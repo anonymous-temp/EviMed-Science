@@ -1,0 +1,48 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "青年非特异性胸闷的病因构成、心源性猝死预警效能与首诊处置路径，以及速效救心丸适应症边界（18–45 岁无诊断人群的院外备药与预防性服用问题）。",
+  "title": "青年非特异性胸闷的病因构成、心源性猝死预警效能与首诊处置路径：速效救心丸适应症边界的证据评价",
+  "startedAt": "2026-08-14T03:20:00Z",
+  "completedAt": "2026-08-14T03:57:50Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC9473420/fulltext.md",
+    ".evimed-sources/PMC10733430/fulltext.md",
+    ".evimed-sources/PMC6599358/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "Cochrane suxiao jiuxin wan (PMID 18254051): cochranelibrary.com HTTP 403, no open-access full text",
+    "J Ethnopharmacol 2023 Suxiao Jiuxin Pill RCT (DOI 10.1016/j.jep.2023.116959): no open-access PDF",
+    "Hsia 2016 JAMA Intern Med (PMID 27295579): jamanetwork.com HTTP 403",
+    "Marijon 2016 Ann Intern Med (PMID 26720493): no open-access full text",
+    "2021 AHA/ACC chest pain guideline (PMID 34709879): no open-access full text",
+    "PubMed search (Kisely psychological interventions non-cardiac chest pain): HTTP 502"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionAndArithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 158,
+    "recordsAfterDeduplication": 78,
+    "sourcesIncluded": 19,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

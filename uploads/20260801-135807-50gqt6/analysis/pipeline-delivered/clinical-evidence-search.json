@@ -1,0 +1,249 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-01T16:20:00Z",
+  "databases": ["PubMed", "Crossref", "EviMed Guideline Index (zh/en)", "PubMed (structured biomedical source)"],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin response diagnostic value acute chest pain cardiac versus noncardiac",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 polymorphism Chinese population nitroglycerin efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan randomized controlled trial angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute coronary syndrome outcomes mortality",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed Guideline Index",
+      "query": "acute chest pain emergency assessment pathway guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin sublingual chest pain diagnostic discrimination",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 polymorphism nitroglycerin response efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "胸痛 硝酸甘油 诊断 鉴别 心脏",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 随机对照 临床 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed Guideline Index",
+      "query": "胸痛 急诊 评估 指南 中国",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin relieves chest pain diagnostic test coronary disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 frequency Chinese Han population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Crossref",
+      "query": "suxiao jiuxin pill angina pectoris clinical trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed Guideline Index",
+      "query": "prehospital chest pain self-medication nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin chest pain relief diagnostic meta-analysis systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Crossref",
+      "query": "nitroglycerin sublingual acute chest pain emergency department diagnostic value",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed (structured)",
+      "query": "\"ALDH2\" \"rs671\" variant allele frequency East Asian Chinese",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay myocardial infarction mortality China time",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 140,
+    "recordsAfterDeduplication": 13,
+    "duplicatesRemoved": 7,
+    "irrelevantExcluded": 120,
+    "fullTextReviewed": 5,
+    "abstractReviewed": 5,
+    "guidelineReviewed": 3,
+    "sourcesIncluded": 13
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan systematic review"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Henrikson2003Nitroglycerin",
+      "identifier": "PMID:14678917",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "nitroglycerin diagnostic value"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Steele2006CJEM",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "nitroglycerin diagnostic value"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Diercks2005AnnEmergMed",
+      "identifier": "DOI:10.1016/j.annemergmed.2004.12.009",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "nitroglycerin diagnostic value"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Li2006JCI",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 and nitroglycerin"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Guo2008JACC",
+      "identifier": "PMID:18772068",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "supporting ALDH2 mechanism"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Qi2021CMDB",
+      "identifier": "PMC8478937",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 frequency in Chinese population"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Im2023CKB",
+      "identifier": "PMC7612513",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 allele frequency 0.21"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Du2026Exomes",
+      "identifier": "PMID:40889739",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 north-south gradient"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Ruan2021SJPProtocol",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan RCT protocol"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Ruan2023SJPResults",
+      "identifier": "DOI:10.1016/j.jep.2023.116959",
+      "accessLevel": "bibliographic_only",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan RCT results (not open access)"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Hu2022CCCACS",
+      "identifier": "PMC9068590",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay in China"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Zhang2007ALDH2",
+      "identifier": "PMID:17967228",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "supporting ALDH2 Chinese study"
+    }
+  ]
+}

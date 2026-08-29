@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-27",
+  "queries": [
+    {"database": "PubMed", "query": "Suxiao Jiuxin", "searchedAt": "2026-08-27", "hits": 40},
+    {"database": "PubMed", "query": "Suxiao Jiuxin Wan", "searchedAt": "2026-08-27", "hits": 2},
+    {"database": "PubMed", "query": "borneol toxicity adverse", "searchedAt": "2026-08-27", "hits": 15},
+    {"database": "PubMed", "query": "tetramethylpyrazine ligustrazine adverse safety", "searchedAt": "2026-08-27", "hits": 14},
+    {"database": "Europe PMC", "query": "速效救心丸", "searchedAt": "2026-08-27", "hits": 30},
+    {"database": "Europe PMC", "query": "Suxiao Jiuxin adverse OR safety OR reaction", "searchedAt": "2026-08-27", "hits": 25},
+    {"database": "Crossref", "query": "速效救心丸", "searchedAt": "2026-08-27", "hits": 25},
+    {"database": "ClinicalTrials.gov", "query": "Suxiao Jiuxin", "searchedAt": "2026-08-27", "hits": 2},
+    {"database": "中国指南共识索引", "query": "速效救心丸", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "国家药监局说明书索引", "query": "速效救心丸", "searchedAt": "2026-08-27", "hits": 2},
+    {"database": "PubMed", "query": "Suxiao Jiuxin chronic long-term treatment angina", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "32495590", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "18254051", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "37487965", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "34252529", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "32744020", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "32716206", "searchedAt": "2026-08-27", "hits": 1},
+    {"database": "Europe PMC", "query": "速效救心丸 共识 OR 指南 OR 专家", "searchedAt": "2026-08-27", "hits": 25}
+  ],
+  "screening": {
+    "recordsIdentified": 156,
+    "recordsAfterDeduplication": 24,
+    "sourcesIncluded": 5
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "title": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates",
+      "source": "BMC Complement Med Ther 2024",
+      "identifier": "PMC11451125",
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "accessLevel": "full_text",
+      "included": true
+    },
+    {
+      "referenceNumber": 2,
+      "title": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "source": "Trials 2021",
+      "identifier": "PMC8287819",
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "accessLevel": "full_text",
+      "included": true
+    },
+    {
+      "referenceNumber": 3,
+      "title": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "source": "Evid Based Complement Alternat Med 2018",
+      "identifier": "PMC5892298",
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "accessLevel": "full_text",
+      "included": true
+    },
+    {
+      "referenceNumber": 4,
+      "title": "速效救心丸治疗冠心病中国专家共识",
+      "source": "中国中西医结合学会 2019",
+      "identifier": "速效救心丸治疗冠心病中国专家共识-2019",
+      "sourceUrl": "https://www.caim.org.cn/",
+      "accessLevel": "official_page",
+      "included": true
+    },
+    {
+      "referenceNumber": 5,
+      "title": "速效救心丸说明书（核准）",
+      "source": "国家药品监督管理局 津药达仁堂集团第六中药厂",
+      "identifier": "NMPA-SXJXW-LABEL",
+      "sourceUrl": "https://www.nmpa.gov.cn/",
+      "accessLevel": "structured_record",
+      "included": true
+    }
+  ]
+}

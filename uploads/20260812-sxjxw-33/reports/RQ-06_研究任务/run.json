@@ -1,0 +1,39 @@
+{
+ "id": "run_0a7e350195c41c90932afe4172637ec7",
+ "dispatchId": "rq-06-A67tam",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00dda2cbaffe24PUMeOIA67tam",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.1.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "matched:clinical-evidence-synthesis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-06 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ⑥ 与复方丹参滴丸对比（涉及 P1 P7），转化为的学术研究命题。 --- ## 派发题面 请撰写一篇学术研究报告： **《速效救心丸与复方丹参滴丸的可核验差异：适应症、起效特征与证据强度的对比评价，并追溯\"可连续服用…",
+ "status": "succeeded",
+ "createdAt": "2026-08-11T18:46:33.214Z",
+ "startedAt": "2026-08-11T18:46:33.214Z",
+ "finishedAt": "2026-08-11T19:24:20.959Z",
+ "durationMs": 2267745,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "The academic report contains runtime or retrieval-process prose instead of scientific analysis.",
+  "claims[4] is not paired with its standard numbered in-text citation."
+ ],
+ "observedMessages": 96,
+ "observedToolCalls": 169,
+ "lastProgressAt": "2026-08-11T19:24:06.094Z"
+}

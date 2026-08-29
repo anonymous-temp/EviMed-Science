@@ -1,0 +1,38 @@
+{
+ "id": "run_d416e5354305d952ec8276ae1ddd6dbb",
+ "dispatchId": "rq-05-ySpVGL",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00483a017ffey4GOOtDoySpVGL",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.95",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-05 研究任务 ## 选题 **《用力排便与急性冠脉事件的关联及其可干预性：从血流动力学机制到排便姿势干预与院外自救药物常备的证据评价》** ## 研究背景 排便是日常生活中少数几个时点可被明确界定的生理性血流动力学负荷事件之一：Valsalva 动作期间胸内压升高、静脉回流骤减、随后出现血压过冲，这些变化在…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T14:17:51.391Z",
+ "startedAt": "2026-08-13T14:17:51.391Z",
+ "finishedAt": "2026-08-13T15:13:09.601Z",
+ "durationMs": 3318210,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after."
+ ],
+ "observedMessages": 119,
+ "observedToolCalls": 194,
+ "lastProgressAt": "2026-08-13T15:12:53.892Z"
+}

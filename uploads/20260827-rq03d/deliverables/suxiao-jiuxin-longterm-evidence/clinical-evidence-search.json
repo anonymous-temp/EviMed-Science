@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-27",
+  "queries": [
+    {"query": "速效救心丸", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 700},
+    {"query": "Suxiao Jiuxin Pill", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 2},
+    {"query": "速效救心丸 长期 疗程", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 700},
+    {"query": "速效救心丸 不良反应 安全性", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 71},
+    {"query": "冰片 龙脑 毒性 长期", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 4103},
+    {"query": "川芎 不良反应 肝肾 安全性", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 19},
+    {"query": "冰片 妊娠 禁忌 肝肾 毒性", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 148},
+    {"query": "速效救心丸 三个月 疗程 连续服用", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 0},
+    {"query": "速效救心丸", "database": "clinicaltrials.gov", "searchedAt": "2026-08-27", "hits": 0},
+    {"query": "Suxiao Jiuxin", "database": "clinicaltrials.gov", "searchedAt": "2026-08-27", "hits": 2},
+    {"query": "速效救心丸", "database": "nmpa label index", "searchedAt": "2026-08-27", "hits": 2},
+    {"query": "Suxiao Jiuxin", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 30},
+    {"query": "速效救心丸 冠心病 心绞痛", "database": "guideline index", "searchedAt": "2026-08-27", "hits": null},
+    {"query": "速效救心丸 专家共识 临床应用", "database": "pubmed", "searchedAt": "2026-08-27", "hits": 10}
+  ]
+}

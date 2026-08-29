@@ -1,0 +1,38 @@
+{
+ "id": "run_ae379891b45403d5610b7bdd26394624",
+ "dispatchId": "rq-09-CEl3HW",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00d6c333bffeZq1n6l66CEl3HW",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.1.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "matched:clinical-evidence-synthesis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-09 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ⑨ 含服后舌麻（涉及 P2），转化为的学术研究命题。 选它作为压力测试的原因：这一命题的直接临床证据很可能稀薄。合格的输出应当明确写出证据缺口， 而不是用药理机制推断填充成看似充分的结论。 --- ## 派发题面 请撰…",
+ "status": "succeeded",
+ "createdAt": "2026-08-11T20:46:40.539Z",
+ "startedAt": "2026-08-11T20:46:40.539Z",
+ "finishedAt": "2026-08-11T21:16:08.654Z",
+ "durationMs": 1768115,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The report must not turn a bounded recommendation into an unsupported exclusive safety claim."
+ ],
+ "observedMessages": 96,
+ "observedToolCalls": 173,
+ "lastProgressAt": "2026-08-11T21:15:57.041Z"
+}

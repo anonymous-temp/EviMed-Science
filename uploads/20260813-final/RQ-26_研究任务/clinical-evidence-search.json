@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T06:51:00Z",
+  "databases": ["PubMed", "Guideline index"],
+  "queries": [
+    { "database": "PubMed", "query": "palpitations emergency department etiology prevalence", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20 },
+    { "database": "PubMed", "query": "panic disorder non-cardiac chest pain emergency department prevalence", "dateFrom": null, "dateTo": null, "resultsRetrieved": 6 },
+    { "database": "PubMed", "query": "mental stress-induced myocardial ischemia", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20 },
+    { "database": "PubMed", "query": "takotsubo syndrome emotional trigger prevalence prognosis", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20 },
+    { "database": "PubMed", "query": "anxiety disorders coronary heart disease comorbidity meta-analysis", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10 },
+    { "database": "PubMed", "query": "Suxiao Jiuxin Wan angina pectoris randomized controlled trial", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "PubMed", "query": "evaluation of patients with palpitations guideline", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15 },
+    { "database": "PubMed", "query": "suxiao jiuxin wan", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2 },
+    { "database": "PubMed", "query": "suxiao jiuxin wan anxiety stress chest pain", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0 },
+    { "database": "PubMed", "query": "palpitations causes primary care cohort diagnosis", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10 },
+    { "database": "Guideline index", "query": "palpitations evaluation electrocardiogram referral red flags", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15 }
+  ],
+  "screening": {
+    "recordsIdentified": 119,
+    "recordsAfterDeduplication": 111,
+    "sourcesIncluded": 9
+  },
+  "sourceRecords": [
+    { "referenceNumber": 2, "citationKey": "McDevittPetrovic2017NCCP", "identifier": "PMC5550987 PMID:28793910", "accessLevel": "full_text", "included": true, "role": "etiology distribution (emergency department)" },
+    { "referenceNumber": 3, "citationKey": "FoldesBusque2013PanicScreening", "identifier": "PMC3808760 PMID:24163208", "accessLevel": "full_text", "included": true, "role": "panic prevalence in unexplained chest pain" },
+    { "referenceNumber": 4, "citationKey": "Zhang2020MSIMI", "identifier": "PMC7257246 PMID:32471451", "accessLevel": "full_text", "included": true, "role": "mental stress-induced ischemia prevalence" },
+    { "referenceNumber": 5, "citationKey": "Hoorweg2017ChestPain", "identifier": "DOI:10.1136/heartjnl-2016-310905", "accessLevel": "full_text", "included": true, "role": "etiology distribution (primary care)" },
+    { "referenceNumber": 6, "citationKey": "Steele2006NTG", "identifier": "DOI:10.1017/s1481803500013671", "accessLevel": "full_text", "included": true, "role": "diagnostic accuracy of symptom relief" },
+    { "referenceNumber": 7, "citationKey": "MoservanderGeest2026SVT", "identifier": "DOI:10.3389/fpsyt.2026.1858764", "accessLevel": "full_text", "included": true, "role": "palpitation/arrhythmia vs anxiety" },
+    { "referenceNumber": 8, "citationKey": "Uribarri2019Takotsubo", "identifier": "PMC6951081 PMID:31830875", "accessLevel": "full_text", "included": true, "role": "takotsubo syndrome triggers and prognosis" },
+    { "referenceNumber": 9, "citationKey": "AHA2021ChestPain", "identifier": "AHA 2021 Chest Pain Guideline", "accessLevel": "official_page", "included": true, "role": "chest pain evaluation guideline" },
+    { "referenceNumber": 10, "citationKey": "NHSChestPain", "identifier": "NHS Chest pain page", "accessLevel": "official_page", "included": true, "role": "emergency triage red flags" },
+    { "referenceNumber": 1, "citationKey": "NMPA2026SuxiaoJiuxinWan", "identifier": "国药准字Z12020025 (indexed)", "accessLevel": "structured_record", "included": false, "role": "regulatory label (indexed record, official-current verification required)" },
+    { "referenceNumber": 11, "citationKey": "Duan2008SuxiaoJiuxinWan", "identifier": "PMID:18254051", "accessLevel": "abstract", "included": false, "role": "Cochrane review (abstract only, full text inaccessible)" },
+    { "referenceNumber": 12, "citationKey": "NCT06531161", "identifier": "NCT06531161", "accessLevel": "structured_record", "included": false, "role": "trial registry record (not anxiety/stress population)" },
+    { "referenceNumber": 13, "citationKey": "NCT05466968", "identifier": "NCT05466968", "accessLevel": "structured_record", "included": false, "role": "trial registry record (not anxiety/stress population)" }
+  ]
+}

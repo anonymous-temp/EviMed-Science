@@ -1,0 +1,448 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-04T07:46:00+00:00",
+  "databases": [
+    "PubMed",
+    "Europe PMC/PMC",
+    "guideline index",
+    "Crossref"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "smartwatch atrial fibrillation detection photoplethysmography",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Apple Heart Study atrial fibrillation irregular pulse notification",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 14
+    },
+    {
+      "database": "PubMed",
+      "query": "Fitbit Heart Study atrial fibrillation detection photoplethysmography",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 22
+    },
+    {
+      "database": "PubMed",
+      "query": "atrial fibrillation screening smartwatch wristband Guo 2019",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Mobile Photoplethysmographic Technology to Detect Atrial Fibrillation Guo",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "2024 ESC guidelines management of atrial fibrillation developed collaboration European Heart Rhythm Association",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "心房颤动诊断和治疗中国指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 心房颤动",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 14
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan atrial fibrillation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "guideline index",
+      "query": "atrial fibrillation guideline 2023 AHA ACC HRS",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "guideline index",
+      "query": "atrial fibrillation ESC guideline 2024",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "guideline index",
+      "query": "2023 ACC/AHA/ACCP/HRS guideline atrial fibrillation diagnosis management",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "Huawei Heart Study atrial fibrillation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Mobile Photoplethysmographic Technology to Detect Atrial Fibrillation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "2023 ACC/AHA/ACCP/HRS guideline diagnosis management atrial fibrillation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "2024 ESC guidelines management atrial fibrillation developed collaboration EACTS",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Large-Scale Assessment of a Smartwatch to Identify Atrial Fibrillation Perez",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Fitbit Heart Study detection atrial fibrillation large population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Detection and Diagnostic Accuracy of Cardiac Arrhythmias Using Wearable Health Devices systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "use of commercially available wearable technology heart rate and activity tracking primary secondary cardiovascular prevention position paper",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Chinese expert consensus guidelines diagnosis treatment atrial fibrillation elderly 2024",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "suxiao jiuxin wan angina pectoris Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Perez smartwatch irregular pulse notification atrial fibrillation 2019 author manuscript",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "Detection of Atrial Fibrillation in a Large Population Using Wearable Devices Fitbit Heart Study Circulation 2022",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "Clinical Validation of 5 Direct-to-Consumer Wearable Smart Devices to Detect Atrial Fibrillation BASEL",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Diagnostic Accuracy of Smartwatches Detection Cardiac Arrhythmia Systematic Review Meta-analysis JMIR 28974",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Crossref",
+      "query": "10.2196/28974",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1093/europace/euae298",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Crossref",
+      "query": "10.3389/fcvm.2020.615927",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1055/a-2325-5923",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "Ethical Challenges With Smartwatch-Based Screening Atrial Fibrillation Putting Users at Risk Marketing",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Spotlight 2024 ESC EACTS management atrial fibrillation guidelines novel key aspects",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Advances in Atrial Fibrillation Management Guide for General Internists",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Van Gelder 2024 ESC guidelines atrial fibrillation European Heart Journal",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC/PMC",
+      "query": "Mobile health applications for the detection of atrial fibrillation systematic review Europace",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 264,
+    "recordsAfterDeduplication": 89,
+    "sourcesIncluded": 23
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Perez2019AppleHeart",
+      "identifier": "PMID:31722151",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "landmark large-scale device study"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Lubitz2022Fitbit",
+      "identifier": "PMID:36148649",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "landmark large-scale device study"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Guo2019Huawei",
+      "identifier": "PMID:31487545",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "landmark large-scale device study"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Mannhart2023BASEL",
+      "identifier": "PMID:36858690",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "device validation study"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Bogar2024Healthcare",
+      "identifier": "PMC11083549",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "systematic review of device detection studies"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Nazarian2021JMIR",
+      "identifier": "PMC8433941",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "diagnostic accuracy meta-analysis"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Predel2021FrontCardiovascMed",
+      "identifier": "PMC7843431",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ethical analysis of smartwatch AF screening"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "VanGelder2024ESCGuideline",
+      "identifier": "PMID:39210723",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC 2024 AF guideline (full text closed)"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Rienstra2024Spotlight",
+      "identifier": "PMC11666470",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ESC 2024 guideline spotlight"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Joglar2024ACC",
+      "identifier": "PMID:38033089",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "2023 ACC/AHA guideline (full text closed)"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Naccarelli2025AHJPlus",
+      "identifier": "PMC12811750",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "guideline comparison review"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Pham2024JCM",
+      "identifier": "PMC11678337",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "general internists AF review"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Wang2024ChineseElderly",
+      "identifier": "PMC11436293",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Chinese elderly AF consensus executive summary"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Jensen2021ECardiology",
+      "identifier": "PMC9753086",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ESC e-cardiology position paper"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Ren2018Suxiao",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "suxiao jiuxin pill CHD meta-analysis"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane review of suxiao jiuxin wan"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "NMPA2024SuxiaoLabel",
+      "identifier": "EVIMED-LABEL:nmpa-0",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "NMPA suxiao jiuxin wan label record"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "CSEC2025ChinaGuideline",
+      "identifier": "EVIMED-GUIDE:689d81af45aed15f15cf9172",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "China AF management guideline 2025 record"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "NICE2021NG196",
+      "identifier": "NICE-NG196",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "NICE guideline NG196"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "USPSTF2022",
+      "identifier": "PMID:35076658",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "USPSTF AF screening recommendation"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "NHS chest pain official page"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "Lubitz2025FitbitFollowup",
+      "identifier": "PMID:40557492",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Fitbit Heart Study follow-up on ECG confirmation yield"
+    },
+    {
+      "referenceNumber": 23,
+      "citationKey": "Abdelrazik2025Sensors",
+      "identifier": "PMC12074175",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "OA review reporting Apple/Fitbit/Huawei study numbers"
+    }
+  ]
+}

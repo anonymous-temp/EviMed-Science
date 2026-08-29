@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-01T08:26:00Z",
+  "databases": ["PubMed (EviMed literature adapter)", "EviMed guideline source", "PubMed (biomedical source connector)", "Europe PMC (full-text retrieval)"],
+  "queries": [
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "nitroglycerin sublingual response diagnostic acute myocardial infarction chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "prehospital delay acute coronary syndrome outcome mortality time",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed guideline source",
+      "query": "acute chest pain prehospital management emergency assessment guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed (biomedical source connector)",
+      "query": "ALDH2 rs671 polymorphism nitroglycerin efficacy Chinese population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "速效救心丸 随机对照 临床试验 急性冠脉综合征 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "ALDH2 polymorphism nitroglycerin efficacy Chinese",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "prehospital delay mortality acute myocardial infarction time threshold",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed guideline source",
+      "query": "急性胸痛 院前急救 急诊评估 中国 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "Suxiao Jiuxin Wan angina randomized trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "Henrikson nitroglycerin chest pain relief diagnostic value",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "\"chest pain relief\" nitroglycerin diagnostic value Henrikson",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed (EviMed literature adapter)",
+      "query": "total ischemic time symptom onset balloon mortality STEMI",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed (biomedical source connector)",
+      "query": "Henrikson nitroglycerin chest pain diagnostic 2003 annals internal medicine",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 149,
+    "recordsAfterDeduplication": 11,
+    "sourcesIncluded": 11
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Grailey2011Diagnostic",
+      "identifier": "PMID:21511974",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "nitroglycerin diagnostic accuracy systematic review"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Diercks2005Changes",
+      "identifier": "PMID:15940087",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "nitroglycerin response prospective study"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Gibbons2003Nitroglycerin",
+      "identifier": "PMID:14678924",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "editorial on Henrikson study"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Li2006Mitochondrial",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "ALDH2 polymorphism and GTN efficacy"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Sakata2011Differential",
+      "identifier": "PMCID:PMC3191425",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 genotype nitrate vasodilation RCT"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Dong2025Geographical",
+      "identifier": "PMCID:PMC12447523",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2 rs671 distribution in Chinese angina patients"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Duan2008Chinese",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan Cochrane review"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Sun2023Evaluation",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Suxiao Jiuxin Pill stable angina RCT"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Shen2020Effects",
+      "identifier": "PMID:32716206",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Suxiao Jiuxin Pill ACS PCI RCT"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Hu2024Efficacy",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Pill CCS nitrate-intolerant RCT"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Guo2008Evidence",
+      "identifier": "PMID:18772068",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "CGRP ALDH2 GTN mechanism"
+    }
+  ]
+}

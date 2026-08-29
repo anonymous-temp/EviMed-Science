@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-26T12:29:00Z",
+  "databases": ["PubMed", "Europe PMC", "Crossref", "EviMed中文文献索引", "指南索引", "说明书索引(NMPA)", "临床试验注册库", "官方页面(NHS)"],
+  "queries": [
+    { "database": "PubMed", "query": "sublingual nitroglycerin chest pain guideline escalation emergency medical services", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "EviMed中文文献索引", "query": "nitroglycerin sublingual acute coronary syndrome guideline every 5 minutes up to 3 doses", "dateFrom": null, "dateTo": null, "resultsRetrieved": 30 },
+    { "database": "PubMed", "query": "prehospital delay myocardial infarction infarct size mortality time to reperfusion", "dateFrom": null, "dateTo": null, "resultsRetrieved": 12 },
+    { "database": "EviMed中文文献索引", "query": "速效救心丸 心绞痛 说明书", "dateFrom": null, "dateTo": null, "resultsRetrieved": 20 },
+    { "database": "PubMed", "query": "symptom onset to balloon time mortality primary angioplasty meta-analysis De Luca", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "PubMed", "query": "nitroglycerin symptom relief predictive value cardiac chest pain emergency department", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "指南索引", "query": "acute coronary syndrome sublingual nitroglycerin every 5 minutes 3 doses chest pain", "dateFrom": null, "dateTo": null, "resultsRetrieved": 8 },
+    { "database": "说明书索引(NMPA)", "query": "速效救心丸", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2 },
+    { "database": "PubMed", "query": "Gulati 2021 AHA/ACC chest pain evaluation diagnosis guideline", "dateFrom": null, "dateTo": null, "resultsRetrieved": 6 },
+    { "database": "PubMed", "query": "De Luca time delay to treatment mortality primary angioplasty every minute of delay counts", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "PubMed", "query": "Boersma early thrombolytic treatment acute myocardial infarction reappraisal golden hour", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "官方页面(NHS)", "query": "https://www.nhs.uk/symptoms/chest-pain/", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "Europe PMC", "query": "nitroglycerin sublingual 0.4 mg every 5 minutes maximum 3 doses angina call emergency", "dateFrom": null, "dateTo": null, "resultsRetrieved": 15 },
+    { "database": "Europe PMC", "query": "PMID:26316714", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "PubMed", "query": "Diercks change numeric descriptive scale pain predictor cardiac chest pain emergency", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0 },
+    { "database": "Europe PMC", "query": "Amsterdam 2014 AHA/ACC guideline non-ST-elevation acute coronary syndromes", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10 },
+    { "database": "Europe PMC", "query": "PMID:41440853", "dateFrom": null, "dateTo": null, "resultsRetrieved": 1 },
+    { "database": "Europe PMC", "query": "Diercks Boghos nitroglycerin response chest pain cardiac etiology Annals Emergency Medicine 2005", "dateFrom": null, "dateTo": null, "resultsRetrieved": 2 },
+    { "database": "指南索引", "query": "硝酸甘油 舌下含服 胸痛 不缓解 呼叫急救 120", "dateFrom": null, "dateTo": null, "resultsRetrieved": 10 },
+    { "database": "临床试验注册库", "query": "速效救心丸 心绞痛", "dateFrom": null, "dateTo": null, "resultsRetrieved": 0 },
+    { "database": "Europe PMC", "query": "2023 ESC Guidelines management acute coronary syndromes Byrne", "dateFrom": null, "dateTo": null, "resultsRetrieved": 8 }
+  ],
+  "screening": {
+    "recordsIdentified": 131,
+    "recordsAfterDeduplication": 118,
+    "sourcesIncluded": 9
+  },
+  "sourceRecords": [
+    { "referenceNumber": 1, "citationKey": "NHS2023ChestPain", "identifier": "NHS Chest pain page", "accessLevel": "official_page", "included": true, "role": "院外升级路径（公众）" },
+    { "referenceNumber": 2, "citationKey": "Boden2015ShortActingNTG", "identifier": "PMID:26316714", "accessLevel": "full_text", "included": true, "role": "硝酸甘油用药边界与升级" },
+    { "referenceNumber": 3, "citationKey": "Dziewierz2025IschemicDelay", "identifier": "PMID:41440853", "accessLevel": "full_text", "included": true, "role": "院前延迟与预后定量关系" },
+    { "referenceNumber": 4, "citationKey": "DeLuca2004TimeDelay", "identifier": "PMID:15007008", "accessLevel": "abstract", "included": true, "role": "延迟—死亡率定量关系（原始研究）" },
+    { "referenceNumber": 5, "citationKey": "Boersma1996GoldenHour", "identifier": "PMID:8813982", "accessLevel": "abstract", "included": true, "role": "溶栓时代时间—获益关系" },
+    { "referenceNumber": 6, "citationKey": "Diercks2005NTGPredict", "identifier": "PMID:15940087", "accessLevel": "abstract", "included": true, "role": "缓解反应不作为诊断依据" },
+    { "referenceNumber": 7, "citationKey": "CSC2019STEMI", "identifier": "急性ST段抬高型心肌梗死诊断和治疗指南(2019)", "accessLevel": "structured_record", "included": true, "role": "中国指南升级路径" },
+    { "referenceNumber": 8, "citationKey": "JSMC2024Thrombolysis", "identifier": "急性ST段抬高型心肌梗死溶栓治疗专家共识(2024)", "accessLevel": "structured_record", "included": true, "role": "中国院前延迟现状" },
+    { "referenceNumber": 9, "citationKey": "NMPASuxiaoJiuxin", "identifier": "速效救心丸说明书(国家药监局核准)", "accessLevel": "structured_record", "included": true, "role": "速效救心丸适应症边界" },
+    { "referenceNumber": null, "citationKey": "Wang2019SuxiaoRCT", "identifier": "EVIMED-LITERATURE:3_317_623c4f9772c7d58c02289d12", "accessLevel": "abstract", "included": false, "exclusionReason": "速效救心丸与硝酸甘油比较的随机对照试验，结局为心绞痛持续时间与生物标志物，与时间阈值/升级路径无关" },
+    { "referenceNumber": null, "citationKey": "Wang2008MetaSuxiao", "identifier": "EVIMED-LITERATURE:2_222_623e08e4411471ce7f208223", "accessLevel": "abstract", "included": false, "exclusionReason": "速效救心丸治疗冠心病心绞痛Meta分析，未涉及含服后观察时长或升级时间界限" },
+    { "referenceNumber": null, "citationKey": "Gulati2021ChestPainGuideline", "identifier": "PMID:34709879", "accessLevel": "abstract", "included": false, "exclusionReason": "2021 AHA/ACC胸痛指南，全文未获（非开放获取），仅摘要层级，未用于具体推荐引用" }
+  ]
+}

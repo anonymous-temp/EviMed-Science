@@ -1,0 +1,56 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸与复方丹参滴丸的可核验差异：说明书适应症、用法用量与禁忌；起效特征（给药途径、达峰时间、机制）及其证据类型与强度；各自临床证据强度与头对头/间接比较现状；以及“可连续服用3个月”说法的出处追溯",
+  "title": "速效救心丸与复方丹参滴丸的可核验差异：适应症、起效特征与证据强度的对比评价，兼论“可连续服用3个月”说法的出处追溯",
+  "startedAt": "2026-08-11T18:46:00Z",
+  "completedAt": "2026-08-11T19:45:00Z",
+  "tools": [
+    "evimed_drug_label_search",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_web_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5407045/fulltext.md",
+    ".evimed-sources/PMC12014028/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC9428755/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID:38395177 (J Ethnopharmacol 2024, Bayesian NMA 331 RCTs) — no open-access full text; abstract-level only",
+    "PMID:32744020 (J Tradit Chin Med 2020, ACS systematic review) — Unpaywall 404; abstract-level only",
+    "DOI 10.1016/j.jep.2023.116959 (Suxiao Jiuxin 24-week stable angina RCT) — not retrieved as full text",
+    "https://mpa.hunan.gov.cn/mpa/ (Hunan MPA official page route) — upstream unavailable",
+    "NMPA 说明书原文（速效救心丸/复方丹参滴丸） — no official gateway route for label PDFs; structured label records only",
+    "速效救心丸专家共识 2019 全文 — not open access; bibliographic record only",
+    "复方丹参滴丸临床应用专家共识 2025 全文 — guideline index record only",
+    "中成药治疗冠心病临床应用指南（2020年）全文 — guideline index record only",
+    "头对头 RCT 全文（李锋1998、郑丽贞2017、王晓梅2022 等） — 中文学术库题录/摘要级，全文未开放获取"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true,
+    "numeralInQuoteOrIdentifierCheck": true,
+    "practicalSectionSourceBound": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 26,
+    "recordsIdentified": 232,
+    "recordsAfterDeduplication": 225,
+    "sourcesIncluded": 20,
+    "distinctPreservedSources": 7
+  }
+}

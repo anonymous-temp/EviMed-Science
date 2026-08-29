@@ -1,0 +1,54 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "围绝经期女性心悸、潮热伴胸痛的病因鉴别与心肌缺血识别，以及速效救心丸说明书适应症是否覆盖该人群与该场景及其证据支持。",
+  "title": "围绝经期女性心悸、潮热伴胸痛的病因鉴别与心肌缺血识别：速效救心丸适应症边界的证据分析",
+  "startedAt": "2026-08-14T07:38:00Z",
+  "completedAt": "2026-08-14T07:56:00Z",
+  "tools": [
+    "evimed_drug_label_search",
+    "evimed_drug_term_normalize",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC4912069/fulltext.md",
+    ".evimed-sources/PMC6755854/fulltext.md",
+    ".evimed-sources/PMC6616854/fulltext.md",
+    ".evimed-sources/PMC13167700/fulltext.md",
+    ".evimed-sources/PMC10785769/fulltext.md",
+    ".evimed-sources/PMC11273011/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "速效救心丸说明书官方现行文本（国家药品监督管理局）：不在可访问的官方页面路由内，仅获说明书索引候选文本",
+    "PMID:37487965（Suxiao Jiuxin Pill 稳定型心绞痛随机对照试验结果）：非开放获取",
+    "PMID:32585222（Zhu 2020，AJOG 血管舒缩症状心血管疾病汇总分析）：非开放获取",
+    "PMID:32744020（Suxiao Jiuxin Pill 急性冠脉综合征系统评价）：非开放获取",
+    "PMID:39367481（Suxiao Jiuxin Pill 慢性冠脉综合征硝酸酯不耐受随机对照试验）：非开放获取",
+    "CNKI／万方／维普中文全文数据库：不可访问"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 160,
+    "recordsAfterDeduplication": 140,
+    "sourcesIncluded": 9,
+    "distinctPreservedSources": 9
+  },
+  "status": "succeeded"
+}

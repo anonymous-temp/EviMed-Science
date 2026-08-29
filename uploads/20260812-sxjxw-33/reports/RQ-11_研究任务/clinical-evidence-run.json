@@ -1,0 +1,67 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "心源性与非心源性胸痛鉴别要素的判别效能及指南分诊路径的一致性：症状学特征能否替代客观检查完成院外风险分层的证据评价（题库语义问题：胸口疼的病因鉴别，心源性 vs 胃源性等）",
+  "title": "心源性与非心源性胸痛鉴别要素的判别效能及指南分诊路径的一致性：症状学特征能否替代客观检查完成院外风险分层的证据评价",
+  "startedAt": "2026-08-11T21:57:00Z",
+  "completedAt": "2026-08-11T23:20:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_health",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11308083/fulltext.md",
+    ".evimed-sources/10.1370-afm.3141/fulltext.md",
+    ".evimed-sources/PMC6398621/fulltext.md",
+    ".evimed-sources/PMC2832616/fulltext.md",
+    ".evimed-sources/PMC12116132/fulltext.md",
+    ".evimed-sources/PMC13064206/fulltext.md",
+    ".evimed-sources/PMC5550987/fulltext.md",
+    ".evimed-sources/PMC4300724/fulltext.md",
+    ".evimed-sources/PMC9168511/fulltext.md",
+    ".evimed-sources/PMC10642332/fulltext.md",
+    ".evimed-sources/PMC12374469/fulltext.md",
+    ".evimed-sources/PMC12936665/fulltext.md",
+    ".evimed-sources/PMC12105216/fulltext.md",
+    ".evimed-sources/PMC12083389/fulltext.md",
+    ".evimed-sources/PMC4496786/fulltext.md",
+    ".evimed-sources/PMC9047920/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "2021 AHA/ACC chest pain guideline full text (doi:10.1161/CIR.0000000000001029) - no open-access copy via gateway; abstract-level only",
+    "2023 ESC ACS guideline full text (doi:10.1093/eurheartj/ehad191) - publisher gateway 403; metadata-only",
+    "2020 ESC NSTE-ACS guideline full text (doi:10.1093/eurheartj/ehaa575) - response exceeded gateway limit",
+    "2022 ACC Expert Consensus Decision Pathway (PMC10691881) - Europe PMC full-text retrieval failed (retried once)",
+    "Bösner 2010 BMJ Marburg score (doi:10.1136/bmj.b5351) - not open access",
+    "Haasenritter 2012 BJGP external validation (doi:10.3399/bjgp12X649106) - publisher 403",
+    "Fanaroff 2015 JAMA Rational Clinical Examination (doi:10.1001/jama.2015.12735) - abstract-level only",
+    "Diercks 2005 Ann Emerg Med nitroglycerin response (doi:10.1016/j.annemergmed.2004.12.009) - abstract-level only",
+    "PPI test systematic review and meta-analysis (doi:10.1097/mcg.0000000000001686) - abstract-level only",
+    "Scand J Pain musculoskeletal chest pain prevalence meta-analysis (doi:10.1515/sjpain-2020-0168) - not open access",
+    "《急性胸痛急诊诊疗专家共识》(2019) - guideline index record only, full text not accessible in this environment",
+    "《胸痛基层诊疗指南（2019年）》 - guideline index record only, full text not accessible in this environment",
+    "中国胃食管反流病专家共识 (2020) - metadata verified via BMC Gastroenterol reference list; full text not accessible",
+    "NHS Chest pain page fetched successfully; ccfdie.org/zryyxxw page fetched but irrelevant to the question (not used)"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 27,
+    "recordsIdentified": 242,
+    "recordsAfterDeduplication": 200,
+    "sourcesIncluded": 17,
+    "distinctPreservedSources": 17
+  },
+  "status": "succeeded"
+}

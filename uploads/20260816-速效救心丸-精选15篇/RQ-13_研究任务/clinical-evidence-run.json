@@ -1,0 +1,53 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸长期用药是否存在效应衰减、剂量递增与停药反应；由'组方不含硝酸酯'推出'不产生耐受'所需的前提条件是什么，直接研究检索结果如何。",
+  "title": "速效救心丸重复给药后效应衰减与停药反应的证据评价：从\"组方不含硝酸酯\"到\"不产生耐受\"所需的前提条件",
+  "startedAt": "2026-08-13T20:16:00Z",
+  "completedAt": "2026-08-13T20:30:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate",
+    "evimed_web_search",
+    "evimed_clinical_trial_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_adr_case_query",
+    "evimed_adr_signal_analysis"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC4752190/fulltext.md",
+    ".evimed-sources/PMC4893570/fulltext.md",
+    ".evimed-sources/PMC6378772/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3347864/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {"identifier": "Cochrane CD004473 / PMID:18254051 / PMC7137214", "reason": "cochranelibrary.com HTTP 403 且 Europe PMC 全文服务不可用，未获取全文；据摘要引用"},
+    {"identifier": "NMPA 速效救心丸说明书官方现行文本", "reason": "官方页面不在可获取白名单内，仅获索引件"},
+    {"identifier": "速效救心丸 2019 专家共识全文", "reason": "指南索引仅返回概述，用法用量/疗程/推荐强度原文未获取"},
+    {"identifier": "药物警戒个案检索与信号分析（速效救心丸）", "reason": "适配器返回 HTTP 400"},
+    {"identifier": "Cardiology Journal PMID:19130411", "reason": "Europe PMC 无记录，未纳入"},
+    {"identifier": "CNKI / 万方 / 维普中文全文", "reason": "不可访问，中文研究仅经摘要间接覆盖"}
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 27,
+    "recordsIdentified": 158,
+    "recordsAfterDeduplication": 150,
+    "sourcesIncluded": 28,
+    "distinctPreservedSources": 6
+  },
+  "status": "succeeded"
+}

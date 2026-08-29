@@ -1,0 +1,13 @@
+claimId,referenceNumber,sourceUrl,sourceTitle,accessLevel,identifier,artifactPath,supportQuoteVerified,claimMatch
+CLM-001,2,https://pubmed.ncbi.nlm.nih.gov/14678917/,Chest pain relief by nitroglycerin does not predict active coronary artery disease.,abstract,PMID:14678917,.evimed-sources/10.1017-s1481803500013671/fulltext.md,yes,yes
+CLM-002,3,https://pubmed.ncbi.nlm.nih.gov/17320010/,Chest pain in emergency department patients: if the pain is relieved by nitroglycerin is it more likely to be cardiac chest pain?,full_text,PMID:17320010,.evimed-sources/10.1017-s1481803500013671/fulltext.md,yes,yes
+CLM-003,4,https://doi.org/10.1016/j.annemergmed.2004.12.009,Changes in the Numeric Descriptive Scale for Pain After Sublingual Nitroglycerin Do Not Predict Cardiac Etiology of Chest Pain,abstract,DOI:10.1016/j.annemergmed.2004.12.009,.evimed-sources/10.1017-s1481803500013671/fulltext.md,yes,yes
+CLM-004,5,https://pubmed.ncbi.nlm.nih.gov/16440063/,Mitochondrial aldehyde dehydrogenase-2 (ALDH2) Glu504Lys polymorphism contributes to the variation in efficacy of sublingual nitroglycerin.,abstract,PMID:16440063,.evimed-sources/PMC8478937/fulltext.md,yes,yes
+CLM-005,7,https://europepmc.org/articles/PMC8478937,Genetic landscape of 125 pharmacogenes in Chinese from the Chinese Millionome Database.,full_text,PMC8478937,.evimed-sources/PMC8478937/fulltext.md,yes,yes
+CLM-006,8,https://europepmc.org/articles/PMC7612513,Alcohol metabolism genes and risks of site-specific cancers in Chinese adults,full_text,PMC7612513,.evimed-sources/PMC7612513/fulltext.md,yes,yes
+CLM-007,1,https://pubmed.ncbi.nlm.nih.gov/18254051/,Chinese herbal medicine suxiao jiuxin wan for angina pectoris.,abstract,PMID:18254051,.evimed-sources/PMC8287819/fulltext.md,yes,yes
+CLM-008,10,https://europepmc.org/articles/PMC8287819,Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina,full_text,PMC8287819,.evimed-sources/PMC8287819/fulltext.md,yes,yes
+CLM-009,12,https://europepmc.org/articles/PMC9068590,Pre-hospital delay in patients with acute myocardial infarction in China,full_text,PMC9068590,.evimed-sources/PMC9068590/fulltext.md,yes,yes
+CLM-010,12,https://europepmc.org/articles/PMC9068590,Pre-hospital delay in patients with acute myocardial infarction in China,full_text,PMC9068590,.evimed-sources/PMC9068590/fulltext.md,yes,yes
+CLM-011,12,https://europepmc.org/articles/PMC9068590,Pre-hospital delay in patients with acute myocardial infarction in China,full_text,PMC9068590,.evimed-sources/PMC9068590/fulltext.md,yes,yes
+CLM-014,3,https://pubmed.ncbi.nlm.nih.gov/17320010/,Chest pain in emergency department patients,synthesized,PMID:17320010,.evimed-sources/10.1017-s1481803500013671/fulltext.md,yes,yes

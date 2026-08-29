@@ -1,0 +1,417 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T19:55:00+08:00",
+  "databases": [
+    "PubMed",
+    "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+    "Europe PMC",
+    "Crossref",
+    "PubChem",
+    "DailyMed",
+    "guideline source",
+    "private pharmacy reference",
+    "open-web metasearch"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "borneol sublimation volatility physicochemical properties",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "Suxiao Jiuxin pill borneol stability content",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 冰片 含量 稳定性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 稳定性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "中成药 开封 有效期",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin sublingual tablets discard after opening six months",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "硝酸甘油 开封 更换 失效",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 开封 3个月 6个月",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "滴丸 冰片 挥发 损失",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "中国药典 速效救心丸 贮藏",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "冰片 熔点 升华 挥发性",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 质量标准",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 有效期 更换 保存",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 留样 加速试验 稳定性考察",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 16
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "中国药典 冰片 龙脑 熔点",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 处方 川芎 冰片 工艺",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 药典标准 含量测定 冰片 限度",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "药典 冰片 性状 升华 熔点 贮藏",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "速效救心丸 有效期 36个月 批准文号 国药准字",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol melting point",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "中成药 开封后 使用期限 规范",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "EviMed internal (CNKI/SinoMed/万方/维普题录)",
+      "query": "冰片 含量 挥发 损失率 温度 时间",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubChem",
+      "query": "borneol",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "borneol melting point boiling point",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Crossref",
+      "query": "borneol physical properties sublimation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "borneol sublimation stability storage",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin wan borneol content stability",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "borneol chemical stability volatile loss pharmaceutical",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "DailyMed",
+      "query": "nitroglycerin sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "DailyMed",
+      "query": "Nitrostat nitroglycerin sublingual tablets",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "DailyMed",
+      "query": "nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "guideline source",
+      "query": "药品 开封 使用期限",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "open-web metasearch",
+      "query": "硝酸甘油 说明书 开封 6个月 更换 依据 药典",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "open-web metasearch",
+      "query": "速效救心丸 说明书 贮藏 密封 阴凉干燥处 20℃",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "open-web metasearch",
+      "query": "USP nitroglycerin tablets discard 6 months after opening beyond-use",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "open-web metasearch",
+      "query": "\"速效救心丸\" 药典 2020 一部 收载 标准 WS3-B-3484-98",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "open-web metasearch",
+      "query": "速效救心丸 药品标准 贮藏 密封 中国药典 2020 一部",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 385,
+    "recordsAfterDeduplication": 258,
+    "sourcesIncluded": 15
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Chen2025GuanxinJieyuStability",
+      "identifier": "PMC12804185 / DOI 10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "含冰片制剂（冠心解郁颗粒）挥发性成分稳定性实测；冰片理化常数；β-CD包合与物理混合物25℃/730天失效概率对照"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Zhao2026dBorneolVolatile",
+      "identifier": "PMC12845388 / DOI 10.3390/pharmaceutics18010111",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "d-龙脑（d-borneol）高挥发性实证；游离态25℃/40℃ 30天损失实测；TGA挥发温度段；脂质体包封对照"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "突发持续胸痛的急诊呼救边界（行动依据）"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "PubChem64685Borneol",
+      "identifier": "PubChem CID 64685",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "冰片（borneol）分子式C10H18O、分子量154.25的结构化记录"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Zou2002VolatilityKinetics",
+      "identifier": "SinoMed 2003082295",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "颗粒与素片中薄荷脑、冰片散逸动力学（开放体系一级反应；颗粒逸散约为片剂4倍）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Zhang2014BorneolStorage",
+      "identifier": "SinoMed 2014537214",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "冰片密闭贮存12月龙脑含量>55%；低温、充氮、避光优于高温、不充氮、光照"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Qin2000BorneolBCD",
+      "identifier": "万方 zycy20000040020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "冰片β-CD包合物在光、热、湿下含量无明显变化，混合物明显下降"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Jiang2020BorneolGel",
+      "identifier": "万方 zgxyzz202008016",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "50℃热风干燥4 h冰片损失29.57%，干凝胶中损失4.79%"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Dong2011GCBorneolSXJW",
+      "identifier": "CNKI GDHG201108072",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸中冰片含量测定方法学（GC-FID，内标法）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Fu2012QAMSborneol",
+      "identifier": "万方 ywfxzz201205010",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸中异龙脑、左旋龙脑、右旋龙脑一测多评含量测定"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Wang2012HSGCborneol",
+      "identifier": "CNKI ZCYA201203029",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "静态顶空-GC测定速效救心丸与华佗再造丸中冰片"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Yin2023ChP2020Borneol",
+      "identifier": "维普 7109411217",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "2020年版中国药典含冰片、薄荷成方制剂305种的质量标准分析"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Zhang2007NTGRecap",
+      "identifier": "CNKI RRJK200703034",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "硝酸甘油反复开盖后有效期降至3-6个月的科普文献（'3–6个月'数字的检索出处）"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Tao2025OpenedShelfLife",
+      "identifier": "万方 jkwz202502063",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "药品有效期≠开封后使用期限（概念区分）"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "NMPALabelSXJWIndexed",
+      "identifier": "EviMed索引NMPA标签候选（需官方核实）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸说明书索引候选：贮藏'密封，置阴凉干燥处（不超过20℃）'；未见'开封后3–6个月用完'字样（检索发现，官方原件未取得）"
+    }
+  ]
+}

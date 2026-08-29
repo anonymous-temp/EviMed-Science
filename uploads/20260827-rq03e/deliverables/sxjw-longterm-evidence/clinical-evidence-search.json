@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-27",
+  "queries": [
+    "速效救心丸 OR \"Suxiao Jiuxin Wan\" OR \"Suxiao Jiuxin Pill\"",
+    "速效救心丸",
+    "Suxiao Jiuxin Wan",
+    "Suxiao Jiuxin",
+    "速效救心丸 共识 OR 指南 OR 专家共识",
+    "Suxiao Jiuxin Pill stable angina randomized double-blind placebo-controlled multi-center trial results",
+    "冰片 毒性 OR 不良反应 OR 肝 OR 肾 OR 神经",
+    "川芎 不良反应 OR 毒性 OR 出血 OR 抗血小板 OR 安全性",
+    "borneol hepatotoxicity nephrotoxicity safety toxicity",
+    "Ligusticum chuanxiong tetramethylpyrazine safety toxicity adverse",
+    "borneol syntheticum Bingpian toxicity adverse effects central nervous system",
+    "速效救心丸 疗程 长期 3个月 三个月 连续服用"
+  ],
+  "searches": [
+    {"query": "速效救心丸 OR \"Suxiao Jiuxin Wan\" OR \"Suxiao Jiuxin Pill\"", "database": "EviMed literature adapter", "hits": 2, "notes": "2 条动物实验"},
+    {"query": "速效救心丸", "database": "EviMed literature adapter", "hits": 700, "notes": "返回 50 条"},
+    {"query": "Suxiao Jiuxin Wan", "database": "PubMed", "hits": 2, "notes": "Cochrane 系统评价 + 药代研究"},
+    {"query": "Suxiao Jiuxin", "database": "Europe PMC", "hits": 40, "notes": "返回 40 条"},
+    {"query": "Suxiao Jiuxin Wan", "database": "Crossref", "hits": 40, "notes": "返回 40 条"},
+    {"query": "Suxiao Jiuxin", "database": "ClinicalTrials.gov", "hits": 2, "notes": "NCT06531161、NCT05466968，均未招募"},
+    {"query": "速效救心丸 Suxiao Jiuxin", "database": "ClinicalTrials.gov", "hits": 0, "notes": ""},
+    {"query": "速效救心丸 共识 OR 指南 OR 专家共识", "database": "EviMed literature adapter", "hits": 1, "notes": "2019 中国专家共识（题录/引言层）"},
+    {"query": "速效救心丸", "database": "NMPA 说明书索引", "hits": 2, "notes": "2 个候选（索引本，需官方核验）"},
+    {"query": "Suxiao Jiuxin Pill stable angina randomized double-blind placebo-controlled multi-center trial results", "database": "PubMed", "hits": 2, "notes": "24 周 RCT 结果 + 方案"},
+    {"query": "冰片 毒性 OR 不良反应 OR 肝 OR 肾 OR 神经", "database": "EviMed literature adapter", "hits": 3, "notes": "无直接相关人体研究"},
+    {"query": "川芎 不良反应 OR 毒性 OR 出血 OR 抗血小板 OR 安全性", "database": "EviMed literature adapter", "hits": 1, "notes": "无直接相关人体研究"},
+    {"query": "borneol hepatotoxicity nephrotoxicity safety toxicity", "database": "PubMed", "hits": 1, "notes": "不相关（双氯芬酸研究）"},
+    {"query": "Ligusticum chuanxiong tetramethylpyrazine safety toxicity adverse", "database": "PubMed", "hits": 0, "notes": ""},
+    {"query": "borneol syntheticum Bingpian toxicity adverse effects central nervous system", "database": "Europe PMC", "hits": 3, "notes": "无直接相关人体研究"},
+    {"query": "速效救心丸 疗程 长期 3个月 三个月 连续服用", "database": "EviMed literature adapter", "hits": 0, "notes": "无直接匹配"}
+  ],
+  "toolStatus": [
+    {"tool": "guideline_search", "status": "adapter_error", "notes": "返回无效契约，不可用；指南/共识改由文献渠道与题录索引获取"},
+    {"tool": "web_search", "status": "disabled", "notes": "本部署未启用"},
+    {"tool": "open_access_full_text", "status": "partial", "notes": "对 10.1016/j.jep.2023.116959 与 10.1016/j.jep.2021.114408 返回非开放获取"}
+  ]
+}

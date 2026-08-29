@@ -1,0 +1,255 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-002",
+      "claim": "纳入 174 例慢性冠脉综合征患者、来自中国 8 个中心的多中心随机双盲安慰剂对照试验，治疗 4 周。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "This was a multicenter, randomized, double-blind, placebo-controlled trial. A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses … for a duration of 4 weeks.",
+      "applicability": "人群为对长效硝酸酯不良反应不耐受的慢性冠脉综合征患者，中国 8 中心，直接性有限：属连续给药而非单次急性含服。",
+      "uncertainty": "样本量按疗效终点计算，不足以检出低频不良反应的组间差异。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "该试验以每周电话或门诊随访、询问参与者是否经历不良事件的方式采集不良事件，报告两组均无参与者报告不良事件，为期 4 周。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "During the 4-week treatment period … Telephone or outpatient follow-up was conducted once a week, and participants were asked whether they had experienced any adverse events … No participants reported experiencing adverse effects.",
+      "applicability": "不良事件为被动询问而非主动结构化清单，对头晕、乏力等非特异性症状的敏感性低。",
+      "uncertainty": "4 周连续给药、174 例、被动采集，零报告的解读受限于采集方式与样本量。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "该试验的给药方式为舌下含服、饭后、每日三次、每次 5 丸（每日 15 丸）、连续 4 周，属连续给药而非单次急性含服。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "During the 4-week treatment period, all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks.",
+      "applicability": "连续含服 4 周的场景，与患者所问的单次急性含服后反应不完全吻合。",
+      "uncertainty": "无法据此外推单次含服后短期出现头晕、乏力的频次。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "按《中国药典》，本品每丸含川芎以阿魏酸计不低于 15.0 μg，含冰片以龙脑计 2.9 至 4.4 mg。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C 10 H 10 O 4 ), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C 10 H 18 O)",
+      "applicability": "含量规定为制剂规格信息，不涉及临床发生率。",
+      "uncertainty": "为转引的中国药典规定，未直接核验药典原文。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "纳入 41 项试验、6276 例冠心病患者的荟萃分析，多数纳入试验因缺乏双盲设计而 Jadad 评分偏低。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis … The majority of the included studies received low Jadad scores due to the lack of a double-blind design",
+      "applicability": "全部为中国研究，检索截至 2016 年 6 月，对照包括硝酸甘油、二硝酸异山梨酯、复方丹参片等。",
+      "uncertainty": "低 Jadad 评分提示偏倚风险高，不良反应报告可能因未设盲而不完整。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "该荟萃分析中 14 项研究报告了不良反应，最常见为轻度头痛、头晕与面部潮红，不良反应率在治疗组与对照组之间无显著差异（RR 1.12，95% CI 0.50 至 2.51，P=0.785）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing … There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "结局为笼统不良反应率而非具体症状的分母与频次，未分列乏力、心悸、口干。",
+      "uncertainty": "区间宽（0.50 至 2.51），未分症状，多数试验未设盲。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "稳定型心绞痛试验（ChiCTR1900021876）方案规定安全性评估基于生命体征（呼吸频率、血压、心率）、实验室检查与不良事件。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "Safety assessment will be based on vital signs, laboratory examinations, and adverse events. Vital signs will include the respiratory rate, blood pressure, and heart rate.",
+      "applicability": "为试验方案，说明血压与心率作为安全指标被计划测量，但其结果见于付费全文。",
+      "uncertainty": "方案的测量计划不等于已发表的结果；血压、心率的变化方向与幅度未获全文核验。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "离体人内乳动脉（78 段，来自 30 例冠脉搭桥患者）器官浴实验显示，本品对 KCl 与 U46619 预收缩产生完全舒张（99.4%±10.5% 与 99.9%±5.6%，各 n=6）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC3997901",
+      "sourceTitle": "Suxiao Jiuxin Pill Induces Potent Relaxation and Inhibition on Contraction in Human Artery and the Mechanism",
+      "artifactPath": ".evimed-sources/PMC3997901/fulltext.md",
+      "identifier": "DOI:10.1155/2014/956924",
+      "accessLevel": "full_text",
+      "supportQuote": "Human IMA ( n = 78, from 30 patients) segments were obtained from patients undergoing CABG … Suxiao Jiuxin Pill caused full relaxation in KCl- and U46619-precontracted IMA rings (99.4 ± 10.5% for KCl; 99.9 ± 5.6% for U46619; n = 6 in each group).",
+      "applicability": "离体人血管平滑肌舒张证据，非人体在体血流动力学测量。",
+      "uncertainty": "器官浴为离体条件，浓度以血浆冰片浓度折算，不能直接外推为含服后的全身血压效应。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "该离体研究明确其动机是本品对人体血管的药理作用此前未知。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC3997901",
+      "sourceTitle": "Suxiao Jiuxin Pill Induces Potent Relaxation and Inhibition on Contraction in Human Artery and the Mechanism",
+      "artifactPath": ".evimed-sources/PMC3997901/fulltext.md",
+      "identifier": "DOI:10.1155/2014/956924",
+      "accessLevel": "full_text",
+      "supportQuote": "widely used for antiangina treatment in China but its pharmacological effect on human blood vessels is unknown",
+      "applicability": "说明该研究定位为首次离体人血管研究，而非在体测量。",
+      "uncertainty": "无。"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "大鼠急性心肌梗死模型与离体冠脉环研究显示，本品通过激活 eNOS-NO 通路诱导冠脉舒张。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "DOI:10.3389/fphar.2023.1104243",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP induced coronary artery relaxation via activation of the eNOS-NO pathway",
+      "applicability": "动物模型与离体冠脉环，机制证据，非人体在体血流动力学。",
+      "uncertainty": "冠脉舒张不等于体循环降压或主观症状的来源。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "该 2024 年试验以对长效硝酸酯不良反应不耐受者作为入选对象，并引证 45% 的冠心病患者出现硝酸酯相关头痛。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "Previous studies have indicated that 45% of patients with coronary heart disease suffer from nitrate-induced headache",
+      "applicability": "支持合并硝酸酯类是头痛等反应的替代解释之一。",
+      "uncertainty": "45% 为转引他人研究，原始出处未在本证据包内核验。"
+    },
+    {
+      "claimId": "CLM-018",
+      "claim": "胸痛伴出汗、恶心、头晕或气短者应立即呼叫 120，因可能为心肌梗死。",
+      "referenceNumber": 15,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "official-page:e6143b76645a9461",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: … you have chest pain and you feel sweaty, sick, light headed or short of breath … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "英国 NHS 公众分诊指引，急诊号码在中国本地化为 120。",
+      "uncertainty": "来源为公众教育页而非临床指南，但急诊处置方向与 ACS 指南一致。"
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "评价健康信息质量的 JAMA benchmark、改良 DISCERN、GQS 与 PEMAT 工具测量信息质量、透明度、可理解性与可操作性，不评价治疗有效性或临床疗效。",
+      "referenceNumber": 16,
+      "sourceUrl": "https://europepmc.org/articles/PMC13043423",
+      "sourceTitle": "Assessment of quality and reliability of Chinese-language myocardial infarction content on Bilibili and TikTok: a cross-sectional study",
+      "artifactPath": ".evimed-sources/PMC13043423/fulltext.md",
+      "identifier": "DOI:10.3389/fpubh.2026.1748168",
+      "accessLevel": "full_text",
+      "supportQuote": "The assessment instruments employed JAMA, mDISCERN, GQS, and PEMAT … to assess informational quality, transparency, understandability, and actionability within a digital health communication framework. They do not evaluate therapeutic validity or clinical efficacy.",
+      "applicability": "说明工具评分为属性存在性测量而非内容正确性测量。",
+      "uncertainty": "工具的适用框架为循证西医学体系，对中医药内容的评估存在系统性低估风险。"
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "该横断面研究的内容分析发现，急救与用药安全信息严重缺乏，硝酸甘油、阿司匹林与速效救心丸鲜少被讨论，部分内容未标明适用人群与禁忌证。",
+      "referenceNumber": 16,
+      "sourceUrl": "https://europepmc.org/articles/PMC13043423",
+      "sourceTitle": "Assessment of quality and reliability of Chinese-language myocardial infarction content on Bilibili and TikTok: a cross-sectional study",
+      "artifactPath": ".evimed-sources/PMC13043423/fulltext.md",
+      "identifier": "DOI:10.3389/fpubh.2026.1748168",
+      "accessLevel": "full_text",
+      "supportQuote": "Common medications, such as nitroglycerin, aspirin, and Suxiao Jiuxin Wan, were rarely discussed, and some content failed to indicate the applicable population and contraindications",
+      "applicability": "以内容正确性（指南对照）为终点的评价，区别于工具评分。",
+      "uncertainty": "样本为 137 条视频，横断面单一时间点，不代表所有公众用药信息。"
+    },
+    {
+      "claimType": "derived",
+      "claimId": "CLM-010",
+      "claim": "安慰剂对照数据未显示组间差异，但该阴性结果承载的信息有限：RR 1.12 的 95% CI 0.50 至 2.51 同时涵盖约 2.5 倍的升高与约 2 倍的降低，既不能排除有意义的小幅药物效应，也不能确认其一，故发生率问题当前不可回答。",
+      "derivedFrom": [
+        "CLM-007"
+      ],
+      "method": "对 CLM-007 的 RR 1.12 及其 95% CI 作解释性推算：95% CI 上界 2.51，意味着不能排除不良反应率约 2.5 倍的升高；下界 0.50，意味着不能排除约 2 倍的降低（1/0.50 = 2）；区间跨过 1，故无统计显著性不能解读为无差异。叠加纳入试验以被动询问采集不良事件且 Jadad 评分偏低，发生率无法据此估计。",
+      "assumptions": "荟萃分析报告的 RR 与其 95% CI 如实反映所合并试验的组间差异；纳入试验的不良反应采集与报告足以支撑该区间。",
+      "sensitivity": "若非特异性症状的漏报偏向任一组，RR 与区间随之移动，但'不能确认也不能排除'的方向性结论不变；区间由 14 项研究合并决定，单项权重变化不改变'不可回答'这一判断。",
+      "applicability": "适用于已确诊冠心病患者连续给药研究的合并证据，不适用于单次急性含服。",
+      "uncertainty": "低偏倚风险与被动采集使确定性进一步降低，区间跨过 1 使 1.12 的点估计不足以支持任何发生率结论。"
+    },
+    {
+      "claimType": "derived",
+      "claimId": "CLM-015",
+      "claim": "从离体血管舒张到人体含服后产生足以引起头晕、乏力的体循环血流动力学改变，中间隔着未被测量的步骤，故'这些反应由血管扩张引起'至多达到机制上可解释的水平（低确定性）。",
+      "derivedFrom": [
+        "CLM-011",
+        "CLM-013"
+      ],
+      "method": "CLM-011 与 CLM-013 提供离体人血管与动物冠脉的舒张证据，但均未测量人体含服后的血压、心率与脑血流，也未将血流动力学改变与主观症状对应。外推需经三个步骤：含服后有效成分的体循环浓度、其对全身血压与脑灌注的净效应、该效应与主观症状的对应关系；三者均无测量数据，故结论止于机制可解释。",
+      "assumptions": "离体血管舒张的机制可外推到体循环血管；含服剂量下有效成分足以产生可测的全身效应。",
+      "sensitivity": "若含服后吸收量低或作用主要限于冠脉，则体循环症状更不可能由药物引起；若存在未测量的显著降压，则头晕等更可能与之相关。两方向均缺数据，结论停在机制层级。",
+      "applicability": "针对'这些反应由血管扩张引起'这一假设的确定性上限。",
+      "uncertainty": "缺少人体在体血流动力学实测是决定性缺口。"
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "稳定型心绞痛试验方案计划纳入 324 例慢性稳定型心绞痛（气滞血瘀证）患者，治疗 24 周。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome) … for 24 weeks",
+      "applicability": "为计划纳入人数与疗程，实际入组 293 例；结果论文的全文未开放获取。",
+      "uncertainty": "方案的计划数与最终发表的样本量可能不同，全文未核验。"
+    },
+    {
+      "claimType": "synthesized",
+      "claimId": "CLM-022",
+      "claim": "有分母的安慰剂对照证据方向一致，均未显示本品的不良反应多于对照：纳入 174 例的试验在两组中均无不良事件报告，纳入 41 项试验的荟萃分析不良反应率无显著组间差异（RR 1.12，95% CI 0.50 至 2.51）。",
+      "confidence": "moderate",
+      "referenceNumber": 3,
+      "referenceNumbers": [
+        2,
+        3
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses … No participants reported experiencing adverse effects."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The remaining 41 studies were included in our meta-analysis … There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)"
+        }
+      ],
+      "applicability": "已确诊冠心病患者连续给药研究的合并证据，不适用于单次急性含服场景。",
+      "uncertainty": "被动采集与区间过宽（0.50 至 2.51）使该一致性不足以回答发生率，亦不排除小幅药物效应。"
+    }
+  ]
+}

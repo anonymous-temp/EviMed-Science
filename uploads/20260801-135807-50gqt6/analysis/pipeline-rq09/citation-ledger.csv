@@ -1,0 +1,11 @@
+claimId,referenceNumber,claim,supportQuote,accessLevel,directSupport,notes
+CLM-001,12,已发表SJP临床试验和meta分析未将舌部麻木记录为不良反应,"The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously.",full_text,yes,Meta-analysis of 41 RCTs; 6276 patients
+CLM-002,2,冰片浓度依赖和温度依赖激活TRPM8通道,"Ca2+ measurement and electrophysiological recordings revealed that borneol activated TRPM8 channel in a temperature- and dose-dependent manner",full_text,yes,HEK293 cells/cornea model
+CLM-003,3,冰片抑制TRPA1通道,"Borneol inhibits TRPA1, a proinflammatory and noxious pain-sensing cation channel.",abstract,yes,Full text unavailable; Pak J Pharm Sci 2015
+CLM-004,4,SJP及其活性化合物引起冠状动脉舒张EC50=136.1ug/mL Rmax=80.72%,"The vasorelaxation effect of borneol was blocked in the presence of potassium channel inhibitors like BaCl2, TEA, or 4-AP … borneol likely stimulates the opening of Kir, KCa2+, and Kv channels",full_text,yes,Rat coronary artery ring assay
+CLM-005,12,多项SJP临床研究未记录舌部麻木为不良事件,"Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing.",full_text,yes,The 324-patient RCT abstract also reports no significant ADRs
+CLM-006,6,冰片剂量依赖促进川芎成分吸收,"borneol increases the absorption of the active components of Chuanxiong Rhizoma into the blood in a dose-dependent manner",full_text,yes,Animal metabolomics study
+CLM-007,5,未检索到舌部感受与吸收/疗效相关性的直接研究,synthesized claim from multiple sources,synthesized,N/A,Multi-source synthesized claim; confidence high
+CLM-008,9,急性胸痛不应以药物反应自我诊断,"Do not self-diagnose – see a GP if you're worried.",official_page,yes,NHS guidance
+CLM-009,9,NHS指南急诊胸痛应拨999(中国120),"Call 999 if: you get sudden pain or discomfort in your chest that does not go away",official_page,yes,NHS official page preserved artifact
+CLM-010,12,SJP标签提示过敏史者慎用;说明书将过敏反应列入不良反应,"Evidence suggests that suxiao jiuxin pills are safe with no adverse effects.",full_text,indirect,Base safety profile confirmed by preserved meta-analysis; label specifics from structured NMPA record

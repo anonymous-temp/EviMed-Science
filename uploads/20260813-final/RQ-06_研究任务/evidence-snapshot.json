@@ -1,0 +1,262 @@
+{
+  "meta": {
+    "task": "RQ-06 速效救心丸与复方丹参滴丸的对比评价",
+    "assessmentType": "comprehensive_drug_evaluation",
+    "decisionDate": "2026-08-13",
+    "jurisdiction": "中国 (NMPA)",
+    "population": "冠心病心绞痛（气滞血瘀型胸痹）成人患者；中国门诊及院外场景",
+    "comparator": "速效救心丸 vs 复方丹参滴丸（互为对照）",
+    "outcomes": "起效时间/症状缓解、心绞痛发作频率与持续时间、心电图改善、安全性、疗程表述溯源",
+    "timeHorizon": "急性发作期 + 长期维持（数周至数月）",
+    "careSetting": "门诊、药店、院外自救与长期慢病管理",
+    "compilerInputSha256": "c09c29b325b7df15ebb653280ee3d0ac4c8b65b02add3606e1aac2b79235a172",
+    "note": "本快照在评估前冻结；compilerInputSha256 在 compile 后回填。"
+  },
+  "scopeGaps": {
+    "population": "用户未显式提供，按任务背景推断为中国冠心病心绞痛人群，属声明性缺口。",
+    "quantitativeScoringRequested": false,
+    "declaredGaps": [
+      "CNKI/万方/维普等中文全文数据库不可访问，中文研究仅经国际数据库收录部分与开放获取渠道间接覆盖",
+      "NMPA 官方说明书原文未能直接抓取（evimed_drug_label_search 返回 HTTP 400）；复方丹参滴丸仅有索引件，速效救心丸仅经二手商业药房站点获得文本，均需官方核实",
+      "ClinicalTrials.gov / 中国临床试验注册中心经适配器检索命中 0 条",
+      "未开展新临床试验，未使用个体患者数据"
+    ]
+  },
+  "sources": [
+    {
+      "id": "CDDP-LABEL-NMPA",
+      "title": "复方丹参滴丸说明书（NMPA 索引件，天士力医药集团股份有限公司）",
+      "url": "https://www.nmpa.gov.cn/ (国家药监局数据查询，批准文号 国药准字Z10950111)",
+      "source": "evimed-nmpa-label-indexed",
+      "retrievedAt": "2026-08-13T15:15:12Z",
+      "evidenceAccess": "regulatory_record",
+      "observedFields": {
+        "批准文号": "国药准字Z10950111",
+        "生产企业": "天士力医药集团股份有限公司",
+        "规格": "薄膜衣滴丸，每丸重 27mg",
+        "成分": "丹参、三七、冰片",
+        "功能主治": "活血化瘀，理气止痛。用于气滞血瘀所致的胸痹，症见胸闷、心前区刺痛；冠心病心绞痛见上述证候者。用于2型糖尿病引起的Ⅰ期（轻度）、Ⅱ期（中度）非增殖性糖尿病视网膜病变气滞血瘀证所致的视物昏花、面色晦暗、眼底点片状出血等。",
+        "禁忌": "对本品及所含成份过敏者禁用",
+        "注意事项": "孕期、哺乳期妇女慎用",
+        "不良反应": "临床试验和监测数据显示本品可见以下不良反应（胃肠系统、头晕等，正文以现行说明书为准）"
+      },
+      "verificationStatus": "EviMed 索引件，官方现行文本需经 NMPA 数据查询核实；本记录非原始批准日期。"
+    },
+    {
+      "id": "SXJW-LABEL-SECONDARY",
+      "title": "速效救心丸说明书（二手商业药房站点转载文本，非官方原件）",
+      "url": "https://www.nmpa.gov.cn/ (国家药监局数据查询，批准文号 国药准字Z12020025)",
+      "source": "open-web-secondary-pharmacy",
+      "retrievedAt": "2026-08-13T15:16:40Z",
+      "evidenceAccess": "bibliographic_only",
+      "observedFields": {
+        "批准文号": "国药准字Z12020025",
+        "生产企业": "津药达仁堂集团股份有限公司第六中药厂",
+        "成分": "川芎、冰片",
+        "规格": "每粒 40mg（规格 40mg×60丸 等）",
+        "功能主治": "行气活血，祛瘀止痛，增加冠脉血流量，缓解心绞痛。用于气滞血瘀型冠心病、心绞痛。",
+        "用法用量": "含服，一次 4～6 粒，一日 3 次；急性发作时，一次 10～15 粒。",
+        "禁忌": "孕妇禁用；对本品及所含成份过敏者禁用。",
+        "注意事项": "寒凝血瘀、阴虚血瘀胸痹心痛不宜单用；有过敏史者慎用。"
+      },
+      "verificationStatus": "经百度聚合的多个商业药房/科普站点（39健康、健客、医联媒体等）转述；NMPA 官方原件未直接获得（drug_label_search HTTP 400），须官方核实后方可引用。"
+    },
+    {
+      "id": "PMID:28397728",
+      "title": "Recommendations on the Clinical Use of Compound Danshen Dripping Pills",
+      "doi": "10.4103/0366-6999.204106",
+      "pmid": "28397728",
+      "pmcid": "PMC5407045",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28397728/",
+      "source": "pubmed / europe-pmc-fulltext",
+      "retrievedAt": "2026-08-13T15:16:40Z",
+      "evidenceAccess": "full_text",
+      "artifact": ".evimed-sources/PMC5407045/fulltext.md",
+      "observedFields": {
+        "出处": "中华老年医学杂志 2016;35:1139-45 中文版之英文版（Chin Med J 2017）",
+        "性质": "中国老年医学学会牵头制定的复方丹参滴丸临床应用专家建议/共识",
+        "关键结论": "CDDP 起效快（口服后丹参素等成分 Tmax <1 h）；冠心病 10丸 tid，4周为一疗程，可据病情延长；急救 10丸舌下含服，5分钟未缓解可再服10丸或改用硝酸酯类；糖尿病微血管并发症 10～20丸 tid，24周为一疗程；含 FDA II 期（美国 125 例，安慰剂对照）结果；16 篇 meta 分析共 513 项原始研究、53,350 例均报阳性疗效；ADR 发生率 0.0018%。"
+      }
+    },
+    {
+      "id": "PMID:25582415",
+      "title": "Compound Danshen (Salvia miltiorrhiza) dripping pill for coronary heart disease: an overview of systematic reviews",
+      "doi": "10.1142/S0192415X15500020",
+      "pmid": "25582415",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/25582415/",
+      "source": "pubmed",
+      "retrievedAt": "2026-08-13T15:17:26Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "系统评价的伞状综述 (overview of SRs)，纳入 13 篇 SR、34,071 例",
+        "方法学评价": "AMSTAR 评价 SR 质量；GRADE 评价证据体确定性",
+        "结果": "多数 SR 提示 CDDP 改善症状与心电图、不良反应少，但终点获益未经证实；证据确定性总体为 very low 至 moderate；纳入 SR 多为 low(3/13) 或 moderate(9/13) 质量。"
+      }
+    },
+    {
+      "id": "PMID:40258733",
+      "title": "Advances of clinical trials on compound Danshen dripping pills for stable angina pectoris: A perspective",
+      "doi": "10.1097/MD.0000000000042175",
+      "pmid": "40258733",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/40258733/",
+      "source": "pubmed",
+      "retrievedAt": "2026-08-13T15:17:28Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "针对稳定型心绞痛的 CDDP 随机对照试验的综述，检索 CNKI+PubMed 至 2024-07-31，纳入 10 项 RCT",
+        "结果": "CDDP 可能具有抗缺血、扩血管、抗氧化获益，单药与联合用药安全性良好；需更多多中心 RCT 验证长期疗效与安全性。"
+      }
+    },
+    {
+      "id": "PMID:22803444",
+      "title": "Assessment of the quality of randomized controlled trials in treating coronary heart disease by Chinese patent medicine",
+      "pmid": "22803444",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/22803444/",
+      "source": "pubmed",
+      "retrievedAt": "2026-08-13T15:17:31Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "对复方丹参滴丸、复方丹参片、速效救心丸、通心络胶囊、硝酸异山梨酯治疗冠心病心绞痛 RCT 的质量评价",
+        "结果": "纳入 88 项 RCT；Jadad 中位 2.00，仅 9.09%(8/88) 为高质量（Jadad>2）；1997—2009 年 RCT 质量未改善。"
+      }
+    },
+    {
+      "id": "SXJW-CONSENSUS-2019",
+      "title": "速效救心丸治疗冠心病中国专家共识",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=7100492500",
+      "source": "evimed-literature (中西医结合心脑血管病杂志, 2019)",
+      "retrievedAt": "2026-08-13T15:17:45Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "作者": "吴宗贵、王肖龙、张敏州、刘中勇、阮小芬、贺治青 等",
+        "年份": "2019",
+        "期刊": "中西医结合心脑血管病杂志",
+        "摘要要点": "速效救心丸为《中华人民共和国药典》第一个纯中药滴丸制剂，1982 年上市；用于冠心病预防、治疗与急救。",
+        "外部转述": "据达仁堂（厂商）回应及媒体转述，该共识推荐预防与长期治疗每次 4～6 粒、每日 3 次，4 周为 1 个疗程、至少服用 1～2 个疗程；正文细节未能经全文核实。"
+      }
+    },
+    {
+      "id": "H2H-LI2014",
+      "title": "复方丹参滴丸与速效救心丸疗效观察",
+      "url": "https://chkdx.cnki.net/kcms/detail/detail.aspx?FileName=YXLT201411083&DbName=CHKJ2014",
+      "source": "evimed-literature (基层医学论坛, 2014)",
+      "retrievedAt": "2026-08-13T15:15:58Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "观察对比 76 例不稳定型心绞痛患者含服两药后的疗效与缓解时间",
+        "结论": "复方丹参滴丸较速效救心丸作用更迅速",
+        "局限": "样本小、单中心、报告为‘观察对比’，随机与盲法未明。"
+      }
+    },
+    {
+      "id": "H2H-ZHENG2017",
+      "title": "速效救心丸与复方丹参滴丸治疗冠心病心绞痛的临床效果比较",
+      "url": "https://qikan.cqvip.com/Qikan/Article/Detail?id=673509142",
+      "source": "evimed-literature (中国生化药物杂志, 2017)",
+      "retrievedAt": "2026-08-13T15:15:58Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "98 例冠心病心绞痛，随机数字表法分为复方丹参滴丸组(n=49)与速效救心丸组(n=49)，常规治疗基础上加药，观察 2 周",
+        "结论": "两组发作频率与持续时间均改善，速效救心丸组下降幅度优于复方丹参滴丸组 (P<0.05)",
+        "局限": "样本小、单中心、结局为替代指标（发作频次/时间）。"
+      }
+    },
+    {
+      "id": "H2H-XU2015",
+      "title": "速效救心丸与复方丹参滴丸治疗冠心病心绞痛的临床效果与经济性比较",
+      "url": "https://www.sinomed.ac.cn/zh/detail.do?ui=2016176927",
+      "source": "evimed-literature (中国当代医药, 2015)",
+      "retrievedAt": "2026-08-13T15:15:58Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "80 例冠心病心绞痛按入院顺序分为速效救心丸组(n=40)与复方丹参滴丸组(n=40)",
+        "结论": "复方丹参滴丸组总有效率 95.0% 高于速效救心丸组 80.0% (P<0.05)；总成本 404.95 vs 394.96 元，差异无统计学意义",
+        "局限": "按入院顺序分配而非严格随机、样本小、单中心。"
+      }
+    },
+    {
+      "id": "H2H-WAN2006",
+      "title": "复方丹参滴丸、速效救心丸治疗冠心病心绞痛的疗效观察",
+      "url": "https://chkdx.cnki.net/kcms/detail/detail.aspx?FileName=JXYY2006S1015&DbName=CHKJ2006",
+      "source": "evimed-literature (江西医药, 2006)",
+      "retrievedAt": "2026-08-13T15:15:58Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "复方丹参滴丸组 46 例 vs 速效救心丸组 27 例，疗程 2 个月",
+        "结论": "复方丹参滴丸组抗心绞痛显效率 67.4% vs 48.1% (P<0.05)、心电图改善 84.8% vs 48.1% (P<0.01)",
+        "局限": "组间样本量严重不平衡、分配方法未明、单中心。"
+      }
+    },
+    {
+      "id": "H2H-LUO2009",
+      "title": "速效救心丸合复方丹参滴丸治疗稳定型心绞痛疗效观察",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMzIxEg1zeHp5MjAwOTA4MDA2Ggh3Zmw4a3FhcQ%3D%3D",
+      "source": "evimed-literature (山西中医, 2009)",
+      "retrievedAt": "2026-08-13T15:15:58Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "两药合用组 46 例 vs 消心痛+阿司匹林对照组 42 例，疗程 2 个月，随访 1～2 年",
+        "结论": "总有效率 91.3% vs 92.9%，差异无统计学意义 (P>0.05)",
+        "局限": "为两药联用 vs 西药，非两药头对头；样本小。"
+      }
+    },
+    {
+      "id": "PK-GUO2003",
+      "title": "GC-FID法同步测定人含服速效救心丸后血中冰片、川芎嗪含量",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMzIxEgx6Y3kyMDAzMDgwMzAaCGNidHZndDZi",
+      "source": "evimed-literature (中草药, 2003)",
+      "retrievedAt": "2026-08-13T15:15:54Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "健康志愿者含服速效救心丸后血浆冰片、川芎嗪 GC-FID 药动学",
+        "结果": "体内药时过程符合开放性一室模型，吸收、分布、排泄较为迅速；摘要未给出具体 Tmax/Cmax 数值。"
+      }
+    },
+    {
+      "id": "PK-YANG1994",
+      "title": "冰片和川芎嗪血药浓度的GC-MSD测定法",
+      "url": "https://d.wanfangdata.com.cn/periodical/ChlQZXJpb2RpY2FsQ0hJTmV3UzIwMjMwMzIxEg15eHhiMTk5NDA5MDA2Ggh4emM4aTFyMg%3D%3D",
+      "source": "evimed-literature (药学学报, 1994)",
+      "retrievedAt": "2026-08-13T15:18:15Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "GC-MSD 同步测定血浆冰片与川芎嗪，并用于健康人含服速效救心丸后冰片的药动学研究",
+        "结果": "方法学文献；未给出速效救心丸达峰时间的定量结论。"
+      }
+    },
+    {
+      "id": "ANIMAL-LI2011",
+      "title": "Effects of Suxiao Jiuxin Pill on Oxidative Stress and Inflammatory Response in Rats with Experimental Atherosclerosis",
+      "url": "https://www.sinomed.ac.cn/zh/detail.do?ui=2011624031",
+      "source": "evimed-literature (中医杂志英文版, 2011)",
+      "retrievedAt": "2026-08-13T15:15:37Z",
+      "evidenceAccess": "abstract",
+      "observedFields": {
+        "设计": "SD 大鼠动脉粥样硬化模型，速效救心丸低/中/高剂量 vs 阿托伐他汀，12 周",
+        "结果": "中、高剂量降低 ox-LDL、MDA，升高 SOD；降低 PPARγ 与 NF-κB 蛋白表达",
+        "性质": "动物实验，仅支持机制描述，不能支撑临床获益结论。"
+      }
+    }
+  ],
+  "queries": [
+    {"tool": "evimed_comprehensive_drug_evaluation", "query": "drug=速效救心丸, indication=冠心病心绞痛/气滞血瘀型胸痹", "action": "retrieve", "resultSummary": "labels:0, guidelines:0, trials:0, literature:2 (血府逐瘀汤应用举偶、不同教材/指南冠心病中医分型对比)"},
+    {"tool": "evimed_comprehensive_drug_evaluation", "query": "drug=复方丹参滴丸, indication=冠心病心绞痛/气滞血瘀型胸痹", "action": "retrieve", "resultSummary": "labels:2 (NMPA 索引件), guidelines:0, trials:0, literature:2"},
+    {"tool": "evimed_drug_label_search", "query": "速效救心丸 / 复方丹参滴丸", "result": "HTTP 400 错误，未取得官方说明书"},
+    {"tool": "evimed_literature_search", "query": "速效救心丸 冠心病 心绞痛 随机对照", "result": "30 条（多为其他中成药 RCT，速效救心丸特异性低）"},
+    {"tool": "evimed_literature_search", "query": "复方丹参滴丸 冠心病 心绞痛 随机对照 临床试验", "result": "19 条"},
+    {"tool": "evimed_literature_search", "query": "Suxiao Jiuxin Wan angina", "result": "1 条（动物实验）"},
+    {"tool": "evimed_literature_search", "query": "Compound Danshen Dripping Pill angina coronary", "result": "7 条 PubMed"},
+    {"tool": "evimed_literature_search", "query": "速效救心丸 药代动力学 舌下含服 川芎嗪 达峰时间", "result": "4 条"},
+    {"tool": "evimed_literature_search", "query": "复方丹参滴丸 药代动力学 达峰时间 丹参素 血药浓度", "result": "3 条"},
+    {"tool": "evimed_literature_search", "query": "速效救心丸 复方丹参滴丸 比较 疗效", "result": "874 条命中，取前 20（含 5 项头对头研究）"},
+    {"tool": "evimed_literature_search", "query": "速效救心丸 连续服用 三个月 疗程", "result": "PubMed 无命中"},
+    {"tool": "evimed_clinical_trial_search", "query": "复方丹参滴丸 冠心病 心绞痛 / 速效救心丸 心绞痛", "result": "各 0 条"},
+    {"tool": "evimed_guideline_search", "query": "复方丹参滴丸/速效救心丸 冠心病 指南", "result": "回落至 PubMed 通用指南，无两药相关指南/共识直接命中"},
+    {"tool": "evimed_biomedical_source_search", "query": "PMID 25582415 / 40258733 / 22803444", "result": "各取摘要"},
+    {"tool": "evimed_web_search", "query": "速效救心丸 说明书 批准文号 / 复方丹参滴丸 说明书 用法用量 / 三个月疗程 / 专家共识", "result": "二手商业站点与媒体转述，未经官方核实"}
+  ],
+  "retrievalTimestamps": {
+    "startedAt": "2026-08-13T15:13:00Z",
+    "frozenAt": "2026-08-13T15:20:00Z"
+  }
+}

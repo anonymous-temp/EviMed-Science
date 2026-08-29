@@ -1,0 +1,349 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "速效救心丸为川芎与冰片（四甲基吡嗪与冰片）组方、批准文号 Z12020025，具有调节气血运行、促进血脉流通之功用。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600; PMCID:PMC8287819; DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "Suxiao Jiuxin Pill (SJP, produced by Tianjin Zhongxin Pharmaceutical Group Co, Ltd.) is a patented drug made of active ingredients from Chuanxiong and Borneol, and it has the effect of regulating Qi and promoting blood circulation. … SJP is composed of tetramethylpyrazine and borneol approval number Z12020025 of the China State Food and Drug Administration",
+      "applicability": "直接：说明书组方与批准文号。",
+      "uncertainty": "批准文号与组方出自试验方案而非官方说明书原件；说明书原文表述以药品说明书索引为准并待官方现行版本核验。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+      "claim": "本品用于冠心病的临床研究均限定气滞血瘀证，纳入年龄 18 至 80 岁，未按绝经状态或性别设定入组条件。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600; PMCID:PMC8287819; DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). … Age 18 to 80 years",
+      "applicability": "直接：本品冠心病试验的入组证型与年龄。",
+      "uncertainty": "入组未按性别或绝经状态限定，不等于围绝经期女性被排除，但未单独入组亦无亚组分析。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "本品稳定型心绞痛试验为随机、双盲、安慰剂对照、多中心设计，每次 5 丸、每日 3 次，疗程 24 周。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600; PMCID:PMC8287819; DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "supportQuote": "This is a prospective, randomized, double-blind, placebo-controlled, and multicenter trial. … Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks.",
+      "applicability": "直接：试验设计与用法。",
+      "uncertainty": "该剂量为试验方案剂量，非说明书批准用法用量。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "2018 年系统评价纳入 41 项随机对照试验、6276 例冠心病患者，本品较对照改善心电图结果（RR 1.32，95%CI 1.26 to 1.38），异质性高（I²=62.3%）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … However, there was significant heterogeneity between studies with respect to ECG results ( I 2 = 62.3%).",
+      "applicability": "直接：冠心病总体人群的心电图结局。",
+      "uncertainty": "异质性高（I²=62.3%），多数研究 Jadad 评分低；心电图改善为替代终点。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "该评价治疗组平均年龄 57.57±8.15 岁、男性占 54.10%，未报告按性别或绝经状态分层的结果。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "The mean age in the treatment group was 57.57 ± 8.15 years and 54.10% of the patients were male.",
+      "applicability": "直接：纳入人群构成。",
+      "uncertainty": "原文仅报告年龄与性别构成，未报告绝经状态；亚组分析只按对照药物区分。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "本品不良反应以轻度头痛、头晕、面部潮红为主，多数自行缓解，发生率与对照无显著差异（RR 1.12，95%CI 0.50 to 2.51）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157; PMCID:PMC5892298; DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "直接：冠心病心绞痛人群的不良反应。",
+      "uncertainty": "仅有 14 项研究报告不良反应；主动监测与分母不完整，发生率估计受限。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claimType": "direct",
+      "claim": "校正年龄与心血管危险因素后，血管舒缩症状与冠心病风险的相关性为 RR 1.28（95%CI 1.08; 1.52）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC4912069",
+      "sourceTitle": "Association of Vasomotor and Other Menopausal Symptoms with Risk of Cardiovascular Disease: A Systematic Review and Meta-Analysis",
+      "artifactPath": ".evimed-sources/PMC4912069/fulltext.md",
+      "identifier": "PMID:27315068; PMCID:PMC4912069; DOI:10.1371/journal.pone.0157417",
+      "accessLevel": "full_text",
+      "supportQuote": "Further adjustment for established cardiovascular risk factors and potential mediators attenuated but did not abolish the associations of VMS (RR = 1.28; 95%CI = 1.08; 1.52) and of any menopausal symptoms (RR = 1.18; 95%CI = 1.03; 1.35) with CHD.",
+      "applicability": "直接：血管舒缩症状与冠心病风险，前瞻性队列汇总。",
+      "uncertainty": "观察性证据，存在残余混杂与发表偏倚；风险标记而非因果估计。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claimType": "direct",
+      "claim": "血管舒缩症状与总心血管疾病风险相关（单研究 RR 1.54，95%CI 1.27–1.86），校正后减弱为 1.23（95%CI 1.00–1.52）。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC4912069",
+      "sourceTitle": "Association of Vasomotor and Other Menopausal Symptoms with Risk of Cardiovascular Disease: A Systematic Review and Meta-Analysis",
+      "artifactPath": ".evimed-sources/PMC4912069/fulltext.md",
+      "identifier": "PMID:27315068; PMCID:PMC4912069; DOI:10.1371/journal.pone.0157417",
+      "accessLevel": "full_text",
+      "supportQuote": "Only one study examined the association between VMS and the risk of CVD and showed a RR adjusted for age and potential risk factors of 1.54 (1.27–1.86) … Multiple adjustment for established cardiovascular risk factors attenuated the overall RRs: 1.23 (95% CI: 1.00–1.52) for VMS",
+      "applicability": "直接：血管舒缩症状与总心血管疾病风险。",
+      "uncertainty": "总心血管疾病结局仅一项研究直接评估 VMS；观察性证据。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "direct",
+      "claim": "绝经女性中血管舒缩症状的报告患病率为 50.3% 至 82.1%。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC4912069",
+      "sourceTitle": "Association of Vasomotor and Other Menopausal Symptoms with Risk of Cardiovascular Disease: A Systematic Review and Meta-Analysis",
+      "artifactPath": ".evimed-sources/PMC4912069/fulltext.md",
+      "identifier": "PMID:27315068; PMCID:PMC4912069; DOI:10.1371/journal.pone.0157417",
+      "accessLevel": "full_text",
+      "supportQuote": "50.3%[ 2 ] to 82.1%[ 3 ] of menopausal women experience VMS",
+      "applicability": "直接：症状流行病学背景。",
+      "uncertainty": "区间来自不同研究设定与人群。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "direct",
+      "claim": "静息心率变异性在有无血管舒缩症状的女性之间无统计学差异（汇总 3 项研究、231 例，LF p=0.06、HF p=0.11）。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC13167700",
+      "sourceTitle": "A systematic review of heart rate variability and menopausal vasomotor symptoms",
+      "artifactPath": ".evimed-sources/PMC13167700/fulltext.md",
+      "identifier": "PMID:42121335; PMCID:PMC13167700; DOI:10.14814/phy2.70907",
+      "accessLevel": "full_text",
+      "supportQuote": "Three studies were suitable for meta‐analysis. The pooled analysis revealed no difference in low frequency (LF) in women with VMS compared to those without VMS (Difference in means: 2.715 [95% CI: −0.124 to 5.555]; p = 0.06). There were no group differences in high frequency (HF) ( p = 0.11). … a total of 231 study participants were reported … n = 3",
+      "applicability": "直接：血管舒缩症状与自主神经（心率变异性）。",
+      "uncertainty": "仅 3 项研究可合并、样本量小（187 例有症状对 44 例无症状）、异质性高。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claimType": "direct",
+      "claim": "17β-雌二醇经内皮细胞雌激素受体 α/β 上调内皮型一氧化氮合酶活性与一氧化氮生成；绝经后雌激素下降被假设为促进心肌微血管功能障碍。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC6616854",
+      "sourceTitle": "Estrogen Contributions to Microvascular Dysfunction Evolving to Heart Failure With Preserved Ejection Fraction",
+      "artifactPath": ".evimed-sources/PMC6616854/fulltext.md",
+      "identifier": "PMID:31333587; PMCID:PMC6616854; DOI:10.3389/fendo.2019.00442",
+      "accessLevel": "full_text",
+      "supportQuote": "we hypothesize that the drop of estrogen levels after menopause contributes to myocardial microvascular dysfunction and renders post-menopausal women more vulnerable for heart diseases that involve the microvasculature … 17β-estradiol (E2) can positively regulate eNOS activity and thereby NO production by binding to the estrogen receptors (ER)-α and -β that are both present in endothelial cells",
+      "applicability": "机制层级：方向性提示。",
+      "uncertainty": "综述性假设，非人体实验，不提供临床效应量。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claimType": "direct",
+      "claim": "女性 1 型心肌梗死的典型症状比例高于男性（77% 对 59%，P=0.007）；≥3 项典型特征在女性有诊断价值（阳性似然比 1.18，95%CI 1.03–1.31）。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC6755854",
+      "sourceTitle": "Presenting Symptoms in Men and Women Diagnosed With Myocardial Infarction Using Sex‐Specific Criteria",
+      "artifactPath": ".evimed-sources/PMC6755854/fulltext.md",
+      "identifier": "PMID:31431112; PMCID:PMC6755854; DOI:10.1161/jaha.119.012307",
+      "accessLevel": "full_text",
+      "supportQuote": "Typical symptoms were more common in women than in men with myocardial infarction (77% [69/90] versus 59% [109/184]; P =0.007) … The presence of ≥3 typical features was associated with a positive likelihood ratio for the diagnosis of myocardial infarction in women (positive likelihood ratio, 1.18; 95% CI, 1.03–1.31) but not in men",
+      "applicability": "直接：女性心肌缺血症状特征与诊断价值。",
+      "uncertainty": "单中心急诊队列；纳入范围为疑诊急性冠脉综合征者。"
+    },
+    {
+      "claimId": "CLM-013",
+      "claimType": "direct",
+      "claim": "胸痛是疑诊急性冠脉综合征女性最常见主诉（女性 92%、男性 91%），女性较男性更多报告心悸（11% 对 7%）与恶心（34% 对 22%）；性别特异阈值使女性 1 型心梗诊断增加 30%。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC6755854",
+      "sourceTitle": "Presenting Symptoms in Men and Women Diagnosed With Myocardial Infarction Using Sex‐Specific Criteria",
+      "artifactPath": ".evimed-sources/PMC6755854/fulltext.md",
+      "identifier": "PMID:31431112; PMCID:PMC6755854; DOI:10.1161/jaha.119.012307",
+      "accessLevel": "full_text",
+      "supportQuote": "Chest pain was the presenting symptom in 91% (1081/1185) of men and 92% (698/756) of women. … Women, compared with men, more often reported palpitations as a presenting symptom (11% versus 7%…) … more likely to report associated nausea (34% versus 22%…) … increased the number of patients diagnosed with type 1 myocardial infarction by 30% (27/90) in women and 4.9% (9/184) in men",
+      "applicability": "直接：女性心肌缺血症状与诊断阈值。",
+      "uncertainty": "单中心、患者自报症状。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claimType": "direct",
+      "claim": "接受造影的稳定型心绞痛患者中，无阻塞性冠状动脉缺血在女性（50%–70%）多于男性（30%–50%）；MINOCA 约占全部急性心肌梗死的 14%，女性更多。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC10785769",
+      "sourceTitle": "Clinical aspects of ischemia with no obstructive coronary artery disease (INOCA)",
+      "artifactPath": ".evimed-sources/PMC10785769/fulltext.md",
+      "identifier": "PMID:38222977; PMCID:PMC10785769; DOI:10.1016/j.ahjo.2023.100352",
+      "accessLevel": "full_text",
+      "supportQuote": "Patients with acute myocardial infarction (AMI) found to have no obstructive CAD (MINOCA) make up 14 % of all AMIs and are also more common in women … INOCA is diagnosed more frequently in women (50–70 %) than in men (30–50 %) among those undergoing angiography for stable angina",
+      "applicability": "直接：无阻塞性冠状动脉缺血的性别分布。",
+      "uncertainty": "分母为接受造影的稳定型心绞痛人群，与更年期主诉就诊人群非同一抽样框。"
+    },
+    {
+      "claimId": "CLM-015",
+      "claimType": "direct",
+      "claim": "约四分之三的无阻塞性冠状动脉缺血患者为女性；女性接受胸痛检查的可能性更低，面临漏诊、治疗不足与预后更差的风险。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC11273011",
+      "sourceTitle": "Reappraising Ischemic Heart Disease in Women",
+      "artifactPath": ".evimed-sources/PMC11273011/fulltext.md",
+      "identifier": "PMID:39076281; PMCID:PMC11273011; DOI:10.31083/j.rcm2404118",
+      "accessLevel": "full_text",
+      "supportQuote": "Women are less likely to have investigations performed for chest pain and, accordingly, are at risk of underdiagnosis, undertreatment, and poorer prognosis … Approximately three-quarters of patients with INOCA are women",
+      "applicability": "直接：女性缺血性心脏病的性别差异。",
+      "uncertainty": "综述性陈述，引用既有研究。"
+    },
+    {
+      "claimId": "CLM-016",
+      "claimType": "direct",
+      "claim": "WHI 与 HERS 随机试验未显示绝经激素治疗用于一级或二级预防的获益；在时间窗（小于 60 岁或末次月经后 10 年内）启动可降低心血管发病与死亡，但对高心血管风险女性以预防为目的使用属禁忌。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC11273011",
+      "sourceTitle": "Reappraising Ischemic Heart Disease in Women",
+      "artifactPath": ".evimed-sources/PMC11273011/fulltext.md",
+      "identifier": "PMID:39076281; PMCID:PMC11273011; DOI:10.31083/j.rcm2404118",
+      "accessLevel": "full_text",
+      "supportQuote": "Two large randomized controlled trials, the Women’s Health Initiative (WHI) and the Heart and Estrogen/progestin Replacement Study (HERS), showed no evidence of benefit for primary or secondary prevention with menopause hormone therapy … If commenced within the optimal timing window ( < 60 years of age or within 10 years since the last menstrual period), menopause hormone therapy can reduce cardiovascular morbidity and mortality, although it is contraindicated for the sole purpose of prevention in women at high risk of cardiovascular disease",
+      "applicability": "直接：绝经激素治疗的心血管预防立场。",
+      "uncertainty": "综述转述既有随机试验结论。"
+    },
+    {
+      "claimId": "CLM-017",
+      "claimType": "direct",
+      "claim": "胸痛持续不缓解（压榨或压迫感）、放射至臂或颈颌、或伴出汗、恶心、头晕、气促，需立即呼叫急救并接受院内评估。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS Chest pain (retrieved 2026-08-14, sha256 e6143b76645a9461)",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: … you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest … you have chest pain and you feel sweaty, sick, light headed or short of breath … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "直接：胸痛警示特征与急诊处置。",
+      "uncertainty": "英国公共卫生指引，急救呼叫号码在中国为 120。"
+    },
+    {
+      "claimId": "CLM-018",
+      "claimType": "synthesized",
+      "claim": "速效救心丸的随机对照证据集中于气滞血瘀型冠心病心绞痛人群（平均年龄 57.57 岁、男性过半），未检索到以围绝经期或绝经后女性为对象、以血管舒缩症状或心悸为终点的适应症内研究。",
+      "referenceNumber": 2,
+      "referenceNumbers": [
+        2,
+        3
+      ],
+      "confidence": "moderate",
+      "applicability": "直接：本品人群覆盖与证据空缺。",
+      "uncertainty": "“未检索到”是检索层面的发现，受中文数据库不可访问与检索范围所限，不等于文献中不存在。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). … Age 18 to 80 years"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The mean age in the treatment group was 57.57 ± 8.15 years and 54.10% of the patients were male."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-019",
+      "claimType": "synthesized",
+      "claim": "血管舒缩症状与心肌缺血的证据分属不同层级：前者与远期心血管风险相关（观察性风险标记）且静息心率变异性在有无症状者间无差异，后者经机制提示与雌激素撤退相关；三者均不构成“潮热伴心悸即心肌缺血”的直接证据。",
+      "referenceNumber": 5,
+      "referenceNumbers": [
+        5,
+        6,
+        7
+      ],
+      "confidence": "moderate",
+      "applicability": "直接：两类临床实体证据基础的区分。",
+      "uncertainty": "三组证据的确定性不等（观察性／生理学／机制假设），不能以机制的生物学合理性替代临床结局证据。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4912069",
+          "sourceTitle": "Association of Vasomotor and Other Menopausal Symptoms with Risk of Cardiovascular Disease: A Systematic Review and Meta-Analysis",
+          "artifactPath": ".evimed-sources/PMC4912069/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Further adjustment for established cardiovascular risk factors and potential mediators attenuated but did not abolish the associations of VMS (RR = 1.28; 95%CI = 1.08; 1.52)"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC13167700",
+          "sourceTitle": "A systematic review of heart rate variability and menopausal vasomotor symptoms",
+          "artifactPath": ".evimed-sources/PMC13167700/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Women with VMS and without VMS did not show differences in HRV."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC6616854",
+          "sourceTitle": "Estrogen Contributions to Microvascular Dysfunction Evolving to Heart Failure With Preserved Ejection Fraction",
+          "artifactPath": ".evimed-sources/PMC6616854/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "we hypothesize that the drop of estrogen levels after menopause contributes to myocardial microvascular dysfunction and renders post-menopausal women more vulnerable for heart diseases that involve the microvasculature"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-020",
+      "claimType": "derived",
+      "claim": "说明书各栏未载“更年期”“围绝经期”“绝经”“女性激素”词条，且已批准适应症限定于气滞血瘀型冠心病、心绞痛；因此“绝经前后气血失调可致气滞血瘀”的证候推演不能用于推断本品适应症覆盖围绝经期女性的心悸、潮热症状。",
+      "method": "说明书索引候选文本的功能主治、禁忌、注意事项、不良反应各栏均无更年期／围绝经期／绝经／女性激素词条（索引检索结果）；已批准适应症文本限定“气滞血瘀型冠心病，心绞痛”（索引检索结果），试验入组亦以气滞血瘀证与冠心病诊断为标准、年龄 18–80 岁（CLM-002）。气滞血瘀作为证候可出现在多种疾病与不同生殖阶段，与“监管批准的适应症人群”之间无一一对应，故证候推演（绝经前后气血失调可致气滞血瘀）只说明证候可在该阶段出现，不构成适应症覆盖的监管依据。",
+      "assumptions": "假设说明书索引候选文本与官方现行版本一致（该假设已在本报告局限性中声明为未核验），且适应症边界由监管批准文本而非证候理论界定。",
+      "sensitivity": "若官方现行说明书确含更年期相关条目或适应症表述有异，则该推演对“说明书是否载词条”的判断需相应更正；但“证候推演不能替代批准适应症文本”这一监管原则不随文本版本变化。",
+      "applicability": "适用于适应症边界与证候推演关系的判断。",
+      "uncertainty": "说明书为索引候选文本，官方现行版本核验未完成。",
+      "derivedFrom": [
+        "CLM-001",
+        "CLM-002"
+      ]
+    },
+    {
+      "claimId": "CLM-021",
+      "claimType": "direct",
+      "claim": "该评价纳入 10 项前瞻性研究、213,976 例女性、10,037 例心血管事件，平均随访 5.3 至 15 年。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC4912069",
+      "sourceTitle": "Association of Vasomotor and Other Menopausal Symptoms with Risk of Cardiovascular Disease: A Systematic Review and Meta-Analysis",
+      "artifactPath": ".evimed-sources/PMC4912069/fulltext.md",
+      "identifier": "PMID:27315068; PMCID:PMC4912069; DOI:10.1371/journal.pone.0157417",
+      "accessLevel": "full_text",
+      "supportQuote": "213,976 women with a total of 10,037 cardiovascular disease outcomes … based on 10 distinct studies … 5.3 to 15 years",
+      "applicability": "直接：血管舒缩症状与心血管事件关联的样本与随访背景。",
+      "uncertainty": "样本为观察性队列汇总，随访长度不等；数字为综述作者报告的总体统计量。原文以千位分隔符书写 213,976 与 10,037 这两个整数，主张文本中的 976 与 37 为千位分隔符拆分后的尾数，非独立报告的数字。"
+    },
+    {
+      "claimId": "CLM-022",
+      "claimType": "derived",
+      "claim": "能填补本品在围绝经期女性证据空白的研究，需以围绝经期或绝经后、证属气滞血瘀型冠心病心绞痛的女性为对象、以安慰剂为对照、以心绞痛发作频次与主要不良心血管事件为结局，事件驱动样本量在数百至千例量级。",
+      "method": "该证据空白由 CLM-004 所示随机对照证据集中于总体冠心病人群、未含围绝经期女性亚组而存在。以主要不良心血管事件为终点的事件驱动设计，样本量与事件率成反比；若该亚组年事件率在 1% 至 5% 量级（低于纳入研究的总体冠心病人群），按 α=0.05、把握度 80% 检出相对效应 20% 至 30% 的组间差异，需累计数百至 1000 例事件及相应随机入组数。",
+      "assumptions": "假设围绝经期女性心绞痛亚组的年主要不良心血管事件率在 1% 至 5% 量级，低于总体冠心病人群；采用事件驱动设计，α=0.05、把握度 80%。",
+      "sensitivity": "若该亚组事件率更接近总体冠心病人群（更高），所需样本量相应降至数百例量级；若终点改为血管舒缩症状评分等连续指标，样本量按效应量与标准差另行计算，可能更小。",
+      "applicability": "适用于对填补证据空白所需研究的样本量量级的估计。",
+      "uncertainty": "事件率假设为量级估计，无该亚组的直接发生率数据，样本量为数量级示意而非精确计算。",
+      "derivedFrom": [
+        "CLM-004"
+      ]
+    }
+  ]
+}

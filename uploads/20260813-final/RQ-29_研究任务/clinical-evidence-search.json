@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "Chinese literature index",
+    "Guideline index",
+    "NMPA label index",
+    "clinical trial registries"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "smartwatch photoplethysmography atrial fibrillation detection sensitivity specificity validation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed",
+      "query": "Apple Heart Study smartwatch irregular pulse atrial fibrillation confirmation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Chinese literature index",
+      "query": "Fitbit Heart Study detection atrial fibrillation large population wearable devices",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "Mobile photoplethysmographic technology detect atrial fibrillation mHealth screening",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Chinese literature index",
+      "query": "NOAH-AFNET 6 anticoagulation atrial high-rate episodes edoxaban",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Chinese literature index",
+      "query": "Apple Heart Study large-scale assessment smartwatch atrial fibrillation NEJM",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "ARTESiA apixaban subclinical atrial fibrillation device-detected stroke",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Chinese literature index",
+      "query": "EAST-AFNET 4 early rhythm control atrial fibrillation cardiovascular outcomes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Chinese literature index",
+      "query": "2023 ACC AHA ACCP HRS guideline diagnosis management atrial fibrillation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Guideline index",
+      "query": "atrial fibrillation screening wearable device detection",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Chinese literature index",
+      "query": "速效救心丸 心房颤动",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed",
+      "query": "device-detected subclinical atrial fibrillation oral anticoagulation NOAH-AFNET 6 ARTESiA review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "early rhythm control atrial fibrillation EAST-AFNET 4 rate versus rhythm control ablation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed",
+      "query": "atrial fibrillation coronary artery disease coexistence angina mechanisms demand ischemia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EAST-AFNET 4 early rhythm control atrial fibrillation cardiovascular outcomes open access",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 106,
+    "recordsAfterDeduplication": 86,
+    "sourcesIncluded": 10
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Varma2021mHealth",
+      "identifier": "PMID:33573393",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "device-detected vs clinical AF distinction; Apple/Huawei screening; USPSTF"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Bacevicius2022DoubleCheckAF",
+      "identifier": "PMID:35463751",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "diagnostic accuracy PPG and 6-lead ECG vs Holter; ESC screening classes"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Wouters2025Comparative",
+      "identifier": "PMID:39791483",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "consumer device sensitivity/specificity and insufficient-quality rates"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Gruwez2021InterpretAF",
+      "identifier": "PMID:34616786",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "diagnosis requirement (>=30 s ECG); PPV vs prevalence"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Wang2025PPG",
+      "identifier": "PMID:41213119",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Chinese PPG AF burden validation vs Holter"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Lowres2019Screening",
+      "identifier": "PMID:31553733",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "screening yield by age; NNS; OAC eligibility"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "NHS chest pain page (reviewed 08 Aug 2023)",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "emergency red flags for chest pain"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Zeemering2025EAST",
+      "identifier": "PMID:41181841",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "early rhythm control (EAST-AFNET 4)"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Pradhan2026Subclinical",
+      "identifier": "PMID:41607628",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "subclinical AF anticoagulation (ASSERT/ARTESiA/NOAH-AFNET 6/meta/guidelines)"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMPA2025Suxiao",
+      "identifier": "NMPA indexed label (Suxiao Jiuxin Wan)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan indication boundary"
+    }
+  ]
+}

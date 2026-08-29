@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "runId": "rq03-longterm-evidence-report",
+  "status": "succeeded",
+  "question": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "searchDate": "2026-08-27",
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.xml"
+  ],
+  "qualityChecks": {
+    "evidence_traceability": true,
+    "question_coverage": true,
+    "practical_emergency_safety": true,
+    "runtime_leakage": true,
+    "citation_integrity": true
+  }
+}

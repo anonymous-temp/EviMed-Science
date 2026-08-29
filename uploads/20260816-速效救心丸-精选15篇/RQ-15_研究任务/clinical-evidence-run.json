@@ -1,0 +1,86 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸含服后出现头晕、乏力、头痛、心悸、口干：这些反应有多常见（发生率与分母）、是否由药物引起（归因层级）、出现后如何处置（分层阈值溯源），以及'这些反应由血管扩张引起'与'轻微者可继续观察'能否成立。",
+  "title": "速效救心丸含服后头晕、乏力与心悸：发生率证据、归因层级与分层处置依据",
+  "startedAt": "2026-08-13T21:45:00Z",
+  "completedAt": "2026-08-13T22:01:13Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_clinical_trial_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate",
+    "evimed_web_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC13043423/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {
+      "source": "evimed_clinical_trial_search",
+      "query": "速效救心丸",
+      "reason": "public source HTTP 502 (retried once)"
+    },
+    {
+      "source": "evimed_open_access_full_text",
+      "identifier": "DOI:10.1089/acm.2020.0014",
+      "reason": "no open-access PDF (paywalled)"
+    },
+    {
+      "source": "evimed_open_access_full_text",
+      "identifier": "DOI:10.1016/j.jep.2023.116959",
+      "reason": "no open-access PDF (paywalled)"
+    },
+    {
+      "source": "evimed_open_access_full_text",
+      "identifier": "DOI:10.1002/14651858.CD004473.pub2",
+      "reason": "cochranelibrary.com HTTP 403"
+    },
+    {
+      "source": "evimed_open_access_full_text",
+      "identifier": "DOI:10.1016/j.eujim.2025.102524",
+      "reason": "no open-access PDF (paywalled)"
+    },
+    {
+      "source": "evimed_open_access_full_text",
+      "identifier": "DOI:10.1136/jech.53.2.105",
+      "reason": "jech.bmj.com HTTP 403"
+    },
+    {
+      "source": "evimed_web_search",
+      "query": "速效救心丸治疗冠心病中国专家共识 不良反应 注意事项 全文",
+      "reason": "0 results; baidu unresponsive"
+    },
+    {
+      "source": "NMPA label / guideline official copies",
+      "reason": "indexed copies returned; official-current verification not reachable via gateway (not allowlisted)"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 17,
+    "recordsIdentified": 189,
+    "recordsAfterDeduplication": 148,
+    "sourcesIncluded": 19,
+    "distinctPreservedSources": 7
+  }
+}

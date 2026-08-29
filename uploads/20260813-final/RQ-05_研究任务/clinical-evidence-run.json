@@ -1,0 +1,61 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "用力排便与急性冠脉事件的关联及其可干预性：从血流动力学机制到排便姿势干预与速效救心丸院外自救药物常备的证据评价。包含五个子问题：用力排便及相关活动在急性冠脉事件人群研究中的关联强度与暴露定义；Valsalva 动作各时相的血流动力学变化与便秘-心血管事件的共同混杂因素；排便姿势与通便措施对排便用力、腹内压或血压的影响及其是否有心血管事件终点；院外急救药物放置位置或可及性研究及速效救心丸常备人群与其核准适应症的关系；排便时胸痛按指南的处置与升级路径。",
+  "title": "用力排便与急性冠脉事件：从血流动力学机制到排便姿势干预与院外自救药物常备的证据评价",
+  "startedAt": "2026-08-13T14:17:00Z",
+  "completedAt": "2026-08-13T15:12:48Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_web_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC7473662/fulltext.md",
+    ".evimed-sources/PMC10326061/fulltext.md",
+    ".evimed-sources/PMC12456042/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC11487843/fulltext.md",
+    ".evimed-sources/PMC12450527/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC7066622/fulltext.md",
+    ".evimed-sources/PMC6960059/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/official-pages/3f9e2ebb850bd07f/page.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "DOI:10.1016/j.jacc.2021.07.053 (2021 AHA/ACC chest pain guideline full text) — no open-access PDF",
+    "DOI:10.1093/eurheartj/ehad191 (2023 ESC ACS guidelines) — academic.oup.com HTTP 403",
+    "DOI:10.1002/14651858.CD004473.pub2 (Cochrane Suxiao Jiuxin Wan review) — cochranelibrary.com HTTP 403",
+    "DOI:10.1253/circj.cj-09-0421 (Komatsu 2010 defecation syncope) — encrypted PDF / timeout",
+    "DOI:10.1023/a:1024180319005 (Sikirov 2003 defecation positions) — not open access",
+    "DOI:10.1111/j.1757-5672.2009.00057.x (Sakakibara 2010 body position) — not open access",
+    "DOI:10.1016/j.jacasi.2025.07.027 (Iwasaki 2025 constipation incident CVD) — timeout",
+    "DOI:10.1161/CIRCULATIONAHA.116.023142 (INTERHEART triggers) — timeout",
+    "https://www.acc.org/latest-in-cardiology/ten-points-to-remember/... (ACC page) — upstream unavailable"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 123,
+    "recordsAfterDeduplication": 115,
+    "sourcesIncluded": 14,
+    "distinctPreservedSources": 13
+  },
+  "status": "succeeded"
+}

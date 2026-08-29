@@ -1,0 +1,415 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "一项多中心双盲安慰剂对照试验（174 例慢性冠脉综合征＋长效硝酸酯不耐受，4 周）显示，加用速效救心丸后 SAQ 总分改善≥20 分的有效率 60.9%，安慰剂组 39.1%（OR 2.43，95%CI 1.32–4.47，P=0.004）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement",
+      "applicability": "已诊断慢性冠脉综合征、长效硝酸酯不耐受人群（中国 8 中心）；加用于常规抗心绞痛治疗",
+      "uncertainty": "4 周短期研究；改良意向治疗分析（174/176 例）；未设置血压终点"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "该试验明确排除未控制高血压；在检索覆盖范围内，该试验未报告血压终点，合并高血压亚组无独立效应量——「合并人群验证与联用血压终点缺失」是结构性的证据缺口，非样本量问题。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "During the screening period, participants with a history or clinical evidence of poorly controlled or severe disease were excluded. These included poorly controlled hypertension",
+      "applicability": "2024 年试验人群（慢性冠脉综合征）",
+      "uncertainty": "「未报告血压终点」为对原文终点设置的阅读判断；「未单独验证」为检索层面的阴性结论"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "该试验预设亚组分析包含高血压，但正文仅报告「各亚组方向与总体结果一致」，未给出高血压亚组的独立效应量。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "We examined the effects on the primary outcome through prespecified subgroup analyses based on age, gender, diabetes mellitus (DM), hypertension, and alcohol consumption. … The direction of effect estimates in all evaluated subgroups was consistent with the overall outcomes (Fig. 5 ).",
+      "applicability": "2024 年试验预设亚组分析",
+      "uncertainty": "高血压亚组具体效应量与区间估计仅在森林图（Fig. 5）中，正文文本未报告"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "该试验研究期内无参与者报告不良事件；次级终点为安全性监测、中医主症积分与血脂参数，未设置血压终点，故「无不良事件」不覆盖联用场景的低血压风险。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "The second endpoint of the study focused on the safety of the investigated SJPs, as well as changes in the Traditional Chinese Medicine (TCM) main syndrome score and lipid parameters, including total cholesterol (TC), low-density lipoprotein cholesterol (LDL-C), and triglycerides (TG). … No participants reported experiencing adverse effects.",
+      "applicability": "2024 年试验（4 周、慢性冠脉综合征）",
+      "uncertainty": "「未设置血压终点」为对原文终点列表的阅读判断；无不良事件≠未发生，且不覆盖联用降压药场景"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "本品组分为川芎与冰片，1982 年经 CFDA 批准上市；按《中国药典》每丸含川芎以阿魏酸计不少于 15.0 μg、含冰片 2.9–4.4 mg。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "which was approved by China Food and Drug Administration (CFDA) in 1982 … According to the Chinese Pharmacopoeia, each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C 10 H 10 O 4 ), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C 10 H 18 O).",
+      "applicability": "组方与规格（中国药典口径）",
+      "uncertainty": "药典规格为最低含量要求，非实测每批含量"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "试验方案（324 例、24 周，稳定型心绞痛气滞血瘀证）排除未控制高血压（收缩压 ≥180 mmHg 或舒张压 ≥100 mmHg）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). All participants will have received the conventional therapy of chronic stable angina. … in addition to conventional treatment for 24 weeks. … Uncontrolled hypertension with systolic blood pressure (SBP) ≥ 180 mmHg or diastolic blood pressure (DBP) ≥ 100 mmHg, or severe arrhythmia;",
+      "applicability": "2021 年方案（中国 11 家医院）",
+      "uncertainty": "方案文本（2019 年注册）；试验结果全文未在本环境取得（见 [2] 摘要层）"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "适应症边界内研究的入组条件为「确诊冠心病＋CCS 心绞痛分级 I–III＋每周心绞痛发作 ≥2 次＋气滞血瘀证」——发作性心绞痛是进入边界的前提，据此人群二（高血压＋冠心病、无心绞痛发作）不在适应症边界内。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Diagnosed with CHD; - CCS classification of angina grades I–III; - Patients with angina pectoris twice or more per week; - TCM diagnosis of Qi stagnation and blood stasis syndrome;",
+      "applicability": "适应症边界内研究的人群界定",
+      "uncertainty": "「人群二无适应症内证据」结合说明书适应症文字（索引副本，官方现行版待核验）与检索阴性结论"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "meta 分析纳入 41 项 RCT、6276 例冠心病患者：本品较对照改善心电图（RR 1.32，95%CI 1.26–1.38）；最常见不良反应为轻度头痛、头晕、面部潮红，治疗组与对照组不良反应率无显著差异（RR 1.12，95%CI 0.50–2.51）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … The remaining 41 studies were included in our meta-analysis. … The most common symptoms were mild headache, dizziness, and facial flushing. … There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "冠心病（含稳定/不稳定心绞痛、心肌梗死）中国人群，检索截至 2016 年",
+      "uncertainty": "纳入研究 Jadad 评分普遍偏低（缺乏双盲）；未报告高血压亚组与血压终点；未分析心血管死亡"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "人离体内乳动脉（CABG 取材，n=78）上，速效救心丸使 KCl 预收缩血管完全舒张（99.4%±10.5%）、使 U46619 预收缩血管完全舒张（99.9%±5.6%），提示其血管舒张作用不限于冠脉床。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC3997901",
+      "sourceTitle": "Suxiao Jiuxin Pill Induces Potent Relaxation and Inhibition on Contraction in Human Artery and the Mechanism",
+      "artifactPath": ".evimed-sources/PMC3997901/fulltext.md",
+      "identifier": "PMC3997901",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP caused full relaxation in KCl- (99.4 ± 10.5%, n = 6) and U46619- (99.9 ± 5.6%, n = 6) contracted IMA. … Human IMA ( n = 78, from 30 patients) segments were obtained from patients undergoing CABG.",
+      "applicability": "离体人动脉（机制层级证据）",
+      "uncertainty": "离体器官浴实验，浓度为人血浆当量推算，不直接等同于体内降压量级"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "动物与分子层面：本品经 eNOS-NO 通路舒张冠脉；冰片本身经钾通道介导内皮非依赖的冠脉血管舒张（Kv/KCa/Kir 通道抑制剂可阻断该效应）。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "PMC10206061",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP induced coronary artery relaxation via activation of the eNOS-NO pathway. … In addition, borneol induced endothelium-independent vasorelaxation of the coronary artery.",
+      "applicability": "大鼠 AMI 模型＋离体冠脉环（机制层级证据）",
+      "uncertainty": "动物模型；冰片钾通道阻断细节见于正文，此处引用摘要级表述"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "患者层级 meta 分析（妊娠期高血压）：在对照组已含硝苯地平、拉贝洛尔、硫酸镁等降压药的基础上，加用川芎嗪（Chuanxiongzine）注射液仍使收缩压额外降低（WMD −11.73，95%CI −14.12~−9.34）与舒张压额外降低（WMD −8.25，95%CI −9.66~−6.84）。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://europepmc.org/articles/PMC11496844",
+      "sourceTitle": "The efficacy of Salvia-ligustrazine and Ligustrazine in treating gestational hypertension: A systematic review and meta-analysis",
+      "artifactPath": ".evimed-sources/PMC11496844/fulltext.md",
+      "identifier": "PMC11496844",
+      "accessLevel": "full_text",
+      "supportQuote": "The control group received only conventional Western medicines, including but not limited to magnesium sulfate, nifedipine, labetalol, and other sedative antihypertensive treatments. … Treatment with Chuanxiongzine injection also significantly reduced SBP (WMD ═ −11.73; 95% CI: −14.12 to −9.34; P < 0.001) and DBP (WMD ═ −8.25; 95% CI: −9.66 to −6.84; P < 0.001)",
+      "applicability": "妊娠期高血压（人体药效学证据，人群间接）；干预为静脉注射液",
+      "uncertainty": "人群（妊娠）与给药途径（静脉）与本品舌下含服场景存在双重间接性；纳入研究以中文文献为主"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "川芎嗪注射液作为心绞痛辅助治疗的 meta 分析（纳入 870 例患者）显示症状改善 OR 3.59（95%CI 2.39–5.40）；正文另报告不良事件为胃部不适与头痛，未报告血压相关事件。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC4671452",
+      "sourceTitle": "Efficacy of Ligustrazine Injection as Adjunctive Therapy for Angina Pectoris: A Systematic Review and Meta-Analysis",
+      "artifactPath": ".evimed-sources/PMC4671452/fulltext.md",
+      "identifier": "PMC4671452",
+      "accessLevel": "full_text",
+      "supportQuote": "Eleven RCTs involving 870 patients with angina pectoris were selected in this study. Compared with conventional antianginal drugs alone, ligustrazine injection combined with antianginal drugs significantly increased the efficacy in symptom improvement (odds ratio [OR], 3.59; 95% confidence interval [CI]: 2.39 to 5.40)",
+      "applicability": "心绞痛患者辅助治疗（组分川芎嗪注射液，人体证据）",
+      "uncertainty": "不良事件细节在正文（未纳入引用片段）；多数纳入研究未报告不良事件"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "2023 中国老年高血压管理指南：老年高血压合并冠心病者，心绞痛发作时硝酸甘油、速效救心丸与复方丹参滴丸可舌下含服；该推荐未给出含服前血压下限或含服后升级时间阈值。",
+      "referenceNumber": 15,
+      "sourceUrl": "https://doi.org/10.26599/1671-5411.2024.06.001",
+      "sourceTitle": "2023 Guideline for the management of hypertension in the elderly population in China",
+      "artifactPath": ".evimed-sources/10.26599-1671-5411.2024.06.001/fulltext.md",
+      "identifier": "10.26599/1671-5411.2024.06.001",
+      "accessLevel": "full_text",
+      "supportQuote": "When angina pectoris is attacked, nitroglycerin, instant-effect Suxiao Jiuxin Pills and compound Danshen Dripping Pills can be taken sublingual.",
+      "applicability": "老年（≥65 岁）高血压合并冠心病患者（中国指南）",
+      "uncertainty": "该句为叙述性推荐（未附推荐类别与证据级别）；「未给出血压下限/时间阈值」为对指南文本的检索判断"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "老年高血压指南对高血压急症的判别标准为「新发急性进行性严重靶器官损害」而非血压数值；急性冠脉综合征作为急症之一的处置目标为 <130/80 mmHg 且舒张压 >60 mmHg、不降低冠脉灌注压与冠脉血流、防止反射性心动过速，院内用药包括硝酸甘油、艾司洛尔、乌拉地尔或地尔硫䓬。",
+      "referenceNumber": 15,
+      "sourceUrl": "https://doi.org/10.26599/1671-5411.2024.06.001",
+      "sourceTitle": "2023 Guideline for the management of hypertension in the elderly population in China",
+      "artifactPath": ".evimed-sources/10.26599-1671-5411.2024.06.001/fulltext.md",
+      "identifier": "10.26599/1671-5411.2024.06.001",
+      "accessLevel": "full_text",
+      "supportQuote": "Acute coronary syndrome Reduce blood pressure and myocardial oxygen consumption, but do not affect the coronary perfusion pressure and coronary blood flow, and prevent reflex tachycardia < 130/80 mmHg, diastolic blood pressure > 60 mmHg",
+      "applicability": "老年高血压急症（院内处置表）",
+      "uncertainty": "表中文字为 PDF 文本层提取，数字与阈值以原文表为准；「判别标准非血压数值」见正文叙述段"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "硝酸甘油含服缓解作为心源性胸痛判别试验：灵敏度 72%（64%–80%）、特异度 37%（34%–41%）、阳性似然比 1.1（0.96–1.34）——「缓解」不能可靠区分心源性与非心源性胸痛；本品无同类判别数据。",
+      "referenceNumber": 17,
+      "sourceUrl": "https://doi.org/10.1017/S1481803500013671",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "10.1017/S1481803500013671",
+      "accessLevel": "full_text",
+      "supportQuote": "The diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%–80%), and the specificity was 37% (34%–41%). The positive likelihood ratio for having coronary artery disease if nitroglycerin relieved chest pain was 1.1 (0.96–1.34).",
+      "applicability": "急诊胸痛患者（硝酸甘油缓解的判别效能）",
+      "uncertainty": "数据针对硝酸甘油；本品无判别效能数据，不得套用为「本品缓解」的判别值"
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "硝酸甘油在收缩压 <90 mmHg 或较基线下降 >30 mmHg、严重心动过缓（<50 次/分）时不被推荐使用；该阈值可作为联用场景下含服制剂的保守参照，但推荐对象为硝酸酯类。",
+      "referenceNumber": 18,
+      "sourceUrl": "https://europepmc.org/articles/PMC9278720",
+      "sourceTitle": "Nitroglycerin Use in the Emergency Department: Current Perspectives",
+      "artifactPath": ".evimed-sources/PMC9278720/fulltext.md",
+      "identifier": "PMC9278720",
+      "accessLevel": "full_text",
+      "supportQuote": "Close hemodynamic monitoring is recommended and in patients with hypotension (SBP <90 mmHg or >30 mmHg below baseline), extreme bradycardia (<50 bpm), or tachycardia in the absence of heart failure (>100 bmp), NTG is not recommended.",
+      "applicability": "急诊硝酸甘油使用禁忌（综述，引用 2021 AHA/ACC 胸痛指南等）",
+      "uncertainty": "本品无自身血压下限阈值；此处为保守套用，属分析判断而非指南对本品的规定"
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "2021 AHA/ACC 胸痛评估与诊断指南的核心要求：急性胸痛患者由患者立即激活急救系统；急诊以 12 导联心电图与高敏肌钙蛋白快速识别心肌损伤，并以低/中/高危结构风险分层决定进一步检查，血流动力学不稳定或高危者行冠脉造影。",
+      "referenceNumber": 20,
+      "sourceUrl": "https://europepmc.org/articles/PMC11308083",
+      "sourceTitle": "The 2021 AHA/ACC Guideline for the Evaluation and Diagnosis of Chest Pain: An Interventionalist's Viewpoint",
+      "artifactPath": ".evimed-sources/PMC11308083/fulltext.md",
+      "identifier": "PMC11308083",
+      "accessLevel": "full_text",
+      "supportQuote": "prompt activation of emergency medical services by the patient dialing 9-1-1. In the emergency department, initial evaluation should focus on rapid identification of patients at highest risk of a cardiac emergency, including those with ACS, aortic dissection, and pulmonary embolism or nonvascular emergencies such as esophageal rupture or pneumothorax. The 12-lead electrocardiogram and preferred high-sensitivity troponin facilitate rapid and accurate detection of myocardial injury, thereby aiding risk assessment. Once acute chest pain is confirmed, stratification into low-, intermediate-, and high-risk categories through the routine use of structured risk assessments can help guide further diagnostic testing",
+      "applicability": "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR 胸痛评估与诊断指南主题（经同行解读件转述）",
+      "uncertainty": "引用为指南解读件（Interventionalist's Viewpoint）而非指南全文；指南全文未在本环境保藏"
+    },
+    {
+      "claimId": "CLM-018",
+      "claim": "2025 巴西急诊胸痛指南（SBC）：疑似缺血患者应在到达急诊后 10 分钟内获得医疗处置（含心电图），并以高敏肌钙蛋白算法与风险评分快速分流。",
+      "referenceNumber": 21,
+      "sourceUrl": "https://europepmc.org/articles/PMC12981354",
+      "sourceTitle": "Diretriz Brasileira de Atendimento à Dor Torácica na Unidade de Emergência – 2025",
+      "artifactPath": ".evimed-sources/PMC12981354/fulltext.md",
+      "identifier": "PMC12981354",
+      "accessLevel": "full_text",
+      "supportQuote": "todo paciente que se apresenta na unidade de emergência com dor ou sintoma equivalente sugestivo de isquemia deve receber atendimento médico dentro de 10 minutos",
+      "applicability": "急诊胸痛（巴西，2025）",
+      "uncertainty": "引用为葡萄牙语原文句；0/1 小时肌钙蛋白算法见于指南正文与参考文献，未在此引用句中"
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "20,005 例直接 PCI 的 STEMI 患者：症状-首次医疗接触 ≤1 小时者从 90 分钟内再灌注获益最大（院内死亡 OR 0.27，95%CI 0.23–0.31），更长延迟（至 24 小时）者及时再灌注仍有生存获益。",
+      "referenceNumber": 23,
+      "sourceUrl": "https://europepmc.org/articles/PMC8103948",
+      "sourceTitle": "Patient delay and benefit of timely reperfusion in ST-segment elevation myocardial infarction",
+      "artifactPath": ".evimed-sources/PMC8103948/fulltext.md",
+      "identifier": "PMC8103948",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 20 005 consecutive patients from the Feedback Intervention and Treatment Times in ST-segment Elevation Myocardial Infarction (FITT-STEMI) programme treated with primary percutaneous coronary intervention (PCI) were included. … Mortality was 10.0% in patients presenting within 1 hour, and 4.9%, 6.0% and 7.3% in patient groups with longer S2C intervals of 1–2 hours, 2–6 hours and 6–24 hours, respectively. Patients with a short S2C interval of less than 1 hour (S2C<60 min) had the highest survival benefit from timely reperfusion with PCI within 90 min (OR 0.27, 95% CI 0.23 to 0.31, p<0.0001)",
+      "applicability": "STEMI（德国 FITT-STEMI 项目，2006–2017）",
+      "uncertainty": "观察性（项目内登记）数据；「至 24 小时仍有获益」见结论句，未在此引用片段"
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "英国 NHS 患者指南：突发、持续不缓解的胸痛或不适（挤压样/压迫感，或放射至手臂/颈/颌/背，或伴出汗、恶心、头晕、气短）应立即呼叫急救（英国 999），因为可能是心脏病发作。",
+      "referenceNumber": 24,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS chest pain page",
+      "accessLevel": "official_page",
+      "supportQuote": "you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "患者导向的急性胸痛处置（英国 NHS；中国急救号码为 120）",
+      "uncertainty": "原文急救号码为 999（英国）；中国急救号码 120 的本地化表述见报告正文与安全处置节；页面最后复核时间 2023-08-08"
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "老年高血压合并冠心病的治疗原则：降压药低剂量起始、逐步加量；若出现与降压治疗相关的心绞痛症状，应减量降压药并评估诱因；本品不得替代已处方的降压治疗。",
+      "referenceNumber": 15,
+      "sourceUrl": "https://doi.org/10.26599/1671-5411.2024.06.001",
+      "sourceTitle": "2023 Guideline for the management of hypertension in the elderly population in China",
+      "artifactPath": ".evimed-sources/10.26599-1671-5411.2024.06.001/fulltext.md",
+      "identifier": "10.26599/1671-5411.2024.06.001",
+      "accessLevel": "full_text",
+      "supportQuote": "Antihypertensive drugs should be initiated at a low dose, increase the dose or add more drugs types gradually, achieve the BP target gradually. If angina pectoris symptoms related to antihypertensive therapy occur, the dosage of antihypertensive drugs should be reduced and possible inducements should be assessed.",
+      "applicability": "老年高血压合并冠心病（中国指南）",
+      "uncertainty": "引用为 PDF 文本层提取（含连字符换行），经空白归一化核对"
+    },
+    {
+      "claimId": "CLM-023",
+      "claimType": "synthesized",
+      "claim": "命题 B 判定（方向成立、量级未知）：速效救心丸与降压药方向叠加的降压作用存在机制与人体验证（本品使人动脉离体完全舒张；组分层级的川芎嗪在妊娠期高血压合并降压治疗背景下实测收缩压 WMD −11.73 mmHg），但检索覆盖范围内未检索到直接研究本品与降压药联用的血压变化幅度与低血压事件率证据——联用风险量级未知，不得表述为「已证实的相互作用」，也不得反向表述为「无相互作用」。",
+      "confidence": "moderate",
+      "referenceNumber": 11,
+      "referenceNumbers": [
+        11,
+        9
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11496844",
+          "sourceTitle": "The efficacy of Salvia-ligustrazine and Ligustrazine in treating gestational hypertension: A systematic review and meta-analysis",
+          "artifactPath": ".evimed-sources/PMC11496844/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Treatment with Chuanxiongzine injection also significantly reduced SBP (WMD ═ −11.73; 95% CI: −14.12 to −9.34; P < 0.001) and DBP (WMD ═ −8.25; 95% CI: −9.66 to −6.84; P < 0.001)"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC3997901",
+          "sourceTitle": "Suxiao Jiuxin Pill Induces Potent Relaxation and Inhibition on Contraction in Human Artery and the Mechanism",
+          "artifactPath": ".evimed-sources/PMC3997901/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "SJP caused full relaxation in KCl- (99.4 ± 10.5%, n = 6) and U46619- (99.9 ± 5.6%, n = 6) contracted IMA."
+        }
+      ],
+      "applicability": "本品＋降压药联用场景（高血压合并冠心病）",
+      "uncertainty": "「未检索到直接研究该联用的证据」为检索覆盖范围内的阴性结论，不构成「不存在」的证明；CYP/转运体体外相互作用线索为摘要层级"
+    },
+    {
+      "claimId": "CLM-025",
+      "claimType": "synthesized",
+      "claim": "对无冠心病诊断者的危害链条（命题 C 的依据之一）：含服缓解不具判别价值（特异度 37% 意味着大多数非心源性胸痛亦缓解）＋症状-首次医疗接触延迟削弱再灌注获益＋患者导向指南要求突发持续胸痛立即呼叫急救——「常备并自行含服、不缓解再就医」策略无临床结局证据支持，且同时引入误判与延迟两个方向的风险。",
+      "confidence": "moderate",
+      "referenceNumber": 17,
+      "referenceNumbers": [
+        17,
+        23,
+        24
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://doi.org/10.1017/S1481803500013671",
+          "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+          "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%–80%), and the specificity was 37% (34%–41%)."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8103948",
+          "sourceTitle": "Patient delay and benefit of timely reperfusion in ST-segment elevation myocardial infarction",
+          "artifactPath": ".evimed-sources/PMC8103948/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Patients with a short S2C interval of less than 1 hour (S2C<60 min) had the highest survival benefit from timely reperfusion with PCI within 90 min (OR 0.27, 95% CI 0.23 to 0.31, p<0.0001)"
+        },
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS",
+          "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+          "accessLevel": "official_page",
+          "supportQuote": "you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital."
+        }
+      ],
+      "applicability": "无冠心病诊断人群自行含服策略的代价结构",
+      "uncertainty": "判别效能数据针对硝酸甘油；「无结局研究支持常备策略」为检索覆盖范围内的阴性结论"
+    },
+    {
+      "claimId": "CLM-026",
+      "claim": "人群三判定：现有最高层级研究（多中心双盲试验、试验方案等）入组条件均为确诊冠心病（心梗史、冠脉造影>50% 狭窄或负荷试验阳性），无冠心病诊断的单纯高血压人群不在任何纳入人群内——该人群无适应症内证据，以胸闷胸痛自行含服属说明书外应用。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The diagnostic criteria for CHD will be ① history of myocardial infarction (MI); ② coronary angiography or computed tomography coronary angiography confirmation of stenosis greater than 50%; and ③ noninvasive imaging stress test diagnostic of coronary artery disease (CAD)",
+      "applicability": "无冠心病诊断的单纯高血压人群",
+      "uncertainty": "「说明书外应用」依据说明书适应症文字（索引副本，官方现行版待核验）"
+    },
+    {
+      "claimId": "CLM-027",
+      "claimType": "derived",
+      "claim": "〔推导〕静脉川芎嗪试验的收缩压 WMD −11.73 mmHg（95%CI −14.12~−9.34）不能直接外推为舌下含服本品联用降压药时的额外降压量级：给药途径（静脉单方注射液 vs 舌下/口服复方滴丸）、暴露剂量（单方注射剂量 vs 每丸川芎以阿魏酸计 ≥15 μg、冰片 2.9–4.4 mg）与人群（妊娠期高血压 vs 成人/老年高血压合并冠心病）三项均不等价，仅方向可外推、量级不可外推。",
+      "derivedFrom": [
+        "CLM-011",
+        "CLM-005"
+      ],
+      "method": "等价外推需途径、剂量、人群三项同时近似成立，而实际为静脉单方注射液对舌下/口服复方滴丸、单方注射剂量对每丸以阿魏酸计 ≥15 μg 与冰片 2.9–4.4 mg 的复方剂量、妊娠期高血压对成人/老年高血压合并冠心病。以 CLM-011 报告的 WMD −11.73（95%CI −14.12~−9.34）为静脉暴露下的实测上限，口服/舌下途径活性成分全身暴露无数据且通常远低于静脉，故该值仅能作为方向性参考而非预期值。",
+      "assumptions": "假设舌下/口服途径的吸收远低于静脉注射等效活性成分暴露；假设本品川芎类成分的降压方向与川芎嗪单方一致。",
+      "sensitivity": "若本品活性成分生物利用度或每丸实际含量显著高于药典下限，量级可向 −11.7 mmHg 靠近；该结论随本品药代数据出现而更新。",
+      "applicability": "本品＋降压药联用场景的预期血压效应量级",
+      "uncertainty": "无本品药代数据，下限无法界定；该推导仅用于约束外推，不进入安全处置建议"
+    },
+    {
+      "claimId": "CLM-028",
+      "claimType": "synthesized",
+      "claim": "人群一判定：高血压合并冠心病心绞痛发作落在说明书适应症边界内；多中心双盲试验（SAQ 有效率 OR 2.43）与老年高血压指南推荐支持短期症状获益，但试验排除未控制高血压、未报告血压终点，合并高血压亚组无独立效应量——判定降级为「适应症内有证据，该合并人群未被单独验证」。",
+      "confidence": "moderate",
+      "referenceNumber": 1,
+      "referenceNumbers": [
+        1,
+        15
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement"
+        },
+        {
+          "sourceUrl": "https://doi.org/10.26599/1671-5411.2024.06.001",
+          "sourceTitle": "2023 Guideline for the management of hypertension in the elderly population in China",
+          "artifactPath": ".evimed-sources/10.26599-1671-5411.2024.06.001/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "When angina pectoris is attacked, nitroglycerin, instant-effect Suxiao Jiuxin Pills and compound Danshen Dripping Pills can be taken sublingual."
+        }
+      ],
+      "applicability": "人群一（高血压＋冠心病＋心绞痛发作）",
+      "uncertainty": "判定降级依据任务书标准；「未被单独验证」为检索覆盖范围内的阴性结论"
+    },
+    {
+      "claimId": "CLM-032",
+      "claimType": "derived",
+      "claim": "〔推导〕含服反应的判别代价可量化：以硝酸甘油判别数据（灵敏度 72%、特异度 37%）代入，100 例心源性胸痛中约 28 例含服不缓解（若据此放弃就医为漏判风险），100 例非心源性中约 63 例含服缓解（若据此推迟就医为误判风险）；急诊路径以 10 分钟内心电图与肌钙蛋白算法在约 1–2 小时内消除该不确定性。",
+      "derivedFrom": [
+        "CLM-015",
+        "CLM-017",
+        "CLM-018"
+      ],
+      "method": "以 CLM-015 的灵敏度 72% 计算假阴性比例：100 − 72 = 28/100；以特异度 37% 计算假阳性缓解比例：100 − 37 = 63/100；按 100 例基数换算为百分比；与 CLM-017/CLM-018 的急诊时间窗（10 分钟心电图、0/1 小时肌钙蛋白算法）对照，说明策略的机会成本。",
+      "assumptions": "假设硝酸甘油判别数据的方向可代表「含服反应」类指标的一般特性（本品无自身数据）；假设患者以「含服是否缓解」决定是否就医。",
+      "sensitivity": "若本品判别效能更差（无数据可查），误判比例只会更高；该推算仅用于说明策略代价结构，不用于个体决策。",
+      "applicability": "「自行含服、不缓解再就医」策略的代价结构",
+      "uncertainty": "数值为推导比例而非测量；本品判别效能未知"
+    }
+  ]
+}

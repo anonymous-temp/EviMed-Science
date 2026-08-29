@@ -1,0 +1,40 @@
+{
+ "id": "run_aa8e7e5e94087c8b57cf29e9b374b6f6",
+ "dispatchId": "rq-26-kNwkRT",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_000f6771bffelIbu7UVMkNwkRT",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.93",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-26 研究任务 ## 选题 **《职业应激与焦虑躯体化所致心悸胸闷同心绞痛的鉴别：证据分层与速效救心丸适应症边界的场景评价》** ## 研究背景 工作压力与情绪激动之后出现的心悸、胸闷是内科门诊与急诊的常见主诉，其背后既可能是焦虑障碍或应激相关躯体化，也可能是心肌缺血，而两者在患者自述层面的表述高度相似。把情…",
+ "status": "succeeded",
+ "createdAt": "2026-08-14T06:51:03.040Z",
+ "startedAt": "2026-08-14T06:51:03.040Z",
+ "finishedAt": "2026-08-14T07:38:04.353Z",
+ "durationMs": 2821313,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — Medication response must not be presented as a way to diagnose or exclude the cause of chest symptoms. State instead that relief after a sublingual dose does not distinguish cardiac from non-cardiac pain, cite the evidence for that, and say that persisting symptoms call for emergency asse",
+  "Report line 71 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 77 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 81,
+ "observedToolCalls": 155,
+ "lastProgressAt": "2026-08-14T07:37:44.120Z"
+}

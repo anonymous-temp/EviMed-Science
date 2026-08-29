@@ -1,0 +1,55 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "睡眠剥夺相关心悸：心血管病理生理、鉴别诊断路径与速效救心丸适应症边界的证据评价",
+  "title": "睡眠剥夺相关心悸：心血管病理生理、鉴别诊断路径与速效救心丸适应症边界的证据评价",
+  "startedAt": "2026-08-13T22:25:53Z",
+  "completedAt": "2026-08-13T23:05:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_clinical_trial_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12394884/fulltext.md",
+    ".evimed-sources/PMC9403140/fulltext.md",
+    ".evimed-sources/PMC10539110/fulltext.md",
+    ".evimed-sources/10.3389-fpsyt.2026.1858764/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC9458321/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "Cochrane review suxiao jiuxin wan (PMID:18254051): cochranelibrary.com HTTP 403, no open-access full text",
+    "Wang 2021 Eur Heart J (PMID:34374755): academic.oup.com HTTP 403",
+    "2021 AHA/ACC chest pain guideline (PMID:34756653): no open-access full text",
+    "Cappuccio 2011 Eur Heart J (PMID:21300732): academic.oup.com HTTP 403",
+    "Sleep fragmentation and incident AF cohort (PMID:40123542): no open-access full text",
+    "Weber 1996 Am J Med (PMID:8629647): not open access",
+    "NMPA official current drug label for 速效救心丸: not reachable via allowlisted official-page routes; used indexed label record as a structured record",
+    "CNKI / 万方 / 维普 Chinese full-text databases: not accessible in this run"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 37,
+    "recordsIdentified": 234,
+    "recordsAfterDeduplication": 15,
+    "sourcesIncluded": 9,
+    "distinctPreservedSources": 8
+  },
+  "status": "succeeded"
+}

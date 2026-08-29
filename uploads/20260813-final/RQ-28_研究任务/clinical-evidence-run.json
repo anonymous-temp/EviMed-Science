@@ -1,0 +1,52 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "养生消费情境下无冠心病诊断者囤置速效救心丸：说明书适应症边界、家庭囤药的风险与获益，及备药门槛的证据评价",
+  "title": "无冠心病诊断者家庭备置速效救心丸的适应症边界与风险获益：一项证据评价",
+  "startedAt": "2026-08-14T08:15:00Z",
+  "completedAt": "2026-08-14T08:51:53Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_drug_label_search",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC9068590/fulltext.md",
+    ".evimed-sources/PMC8705540/fulltext.md",
+    ".evimed-sources/PMC11540675/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC12702074/fulltext.md"
+  ],
+  "failedSources": [
+    "国家药监局现行官方说明书全文（数据查询平台不在可访问官方页面路由内，仅获说明书索引件）",
+    "PMID:37487965（Sun 2024 稳定型心绞痛 RCT）——无开放获取全文",
+    "PMID:32744020（Liu 2020 ACS 系统评价）——无开放获取全文",
+    "PMID:32716206（Shen 2020 ACS-PCI RCT）——无开放获取全文",
+    "PMID:34252529（Qiang 2021 CYP450 相互作用）——无开放获取全文",
+    "PMID:27682885（China-PAR 模型原文）——无开放获取全文",
+    "CNKI/万方/维普中文全文库——不可访问",
+    "中国临床试验注册中心（ChiCTR）——无直接连接器"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "arithmeticCheck": true,
+    "contradictionCheck": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 136,
+    "recordsAfterDeduplication": 122,
+    "sourcesIncluded": 13,
+    "distinctPreservedSources": 6
+  },
+  "status": "succeeded"
+}

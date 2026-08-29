@@ -1,0 +1,371 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-12T00:40:00Z",
+  "databases": [
+    "PubMed (EviMed 文献适配器)",
+    "Europe PMC",
+    "Crossref",
+    "EviMed 中文文献索引",
+    "NMPA 说明书索引（EviMed 标签候选）",
+    "指南/共识索引",
+    "临床试验注册库（ClinicalTrials.gov 等）",
+    "官方页面（NHS）"
+  ],
+  "queries": [
+    {
+      "database": "EviMed 文献索引 (internal/pubmed/crossref)",
+      "query": "速效救心丸 经皮冠状动脉介入",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "EviMed 文献索引 (internal/pubmed/crossref)",
+      "query": "速效救心丸 支架",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed (EviMed 适配器)",
+      "query": "suxiao jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin pill",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 50
+    },
+    {
+      "database": "Crossref",
+      "query": "suxiao jiuxin pill",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 50
+    },
+    {
+      "database": "指南/共识索引",
+      "query": "经皮冠状动脉介入治疗 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "指南/共识索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "指南/共识索引",
+      "query": "中成药 冠心病 心绞痛 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "指南/共识索引",
+      "query": "chronic coronary syndrome stable angina guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 17
+    },
+    {
+      "database": "临床试验注册库",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "临床试验注册库",
+      "query": "suxiao jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed 文献索引 (internal/pubmed/crossref)",
+      "query": "速效救心丸 专家共识 冠心病",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed 文献索引 (internal/pubmed/crossref)",
+      "query": "冠心病心绞痛介入前后中医诊疗指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin acute coronary syndrome early percutaneous coronary intervention",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed (EviMed 适配器)",
+      "query": "suxiao jiuxin wan angina pectoris Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Qi stagnation blood stasis angina indication",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed (EviMed 适配器)",
+      "query": "Patient delay benefit timely reperfusion ST-segment elevation myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "comparative effects oral Chinese patent medicines western medicine stable angina network meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed (EviMed 适配器)",
+      "query": "Efficacy Safety Shexiang Baoxin Pill Coronary Heart Disease Percutaneous Coronary Intervention meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "0-Hour/1-Hour Algorithm Diagnosing Myocardial Infarction chest pain emergency department",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 313,
+    "recordsAfterDeduplication": 170,
+    "sourcesIncluded": 26
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Hu2024CCS",
+      "identifier": "PMC11451125 / 10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "2024 年 CCS 硝酸酯不耐受多中心双盲安慰剂对照 RCT（总体人群证据）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Ruan2021Protocol",
+      "identifier": "PMC8287819 / 10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "2021 年稳定型心绞痛（气滞血瘀证）RCT 方案：证型入组、术后 3 个月排除、批准文号"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Ren2018Meta",
+      "identifier": "PMC5892298 / 10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "2018 年 meta（41 RCT/6276 例）：总体人群证据、无术后亚组"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Shen2020EarlyPCI",
+      "identifier": "PMID 32716206 / 10.1089/acm.2020.0014",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "2020 年 ACS 早期 PCI 多中心双盲安慰剂对照 RCT（术后人群直接证据，摘要级）"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Wang2012EarlyPCI",
+      "identifier": "PMID 23359969",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "2012 年 ACS 早期 PCI RCT 60 例（摘要级）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Liu2013UAPCI",
+      "identifier": "SinoMed 2013449834",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "2013 年不稳定型心绞痛早期 PCI RCT 90 例（摘要级）"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Ruan2019PostRevasc",
+      "identifier": "中西医结合心脑血管病杂志 2019;17(9):1286-1290",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "2019 年 ACS 血运重建后 RCT（书目级，经方案引文确认）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Rong2013Perioperative",
+      "identifier": "中西医结合心脑血管病杂志 2013;11(10):1156-1159",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "2013 年稳定型心绞痛介入治疗围术期 RCT（书目级，经方案引文确认）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID 18254051 / 10.1002/14651858.CD004473.pub2",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane 2008 系统评价（15 RCT/1776 例，弱证据）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NMA179Trials2022",
+      "identifier": "PMC9428755 / 10.3389/fphar.2022.918689",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "2022 年稳定型心绞痛网络 meta（179 RCT/16789 例，含 SXJX 6 项 RCT 与 ADR 数据）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "SXBX2021PostPCI",
+      "identifier": "PMC8684521 / 10.1155/2021/2672516",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "麝香保心丸 PCI 术后系统评价（19 RCT/2022 例）：对照组药品直接术后证据"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Li2023Mechanism",
+      "identifier": "PMC10206061 / 10.3389/fphar.2023.1104243",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "机制研究：eNOS-NO 冠脉舒张（临床前）"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "SJX2019Consensus",
+      "identifier": "速效救心丸治疗冠心病中国专家共识（中西医结合心脑血管病杂志 2019）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "2019 年速效救心丸专家共识（索引记录级）"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "CPMCHD2020Guideline",
+      "identifier": "中成药治疗冠心病临床应用指南（2020 年）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "2020 年中成药治疗冠心病指南（索引记录级）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "TCMGuideline2018",
+      "identifier": "冠心病心绞痛介入前后中医诊疗指南（中华中医药学会，2018）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "2018 年介入前后中医诊疗指南（索引记录级）"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "PCIGuideline2025",
+      "identifier": "经皮冠状动脉介入治疗指南（2025）（中华医学会心血管病学分会）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "中国 PCI 指南 2025（索引记录级）"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "PCILongTerm2026",
+      "identifier": "经皮冠状动脉介入治疗患者术后长期管理中国专家共识（2026）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "PCI 术后长期管理共识 2026（索引记录级）"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "ESC2024CCS",
+      "identifier": "2024 ESC 慢性冠状动脉综合征管理指南（Eur Heart J, 10.1093/eurheartj/ehae177）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC 2024 CCS 指南（索引记录级；全文网关不可得）"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "NHSChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "NHS 胸痛处置官方页面（急诊呼叫边界）"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "Steele2006NTG",
+      "identifier": "10.1017/S1481803500013671",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "硝酸甘油缓解判别价值前瞻队列（270 例）"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "FITT2021Delay",
+      "identifier": "PMC8103948 / 10.1136/openhrt-2021-001650",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "STEMI 患者延迟与及时再灌注获益（20005 例）"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "Oh1Algo2022",
+      "identifier": "PMC9168511 / 10.1253/circrep.cr-22-0001",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "0/1 小时 hs-cTn 算法系统评价（灵敏度 99.3%）"
+    },
+    {
+      "referenceNumber": 23,
+      "citationKey": "Zhelev2015hsTnT",
+      "identifier": "PMC4300724 / 10.1136/bmj.h15",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "单次基线 hs-TnT 诊断准确性系统评价"
+    },
+    {
+      "referenceNumber": 24,
+      "citationKey": "Overview2025",
+      "identifier": "PMC12226556 / 10.3389/fcvm.2025.1553735",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "2025 年中成药治疗心绞痛 meta 的总览（证据质量评估）"
+    },
+    {
+      "referenceNumber": 25,
+      "citationKey": "ChinaSTEMIDelay",
+      "identifier": "PMC6858215 / 10.1136/bmjopen-2019-031918",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "中国 101 家非 PCI 医院 STEMI 院前延迟观察（7312 例）"
+    },
+    {
+      "referenceNumber": 26,
+      "citationKey": "NMPALabelSJX",
+      "identifier": "EVIMED-LABEL:nmpa-0（NMPA 说明书索引副本）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸 NMPA 说明书索引副本（适应症/禁忌/注意事项字段；官方现行版本待核验）"
+    }
+  ]
+}

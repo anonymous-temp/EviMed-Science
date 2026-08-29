@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "复方丹参滴丸说明书用法被系统评价转述为一次10丸、一日3次、至少4周；其对照硝酸酯试验（29项、3,185例）的疗程为4至12周，症状有效率OR为1.95（4周）、3.45（6周）、4.02（8周），心电图有效率OR为1.60/2.47/3.43，不良反应率低于硝酸酯组（OR 0.15）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://www.frontiersin.org/journals/cardiovascular-medicine/articles/10.3389/fcvm.2023.1168730/full",
+      "sourceTitle": "Compound danshen dripping pills vs. nitrates for stable angina pectoris: a systematic review and meta-analysis",
+      "artifactPath": ".evimed-sources/PMC10240178/fulltext.md",
+      "identifier": "PMID:37283584",
+      "accessLevel": "full_text",
+      "supportQuote": "Twenty-nine studies were included for the statistical analysis. … The meta-analyses with the random-effect model indicated that CDDP could significantly increase the effective rate in symptom improvement compared with nitrates (Pooled 9 RCTs, OR = 1.95, 95% CI: 1.25–3.05, P = 0.003, duration of 4 weeks; Pooled 4 RCTs, OR = 3.45, 95% CI: 1.84–6.48, P = 0.0001, duration of 6 weeks; Pooled 13 RCTs, OR = 4.02, 95% CI: 2.14–7.57, P < 0.0001, duration of 8 weeks). … The meta-analyses with the random-effect model indicated that CDDP could significantly increase the effective rate in electrocardiogram improvement compared with nitrates (Pooled 5 RCTs, OR = 1.60, 95% CI: 1.02–2.52, P = 0.04, duration of 4 weeks; Pooled 3 RCTs, OR = 2.47, 95% CI: 1.60–3.82, P < 0.0001, duration of 6 weeks; Pooled 11 RCTs, OR = 3.43, 95% CI: 2.68–4.38, P < 0.00001, duration of 8 weeks). … The incidence of adverse drug reactions in the CDDP group was lower than that in the nitrates group (Pooled 23 RCTs, OR = 0.15, 95% CI: 0.1–0.21, P < 0.00001). … According to the instruction of CDDP, patients should take CDDP ten pills a time, and three times a day for at least 4 weeks. … After checking full-texts, 29 studies were finally included for the statistical analysis. … They involved 3,185 patients and were published between 1997 and 2013. … The duration of CDDP or nitrates ranged from 4 weeks to 12 weeks.",
+      "applicability": "说明书剂量为系统评价作者转述，属次级表述；疗效估计来自该SR对29项RCT的汇总",
+      "uncertainty": "用法用量原文以英文单词书写10与3（'ten pills a time, and three times a day'）；试验数量在摘要中以单词'Twenty-nine'书写、结果部分以数字29书写（'29 studies were finally included'）；说明书官方现行文本未直接获取（参考文献1、2为NMPA索引候选记录），用法用量/疗程字段以官方文本为准；'可连续服用3个月'未见于该引文及任何可及来源"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "速效救心丸治疗冠心病的荟萃分析（41项随机对照试验、6276例）显示心电图改善RR 1.32（95%CI 1.26至1.38，P<0.001，I²=62.3%），不良反应率与对照组无显著差异（RR 1.12，95%CI 0.50至2.51），但多数纳入试验Jadad评分低、缺乏双盲设计，且未分析心血管死亡等硬终点。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://www.hindawi.com/journals/ecam/2018/9745804/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … The majority of the included studies received low Jadad scores due to the lack of a double-blind design ( Table 2 ). … However, there was significant heterogeneity between studies with respect to ECG results ( I 2 = 62.3%). … There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785) … In this study, we did not analyze cardiovascular death or drug-related complications.",
+      "applicability": "冠心病（含稳定/不稳定心绞痛与心梗恢复期）人群，以常规治疗/硝酸酯/丹参片等为对照",
+      "uncertainty": "纳入试验质量低、异质性显著（I²=62.3%），结果需谨慎解读；原文以英文单词'Forty-one'书写41（'Forty-one trials involving 6276 patients'），未以阿拉伯数字书写"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "速效救心丸文献表述'舌下含服可快速缓解心绞痛'；急性心肌梗死大鼠模型中，腹腔注射给药（作者用于模拟舌下途径）后5-20分钟、灌胃后10-20分钟改善心功能，腹腔给药快于灌胃。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2023.1104243/full",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "PMID:37234713",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP treatment (54 mg/kg) significantly reduced EF, FS, and LVID values 5–20 min after intraperitoneal injection and 10–20 min after intragastric gavage administration. … Sublingual administration of the Suxiao Jiuxin Pill provides rapid relief from angina ( Duan et al., 2008 ).",
+      "applicability": "动物实验（大鼠AMI模型）；'快速缓解'表述引用自Cochrane系统评价（Duan 2008），未提供人体起效时间数据",
+      "uncertainty": "腹腔注射仅用于模拟舌下给药，非人体数据；不可直接外推为临床起效时间"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "速效救心丸经eNOS-NO通路诱导冠状动脉舒张，其有效成分包括senkyunolide A、scopoletin（Akt-eNOS-NO通路）与冰片（内皮非依赖机制）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2023.1104243/full",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "PMID:37234713",
+      "accessLevel": "full_text",
+      "supportQuote": "Indeed, SJP induced coronary artery relaxation via activation of the eNOS-NO pathway. Several of SJP’s main compounds, like senkyunolide A, scopoletin, and borneol, caused concentration-dependent coronary artery relaxation.",
+      "applicability": "机制层面证据（大鼠冠状动脉环、HUVEC实验）",
+      "uncertainty": "机制研究不能直接等同于临床疗效或起效速度"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "2022年发表的网络meta分析（179项随机对照试验、16,789例）同时纳入速效救心丸（6项试验）与复方丹参滴丸（30项试验），纳入试验疗程2至144周；作者采用Cochrane风险偏倚工具第二版（Version 2）评价，全部试验评为'有一定担忧'，并报告有效临床率与心电图有效率的全局不一致性检验P=0.077与P=0.081。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2022.918689/full",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMID:36059992",
+      "accessLevel": "full_text",
+      "supportQuote": "We employed Version 2 of the Cochrane risk-of-bias tool (ROB2) to assess the overall quality of the selected studies. … A total of 179 randomized controlled trials with 16,789 patients were included. … Overall, 11 OCPMs were included in our study, involving Fufang Danshen dripping pill (FFDS, 30 RCTs) … Suxiao Jiuxin pill (SXJX, 6 RCTs) … with the course of treatment ranging from two to 144 weeks. … Overall, the trials included in this network meta-analysis were rated as “some concerns”. … The results of global inconsistency did not indicate any significant difference for each of the two outcomes ( p = 0.077 and p = 0.081 for effective clinical rate and effective rate in ECG, respectively).",
+      "applicability": "稳定型心绞痛患者，中成药联合西药 vs 单用西药",
+      "uncertainty": "发表年份2022为参考文献6的书目信息，引句未载年份；疗程下限在原文写作'two'（two to 144 weeks），未以阿拉伯数字书写；样本量原文写作'16,789'（含千分位逗号）"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "该网络meta的临床有效率SUCRA排序前三位为芪参益气滴丸（98.12%）、速效救心丸（71.04%）、通心络胶囊（68.40%），复方丹参滴丸未进入前三位；心电图有效率排序中速效救心丸为73.80%（该节点含6项试验）；该排序为概率性指标而非假设检验结果。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2022.918689/full",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMID:36059992",
+      "accessLevel": "full_text",
+      "supportQuote": "Overall, 11 OCPMs were included in our study, involving Fufang Danshen dripping pill (FFDS, 30 RCTs) … Suxiao Jiuxin pill (SXJX, 6 RCTs) … Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (98.12%), followed by SXJX + WM (71.04%) and TXL + WM (68.40%), whereas WM alone obtained the worst effect (3.09%). … Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (94.21%), followed by SXJX + WM (73.80%) and KXQW + WM (56.70%), whereas WM alone obtained the worst effect (5.63%).",
+      "applicability": "仅描述该网络内的排序数值；不构成两药间显著差异的统计学证据",
+      "uncertainty": "SUCRA排序存在概率区间重叠；速效救心丸与复方丹参滴丸之间无报告统计显著的成对比较"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "该网络内汇总的不良反应率：速效救心丸组35.80%（81例），复方丹参滴丸组7.79%（616例）；作者同时说明多数研究报告不良反应零发生率、无法进行不良反应的网络meta分析。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2022.918689/full",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMID:36059992",
+      "accessLevel": "full_text",
+      "supportQuote": "In 81 patients treated with SXJX + WM, the incidences of mild abdominal discomfort, dizziness/headache, rash, and mild chest discomfort, were 2.47%, 17.28%, 7.41%, and 8.64%, separately, with a total adverse reaction rate of 35.80%. The incidence of ADRs in FFDS + WM groups (616 patients) was 7.79%",
+      "applicability": "网络内汇总发生率，非头对头比较",
+      "uncertainty": "速效救心丸组仅81例、事件数少，发生率波动大；未做网络meta分析，差异无统计推断"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "复方丹参滴丸联合标准治疗在PCI术后网络meta分析（47项试验、5,077例）中使再发心绞痛风险降低83%（RR 0.17，95%CI 0.04至0.51），证据确定度为极低至中等。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2023.1265766/full",
+      "sourceTitle": "Comparative efficacy of different Chinese patent medicines in preventing restenosis after percutaneous coronary intervention: a systematic review and Bayesian network meta-analysis of randomized clinical trials",
+      "artifactPath": ".evimed-sources/PMC10796822/fulltext.md",
+      "identifier": "PMID:38249344",
+      "accessLevel": "full_text",
+      "supportQuote": "This network meta-analysis included 47 trials with 5,077 patients evaluating 11 interventions. … Fufang Danshen dripping pill combined with Std showed superiority over other interventions for relieving recurrence angina, which can reduce the risk by 83% (RR 0.17, 95% CI 0.04–0.51, very low to moderate certainty of evidence) compared to Std alone.",
+      "applicability": "PCI术后患者，复方丹参滴丸联合标准药物治疗",
+      "uncertainty": "证据确定度极低至中等；网络内比较、非直接头对头证据；样本量原文写作'5,077'（含千分位逗号）"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "硝酸酯不耐受的慢性冠脉综合征患者随机对照试验（174例mITT、4周）：速效救心丸组SAQ总分改善≥20分者60.9%，安慰剂组39.1%（OR 2.43，95%CI 1.32至4.47，P=0.004）。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://bmccomplementmedtherapies.biomedcentral.com/articles/10.1186/s12906-024-04661-5",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement",
+      "applicability": "已确诊CCS、不耐受长效硝酸酯不良反应的患者，辅助常规治疗4周",
+      "uncertainty": "4周短期疗程；未做停药后长期随访；酒精摄入史可能影响疗效"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "速效救心丸试验给药方式为舌下含服、一次5粒、一日3次、连续4周；按《中国药典》规定每粒速效救心丸含川芎（以阿魏酸计）不少于15.0 μg、冰片2.9至4.4 mg。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://bmccomplementmedtherapies.biomedcentral.com/articles/10.1186/s12906-024-04661-5",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481",
+      "accessLevel": "full_text",
+      "supportQuote": "According to the Chinese Pharmacopoeia, each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid (C 10 H 10 O 4 ), and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol (C 10 H 18 O). … During the 4-week treatment period, all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks.",
+      "applicability": "试验给药方案与药典含量规定；不等同于说明书用法用量",
+      "uncertainty": "一日3次的'3'与'5粒'的5在原文以英文单词书写（'three times a day, taking 5 capsules each time'——5为数字、3为单词）；方案剂量与说明书剂量可能不同，须区分表述"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "稳定型心绞痛（气滞血瘀证）随机对照试验方案：速效救心丸一次5粒、一日3次、共24周，计划纳入324例，主要终点为入组后4周心绞痛症状改善率与主要心血管不良事件；每粒40 mg。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://trialsjournal.biomedcentral.com/articles/10.1186/s13063-021-05448-6",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:34281600",
+      "accessLevel": "full_text",
+      "supportQuote": "This is a prospective, randomized, double-blind, placebo-controlled, and multicenter trial. The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). … Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks. … The primary outcomes are the symptom improvement rate of angina from baseline to 4 weeks after inclusion and major adverse cardiovascular events (MACE). … Each pill weighs 40 mg.",
+      "applicability": "慢性稳定型心绞痛（气滞血瘀证）患者",
+      "uncertainty": "研究方案（protocol），最终结果以已发表试验为准；方案剂量不等于说明书剂量；'5粒'的5与'一日3次'的3在原文以英文单词书写（'five pills administered orally, three times daily'）"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "犬急性心肌缺血模型中，速效救心丸剂量依赖地缩小梗死面积：缺血180分钟后模型组梗死面积17.84%，6.4/12.8/25.6 mg/kg剂量组分别降至7.33%/6.03%/5.55%。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://bmccomplementmedtherapies.biomedcentral.com/articles/10.1186/s12906-015-0908-9",
+      "sourceTitle": "Protective effect of Suxiao jiuxin pill, a traditional Chinese medicine, against acute myocardial ischemia in dogs",
+      "artifactPath": ".evimed-sources/PMC4617746/fulltext.md",
+      "identifier": "PMID:26481800",
+      "accessLevel": "full_text",
+      "supportQuote": "Figure 1 shows the percentage of infarct size of hearts subjected to 180 min of ischemia. Post-ischemia myocardium was associated with a 17.84 ± 2.83 % infarct size which was consistently reduced by increasing concentrations of SX to 7.33 ± 4.39 % ( P < 0.01, 6.40 mg/kg SX), 6.03 ± 3.13 % (P <0.01, 12.80 mg/kg SX), and 5.55 ± 1.72 % ( P <0.01, 25.60 mg/kg SX), in low, middle, and high dose group respectively",
+      "applicability": "动物实验（麻醉犬急性心肌缺血模型）",
+      "uncertainty": "动物数据不能直接外推至人体临床疗效；剂量数值在原文以6.40/12.80/25.60 mg/kg书写（含末位零），主张以6.4/12.8/25.6表述"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "突发、持续不缓解的胸痛（可表现为挤压或压迫样不适、灼烧样或消化不良样）可能为心肌梗死，应立即呼叫急救并尽快接受医院救治。",
+      "referenceNumber": 29,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+      "identifier": "NHS chest pain page (last reviewed 08 Aug 2023)",
+      "accessLevel": "official_page",
+      "supportQuote": "you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "面向公众的急性胸痛急救指引；中国语境下急救电话为120",
+      "uncertainty": "该指引面向突发持续胸痛；间歇性胸痛建议尽早就诊而非自我判断"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "未检索到速效救心丸与复方丹参滴丸的直接头对头随机对照试验；可及的网络meta分析均为间接比较（其中一项明确声明因无头对头RCT而未做一致性检验）。",
+      "referenceNumber": 7,
+      "referenceNumbers": [6, 7],
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "applicability": "两药比较的证据格局",
+      "uncertainty": "基于可及检索范围（2026-08-04前）；中文数据库全文覆盖有限，不能排除未被索引的头对头研究",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2023.1265766/full",
+          "sourceTitle": "Comparative efficacy of different Chinese patent medicines in preventing restenosis after percutaneous coronary intervention",
+          "artifactPath": ".evimed-sources/PMC10796822/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "No consistency evaluation was performed because all data were from indirect treatment comparisons and no head-to-head RCTs."
+        },
+        {
+          "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2022.918689/full",
+          "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+          "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Overall, 11 OCPMs were included in our study, involving Fufang Danshen dripping pill (FFDS, 30 RCTs) … Suxiao Jiuxin pill (SXJX, 6 RCTs)"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "现有随机对照证据中，速效救心丸的疗程为4周（硝酸酯不耐受CCS研究）或24周（稳定型心绞痛方案），复方丹参滴丸对照硝酸酯试验的疗程为4至12周；可及证据中未检索到'3个月为一疗程'的界定。",
+      "referenceNumber": 8,
+      "referenceNumbers": [3, 8, 9],
+      "claimType": "synthesized",
+      "confidence": "high",
+      "applicability": "两药疗程的证据现状（对'可连续服用3个月'说法的核验）",
+      "uncertainty": "阴性检索结论限于可及来源（说明书索引记录、指南/共识题录、注册库、可获取全文）；中文全文库覆盖有限；'3个月为一疗程'中的3为查询与阴性结论表述的一部分，未见于任何支撑引句，属'未检索到该表述'的检索性结论",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://bmccomplementmedtherapies.biomedcentral.com/articles/10.1186/s12906-024-04661-5",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "This study consisted of a 2-week screening period followed by a 4-week treatment period. … participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks."
+        },
+        {
+          "sourceUrl": "https://trialsjournal.biomedcentral.com/articles/10.1186/s13063-021-05448-6",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks."
+        },
+        {
+          "sourceUrl": "https://www.frontiersin.org/journals/cardiovascular-medicine/articles/10.3389/fcvm.2023.1168730/full",
+          "sourceTitle": "Compound danshen dripping pills vs. nitrates for stable angina pectoris: a systematic review and meta-analysis",
+          "artifactPath": ".evimed-sources/PMC10240178/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The duration of CDDP or nitrates ranged from 4 weeks to 12 weeks."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "两药疗效证据均以症状/心电图改善等替代终点为主、硬终点证据有限，纳入试验方法学质量低：速效救心丸荟萃分析多数试验Jadad低分，复方丹参滴丸对照硝酸酯系统评价GRADE极低至低且选择/实施偏倚风险均'不清楚'，网络meta分析全部试验RoB 2为'有一定担忧'。",
+      "referenceNumber": 3,
+      "referenceNumbers": [3, 5, 6],
+      "claimType": "synthesized",
+      "confidence": "high",
+      "applicability": "两药临床证据强度的总体判定",
+      "uncertainty": "三个评价体系（Jadad、GRADE、RoB 2）覆盖的试验集合不完全相同；'RoB 2'中的'2'指Cochrane风险偏倚工具第二版，引句见'Version 2'（CLM-005证据）；原提及的发表年份2022为参考文献6的书目信息，非引句内容",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://www.hindawi.com/journals/ecam/2018/9745804/",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The majority of the included studies received low Jadad scores due to the lack of a double-blind design ( Table 2 )."
+        },
+        {
+          "sourceUrl": "https://www.frontiersin.org/journals/cardiovascular-medicine/articles/10.3389/fcvm.2023.1168730/full",
+          "sourceTitle": "Compound danshen dripping pills vs. nitrates for stable angina pectoris: a systematic review and meta-analysis",
+          "artifactPath": ".evimed-sources/PMC10240178/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "The risk of selection bias was graded as unclear in all of the included studies because no specific random sequence generation and allocation concealment methods were reported. … The levels of the evidence for the effective rate and the markedly effective rate in symptom improvement ranged from very low to low.",
+          "uncertainty": "引句跨段落，以省略号标示间隔，两侧文字均在原文出现且顺序一致"
+        },
+        {
+          "sourceUrl": "https://www.frontiersin.org/journals/pharmacology/articles/10.3389/fphar.2022.918689/full",
+          "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+          "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "We employed Version 2 of the Cochrane risk-of-bias tool (ROB2) to assess the overall quality of the selected studies. … Overall, the trials included in this network meta-analysis were rated as “some concerns”."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "'本品可连续服用3个月'的说法未能追溯到可核验来源：该表述未见于两药说明书结构化记录、可及指南/共识题录、临床试验注册或可获取全文的研究（现有疗程为4周、24周、6个月或4-12周），不应作为说明书、指南、共识或临床研究结论引用。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-001", "CLM-009", "CLM-011", "CLM-005"],
+      "method": "设定可核验出处的充分条件为（a）说明书文本、（b）指南/共识条款或（c）同行评议论文原文。逐层比对：（i）说明书——两药各2份NMPA索引候选记录均无该句且无疗程字段（CLM-001佐证CDDP说明书剂量转述中仅'至少4周'）；（ii）指南/共识——5份相关文件题录摘要均无该句，全文未开放按未核验处理；（iii）研究——速效救心丸RCT疗程4周（CLM-009）与24周（CLM-011），复方丹参滴丸对照试验疗程4至12周（CLM-001），网络meta纳入试验2至144周（CLM-005），均无'3个月'界定。三项条件全部不满足，故判定不可溯源。另：'3个月约等于12周'为报告正文中的反证性假设，12周未见于任何可及来源的疗程规定。",
+      "assumptions": "可及来源（说明书索引、指南题录、注册库、开放全文）能代表公开证据体系的主要部分；中文全文库覆盖有限。",
+      "sensitivity": "若未来出现含该句的说明书修订版（含批准文号/修订日期）或指南条款，判定需更新；在可及证据范围内结论稳健。",
+      "applicability": "对'可连续服用3个月'说法的溯源判定",
+      "uncertainty": "阴性结论是检索性结论而非对全部文献的穷尽性否定"
+    },
+    {
+      "claimId": "CLM-018",
+      "claim": "在两药无直接头对头比较、节点证据量悬殊（速效救心丸6项试验 vs 复方丹参滴丸30项试验）、纳入试验质量低且网络存在不一致性检出的情况下，任何基于SUCRA排序数值的'某药优于某药'表述均违反统计推断边界，本报告不采用两药优劣结论。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-005", "CLM-006", "CLM-008", "CLM-014"],
+      "method": "取2022年网络meta的节点构成（速效救心丸6项、复方丹参滴丸30项试验，CLM-005）与临床有效率SUCRA数值（速效救心丸71.04%，CLM-006），对照其作者报告的一致性检验结果（有效临床率与心电图有效率全局检验P=0.077与P=0.081、未达统计学显著但接近界值，见CLM-005引句；节点分裂法在部分成对比较中检出直接与间接证据的显著差异）与'无头对头RCT'声明（CLM-014、CLM-008）。SUCRA是概率性排序指标，其区间重叠时不可区分优劣，故排序不能承担假设检验的结论功能。",
+      "assumptions": "网络模型设定（随机效应、节点连通性）成立；两节点无直接比较边。",
+      "sensitivity": "若出现直接头对头试验或速效救心丸高质量试验加入网络，结论可能改变。",
+      "applicability": "对网络meta分析间接比较结果的可信度界定",
+      "uncertainty": "本推理不否定网络内单药对安慰剂/西药的效应估计，仅限制排序解读"
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "'速效救心丸起效快于复方丹参滴丸'属于无直接数据支持的推断：可核验的起效数据仅存在于速效救心丸的动物实验与文献转述（模拟舌下5-20分钟、灌胃10-20分钟），复方丹参滴丸无等价起效时间数据，两者不存在人体对比研究。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-003", "CLM-012"],
+      "method": "汇总可核验的起效时间证据：速效救心丸AMI大鼠腹腔（模拟舌下）5-20分钟、灌胃10-20分钟改善心功能（CLM-003），犬模型30-180分钟时间窗内观察（CLM-012）；复方丹参滴丸仅见大鼠群体药代动力学模型（一室/二室模型），无起效时间数据。两药之间不存在任何同一模型或同一人群的直接对比，故任何相对起效速度表述均为推断。",
+      "assumptions": "动物时间窗与人体临床起效时间存在可类比性（该假设本身缺乏人体证据）。",
+      "sensitivity": "一旦出现规范的人体Tmax或症状起效时间对比研究，本约束即失效。",
+      "applicability": "对'起效更快'类宣传表述的证据约束",
+      "uncertainty": "未排除存在未检索到的人体药代动力学数据"
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "两药说明书未规定'3个月'疗程（可核验记录层面），现有试验疗程为4周至6个月不等，故临床与科普的准确表述应为'按说明书与医嘱使用、疗程由病情与随访决定'，并明确'说明书未规定3个月疗程'。",
+      "claimType": "derived",
+      "derivedFrom": ["CLM-001", "CLM-009", "CLM-011"],
+      "method": "比对可核验的疗程来源：CDDP说明书剂量转述仅含'至少4周'（CLM-001），速效救心丸RCT疗程4周（CLM-009）与24周（CLM-011），另有摘要级6个月试验。所有可核验来源均无'3个月'疗程规定，故准确的临床沟通必须以'遵医嘱+说明书'为框架，不得断言存在'3个月'疗程。",
+      "assumptions": "说明书结构化记录完整反映说明书文本（受限于索引记录完整性）。",
+      "sensitivity": "若官方说明书含疗程字段，需以官方文本为准更新表述。",
+      "applicability": "面向临床医师与药师的沟通表述建议",
+      "uncertainty": "说明书官方现行文本未直接获取，疗程字段按'未核验'处理而非'不存在'"
+    }
+  ]
+}

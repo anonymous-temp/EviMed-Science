@@ -1,0 +1,51 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "冰片（龙脑）的挥发性/升华性及其理化性质如何？速效救心丸开封后不同时间点是否存在冰片含量或效价变化的直接实测研究？'开封后应在3–6个月内用完'的说法依据是什么、能否追溯？现行药典与说明书对本品的贮藏规定针对未开封还是开封后状态？",
+  "title": "冰片挥发性对速效救心丸开封后效价的影响：稳定性证据评价与\"开封后 3–6 个月\"说法的依据核查",
+  "startedAt": "2026-08-04T07:18:00Z",
+  "completedAt": "2026-08-04T07:48:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_guideline_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12845388/fulltext.md",
+    ".evimed-sources/PMC12844603/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/PMC4617746/fulltext.md",
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md"
+  ],
+  "failedSources": [
+    "PMID 23974515 (Acta Pharmacol Sin) - 开放获取全文解析失败（非开放获取）",
+    "PMID 30314813 (Am J Cardiol) - 开放获取全文解析失败（非开放获取）",
+    "PMID 38751210 (J Chromatogr Sci) - 开放获取全文解析失败（非开放获取）",
+    "NMPA 说明书 PDF（速效救心丸等）- 仅索引记录可取回，官方页面不在允许的官方抓取路由内，官方现行版本核验未完成",
+    "中国药典（ChP 2020）原文 - 本环境无可访问的官方原文通道",
+    "CNKI/万方全文库 - 仅题录/摘要经适配器可取回，全文库不可直接访问"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true,
+    "practicalSafetyReview": true,
+    "threeTierEvidenceDistinction": true
+  },
+  "stats": {
+    "totalSearches": 41,
+    "recordsIdentified": 476,
+    "recordsAfterDeduplication": 70,
+    "sourcesIncluded": 18,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

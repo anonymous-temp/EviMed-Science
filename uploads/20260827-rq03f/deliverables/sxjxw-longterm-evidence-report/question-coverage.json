@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "1",
+      "question": "疗程达到或超过三个月的有效性研究有哪些？",
+      "status": "answered",
+      "reportLines": [31, 33, 35, 37],
+      "claimIds": ["CLM-005", "CLM-006", "CLM-007", "CLM-004", "CLM-002", "CLM-003", "CLM-016", "CLM-009", "CLM-010", "CLM-014"]
+    },
+    {
+      "id": "2",
+      "question": "长期用药的安全性证据来自哪些研究？",
+      "status": "answered",
+      "reportLines": [43],
+      "claimIds": ["CLM-011"]
+    },
+    {
+      "id": "3",
+      "question": "冰片（龙脑）与川芎的长期暴露，在药理毒理研究与临床文献中是否存在可核验的安全性关注点",
+      "status": "answered",
+      "reportLines": [27],
+      "claimIds": ["CLM-001"]
+    },
+    {
+      "id": "4",
+      "question": "国家药监局核准说明书、中医药与中西医结合相关指南共识，各自如何界定长期服用的适用人群",
+      "status": "answered",
+      "reportLines": [53],
+      "claimIds": ["CLM-015"]
+    },
+    {
+      "id": "5",
+      "question": "就长期有效性与长期安全性两条线索，\"存在相关表述或推荐\"与\"该表述有前瞻性研究支持\"能否在现有文献中分别确认？",
+      "status": "answered",
+      "reportLines": [43, 33, 35],
+      "claimIds": ["CLM-011", "CLM-007", "CLM-016"]
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "运动诱发胸痛的病因构成、首诊鉴别路径的诊断效能，与速效救心丸适应症对三类临床情境的覆盖边界。",
+  "title": "运动诱发胸痛：病因构成、首诊鉴别路径的诊断效能与速效救心丸适应症边界的证据评价",
+  "startedAt": "2026-08-14T00:13:42Z",
+  "completedAt": "2026-08-14T00:22:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_clinical_trial_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_evidence_deduplicate",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC3490454/fulltext.md",
+    ".evimed-sources/PMC5435153/fulltext.md",
+    ".evimed-sources/PMC2072948/fulltext.md",
+    ".evimed-sources/10.1136-heartjnl-2016-310905/fulltext.md"
+  ],
+  "failedSources": [
+    "2021 AHA/ACC chest pain guideline full text (PMID:34709928 / PMID:34756653 / DOI:10.1016/j.jacc.2021.07.053): no open-access copy retrievable; full text unavailable, cited at abstract level only",
+    "ESC 2019 chronic coronary syndromes guideline (PMID:31504439): academic.oup.com HTTP 403",
+    "ESC 2024 chronic coronary syndromes guideline (PMID:39210706): academic.oup.com HTTP 403",
+    "ESC 2020 sports cardiology guideline (PMID:32860412): academic.oup.com HTTP 403",
+    "Fanaroff 2015 JAMA Rational Clinical Exam (PMID:26547467): no open-access copy",
+    "Harmon 2015 NCAA sudden cardiac death decade review (PMID:25977310 / PMC4496313): ahajournals.org HTTP 403",
+    "Bruyninckx 2008 diagnostic meta-analysis (PMID:18307844): bjgp.org HTTP 403",
+    "2022 ACC Expert Consensus Decision Pathway (PMID:36241466): no open-access copy",
+    "2023 Taiwan chronic coronary syndrome guideline (PMID:36685161): Unpaywall HTTP 404",
+    "NMPA official current label text for 速效救心丸: no fetchable official route; only an indexed label copy was retrievable",
+    "Open-web metasearch: engines unresponsive (baidu unresponsive, no results returned); Chinese full-text databases (CNKI/Wanfang/VIP) inaccessible"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 15,
+    "recordsIdentified": 126,
+    "recordsAfterDeduplication": 125,
+    "sourcesIncluded": 8,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

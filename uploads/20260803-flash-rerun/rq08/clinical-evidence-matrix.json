@@ -1,0 +1,189 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "冰片（龙脑，C10H18O）分子量 154.25，沸点 212 ℃。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMID:41449179; DOI:10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "Borneol (1,7,7-Trimethylbicyclo[2.2.1]heptan-2-ol, C10H18O) has a molecular weight of 154.25 and a boiling point of 212°C",
+      "applicability": "冰片原料药理化基准",
+      "uncertainty": "沸点在不同来源报道为 210–212 ℃，存在来源间微小差异；不影响其挥发性/升华性结论。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "冰片及环状单萜类在常温下即可升华并存在于气相，导致其可测浓度下降——这是开封后冰片逸散风险的机制基础。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMID:41449179; DOI:10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "Borneol, or related cyclic monoterpenes are readily sublimed and may exist in the gas phase at ambient temperature, which accounts for the observed decline in measurable concentration.",
+      "applicability": "含冰片固体制剂的储存机制",
+      "uncertainty": "该陈述为机制性解释，未给出具体速率；适用于一般含冰片固体制剂。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "密封包装的加速破坏性降解试验中，在 25 ℃、730 天、以含量损失 ≥5% 为失效判据时，β-环糊精包合物失效概率 1.10%，未包合冰片物理混合物失效概率 88.50%。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMID:41449179; DOI:10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "under the specified storage conditions of 25 °C and a shelf life of 730 days (2 years), with a residual content threshold of 95% (indicating a 5% loss as the criterion for failure), failure probabilities were characterized by using Crossing Time Distribution Profiler. The inclusion complex exhibited only a 1.10% probability of failure (defined as ≥ 5% content loss), in contrast to an 88.50% probability observed for the physical mixture.",
+      "applicability": "含冰片制剂密封体系损失动力学的数量级参考",
+      "uncertainty": "样品为包合前/包合后粉末体系而非滴丸成品；包装为热封密封膜袋（未开封）；统计模型外推（Arrhenius）引入不确定性。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "该稳定性试验样品均封装于三层 PET/AL/PE 复合膜袋（2 g/袋）并热封，属未开封密封体系；其结论不能直接外推至开封后（敞口/反复开盖）状态。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMID:41449179; DOI:10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "Samples were packaged in three-layer PET/AL/PE composite film bags (2 g fill weight per bag) and heat-sealed at 200 °C.",
+      "applicability": "界定 A 类（未开封）证据的适用边界",
+      "uncertainty": "作者亦提示热封膜袋存在协同保护作用；不能据此量化开封后的冰片损失。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "冰片与萘、金刚烷、樟脑均为白色结晶固体，在室温常压（RTP）下即可升华。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12572270",
+      "sourceTitle": "Alternative solid hydrocarbons as propellants for electrothermal plasma radio-frequency thrusters",
+      "artifactPath": ".evimed-sources/PMC12572270/fulltext.xml",
+      "identifier": "PMID:41162678; DOI:10.1038/s41598-025-21764-2",
+      "accessLevel": "full_text",
+      "supportQuote": "All four compounds are white crystalline solids that sublimate at room temperature and pressure (RTP).",
+      "applicability": "冰片室温升华的直接陈述",
+      "uncertainty": "该研究背景为航天推进剂应用，升华陈述为共性物理性质，适用于药品语境。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "文献 Table 1（列序：萘/金刚烷/樟脑/冰片）给出冰片熔点 206 ℃、沸点 210 ℃。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12572270",
+      "sourceTitle": "Alternative solid hydrocarbons as propellants for electrothermal plasma radio-frequency thrusters",
+      "artifactPath": ".evimed-sources/PMC12572270/fulltext.xml",
+      "identifier": "PMID:41162678; DOI:10.1038/s41598-025-21764-2",
+      "accessLevel": "full_text",
+      "supportQuote": "Melting point (°C)</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">80.2</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">270</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">177</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">206</td></tr><tr><td align=\"left\" colspan=\"1\" rowspan=\"1\">Boiling point (°C)</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">218</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">–</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">209</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">210</td>",
+      "applicability": "冰片熔点/沸点基准",
+      "uncertainty": "表格列序为萘/金刚烷/樟脑/冰片，末列对应冰片；沸点另见 212 ℃ 报道。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "文献 Table 1 给出冰片室温蒸汽压 23 mTorr、升华焓 74.7 kJ/mol。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12572270",
+      "sourceTitle": "Alternative solid hydrocarbons as propellants for electrothermal plasma radio-frequency thrusters",
+      "artifactPath": ".evimed-sources/PMC12572270/fulltext.xml",
+      "identifier": "PMID:41162678; DOI:10.1038/s41598-025-21764-2",
+      "accessLevel": "full_text",
+      "supportQuote": "Vapour pressure (mTorr) @ RTP</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">80</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">140</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">200</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">23</td></tr><tr><td align=\"left\" colspan=\"1\" rowspan=\"1\">Enthalpy of sublimation (kJ/mol)</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">72.8</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">59.9</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">51.9</td><td align=\"left\" colspan=\"1\" rowspan=\"1\">74.7</td>",
+      "applicability": "冰片挥发性/升华热力学基准",
+      "uncertainty": "表格列序为萘/金刚烷/樟脑/冰片，末列对应冰片；蒸汽压为室温常压条件。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "含 L-冰片的粗提物疗效常因冰片升华及水性环境中润湿性差而不稳定。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC12844603",
+      "sourceTitle": "Ai-Fen Solid Dispersions: Preparation, Characterization, and Enhanced Therapeutic Efficacy in a Rat Model of Oral Ulceration",
+      "artifactPath": ".evimed-sources/PMC12844603/fulltext.md",
+      "identifier": "PMID:41599609; DOI:10.3390/ph19010007",
+      "accessLevel": "full_text",
+      "supportQuote": "Previous pharmacological studies have established that while the crude extract possesses potent anti-inflammatory activity, its efficacy is often inconsistent due to the sublimation of borneol and poor wettability in the aqueous oral environment",
+      "applicability": "冰片升华导致制剂性能不稳定的佐证（滴丸为间接类比）",
+      "uncertainty": "对象为口腔用提取物制剂，非滴丸。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "L-冰片固体分散体以熔融法、以聚乙二醇 6000（PEG 6000）为载体——与滴丸的聚乙二醇基质体系同类。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC12844603",
+      "sourceTitle": "Ai-Fen Solid Dispersions: Preparation, Characterization, and Enhanced Therapeutic Efficacy in a Rat Model of Oral Ulceration",
+      "artifactPath": ".evimed-sources/PMC12844603/fulltext.md",
+      "identifier": "PMID:41599609; DOI:10.3390/ph19010007",
+      "accessLevel": "full_text",
+      "supportQuote": "Ai-Fen solid dispersions (AF-SD) were prepared by a melt-fusion method using polyethylene glycol 6000 (PEG 6000) as the carrier.",
+      "applicability": "冰片在聚乙二醇基质中的存在形式（滴丸基质类比）",
+      "uncertainty": "滴丸处方与工艺以厂家为准，此处为基质类型的直接类比。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "最优处方（药载比 1:2、70 ℃、5 min）下 L-冰片释放提高 2.5 倍，DSC 与 PXRD 证实冰片完全转化为无定形态。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC12844603",
+      "sourceTitle": "Ai-Fen Solid Dispersions: Preparation, Characterization, and Enhanced Therapeutic Efficacy in a Rat Model of Oral Ulceration",
+      "artifactPath": ".evimed-sources/PMC12844603/fulltext.md",
+      "identifier": "PMID:41599609; DOI:10.3390/ph19010007",
+      "accessLevel": "full_text",
+      "supportQuote": "The optimal formulation was obtained at a drug-to-carrier ratio of 1:2, a melting temperature of 70 °C, and a melting time of 5 min. Under these conditions, L-borneol release increased 2.5-fold. DSC and PXRD confirmed complete conversion of Ai-Fen to an amorphous state",
+      "applicability": "无定形化提高溶出但不改变逸散热力学的推断基础",
+      "uncertainty": "无定形态提高溶出，并不等同于抑制升华逸散。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "速效救心丸（SJP）由冰片与川芎（Chuanxiong Rhizoma）组成，为活血化瘀类代表中成药，用于稳定型冠状动脉疾病。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC12400554",
+      "sourceTitle": "Integrated metabolomics and the microbiome reveal the compatibility mechanism of the Suxiao Jiuxin pill in the treatment of stable coronary artery disease",
+      "artifactPath": ".evimed-sources/PMC12400554/fulltext.md",
+      "identifier": "PMID:40890831; DOI:10.1186/s13020-025-01198-8",
+      "accessLevel": "full_text",
+      "supportQuote": "the Suxiao Jiuxin pill (SJP) is composed of borneol and Chuanxiong Rhizoma",
+      "applicability": "速效救心丸组成（全文级证据）",
+      "uncertainty": "冰片在复方中的具体含量与质量标准以药典/说明书为准。"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "NHS 官方胸痛指导：突发胸痛（压榨感/挤压样、放射至手臂、颈、下颌、背部，或伴出汗、恶心、头晕、气短）可能为心肌梗死，应立即呼叫急救（英国 999）并接受院内治疗。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion\n\n- you get pain that spreads to your left or right arm, or your neck, jaw, stomach or back\n\n- you have chest pain and you feel sweaty, sick, light headed or short of breath\n\nYou could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "急性胸痛的急救行动边界",
+      "uncertainty": "源文为英国 NHS 指导（999）；中国辖区以 120 本地化，属转译而非原文内容。 中国急救号码（120）的本地化转译因无来源支撑已从主张与正文中移除；源文为英国 NHS 指导（999）。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "突发急性胸痛疑似心肌梗死时应立即呼叫急救并接受急诊评估，含服速效救心丸不得延误急救；本品循证证据基于稳定型冠心病（心绞痛）患者人群。",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "applicability": "中国院前急救场景（急救号码本地化为 120）",
+      "uncertainty": "急救行动边界来自英国 NHS 官方指导并以中国 120 本地化；本品适用人群证据来自稳定型冠状动脉疾病研究；'含服不得延误急救'为综合推断。 中国急救号码（120）的本地化转译因无来源支撑已从主张与正文中移除；急救行动以支持来源（NHS 官方指导）为准。",
+      "referenceNumber": 11,
+      "referenceNumbers": [
+        5,
+        11
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS",
+          "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+          "accessLevel": "official_page",
+          "supportQuote": "You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC12400554",
+          "sourceTitle": "Integrated metabolomics and the microbiome reveal the compatibility mechanism of the Suxiao Jiuxin pill in the treatment of stable coronary artery disease",
+          "artifactPath": ".evimed-sources/PMC12400554/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "As a representative Chinese patent medicine for promoting blood circulation and removing blood stasis, the Suxiao Jiuxin pill (SJP) is composed of borneol and Chuanxiong Rhizoma , which has been proven to be effective in treating patients with stable coronary artery disease (SCAD) through clinical trials"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸在现行法规下按处方药还是非处方药管理、监管文本是否对单次购买数量设限；说明书与国家药品标准对规格、用法用量、疗程、贮藏与有效期的表述；在售大规格包装是否有对应注册包装规格记录；已发表对照研究覆盖的连续给药时长；一次性购入大规格包装在何种条件下与现行规定及现有证据相容或不相容。",
+  "title": "速效救心丸的分类属性、注册包装规格与已发表给药时长：家庭一次性大量购药的证据与合规边界",
+  "startedAt": "2026-08-14T04:07:50Z",
+  "completedAt": "2026-08-14T04:22:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_clinical_trial_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_web_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID 37487965 (Sun 2023 stable angina RCT) — no open-access PDF",
+    "PMID 32716206 (Shen 2020 ACS PCI RCT) — no open-access PDF",
+    "PMID 18254051 (Duan 2008 Cochrane) — cochranelibrary.com HTTP 403",
+    "NMPA 药品注册数据库 / 非处方药目录 / 官方说明书 PDF — not retrievable in this run",
+    "湖南省药监局《药品网络销售监督管理实施办法》政策解读页 — not an approved official-document route",
+    "CNKI / 万方 中文全文 — not accessible"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 13,
+    "recordsIdentified": 117,
+    "recordsAfterDeduplication": 85,
+    "sourcesIncluded": 15,
+    "distinctPreservedSources": 4
+  },
+  "status": "succeeded"
+}

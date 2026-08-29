@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "questionPico": {
+    "population": "院外急性胸痛患者（已确诊冠心病心绞痛者与首次发作病因未明者）",
+    "intervention": "舌下含服硝酸甘油或速效救心丸后症状不缓解的升级时间阈值",
+    "outcome": "升级处置（呼叫急救/就医）的时间界限及其证据基础"
+  },
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "英国 NHS 面向公众的胸痛页将突然出现且不消失的胸痛或不适列为立即呼叫急救（999）的条件。",
+      "claimType": "direct",
+      "referenceNumber": 1,
+      "referenceNumbers": [1],
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS-ChestPain-page",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: … you get sudden pain or discomfort in your chest that does not go away",
+      "applicability": "面向公众的院外自救与升级指引；号码为英国本地化（999），中国对应 120。",
+      "uncertainty": "为公众教育文本，非分级推荐；触发条件以症状为准。",
+      "pico": {
+        "population": "院外胸痛公众（未分层）",
+        "intervention": "识别警示症状后呼叫急救",
+        "outcome": "呼叫 999 处置"
+      },
+      "picoMatch": {
+        "population": "same",
+        "intervention": "different",
+        "outcome": "same"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "jurisdiction", "forms": ["英国", "999"] },
+        { "id": "audience", "forms": ["公众", "面向公众"] }
+      ]
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "ACC/AHA 指南推荐舌下含服硝酸甘油（片剂或喷雾）用于稳定型缺血性心脏病心绞痛的立即缓解，推荐类别 I、证据等级 B。",
+      "claimType": "direct",
+      "referenceNumber": 2,
+      "referenceNumbers": [2],
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "In SIHD patients, sublingual nitroglycerin tablets or spray are recommended for immediate relief of angina (Class I, Level of Evidence, B).",
+      "applicability": "适应症人群为稳定型缺血性心脏病（SIHD）心绞痛发作；不覆盖未分化急性胸痛自救。",
+      "uncertainty": "推荐类别与证据等级引自综述对指南的转述，未核对指南原文分级。",
+      "pico": {
+        "population": "稳定型缺血性心脏病（SIHD）心绞痛患者",
+        "intervention": "舌下含服硝酸甘油",
+        "outcome": "心绞痛立即缓解"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "population", "forms": ["SIHD", "稳定型缺血性心脏病", "已确诊"] }
+      ]
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "如需追加剂量，应每 5 分钟一次，15 分钟内最大剂量不超过 1.2 mg；此时间窗内不缓解即应寻求立即医疗关注。",
+      "claimType": "direct",
+      "referenceNumber": 2,
+      "referenceNumbers": [2],
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "If additional doses are necessary, they should be taken at 5-minute intervals for a maximum dose of ≤1.2 mg within 15 minutes. During this timeframe, if relief does not occur, the patient should seek immediate medical attention.",
+      "applicability": "用药边界与升级时点为同一句话；首先是剂量上限，其次才是升级触发点。",
+      "uncertainty": "该时间窗为指南/说明书层级的用药边界，未检索到以该阈值为变量的前瞻性验证。",
+      "pico": {
+        "population": "稳定型缺血性心脏病心绞痛患者",
+        "intervention": "舌下含服硝酸甘油重复给药",
+        "outcome": "用药边界与升级时点"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "population", "forms": ["已确诊", "SIHD"] },
+        { "id": "nature", "forms": ["用药边界", "剂量上限"] }
+      ]
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "对短效硝酸甘油无反应的发作（通常界定为每 5 分钟一次、至多三剂后胸痛仍无改善）应视为与可能的急性心肌梗死相符，需立即就医评估。",
+      "claimType": "direct",
+      "referenceNumber": 2,
+      "referenceNumbers": [2],
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "an angina attack that does not respond to short-acting nitroglycerin (generally defined as a lack of improvement in chest discomfort following up to three short-acting nitrates every 5 minutes) should be regarded as consistent with a possible acute MI requiring immediate medical attention and evaluation.",
+      "applicability": "描述的是不缓解作为急性心肌梗死的警示条件，不构成'缓解即放心'的对偶结论。",
+      "uncertainty": "为综述转述的临床共识表述，非分级推荐原文。",
+      "pico": {
+        "population": "心绞痛发作患者",
+        "intervention": "短效硝酸甘油含服",
+        "outcome": "无反应与急性心肌梗死的关联"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "population", "forms": ["心绞痛发作", "已确诊"] }
+      ]
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "ESC 稳定型冠心病指南推荐心绞痛发作时含服硝酸甘油 0.3–0.6 mg，每 5 分钟一次，直至疼痛缓解或 15 分钟内达 1.2 mg 上限。",
+      "claimType": "direct",
+      "referenceNumber": 2,
+      "referenceNumbers": [2],
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "take sublingual nitroglycerin (0.3 to 0.6 mg) every 5 minutes until the pain subsides or a maximum of 1.2 mg has been taken within 15 minutes.",
+      "applicability": "ESC 稳定型冠心病任务组对 effort angina 的用药边界；与 ACC/AHA 数字一致。",
+      "uncertainty": "引自综述对 ESC 指南的转述（Table S1），未核对指南原文。",
+      "pico": {
+        "population": "稳定型冠心病 effort angina 患者",
+        "intervention": "舌下含服硝酸甘油",
+        "outcome": "用药边界"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "same"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "jurisdiction", "forms": ["ESC", "欧洲"] },
+        { "id": "population", "forms": ["稳定型冠心病", "effort angina"] }
+      ]
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "每 30 分钟再灌注延迟使 1 年死亡风险增加 7.5%。",
+      "claimType": "direct",
+      "referenceNumber": 3,
+      "referenceNumbers": [3],
+      "sourceUrl": "https://europepmc.org/articles/PMC12733498",
+      "sourceTitle": "The Irreversible March of Time: Ischemic Delay and Impact on Outcomes in ST-Segment Elevation Myocardial Infarction",
+      "artifactPath": ".evimed-sources/PMC12733498/fulltext.md",
+      "identifier": "PMID:41440853",
+      "accessLevel": "full_text",
+      "supportQuote": "each 30 min reperfusion delay increases one-year mortality risk by 7.5%",
+      "applicability": "描述 STEMI 再灌注延迟与死亡风险的关系，属观察性/注册数据，非随机试验。",
+      "uncertainty": "观察性证据，存在按适应症选择的混杂与间接性；按 GRADE 为低确定性。",
+      "pico": {
+        "population": "STEMI 接受再灌注患者",
+        "intervention": "再灌注时间延迟",
+        "outcome": "1 年死亡率"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "different",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "population", "forms": ["STEMI", "再灌注"] },
+        { "id": "design", "forms": ["观察性"] }
+      ]
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "校正后的院内死亡率随门球时间上升：30 分钟 3.0%、60 分钟 3.5%、90 分钟 4.3%、150 分钟 7.0%。",
+      "claimType": "direct",
+      "referenceNumber": 3,
+      "referenceNumbers": [3],
+      "sourceUrl": "https://europepmc.org/articles/PMC12733498",
+      "sourceTitle": "The Irreversible March of Time: Ischemic Delay and Impact on Outcomes in ST-Segment Elevation Myocardial Infarction",
+      "artifactPath": ".evimed-sources/PMC12733498/fulltext.md",
+      "identifier": "PMID:41440853",
+      "accessLevel": "full_text",
+      "supportQuote": "adjusted in-hospital mortality rises progressively: from 3.0% at 30 min to 3.5% at 60 min, 4.3% at 90 min, and 7.0% at 150 min",
+      "applicability": "门球时间（院内）与死亡率的单调关系；描述的是院内流程延迟，非院前决策延迟。",
+      "uncertainty": "注册数据，存在'门球时间悖论'——总体门球时间改善未必等比例降低死亡率。",
+      "pico": {
+        "population": "STEMI 直接 PCI 患者",
+        "intervention": "门球时间",
+        "outcome": "院内死亡率"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "different",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "population", "forms": ["STEMI"] },
+        { "id": "outcome", "forms": ["院内死亡率", "门球时间"] }
+      ]
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "缺血持续时间直接决定梗死面积与临床结局，每分钟延迟都与死亡率升高、梗死面积增大、心力衰竭风险上升相关。",
+      "claimType": "direct",
+      "referenceNumber": 3,
+      "referenceNumbers": [3],
+      "sourceUrl": "https://europepmc.org/articles/PMC12733498",
+      "sourceTitle": "The Irreversible March of Time: Ischemic Delay and Impact on Outcomes in ST-Segment Elevation Myocardial Infarction",
+      "artifactPath": ".evimed-sources/PMC12733498/fulltext.md",
+      "identifier": "PMID:41440853",
+      "accessLevel": "full_text",
+      "supportQuote": "Each minute of delay correlates with increased mortality, larger infarcts, and a higher risk of heart failure development.",
+      "applicability": "构成'时间就是心肌'的方向性证据，支持'越早越好'而非某一精确阈值。",
+      "uncertainty": "方向性结论，不提供精确的时间阈值效应量。",
+      "pico": {
+        "population": "急性冠脉闭塞（STEMI 及其他 OMI）",
+        "intervention": "缺血时间延长",
+        "outcome": "死亡率、梗死面积、心力衰竭"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "different",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "design", "forms": ["观察性", "病理生理"] }
+      ]
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "患者决策延迟的中位数约 100 分钟，约占院前延迟的 60%。",
+      "claimType": "direct",
+      "referenceNumber": 3,
+      "referenceNumbers": [3],
+      "sourceUrl": "https://europepmc.org/articles/PMC12733498",
+      "sourceTitle": "The Irreversible March of Time: Ischemic Delay and Impact on Outcomes in ST-Segment Elevation Myocardial Infarction",
+      "artifactPath": ".evimed-sources/PMC12733498/fulltext.md",
+      "identifier": "PMID:41440853",
+      "accessLevel": "full_text",
+      "supportQuote": "Median patient decision delay approximates 100 min, constituting nearly 60% of pre-hospital delay",
+      "applicability": "说明患者侧延迟是总缺血时间中最大且最易变的成分。",
+      "uncertainty": "汇总多项研究的中位数估计，人群与年代存在异质性。",
+      "pico": {
+        "population": "急性心肌梗死患者",
+        "intervention": "患者决策延迟",
+        "outcome": "院前延迟构成"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "different",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "measure", "forms": ["患者决策延迟", "pre-hospital delay"] }
+      ]
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "多数患者在含服 1 至 2 剂（每剂 0.3–0.6 mg）后 5 分钟内起效。",
+      "claimType": "direct",
+      "referenceNumber": 2,
+      "referenceNumbers": [2],
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "Most patients respond within 5 minutes of taking one to two sublingual dose(s) of 0.3–0.6 mg each.",
+      "applicability": "起效时间与单剂剂量，属 SIHD 人群。",
+      "uncertainty": "为综述陈述，未给出具体分母与人群异质性。",
+      "pico": {
+        "population": "SIHD 心绞痛患者",
+        "intervention": "舌下含服硝酸甘油",
+        "outcome": "起效时间"
+      },
+      "picoMatch": {
+        "population": "different",
+        "intervention": "same",
+        "outcome": "different"
+      },
+      "denominatorKind": "not_applicable",
+      "requiredCaveats": [
+        { "id": "population", "forms": ["SIHD", "多数患者"] }
+      ]
+    }
+  ]
+}

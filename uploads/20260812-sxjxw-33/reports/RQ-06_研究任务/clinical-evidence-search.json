@@ -1,0 +1,363 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T18:58:00.000Z",
+  "databases": [
+    "中文学术库（SinoMed/CNKI/万方/维普）",
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "指南与共识索引",
+    "ClinicalTrials.gov"
+  ],
+  "queries": [
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "速效救心丸 复方丹参滴丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Compound Danshen Dripping Pill angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "指南与共识索引",
+      "query": "速效救心丸 冠心病 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "指南与共识索引",
+      "query": "复方丹参滴丸 冠心病 心绞痛 共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "速效救心丸 起效 达峰",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "复方丹参滴丸 舌下含服 起效时间",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 疗程 三个月",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "复方丹参滴丸 疗程 3个月",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "速效救心丸治疗冠心病中国专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "中成药 冠心病心绞痛 网络Meta分析",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "速效救心丸 说明书 用法用量",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "ClinicalTrials.gov",
+      "query": "NCT01659580",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin pill acute coronary syndrome systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "38395177",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "32744020",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "38395177",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "中文学术库（SinoMed/CNKI/万方/维普）",
+      "query": "速效救心丸 药动学 川芎嗪 含服 吸收",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "指南与共识索引",
+      "query": "中成药治疗冠心病临床应用指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Crossref",
+      "query": "速效救心丸治疗冠心病中国专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "PMC5892298",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "PMC8287819",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "PMC9428755",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin fufang danshen comparison",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 232,
+    "recordsAfterDeduplication": 225,
+    "sourcesIncluded": 20
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NHSChestPain2023",
+      "identifier": "official-page:e6143b76645a9461",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急性胸痛处置边界"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "SuxiaoJiuXinCCSRCT2024",
+      "identifier": "PMC11451125 (PMID:39367481; 2024)",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸单药疗效RCT"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "SuxiaoJiuXinCHDMA2018",
+      "identifier": "PMC5892298 (PMID:29770157; 2018)",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸meta分析"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "SuxiaoJiuXinProtocol2021",
+      "identifier": "PMC8287819 (PMID:34281600; 2021)",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸试验方案（24周）"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "CDDPRecommendations2017",
+      "identifier": "PMC5407045 (PMID:28397728; 2017)",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "复方丹参滴丸专家建议（用法/药动学/证据库）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "CDDPAdvances2025",
+      "identifier": "PMC12014028 (PMID:40258733; 2025)",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "复方丹参滴丸稳定型心绞痛综述"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "NMA179Trials2022",
+      "identifier": "PMC9428755 (PMID:36059992; 2022)",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "间接比较网络meta"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "SuxiaoJiuXinConsensus2019",
+      "identifier": "cqvip 7100492500",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸专家共识（书目）"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "CDDPConsensus2025",
+      "identifier": "指南索引记录 2025-04-21",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "复方丹参滴丸专家共识（索引）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "GuidelineChinesePatentMedicineCHD2020",
+      "identifier": "中西医结合心脑血管病杂志2021;19(9)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "中成药治疗冠心病指南（索引）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NMPALabelSuxiaoJiuXin",
+      "identifier": "EVIMED-LABEL:nmpa-0（速效救心丸）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "速效救心丸说明书（NMPA索引）"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "NMPALabelCDDP",
+      "identifier": "EVIMED-LABEL:nmpa-1（复方丹参滴丸）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "复方丹参滴丸说明书（NMPA索引）"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "BayesianNMA331RCT2024",
+      "identifier": "PMID:38395177",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "间接比较（摘要级）"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "SuxiaoJiuXinACSSR2020",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "速效救心丸ACS系统评价（摘要级）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "SuxiaoJiuXinCourseMA2022",
+      "identifier": "袁慧婵等2022 北京中医药",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "疗程meta分析（摘要级）"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "LiFeng1998HeadToHead",
+      "identifier": "sinomed 1998069715",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "头对头研究（题录/摘要级）"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "ZhengLizhen2017HeadToHead",
+      "identifier": "中国生化药物杂志2017",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "头对头研究（题录/摘要级）"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "WangXiaomei2022HeadToHead",
+      "identifier": "中国社区医师2022",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "头对头研究（题录/摘要级）"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "ZhangXuebin2021PharmacoEcon",
+      "identifier": "sinomed 2021407668",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "药物经济学队列（摘要级）"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "T89PhaseIII",
+      "identifier": "NCT01659580",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "T89 III期注册记录"
+    }
+  ]
+}

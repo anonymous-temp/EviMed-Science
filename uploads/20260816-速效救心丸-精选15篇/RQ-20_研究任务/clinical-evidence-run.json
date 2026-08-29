@@ -1,0 +1,54 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "无冠心病诊断者家庭备置速效救心丸的获益与风险：说明书适应症边界与「按危险因素备药」主张的证据评价",
+  "title": "无冠心病诊断者家庭备置速效救心丸的获益与风险：说明书适应症边界与「按危险因素备药」主张的证据评价",
+  "startedAt": "2026-08-14T01:33:00Z",
+  "completedAt": "2026-08-14T01:52:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC5643596/fulltext.md",
+    ".evimed-sources/PMC7053675/fulltext.md",
+    ".evimed-sources/PMC13027161/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC12260233/fulltext.md",
+    ".evimed-sources/PMC12546671/fulltext.md"
+  ],
+  "failedSources": [
+    "https://www.nhs.uk/symptoms/chest-pain/ 已成功；https://cpr.heart.org/en/resuscitation-science/ 不可达",
+    "https://professional.heart.org/en/science-news/2021-guideline-for-the-evaluation-and-diagnosis-of-chest-pain 本次抓取不可达（使用同文档既有保留副本）",
+    "中国-PAR 主文（Circulation, PMID:27682885）非开放获取",
+    "HAT 家庭除颤试验（NEJM, PMID:18463307）非开放获取",
+    "PAD 试验原文（NEJM, PMID:15306665）非开放获取",
+    "Diercks 2005（Ann Emerg Med, PMID:15940087）非开放获取",
+    "突发心源性死亡作为冠心病首发表现的比例：未检索到可引用的开放获取来源",
+    "国家药品监督管理局官方数据查询网站：本次不可访问",
+    "CNKI/万方中文全文数据库：不可访问"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true
+  },
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 208,
+    "recordsAfterDeduplication": 145,
+    "sourcesIncluded": 13,
+    "distinctPreservedSources": 8
+  },
+  "status": "succeeded"
+}

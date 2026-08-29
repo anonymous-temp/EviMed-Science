@@ -1,0 +1,51 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "职业应激与焦虑躯体化所致心悸胸闷同心绞痛的鉴别：证据分层与速效救心丸适应症边界的场景评价",
+  "title": "职业应激与焦虑所致心悸胸闷同心绞痛的鉴别：证据分层与速效救心丸适应症边界",
+  "startedAt": "2026-08-14T06:50:00Z",
+  "completedAt": "2026-08-14T07:12:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_clinical_trial_search",
+    "evimed_web_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5550987/fulltext.md",
+    ".evimed-sources/PMC3808760/fulltext.md",
+    ".evimed-sources/PMC7257246/fulltext.md",
+    ".evimed-sources/10.1136-heartjnl-2016-310905/fulltext.md",
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/10.3389-fpsyt.2026.1858764/fulltext.md",
+    ".evimed-sources/PMC6951081/fulltext.md",
+    ".evimed-sources/official-pages/d7f13b48a8ccf3c4/page.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "NMPA 速效救心丸说明书现行官方文本：数据查询与省药监镜像不可达，仅获索引化监管记录",
+    "Duan 2008 Cochrane review (PMID:18254051)：Cochrane Library HTTP 403，仅题录/摘要",
+    "Greenslade 2017 (PMID:28256404)、Vaccarino 2021 JAMA (PMID:34751708)、Tully 2013 (PMID:23300050)：无开放获取全文",
+    "湖南省药品监督管理局 (mpa.hunan.gov.cn/mpa)：上游不可用"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 11,
+    "recordsIdentified": 119,
+    "recordsAfterDeduplication": 111,
+    "sourcesIncluded": 9,
+    "distinctPreservedSources": 9
+  },
+  "status": "succeeded"
+}

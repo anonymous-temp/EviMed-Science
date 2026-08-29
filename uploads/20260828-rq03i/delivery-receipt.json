@@ -1,0 +1,84 @@
+{
+  "formatVersion": 1,
+  "runId": "run_ece2174ebb30402f08b21eac74315046",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "entries": [
+    {
+      "deliverableId": "sxjw-longterm-evidence-review",
+      "contractKind": "clinical-evidence-report",
+      "capability": "clinical-evidence-synthesis",
+      "files": [
+        {
+          "path": "clinical-evidence-report.md",
+          "sha256": "cbeef86396571307953cb96a98624e25a68f695279fb7d471ff705d6436b28aa",
+          "bytes": 24321
+        },
+        {
+          "path": "clinical-evidence-matrix.json",
+          "sha256": "e6795d5ecd12c4989d06a6274b4d8cbe68a1f1983fc701fe11ed330e8734037a",
+          "bytes": 18432
+        },
+        {
+          "path": "clinical-evidence-search.json",
+          "sha256": "81de6c328c147cc2e307619871ecc2c274ef813ec7ad7c87dc24e152a75a4e21",
+          "bytes": 4509
+        },
+        {
+          "path": "citation-ledger.csv",
+          "sha256": "3baebaf7e687215778cf1c2325e4007d97507908fc162029081f9101e0a72f63",
+          "bytes": 2085
+        },
+        {
+          "path": "references.bib",
+          "sha256": "0fcef1422591dd6ea49a0a95992cfe8941dec5365b31c6923b1eebcc66475786",
+          "bytes": 5091
+        },
+        {
+          "path": "citation-audit.md",
+          "sha256": "a7a5710beee99fa47ac5d52b17c5c09f320e2dff516034343f5ffcba52778824",
+          "bytes": 2040
+        },
+        {
+          "path": "clinical-evidence-run.json",
+          "sha256": "6f762d37272c470339dd243fac6b59551292a95dd5daac099950a35a49676938",
+          "bytes": 1693
+        },
+        {
+          "path": "question-coverage.json",
+          "sha256": "fce8bdf299475e315722b6251c075c5fcfb83ccf73cd89e636e813bc3b09e78b",
+          "bytes": 5647
+        }
+      ],
+      "acceptedAt": "2026-08-28T16:28:12.451Z",
+      "attempt": 6,
+      "notices": [
+        "claims[1].claim numeric fact 1.26-1.38 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "claims[2].claim numeric fact 1.12 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "claims[2].claim numeric fact 0.32 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "claims[3].claim numeric fact 14 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "claims[4].claim numeric fact 0.5-2.51 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "claims[7].claim numeric fact 24 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "claims[8].claim numeric fact 5 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+        "Report line 5 numeric facts 12 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+        "Report line 9 numeric facts 1, 101, 856 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 11 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+        "Report line 37 numeric facts 2, 1, 101 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 39 numeric facts 1, 15, 1776, 4, 8, 979, 0.34, 0.17-0.68 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 41 numeric facts 1, 24 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 47 numeric facts 24, 2 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 49 numeric facts 1, 2001-2015, 856, 65, 72.48, 47.97, 61.15, 50.77 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 53 numeric facts 1, 200, 100 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 55 numeric facts 1, 75 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 57 numeric facts 1, 1000, 805.7, 21.9 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+        "Report line 65 numeric facts 40, 6, 15, 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 67 numeric facts 15, 6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 71 numeric facts 24 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "Report line 73 numeric facts 24 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+        "Report line 79 numeric facts 24, 856 have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.",
+        "Report line 83 numeric facts 1 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+        "citation-audit.md must reference at least one real audited source identifier from the evidence matrix."
+      ]
+    }
+  ]
+}

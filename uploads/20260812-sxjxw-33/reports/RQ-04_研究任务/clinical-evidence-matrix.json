@@ -1,0 +1,509 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "referenceNumber": 1,
+      "claim": "中国延边单中心 9 年连续队列 3158 例有明确发病时间的急性心肌梗死患者中，06:00–11:59 时段发病占 30.6%（967 例），显著高于其余三个 6 小时时段（P<0.01），峰值位于 7–9 时。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/35839036/",
+      "sourceTitle": "Circadian and seasonal variation in onset of acute myocardial infarction (Medicine, 2022)",
+      "artifactPath": ".evimed-sources/PMC11132392/fulltext.md",
+      "identifier": "PMID:35839036",
+      "accessLevel": "full_text",
+      "supportQuote": "and thus a final total of 3158 cases with a definite time of AMI onset was analyzed (Fig. 1 ).…During the 9-year period of study, 3867 patients were diagnosed with AMI in the Yanbian University Hospital.…The onset of AMI was 00:00–05:59 in 714 (22.6%), between 06:00–11:59 in 967 patients (30.6%), between 12:00–17:59 in patients 783 (24.8%), and 18:00–23:59 in 694 patients (22.0%)…the number of patients whose AMI occurred during the second time period (06:00–11:59) was significantly higher than those of the other 3 periods ( P < 0.01), with the peak from 7 to 9 am",
+      "applicability": "中国东北地区单中心住院 AMI 人群；适用于人群层面时间分布描述",
+      "uncertainty": "回顾性电子病历数据，386 例无明确发病时间者被排除；未校正觉醒时点与晨间活动量；发病时间依赖自报"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+      "referenceNumber": 2,
+      "claim": "中国社区远程心电系统 10,210 例心脏骤停中，08:00–11:59 为峰值时段（占 30.1%，深夜 00:00–03:59 谷值 7.5%）；校正年龄、性别、周末效应、地域与经济水平后，08:00–11:59 时段可电击心律的相对风险升高（aOR 1.34，95%CI 1.09 to 1.64）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39414308/",
+      "sourceTitle": "Circadian variation pattern of sudden cardiac arrest occurred in Chinese community (Open Heart, 2024)",
+      "artifactPath": ".evimed-sources/PMC11487843/fulltext.md",
+      "identifier": "PMID:39414308",
+      "accessLevel": "full_text",
+      "supportQuote": "Among 10 210 cases of SCA, major cases (8736, 85.6%) were non-shockable and 1474 (14.4%) cases were shockable. The circadian rhythm of SCA was as follows: peak time was from 08:00 to 11:59 (30.1%), while deep valley was from 00:00 to 03:59 (7.5%)…but higher from 08:00 to 11:59 (aOR: 1.34, 95% CI: 1.09 to 1.64, p=0.005).",
+      "applicability": "中国社区医疗机构/一级医院远程心电记录的心脏骤停；适用于时间分布与相对风险描述",
+      "uncertainty": "横断面观察；aOR 为可电击心律对不可电击心律的相对风险，非事件绝对风险；未校正觉醒时点；ECG 采集时间可能反映就诊行为而非真实骤停时刻"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "referenceNumber": 3,
+      "claim": "日本全国前瞻注册 JAMIR 的 2,251 例 STEMI 患者中，06:00–12:00 发病占 31.2%（704 例），显著高于其他时段（清晨单峰）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41081262/",
+      "sourceTitle": "Circadian variability and its influence on infarct size and clinical outcome among Japanese patients with acute myocardial infarction (Circ Rep, 2025)",
+      "artifactPath": ".evimed-sources/PMC12510979/fulltext.md",
+      "identifier": "PMID:41081262",
+      "accessLevel": "full_text",
+      "supportQuote": "No significant differences in peak CK levels were observed among the 4 time period groups (P=0.117)…There were no significant differences among the 4 time period groups in secondary endpoints of in-hospital mortality (P=0.788)…Finally, 2,251 patients with STEMI were included in this analysis…These patients were divided into 4 groups according to the time of onset as follows: Period 1, 00:00–06:00 h (435 patients; 19.3%); Period 2, 06:00–12:00 h (704 patients; 31.2%); Period 3, 12:00–18:00 h (573 patients; 25.4%); and Period 4, 18:00–00:00 h (539 patients; 23.9%)",
+      "applicability": "日本 50 家机构登记的 STEMI 患者（接受早期再灌注）；适用于时间分布描述",
+      "uncertainty": "起病时间自报可能不准；仅纳入接受早期再灌注者，排除 OHCA 等；未校正觉醒时点"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "referenceNumber": 4,
+      "claim": "卒中系统评价（纳入 58 项研究）显示缺血性卒中最高发时段为清晨 06:00–12:00（部分研究呈清晨-傍晚双峰）；其转述的 11816 例 meta 分析显示，清晨时段缺血性卒中风险较其余 18 小时升高 89%、出血性卒中升高 52%、短暂性脑缺血发作升高 80%。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41503592/",
+      "sourceTitle": "Relationship between stroke onset timing and clinical outcomes in ischemic and hemorrhagic strokes: a systematic review (Int J Cardiol Cardiovasc Risk Prev, 2025)",
+      "artifactPath": ".evimed-sources/PMC12769409/fulltext.md",
+      "identifier": "PMID:41503592",
+      "accessLevel": "full_text",
+      "supportQuote": "The highest incidence of CVAs occurs mostly in the morning, between 6:00 and 12:00 …A meta-analysis with 11,816 CVA patients…reported that during ischemic, hemorrhagic, and even transient attacks, the risk of CVA is significantly higher during the morning hours, particularly between 6:00 a.m. and 12:00 noon. Specifically, the risk of ischemic CVA is increased by 89 %, hemorrhagic type by 52 %, and transient ischemic attack by 80 % compared to the remaining 18 h of daytime…Finally, 58 eligible articles were included for data extraction",
+      "applicability": "国际卒中起病时间观察性研究汇总；适用于卒中晨峰的存在性判断",
+      "uncertainty": "系统评价基于观察性研究；meta 数值为转述（原始研究 Elliott 1998 全文不可获取）；出血性卒中晨峰证据不一致；未报告校正觉醒时点与活动量"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 1,
+      "referenceNumbers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "claim": "至少三项相互独立的大样本研究（延边 AMI 队列 3158 例、中国社区心脏骤停 10210 例、日本 JAMIR 2251 例）与卒中系统评价方向一致地报告清晨事件聚集；但所检获可核验来源中，无一以发生率比+可信区间形式报告经觉醒时点与晨间活动量联合校正的估计。按本报告判定条件一，晨峰现象不满足'成立'的严格判定，结论降级为'观察性证据提示事件的时间分布不均，混杂未能完全排除'。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/35839036/",
+          "sourceTitle": "Medicine 2022 (Yanbian AMI cohort)",
+          "artifactPath": ".evimed-sources/PMC11132392/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "and thus a final total of 3158 cases with a definite time of AMI onset was analyzed (Fig. 1 ).…The onset of AMI was 00:00–05:59 in 714 (22.6%), between 06:00–11:59 in 967 patients (30.6%), between 12:00–17:59 in patients 783 (24.8%), and 18:00–23:59 in 694 patients (22.0%)"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39414308/",
+          "sourceTitle": "Open Heart 2024 (Chinese community SCA)",
+          "artifactPath": ".evimed-sources/PMC11487843/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Among 10 210 cases of SCA, major cases (8736, 85.6%) were non-shockable and 1474 (14.4%) cases were shockable. The circadian rhythm of SCA was as follows: peak time was from 08:00 to 11:59 (30.1%), while deep valley was from 00:00 to 03:59 (7.5%)"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41081262/",
+          "sourceTitle": "Circ Rep 2025 (JAMIR)",
+          "artifactPath": ".evimed-sources/PMC12510979/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Finally, 2,251 patients with STEMI were included in this analysis…Period 2, 06:00–12:00 h (704 patients; 31.2%)…There was a significantly higher number of patients in the Period 2 group than in the other groups"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41503592/",
+          "sourceTitle": "Int J Cardiol Cardiovasc Risk Prev 2025 (stroke onset SR)",
+          "artifactPath": ".evimed-sources/PMC12769409/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Finally, 58 eligible articles were included for data extraction"
+        }
+      ],
+      "applicability": "人群层面（事件时间分布）；不适用于个体用药决策",
+      "uncertainty": "判定降级源于校正条件未满足与可及性限制（ISAM 等觉醒时点分析全文不可获取），并非晨峰不存在的证据；事件时间依赖自报"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "referenceNumber": 7,
+      "claim": "中国深圳 36 家医院 14,048 例急性缺血性卒中患者中，清晨（05:00–10:59）起病占 33.2%；校正年龄、性别、血管危险因素等后，清晨起病与更低的入院 NIHSS 相关（aOR 0.88，95%CI 0.82–0.94），即'事件多发于清晨'与'清晨事件较轻'并存。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41695243/",
+      "sourceTitle": "The influence of circadian onset time on admission severity in acute ischemic stroke: a retrospective cohort study (J Cent Nerv Syst Dis, 2026)",
+      "artifactPath": ".evimed-sources/PMC12894651/fulltext.md",
+      "identifier": "PMID:41695243",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 14,048 patients with AIS were included in the study. Based on the time of stroke onset, patients were categorized into 4 groups: Morning (05:00-10:59; n = 4,657, 33.2%), Afternoon (11:00-16:59; n = 3,938, 28.0%), Evening (17:00-22:59; n = 3,577, 25.5%), and Night (23:00-04:59; n = 1,876, 13.3%)…In the ordinal logistic regression model for admission NIHSS score groups, stroke onset in the Morning group was associated with lower neurological severity (adjusted odds ratio [aOR] = 0.88; 95% CI: 0.82-0.94; P < .001)",
+      "applicability": "中国深圳多中心缺血性卒中人群；适用于卒中起病时间分布与入院严重度关联",
+      "uncertainty": "回顾性；起病时间自报/目击；排除无明确起病时间者 14,463 例；未测量晨间活动量等行为混杂"
+    },
+    {
+      "claimId": "CLM-007",
+      "claimType": "direct",
+      "referenceNumber": 5,
+      "claim": "机制综述描述：觉醒时肾上腺素分泌增加（提示交感-肾上腺活性增强），随后的直立位激活去甲肾上腺素能分支；皮质醇、ACTH 经下丘脑-垂体-肾上腺轴参与觉醒相关血压升高的生理过程。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29872338/",
+      "sourceTitle": "Morning blood pressure surge: pathophysiology, clinical relevance and therapeutic aspects (Integr Blood Press Control, 2018)",
+      "artifactPath": ".evimed-sources/PMC5973439/fulltext.md",
+      "identifier": "PMID:29872338",
+      "accessLevel": "full_text",
+      "supportQuote": "An increase in secretion of epinephrine, testifying an increased sympathoadrenal activity, is found at the awakening, while the noradrenergic branches, determining the release of nor-epinephrine, are activated by the subsequent orthostasis.",
+      "applicability": "机制层面；说明晨峰期交感/儿茶酚胺背景",
+      "uncertainty": "该条目为综述转述人体生理学研究，未在本报告提供原始测量数据；儿茶酚胺晨峰与事件之间的因果链仍属推断"
+    },
+    {
+      "claimId": "CLM-008",
+      "claimType": "direct",
+      "referenceNumber": 5,
+      "claim": "血压晨峰（MBPS）的标准化定义为觉醒后 2 小时平均收缩压与夜间最低血压（sleep-trough）之差；其大小与觉醒后体力活动程度相关，评估受活动量影响。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29872338/",
+      "sourceTitle": "Morning blood pressure surge: pathophysiology, clinical relevance and therapeutic aspects (Integr Blood Press Control, 2018)",
+      "artifactPath": ".evimed-sources/PMC5973439/fulltext.md",
+      "identifier": "PMID:29872338",
+      "accessLevel": "full_text",
+      "supportQuote": "Sleep-trough MBPS, that is, the difference between the mean systolic BP (SBP) over 2 hours following the awakening and the average of three BP values centered on the lowest nocturnal BP",
+      "applicability": "机制/生理测量层面",
+      "uncertainty": "MBPS 定义多样、个体内可重复性差；其与觉醒后活动的耦合使'纯内源性晨峰'难以分离"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "direct",
+      "referenceNumber": 5,
+      "claim": "血压晨峰与结局的关联证据存在异质性：前瞻性研究报道 MBPS 每升高 10 mmHg 的卒中风险比 1.22（95%CI 1.05–1.40）；但系统评价未能确认升高的 MBPS（分类变量）与心血管病结局的显著关联，仅在连续变量分析中提示每 10 mmHg 卒中风险升高 11%；综述指出 MBPS 可能是整体心血管功能受损的表型而非因果因子。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29872338/",
+      "sourceTitle": "Morning blood pressure surge: pathophysiology, clinical relevance and therapeutic aspects (Integr Blood Press Control, 2018)",
+      "artifactPath": ".evimed-sources/PMC5973439/fulltext.md",
+      "identifier": "PMID:29872338",
+      "accessLevel": "full_text",
+      "supportQuote": "The first solid evidence on the relationship of MBPS with cardiovascular events became available in 2003 when Kario et al reported an independent association between MBPS and silent cerebral infarcts as well as with incident stroke, with hazard ratios for each 10 mmHg increase in the sleep-trough and preawakening MBPS being 1.22 (95% CI: 1.05–1.40) and 1.14 (95% CI: 0.99–1.31), respectively…The authors were unable to identify a significant association between elevated MBPS (as a categorical variable) and cardiovascular disease. When MBPS was considered as a continuous variable, a significant increase of stroke risk (by 11% per 10 mmHg of MBPS increase) was observed.",
+      "applicability": "机制-结局关联层面；血压晨峰作为候选机制的证据强度",
+      "uncertainty": "观察性关联、异质性大；结论随定义与分析方式改变；不能据此支持任何干预"
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "direct",
+      "referenceNumber": 6,
+      "claim": "人体强制去同步（forced desynchrony）研究显示血小板激活的晨峰独立于行为因素，且促血栓的纤溶酶原激活物抑制物-1（PAI-1）晨峰独立于睡眠-觉醒周期；纳入 26 项研究的昼夜止血系统评价中，91.6%（11/12）的止血功能研究报告血小板激活与凝血标志物存在昼夜节律。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/42293739/",
+      "sourceTitle": "Circadian clock regulation of hemostasis: a systematic review of molecular pathways (Res Pract Thromb Haemost, 2026)",
+      "artifactPath": ".evimed-sources/PMC13264353/fulltext.md",
+      "identifier": "PMID:42293739",
+      "accessLevel": "full_text",
+      "supportQuote": "Of the 1048 articles screened at the level of title and abstract independently by 2 authors, 26 studies met the inclusion criteria…Across the diverse populations and experimental models included in the 12 studies, 91.6% ( n = 11) reported evidence that circadian rhythm influences hemostatic function, including platelet activation and coagulation markers",
+      "applicability": "机制层面（人体与动物）；血小板聚集性与纤溶活性的昼夜节律被直接检验",
+      "uncertainty": "纳入研究异质性高、质量评价为定性；多数为观察性；血小板-事件因果链仍为推断"
+    },
+    {
+      "claimId": "CLM-011",
+      "claimType": "direct",
+      "referenceNumber": 6,
+      "claim": "昼夜止血系统评价自认的知识缺口：人类研究多属观察性，常忽略睡眠-觉醒时相、饮食与体力活动等行为混杂因素。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/42293739/",
+      "sourceTitle": "Circadian clock regulation of hemostasis: a systematic review of molecular pathways (Res Pract Thromb Haemost, 2026)",
+      "artifactPath": ".evimed-sources/PMC13264353/fulltext.md",
+      "identifier": "PMID:42293739",
+      "accessLevel": "full_text",
+      "supportQuote": "Human investigations remain largely observational and often ignore behavioral confounders such as sleep–wake timing, diet, and physical activity.",
+      "applicability": "机制证据的方法学边界",
+      "uncertainty": "无"
+    },
+    {
+      "claimId": "CLM-012",
+      "claimType": "direct",
+      "referenceNumber": 11,
+      "claim": "2024 年多中心随机双盲安慰剂对照试验（174 例确诊慢性冠脉综合征、长效硝酸酯不耐受患者）显示，速效救心丸组 4 周后西雅图心绞痛问卷汇总分改善 ≥20 分的比例 60.9% vs 安慰剂 39.1%（OR 2.43，95%CI 1.32 to 4.47，P=0.004）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates (BMC Complement Med Ther, 2024)",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMID:39367481",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses.…Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks…Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement…After 4 weeks, the SJPs intervention resulted in an improvement of 5.68 (95% CI = 2.37 to 8.99, P < 0.001, SJPs vs. placebo: 15.46 vs. 9.78 ) for the summary score in SAQ (SAQ-SS), compared to the placebo intervention.",
+      "applicability": "已确诊慢性冠脉综合征（CCS I–III 级）、长效硝酸酯不耐受患者；不适用于未确诊人群",
+      "uncertainty": "4 周短期疗效；样本量 174 小于初始计划 236；亚组分析为事后分析；未覆盖未确诊人群"
+    },
+    {
+      "claimId": "CLM-013",
+      "claimType": "synthesized",
+      "confidence": "low",
+      "referenceNumber": 13,
+      "referenceNumbers": [
+        13,
+        14
+      ],
+      "claim": "未检索到针对未确诊人群'晨起头晕＋胸闷'病因分布的直接研究；可获得的相邻证据（急诊胸痛人群）显示非心脏成因为主——1341 例非心源性胸痛中肌骨源性 44.9%、非特异性 44.7%、精神科 5.6%，且头晕在非心脏性组更常见（17% vs 8%）。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/30707725/",
+          "sourceTitle": "PLoS One 2019 (ED non-cardiac chest pain)",
+          "artifactPath": ".evimed-sources/PMC6358153/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "In total, 1341 ED admissions for non-cardiac chest pain (4.2% of all ED admissions) were analyzed. Non-specific chest pain remained the discharge diagnosis in 44.7% (n = 599). Identified underlying diseases included musculoskeletal chest pain (n = 602, 44.9%), pulmonary (n = 30, 2.2%), GI-tract (n = 35, 2.6%), or psychiatric diseases (n = 75, 5.6%)."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38618438/",
+          "sourceTitle": "Cureus 2024 (ED acute chest pain, North India)",
+          "artifactPath": ".evimed-sources/PMC11014751/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Stabbing chest pain and dizziness were also more frequently reported in the NCCP group (30% and 17%, respectively) than in the CCP group (15% and 8%, respectively, p=0.010 and p=0.023)."
+        }
+      ],
+      "applicability": "未确诊胸痛/头晕症状人群（急诊来源，非晨起限定）",
+      "uncertainty": "间接性明显：急诊人群不等于未确诊社区人群，'晨起'限定无直接数据；各病因占比随地区与就诊层级变化"
+    },
+    {
+      "claimId": "CLM-014",
+      "claimType": "direct",
+      "referenceNumber": 13,
+      "claim": "急诊胸痛人群中 60% to 90% 可排除急性心肌缺血；急诊评估常规包括心电图（89% 患者执行）与肌钙蛋白检测（81.4%），正式三测肌钙蛋白排外流程仅用于少数（9.2%）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/30707725/",
+      "sourceTitle": "Non-cardiac chest pain patients in the emergency department: do physicians have a plan how to diagnose and treat them? A retrospective study (PLoS One, 2019)",
+      "artifactPath": ".evimed-sources/PMC6358153/fulltext.md",
+      "identifier": "PMID:30707725",
+      "accessLevel": "full_text",
+      "supportQuote": "A formal ACS rule out troponin testing was performed in 9.2%…an acute myocardial ischemia can be ruled out for 60% to 90% of patients presenting with chest pain…Overall, in 89% of the patients an ECG, in 91.9% at least one blood analysis, and in 81.4% at least one troponin test was performed.",
+      "applicability": "急诊未分化胸痛评估路径；支持'主诉不能自我归类，需 ECG+肌钙蛋白评估'",
+      "uncertainty": "单中心回顾性；瑞士人群；心电图/肌钙蛋白为急诊实践描述而非本报告推荐依据"
+    },
+    {
+      "claimId": "CLM-015",
+      "claimType": "direct",
+      "referenceNumber": 14,
+      "claim": "印度三级医院 714 例急诊急性胸痛患者中，心脏性胸痛占 53.7%（383 例）、非心脏性占 46.3%（331 例）；头晕在非心脏性组更常见（17% vs 8%，p=0.023），肌骨源性诊断仅见于非心脏性组（40%）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38618438/",
+      "sourceTitle": "Incidence, pattern, causes, and outcome of acute chest pain among patients presenting in the emergency department of a tertiary care hospital in North India (Cureus, 2024)",
+      "artifactPath": ".evimed-sources/PMC11014751/fulltext.md",
+      "identifier": "PMID:38618438",
+      "accessLevel": "full_text",
+      "supportQuote": "this left 714 patients who consented and were fully evaluated…CCP: 383 patients (53.7% of the evaluated sample size)…NCCP: 331 patients (46.3% of the evaluated sample size)…Stabbing chest pain and dizziness were also more frequently reported in the NCCP group (30% and 17%, respectively) than in the CCP group (15% and 8%, respectively, p=0.010 and p=0.023)…Musculoskeletal issues were exclusively diagnosed in the NCCP group (40%, p<0.001)",
+      "applicability": "南亚三级医院急诊急性胸痛人群；提示头晕并非心肌缺血的指向性症状",
+      "uncertainty": "单中心、选择性入组（797 目标→714 分析）；急诊人群心脏性比例高于欧美（可能反映就诊层级差异）"
+    },
+    {
+      "claimId": "CLM-016",
+      "claimType": "direct",
+      "referenceNumber": 16,
+      "claim": "英国国民健康服务体系（NHS）官方胸痛指引将焦虑/惊恐发作列为可伴头晕的胸痛常见原因之一，并明确告诫'不要自我诊断，担心应就医'。",
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS (page last reviewed 8 August 2023)",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Do not self-diagnose – see a GP if you're worried. …An often sharp, continuous pain triggered by worries or a stressful situation, heartbeat gets faster, sweating, dizziness",
+      "applicability": "患者层面的官方指引；非自我诊断原则",
+      "uncertainty": "英国国民健康服务体系语境；中国语境需以国内指南与急救体系（120）为准"
+    },
+    {
+      "claimId": "CLM-017",
+      "claimType": "direct",
+      "referenceNumber": 12,
+      "claim": "速效救心丸治疗冠心病的 meta 分析（41 项 RCT、6276 例，均为中国研究，截至 2016 年 6 月）显示：心电图改善 RR 1.32（95%CI 1.26 to 1.38），但研究间异质性显著（I²=62.3%）且多数纳入研究 Jadad 评分低；不良反应以轻度头痛、头晕、面红为主，与对照组差异无统计学意义（RR 1.12，95%CI 0.50 to 2.51）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials (Evid Based Complement Alternat Med, 2018)",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis…The remaining 41 studies were included in our meta-analysis…Pooled analysis indicated significant benefits of suxiao jiuxin pill on ECG outcomes (RR 1.32; 95% CI 1.26 to 1.38, P < 0.001)…However, there was significant heterogeneity between studies with respect to ECG results ( I 2 = 62.3%)…The most common symptoms were mild headache, dizziness, and facial flushing…There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "已确诊冠心病/心绞痛患者；疗效证据不可外推至未确诊人群",
+      "uncertainty": "纳入研究质量低、异质性高、全部来自中国；未分析心血管死亡等硬终点；不良反应（含头晕）为自我报告"
+    },
+    {
+      "claimId": "CLM-018",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 10,
+      "referenceNumbers": [
+        10,
+        11,
+        12
+      ],
+      "claim": "已发表与已注册的速效救心丸临床研究均以确诊冠心病/心绞痛（或慢性冠脉综合征）患者为对象：41 项 RCT、6276 例冠心病患者的 meta 分析、2021 年注册方案（ChiCTR1800014258，国药准字 Z12020025，纳入标准要求'确诊冠心病'）与 2024 年 174 例慢性冠脉综合征 RCT 均如此；临床试验注册库检索未发现以未确诊人群'晨起头晕胸闷'为对象、评价速效救心丸预防性或备用性使用的研究。判定条件二(a)不满足。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/34281600/",
+          "sourceTitle": "Trials 2021 study protocol (SJP stable angina)",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Trial registration: ChiCTR, ChiCTR1800014258. Registered on 13 March 2019 at chictr.org.cn…coronary angiography or computed tomography coronary angiography confirmation of stenosis greater than 50%; and ③ noninvasive imaging stress test diagnostic of coronary artery disease (CAD)…Patients will be considered to be diagnosed with CHD if they meet at least one of these criteria…SJP is composed of tetramethylpyrazine and borneol approval number Z12020025 of the China State Food and Drug Administration [SFDA]"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+          "sourceTitle": "eCAM 2018 meta-analysis",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis.…The 41 studies consisted of 6276 patients with coronary heart disease."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39367481/",
+          "sourceTitle": "BMC Complement Med Ther 2024 RCT",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses.…Patients aged 30 to 70 years with a diagnosis of chronic coronary syndrome were enrolled who were intolerant to side effects of long-acting nitrates."
+        }
+      ],
+      "applicability": "说明书边界与注册研究证据；直接回答第 4 问",
+      "uncertainty": "NMPA 说明书条目为 EviMed 索引候选（官方现行版本核验中）；注册库检索覆盖 ClinicalTrials.gov 与中文库，不排除其他辖区注册遗漏；'未检索到'仅界定检索范围"
+    },
+    {
+      "claimId": "CLM-019",
+      "claimType": "direct",
+      "referenceNumber": 16,
+      "claim": "突发、持续不缓解的胸痛/胸闷不适（可为挤压感或压迫感，可伴放射痛、出汗、恶心、头晕、气促）时，应立即呼叫急救并静息等待——可能是心脏病发作，需立即住院治疗；任何自救用药不得延迟呼救。",
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS (page last reviewed 8 August 2023)",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: …you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion…you have chest pain and you feel sweaty, sick, light headed or short of breath You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "患者层面急救呼救阈值；中国语境急救电话为 120",
+      "uncertainty": "英国 999 体系表述，本地化时以中国 120 及国内指南为准"
+    },
+    {
+      "claimId": "CLM-020",
+      "claimType": "direct",
+      "referenceNumber": 15,
+      "claim": "急性心肌梗死女性患者的质性研究显示：65% 的患者描述间歇症状未被认真对待而采取'等待观察'；以自我治疗为核心的行为类型（'Wonder a Lots'）'过度依赖自我治疗，在漫长的过程中把症状归因于各种非心脏原因'，症状识别失败与就医延迟相关。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/31312779/",
+      "sourceTitle": "Treatment-seeking delay among Hispanic and non-Hispanic women with acute myocardial infarction (Health Equity, 2019)",
+      "artifactPath": ".evimed-sources/PMC6634169/fulltext.md",
+      "identifier": "PMID:31312779",
+      "accessLevel": "full_text",
+      "supportQuote": "Sixty-five percent ( n =28) of women described intermittent symptoms that were not taken seriously. …Beyond failing to recognize their symptoms as ischemic, they over relied on self-treatment in an extended process of assigning various noncardiac causes to their symptoms.",
+      "applicability": "症状归因偏倚与自我处置倾向→就医延迟；相邻人群（AMI 女性患者）外推至未确诊人群时有间接性",
+      "uncertainty": "质性研究、样本 43 例、便利抽样；美国科罗拉多州；主要针对女性；因果关系方向由质性推断"
+    },
+    {
+      "claimId": "CLM-021",
+      "claimType": "direct",
+      "referenceNumber": 8,
+      "claim": "德国 FITT-STEMI 网络 20,005 例接受直接 PCI 的 STEMI 患者显示：症状-首次医疗接触（S2C）时间与院内死亡率呈 J 形（<1 小时组 10.0%、1–2 小时组 4.9%、2–6 小时组 6.0%、6–24 小时组 7.3%）；首次医疗接触后 90 分钟内再灌注在短延误组（S2C<1 小时）获益最大（OR 0.27，95%CI 0.23 to 0.31），且对 S2C 长达 24 小时者仍有获益。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/33958491/",
+      "sourceTitle": "Patient delay and benefit of timely reperfusion in ST-segment elevation myocardial infarction (Open Heart, 2021)",
+      "artifactPath": ".evimed-sources/PMC8103948/fulltext.md",
+      "identifier": "PMID:33958491",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 20 005 consecutive patients from the Feedback Intervention and Treatment Times in ST-segment Elevation Myocardial Infarction (FITT-STEMI) programme treated with primary percutaneous coronary intervention (PCI) were included…Mortality was 10.0% in patients presenting within 1 hour, and 4.9%, 6.0% and 7.3% in patient groups with longer S2C intervals of 1–2 hours, 2–6 hours and 6–24 hours, respectively…Patients with a short S2C interval of less than 1 hour (S2C<60 min) had the highest survival benefit from timely reperfusion with PCI within 90 min (OR 0.27, 95% CI 0.23 to 0.31, p<0.0001)",
+      "applicability": "已发生 STEMI 的患者层面；说明'早呼救-早评估-早再灌注'的结局意义",
+      "uncertainty": "观察性（FITT-STEMI 网络质量干预背景下）；起病时间自报；仅院内死亡率；德国急救体系与中国存在差异"
+    },
+    {
+      "claimId": "CLM-022",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 3,
+      "referenceNumbers": [
+        3,
+        7
+      ],
+      "claim": "晨峰频率与个体结局解耦：JAMIR（2251 例 STEMI）显示发病时段与梗死面积（峰值肌酸激酶，P=0.117）及院内死亡率（P=0.788）无显著关联；深圳缺血性卒中队列（14048 例）显示清晨起病者入院 NIHSS 反而更低（aOR 0.88，95%CI 0.82–0.94）。即'清晨多发'不等于'清晨更重或更险'。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41081262/",
+          "sourceTitle": "Circ Rep 2025 (JAMIR)",
+          "artifactPath": ".evimed-sources/PMC12510979/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "No significant differences in peak CK levels were observed among the 4 time period groups (P=0.117)…There were no significant differences among the 4 time period groups in secondary endpoints of in-hospital mortality (P=0.788)…Circadian variation had no effect on infarct size or clinical outcomes in patients with STEMI.…Finally, 2,251 patients with STEMI were included in this analysis"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41695243/",
+          "sourceTitle": "J Cent Nerv Syst Dis 2026 (Shenzhen AIS cohort)",
+          "artifactPath": ".evimed-sources/PMC12894651/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "A total of 14,048 patients with AIS were included in the study…In the ordinal logistic regression model for admission NIHSS score groups, stroke onset in the Morning group was associated with lower neurological severity (adjusted odds ratio [aOR] = 0.88; 95% CI: 0.82-0.94; P < .001)"
+        }
+      ],
+      "applicability": "冲突处理：时间分布≠预后/严重度；反对'晨峰=晨起更危险'的隐含前提",
+      "uncertainty": "两项研究人群与疾病谱不同（MI 与卒中）；JAMIR 排除了 OHCA；观察性证据"
+    },
+    {
+      "claimId": "CLM-023",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 8,
+      "referenceNumbers": [
+        8,
+        10,
+        12,
+        15
+      ],
+      "claim": "按判定条件二逐条检验，'床头常备建议对未确诊者恰当'不成立：(a) 说明书适应症边界外且无未确诊人群前瞻研究（不满足）；(b) 无'常备与不常备'直接结局比较证据（不满足）；(c) 无证据显示常备不延长就医延迟，且自我处置倾向与症状归因偏倚、就医延迟相关（不满足）。结论：现有证据不支持未确诊人群'床头常备'速效救心丸的建议。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/34281600/",
+          "sourceTitle": "Trials 2021 protocol",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Patients will be considered to be diagnosed with CHD if they meet at least one of these criteria"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+          "sourceTitle": "eCAM 2018 meta-analysis",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/31312779/",
+          "sourceTitle": "Health Equity 2019",
+          "artifactPath": ".evimed-sources/PMC6634169/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Beyond failing to recognize their symptoms as ischemic, they over relied on self-treatment in an extended process of assigning various noncardiac causes to their symptoms."
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/33958491/",
+          "sourceTitle": "Open Heart 2021 (FITT-STEMI)",
+          "artifactPath": ".evimed-sources/PMC8103948/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Mortality was 10.0% in patients presenting within 1 hour, and 4.9%, 6.0% and 7.3% in patient groups with longer S2C intervals of 1–2 hours, 2–6 hours and 6–24 hours, respectively."
+        }
+      ],
+      "applicability": "个体层面用药建议的判定结论",
+      "uncertainty": "(c) 条的证据空白是双向的（既无'延迟'亦无'不延迟'的直接证据），本报告按判定条件将其计为不满足；证据缺失不等于存在危害，但也不构成支持"
+    },
+    {
+      "claimId": "CLM-024",
+      "claimType": "direct",
+      "referenceNumber": 9,
+      "claim": "急诊 270 例前瞻观察队列（含 4 周随访，随访率 95%）显示：以硝酸甘油含服后疼痛缓解判断心源性胸痛，灵敏度 72%（95%CI 64%–80%）、特异度 37%（95%CI 34%–41%）、阳性似然比 1.1（95%CI 0.96–1.34）。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain? (CJEM, 2006)",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "DOI:10.1017/S1481803500013671",
+      "accessLevel": "full_text",
+      "supportQuote": "The diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%–80%), and the specificity was 37% (34%–41%). The positive likelihood ratio for having coronary artery dis - ease if nitroglycerin relieved chest pain was 1.1 (0.96–1.34). Telephone follow-up at 4 weeks was performed, with a 95% follow-up rate. …A total of 278 patients were enrolled. Eight subjects were excluded after initial entry into the study, leaving 270 sub- jects studied (Fig. 1).",
+      "applicability": "急诊胸痛患者（已接受含服硝酸甘油者）；用于否定'含服反应'的诊断价值",
+      "uncertainty": "单中心、非盲（医生知晓患者反应）；心源性定义包含肌钙蛋白/造影/负荷试验复合标准；PDF 文本层保留连字符断行"
+    },
+    {
+      "claimId": "CLM-025",
+      "claimType": "direct",
+      "referenceNumber": 9,
+      "claim": "硝酸甘油缓解不能作为可靠诊断试验，不能区分心脏性与非心脏性胸痛——含服后缓解既不能排除急性冠脉综合征，也不能据此决定就医次序。",
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain? (CJEM, 2006)",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "DOI:10.1017/S1481803500013671",
+      "accessLevel": "full_text",
+      "supportQuote": "Relief of chest pain with nitroglycerin is not a reliable diagnostic test and does not distinguish between cardiac and non-cardiac chest pain.",
+      "applicability": "安全边界：任何药物反应均不得作为诊断/排除工具或延迟就医理由",
+      "uncertainty": "该结论来自硝酸甘油证据；速效救心丸无同类诊断性能研究，按同类机制外推需谨慎"
+    },
+    {
+      "claimId": "CLM-027",
+      "claimType": "derived",
+      "claim": "〔推导〕含服后'症状缓解'对心源性胸痛概率的修正量级极小（以实测参数计算）：先验 30% 时，缓解后验约 33%、不缓解后验约 25%；先验 10% 时分别约 11% 与 8%。症状反应作为自我分诊信息几乎没有信息量，不足以支撑'以药物反应决定是否就医'的行为。",
+      "derivedFrom": [
+        "CLM-024"
+      ],
+      "method": "以 Steele 2006 实测参数代入贝叶斯公式：灵敏度 se=0.72，特异度 sp=0.37，LR+=se/(1−sp)=0.72/0.63≈1.14，LR−=(1−se)/sp=0.28/0.37≈0.76；后验=先验×LR/(先验×LR+1−先验)。先验 0.30 时：缓解后验=0.30×1.14/(0.30×1.14+0.70)=0.342/1.042≈0.33；不缓解后验=0.30×0.76/(0.30×0.76+0.70)=0.228/0.928≈0.25。先验 0.10 时：缓解=0.10×1.14/(0.10×1.14+0.90)≈0.11；不缓解=0.10×0.76/(0.10×0.76+0.90)≈0.08。",
+      "assumptions": "假设 Steele 2006 的灵敏度/特异度可迁移至未确诊晨起症状人群（异质性风险）；假设含服反应与硝酸甘油同机制（速效救心丸无直接诊断性能数据）；先验为假设值。",
+      "sensitivity": "若特异度被高估（如真实值 0.30），LR+≈1.03，修正量进一步缩小；若先验升高至 0.50，缓解后验约 0.53、不缓解约 0.43，差值仍不足 10 个百分点。结论方向稳健。",
+      "applicability": "个体自我分诊的定量边界",
+      "uncertainty": "推导结果而非测量；先验概率未被直接测量，仅作敏感性展示"
+    },
+    {
+      "claimId": "CLM-028",
+      "claimType": "derived",
+      "claim": "〔推导〕晨峰的量级是'时段事件数约为均匀期望的 1.2 倍'的相对超额，而非'晨起个体发病概率升高 30%'：将人群时间分布解读为个体晨起症状提示缺血、进而支持晨起备药，混淆了事件的时间分布与主诉的预测值，构成生态学谬误。",
+      "derivedFrom": [
+        "CLM-001",
+        "CLM-003"
+      ],
+      "method": "以已测比例计算超额倍数：延边 AMI 队列清晨（06:00–11:59）占比 30.6%，6 小时时段均匀期望为 25%，超额倍数=30.6/25=1.224≈1.22；JAMIR 清晨占比 31.2%，超额倍数=31.2/25=1.248≈1.25。即晨峰'发生率比'量级约 1.2，而非个体风险升高约 30%。个体晨起主诉→急性事件的预测值需要未确诊人群的贝叶斯先验，该先验无直接测量（见 CLM-013 证据空白）。",
+      "assumptions": "假设 24 小时事件均匀分布为基准（各 6 小时时段期望 25%）；假设时段占比可近似视为相对频率。",
+      "sensitivity": "若以中国社区心脏骤停的 30.1%（08:00–11:59）替代，超额倍数 1.20；若以 4 小时时段重分（峰值 30.1% vs 期望 16.7%），倍数升至约 1.8——分箱宽度影响'发生率比'数值，但'相对超额≠个体概率'的结论不受影响。",
+      "applicability": "推理边界检验（生态学谬误）；不构成任何剂量或用药建议",
+      "uncertainty": "推导结果而非测量；'晨起头晕胸闷'主诉的先验概率未被测量，是未来研究的关键缺口"
+    },
+    {
+      "claimId": "CLM-029",
+      "claimType": "derived",
+      "claim": "〔推导〕本报告第一层判定标准（操作化）：须存在至少 2 项相互独立的大样本队列或注册登记研究（或其 meta 分析）报告清晨时段事件的发生率比及可信区间，且在校正觉醒时点与晨间活动量后方向一致，方可判定'晨峰现象成立'；仅单一研究或未校正上述混杂时，结论降级为'观察性证据提示事件的时间分布不均，混杂未能排除'。",
+      "derivedFrom": [
+        "CLM-005"
+      ],
+      "method": "将研究任务书给定的第一层判定规则操作化为可执行标准并应用于已检获证据：计数相互独立的大样本研究（延边 AMI 3158 例、中国社区心脏骤停 10210 例、日本 JAMIR 2251 例，见 CLM-005 的 4 项支持来源），逐项核对是否以发生率比+可信区间报告清晨事件并校正觉醒时点与晨间活动量；核对结果：三项研究方向一致，但无一满足'发生率比+CI'与'校正觉醒时点及晨间活动量'的联合条件，故按规则（阈值 2 项）判定不成立并降级。",
+      "assumptions": "判定规则来自研究任务书而非临床指南；'至少 2 项'为形式阈值；'校正觉醒时点与晨间活动量'按可核验工件逐字核对。",
+      "sensitivity": "若将阈值放宽为 1 项，唯一以校正 OR+CI 报告清晨相对风险的中国社区心脏骤停研究（aOR 1.34，95%CI 1.09 to 1.64）仍缺觉醒时点校正，结论仍为降级；若改为要求 meta 分析层级证据，结论同为降级。",
+      "applicability": "本报告分析框架；不构成临床建议。",
+      "uncertainty": "该标准为本报告采用的判定约定，不来自任何临床来源；其数值含义为研究数量阈值。"
+    }
+  ]
+}

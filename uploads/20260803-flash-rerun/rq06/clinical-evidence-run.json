@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸与复方丹参滴丸的可核验差异：适应症、起效特征与证据强度的对比评价，并追溯'本品可连续服用3个月'说法的出处",
+  "title": "速效救心丸与复方丹参滴丸的可核验差异：适应症、起效特征与证据强度的对比评价，并追溯\"可连续服用3个月\"说法的出处",
+  "startedAt": "2026-08-03T03:48:20Z",
+  "completedAt": "2026-08-03T04:40:32Z",
+  "tools": [
+    "evimed_health",
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_biomedical_source_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC10717272/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC4592726/fulltext.md",
+    ".evimed-sources/PMC5702344/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC7685822/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC9088738/fulltext.md",
+    ".evimed-sources/PMC9428755/fulltext.md",
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md"
+  ],
+  "failedSources": [
+    {
+      "id": "Cochrane-CD004473",
+      "pmid": "18254051",
+      "reason": "全文不可保存（Europe PMC上游不可用，重试3次；Cochrane Library返回403）；相应主张CLM-032已删除"
+    },
+    {
+      "id": "SJP-RCT-2023",
+      "pmid": "37487965",
+      "reason": "非开放获取且无PMCID；相应主张CLM-039已删除，其324例/24周由CLM-002（试验方案全文）承载"
+    },
+    {
+      "id": "SJP-ACS",
+      "pmid": "32716206",
+      "reason": "非开放获取且无PMCID；相应主张CLM-033已删除"
+    },
+    {
+      "id": "SJP-realworld",
+      "pmid": "32495590",
+      "reason": "非开放获取且无PMCID；相应主张CLM-034已删除"
+    },
+    {
+      "id": "Bayesian-NMA",
+      "pmid": "38395177",
+      "reason": "非开放获取且无PMCID；相应主张CLM-035已删除"
+    },
+    {
+      "id": "NMA-UA",
+      "pmid": "33645038",
+      "reason": "非开放获取且无PMCID；相应主张CLM-036已删除"
+    },
+    {
+      "id": "RCT-quality",
+      "pmid": "22803444",
+      "reason": "非开放获取且无Europe PMC记录；相应主张CLM-037已删除"
+    },
+    {
+      "id": "CDDP-PK",
+      "pmid": "15315771",
+      "reason": "非开放获取且无PMCID；相应主张CLM-038已删除"
+    },
+    {
+      "id": "SJP-PK",
+      "pmid": "7900539",
+      "reason": "非开放获取且无PMCID；相应主张CLM-040已删除"
+    },
+    {
+      "id": "SR-overview",
+      "pmid": "25582415",
+      "reason": "非开放获取且无PMCID；相应主张CLM-029已删除，34,071例由CLM-041（INCODER全文）承载"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 30,
+    "recordsIdentified": 314,
+    "recordsAfterDeduplication": 21,
+    "sourcesIncluded": 17,
+    "distinctPreservedSources": 11
+  },
+  "status": "succeeded"
+}

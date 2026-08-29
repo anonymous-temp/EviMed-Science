@@ -1,0 +1,13 @@
+claimId,referenceNumber,sourceType,accessLevel,directSupport,status
+CLM-001,3,RCT,full_text,direct,verified
+CLM-002,3,RCT,full_text,direct,verified
+CLM-003,4,Meta-analysis,full_text,direct,verified
+CLM-004,4,Meta-analysis,full_text,direct,verified
+CLM-005,4,Meta-analysis,full_text,direct,verified
+CLM-006,3,RCT,full_text,direct,verified
+CLM-007,4,Meta-analysis,full_text,direct,verified
+CLM-008,1|3,synthesized,full_text|full_text,synthesized,verified
+CLM-009,3|4,synthesized,full_text|full_text,synthesized,verified
+CLM-010,3|4,synthesized,full_text|full_text,synthesized,verified
+CLM-011,8,structured_record,structured_record,direct,verified
+CLM-012,3|8,synthesized,full_text|structured_record,synthesized,verified

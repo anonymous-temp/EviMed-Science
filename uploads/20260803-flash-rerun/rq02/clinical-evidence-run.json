@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛自救用药（舌下硝酸甘油、速效救心丸）后症状不缓解的时间阈值在现行指南（AHA/ACC、ESC、中国指南与共识）中如何界定、证据来源与推荐强度为何、彼此是否一致；速效救心丸说明书与共识是否给出时间阈值及其证据基础；'时间就是心肌'的定量证据如何；升级路径与中国场景下呼叫 120 的相对位置。",
+  "title": "急性胸痛自救用药后症状不缓解的时间阈值与升级路径：现行指南界定的证据基础与一致性分析",
+  "startedAt": "2026-08-03T03:46:00Z",
+  "completedAt": "2026-08-03T04:35:00Z",
+  "tools": [
+    "evimed_health",
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+    ".evimed-sources/PMC6858215/fulltext.md",
+    ".evimed-sources/PMC5586439/fulltext.md",
+    ".evimed-sources/PMC8457972/fulltext.md",
+    ".evimed-sources/PMC4548722/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "10.1093/eurheartj/ehad191",
+      "source": "ESC 2023 Guidelines for the management of acute coronary syndromes",
+      "reason": "public_source_pdf_not_open_access (academic.oup.com HTTP 403)；重试后网关响应超限"
+    },
+    {
+      "identifier": "PMID 34756653",
+      "source": "2021 AHA/ACC chest pain guideline",
+      "reason": "public_source_pdf_not_open_access"
+    },
+    {
+      "identifier": "PMID 25249585",
+      "source": "2014 AHA/ACC NSTE-ACS guideline",
+      "reason": "全文获取请求超时；非开放获取"
+    },
+    {
+      "identifier": "PMID 14678916",
+      "source": "Henrikson 2003, Chest pain relief by nitroglycerin does not predict active coronary artery disease",
+      "reason": "public_source_pdf_not_open_access"
+    },
+    {
+      "identifier": "PMID 15007008",
+      "source": "De Luca 2004, Time delay to treatment and mortality in primary angioplasty",
+      "reason": "public_source_pdf_not_open_access"
+    },
+    {
+      "identifier": "PMID 29437704",
+      "source": "Foo 2018, Coronary intervention door-to-balloon time meta-analysis",
+      "reason": "public_source_pdf_not_open_access"
+    },
+    {
+      "identifier": "PMID 912839",
+      "source": "Reimer 1977, The wavefront phenomenon of ischemic cell death",
+      "reason": "public_source_pdf_not_open_access"
+    },
+    {
+      "identifier": "PMID 18254051 / PMC7137214",
+      "source": "Cochrane CD004473, Chinese herbal medicine suxiao jiuxin wan for angina pectoris",
+      "reason": "cochranelibrary.com HTTP 403；Europe PMC 全文上游不可用"
+    },
+    {
+      "identifier": "https://mpa.hunan.gov.cn/mpa/",
+      "source": "湖南省药品监督管理局门户",
+      "reason": "official_page_upstream_unavailable"
+    },
+    {
+      "identifier": "https://www.ccfdie.org/zryyxxw/",
+      "source": "中日医药信息网",
+      "reason": "已抓取但内容与主题无关，未使用"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true,
+    "practicalAnswerSafety": true
+  },
+  "stats": {
+    "totalSearches": 24,
+    "recordsIdentified": 294,
+    "recordsAfterDeduplication": 24,
+    "sourcesIncluded": 24,
+    "distinctPreservedSources": 6
+  },
+  "status": "succeeded"
+}

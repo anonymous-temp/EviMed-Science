@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T18:55:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "EviMed guideline index"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "chest pain emergency department final diagnosis prospective cohort follow-up acute coronary syndrome non-cardiac",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain likelihood ratio symptoms acute coronary syndrome myocardial infarction systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 14
+    },
+    {
+      "database": "PubMed",
+      "query": "HEART score chest pain risk stratification systematic review sensitivity specificity",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed",
+      "query": "high-sensitivity cardiac troponin 0/1 hour algorithm rule out acute myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 19
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain primary care general practice diagnosis etiology follow-up cohort",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Marburg Heart Score chest pain coronary artery disease primary care",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "EDACS score chest pain major adverse cardiac event early discharge",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 13
+    },
+    {
+      "database": "PubMed",
+      "query": "proton pump inhibitor test diagnostic accuracy gastroesophageal reflux disease meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain history value limitations acute coronary syndromes Swap Nagurney",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin relief chest pain predictor ischemia diagnostic",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "symptom checkers self diagnosis triage accuracy systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "normal electrocardiogram rule out acute myocardial infarction negative predictive value",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Fruergaard chest pain diagnosis without myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "Effect of duration from symptom onset on the negative predictive value of a normal ECG for exclusion of acute myocardial infarction Singer",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Does This Patient With Chest Pain Have Acute Coronary Syndrome Rational Clinical Examination",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Signs and symptoms diagnosing acute myocardial infarction acute coronary syndrome diagnostic meta-analysis Bruyninckx",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "HEART score major adverse cardiac events chest pain meta-analysis systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "HEART score low risk chest pain 30-day major adverse cardiac events sensitivity negative predictive value meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "chest pain evaluation and diagnosis guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "acute coronary syndromes management guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "gastroesophageal reflux disease diagnosis guideline",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 212,
+    "recordsAfterDeduplication": 170,
+    "sourcesIncluded": 19
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Gulati2021AHAACC",
+      "identifier": "PMID:34709928",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Byrne2023ESC",
+      "identifier": "PMID:37622654",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "NHSChestPain2023",
+      "identifier": "NHS Chest pain page",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "patient guidance"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Haasenritter2012Meta",
+      "identifier": "PMID:23100205",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "symptom likelihood ratios"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Body2017WestJEM",
+      "identifier": "PMID:28611898",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "symptom likelihood ratios / ECG"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Nomura2022ZeroOneH",
+      "identifier": "PMID:35774074",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "troponin 0/1h algorithm"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Wang2023EDACS",
+      "identifier": "PMID:37594309",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "EDACS score"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "RiboliSasco2023OSC",
+      "identifier": "PMID:37266983",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "symptom checkers"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "BMC2025HEART",
+      "identifier": "PMID:40847270",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "composite scores"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Singer1997ECG",
+      "identifier": "PMID:9140239",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "normal ECG NPV"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Fruergaard1996",
+      "identifier": "PMID:8809520",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "etiology composition"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Fanaroff2015JAMA",
+      "identifier": "PMID:26547467",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "rational clinical examination (title-only)"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Bruyninckx2008",
+      "identifier": "PMID:18307844",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "symptom likelihood ratios"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "LaureanoPhillips2019HEART",
+      "identifier": "PMID:30718010",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "HEART score systematic review (title-only)"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "BoyleBody2021EDACS",
+      "identifier": "PMID:33461885",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "EDACS score systematic review (title-only)"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Bosner2010CMAJ",
+      "identifier": "PMID:20603345",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "Marburg Heart Score (title-only)"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Katz2022ACG",
+      "identifier": "PMID:34807007",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "GERD guideline"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "CMA2019ChestPainConsensus",
+      "identifier": "急性胸痛急诊诊疗专家共识(2019)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Chinese guideline"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "CMA2019ChestPainPrimary",
+      "identifier": "胸痛基层诊疗指南(2019)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Chinese guideline"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "CCEP2019ACS",
+      "identifier": "急性冠脉综合征急诊快速诊治指南(2019)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Chinese guideline"
+    },
+    {
+      "referenceNumber": 21,
+      "citationKey": "GhoneimPPITest",
+      "identifier": "Embase L633655422",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "PPI test diagnostic accuracy"
+    },
+    {
+      "referenceNumber": 22,
+      "citationKey": "Grailey2012NTG",
+      "identifier": "PMID:21511974",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "nitroglycerin test of treatment (title-only)"
+    },
+    {
+      "referenceNumber": 23,
+      "citationKey": "Diercks2005NTG",
+      "identifier": "PMID:15940087",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "nitroglycerin response"
+    },
+    {
+      "referenceNumber": 24,
+      "citationKey": "Semigran2015BMJ",
+      "identifier": "PMID:26157077",
+      "accessLevel": "abstract",
+      "included": false,
+      "role": "symptom checker audit (title-only)"
+    },
+    {
+      "referenceNumber": 25,
+      "citationKey": "Roffi2015ESC",
+      "identifier": "PMID:26320110",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "ESC NSTE-ACS guideline"
+    }
+  ]
+}

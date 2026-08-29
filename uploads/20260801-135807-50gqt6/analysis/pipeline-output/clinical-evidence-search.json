@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-01T06:55:00Z",
+  "databases": [
+    "PubMed",
+    "FDA DailyMed",
+    "NMPA",
+    "evimed-literature",
+    "evimed-guideline",
+    "Europe PMC"
+  ],
+  "queries": [
+    {
+      "database": "evimed-literature",
+      "query": "nitroglycerin chest pain response diagnostic accuracy acute coronary syndrome",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "evimed-literature",
+      "query": "ALDH2 rs671 polymorphism nitroglycerin efficacy Chinese population",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "evimed-literature",
+      "query": "Suxiao Jiuxin Wan angina randomized controlled trial clinical",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "evimed-literature",
+      "query": "pre-hospital delay acute myocardial infarction outcomes mortality",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "evimed-guideline",
+      "query": "acute chest pain emergency assessment pathway ECG troponin guideline",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "evimed-guideline",
+      "query": "急性胸痛 急诊 评估 心电图 肌钙蛋白 指南",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "evimed-literature",
+      "query": "prehospital delay time acute coronary syndrome patient delay decision outcomes systematic review",
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed (biomedical_source)",
+      "query": "prehospital delay acute myocardial infarction patient outcomes systematic review meta-analysis",
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "evimed-literature",
+      "query": "速效救心丸 临床 心绞痛 疗效",
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "evimed-literature",
+      "query": "ALDH2 polymorphism aldehyde dehydrogenase nitroglycerin bioactivation vascular",
+      "resultsRetrieved": 13
+    },
+    {
+      "database": "FDA DailyMed (drug_label)",
+      "query": "nitroglycerin",
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "NMPA (drug_label)",
+      "query": "nitroglycerin",
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "evimed-literature",
+      "query": "速效救心丸 随机对照试验 冠心病 心绞痛",
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "myvariant",
+      "query": "rs671",
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "evimed-pharmacy-reference",
+      "query": "速效救心丸",
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 175,
+    "recordsAfterDeduplication": 16,
+    "sourcesIncluded": 9
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Hara2022-prehospital-activation",
+      "identifier": "PMID:36120483, PMC9437475",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "systematic_review"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "FDA-nitroglycerin-2024",
+      "identifier": "FDA:041f127e-5166-4484-bc1a-0a373d1187ae",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "drug_label"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "NMPA-xiaosuan-ganyou",
+      "identifier": "NMPA:8694b29782f6b9134e47c747eece0414",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "drug_label"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Zhang2023-ALDH2-NatRevCardiol",
+      "identifier": "PMID:36781974",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "review"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Guo2008-ALDH2-GTN-JACC",
+      "identifier": "PMID:18772068",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "pharmacogenomics"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "He2019-ALDH2-GTN-JCP",
+      "identifier": "PMID:31162244",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "pharmacogenomics"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Liu2020-SJXW-meta",
+      "identifier": "CNKI:ZYYW202004002",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "systematic_review"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "CEMA2019-chest-pain-consensus",
+      "identifier": "evimed-guideline:0",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "CCCP2024-biomarker-consensus",
+      "identifier": "evimed-guideline:5",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline"
+    }
+  ]
+}

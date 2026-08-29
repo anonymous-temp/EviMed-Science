@@ -1,0 +1,42 @@
+{
+ "id": "run_d764c064b027c15e3612a1c8088445ed",
+ "dispatchId": "rq-04-mQHF01",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_004b39385ffezox7FMqnmQHF01",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.95",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-04 研究任务 ## 选题 **《晨起头晕胸闷的病因归属与心血管事件晨峰现象的证据强度：未确诊人群家庭常备速效救心丸的获益-风险边界评价》** ## 研究背景 急性心肌梗死、心源性猝死与卒中的发生在一昼夜之内并不均匀，清晨时段的事件聚集自二十世纪八十年代起被反复报告，并被归因于觉醒前后皮质醇与儿茶酚胺升高、血…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T13:25:29.699Z",
+ "startedAt": "2026-08-13T13:25:29.699Z",
+ "finishedAt": "2026-08-13T14:17:36.975Z",
+ "durationMs": 3127276,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+  "claims[10].claim numeric fact 42 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "claims[10].claim numeric fact 56 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "claims[10].claim numeric fact 21 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "claims[10].claim numeric fact 80 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure."
+ ],
+ "observedMessages": 95,
+ "observedToolCalls": 166,
+ "lastProgressAt": "2026-08-13T14:17:15.723Z"
+}

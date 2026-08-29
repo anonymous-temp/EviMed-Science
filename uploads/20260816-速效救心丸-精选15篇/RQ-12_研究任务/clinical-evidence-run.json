@@ -1,0 +1,51 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸与麝香保心丸治疗冠心病心绞痛的比较证据评价：直接头对头随机对照试验的检索结果、网络 meta 分析相对位次的可解释边界与互换使用的证据状态",
+  "title": "速效救心丸与麝香保心丸治疗冠心病心绞痛的比较证据评价：头对头随机对照试验、网络 meta 分析位次与互换使用的证据边界",
+  "startedAt": "2026-08-13T19:26:00Z",
+  "completedAt": "2026-08-13T19:42:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_clinical_trial_search",
+    "evimed_data_source_catalog",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC7817287/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8652282/fulltext.md",
+    ".evimed-sources/PMC9701736/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID:37487965（速效救心丸稳定型心绞痛 RCT，J Ethnopharmacol，无开放获取）",
+    "PMID:18254051（Cochrane 系统评价，速效救心丸，cochranelibrary 403）",
+    "PMID:31342723（益气活血中成药网络 meta 分析，Unpaywall 404）",
+    "DOI:10.1016/j.jep.2024.117925（Jia/Leung 2024 网络 meta 分析，无开放获取）",
+    "DOI:10.1016/j.jep.2023.116959（Sun 2023 速效救心丸 RCT，无开放获取）",
+    "PMID:32744020（速效救心丸 ACS 系统评价，Unpaywall 404）",
+    "临床试验检索「速效救心丸 心绞痛」（HTTP 502，重试后改用英文检索式）"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 19,
+    "recordsIdentified": 252,
+    "recordsAfterDeduplication": 130,
+    "sourcesIncluded": 14,
+    "distinctPreservedSources": 6
+  },
+  "status": "succeeded"
+}

@@ -1,0 +1,45 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价：证据确定性分级与适用人群边界",
+  "title": "速效救心丸连续用药三个月及以上的有效性与安全性证据评价",
+  "startedAt": "2026-08-28T15:45:00Z",
+  "completedAt": "2026-08-28T16:20:00Z",
+  "tools": [
+    "literature_search",
+    "guideline_search",
+    "clinical_trial_search",
+    "drug_label_search",
+    "drug_term_normalize",
+    "open_access_full_text",
+    "biomedical_source_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md"
+  ],
+  "failedSources": [
+    "PMID:37487965 (J Ethnopharmacol 2023, 非开放获取，仅摘要)",
+    "PMID:32495590 (真实世界研究，非开放获取，仅摘要)",
+    "PMID:34252529 (CYP450 相互作用，非开放获取，仅摘要)",
+    "PMID:18254051 (Cochrane 2008，cochranelibrary.com HTTP 403，仅摘要)",
+    "PMID:32744020 (ACS Meta 分析，非开放获取，仅摘要)",
+    "guideline_search 返回 adapter_contract_invalid（指南工件未登记为可核查证据）",
+    "clinical_trial_search 首次调用 HTTP 502（重试后返回 0 条）"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 12,
+    "recordsIdentified": 236,
+    "recordsAfterDeduplication": 231,
+    "sourcesIncluded": 13,
+    "distinctPreservedSources": 2
+  }
+}

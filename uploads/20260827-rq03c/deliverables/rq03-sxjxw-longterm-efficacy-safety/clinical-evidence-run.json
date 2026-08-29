@@ -1,0 +1,20 @@
+{
+  "status": "succeeded",
+  "reportProfile": "clinical_evidence_report_v1",
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC6271708/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC11996930/fulltext.md",
+    ".evimed-sources/PMC8566037/fulltext.md"
+  ],
+  "qualityChecks": {
+    "sourcesPreserved": true,
+    "quotesVerifiedVerbatim": true,
+    "effectivenessSafetySeparated": true,
+    "gradeAppliedSeparately": true,
+    "traceabilityVerified": true
+  }
+}

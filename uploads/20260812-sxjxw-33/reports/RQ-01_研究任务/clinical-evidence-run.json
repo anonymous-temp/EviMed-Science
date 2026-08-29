@@ -1,0 +1,59 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "急性胸痛院外自救场景下：（1）速效救心丸是否具备替代或优先于舌下含服硝酸甘油的证据？（2）\"硝酸甘油对约半数中国人不起效\"一说的证据基础与可核验数据（ALDH2 rs671 频率、对硝酸甘油生物活化与临床疗效的影响）？（3）含服后症状缓解能否区分心源性与非心源性胸痛？（4）院前延迟对急性心肌梗死结局的影响与指南对自救用药与呼叫急救先后关系的立场？",
+  "title": "急性胸痛院外自救的药物选择证据评价：硝酸甘油与速效救心丸的比较，以及 ALDH2 rs671 变异对硝酸甘油疗效的人群学影响",
+  "startedAt": "2026-08-11T15:54:00Z",
+  "completedAt": "2026-08-11T16:25:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_health"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/PMC2801295/fulltext.md",
+    ".evimed-sources/PMC12447523/fulltext.md",
+    ".evimed-sources/PMC7218264/fulltext.md",
+    ".evimed-sources/PMC6403432/fulltext.md",
+    ".evimed-sources/PMC13239337/fulltext.md",
+    ".evimed-sources/PMC6858215/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/official-pages/e2c33edcc476dbdd/page.md"
+  ],
+  "failedSources": [
+    "JCI 2006 Li Y et al., PMID:16440063 / PMCID:PMC1351000 — Europe PMC 全文三次尝试失败，未获工件（临床数值经已保存的 Beretta 2010 转述）",
+    "Cochrane CD004473, PMID:18254051 / PMCID:PMC7137214 — cochranelibrary.com HTTP 403、Europe PMC 两次失败",
+    "Diercks 2005, PMID:15940087 — 非开放获取",
+    "ACC/AHA 2013 STEMI 指南 (PMID:23247304)、2021 AHA/ACC 胸痛指南 (PMID:33555948)、ESC 2023 ACS 指南 (PMID:37622663)、ACC/AHA 2025 ACS 指南 (PMID:40013746)、ACC 2022 急诊胸痛 ECDP (PMC10691881) — 非开放获取/Europe PMC 失败",
+    "PNAS 2005 Chen Z (PMID:16103363)、Nat Rev Cardiol 2023 (PMID:36781974)、BJCP 2023 (PMID:37101414)、Circulation 2004 De Luca (PMID:15007008)、JAMA 2022 Jollis (PMID:36335474/PMC9638953)、Tohoku J Exp Med 2014 (PMID:25263942，两次超时) — 非开放获取或上游不可用",
+    "gnomAD 查询 'rs671' — GraphQL 'Gene not found'（retryable=false，按规停止重试）；改查 ALDH2 基因页无频率数据",
+    "PMC 检索 '16440063 OR Glu504Lys polymorphism nitroglycerin 2006' — HTTP 502（重试一次后仍失败，后经其它查询定位 PMCID:PMC1351000）",
+    "NMPA 速效救心丸说明书 — 仅索引副本，未获官方现行版本核验，不作引文证据"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true,
+    "derivedClaimWorkingShown": true,
+    "practicalSectionNoDerivedClaims": true,
+    "reportNoOperationalProse": true
+  },
+  "stats": {
+    "totalSearches": 41,
+    "recordsIdentified": 268,
+    "recordsAfterDeduplication": 40,
+    "sourcesIncluded": 10,
+    "distinctPreservedSources": 10
+  },
+  "notes": "成功工件每个独立文档仅计一条规范路径（论文用 fulltext.md、官方页用 page.md）。sourcesIncluded=10 与 distinctPreservedSources=10 一致；检索日志中的 screening 计数与统计数据逐项吻合。",
+  "status": "succeeded"
+}

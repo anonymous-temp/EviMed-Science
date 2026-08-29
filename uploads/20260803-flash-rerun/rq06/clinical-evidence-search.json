@@ -1,0 +1,368 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-03T03:48:20Z",
+  "databases": [
+    "PubMed",
+    "PubMed/Crossref (EviMed literature search)",
+    "Guideline index",
+    "Clinical trial registry",
+    "Europe PMC",
+    "NMPA label index",
+    "Pharmacy reference"
+  ],
+  "queries": [
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "suxiao jiuxin wan stable angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "compound danshen dripping pill angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "suxiao jiuxin pill compound danshen dripping pill comparison",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "suxiao jiuxin pill pharmacokinetics borneol sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "速效救心丸治疗冠心病中国专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 23
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "速效救心丸 用法用量 疗程 说明书",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "复方丹参滴丸临床应用专家共识 疗程",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 24
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "速效救心丸 复方丹参滴丸 心绞痛 疗效 对照",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "速效救心丸 连续服用 三个月",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "compound danshen dripping pill pharmacokinetics human plasma",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "速效救心丸 疗程",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "suxiao jiuxin mechanism vasodilation coronary",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "compound danshen dripping pill United States FDA clinical trial phase",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "suxiao jiuxin pill package insert label dosage instruction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed/Crossref (EviMed literature search)",
+      "query": "复方丹参滴丸 说明书 用法用量",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Guideline index (EviMed guideline search)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "Guideline index (EviMed guideline search)",
+      "query": "复方丹参滴丸 冠心病 心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "Guideline index (EviMed guideline search)",
+      "query": "速效救心丸 复方丹参滴丸 三个月 疗程",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed (biomedical connector)",
+      "query": "suxiao jiuxin wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed (biomedical connector)",
+      "query": "33645038[PMID]",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC (biomedical connector)",
+      "query": "suxiao jiuxin wan angina Cochrane withdrawn",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC (biomedical connector)",
+      "query": "CD004473",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC (biomedical connector)",
+      "query": "\"suxiao jiuxin\" AND \"compound danshen\"",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC (biomedical connector)",
+      "query": "suxiao jiuxin pill clinical trial angina randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Pharmacy reference (private index)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "NMPA label index (EviMed drug label search)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "europe-pmc",
+      "query": "18254051[PMID]",
+      "resultsRetrieved": 0,
+      "date": "2026-08-03T04:16:00Z",
+      "note": "零结果检索（Europe PMC无该Cochrane记录的全文），用于确认Cochrane综述无法以开放获取形式保存"
+    },
+    {
+      "database": "europe-pmc",
+      "query": "37487965",
+      "resultsRetrieved": 1,
+      "date": "2026-08-03T04:27:51Z",
+      "note": "SJP稳定型心绞痛RCT（2023）Europe PMC记录核查，确认无PMCID可保存全文"
+    },
+    {
+      "database": "europe-pmc",
+      "query": "38395177",
+      "resultsRetrieved": 1,
+      "date": "2026-08-03T04:27:51Z",
+      "note": "贝叶斯网络meta分析Europe PMC记录核查，确认无PMCID可保存全文"
+    },
+    {
+      "database": "europe-pmc",
+      "query": "32716206",
+      "resultsRetrieved": 1,
+      "date": "2026-08-03T04:27:52Z",
+      "note": "SJP ACS试验Europe PMC记录核查，确认无PMCID可保存全文"
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 314,
+    "recordsAfterDeduplication": 21,
+    "sourcesIncluded": 17
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Duan2008CochraneSJP",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "SJP证据强度（Cochrane系统评价）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Sun2023SJPRCT",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "SJP随机对照试验结果"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Ruan2021SJPProtocol",
+      "identifier": "PMCID:PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP试验方案（组成/剂量/疗程）"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Shen2020SJPACS",
+      "identifier": "PMID:32716206",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "SJP ACS早期PCI试验"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Bai2014SJPMechanism",
+      "identifier": "PMCID:PMC3997901",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP血管舒张机制"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Huang2018SJPMeta",
+      "identifier": "PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP疗效meta分析"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Yang1994SJPKinet",
+      "identifier": "PMID:7900539",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "SJP人体药代（舌下含服）"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "SJP2024CCS",
+      "identifier": "PMCID:PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP CCS硝酸酯不耐受RCT（舌下含服）"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "INCODER2022",
+      "identifier": "PMCID:PMC9088738",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "CDDP INCODER方案（组成/FDA II期/剂量）"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Li2020CDDPPCI",
+      "identifier": "PMCID:PMC7685822",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "CDDP联用PCI meta分析"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "CDDP2015DR",
+      "identifier": "PMCID:PMC4592726",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "CDDP糖尿病视网膜病变RCT"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Lv2017Warfarin",
+      "identifier": "PMCID:PMC5702344",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "CDDP与华法林PK/PD研究"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Yang2023NMA78",
+      "identifier": "PMCID:PMC10717272",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "网络meta分析（78项RCT）"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Luo2015CDDPoverview",
+      "identifier": "PMID:25582415",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "CDDP系统评价再评价"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Jia2024BayesianNMA",
+      "identifier": "PMID:38395177",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "贝叶斯网络meta分析（含JXP与DSP）"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "NMA2022Stable179",
+      "identifier": "PMCID:PMC9428755",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "网络meta分析（179项试验，含两药）"
+    },
+    {
+      "referenceNumber": 27,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "official-page:f60ccb4779eccff7",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急性胸痛处置官方指导"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "高原低氧暴露与心肌缺血：病理生理路径、临床实体鉴别与速效救心丸适应症边界的证据评价",
+  "title": "高原低氧暴露与心肌缺血：病理生理路径、临床实体鉴别与速效救心丸适应症边界的证据评价",
+  "startedAt": "2026-08-14T02:13:00Z",
+  "completedAt": "2026-08-14T02:27:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_drug_label_search",
+    "evimed_drug_term_normalize",
+    "evimed_pharmacy_reference_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC9488514/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC12429522/fulltext.md",
+    ".evimed-sources/PMC11983428/fulltext.md"
+  ],
+  "failedSources": [
+    "PMID:18254051 (Cochrane review suxiao jiuxin wan) - no open-access PDF (cochranelibrary.com HTTP 403)",
+    "PMID:16339809 (Schmid 2006, Heart) - no open-access PDF (heart.bmj.com HTTP 403)",
+    "PMID:37833187 (WMS 2024 guideline) - no open-access PDF",
+    "PMID:37642283 (Tymko 2023 sympathetic meta-analysis) - no open-access PDF",
+    "PMID:32268833 (Tymko 2020 Circ Res endothelial) - no open-access PDF (ahajournals HTTP 403)",
+    "DOI:10.1089/ham.2010.1024 (Dehnert 2010) - no open-access PDF",
+    "速效救心丸 NMPA 官方现行说明书 - 仅获索引件，官方文本未直接核验"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionOrArithmetic": true
+  },
+  "stats": {
+    "totalSearches": 39,
+    "recordsIdentified": 205,
+    "recordsAfterDeduplication": 179,
+    "sourcesIncluded": 19,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

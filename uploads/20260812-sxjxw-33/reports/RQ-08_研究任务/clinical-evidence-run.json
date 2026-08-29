@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "reportProfile": "academic_deep_research_v1",
+  "question": "冰片的挥发性对速效救心丸开封后效价的影响如何？\"开封后 3–6 个月用完\"的说法依据是什么？现行药典与说明书对本品的贮藏条件如何规定（未开封 vs 开封后）？",
+  "title": "冰片挥发性对速效救心丸开封后效价的影响：稳定性证据评价与\"开封后 3–6 个月\"说法的依据核查",
+  "startedAt": "2026-08-11T19:46:00+08:00",
+  "completedAt": "2026-08-11T19:58:00+08:00",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_web_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12804185/fulltext.md",
+    ".evimed-sources/PMC12845388/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:38964157 / DOI 10.1016/j.phymed.2024.155848",
+      "tool": "evimed_open_access_full_text",
+      "reason": "public_source_pdf_not_open_access — 非开放获取，未写入工件；该冰片综述（Phytomedicine 2024）仅作题录参考，不承载主张"
+    },
+    {
+      "identifier": "PMID:36087846 / DOI 10.1016/j.jep.2022.115697",
+      "tool": "evimed_open_access_full_text",
+      "reason": "public_source_pdf_not_open_access — 非开放获取；仅作题录参考"
+    },
+    {
+      "identifier": "PMID:37321057 / DOI 10.1016/j.biopha.2023.114668",
+      "tool": "evimed_open_access_full_text",
+      "reason": "public_source_pdf_not_open_access — 非开放获取；仅作题录参考"
+    },
+    {
+      "identifier": "PMID:33913042 / DOI 10.1208/s12249-021-01999-8",
+      "tool": "evimed_open_access_full_text",
+      "reason": "public_source_pdf_not_open_access — 非开放获取；仅作题录参考"
+    },
+    {
+      "identifier": "PMID:22583066 / DOI 10.1111/j.1750-3841.2012.02713.x",
+      "tool": "evimed_open_access_full_text",
+      "reason": "public_source_pdf_not_open_access — 冰片 β-CD 包合物稳定性研究（J Food Sci 2012）非开放获取；其摘要证据经 europe-pmc 检索记录使用"
+    },
+    {
+      "identifier": "PubChem CID 64685（属性查询）",
+      "tool": "evimed_biomedical_source_search",
+      "reason": "HTTP 502 — 重试一次后仍不可达；PubChem 结构记录（分子式/分子量）已由先前的成功检索取得，属性级查询未完成"
+    },
+    {
+      "identifier": "DailyMed 硝酸甘油舌下片说明书（Nitrostat）",
+      "tool": "evimed_biomedical_source_search",
+      "reason": "dailymed 查询未返回匹配记录（0 条）；\"discard 6 months after opening\"字样未能在 DailyMed 记录层核验，改以中文科普文献与 USP 文本检索作为该说法出处的间接佐证"
+    },
+    {
+      "identifier": "NMPA 官网速效救心丸说明书原件",
+      "tool": "evimed_drug_label_search / 官方页面通道",
+      "reason": "NMPA 官网说明书数据库不在本环境可用官方页面通道内；说明书条款经 EviMed 索引候选与公开转载版（药智数据）核验，报告已标注需以官方原件为准"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionOrArithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 44,
+    "recordsIdentified": 393,
+    "recordsAfterDeduplication": 264,
+    "sourcesIncluded": 15,
+    "distinctPreservedSources": 3
+  },
+  "status": "succeeded"
+}

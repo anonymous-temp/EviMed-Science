@@ -1,0 +1,39 @@
+{
+ "id": "run_4d077ef150816efe2018c4df934657d0",
+ "dispatchId": "rq-08-w3wqhG",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00415eb25ffe2245LQWOw3wqhG",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.85",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-08 研究任务 ## 选题 **《速效救心丸开封后冰片挥发损失与含量稳定性的分层证据评价：贮藏条件规定的适用状态及\"开封后三至六个月\"使用期表述的来源追溯》** ## 研究背景 冰片（龙脑）是速效救心丸的主要挥发性组分，常温常压下即可升华，其含量既是法定质量控制指标，也被普遍认为与舌下含服的起效特征有关。然而…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T16:18:06.100Z",
+ "startedAt": "2026-08-13T16:18:06.100Z",
+ "finishedAt": "2026-08-13T17:01:13.900Z",
+ "durationMs": 2587800,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The practical answer must explicitly state that Suxiao Jiuxin Wan must not delay emergency care. Add that sentence to the practical section — taking it is not a reason to wait, and emergency services should be called at the same time, not after.",
+  "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — logged but never executed: \"速效救心丸 开封后 三到六个月 用完 冰片 挥发\", \"冰片 龙脑 升华 熔点 蒸气压 理化性质\", \"冰片 挥发 速效救心丸 贮藏\", \"速效救心丸 说明书 贮藏 密封 阴凉 有效期\"."
+ ],
+ "observedMessages": 116,
+ "observedToolCalls": 143,
+ "lastProgressAt": "2026-08-13T17:00:49.314Z"
+}

@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "冰片（borneol，C10H18O）分子量 154.25，沸点 212 ℃。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines (Sci Rep, 2025)",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMCID: PMC12804185; DOI: 10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "Borneol (1,7,7-Trimethylbicyclo[2.2.1]heptan-2-ol, C10H18O) has a molecular weight of 154.25 and a boiling point of 212°C",
+      "applicability": "冰片理化常数，适用于含冰片制剂的挥发损失机制分析",
+      "uncertainty": "沸点为常压数值；熔点等其余物理常数未在该来源逐字呈现"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+      "claim": "未经包合保护的冰片物理混合物在 25 ℃、730 天货架期内 ≥5% 含量损失的失效概率为 88.50%，而 β-环糊精包合物仅为 1.10%。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines (Sci Rep, 2025)",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMCID: PMC12804185; DOI: 10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "At 25 °C over 730 days, the inclusion complex showed only a 1.10% probability of failure (defined as ≥ 5% content loss), compared to 88.50% for the physical mixture.",
+      "applicability": "提示未包合形态的冰片在长期贮存中挥发损失风险显著高于包合形态；用于支持速效救心丸（未包合滴丸）开封后损失风险方向性结论",
+      "uncertainty": "该数据来自冠心解郁颗粒体系（含冰片的 β-CD 包合研究），非速效救心丸本体；物理混合物为冰片与 β-CD 简单混合，与滴丸基质约束不完全等同"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "d-龙脑（d-borneol）作为高挥发性代表药物，其高挥发性导致制造与贮存过程中的大量损失。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs (Pharmaceutics, 2026)",
+      "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+      "identifier": "PMCID: PMC12845388; DOI: 10.3390/pharmaceutics18010111",
+      "accessLevel": "full_text",
+      "supportQuote": "its high volatility results in substantial loss during manufacture and storage",
+      "applicability": "冰片（含 d-龙脑）挥发损失机制的直接实测证据，适用于含冰片制剂的稳定性风险分析",
+      "uncertainty": "该表述针对游离态/制剂场景的 d-龙脑，损失量级取决于具体剂型与包装"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "游离态 d-龙脑在 25 ℃ 贮存 30 天内几乎完全损失；40 ℃ 加速条件下 30 天内完全损失。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs (Pharmaceutics, 2026)",
+      "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+      "identifier": "PMCID: PMC12845388; DOI: 10.3390/pharmaceutics18010111",
+      "accessLevel": "full_text",
+      "supportQuote": "free d-borneol was almost completely lost within 30 days under 25 °C storage conditions … Under accelerated conditions (40 °C), free d-borneol degraded completely within 30 days",
+      "applicability": "作为冰片挥发损失速率的上限参照：说明高温显著加速损失；用于支持避免高温存放的管理建议",
+      "uncertainty": "对象为游离态 d-龙脑（非滴丸中受基质约束的形态），30 天窗口为极端暴露条件的量级参照，不直接代表速效救心丸开封后损失"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "热重分析显示 d-龙脑在 87–165 ℃ 区间为快速挥发段。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs (Pharmaceutics, 2026)",
+      "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+      "identifier": "PMCID: PMC12845388; DOI: 10.3390/pharmaceutics18010111",
+      "accessLevel": "full_text",
+      "supportQuote": "A rapid volatilization phase was observed from 87 to 165 °C, with the maximum rate occurring between 129 and 164.5 °C.",
+      "applicability": "支持温度是冰片挥发主导变量的结论；说明常规贮存温度（20–40 ℃）下挥发虽慢但持续存在",
+      "uncertainty": "TGA 为升温程序下的快速失重测量，反映温度-挥发速率关系，不直接给出等温 25 ℃ 下的绝对损失率"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "速效救心丸为含冰片的中药复方制剂（用于稳定型心绞痛）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12804185",
+      "sourceTitle": "Assessment of volatile component stability in Guanxin Jieyu granules through gas chromatography in accordance with Q14 guidelines (Sci Rep, 2025)",
+      "artifactPath": ".evimed-sources/PMC12804185/fulltext.md",
+      "identifier": "PMCID: PMC12804185; DOI: 10.1038/s41598-025-31589-8",
+      "accessLevel": "full_text",
+      "supportQuote": "a traditional Chinese medicine formula containing Borneol—Suxiaojiuxin pill—can treat chronic stable angina pectoris",
+      "applicability": "确认研究对象（速效救心丸）含冰片，构成冰片挥发风险分析的对象基础",
+      "uncertainty": "该来源仅确认速效救心丸含冰片与临床用途，不提供其冰片含量、包合状态或处方工艺细节"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "direct",
+      "claim": "突发、持续且不缓解的胸痛（伴或不伴放射痛、出汗、恶心、气短）属急诊征象，应立即呼叫急救，可能是心脏病发作。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain — National Health Service (NHS) official page",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if:\n\n- you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion\n\n- you get pain that spreads to your left or right arm, or your neck, jaw, stomach or back\n\n- you have chest pain and you feel sweaty, sick, light headed or short of breath\n\nYou could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "支撑安全处置中的急诊呼救边界（中国本地化为 120）；说明含服速效救心丸不能替代急诊评估",
+      "uncertainty": "NHS 页面为英国公众指导（呼叫 999），中国读者对应 120；页面不涉及速效救心丸"
+    },
+    {
+      "claimId": "CLM-020",
+      "claimType": "derived",
+      "claim": "〔推导〕在说明书符合性使用条件（每次用后拧紧瓶盖、≤20 ℃ 阴凉处）下，速效救心丸开封后 3–6 个月冰片含量损失量级估计为约 1%–2%（低于 5% 质控阈值）；高温（≥40 ℃）或不密闭暴露下损失可接近游离态 30 天几乎完全损失的量级。",
+      "derivedFrom": [
+        "CLM-004",
+        "CLM-002",
+        "CLM-005"
+      ],
+      "method": "以未包合物理混合物 25 ℃、730 天 ≥5% 损失失效概率 88.50% 为锚点（CLM-002），保守标定中位失效时间约 1.5–2 年；假设冰片逸散近似遵循一级动力学（摘要层级检索发现报告颗粒/片剂中冰片散逸符合一级反应），则 730 天达 5% 损失对应速率常数 k≈-ln(0.95)/730≈7.0×10^-5 /天；3–6 个月（90–180 天）损失 = 1-exp(-k·t)，代入 t=90 得约 0.63%，代入 t=180 得约 1.25%，故量级区间约 1%–2%；该外推未计入滴丸基质约束（会减小损失）与反复开盖引入的空气对流/湿度（会增大损失），两种未计因素方向相反，故取两者之间作为结论区间。",
+      "assumptions": "冰片逸散近似一级动力学；25 ℃ 等温；88.5% 失效概率对应中位失效约 1.5–2 年的标定成立；每次取用后立即拧紧瓶盖且置 ≤20 ℃ 阴凉处。",
+      "sensitivity": "若温度升至 40 ℃，实测显示游离态 30 天完全损失（CLM-004），损失速率可提高一个数量级以上，3–6 个月损失接近 100%；若长期密封冷藏，损失可远低于 1%。",
+      "applicability": "仅作质量管理参考的量级估计，不构成质控、法规或效期判定依据",
+      "uncertainty": "低确定性序贯推断：滴丸基质对冰片的实际约束程度、瓶内残留空气体积、开盖频率均无实测参数；任何单一数字外推均不稳健"
+    },
+    {
+      "claimId": "CLM-021",
+      "claimType": "derived",
+      "claim": "〔推导〕\"开封后 3–6 个月用完\"说法的证据属性为经验性保守建议：在说明书、药典与稳定性文献中均无出处，其数字原型为硝酸甘油反复开盖后\"有效期降至 3–6 个月\"的科普表述，属跨品种经验类推。",
+      "derivedFrom": [
+        "CLM-004",
+        "CLM-002"
+      ],
+      "method": "将说法与四组判定条件逐一比对：说明书条款（检索未见，四路检索均无）、药典规定（检索未见）、速效救心丸专属稳定性研究结论（检索未见）、跨品种经验类推（成立，\"3–6 个月\"文字出处见于硝酸甘油科普文献，为摘要层级检索发现）。并以实测边界检验其合理性：游离态冰片 30 天几乎完全损失（CLM-004）提示若暴露严苛则 3–6 个月或偏长；物理混合物 25 ℃ 730 天 88.5% 失效（CLM-002）提示若暴露温和则 3–6 个月未必达 5% 阈值；两边界跨度巨大，现有数据无法判定该时间窗恰当与否。",
+      "assumptions": "四路检索（说明书/药典/指南/文献）在检索时间窗（截至 2026-08-11）内覆盖了主要公开来源；硝酸甘油科普文献为该数字唯一可追溯的文字出处。",
+      "sensitivity": "若未来出现速效救心丸开封后留样观察数据或说明书修订，该时间窗可被证实、修正或否定；在获得数据前其归类不改变。",
+      "applicability": "适用于药师与质量管理人员对该说法证据层级的判断：可按经验性保守建议交代，但不得表述为药品规定",
+      "uncertainty": "说明书原文工件未直接取得（NMPA 官网原件不可达），\"无开封后期限字样\"为检索层面的阴性发现而非官方确认的阴性事实"
+    }
+  ]
+}

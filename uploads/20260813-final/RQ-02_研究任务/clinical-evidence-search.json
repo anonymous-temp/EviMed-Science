@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T11:20:00Z",
+  "databases": [
+    "guideline index",
+    "PubMed",
+    "EviMed Chinese literature",
+    "europe-pmc",
+    "FDA label (OpenFDA/DailyMed)",
+    "NMPA label index"
+  ],
+  "queries": [
+    {
+      "database": "guideline index",
+      "query": "nitroglycerin sublingual chest pain not relieved call emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain not relieved after nitroglycerin call emergency medical services",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay myocardial infarction infarct size mortality",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "symptom-to-door time acute myocardial infarction prognosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "EviMed Chinese literature",
+      "query": "速效救心丸 冠心病心绞痛",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "guideline index",
+      "query": "急性胸痛 呼叫120 硝酸甘油 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "EviMed Chinese literature",
+      "query": "nitroglycerin relief chest pain diagnostic acute coronary syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "FDA label (OpenFDA/DailyMed)",
+      "query": "nitroglycerin (jurisdiction US)",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "NMPA label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed Chinese literature",
+      "query": "nitroglycerin response does not predict coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "europe-pmc",
+      "query": "2021 AHA ACC guideline evaluation diagnosis chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "europe-pmc",
+      "query": "2023 ESC Guidelines acute coronary syndromes nitroglycerin sublingual",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "europe-pmc",
+      "query": "nitroglycerin sublingual angina pectoris dosing 0.4 mg every 5 minutes three doses",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "guideline index",
+      "query": "硝酸甘油 舌下含服 每5分钟 心绞痛 呼叫急救",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "europe-pmc",
+      "query": "suxiao jiuxin wan angina pectoris Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "guideline index",
+      "query": "速效救心丸 共识 胸痹 气滞血瘀",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Henrikson chest pain relief by nitroglycerin does not predict active coronary artery disease Annals",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin angina repeat every 5 minutes maximum 3 doses",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin 0.4 mg sublingual every 5 minutes up to 3 doses",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "call 911 within 5 minutes nitroglycerin not relieved angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 183,
+    "recordsAfterDeduplication": 130,
+    "sourcesIncluded": 13
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "NHS chest pain symptom page (reviewed 2023-08-08)",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "patient-facing emergency-contact boundary"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Lee2020PrehospitalDelay",
+      "identifier": "PMID:31766823",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay and EMS, quantitative"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Shen2022UrbanRural",
+      "identifier": "PMID:36396304",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "China prehospital delay and prognosis, quantitative"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Boden2015ShortActingNTG",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "nitroglycerin dosing and verbatim guideline recommendations"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Ren2018SuxiaoJiuxinMeta",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan evidence base"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "FDANitroglycerinLabel",
+      "identifier": "DailyMed setid 041f127e-5166-4484-bc1a-0a373d1187ae",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory label dosing and contraindications"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "NMPASuxiaoJiuxinWanLabel",
+      "identifier": "NMPA indexed label candidate",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan indication and precautions"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Diercks2005NTGDiagnostic",
+      "identifier": "PMID:15940087",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "NTG response not predictive of cardiac etiology"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Henrikson2003NTGDiagnostic",
+      "identifier": "PMID:14678917",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "NTG relief does not predict active coronary artery disease"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Duan2008CochraneSXJW",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan Cochrane review, weak evidence"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "CSE2019AcuteChestPainConsensus",
+      "identifier": "中华医学会急诊医学分会 急性胸痛急诊诊疗专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Chinese acute chest pain consensus"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "CAIM2019SuxiaoJiuxinConsensus",
+      "identifier": "中国中西医结合学会 速效救心丸治疗冠心病中国专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Suxiao Jiuxin Wan expert consensus"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "CMA2021ChestPainPrimaryCare",
+      "identifier": "中华医学会 胸痛基层合理用药指南 2021",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "Chinese primary-care chest pain medication guidance"
+    }
+  ]
+}

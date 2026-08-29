@@ -1,0 +1,38 @@
+{
+ "id": "run_01af44fc855dc623c2b83c1f46587637",
+ "dispatchId": "rq-13-XUdnUp",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_0033c0591ffeFsEvAtszXUdnUp",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.90",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-13 研究任务 ## 选题 **《速效救心丸长期用药的效应衰减、剂量递增与停药反应证据评价：从\"组方不含硝酸酯\"推出\"不产生耐受\"所需的前提条件与直接研究的检索结果》** ## 研究背景 速效救心丸在大量患者中被长期服用，随之而来的一个常见疑问是长期吃下去会不会像硝酸甘油那样逐渐不管用、会不会离不开。流传的回…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T20:16:13.687Z",
+ "startedAt": "2026-08-13T20:16:13.687Z",
+ "finishedAt": "2026-08-13T20:51:55.777Z",
+ "durationMs": 2142090,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — missing from the log: \"drug tolerance dependence addiction withdrawal definitions c\"; logged but never executed: \"速效救心丸治疗冠心病中国专家共识 2019 全文 用法用量 疗程\", \"速效救心丸 说明书 用法用量 含服 一次 一日 疗程 长期使用\", \"中成药治疗冠心病临床应用指南 20"
+ ],
+ "observedMessages": 66,
+ "observedToolCalls": 127,
+ "lastProgressAt": "2026-08-13T20:45:39.906Z"
+}

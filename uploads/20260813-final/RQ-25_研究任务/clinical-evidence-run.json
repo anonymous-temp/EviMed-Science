@@ -1,0 +1,68 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸的处方药与非处方药分类：监管依据溯源、购买渠道边界与自我选药情形下的证据审视",
+  "title": "速效救心丸的药品分类属性与自我选药适宜性：监管依据溯源与临床证据评价",
+  "startedAt": "2026-08-14T06:02:33.375919Z",
+  "completedAt": "2026-08-14T06:22:33.375919Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3785905/fulltext.md",
+    ".evimed-sources/PMC6960059/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:37487965",
+      "reason": "No open-access PDF (J Ethnopharmacol 2023 stable angina RCT)"
+    },
+    {
+      "identifier": "PMID:38965126",
+      "reason": "No open-access PDF (Herz 2024 self-perceived risk STEMI)"
+    },
+    {
+      "identifier": "PMID:11410572",
+      "reason": "No open-access PDF (Heart 2001 symptom expectations)"
+    },
+    {
+      "identifier": "PMID:22897413",
+      "reason": "No open-access PDF (JACM 2012 TCM diagnostic reliability)"
+    },
+    {
+      "identifier": "DOI:10.1002/14651858.CD004473.pub2",
+      "reason": "Cochrane Library HTTP 403"
+    },
+    {
+      "identifier": "query: self-treatment acute coronary syndrome delay",
+      "reason": "public source HTTP 502 (retryable, not retried after failure)"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 20,
+    "recordsIdentified": 100,
+    "recordsAfterDeduplication": 98,
+    "sourcesIncluded": 6,
+    "distinctPreservedSources": 6
+  },
+  "status": "succeeded"
+}

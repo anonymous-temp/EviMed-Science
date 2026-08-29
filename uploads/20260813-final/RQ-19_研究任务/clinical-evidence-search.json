@@ -1,0 +1,293 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T00:55:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "PMC",
+    "NMPA 说明书索引",
+    "指南索引",
+    "ClinicalTrials.gov",
+    "药学参考索引"
+  ],
+  "queries": [
+    {
+      "database": "NMPA 说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed 文献索引",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed 文献索引",
+      "query": "速效救心丸 心绞痛 随机对照",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "指南索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "临床试验注册库",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "EviMed 文献索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed/Crossref",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "EviMed 文献索引",
+      "query": "速效救心丸 系统评价 meta",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay treatment seeking acute coronary syndrome symptom attribution",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "prescription medication sharing borrowing family members",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "home blood pressure monitoring telemonitoring randomized trial cardiovascular events outcomes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 17
+    },
+    {
+      "database": "药学参考索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:24524496 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:20938251 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:18254051 AND SRC:MED",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PMC",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PMC",
+      "query": "screening atrial fibrillation single-lead ECG older adults stroke",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Liu effectiveness safety Suxiao Jiuxin acute coronary syndrome systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 175,
+    "recordsAfterDeduplication": 149,
+    "sourcesIncluded": 18
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPA2026SuxiaoLabel",
+      "identifier": "国药准字 Z12020025（索引件）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书适应症与规范边界"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "NHS chest pain page",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "急性胸痛安全边界"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Hu2024SJP_CCS",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "随机对照试验（已确诊人群疗效）"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Ruan2021SJP_protocol",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "气滞血瘀证人群定义与入组标准"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Ren2018SJP_meta",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "系统评价（替代终点）"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane 系统评价"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Liu2020ACS_meta",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "急性冠脉综合征系统评价"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Wang2019CriticalLesion",
+      "identifier": "中国中西医结合杂志 2019;39(6)",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "心血瘀阻证临界病变随机对照研究"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Song2026Sharing",
+      "identifier": "PMC12990816",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "老年人药物共享与就医延迟"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Obol2018Borrowing",
+      "identifier": "PMC5907402",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "处方药借用/共享现患率"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Beyene2014SharingReview",
+      "identifier": "PMID:24524496",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "处方药共享系统评价"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Cao2010DelayChina",
+      "identifier": "PMID:20938251",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "中国急性冠脉综合征院前延迟"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Asghari2022Symptom",
+      "identifier": "PMC9703419",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "症状误判与就医延迟"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "CAIM2019Consensus",
+      "identifier": "速效救心丸治疗冠心病中国专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "专家共识"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "CTgovSJP",
+      "identifier": "NCT06531161; NCT05466968; NCT04814121",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "注册试验（未招募/状态未知，无结局数据）"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "Uittenbogaart2020D2AF",
+      "identifier": "PMC7492823",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "机会性房颤筛查阴性结果"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "Zhongcao2020RealWorld",
+      "identifier": "中国中药杂志 2020（题录）",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "老年真实世界用药特征"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "CCFDIE2026Portal",
+      "identifier": "https://www.ccfdie.org/zryyxxw/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "处方药网络零售合规指南发文线索"
+    }
+  ]
+}

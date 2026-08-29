@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T13:31:00Z",
+  "databases": [
+    "PubMed",
+    "Guideline index",
+    "Europe PMC"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "circadian variation in frequency of onset acute myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation sudden cardiac death morning peak",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "meta-analysis morning excess acute myocardial infarction sudden cardiac death",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation stroke onset meta-analysis morning",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "morning surge blood pressure cardiovascular events predictor",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation platelet aggregation fibrinolytic activity morning myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed",
+      "query": "cortisol awakening response cardiovascular disease association",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "dizziness primary care etiology prevalence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "concurrent morning increase platelet aggregability myocardial infarction sudden cardiac death",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain primary care prevalence underlying cause coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan coronary heart disease meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction patient factors systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain general practice musculoskeletal gastrointestinal cause distribution",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation cardiovascular disease review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Guideline index",
+      "query": "chest pain evaluation acute coronary syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Guideline index",
+      "query": "急性心肌梗死 胸痛 指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 18
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 209,
+    "recordsAfterDeduplication": 159,
+    "sourcesIncluded": 13
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Kelters2025Circadian",
+      "identifier": "PMID:40663373",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "circadian morning peak + mechanisms"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Yao2024SCAChinese",
+      "identifier": "PMID:39414308",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "Chinese community SCA circadian"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Bosner2018Dizziness",
+      "identifier": "PMID:29458336",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "dizziness aetiology"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Maarsingh2010Dizziness",
+      "identifier": "PMID:20458102",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "dizziness aetiology elderly"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Hoorweg2017ChestPain",
+      "identifier": "PMID:28634285",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "chest pain primary care diagnoses"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Sancassiani2021Delay",
+      "identifier": "PMID:34501261",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay psychological"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Hoschar2020Education",
+      "identifier": "PMID:32201586",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "prehospital delay interventions"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "He2018SuxiaoMeta",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "suxiao jiuxin wan RCT meta-analysis"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Bai2014SuxiaoArtery",
+      "identifier": "PMID:24808920",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "suxiao jiuxin pill mechanism"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "NHSChestPain",
+      "identifier": "NHS-chest-pain-2023-08-08",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "emergency triage"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NMPASuxiaoLabel",
+      "identifier": "NMPA-速效救心丸",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "drug label indication"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "suxiao jiuxin wan Cochrane review"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "TrialRegistries",
+      "identifier": "NCT06531161; NCT05466968; NCT04814121; ChiCTR2100050066; ChiCTR1900021876",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "trial registry coverage"
+    }
+  ]
+}

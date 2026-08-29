@@ -1,0 +1,43 @@
+{
+ "id": "run_fdc451a59fcc6f2577b0ea3547ae241e",
+ "dispatchId": "rq-01-3HhU9e",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00e77a383ffeZ3YQDo2e3HhU9e",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.1.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "matched:clinical-evidence-synthesis",
+ "model": "deepseek/deepseek-v4-flash",
+ "question": "# RQ-01 研究任务（派发给 EviMedScience 产品管线的原始题面） 题库中的语义问题 ① 急救药物对比与首选确认（涉及 P3 P6 P7），转化为的学术研究命题。 留存此文件的原因：前几轮复跑的题面没有存档，导致同一问题的两次运行无法严格对照。 自本轮起，每条 RQ 的题面以原文留档，复跑一律引用此处。…",
+ "status": "succeeded",
+ "createdAt": "2026-08-11T15:54:33.570Z",
+ "startedAt": "2026-08-11T15:54:33.570Z",
+ "finishedAt": "2026-08-11T16:34:51.766Z",
+ "durationMs": 2418196,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "claims[6].claim numeric fact 664 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "claims[18].claim numeric fact 2000-2025 is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.",
+  "Report line 41 numeric facts 1.16-1.56, 0.5-2.51 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 99 numeric facts 30-57 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 109 numeric facts 20 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them.",
+  "Report line 115 numeric facts 30-57 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 120,
+ "observedToolCalls": 195,
+ "lastProgressAt": "2026-08-11T16:34:36.063Z"
+}

@@ -1,0 +1,38 @@
+{
+ "id": "run_fb568f9e292a4d9874a6395da7e983ce",
+ "dispatchId": "rq-25-AOVrrh",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_00123346effeSEA76UTvAOVrrh",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.75",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-25 研究任务 ## 选题 **《速效救心丸的处方药与非处方药分类：监管依据溯源、购买渠道边界与自我选药情形下的证据审视》** ## 研究背景 速效救心丸的院外使用多由患者本人或家属自行发起，购药环节又大量转移至线上，\"能在哪里买到\"与\"是否属于可自行选用的药品\"因而常被合并成同一个问题来回答。药品按处方药或…",
+ "status": "succeeded",
+ "createdAt": "2026-08-14T06:03:12.329Z",
+ "startedAt": "2026-08-14T06:03:12.329Z",
+ "finishedAt": "2026-08-14T06:50:29.207Z",
+ "durationMs": 2836878,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": null,
+ "qualityNotices": [
+  "Report line 59 numeric facts 6 are not present in the cited claim evidence. Cite the claim that carries them, or attach the source passage that states them."
+ ],
+ "observedMessages": 85,
+ "observedToolCalls": 148,
+ "lastProgressAt": "2026-08-14T06:49:48.175Z"
+}

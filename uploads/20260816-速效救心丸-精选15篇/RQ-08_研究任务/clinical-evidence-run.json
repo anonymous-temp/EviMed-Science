@@ -1,0 +1,53 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸开封后冰片挥发损失与含量稳定性的分层证据评价：贮藏条件规定的适用状态及\"开封后三至六个月\"使用期表述的来源追溯",
+  "title": "速效救心丸开封后冰片挥发损失与含量稳定性：贮藏规定的适用边界与\"开封后三至六个月\"使用期表述的出处追溯",
+  "startedAt": "2026-08-13T16:18:00Z",
+  "completedAt": "2026-08-13T16:35:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_clinical_trial_search",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate",
+    "evimed_pharmacy_reference_search",
+    "evimed_web_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12804185/fulltext.md",
+    ".evimed-sources/PMC12844603/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "Suxiao Jiuxin Pill RCT result paper (DOI 10.1016/j.jep.2023.116959): no open-access PDF; cited at abstract level",
+    "Borneol/camphor/isoborneol solubility (DOI 10.1021/acs.jced.9b00045): no open-access PDF",
+    "β-cyclodextrin natural borneol inclusion (PMID 22583066): subscription only; abstract level",
+    "Cochrane suxiao jiuxin wan review (PMID 18254051): cochranelibrary HTTP 403",
+    "Guanxingao GC determination (PMID 11498920): no Europe PMC record; abstract level",
+    "Sublimation/evaporation of borneol in-situ forming matrix (DOI 10.1016/j.matpr.2023.03.768): no open-access PDF",
+    "Borneol stereochemistry comparison (DOI 10.1016/j.biopha.2023.114668): no open-access PDF",
+    "NMPA official current drug label page: not reachable via allowed gateway; indexed label candidate only",
+    "Chinese Pharmacopoeia (2020) borneol and Suxiao Jiuxin Wan monographs: full text not accessible"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 35,
+    "recordsIdentified": 163,
+    "recordsAfterDeduplication": 160,
+    "sourcesIncluded": 13,
+    "distinctPreservedSources": 5
+  },
+  "status": "succeeded"
+}

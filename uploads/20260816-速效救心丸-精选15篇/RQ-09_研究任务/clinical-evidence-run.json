@@ -1,0 +1,59 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "舌下含服速效救心丸后的舌部麻木、清凉、灼热或刺痛感的药理机制，其与冰片经舌下黏膜实际吸收及心绞痛缓解之间的证据关联，以及把它作为药效指示的证据评价。",
+  "title": "舌下含服速效救心丸后的舌部麻木与清凉感：机制、与黏膜吸收及心绞痛缓解的关系",
+  "startedAt": "2026-08-13T17:00:00Z",
+  "completedAt": "2026-08-13T17:26:00Z",
+  "tools": [
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_data_source_catalog",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC4957794/fulltext.md",
+    ".evimed-sources/PMC3889502/fulltext.md",
+    ".evimed-sources/PMC5452010/fulltext.md",
+    ".evimed-sources/PMC12301920/fulltext.md",
+    ".evimed-sources/PMC8810075/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID:26730517 (no open-access PDF)",
+    "PMID:34981536 (no open-access PDF)",
+    "PMID:25835611 (no open-access PDF)",
+    "PMID:38103845 (no open-access PDF)",
+    "PMID:7900539 (no Europe PMC record)",
+    "PMID:32147750 (no open-access PDF)",
+    "DOI:10.1016/j.ejphar.2023.175833 (no open-access PDF)",
+    "PMID:33913042 (no open-access PDF)",
+    "PMID:38964157 (no open-access PDF)",
+    "PMC10264986 (Europe PMC retrieval failed)",
+    "PubMed query 'borneol TRPM8 agonist cooling' (HTTP 502)",
+    "PubMed query 'sublingual nitroglycerin tingling burning sensation potency efficacy' (HTTP 502)",
+    "NMPA official label page (not fetchable via approved routes; label cited as indexed record)",
+    "DOI:10.1007/s00228-020-02851-x (SPT-07A, no open-access PDF)",
+    "Crossref query 'tetramethylpyrazine borneol human plasma sublingual Suxiao Jiuxin Wan pharmacokinetic' (HTTP 429)"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 36,
+    "recordsIdentified": 158,
+    "recordsAfterDeduplication": 150,
+    "sourcesIncluded": 12,
+    "distinctPreservedSources": 6
+  }
+}

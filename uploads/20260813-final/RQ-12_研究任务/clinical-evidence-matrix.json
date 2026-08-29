@@ -1,0 +1,215 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "麝香保心丸 MUSKARDIA 试验为 2674 例、97 中心、24 个月的双盲安慰剂对照研究，主要终点 MACE 发生率 1.9% 对 2.6%（OR 0.80，95%CI 0.45–1.07，P=0.2869），未达统计学显著。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC7817287",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin pill (MUSKARDIA) in patients with stable coronary artery disease: a multicenter, double-blind, placebo-controlled phase IV randomized clinical trial",
+      "artifactPath": ".evimed-sources/PMC7817287/fulltext.md",
+      "identifier": "doi:10.1097/CM9.0000000000001257",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 2674 patients from 97 centers were enrolled and randomized between July 2011 and August 2015 … The incidence of the primary endpoint (MACE) was 1.9% (26/1335) in the MUSKARDIA group compared with 2.6% (34/1327) in the placebo group at 24 months (OR = 0.80; 95% CI: 0.45–1.07; P = 0.2869).",
+      "applicability": "稳定型冠心病，中国，长期（24 个月）联合优化药物治疗；不适用于急性发作按需用药与未分化胸痛人群。",
+      "uncertainty": "主要终点事件率低于预设假设，样本量可能不足以检验该终点；试验注册晚于首例入组（2012 年注册，2011 年首例入组），作者述及此局限。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "该试验 18 个月时麝香保心丸组心绞痛频率评分显著优于安慰剂组（P=0.0362），24 个月时差异不再显著。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC7817287",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin pill (MUSKARDIA) in patients with stable coronary artery disease: a multicenter, double-blind, placebo-controlled phase IV randomized clinical trial",
+      "artifactPath": ".evimed-sources/PMC7817287/fulltext.md",
+      "identifier": "doi:10.1097/CM9.0000000000001257",
+      "accessLevel": "full_text",
+      "supportQuote": "At 18 months, the MUSKARDIA group had significantly higher scores than the placebo group for angina stability ( P = 0.0458) and angina frequency ( P = 0.0362). No significant differences were observed in angina stability ( P = 0.9104) and angina frequency ( P = 0.0742) at 24 months",
+      "applicability": "稳定型冠心病长期联合治疗的心绞痛症状终点；西雅图心绞痛量表评分。",
+      "uncertainty": "症状量表为替代性终点，非心血管事件；24 个月时效应消退，其临床含义未定。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "该试验安全性方面，麝香保心丸组至少发生 1 例不良事件者 17.7%，安慰剂组 17.1%（P=0.8785），差异无统计学意义。",
+      "referenceNumber": 6,
+      "sourceUrl": "https://europepmc.org/articles/PMC7817287",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin pill (MUSKARDIA) in patients with stable coronary artery disease: a multicenter, double-blind, placebo-controlled phase IV randomized clinical trial",
+      "artifactPath": ".evimed-sources/PMC7817287/fulltext.md",
+      "identifier": "doi:10.1097/CM9.0000000000001257",
+      "accessLevel": "full_text",
+      "supportQuote": "236 patients (17.7%) in the MUSKARDIA group had at least 1 AE, which could be compared with 231 patients (17.1%) in the placebo group ( P = 0.8785).",
+      "applicability": "麝香保心丸 24 个月长期使用的安全性，分母明确、同期采集；不涉及速效救心丸。",
+      "uncertainty": "仅反映 24 个月观察窗内的报告事件，更长期的安全性未经检验。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "速效救心丸 41 项随机对照试验的 meta 分析（6276 例）报告心电图改善 RR 1.32（95%CI 1.26 至 1.38，P<0.001）。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "doi:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001).",
+      "applicability": "冠心病心电图改善终点；纳入研究均为中国、多未设盲。",
+      "uncertainty": "多数纳入研究 Jadad 评分低、缺乏双盲；心电图改善为替代终点，非心血管事件。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "该 meta 分析报告速效救心丸不良反应发生率与对照无显著差异（RR 1.12，95%CI 0.50 至 2.51，P=0.785），常见轻度头痛、头晕与面部潮红。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "doi:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "速效救心丸对照试验报告的不良反应；对照组为硝酸甘油、消心痛、丹参片及其他中成药。",
+      "uncertainty": "纳入研究多为小样本、报告不全，不良反应率合并不等于发生率估计。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "速效救心丸 meta 分析的参考文献中收录 2 项速效救心丸与麝香保心丸的头对头试验（王东平 1996、王飞 2008）。",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "doi:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "supportQuote": "Wang D. P. Comparison between suxiao jiuxin pill and shexiang baoxin pill on angina Shanghai Medicine 1996 12 25 26 … Fei W. Comparison between suxiao jiuxin pill and shexiang baoxin pill on angina Medicine Review 2008 14 19 3022 3024",
+      "applicability": "证明该两项头对头试验被收录于速效救心丸 meta 分析的参考文献。",
+      "uncertainty": "两项试验为摘要层证据，其数据未在 meta 分析中单独给出两药间合并效应量。 所述两项头对头试验的数量，系由该 meta 分析参考文献列表中两篇文献（Wang D. P. 1996 与 Fei W. 2008）计数得出，原文以条目而非数字表述该计数。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "速效救心丸在不能耐受长效硝酸酯不良反应的慢性冠脉综合征患者中的 174 例、8 中心、4 周随机双盲安慰剂对照试验，有效率 60.9% 对 39.1%（OR 2.43，95%CI 1.32 至 4.47，P=0.004），未报告不良事件。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "doi:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses … This study consisted of a 2-week screening period followed by a 4-week treatment period … 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement … No participants reported experiencing adverse effects.",
+      "applicability": "不能耐受长效硝酸酯不良反应的慢性冠脉综合征患者，4 周短期；结局为西雅图心绞痛量表。",
+      "uncertainty": "样本量小于初始注册方案（236 例）而纳入 176 例；4 周短期，未评估长期结局；酒精亚组为事后探索分析。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "速效救心丸组方为川芎与冰片，1982 年经原中国药品监督管理部门批准上市。",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "doi:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "supportQuote": "was approved by China Food and Drug Administration (CFDA) in 1982 … The pill is composed of Ligusticum striatum DC. (WFO accession number: wfo-0000362231, family Apiaceae, Chuanxiong Rhizoma) and Dryobalanops aromatica C.F.Gaertn. (WFO accession number: wfo-0000657511, family Dipterocarpaceae, Borneolum syntheticum)",
+      "applicability": "速效救心丸组方与上市年代的来源说明。",
+      "uncertainty": "期刊转述的组方与批准信息，非说明书原文。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "麝香保心丸 42 项随机对照试验的 meta 分析（6694 例）报告联合常规治疗较常规治疗降低 MACE（RR 0.50，95%CI 0.37 至 0.68，GRADE 中等确定性）、提高心绞痛总有效率（RR 1.23）与心电图改善率（RR 1.34）。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC9701736",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin Pill for stable coronary artery disease: A systematic review and meta-analysis of 42 randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC9701736/fulltext.md",
+      "identifier": "doi:10.3389/fphar.2022.1002713",
+      "accessLevel": "full_text",
+      "supportQuote": "42 articles, involving 6,694 patients were screened among all the 1,374 records in the analysis … (MACE, RR = 0.50, 95% CI: 0.37 to 0.68, p < 0.00001) … (RR = 1.23, 95% CI: 1.19 to 1.28, p < 0.00001) … (RR = 1.34, 95% CI: 1.26 to 1.43, p < 0.00001) … For MACE, and ECG improvement, we downgraded the evidence by one level for serious risk of bias, and the evidence was judged as moderate certainty.",
+      "applicability": "稳定型冠心病联合常规治疗；MACE 由 6 项试验 3272 例得出。",
+      "uncertainty": "纳入研究以低质量为主、多数未盲；MACE 为中等确定性而非高确定性。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "该 meta 分析报告麝香保心丸联合治疗不增加不良事件风险（RR 0.75，95%CI 0.44 至 1.25，P=0.27），常见胃肠道不适、舌麻、头痛、皮疹。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC9701736",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin Pill for stable coronary artery disease: A systematic review and meta-analysis of 42 randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC9701736/fulltext.md",
+      "identifier": "doi:10.3389/fphar.2022.1002713",
+      "accessLevel": "full_text",
+      "supportQuote": "the SBP group did not increase the risk of AEs (RR = 0.75, 95% CI: 0.44 to 1.25, p = 0.27; I 2 = 51% … gastrointestinal discomfort, tongue numbness, headache, and rash constitute the most frequently occurring AEs",
+      "applicability": "麝香保心丸联合常规治疗对照常规治疗的不良事件比较（18 项研究 4422 例）。",
+      "uncertainty": "异质性高（I2=51%），证据确定性低；未与速效救心丸直接比较。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "该 meta 分析引用国家不良反应监测系统数据，麝香保心丸 2017 至 2021 年报告例数分别为 346、419、479、581、775 例，属罕见范围。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC9701736",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin Pill for stable coronary artery disease: A systematic review and meta-analysis of 42 randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC9701736/fulltext.md",
+      "identifier": "doi:10.3389/fphar.2022.1002713",
+      "accessLevel": "full_text",
+      "supportQuote": "the adverse reactions of SBP collected from 2017 to 2021 were 346 cases (about 0.027%), 419 cases (about 0.029%), 479 cases (about 0.035%), 581 cases (about 0.040%), and 775 cases (about 0.048%), belonging to the rare range.",
+      "applicability": "麝香保心丸自发报告监测数据，转引自 meta 分析。",
+      "uncertainty": "自发报告无明确分母，百分比为报告数与估计用药人次的近似，不等于发生率。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "麝香保心丸急性心肌梗死的 meta 分析（19 项 RCT、1849 例）报告临床疗效 RR 1.15（95%CI 1.06 至 1.25），联合 PCI 亚组无显著改善。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC8652282",
+      "sourceTitle": "Shexiang Baoxin Pill for Acute Myocardial Infarction: Clinical Evidence and Molecular Mechanism of Antioxidative Stress",
+      "artifactPath": ".evimed-sources/PMC8652282/fulltext.md",
+      "identifier": "doi:10.1155/2021/7644648",
+      "accessLevel": "full_text",
+      "supportQuote": "Nineteen RCTs [ 23 – 41 ] and five PEs [ 42 – 46 ] were included in this study, involving 1849 patients (observation group: 926, control group: 923) … SBP plus RT showed a better clinical efficacy rate than RT alone (RR = 1.15, 95% CI [1.06, 1.25], p < 0.05) … SBP adjunctive to RT plus PCI did not significantly improve the clinical efficacy rate (RR = 1.09, 95% CI [0.89, 1.35], p > 0.05)",
+      "applicability": "急性心肌梗死联合常规治疗；对照组为常规治疗或常规治疗加 PCI。",
+      "uncertainty": "纳入 RCT 多为 RoB 2.0 存在顾虑的研究；联合 PCI 亚组效应不确定。 原文以“Nineteen RCTs”（英文单词）表述纳入的随机对照试验数量。"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "麝香保心丸组方为麝香、人参、人工牛黄、肉桂、苏合香、蟾酥、冰片，1981 年上市。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://europepmc.org/articles/PMC9701736",
+      "sourceTitle": "Efficacy and safety of Shexiang Baoxin Pill for stable coronary artery disease: A systematic review and meta-analysis of 42 randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC9701736/fulltext.md",
+      "identifier": "doi:10.3389/fphar.2022.1002713",
+      "accessLevel": "full_text",
+      "supportQuote": "since its marketing in 1981 … SBP is a Chinese medicine compound prescription composed of Moschus (the dried preputial secretion of Moschus berezovskii, M. sifanicus or M. moschiferus ), Radix Ginseng ( Panax ginseng C.A.Mey. ), Bovis Calculus Artifactus (the dried gall-stone of Bos taurus domesticus Gmelin ), Cinnamomi Cortex ( Cinnamomum cassia ), Styrax ( Liquidambar orientalis Mill. ), Bufonis Venenum ( Bufo gargarizans ), and Borneolum Syntheticum ( Dryobalanops aromatica C.F.Gaertn. )",
+      "applicability": "麝香保心丸组方与上市年代的来源说明。",
+      "uncertainty": "期刊转述的组方与上市信息，非说明书原文。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "突发且不缓解的胸部疼痛不适，或放射至左臂、右臂、颈部、下颌、胃部或背部，伴出汗、恶心、头晕或气短者，可能为心肌梗死，应立即呼叫急救并接受医院即时治疗。",
+      "referenceNumber": 14,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Immediate action required: Call 999 if: … you get sudden pain or discomfort in your chest that does not go away … you get pain that spreads to your left or right arm, or your neck, jaw, stomach or back … you have chest pain and you feel sweaty, sick, light headed or short of breath",
+      "applicability": "院外急性胸痛急救边界的通用指引；呼叫号码在英国为 999，中国场景为 120。",
+      "uncertainty": "英国 NHS 指南；急救号码在中文场景按本地化为 120，命题本身保持一致。"
+    },
+    {
+      "claimType": "synthesized",
+      "claimId": "CLM-015",
+      "claim": "两药各自的随机对照试验均以安慰剂或常规治疗为对照，而非互为对照臂；未检索到以两药互换为暴露的等效性或非劣效性研究，现有证据不足以支持两药之间的互换使用。",
+      "applicability": "两药互换使用（以一药替换已处方的另一药）的证据状态判断。",
+      "uncertainty": "结论止于「未检索到」：所检数据库与语种边界内的检索为阴性，不等于此类研究不存在。",
+      "confidence": "high",
+      "referenceNumber": 6,
+      "referenceNumbers": [
+        6,
+        8
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC7817287",
+          "sourceTitle": "Efficacy and safety of Shexiang Baoxin pill (MUSKARDIA) in patients with stable coronary artery disease: a multicenter, double-blind, placebo-controlled phase IV randomized clinical trial",
+          "artifactPath": ".evimed-sources/PMC7817287/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Patients were randomly assigned 1:1 to receive oral MUSKARDIA (Hehuang Pharmaceutical Co., Shanghai, China) or placebo for 24 months."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Participants were randomly assigned in a 1:1 ratio to one of two groups of interventions: placebo group or SJPs group."
+        }
+      ]
+    }
+  ]
+}

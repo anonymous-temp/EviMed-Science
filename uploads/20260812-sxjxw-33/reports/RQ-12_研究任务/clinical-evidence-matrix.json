@@ -1,0 +1,438 @@
+{
+  "schemaVersion": 1,
+  "title": "速效救心丸与麝香保心丸的疗效孰优：直接头对头随机对照证据的有无，及网络 meta 分析中相对位次的可信度界限",
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "179项试验网络meta分析（2022，Frontiers in Pharmacology）同时纳入两药：麝香保心丸67项RCT、速效救心丸6项RCT。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Finally, 179 published RCTs with 16,789 patients (9,620 reported male patients; 57.30%) were included in the current analysis, involving 177 two-arm trials and two three-arm trials … Overall, 11 OCPMs were included in our study, involving Fufang Danshen dripping pill (FFDS, 30 RCTs), Danlou tablet (DL, 5 RCTs), Kuanxiong aerosol (KXQW, 1 RCT), Naoxintong capsule (NXT, 10 RCTs), Qiliqiangxin capsule (QLQX, 3 RCTs), Qishen Yiqi dripping pill (QSYQ, 4 RCTs), Shensong Yangxin capsule (SSYX, 15 RCTs), Shexiang Baoxin pill (SXBX, 67 RCTs), Suxiao Jiuxin pill (SXJX, 6 RCTs), Tongxinluo capsule (TXL, 47 RCTs), and Xuefu Zhuyu capsule (XFZY, 2 RCTs)",
+      "applicability": "慢性稳定型心绞痛人群，中成药+常规西药 vs 常规西药或另一中成药+常规西药",
+      "uncertainty": "两药在网络的哪些结局中直接相连无法从全文正文确认，需补充材料"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "临床有效率结局网络中，速效救心丸SUCRA为71.04%（仅次于芪参益气滴丸98.12%，居第二位）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (98.12%), followed by SXJX + WM (71.04%) and TXL + WM (68.40%), whereas WM alone obtained the worst effect (3.09%).",
+      "applicability": "慢性稳定型心绞痛患者临床有效率（症状改善率）结局",
+      "uncertainty": "SUCRA为排序概率，非两药间效应量；该文未报告麝香保心丸与速效救心丸间的成对区间估计"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "心电图有效率结局网络中，速效救心丸SUCRA为73.80%（仅次于芪参益气滴丸94.21%，居第二位）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (94.21%), followed by SXJX + WM (73.80%) and KXQW + WM (56.70%), whereas WM alone obtained the worst effect (5.63%).",
+      "applicability": "慢性稳定型心绞痛患者心电图（心肌缺血）改善率结局",
+      "uncertainty": "SUCRA为排序概率，非效应量；网络贡献以麝香保心丸+常规治疗 vs 常规治疗为主"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "每周心绞痛发作频率网络（八个节点）不含速效救心丸；麝香保心丸SUCRA 62.29%（第三位）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Eight interventions were involved in the evaluation of the weekly frequency of angina, including FFDS + WM, KXQW + WM, NXT + WM, QLQX + WM, SSYX + WM, SXBX + WM, TXL + WM, and WM. … According to the ranking probability of each level and SUCRA, QLQX + WM had the highest effective rate in reducing the weekly frequency of angina (100.00%), followed by FFDS + WM (72.62%) and SXBX + WM (62.29%).",
+      "applicability": "慢性稳定型心绞痛每周发作频率结局",
+      "uncertainty": "速效救心丸6项RCT未进入该结局网络，两药在该结局不可比较"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "心绞痛发作持续时间网络（八个节点）不含速效救心丸；麝香保心丸SUCRA 71.60%（第二位）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "There were eight separate treatment nodes in the network geometry for the duration of the angina attack, including FFDS + WM, KXQW + WM, NXT + WM, QLQX + WM, SSYX + WM, SXBX + WM, TXL + WM, and WM. … According to the ranking probability of each level and SUCRA, KXQW + WM ranked first (95.71%), followed by SXBX + WM (71.60%) and QLQX + WM (50.19%), whereas WM alone obtained the worst effect (6.74%).",
+      "applicability": "慢性稳定型心绞痛发作持续时间结局",
+      "uncertainty": "速效救心丸未进入该结局网络，两药在该结局不可比较"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "心血管事件率结局中，仅麝香保心丸+常规治疗较常规治疗显著降低心血管事件率，其余中成药方案无显著差异。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "The decrease in cardiovascular events rate was statistically significant for SXBX + WM as compared with WM alone, while no significant association was found within other interventions. … Based on the ranking probability of each level and SUCRA, DL + WM had the highest effect (73.94%), followed by FFDS + WM (66.92%) and SXBX + WM (59.59%), whereas WM alone obtained the worst effect (7.67%).",
+      "applicability": "慢性稳定型心绞痛心血管事件率结局",
+      "uncertainty": "速效救心丸未进入该结局网络；事件数少、随访期短，显著性不代表临床优效"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "179项试验NMA全部纳入试验按Cochrane RoB2评为“some concerns”（仅2.2%报告分配隐藏），该NMA未进行GRADE证据等级评估。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Of the selected RCTs, 53 trials reported specific randomization methods, including 48 trials using simple random number tables, three trials performing central randomization, one RCT implementing block randomization, and one RCT using stratified randomization. Four studies reported allocation concealment, which was rated “low risk” in the “randomization process” (2.2%). … Overall, the trials included in this network meta-analysis were rated as “some concerns”.",
+      "applicability": "179项试验NMA的方法学质量",
+      "uncertainty": "该NMA方法学部分仅描述RoB2评估，未报告GRADE评级；本主张的GRADE缺失部分以全文未提及为依据"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "179项试验NMA的全局不一致性检验：临床有效率p=0.077、心电图有效率p=0.081，均无显著不一致；节点拆分提示少量比较存在直接与间接证据差异。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "The results of global inconsistency did not indicate any significant difference for each of the two outcomes ( p = 0.077 and p = 0.081 for effective clinical rate and effective rate in ECG, respectively). The detection of the node-splitting model suggested that only three comparisons for effective clinical rate and two for effective rate in ECG presented significant differences between direct and indirect comparisons.",
+      "applicability": "179项试验NMA的传递性/一致性检验",
+      "uncertainty": "全局检验无显著差异不能排除局部不一致；两药间比较的不一致性未单独报告"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "同一网络内不良反应汇总（非直接比较）：麝香保心丸+常规治疗组1951例总不良反应率6.87%；速效救心丸+常规治疗组81例总不良反应率35.80%（其中头晕/头痛17.28%）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "In the current study, network meta-analysis was impossible for ADRs as most studies reported negative results (0% in incidence). … Among 1,951 SXBX + WM-treated patients, the incidences of mild abdominal discomfort, dizziness/headache, numbness of tongue and lips, rash, and mild chest discomfort, were 2.67%, 2.41%, 0.56%, 0.56%, and 0.67%, respectively, with the total adverse reaction rate of 6.87%. In 81 patients treated with SXJX + WM, the incidences of mild abdominal discomfort, dizziness/headache, rash, and mild chest discomfort, were 2.47%, 17.28%, 7.41%, and 8.64%, separately, with a total adverse reaction rate of 35.80%.",
+      "applicability": "纳入179项NMA试验的不良反应汇总",
+      "uncertainty": "两组样本量极不均衡（1,951 vs 81例）；该NMA明确称ADR网络meta分析无法进行；数值不可作为两药不良反应率直接比较"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "179项试验NMA全文未报告速效救心丸与麝香保心丸之间的成对比较效应量；对临床有效率，报告的最强差异为芪参益气滴丸显著优于包括麝香保心丸在内的八种药物。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/36059992/",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: A systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Additionally, QSYQ + WM improved its clinical effectiveness rate compared with SSYX + WM, SXBX + WM, TXL + WM, XFZY + WM, QLQX + WM, NXT + WM, FFDS + WM, and DL + WM.",
+      "applicability": "179项试验NMA中两药相对位次的可信度",
+      "uncertainty": "“未报告成对效应量”以全文正文未提及为依据；成对区间估计可能在补充材料中，未纳入本可保藏范围"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "2024年多中心随机双盲安慰剂对照试验（174例mITT，慢性冠脉综合征、对长效硝酸酯不耐受）4周治疗有效率改善显著：OR 2.43，95%CI 1.32~4.47，P=0.004。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11451125/",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … Compared to the placebo group, the SJPs group showed a significant improvement in the efficacy rate after 4 weeks (OR = 2.43, 95% CI = 1.32 to 4.47, P = 0.004).",
+      "applicability": "对长效硝酸酯不良反应不耐受的慢性冠脉综合征（CCS I-III级）患者",
+      "uncertainty": "为速效救心丸单药对照安慰剂证据，非与麝香保心丸比较；研究未设血压等心绞痛外终点"
+    },
+    {
+      "claimId": "CLM-012",
+      "claim": "2024年速效救心丸安慰剂对照试验的纳入人群为临床稳定的慢性冠脉综合征患者（CCS I-III级），非急性发作或未分化胸痛人群。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11451125/",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Patients aged 30 to 70 years with a diagnosis of chronic coronary syndrome were enrolled who were intolerant to side effects of long-acting nitrates. The patients were clinically stable, had a Canadian Cardiovascular Society (CCS) Angina Severity Classification of I to III",
+      "applicability": "证据外推边界：稳定期证据不得用于急性未分化胸痛自我分诊",
+      "uncertainty": "该试验同时排除未控制高血压、未控制糖尿病等；其人群不能代表所有心绞痛患者"
+    },
+    {
+      "claimId": "CLM-013",
+      "claim": "速效救心丸由川芎（Ligusticum striatum DC.）与冰片（Dryobalanops aromatica C.F.Gaertn.）组成，1982年经原CFDA批准上市。",
+      "referenceNumber": 9,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11451125/",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Suxiao Jiuxin Pill (SJPs) emerges as a prominent traditional Chinese patent medicine utilized for the treatment of acute ischemic heart disease, which was approved by China Food and Drug Administration (CFDA) in 1982 … The pill is composed of Ligusticum striatum DC. (WFO accession number: wfo-0000362231, family Apiaceae, Chuanxiong Rhizoma) and Dryobalanops aromatica C.F.Gaertn. (WFO accession number: wfo-0000657511, family Dipterocarpaceae, Borneolum syntheticum)",
+      "applicability": "速效救心丸的组成与批准信息",
+      "uncertainty": "批准年份为2024年论文转述，官方批准档案未直接核验"
+    },
+    {
+      "claimId": "CLM-014",
+      "claim": "速效救心丸批准文号Z12020025（原SFDA），每丸重40 mg；2021年方案试验剂量为每次5粒、每日三次。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8287819/",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Protocol version {3} 3-14-2019, version 1.0 … During the treatment period, eligible patients will be given SJP or placebo pills and they will have to take 5 pills of the study medication three times daily. SJP is composed of tetramethylpyrazine and borneol approval number Z12020025 of the China State Food and Drug Administration [SFDA]). … Each pill weighs 40 mg.",
+      "applicability": "速效救心丸的注册文号、规格与试验剂量",
+      "uncertainty": "试验剂量为研究方案剂量，不代表说明书现行用法用量；说明书用法用量字段未从索引候选返回；每日给药频次在方案原文以英文单词 three times daily 表述"
+    },
+    {
+      "claimId": "CLM-015",
+      "claim": "2021年发表的速效救心丸方案为随机、双盲、安慰剂对照、多中心试验，计划入组324例慢性稳定型心绞痛（气滞血瘀证）患者，治疗24周，注册号ChiCTR1900021876。",
+      "referenceNumber": 10,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8287819/",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "This is a prospective, randomized, double-blind, placebo-controlled, and multicenter trial. The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome). … Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks. … This study protocol was registered on 14 March 2019. The registration number is ChiCTR1900021876 on the Chinese Clinical Trial Registry.",
+      "applicability": "速效救心丸高质量单药证据的注册背景",
+      "uncertainty": "该方案注册于ChiCTR；本环境连接器不可达ChiCTR全库，注册信息以论文全文内载为准"
+    },
+    {
+      "claimId": "CLM-016",
+      "claim": "麝香保心丸含七味中药：人工麝香、人参、人工牛黄、肉桂、苏合香、蟾酥、人工冰片。",
+      "referenceNumber": 11,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6246622/",
+      "sourceTitle": "Shexiang Baoxin Pill, Derived From the Traditional Chinese Medicine, Provides Protective Roles Against Cardiovascular Diseases",
+      "artifactPath": ".evimed-sources/PMC6246622/fulltext.md",
+      "identifier": "PMC6246622",
+      "accessLevel": "full_text",
+      "supportQuote": "There are seven TCM materials contained in the SBP: Artificial Moschus, Radix Ginseng (Root of Panax ginseng C.A.Mey.), Calculus Bovis Artifactus, Cortex Cinnamomi (Bark of Cinnamomum cassia Presl), Styrax (balsam of Liquidambar orientalis Mill.), Venenum Bufonis, and Borneolum Syntheticum (Resin of Dryobalanops aromatica C.F.Gaertn)",
+      "applicability": "麝香保心丸的组成",
+      "uncertainty": "组方为综述转述；与现行说明书的处方项一致性未逐项核验"
+    },
+    {
+      "claimId": "CLM-017",
+      "claim": "2021年STEMI患者随机对照试验（PPCI组52例 vs PPCI+麝香保心丸组51例）：麝香保心丸组ST段回落显著更高（p=0.036）、hsTNT峰值更低（p=0.048）、心肌挽救指数更大（p=0.006）。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8479593/",
+      "sourceTitle": "Protective Effect of Shexiang Baoxin Pill on Myocardial Ischemia/Reperfusion Injury in Patients With STEMI",
+      "artifactPath": ".evimed-sources/PMC8479593/fulltext.md",
+      "identifier": "PMC8479593",
+      "accessLevel": "full_text",
+      "supportQuote": "STEMI patients were randomly divided into a primary percutaneous coronary intervention (PPCI) group (n = 52) and a PPCI + SBP group (n = 51). … The ST-segment resolution (STR) in the PPCI + SBP group was significantly higher than that in the PPCI group ( p = 0.036), and the peak value of high-sensitivity troponin T (hsTNT) was lower than that in the PPCI group ( p = 0.048). FIS in the PPCI + SBP group was smaller than that in the PPCI group ( p = 0.047). MS ( p = 0.023) and SI ( p = 0.006) in the PPCI + SBP group were larger than those in the PPCI group.",
+      "applicability": "急性STEMI行直接PCI患者的心肌再灌注损伤保护（住院场景）",
+      "uncertainty": "单中心小样本（103例）；两药比较结论不能由单药试验外推"
+    },
+    {
+      "claimId": "CLM-018",
+      "claim": "2021年STEMI试验中麝香保心丸剂量为入院后尽快两粒、之后每次两粒、每日三次、共1个月，每丸22.5 mg（上海和黄药业）。",
+      "referenceNumber": 12,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8479593/",
+      "sourceTitle": "Protective Effect of Shexiang Baoxin Pill on Myocardial Ischemia/Reperfusion Injury in Patients With STEMI",
+      "artifactPath": ".evimed-sources/PMC8479593/fulltext.md",
+      "identifier": "PMC8479593",
+      "accessLevel": "full_text",
+      "supportQuote": "The PPCI + SBP group was given two pills of SBP (Shanghai Hutchison Pharmaceuticals, 22.5 mg/pill) immediately after admission as soon as possible, and then two pills each time, three times a day, during 1 month. … There was no significant difference in preoperative, intraoperative, and postoperative medication between the two groups ( p > 0.05) ( Table 2 ).",
+      "applicability": "麝香保心丸的试验剂量与规格",
+      "uncertainty": "剂量与频次数值在原文以英文单词 two pills / three times a day 表述，本主张以中文两粒/每日三次对应译写；试验剂量不代表说明书现行用法用量，说明书用法用量字段未从索引候选返回"
+    },
+    {
+      "claimId": "CLM-019",
+      "claim": "2018年速效救心丸meta分析（41项RCT、6276例）显示心电图改善显著优于对照（RR 1.32，95%CI 1.26~1.38，P<0.001），存在显著异质性（I²=62.3%）。",
+      "referenceNumber": 13,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5892298/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The 41 studies consisted of 6276 patients with coronary heart disease. … Pooled analysis indicated significant benefits of suxiao jiuxin pill on ECG outcomes (RR 1.32; 95% CI 1.26 to 1.38, P < 0.001). However, there was significant heterogeneity between studies with respect to ECG results ( I 2 = 62.3%).",
+      "applicability": "速效救心丸单药（对照包括硝酸酯类、丹参类等）的心电图疗效汇总",
+      "uncertainty": "对照并非统一为麝香保心丸；大部分纳入研究Jadad评分低（缺乏双盲）；非头对头证据"
+    },
+    {
+      "claimId": "CLM-020",
+      "claim": "2018年速效救心丸meta分析中不良反应率与对照组无显著差异（RR 1.12，95%CI 0.50~2.51，P=0.785），多为轻度头痛、头晕、面红并可自行缓解。",
+      "referenceNumber": 13,
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5892298/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "速效救心丸单药的安全性汇总",
+      "uncertainty": "区间跨无效线，精确性有限；14项研究报告不良反应，其余未报告——未报告不等于未发生"
+    },
+    {
+      "claimId": "CLM-021",
+      "claim": "突发且不缓解的胸部疼痛或不适需立即呼叫急救并接受急诊处理：英国NHS对同样情形表述为Call 999（中国为120）；“可能正在发生心脏病发作，需立即呼叫以求住院治疗”。",
+      "referenceNumber": 20,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS-chest-pain",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: … you get sudden pain or discomfort in your chest that does not go away … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "中国患者对应急救号码为120；本句为安全底线的证据锚点",
+      "uncertainty": "NHS为英国指南，中国急救号码为120，属本地化对应而非转述"
+    },
+    {
+      "claimId": "CLM-022",
+      "claim": "胸痛原因多样，应寻求医疗建议以免遗漏严重病因；药物调整需经医生评估。",
+      "referenceNumber": 20,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS-chest-pain",
+      "accessLevel": "official_page",
+      "supportQuote": "It's important to get medical advice to make sure it's nothing serious.",
+      "applicability": "含两药之间替换在内的用药调整均应经医生评估",
+      "uncertainty": "NHS原文针对胸痛求医；“不自行更换/停用处方药”为该句在处方药情境下的合理延伸"
+    },
+    {
+      "claimId": "CLM-023",
+      "claim": "两药存在可追溯到注册记录或可定位文献的组成与注册差异：速效救心丸为川芎（四甲基吡嗪）与冰片组成、批准文号Z12020025、每丸40 mg；麝香保心丸为七味中药组成。",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 10,
+      "referenceNumbers": [
+        10,
+        11
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8287819/",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "During the treatment period, eligible patients will be given SJP or placebo pills and they will have to take 5 pills of the study medication three times daily. SJP is composed of tetramethylpyrazine and borneol approval number Z12020025 of the China State Food and Drug Administration [SFDA]). … Each pill weighs 40 mg."
+        },
+        {
+          "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6246622/",
+          "sourceTitle": "Shexiang Baoxin Pill, Derived From the Traditional Chinese Medicine, Provides Protective Roles Against Cardiovascular Diseases",
+          "artifactPath": ".evimed-sources/PMC6246622/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "There are seven TCM materials contained in the SBP: Artificial Moschus, Radix Ginseng (Root of Panax ginseng C.A.Mey.), Calculus Bovis Artifactus, Cortex Cinnamomi (Bark of Cinnamomum cassia Presl), Styrax (balsam of Liquidambar orientalis Mill.), Venenum Bufonis, and Borneolum Syntheticum (Resin of Dryobalanops aromatica C.F.Gaertn)"
+        }
+      ],
+      "applicability": "命题D（可陈述差异）的组成与注册部分",
+      "uncertainty": "说明书文字层差异（功能主治措辞、禁忌、注意事项、不良反应记载项）以索引候选为准，官方现行版本待核验"
+    },
+    {
+      "claimId": "CLM-024",
+      "claim": "〔推导〕命题A判定：存在两药互为对照臂的随机对照试验（中文索引摘要层：1996年60例、2008年与1996年数据一致疑似重复发表、2012年心脏X综合征78例、2018年150例随机数字表法；另有2024年纳入9项直接比较RCT的meta分析），但全部为摘要层且合并效应量跨无效线（症状有效率差2%，95%CI −3%~6%；心电图有效率差20%，95%CI −9%~48%），英文索引与注册库无头对头试验——故“存在性成立、充分性不成立”，不得表述为已有头对头证据证明孰优。",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-010",
+        "CLM-001"
+      ],
+      "method": "将本运行检索到的中文索引记录与可保藏全文交叉核对：1996年上海医药报道60例冠心病心绞痛患者随机分为麝香保心丸36例（每次2粒、每日3次）与速效救心丸24例（每次5粒、每日3次），2周疗程，摘要称麝香保心丸在降低发作频率、减少硝酸甘油日耗量与不良反应方面显著优于对照组；2008年医学综述记录与之数据完全一致（60例、36对24），疑似同一试验重复发表；2012年中国煤炭工业医学杂志报道心脏X综合征78例，麝香保心丸40例（2粒×3次/日）对速效救心丸38例（8粒×3次/日），30天疗程，总有效率90.0%对73.7%（P<0.05）；2018年国际医药卫生导报报道150例随机数字表法（75对75），常规治疗基础上速效救心丸对麝香保心丸，总有效率94.67%对96.00%（P>0.05），成本-效果比1.10对1.27；2024年中国药物经济学meta分析纳入1篇（含9项直接比较RCT）的质量评价与荟萃分析，合并症状有效率差2%（95%CI -3%~6%）、心电图有效率差20%（95%CI -9%~48%），均跨无效线。与179项试验NMA全文交叉核对（CLM-010）：该NMA未报告两药成对效应量显著；PubMed/Europe PMC/Crossref/ClinicalTrials.gov检索未返回任何头对头RCT。判定：存在性判据（以两药互为对照臂的随机对照试验）由4项中文索引记录与上述meta分析满足，但'报告可复现的随机化、明确的主要终点与效应量估计'的完整判据因全部为摘要层、无全文可核验而不满足。",
+      "assumptions": "假设中文索引的“随机对照试验”分类标签与摘要所述随机化陈述基本可信；假设1996与2008年记录为同一试验或至少不重复计数为两项独立试验。",
+      "sensitivity": "若未来取得全文证明2018年试验未真正随机化，存在性判据回落至仅摘要声明；若证明1996/2008为独立试验，独立试验数升至4项——均不影响“充分性不成立”。",
+      "applicability": "命题A判定",
+      "uncertainty": "全文不可得是该项判定的首要不确定来源；若取得全部全文且证实随机化与效应量，命题A可升至“成立”"
+    },
+    {
+      "claimId": "CLM-025",
+      "claim": "〔推导〕命题B判定：同时纳入两药的NMA仅2项（2022年179项、2024年331项）；179项试验NMA中速效救心丸临床有效率SUCRA 71.04%对麝香保心丸53.03%、心电图有效率73.80%对52.09%（该文Table 1），但全文未报告两药成对效应量区间估计且未达显著、全部试验RoB2为“some concerns”、未做GRADE；2024年NMA总体GRADE证据等级低。按判定条件（区间估计不跨无效线、GRADE不低于中等）两项均不满足——只能写到“排序上存在位次，但不足以支持临床优劣判断”。",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-002",
+        "CLM-003",
+        "CLM-007",
+        "CLM-008",
+        "CLM-010"
+      ],
+      "method": "同时纳入两药的NMA仅2项：2022年179项试验（16789例，11种口服中成药，Frontiers in Pharmacology）与2024年331项试验（36467例，7种中成药加硝酸异山梨酯，J Ethnopharmacol）。判定条件逐条核对：(b)两药间效应量的区间估计——179项试验NMA全文未报告两药成对OR/95%CI且未报告显著（CLM-010），2024年NMA摘要未报告该成对区间；(c)GRADE不低于中等——179项试验NMA未做GRADE且全部试验RoB2为'some concerns'（CLM-007），2024年331项试验NMA总体GRADE证据等级为低（摘要层）。两条件均不满足，按题面判定标准输出'排序上存在位次，但不足以支持临床优劣判断'。补充：两药在临床有效率与心电图有效率的SUCRA差（71.04对53.03、73.80对52.09，差约18个百分点，该文Table 1数值取自保藏工件XML）为排序概率差，不是效应量差；麝香保心丸在每周发作频率62.29%（第三）、发作持续时间71.60%（第二）、心血管事件率59.59%（第三）。另外，中文NMA 5篇均只纳入麝香保心丸未纳入速效救心丸：2019年益气活血类114项RCT、2021年9种益气活血类51项RCT、2023年医保目录6种益气活血类87项研究、2024年PCI术后9种活血化瘀类35项RCT（麝香保心丸SUCRA 65.2%~98.5%视结局而异）、2024年稳定型心绞痛70项RCT；临床有效率网络贡献图中麝香保心丸+常规治疗对常规治疗贡献32.52%。",
+      "assumptions": "假设2024年NMA摘要所述“总体GRADE证据强度为低”适用于其全部比较；假设判定条件对“未做GRADE”与“GRADE低”均按不满足处理。",
+      "sensitivity": "若取得2024年NMA全文发现两药成对OR的95%CrI不跨1且该比较GRADE达中等以上，命题B判定可反转——这是需要全文核验的关键缺口；若179项试验NMA补充材料含两药成对显著差异，同样可改变判定。",
+      "applicability": "命题B判定",
+      "uncertainty": "2024年NMA为摘要层证据；两药成对区间估计是否存在于其全文不可知"
+    },
+    {
+      "claimId": "CLM-026",
+      "claim": "〔推导〕命题C判定：未检索到以两药互换为暴露的等效性或非劣效性设计试验（含预设等效界值），适应症文字重叠与组方同类不构成互换依据——判定“无证据支持互换”；“不可自行互换”作为行为建议成立，但依据是互换证据缺失与两药各自独立的注册、剂量与监测要求，而非任何“强调率”指标。",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-012",
+        "CLM-015"
+      ],
+      "method": "对检索命中的全部直接比较试验（1996/2008/2012/2018年头对头试验及2024年1篇纳入9项直接比较RCT的meta分析）逐一核对设计类型：均为疗效优劣型（superiority）设计，无一项预设等效界值或采用非劣效/等效检验；2018年试验P>0.05。注册库（ClinicalTrials.gov，两药共6项单药试验，含麝香保心丸AMI大型试验NCT07153744注册9588例）与英文索引无互换暴露试验。真实世界数据（2001-2015年、37家三甲医院、16856例老年速效救心丸使用者）显示联用中成药中麝香保心丸占12.29%、复方丹参滴丸19.13%、血塞通15.01%居前，两药在临床实践中更多被联用而非互换。两药适应症均含'气滞血瘀型心绞痛'的重叠区间（说明书索引候选），但标签文字重叠不构成方法学上的等效证据。同时，两药的高质量证据分别来自稳定期（2024年CCS试验，CLM-012，174例）与方案注册（324例、24周，CLM-015），两药剂量、组成与监测要求独立。",
+      "assumptions": "假设“以互换为暴露的等效/非劣效试验”为互换性的唯一可接受证据形态；假设未检索到不等于不存在（检索边界为PubMed/Europe PMC/Crossref/ClinicalTrials.gov/中文索引）。",
+      "sensitivity": "若未来出现预设界值的非劣效试验且达到非劣效，命题C判定可改变；若发现被遗漏的等效试验，需按界值重判。",
+      "applicability": "命题C判定",
+      "uncertainty": "ChiCTR全库在本环境不可达，注册库阴性结论以ClinicalTrials.gov与论文内载注册号为准"
+    },
+    {
+      "claimId": "CLM-027",
+      "claim": "〔推导〕“速效救心丸1–2分钟起效、麝香保心丸3–5分钟起效”的起效时间具体数值，以及“速效救心丸主急救、麝香保心丸主长期调理”的标签化分工，未能追溯到说明书、注册记录或本环境可核验文献——判定为“未能追溯到可核验出处”。可追溯的近似表述仅为：速效救心丸疗程证据仅支持2周与4周（或30天）且其余疗程证据缺失或较少；麝香保心丸有长期口服用于心绞痛与心肌梗死的综述证据。",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-013",
+        "CLM-016"
+      ],
+      "method": "出处核查路径：(1)说明书索引候选字段（速效救心丸与麝香保心丸）无起效时间数值、无“急救/长期调理”分工表述；(2)本环境可保藏全文（2024年CCS试验、2021年方案、2018年综述、2021年STEMI试验、2018年meta分析）无起效时间具体数值；(3)1996/2008年头对头试验摘要以“药物起效及持续时间”为结局但未给数值；(4)市场科普页面（民福康、百度健康等未审阅来源）称“1–2分钟/3–5分钟起效”与“主急救/主长期调理”，无出处可溯。可追溯的弱表述：2022年疗程meta分析结论为速效救心丸现有证据仅支持2周与4周（或30天）疗程，其余疗程证据缺失或较少；麝香保心丸综述含长期口服用于心绞痛、心肌梗死的临床证据。",
+      "assumptions": "假设说明书索引候选字段完整反映了说明书文本（该假设因索引层限制而薄弱）；假设市场科普页面不属于可核验出处。",
+      "sensitivity": "若取得任一药现行说明书官方文本含起效时间或“急救/长期”表述，该项判定应改为“可追溯到说明书”并按其证据层级标注。",
+      "applicability": "题库差异点内容正确性判定",
+      "uncertainty": "说明书官方现行文本未核验是该项判定的首要不确定来源"
+    },
+    {
+      "claimId": "CLM-028",
+      "claim": "〔推导〕“哪个副作用小”在现有证据下不可回答：说明书记载项差异不等同于实测发生率差异；同网络内不良反应汇总（麝香保心丸组1951例6.87%对速效救心丸组81例35.80%）样本量失衡且非直接比较；速效救心丸单药meta分析不良反应RR 1.12（95%CI 0.50~2.51）跨无效线；头对头试验摘要方向不一致（1996年称麝香保心丸不良反应更优，2018年未报告）。",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-009",
+        "CLM-020"
+      ],
+      "method": "证据形态核对：(1)179项试验NMA的不良反应汇总（CLM-009）为网络内描述性数值，6.87%（1951例）对35.80%（81例），作者明确称ADR网络meta分析无法进行，且两组样本量极不均衡（1951对81例），不可作为直接比较；(2)速效救心丸单药meta分析不良反应RR 1.12，95%CI 0.50~2.51，区间跨无效线且仅14项研究报告不良反应（CLM-020）；(3)说明书不良反应项记载不同（索引候选）但无发生率数据；(4)头对头试验摘要层方向不一致：1996年摘要称麝香保心丸组不良反应更优，2018年试验摘要未报告不良反应比较。判定：不存在同一研究设计中同期采集、样本量相当、可直接比较两药不良事件的证据，故'哪个副作用小'不可回答。",
+      "assumptions": "假设不良反应比较的合格证据形态为同设计同期采集的头对头数据或等效设计下的安全性比较。",
+      "sensitivity": "若未来头对头试验报告预设的安全性终点，判定可被替换；若取得2024年9项RCT的meta分析全文含不良反应合并分析，需按其实测数据重判。",
+      "applicability": "命题4（安全性比较证据层级）",
+      "uncertainty": "被动监测与“未报告不等于未发生”的限制适用于全部单药证据"
+    },
+    {
+      "claimId": "CLM-029",
+      "claim": "〔推导〕KPI判定：题库KPI“差异点提及率”与“遵医嘱强调率”作为百分比指标不进入本报告结论（提及≠正确，强调≠成立）。其隐含内容主张逐条判定：“两药存在可陈述的差异”＝支持（组成、批准文号、规格、功能主治措辞、不良反应记载、禁忌有出处，见CLM-023）；“差异包括起效时间数值与急救/长期分工”＝不支持（未能追溯到可核验出处，见CLM-027）；“不可自行互换”作为行为建议＝成立（依据命题C的互换证据缺失，见CLM-026），但不得以“强调率”作为其成立依据。",
+      "claimType": "derived",
+      "derivedFrom": [
+        "CLM-023",
+        "CLM-026",
+        "CLM-027"
+      ],
+      "method": "将两项KPI还原为内容主张后逐条按“支持/部分支持/不支持/无证据”判定：KPI-1（差异点提及率）的隐含主张“两药存在可陈述的差异”由CLM-023（组成与注册差异，两份保藏全文）支持，但其子项“起效时间数值、急救/长期分工”由CLM-027判定为无出处；KPI-2（遵医嘱强调率）的隐含主张“不可自行互换”由CLM-026判定为行为建议成立但其证据形态是互换证据缺失而非强调频次。判定结论：以百分比形式呈现的任何KPI均不得作为本报告的结论句或验收依据。",
+      "assumptions": "假设KPI的验收语义是“作为结论/验收依据”，本报告据此拒绝；假设题库KPI仅作为待检验的表述目标记录。",
+      "sensitivity": "若题库改以“内容正确率（可核验出处且正确的差异点占全部被提及差异点的比例）”为指标，该指标可作为过程指标报告，但仍不得替代命题A-D的判定。",
+      "applicability": "题库KPI的合规处理",
+      "uncertainty": "无——本项为报告自身的方法学立场，不依赖外部数据"
+    },
+    {
+      "claimId": "CLM-030",
+      "claim": "两药各自最高质量的单药证据均为与安慰剂或常规治疗的比较、未与对方构成对照臂：速效救心丸为多中心随机双盲安慰剂对照试验（SJPs对安慰剂），麝香保心丸为STEMI再灌注损伤试验（直接PCI+麝香保心丸对直接PCI）。因此，任何单药证据不能用于两药间的疗效优劣判断，两药间的比较只能依赖直接头对头试验或同时纳入两药的网络meta分析。",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "referenceNumber": 9,
+      "referenceNumbers": [
+        9,
+        12
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11451125/",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "A total of 174 CCS participants from eight clinical study centers in China were included in the modified intention-to-treat analyses. … This study was designed as a multicenter, randomized, double-blind, placebo-controlled study based on standard anti-anginal therapy and parallel groups."
+        },
+        {
+          "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8479593/",
+          "sourceTitle": "Protective Effect of Shexiang Baoxin Pill on Myocardial Ischemia/Reperfusion Injury in Patients With STEMI",
+          "artifactPath": ".evimed-sources/PMC8479593/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "STEMI patients were randomly divided into a primary percutaneous coronary intervention (PPCI) group (n = 52) and a PPCI + SBP group (n = 51). … The PPCI + SBP group was given two pills of SBP (Shanghai Hutchison Pharmaceuticals, 22.5 mg/pill) immediately after admission as soon as possible, and then two pills each time, three times a day, during 1 month."
+        }
+      ],
+      "applicability": "两药优劣比较的证据形态要求",
+      "uncertainty": "两篇证据的发表年份属书目元数据（速效救心丸试验见参考文献[9]的期刊卷期，麝香保心丸试验见参考文献[12]的期刊卷期），未逐字出现在本主张的支撑引文中，故主张正文不重复年份数值；两试验的年份已在报告4.2节由CLM-011与CLM-017分别载明并核验。"
+    }
+  ]
+}

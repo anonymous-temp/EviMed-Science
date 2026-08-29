@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "游离（未包封）d-龙脑在 25 ℃ 贮存条件下约 30 天内几乎完全损失；40 ℃ 下 30 天内完全损失；经脂质体双层包封后 25 ℃ 90 天保留约 80%、40 ℃ 90 天保留 60% 以上。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs",
+      "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+      "identifier": "PMC12845388",
+      "accessLevel": "full_text",
+      "supportQuote": "Long-term stability data ( Figure 5 i) further demonstrated that free d-borneol was almost completely lost within 30 days under 25 °C storage conditions, whereas Bo-Lip retained approximately 80% of the drug after 90 days. Under accelerated conditions (40 °C), free d-borneol degraded completely within 30 days, while Bo-Lip still retained over 60% after 90 days.",
+      "applicability": "直接适用于游离龙脑固体/薄膜的常温暴露行为；为开封瓶内冰片损失速率提供暴露上限锚点，但不直接等于滴丸基质内的损失速率。",
+      "uncertainty": "样品为未包封固体（未描述容器密闭状态），30 天近全损速率反映完全暴露条件下的上限；滴丸基质（PEG）可降低速率但幅度未测量。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+ "claim": "TGA（氮气、5 ℃/min 升温）显示 d-龙脑在 30 与 86 ℃ 之间挥发很少（DTG<0.1%），在 87 至 165 ℃ 快速挥发，170.44 ℃ 完全挥发。",
+ "referenceNumber": 1,
+ "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+ "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+ "identifier": "PMC12845388",
+ "accessLevel": "full_text",
+ "supportQuote": "…Samples weighing 10 mg ± 0.5 mg were placed in an open alumina crucible and heated from 30 °C to 300 °C at a heating rate of 5 °C/min…Little volatilization occurred between 30 and 86 °C (DTG < 0.1%). A rapid volatilization phase was observed from 87 to 165 °C, with the maximum rate occurring between 129 and 164.5 °C. Volatilization was complete at 170.44 °C",
+      "applicability": "说明龙脑挥发强烈依赖温度；常温（30–86 ℃）下单位时间挥发量小，但长期持续暴露仍可造成累积损失。",
+      "uncertainty": "TGA 为动态升温程序（约 11 分钟完成 30–300 ℃ 扫描），单位时间暴露短，不能直接外推常温长期损失速率。",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "挥发性药物（单萜类）因高挥发性与化学不稳定性，在生产与贮存过程中发生显著损失，损害最终产品疗效。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+      "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+      "identifier": "PMC12845388",
+      "accessLevel": "full_text",
+      "supportQuote": "their high volatility and susceptibility to chemical degradation lead to substantial losses during production and storage, compromising the efficacy of the final products",
+      "applicability": "冰片（龙脑）属单萜醇挥发性药物，该陈述直接适用于其制剂稳定性风险。",
+      "uncertainty": "为领域综述性论断，不包含针对具体剂型的速率数据。",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "60 ℃×12 h 密封小瓶加速试验中，与龙脑强相互作用的辅料（HP-β-CD）保留率 >50%，弱相互作用辅料（DBTS、La）保留率 <20%、接近纯龙脑的快速挥发行为；基质/辅料相互作用是龙脑保留率的主要决定因素。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+      "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+      "identifier": "PMC12845388",
+      "accessLevel": "full_text",
+      "supportQuote": "For thermal stability assessment, the complexes were sealed in glass vials and heated at 60 °C for 12 h in a constant-temperature oven.…In thermal acceleration tests at a 1:1 molar ratio, the d-borneol retention rate ( Figure 3 b) decreased over time in a manner consistent with the Protenix ranking: the HP-β-CD group retained >50% of d-borneol after 12 h, owing to strong interactions; the SDC and PC groups showed slower release, while the DBTS and La groups exhibited rapid volatilization, approaching the behavior of pure d-borneol…DBTS and La again showed the lowest retention (<20%), supporting the model’s accuracy even in weak-interaction regimes.",
+      "applicability": "说明龙脑的保留率取决于其与基质/辅料的相互作用强度；滴丸基质对冰片保留的作用方向由此推断。",
+      "uncertainty": "试验条件为 60 ℃ 密封小瓶，非 25 ℃ 开封状态；辅料种类与滴丸基质不同，定量不可直接平移。",
+      "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "含 40–60%（w/w）L-龙脑的艾粉（Blumea balsamifera）粗粉在口腔应用的疗效不一致，被既往药理学研究归因于龙脑的升华。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12844603",
+      "artifactPath": ".evimed-sources/PMC12844603/fulltext.md",
+      "identifier": "PMC12844603",
+      "accessLevel": "full_text",
+      "supportQuote": "Phytochemical analyses reveal that Ai-Fen contains 40–60% ( w / w ) L-borneol…its efficacy is often inconsistent due to the sublimation of borneol and poor wettability in the aqueous oral environment",
+      "applicability": "直接证据表明龙脑升华会造成含龙脑固体材料的药效不确定性；为速效救心丸中冰片挥发损失的机制类比提供剂型相近的实例。",
+      "uncertainty": "涉及原料粗粉而非滴丸制剂；升华导致疗效不一致为既往研究结论，未给出含量-疗效定量曲线。",
+      "sourceTitle": "Ai-Fen Solid Dispersions: Preparation, Characterization, and Enhanced Therapeutic Efficacy in a Rat Model of Oral Ulceration"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "L-龙脑在加热熔融加工中发生挥发损失：熔融温度 60 ℃ 时释放量低、70 ℃ 时升高、升至 80 ℃、90 ℃、100 ℃ 时递减（归因于挥发损失）；制备中需以聚乙烯膜密封以减少挥发损失。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC12844603",
+      "artifactPath": ".evimed-sources/PMC12844603/fulltext.md",
+      "identifier": "PMC12844603",
+      "accessLevel": "full_text",
+      "supportQuote": "At 60 °C, incomplete melting of PEG 6000 resulted in poor dispersion of Ai-Fen and a low cumulative release (21.35 ± 1.42 mg). Raising the temperature to 70 °C markedly increased release to 32.08 ± 1.52 mg. However, further increases to 80 °C, 90 °C, and 100 °C led to progressively lower release values of 30.57 ± 1.38 mg, 29.14 ± 1.55 mg, and 27.68 ± 1.62 mg, respectively. This decline was likely due to volatilization losses of L-borneol at elevated temperatures.",
+      "applicability": "证明即使分散于 PEG 类基质，L-龙脑在受热/暴露时仍发生可观挥发；提示滴丸（PEG 熔融基质）中冰片同样存在挥发途径。",
+      "uncertainty": "加工温度（60–100 ℃）高于日常贮存温度；密封抑制挥发在工艺层面有效，其常温贮存保留能力的定量外推受限制。",
+      "sourceTitle": "Ai-Fen Solid Dispersions: Preparation, Characterization, and Enhanced Therapeutic Efficacy in a Rat Model of Oral Ulceration"
+    },
+    {
+      "claimId": "CLM-007",
+      "claimType": "direct",
+      "claim": "速效救心丸由川芎（Ligusticum chuanxiong Hort.）与冰片（Borneolum syntheticum）两味组成。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "PMC10206061",
+      "accessLevel": "full_text",
+      "supportQuote": "SJP is composed of two components; Ligusticum chuanxiong Hort. and Borneolum syntheticum",
+      "applicability": "确立速效救心丸的处方组成：冰片（合成龙脑）为两大组分之一。",
+      "uncertainty": "为研究用样品（津药达仁堂第六中药厂提供）的组成描述，与药典处方一致性的直接引证需以中国药典原文为准。",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone"
+    },
+    {
+      "claimId": "CLM-008",
+      "claimType": "direct",
+      "claim": "冰片对大鼠冠状动脉产生浓度依赖性舒张，EC50 为 119.7 μmol/L，Rmax 为 83.63%，机制为非内皮依赖性（钾通道介导）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+      "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+      "identifier": "PMC10206061",
+      "accessLevel": "full_text",
+      "supportQuote": "The EC 50 value for borneol-induced concentration-dependent coronary artery ring relaxation was 119.7 μmol/L, and the R max value was 83.63%",
+      "applicability": "说明冰片是速效救心丸冠状动脉舒张作用的主要活性成分之一；其含量下降原则上影响该药理贡献。",
+      "uncertainty": "为大鼠离体血管实验数据；含量-效价的定量关系在人体中未测定，不能据此量化临床效价损失。",
+      "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "direct",
+      "claim": "川芎（Rhizoma Chuanxiong）与冰片（Borneolum Syntheticum）是速效救心丸的两大主成分。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4617746",
+      "artifactPath": ".evimed-sources/PMC4617746/fulltext.md",
+      "identifier": "PMC4617746",
+      "accessLevel": "full_text",
+      "supportQuote": "Ligusticum Chuanxiong ( Rhizoma Chuanxiong ) and Borneol ( Borneolum Syntheticum ) are the two main components of SX [ 9 ]",
+      "applicability": "第二项独立发表的研究确认速效救心丸组成。",
+      "uncertainty": "同 CLM-007；两篇独立研究互证组成（见 CLM-011）。",
+      "sourceTitle": "Protective effect of Suxiao jiuxin pill, a traditional Chinese medicine, against acute myocardial ischemia in dogs"
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "direct",
+      "claim": "速效救心丸每丸川芎嗪（tetramethylpyrazine）平均含量为 0.04084 mg（该研究测定的量值示例）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4617746",
+      "artifactPath": ".evimed-sources/PMC4617746/fulltext.md",
+      "identifier": "PMC4617746",
+      "accessLevel": "full_text",
+      "supportQuote": "The average content of tetramethylpyrazine is 0.04084 mg/pill in SX [ 16 ]",
+      "applicability": "说明速效救心丸对主成分含量有可测定的量值尺度（类似地，冰片含量亦为药典质量控制项）；不用于推断冰片绝对含量。",
+      "uncertainty": "为单批/单研究测定值，非现行药典限度表述；冰片含量本身未在此引用句中给出。",
+      "sourceTitle": "Protective effect of Suxiao jiuxin pill, a traditional Chinese medicine, against acute myocardial ischemia in dogs"
+    },
+    {
+      "claimId": "CLM-011",
+      "claimType": "synthesized",
+      "claim": "两项独立发表的研究（Frontiers in Pharmacology 与 BMC Complementary and Alternative Medicine）均确认速效救心丸由川芎与冰片（合成龙脑）两大组分组成。",
+      "confidence": "high",
+      "referenceNumber": 3,
+      "referenceNumbers": [
+        3,
+        4
+      ],
+      "applicability": "速效救心丸处方组成证据为跨来源一致；冰片作为挥发性组分的处方地位确立。",
+      "uncertainty": "两篇均为药理研究中的组成描述，未逐字引用现行药典条目；组成本身为公开常识性事实，冲突风险低。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC10206061",
+          "sourceTitle": "Suxiao Jiuxin Pill attenuates acute myocardial ischemia via regulation of coronary artery tone",
+          "artifactPath": ".evimed-sources/PMC10206061/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "SJP is composed of two components; Ligusticum chuanxiong Hort. and Borneolum syntheticum"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4617746",
+          "sourceTitle": "Protective effect of Suxiao jiuxin pill, a traditional Chinese medicine, against acute myocardial ischemia in dogs",
+          "artifactPath": ".evimed-sources/PMC4617746/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Ligusticum Chuanxiong ( Rhizoma Chuanxiong ) and Borneol ( Borneolum Syntheticum ) are the two main components of SX [ 9 ]"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-012",
+      "claimType": "synthesized",
+      "claim": "机制证据组合（游离龙脑常温 30 天近全损＋含龙脑固体材料中龙脑升华导致疗效不一致＋PEG 基质加工中龙脑挥发）共同支持：速效救心丸滴丸中的冰片在开封暴露条件下存在现实可感的挥发损失风险，含量随暴露时间与温度下降的方向确定。",
+      "confidence": "moderate",
+      "referenceNumber": 1,
+      "referenceNumbers": [
+        1,
+        2
+      ],
+      "applicability": "支撑'开封后冰片含量下降方向确定'这一核心结论；不支撑任何具体速率或阈值。",
+      "uncertainty": "全部机制证据来自非速效救心丸样品；滴丸基质的保留作用与真实开瓶行为未测量，损失幅度不可定量。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC12845388",
+          "sourceTitle": "Structure-Based Prediction of Molecular Interactions for Stabilizing Volatile Drugs",
+          "artifactPath": ".evimed-sources/PMC12845388/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Long-term stability data ( Figure 5 i) further demonstrated that free d-borneol was almost completely lost within 30 days under 25 °C storage conditions"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC12844603",
+          "sourceTitle": "Ai-Fen Solid Dispersions: Preparation, Characterization, and Enhanced Therapeutic Efficacy in a Rat Model of Oral Ulceration",
+          "artifactPath": ".evimed-sources/PMC12844603/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Previous pharmacological studies have established that while the crude extract possesses potent anti-inflammatory activity, its efficacy is often inconsistent due to the sublimation of borneol and poor wettability in the aqueous oral environment"
+        }
+      ]
+    },
+    {
+     "claimId": "CLM-013",
+     "claimType": "direct",
+     "claim": "英国 NHS 指南明确：出现突发、持续不退的胸痛（挤压样或压迫感、烧灼感或消化不良样不适），或疼痛放射至手臂、颈部、下颌、胃部或背部，或伴出汗、恶心、头晕、气短时，应视为可能的心肌梗死并立即呼叫急救（NHS 指导拨打 999）。",
+     "referenceNumber": 18,
+     "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+     "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+     "identifier": "official-page:f60ccb4779eccff7",
+     "accessLevel": "official_page",
+     "supportQuote": "Immediate action required: Call 999 if:…you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion…You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+     "applicability": "为急性胸痛急救呼叫提供权威指导：呼叫动作（Call 999）与限定症状条件（突发、持续不退的胸痛）同段出现；报告按读者司法辖区将呼叫号码本地化为中国 120。",
+     "uncertainty": "NHS 页面为英国指导（急救电话 999）；中国急救电话为 120，报告按辖区本地化，源命题不变。页面最后审核日期 2023-08-08。",
+     "sourceTitle": "Chest pain - NHS"
+    },
+    {
+     "claimId": "CLM-100",
+      "claimType": "derived",
+      "claim": "〔推导〕开封瓶装速效救心丸滴丸中冰片在开封后 3–6 个月的残留比例约在 0%–96% 之间（跨数量级）：f=0.005 时 3 个月约 96%、6 个月约 91%；f=0.05 时 3 个月约 64%；f=0.1 时 3 个月约 41%；f=0.5 时 3 个月约 1%。该区间无法区分 3 个月与 6 个月。",
+      "derivedFrom": [
+        "CLM-001",
+        "CLM-002",
+        "CLM-004",
+        "CLM-006"
+      ],
+      "method": "以 CLM-001 实测'游离 d-龙脑 25 ℃ 贮存 30 天内几乎完全损失'为暴露上限锚点，设 30 天损失≥95%，一阶速率常数 k = −ln(0.05)/30 ≈ 0.10 d⁻¹（半衰期≈6.9 d）。对开封瓶内滴丸引入暴露分数 f∈[0.005, 0.5]（滴丸中可与空气交换的龙脑比例×开瓶换气系数，区间为假设），一阶残留 R(t)=e^(−k·f·t)。代入 t=90 d：f=0.005→R≈e^(−0.045)≈0.96；f=0.02→R≈e^(−0.18)≈0.84；f=0.05→R≈e^(−0.45)≈0.64；f=0.1→R≈e^(−0.9)≈0.41；f=0.5→R≈e^(−4.5)≈0.011。代入 t=180 d：f=0.005→R≈e^(−0.09)≈0.91；f=0.02→R≈e^(−0.36)≈0.70；f=0.2→R≈e^(−3.6)≈0.027。合并得 3–6 个月残留约 0%–96%。",
+      "assumptions": "损失近似一阶动力学；滴丸中冰片暴露行为可按游离固体按比例缩放；f 区间为假设且未经本品标定；PEG 熔融基质（CLM-004、CLM-006）可降低有效速率但幅度未测量；25 ℃ 恒温。",
+      "sensitivity": "k 若因基质保留降为 1/10（0.01 d⁻¹），f=0.02 时 6 个月 R≈e^(−0.036)≈0.96（几乎无损失）；温度按 CLM-001/CLM-002 升至 40 ℃ 时 k 大幅上升（40 ℃ 30 天全损对应 k≈0.10 d⁻¹ 之上限随温度上升而增加），f=0.5 时数周内可近全损；f 每变化一个数量级，R 的指数相应变化一个数量级。",
+      "applicability": "用于'开封后含量下降方向确定、幅度不可确定'的结论；不作为任何具体使用期限的规格依据。",
+      "uncertainty": "所有数值均为假设参数下的估计，未经速效救心丸本品实测；区间跨数量级意味着该模型对阈值问题无分辨力。"
+    },
+    {
+      "claimId": "CLM-101",
+      "claimType": "derived",
+      "claim": "〔推导〕'开封后 3–6 个月用完'对速效救心丸而言在本检索范围内无直接出处：说明书索引仅载密封贮藏、可检索文献中无本品开封后稳定性实测、药典层面规定不可直接获取；其数值与硝酸甘油舌下片'每 3–6 个月更换'惯例一致，最可能是经验性迁移，方向保守合理但阈值无实测支撑。",
+      "derivedFrom": [
+        "CLM-100",
+        "CLM-001"
+      ],
+      "method": "将命题 H0='3–6 个月对速效救心丸有直接实测或规范出处'作为可检验假说：H0 成立需（a）存在本品开封后含量/效价-时间实测曲线并在 3–6 个月处达到可界定限度，或（b）说明书/药典载明该期限。本报告 41 次检索（PubMed、欧洲 PMC、Crossref、NMPA 说明书索引、指南索引、中文期刊题录）未返回满足（a）或（b）的记录；说明书索引记录仅载明'密封，置阴凉干燥处（不超过 20 ℃）'。替代解释：该数值与硝酸甘油舌下片'Contemporary practice favors refilling sublingual nitroglycerin (SL NTG) every 3 to 6 months'（PMID 30314813 摘要原文）一致，且与含挥发油中药贮存期限从紧的一般取向（PMID 38751210 摘要）方向一致，故判定为经验性迁移。",
+      "assumptions": "本检索来源覆盖面足以代表公开发表证据；企业内部未公开稳定性档案可能存在；中国药典（ChP 2020）原文在本环境中不可直接获取，其'针对未开封状态'的定位是基于说明书模式与稳定性制度设计的一致性推断。",
+      "sensitivity": "若企业未公开稳定性数据存在并支持其他阈值，或未来出现开封后直接实测，本判定作废并应更新说明书；若未来 NMPA 修订说明书增补开封期限，亦推翻本判定。",
+      "applicability": "用于管理决策：该说法应标注为经验性保守建议而非实测规格；指导药房与质管部门开展/要求直接稳定性研究。",
+      "uncertainty": "判定基于负性检索结果与类比推理；负性结果只界定'未检索到'而非'不存在'。"
+    }
+  ]
+}

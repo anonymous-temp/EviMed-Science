@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-12T01:17:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "中文文献索引（SinoMed/CNKI/万方）",
+    "指南索引",
+    "ClinicalTrials.gov/ChiCTR",
+    "NMPA 说明书索引",
+    "公开网页（元搜索）"
+  ],
+  "queries": [
+    {
+      "database": "NMPA 说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed（经 EviMed 文献适配器）",
+      "query": "Suxiao Jiuxin pill hypertension blood pressure",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "中文文献索引",
+      "query": "速效救心丸 高血压 血压",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "ClinicalTrials.gov/ChiCTR（经注册库适配器）",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill hypotension OR low blood pressure",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "tetramethylpyrazine OR ligustrazine blood pressure human",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol blood pressure effect",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 26
+    },
+    {
+      "database": "指南索引",
+      "query": "chest pain evaluation and diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 13
+    },
+    {
+      "database": "指南索引",
+      "query": "急性胸痛急诊诊疗专家共识",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "ligustrazine OR tetramethylpyrazine hypertension clinical trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "指南索引",
+      "query": "中国高血压防治指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "指南索引",
+      "query": "chronic coronary syndromes ESC 2024",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "ClinicalTrials.gov/ChiCTR（经注册库适配器）",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "公开网页（元搜索，仅作说明书公开转载核对）",
+      "query": "速效救心丸 说明书 国家药品监督管理局 批准文号",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin pill angina randomized double-blind placebo",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "指南索引",
+      "query": "高血压急症",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin self-administration hypotension syncope",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital nitrate aspirin acute coronary syndrome treatment delay outcome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "34252529 OR 8923809 OR 32495590",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "32716206",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "39367481 OR 37487965",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Crossref",
+      "query": "中国高血压防治指南 2024年修订版 中华高血压杂志",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Crossref",
+      "query": "中国高血压急症诊治规范 中华急诊医学杂志 2020",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 310,
+    "recordsAfterDeduplication": 186,
+    "sourcesIncluded": 28
+  },
+  "sourceRecords": [
+    { "referenceNumber": 1, "citationKey": "Hu2024BMC", "identifier": "PMC11451125", "accessLevel": "full_text", "included": true, "role": "primary trial (命题A/B)" },
+    { "referenceNumber": 2, "citationKey": "Sun2024JEP", "identifier": "PMID:37487965", "accessLevel": "abstract", "included": true, "role": "24-week RCT (abstract)" },
+    { "referenceNumber": 3, "citationKey": "Ruan2021Trials", "identifier": "PMC8287819", "accessLevel": "full_text", "included": true, "role": "trial protocol / 入组-排除标准" },
+    { "referenceNumber": 4, "citationKey": "Ren2018MA", "identifier": "PMC5892298", "accessLevel": "full_text", "included": true, "role": "meta-analysis 疗效/安全" },
+    { "referenceNumber": 5, "citationKey": "Shen2020JACM", "identifier": "PMID:32716206", "accessLevel": "abstract", "included": true, "role": "ACS-PCI RCT (abstract)" },
+    { "referenceNumber": 6, "citationKey": "Liu2020JTCM", "identifier": "PMID:32744020", "accessLevel": "abstract", "included": true, "role": "ACS 系统评价 (abstract)" },
+    { "referenceNumber": 7, "citationKey": "CYP2021JEP", "identifier": "PMID:34252529", "accessLevel": "abstract", "included": true, "role": "CYP/转运体相互作用 (in vitro, abstract)" },
+    { "referenceNumber": 8, "citationKey": "RealWorld2020", "identifier": "PMID:32495590", "accessLevel": "abstract", "included": true, "role": "真实世界联用 (abstract)" },
+    { "referenceNumber": 9, "citationKey": "Bai2014eCAM", "identifier": "PMC3997901", "accessLevel": "full_text", "included": true, "role": "人动脉离体机制" },
+    { "referenceNumber": 10, "citationKey": "Li2023Front", "identifier": "PMC10206061", "accessLevel": "full_text", "included": true, "role": "AMI/冠脉张力机制" },
+    { "referenceNumber": 11, "citationKey": "Ji2024Biomol", "identifier": "PMC11496844", "accessLevel": "full_text", "included": true, "role": "川芎嗪妊娠高血压 meta" },
+    { "referenceNumber": 12, "citationKey": "Shao2015MSM", "identifier": "PMC4671452", "accessLevel": "full_text", "included": true, "role": "川芎嗪心绞痛 meta" },
+    { "referenceNumber": 13, "citationKey": "Pang1996Planta", "identifier": "PMID:8923809", "accessLevel": "abstract", "included": true, "role": "川芎嗪钙拮抗 (abstract)" },
+    { "referenceNumber": 14, "citationKey": "Luz2022HR", "identifier": "PMID:35194168", "accessLevel": "abstract", "included": true, "role": "冰片大鼠降压 (abstract)" },
+    { "referenceNumber": 15, "citationKey": "ElderlyHTN2023", "identifier": "10.26599/1671-5411.2024.06.001", "accessLevel": "full_text", "included": true, "role": "老年高血压指南" },
+    { "referenceNumber": 16, "citationKey": "LabelNMPA", "identifier": "国药准字Z12020025", "accessLevel": "structured_record", "included": true, "role": "说明书索引副本+公开转载" },
+    { "referenceNumber": 17, "citationKey": "Steele2006CJEM", "identifier": "10.1017/S1481803500013671", "accessLevel": "full_text", "included": true, "role": "NTG 缓解判别效能" },
+    { "referenceNumber": 18, "citationKey": "Davidson2022OAEM", "identifier": "PMC9278720", "accessLevel": "full_text", "included": true, "role": "NTG 急诊使用/禁忌" },
+    { "referenceNumber": 19, "citationKey": "Gulati2021Circulation", "identifier": "10.1161/CIR.0000000000001029", "accessLevel": "bibliographic_only", "included": true, "role": "2021 AHA/ACC 胸痛指南（题录；经[20]核验）" },
+    { "referenceNumber": 20, "citationKey": "Riley2022JSCAI", "identifier": "PMC11308083", "accessLevel": "full_text", "included": true, "role": "2021 AHA/ACC 指南解读件" },
+    { "referenceNumber": 21, "citationKey": "Brazil2025SBC", "identifier": "PMC12981354", "accessLevel": "full_text", "included": true, "role": "2025 巴西急诊胸痛指南" },
+    { "referenceNumber": 22, "citationKey": "ESC2023ACScommentary", "identifier": "PMC11317809", "accessLevel": "full_text", "included": true, "role": "ESC 2023 ACS 解读件" },
+    { "referenceNumber": 23, "citationKey": "Scholz2021OpenHeart", "identifier": "PMC8103948", "accessLevel": "full_text", "included": true, "role": "STEMI 延迟-再灌注" },
+    { "referenceNumber": 24, "citationKey": "NHSChestPain", "identifier": "NHS chest pain page", "accessLevel": "official_page", "included": true, "role": "患者导向急救呼叫" },
+    { "referenceNumber": 25, "citationKey": "Ji1995SYYJ", "identifier": "SYYJ199505034", "accessLevel": "abstract", "included": true, "role": "本品降压摘要层记录" },
+    { "referenceNumber": 26, "citationKey": "Zhong2016DJK", "identifier": "djjk-x201612056", "accessLevel": "abstract", "included": true, "role": "缬沙坦联用摘要层记录" },
+    { "referenceNumber": 27, "citationKey": "Yunnan2014TCM", "identifier": "2014285695", "accessLevel": "abstract", "included": true, "role": "内皮功能摘要层记录" },
+    { "referenceNumber": 28, "citationKey": "Bassan1991Chest", "identifier": "PMID:1905618", "accessLevel": "abstract", "included": true, "role": "自行含服硝酸甘油调查 (abstract)" }
+  ]
+}

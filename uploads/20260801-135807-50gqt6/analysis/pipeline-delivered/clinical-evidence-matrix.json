@@ -1,0 +1,180 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "舌下含服硝酸甘油后胸痛的缓解程度不能区分心源性与非心源性胸痛，Henrikson等（2003）前瞻性研究得出此结论，该结论被后续研究一致确认",
+      "referenceNumber": 2,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/14678917/",
+      "sourceTitle": "Chest pain relief by nitroglycerin does not predict active coronary artery disease.",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "PMID:14678917",
+      "accessLevel": "abstract",
+      "supportQuote": "Henrikson and coworkers",
+      "applicability": "direct",
+      "uncertainty": "Henrikson原文非开放获取；Steele（2006）全文引用并确认了Henrikson等人的结论"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "急诊胸痛患者中，硝酸甘油缓解胸痛对心源性病因鉴别灵敏度72%、特异度37%，阳性似然比约1.1，不能用于病因鉴别",
+      "referenceNumber": 3,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "supportQuote": "the diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%-80%), and the specificity was 37% (34%-41%)",
+      "applicability": "direct",
+      "uncertainty": "n=270急诊胸痛患者，单中心；阳性似然比1.1（标题语句含于全文摘要但此引用行仅含灵敏度和特异度数值）"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "舌下含服硝酸甘油后数字疼痛评分的变化不能预测胸痛的心脏病因，Diercks等在595例急诊患者中得出此结论",
+      "referenceNumber": 4,
+      "sourceUrl": "https://doi.org/10.1016/j.annemergmed.2004.12.009",
+      "sourceTitle": "Changes in the Numeric Descriptive Scale for Pain After Sublingual Nitroglycerin Do Not Predict Cardiac Etiology of Chest Pain",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "DOI:10.1016/j.annemergmed.2004.12.009",
+      "accessLevel": "abstract",
+      "supportQuote": "Diercks and associates",
+      "applicability": "direct",
+      "uncertainty": "Diercks原文非开放获取；Steele（2006）全文引用并确认了Diercks等人的结论"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "ALDH2 Glu504Lys (rs671) 多态性通过降低ALDH2酶活性影响舌下含服硝酸甘油生物活化为NO的过程，从而降低其疗效",
+      "referenceNumber": 5,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/16440063/",
+      "sourceTitle": "Mitochondrial aldehyde dehydrogenase-2 (ALDH2) Glu504Lys polymorphism contributes to the variation in efficacy of sublingual nitroglycerin.",
+      "artifactPath": ".evimed-sources/PMC8478937/fulltext.md",
+      "identifier": "PMID:16440063",
+      "accessLevel": "abstract",
+      "supportQuote": "ALDH2 12:112241766 G/A (rs671) were population-specific for CMDB Chinese",
+      "applicability": "direct",
+      "uncertainty": "Li（2006）原文非开放获取；CMDB论文确认ALDH2 rs671为中国人群特异性药理学重要变异"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "ALDH2 rs671 是中国人群特异性常见功能性变异，在gnomAD其他人群中不存在或极为罕见",
+      "referenceNumber": 7,
+      "sourceUrl": "https://europepmc.org/articles/PMC8478937",
+      "sourceTitle": "Genetic landscape of 125 pharmacogenes in Chinese from the Chinese Millionome Database.",
+      "artifactPath": ".evimed-sources/PMC8478937/fulltext.md",
+      "identifier": "PMC8478937",
+      "accessLevel": "full_text",
+      "supportQuote": "ALDH2 12:112241766 G/A (rs671) were population-specific for CMDB Chinese because they were absent (with a zero of variant allele frequency) or very rare in other gnomAD populations.",
+      "applicability": "direct",
+      "uncertainty": "基于141,431例中国全基因组数据"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "在中国成人中，ALDH2 rs671 A等位基因频率为0.21",
+      "referenceNumber": 8,
+      "sourceUrl": "https://europepmc.org/articles/PMC7612513",
+      "sourceTitle": "Alcohol metabolism genes and risks of site-specific cancers in Chinese adults: An 11-year prospective study.",
+      "artifactPath": ".evimed-sources/PMC7612513/fulltext.md",
+      "identifier": "PMC7612513",
+      "accessLevel": "full_text",
+      "supportQuote": "frequency was 0.21 for ALDH2",
+      "applicability": "direct",
+      "uncertainty": "基于150,722例中国成人队列；基因型分布（62.4%, 33.2%, 4.4%）由Hardy-Weinberg平衡从A等位基因频率0.21推算"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "速效救心丸Cochrane系统评价认为现有证据质量低，不足以支持或反对其用于心绞痛",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/18254051/",
+      "sourceTitle": "Chinese herbal medicine suxiao jiuxin wan for angina pectoris. Cochrane Database Syst Rev. 2008;(1):CD004473.",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "supportQuote": "the evidence remains weak due to the poor methodological quality of included studies",
+      "applicability": "direct",
+      "uncertainty": "Cochrane评价原文非开放获取；SJP RCT方案论文引用并确认了这一结论"
+    },
+    {
+      "claimId": "CLM-008",
+      "claim": "速效救心丸的高质量RCT方案针对稳定型心绞痛患者，干预为每日三次口服、24周疗程，非急性胸痛院外含服场景",
+      "referenceNumber": 10,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks.",
+      "applicability": "direct",
+      "uncertainty": "该RCT的干预模式和人群与院外急性胸痛自救场景有本质差异"
+    },
+    {
+      "claimId": "CLM-009",
+      "claim": "中国70.7%的急性心肌梗死患者院前延迟≥2小时",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC9068590",
+      "sourceTitle": "Pre-hospital delay in patients with acute myocardial infarction in China: findings from the CCC-ACS project.",
+      "artifactPath": ".evimed-sources/PMC9068590/fulltext.md",
+      "identifier": "PMC9068590",
+      "accessLevel": "full_text",
+      "supportQuote": "Of the 33,386 patients with AMI, 70.7% of patients arrived at hospital ≥ 2 h after symptom onset.",
+      "applicability": "direct",
+      "uncertainty": "数据收集自2014-2019年，可能存在存活偏倚"
+    },
+    {
+      "claimId": "CLM-010",
+      "claim": "STEMI患者院前延迟≥2小时与院内死亡风险增加相关（OR 1.36, 95% CI 1.09-1.69, P=0.006）",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC9068590",
+      "sourceTitle": "Pre-hospital delay in patients with acute myocardial infarction in China: findings from the CCC-ACS project.",
+      "artifactPath": ".evimed-sources/PMC9068590/fulltext.md",
+      "identifier": "PMC9068590",
+      "accessLevel": "full_text",
+      "supportQuote": "A pre-hospital delay of ≥ 2 h was associated with an increased risk of mortality [odds ratio (OR) = 1.36, 95% CI: 1.09-1.69, P = 0.006]",
+      "applicability": "direct",
+      "uncertainty": "观察性研究，非随机对照；可能存在混杂因素"
+    },
+    {
+      "claimId": "CLM-011",
+      "claim": "超过80%的中国AMI患者未使用救护车转运",
+      "referenceNumber": 12,
+      "sourceUrl": "https://europepmc.org/articles/PMC9068590",
+      "sourceTitle": "Pre-hospital delay in patients with acute myocardial infarction in China: findings from the CCC-ACS project.",
+      "artifactPath": ".evimed-sources/PMC9068590/fulltext.md",
+      "identifier": "PMC9068590",
+      "accessLevel": "full_text",
+      "supportQuote": "more than 80% of patients in this analysis avoided calling for an emergency ambulance",
+      "applicability": "direct",
+      "uncertainty": "数据来自241家医院注册数据；可能低估农村地区比率"
+    },
+    {
+      "claimId": "CLM-014",
+      "claimType": "synthesized",
+      "claim": "三项独立研究一致否定硝酸甘油缓解胸痛作为心源性病因鉴别工具的价值",
+      "referenceNumber": 3,
+      "referenceNumbers": [2, 3, 4],
+      "confidence": "high",
+      "applicability": "direct",
+      "uncertainty": "三项研究的样本量和场景不同但结论一致；均为观察性设计",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/14678917/",
+          "sourceTitle": "Chest pain relief by nitroglycerin does not predict active coronary artery disease.",
+          "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+          "accessLevel": "abstract",
+          "supportQuote": "Henrikson and coworkers"
+        },
+        {
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+          "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+          "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Relief of chest pain with nitroglycerin is not a reliable diagnostic test and does not distinguish between cardiac and non-cardiac chest pain."
+        },
+        {
+          "sourceUrl": "https://doi.org/10.1016/j.annemergmed.2004.12.009",
+          "sourceTitle": "Changes in the Numeric Descriptive Scale for Pain After Sublingual Nitroglycerin Do Not Predict Cardiac Etiology of Chest Pain",
+          "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+          "accessLevel": "abstract",
+          "supportQuote": "Diercks and associates"
+        }
+      ]
+    }
+  ]
+}

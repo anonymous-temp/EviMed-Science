@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-13T22:00:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "EviMed guideline index",
+    "NMPA label index",
+    "EviMed pharmacy reference"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxinwan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 28
+    },
+    {
+      "database": "Crossref",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin adverse reaction safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "EviMed guideline index (records)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "NMPA label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Pill dizziness headache adverse",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "EviMed guideline index (blocks)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "中成药治疗冠心病临床应用指南",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "DISCERN instrument JAMA benchmark quality health information evaluation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Evaluation efficacy safety Suxiao Jiuxin Pill stable angina randomized double-blind placebo-controlled",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Effects Suxiao Jiuxin Pills acute coronary syndrome early percutaneous coronary intervention multicenter randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PubMed",
+      "query": "tetramethylpyrazine ligustrazine blood pressure hypotensive humans",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "EviMed pharmacy reference",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "DISCERN instrument development evaluating quality written consumer health information treatment choices",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "EviMed guideline index",
+      "query": "速效救心丸治疗冠心病中国专家共识 不良反应 含服",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 189,
+    "recordsAfterDeduplication": 148,
+    "sourcesIncluded": 19
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "nmpa_suxiao_label",
+      "identifier": "国药准字Z12020025",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "说明书"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "hu2024suxiao",
+      "identifier": "DOI:10.1186/s12906-024-04661-5",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "RCT-发生率"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "ren2018suxiao",
+      "identifier": "DOI:10.1155/2018/9745804",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "系统评价-发生率/归因"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "bai2014suxiao",
+      "identifier": "DOI:10.1155/2014/956924",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "机制-离体人血管"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "li2023suxiao",
+      "identifier": "DOI:10.3389/fphar.2023.1104243",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "机制-动物/离体冠脉"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "ruan2021protocol",
+      "identifier": "DOI:10.1186/s13063-021-05448-6",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "方案-不良事件采集"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "sun2024suxiao",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "RCT-发生率"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "shen2020acs",
+      "identifier": "PMID:32716206",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "RCT-发生率"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "duan2008cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "系统评价"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "caim2019consensus",
+      "identifier": "中国中西医结合学会2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "共识"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "zcy2020guideline",
+      "identifier": "中成药标准化项目组2021",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "指南"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "gxbyy2018guideline",
+      "identifier": "国家卫生计生委合理用药专家委员会2018",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "指南"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "stemi2019guideline",
+      "identifier": "国家卫生计生委合理用药专家委员会2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "指南-处置"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "lnxgy2023guideline",
+      "identifier": "中国老年医学学会高血压分会2023",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "指南-适应人群"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "nhs2023chestpain",
+      "identifier": "official-page:e6143b76645a9461",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "公众分诊"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "bilibili2026mi",
+      "identifier": "DOI:10.3389/fpubh.2026.1748168",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "公众信息质量"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "charnock1999discern",
+      "identifier": "PMID:10396471",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "工具方法论"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "yang1994pk",
+      "identifier": "PMID:7900539",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "人体药代"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "networkmeta2022",
+      "identifier": "PMID:36059992",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "系统评价"
+    }
+  ]
+}

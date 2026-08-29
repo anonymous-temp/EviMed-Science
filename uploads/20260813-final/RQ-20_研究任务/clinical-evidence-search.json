@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T01:48:30Z",
+  "databases": [
+    "literature (Chinese)",
+    "PubMed",
+    "guideline index",
+    "NMPA drug label",
+    "pharmacy reference"
+  ],
+  "queries": [
+    {
+      "database": "literature (Chinese)",
+      "query": "速效救心丸 冠心病 心绞痛 meta分析",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "literature (Chinese)",
+      "query": "速效救心丸 专家共识 临床应用",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "literature (Chinese)",
+      "query": "速效救心丸 非处方药 甲类 OTC",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "household medication storage child poisoning expired medicines",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "guideline index",
+      "query": "acute coronary syndrome chest pain prehospital emergency",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "China-PAR atherosclerotic cardiovascular disease 10-year risk prediction Chinese population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "sudden cardiac death first manifestation coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "home automated external defibrillator high-risk myocardial infarction randomized trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction self-medication nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin response diagnosis cardiac chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital aspirin suspected acute myocardial infarction mortality",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed",
+      "query": "medication storage practices household unintentional poisoning prevalence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "public access defibrillation survival out-of-hospital cardiac arrest randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "sudden death first clinical manifestation coronary heart disease Framingham proportion",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "patient delay decision time acute myocardial infarction self-treatment symptoms",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "NMPA drug label",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "pharmacy reference",
+      "query": "速效救心丸 说明书 处方药 非处方药 国家药品标准",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 208,
+    "recordsAfterDeduplication": 145,
+    "sourcesIncluded": 13
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPA2023SuxiaoJiuxinWanLabel",
+      "identifier": "国药准字（NMPA 药品说明书：速效救心丸，津药达仁堂集团股份有限公司第六中药厂）",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory scope"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Wu2019SuxiaoConsensus",
+      "identifier": "速效救心丸治疗冠心病中国专家共识. 中西医结合心脑血管病杂志. 2019",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "consensus / usage claims"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Wang2015SuxiaoMeta",
+      "identifier": "速效救心丸与消心痛治疗冠心病心绞痛效果比较的Meta分析. 中国循证心血管医学杂志. 2015",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "RCT meta-analysis (diagnosed CHD angina)"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Yuan2022SuxiaoMeta",
+      "identifier": "不同疗程速效救心丸对冠心病心绞痛临床疗效及安全性的Meta分析. 北京中医药. 2022",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "RCT meta-analysis (diagnosed CHD angina)"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Ruan2021SuxiaoProtocol",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "RCT protocol (stable angina, Qi stagnation/blood stasis)"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Hu2024SuxiaoCCS",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "RCT (CCS, nitrate intolerance)"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Zheng2025TCMPCI",
+      "identifier": "PMC12260233",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "review (SJP ACS post-PCI RCT)"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Yang2016ChinaPARRisk",
+      "identifier": "PMC5643596",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "absolute ASCVD risk (China-PAR)"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "public triage guidance"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Djarv2020AspirinSR",
+      "identifier": "PMC7053675",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "aspirin first-aid systematic review"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Pagnoni2026PAD",
+      "identifier": "PMC13027161",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "public-access defibrillation / home setting"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Charlton2025ExpiredMeds",
+      "identifier": "PMC12546671",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "expired first-aid medications"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Diercks2005NTGDiagnostic",
+      "identifier": "PMID:15940087",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "nitroglycerin response as diagnostic test"
+    }
+  ]
+}

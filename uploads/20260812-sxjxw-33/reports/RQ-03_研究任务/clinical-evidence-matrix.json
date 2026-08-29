@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-11T17:20:00Z",
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "速效救心丸于 1982 年经中国食品药品监督管理局（CFDA）批准上市，由川芎（Ligusticum striatum，川芎根茎）与冰片（Dryobalanops aromatica，合成龙脑）两味中药组成。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Suxiao Jiuxin Pill (SJPs) emerges as a prominent traditional Chinese patent medicine utilized for the treatment of acute ischemic heart disease, which was approved by China Food and Drug Administration (CFDA) in 1982 [ 9 ]. … The pill is composed of Ligusticum striatum DC. (WFO accession number: wfo-0000362231, family Apiaceae, Chuanxiong Rhizoma) and Dryobalanops aromatica C.F.Gaertn. (WFO accession number: wfo-0000657511, family Dipterocarpaceae, Borneolum syntheticum).",
+      "applicability": "适用于已上市药品的基本信息与组方认定。",
+      "uncertainty": "批准时间与组方来源为原文叙述；药典质控含量见 CLM-022。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "荟萃分析纳入 41 项随机对照试验、6276 例冠心病患者，速效救心丸较对照显著改善心电图结果（RR 1.32，95%CI 1.26 至 1.38，P<0.001）；研究间异质性显著（I²=62.3%）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … The remaining 41 studies were included in our meta-analysis. … Pooled analysis indicated significant benefits of suxiao jiuxin pill on ECG outcomes (RR 1.32; 95% CI 1.26 to 1.38, P < 0.001). However, there was significant heterogeneity between studies with respect to ECG results ( I 2 = 62.3%).",
+      "applicability": "有效性证据（替代终点——心电图）。",
+      "uncertainty": "异质性高提示合并效应量需谨慎解读；研究质量限制见 CLM-005 及正文。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "亚组分析显示，速效救心丸的心电图改善优于丹参片（RR 1.54）、消心痛（RR 1.14）、硝酸甘油（RR 1.35）与其他药物（RR 1.32），差异均有统计学意义。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The subgroup analyses indicated that suxiao jiuxin pill improved ECG results more than salvia tablets (RR 1.54; 95% CI 1.41 to 1.67, P < 0.001), isosorbide dinitrate (RR 1.14; 95% CI 1.05 to 1.22, P = 0.001), nitroglycerin (RR 1.35, 95% CI 1.16 to 1.56, P < 0.001), and other drugs (RR 1.32, 95% CI 1.21 to 1.44, P < 0.001).",
+      "applicability": "有效性证据（替代终点，对照为其他药物）。",
+      "uncertainty": "对照为其他药物而非安慰剂或单纯西医治疗，属间接比较；与网状荟萃（CLM-014）的对照设置不同。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "荟萃分析纳入的研究多数因缺乏双盲设计而获低 Jadad 评分（方法学质量低、偏倚风险高）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The majority of the included studies received low Jadad scores due to the lack of a double-blind design",
+      "applicability": "证据等级评定（偏倚风险）。",
+      "uncertainty": "Jadad 为报告质量工具，低分反映报告不充分；不能据此推断研究执行必然有偏，但按 GRADE 需下调证据等级。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "荟萃分析中 14 项研究报告不良反应，以轻度头痛、头晕、面部潮红为主且多自行缓解；速效救心丸组与对照组不良反应率差异无统计学意义（RR 1.12，95%CI 0.50 至 2.51，P=0.785）。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMC5892298",
+      "accessLevel": "full_text",
+      "supportQuote": "The 41 studies consisted of 6276 patients with coronary heart disease. … Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)",
+      "applicability": "安全性证据（RCT 汇总，短期疗程为主）。",
+      "uncertainty": "多数纳入试验疗程短（≤4 周）；事件少、随访短，不能外推长期安全性。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "direct",
+      "claim": "网状荟萃纳入的 179 项 RCT 疗程范围为 2 至 144 周，其中速效救心丸联合西医治疗相关 RCT 为 6 项；分析未单独报告速效救心丸的长疗程亚组结果。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "according to Version 2 of the Cochrane risk-of-bias tool for randomized trials…Suxiao Jiuxin pill (SXJX, 6 RCTs)…with the course of treatment ranging from two to 144 weeks.",
+      "applicability": "有效性证据分布（疗程信息）。",
+      "uncertainty": "179 项 RCT 与 6 项速效救心丸相关 RCT 的计数见于该文标题与正文；疗程分层未按单药报告，长期结论受限。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claimType": "direct",
+      "claim": "网状荟萃按临床有效率排序：芪参益气滴丸联合西医居首（SUCRA 98.12%），速效救心丸联合西医排名第二（71.04%），通心络联合西医第三（68.40%），单纯西医末位（3.09%）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 179 randomized controlled trials with 16,789 patients were included. … Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (98.12%), followed by SXJX + WM (71.04%) and TXL + WM (68.40%), whereas WM alone obtained the worst effect (3.09%).",
+      "applicability": "有效性证据（症状/临床有效率，替代终点）。",
+      "uncertainty": "SUCRA 为排序概率指标，不代表疗效的绝对量级；网络证据受纳入试验质量限制。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claimType": "direct",
+      "claim": "在网状荟萃中，速效救心丸联合西医（与丹蒌片、宽胸气雾剂联合西医并列）的心电图有效率相比单纯西医未显示出改善效应，其余所有中成药联合西医均优于单纯西医。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Apart from DL + WM, KXQW + WM, and SXJX + WM, an improvement effect of effective rate in ECG was detected for all of the included OCPMs plus WM as compared with WM alone.",
+      "applicability": "有效性证据（替代终点——心电图，与 CLM-003 结果存在对照差异）。",
+      "uncertainty": "该比较以单纯西医为对照，与 2018 荟萃以其他药物为对照不同；两项证据的心电图终点结论不一致，见三角互证。"
+    },
+    {
+      "claimId": "CLM-015",
+      "claimType": "direct",
+      "claim": "网状荟萃中，速效救心丸联合西医组 81 例患者的汇总不良反应率为 35.80%（轻度腹部不适 2.47%、头晕/头痛 17.28%、皮疹 7.41%、轻度胸部不适 8.64%），明显高于同期其他中成药组（如麝香保心丸联合西医组 6.87%）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Shexiang Baoxin pill (SXBX, 67 RCTs), Suxiao Jiuxin pill (SXJX, 6 RCTs), Tongxinluo capsule (TXL, 47 RCTs), and Xuefu Zhuyu capsule (XFZY, 2 RCTs)…Of 4,514 patients observed, 250 occurred with ADRs (5.54%), involving 96 with mild abdominal discomfort, 91 with dizziness/headache, 11 with numbness of tongue and lips, 24 with rash, and 28 with mild chest discomfort, whereas had no serious ADRs.…Among 1,951 SXBX + WM-treated patients, the incidences of mild abdominal discomfort, dizziness/headache, numbness of tongue and lips, rash, and mild chest discomfort, were 2.67%, 2.41%, 0.56%, 0.56%, and 0.67%, respectively, with the total adverse reaction rate of 6.87%.…In 81 patients treated with SXJX + WM, the incidences of mild abdominal discomfort, dizziness/headache, rash, and mild chest discomfort, were 2.47%, 17.28%, 7.41%, and 8.64%, separately, with a total adverse reaction rate of 35.80%.",
+      "applicability": "安全性证据（RCT 汇总率）。",
+      "uncertainty": "该组仅 81 例且来源试验质量低；35.80% 与 4 周 RCT 的 0 例报告不可同时为真（见推导 CLM-037），该率不能视为真实发生率。"
+    },
+    {
+      "claimId": "CLM-017",
+      "claimType": "direct",
+      "claim": "网状荟萃仅纳入中国指南（《中成药治疗冠心病临床应用指南》，Mao 等 2021）推荐的 12 种口服中成药，速效救心丸位列其中（纳入 6 项 RCT）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+      "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+      "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+      "identifier": "PMC9428755",
+      "accessLevel": "full_text",
+      "supportQuote": "Notably, the OCPMs must be within the 12 OCPMs recommended by the Chinese guideline ( Mao et al., 2021 ). … Suxiao Jiuxin pill (SXJX, 6 RCTs)",
+      "applicability": "人群边界证据（指南纳入）。",
+      "uncertainty": "指南推荐的具体适应症定位与推荐强度以指南原文为准；本条目仅证明速效救心丸被该指南纳入推荐集。"
+    },
+    {
+      "claimId": "CLM-019",
+      "claimType": "direct",
+      "claim": "174 例（mITT）患者入组的 4 周、多中心、随机、双盲、安慰剂对照试验（慢性冠脉综合征合并长效硝酸酯不耐受患者）显示，西雅图心绞痛量表总分改善 ≥20 分的比例在速效救心丸组为 60.9%、安慰剂组为 39.1%（OR 2.43，95%CI 1.32 至 4.47，P=0.004）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … However, only 174 patients were included in the mITT analyses due to the fact that two subjects had taken SJPs or placebos less than once. … Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement",
+      "applicability": "有效性证据（患者报告终点，4 周）。",
+      "uncertainty": "疗程仅 4 周，不能外推 ≥3 个月疗效；人群为硝酸酯不耐受的慢性冠脉综合征患者，直接性受限。"
+    },
+    {
+      "claimId": "CLM-020",
+      "claimType": "direct",
+      "claim": "4 周随机对照试验中，174 例纳入 mITT 分析的患者均未报告不良反应。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … However, only 174 patients were included in the mITT analyses due to the fact that two subjects had taken SJPs or placebos less than once. … No participants reported experiencing adverse effects.",
+      "applicability": "安全性证据（单中心 RCT 报告）。",
+      "uncertainty": "随访仅 4 周且以被动报告为主；0 例与网状荟萃汇总率不一致（见推导 CLM-037），不能据此宣称无不良反应。"
+    },
+    {
+      "claimId": "CLM-022",
+      "claimType": "direct",
+      "claim": "按《中国药典》质控要求，每丸速效救心丸含川芎（以阿魏酸计）不低于 15.0 μg，含冰片（以龙脑计）2.9 至 4.4 mg。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "According to the Chinese Pharmacopoeia, each pill of SJPs is required to contain a minimum of 15.0 μg of Ligusticum chuanxiong, expressed in terms of ferulic acid…, and 2.9 to 4.4 mg of Borneolum syntheticum, expressed in terms of Borneol…",
+      "applicability": "组分暴露量估算的依据（质控下限–上限）。",
+      "uncertainty": "为药典规定含量区间而非实测每丸含量；实际批次间存在差异，用于暴露量估算需谨慎。"
+    },
+    {
+      "claimId": "CLM-023",
+      "claimType": "direct",
+      "claim": "4 周 RCT 中，患者基线抗心绞痛治疗以阿司匹林（73.6%）、他汀（71.3%）、β 受体阻滞剂（54.0%）为主，速效救心丸系在此基础上加用的辅助用药。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … Antianginal therapies were commonly prescribed aspirin (73.6%), statin (71.3%), and β-Blockers (54.0%).",
+      "applicability": "人群边界证据（辅助用药定位）。",
+      "uncertainty": "反映试验人群的合并用药背景；未报告出血事件增加，但随访窗过短。"
+    },
+    {
+      "claimId": "CLM-025",
+      "claimType": "synthesized",
+      "claim": "现有随机试验（4 周试验与 24 周试验）均采用每次 5 粒、每日合计 15 粒、分次含服的给药方案；24 周试验以此方案连续用药 24 周。",
+      "confidence": "high",
+      "referenceNumber": 4,
+      "referenceNumbers": [
+        3,
+        4
+      ],
+      "applicability": "长期试验的给药方案（用法用量参考）。",
+      "uncertainty": "为研究方案剂量；临床具体用量仍以说明书与处方医师指导为准。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+          "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+          "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "During the 4-week treatment period, all participants were instructed to orally administer the study medication sublingually after meals, three times a day, taking 5 capsules each time (total of 15 capsules per day), continuously for 4 weeks."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-027",
+      "claimType": "direct",
+      "claim": "24 周试验方案将急救药用量与停药率、加拿大心血管学会（CCS）分级、中医证候、西雅图心绞痛量表与心电图疗效列为次要结局。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "Eligible participants will receive either SJP or placebo (five pills administered orally, three times daily) in addition to conventional treatment for 24 weeks. … The secondary outcomes are angina classification (CCS), improvement of traditional Chinese medicine (TCM) syndromes, Seattle Angina Scale score, the dosage of emergency drugs and the stopping rate, and electrocardiogram (EKG) efficacy.",
+      "applicability": "长期试验的终点设置（停药率等结局的测量）。",
+      "uncertainty": "该方案列出的次要结局在已发表摘要中未报告数值。"
+    },
+    {
+      "claimId": "CLM-026",
+      "claimType": "direct",
+      "claim": "唯一检索到的 ≥24 周随机对照试验方案：纳入 324 例稳定型心绞痛（气滞血瘀证）患者，疗程 24 周，主要终点为第 4 周心绞痛症状改善率与主要不良心血管事件（MACE）；其完成结果目前仅见摘要层级。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC8287819",
+      "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol of a randomized, double-blind, placebo-controlled, multi-center clinical trial",
+      "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+      "identifier": "PMC8287819",
+      "accessLevel": "full_text",
+      "supportQuote": "The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome).…in addition to conventional treatment for 24 weeks.…The primary outcomes are the symptom improvement rate of angina from baseline to 4 weeks after inclusion and major adverse cardiovascular events (MACE).",
+      "applicability": "有效性/安全性证据（长期随机证据的现状）。",
+      "uncertainty": "完成结果未公开 MACE 与停药率等关键数值，长期结论待全文发表后更新。"
+    },
+    {
+      "claimId": "CLM-029",
+      "claimType": "direct",
+      "claim": "突发、持续不缓解的胸痛或胸部不适（可呈挤压感、烧灼感）应立即呼叫急救（来源文本为英国急救电话 999），因可能为心肌梗死，需要立即住院治疗；在中国读者应拨打当地急救电话。",
+      "referenceNumber": 13,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "supportQuote": "Call 999 if: - you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "紧急处置边界（任何胸痛情形通用）。",
+      "uncertainty": "该指引针对一般胸痛人群；含服速效救心丸不应延误急救呼叫。"
+    },
+    {
+      "claimId": "CLM-031",
+      "claimType": "direct",
+      "claim": "4 周 RCT 的讨论部分引述：该长期试验在第 4 周时并未显示速效救心丸优于安慰剂，与其在 24 周疗程终点报告的改善形成对比。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+      "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+      "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+      "identifier": "PMC11451125",
+      "accessLevel": "full_text",
+      "supportQuote": "In a recent randomized clinical trial, it was reported that SJPs demonstrated improvements in physical limitations, angina stability, and treatment satisfaction after 24 weeks of intervention [ 9 ]. … Interestingly, the aforementioned trial found that after 4 weeks of intervention, the SJPs did not demonstrate superior anti-angina efficacy compared to the placebo [ 9 ].",
+      "applicability": "冲突处理（短期疗效证据不一致）。",
+      "uncertainty": "引述为二手转述（原文献为 J Ethnopharmacol 2024，摘要层级）；24 周试验的完整分时间点数据尚未公开。"
+    },
+    {
+      "claimId": "CLM-032",
+      "claimType": "synthesized",
+      "claim": "症状与替代终点层面的有效性证据方向一致但等级低：荟萃分析（41 项 RCT、6276 例，心电图 RR 1.32）、网状荟萃（临床有效率 SUCRA 71.04%）、4 周 RCT（OR 2.43）均提示速效救心丸作为规范治疗基础上的辅助用药可改善症状与替代终点；但受方法学质量（Jadad 低分、RoB2 评估为存在一定问题）、异质性与终点间接性限制，且无死亡/心肌梗死等硬终点获益证据。",
+      "confidence": "moderate",
+      "referenceNumber": 1,
+      "referenceNumbers": [
+        1,
+        2,
+        3
+      ],
+      "applicability": "有效性证据等级的总体评定（低等级）。",
+      "uncertainty": "三项证据随访均 ≤24 周；效应量可能被低质量研究高估。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … The remaining 41 studies were included in our meta-analysis."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+          "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+          "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Based on the ranking probability of each level and SUCRA, QSYQ + WM had the highest effective rate (98.12%), followed by SXJX + WM (71.04%) and TXL + WM (68.40%), whereas WM alone obtained the worst effect (3.09%)."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … Specifically, 60.9% of patients treated with SJPs achieved a 20-point or greater improvement in SAQ-SS, while only 39.1% (OR = 2.43, 95% confidence interval [CI] = 1.32 to 4.47, P = 0.004) of patients in the placebo group achieved the same level of improvement"
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-033",
+      "claimType": "synthesized",
+      "claim": "不良反应谱三源一致而发生率估计不稳定：荟萃分析显示速效救心丸与对照的不良反应率无显著差异（RR 1.12，95%CI 0.50 至 2.51，主要为轻度头痛、头晕、面部潮红）；网状荟萃汇总速效救心丸联合西医组不良反应率 35.80%（81 例，以头晕/头痛与腹部不适、皮疹为主）；4 周随机对照试验未报告任何不良反应；说明书监测谱（恶心、腹痛、头痛、头晕、皮疹等）与 RCT 谱相互印证；无严重不良反应报告。",
+      "confidence": "moderate",
+      "referenceNumber": 2,
+      "referenceNumbers": [
+        1,
+        2,
+        3
+      ],
+      "applicability": "安全性证据（不良反应谱与发生率估计的不确定性）。",
+      "uncertainty": "发生率三源矛盾（见推导 CLM-037），真实发生率无法确定；谱系信息（消化道、神经、皮肤）较为一致。",
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC9428755",
+          "sourceTitle": "The comparative effects of oral Chinese patent medicines combined with western medicine in stable angina: a systematic review and network meta-analysis of 179 trials",
+          "artifactPath": ".evimed-sources/PMC9428755/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "In 81 patients treated with SXJX + WM, the incidences of mild abdominal discomfort, dizziness/headache, rash, and mild chest discomfort, were 2.47%, 17.28%, 7.41%, and 8.64%, separately, with a total adverse reaction rate of 35.80%."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+          "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials",
+          "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Fourteen studies reported the incidence of adverse reactions. The most common symptoms were mild headache, dizziness, and facial flushing. Most of these symptoms resolved spontaneously. There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)"
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC11451125",
+          "sourceTitle": "Efficacy and Safety of Suxiao Jiuxin Pills in the Treatment of Chronic Coronary Syndrome with Intolerance to Adverse Effects of Long-acting Nitrates: A Multicenter, Randomized, Double-blind, Placebo-controlled Study",
+          "artifactPath": ".evimed-sources/PMC11451125/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Participants with CCS and intolerance to the adverse effects of long-acting nitrates were recruited and randomized to either the SJPs or the placebo group for a duration of 4 weeks. … However, only 174 patients were included in the mITT analyses due to the fact that two subjects had taken SJPs or placebos less than once. … No participants reported experiencing adverse effects."
+        }
+      ]
+    },
+    {
+      "claimId": "CLM-035",
+      "claimType": "derived",
+      "claim": "〔推导〕按研究方案剂量（每次 5 粒、每日 3 次，即 15 粒/日）与药典质控区间（每丸冰片 2.9–4.4 mg）计算，冰片日暴露量约 43.5–66.0 mg；连续 90 天累计约 3.9–5.9 g，连续 180 天累计约 7.8–11.9 g。",
+      "derivedFrom": [
+        "CLM-022",
+        "CLM-025"
+      ],
+      "method": "乘法与线性累加：日暴露量下限 = 15 粒/日 × 2.9 mg/粒 = 43.5 mg/日；上限 = 15 × 4.4 = 66.0 mg/日；90 天累计 = 43.5×90 ≈ 3915 mg（3.9 g）至 66.0×90 ≈ 5940 mg（5.9 g）；180 天累计 = 43.5×180 ≈ 7830 mg（7.8 g）至 66.0×180 ≈ 11880 mg（11.9 g）。",
+      "assumptions": "假设按方案足量、无漏服持续含服；假设每丸冰片含量落在药典规定区间且全部经口摄入（吸收率与首过代谢未计入）；急性发作加量（每次 10–15 粒）未计入常规暴露。",
+      "sensitivity": "若按说明书常规含服每次 4–6 粒、每日 3 次（12–18 粒/日），日暴露量 34.8–79.2 mg，90 天累计 3.1–7.1 g；若单日追加急性剂量 10–15 粒（日总量 25–30 粒），单日暴露量 72.5–132.0 mg。",
+      "applicability": "仅作冰片暴露量级的量级参考，不等同于毒性阈值；用于说明长期疗程的组分累计暴露规模。",
+      "uncertainty": "冰片口服吸收与个体代谢差异大，剂量-暴露-毒性关系无临床数据；斑马鱼多器官毒性为动物高剂量证据，不能直接外推。"
+    },
+    {
+      "claimId": "CLM-036",
+      "claimType": "derived",
+      "claim": "〔推导〕现有随机研究规模对低频严重不良反应的检出能力有限：若真实严重不良反应发生率为 1%，174 例 4 周 RCT 观察到 0 例的概率约 0.174（检出至少 1 例的把握约 83%），324 例 24 周 RCT 相应概率约 0.039；若真实发生率为 0.5%，两概率分别约 0.418 与 0.197。现有证据只能弱排除发生率 ≥1% 的严重不良反应，对 <0.5% 的事件几乎没有信息量。",
+      "derivedFrom": [
+        "CLM-020",
+        "CLM-026"
+      ],
+      "method": "二项分布零事件概率 P(X=0) = (1−p)^n：n=174、p=0.01 → 0.99^174 = e^(174×ln0.99) ≈ e^(−1.7487) ≈ 0.174；n=324 → 0.99^324 ≈ e^(−3.2562) ≈ 0.039；n=174、p=0.005 → 0.995^174 ≈ e^(−0.8722) ≈ 0.418；n=324 → 0.995^324 ≈ e^(−1.6240) ≈ 0.197。",
+      "assumptions": "假设事件相互独立、发生率恒定、随访完整且所有事件均被记录报告；以入组例数作为可评估例数上界，未扣减脱落。",
+      "sensitivity": "若随访依从性仅 90%（有效暴露约 292 例），p=1% 时 0.99^292 ≈ 0.053；若真实发生率 p=2%，0.99^174 ≈ 0.030、0.99^324 ≈ 0.0015（约 0.15%），此时阴性结果才具排除意义。",
+      "applicability": "用于说明“现有规模不能证实长期安全”这一缺口，支持需要更大样本或主动监测。",
+      "uncertainty": "为零事件概率的粗略下界估计；实际检出能力还取决于监测强度、结局定义与随访时长。"
+    },
+    {
+      "claimId": "CLM-037",
+      "claimType": "derived",
+      "claim": "〔推导〕不良反应报告的两种数值在统计上不可共存：若真实不良反应率为网状荟萃汇总的 35.80%，174 例 4 周 RCT 中观察到 0 例的概率 (1−0.358)^174 ≈ 3×10⁻³⁴，几近不可能；若真实率极低，81 例中汇总出 35.8% 同样不可能。两者必居其一：网状荟萃率混入非药物相关事件（判定标准过宽），或 4 周 RCT 存在漏报与随访窗过短。",
+      "derivedFrom": [
+        "CLM-015",
+        "CLM-020"
+      ],
+      "method": "零事件概率计算：(1−0.358)^174 = e^(174×ln0.642)；ln0.642 ≈ −0.4432，174×(−0.4432) ≈ −77.1，e^(−77.1) ≈ 3×10⁻³⁴。",
+      "assumptions": "假设两组人群的不良反应判定标准与报告强度一致，且网状荟萃汇总率反映同一药物的固有风险。",
+      "sensitivity": "若部分不良反应实为疾病症状或合并用药所致（混入偏倚），真实药物相关率低于 35.80%；若 4 周 RCT 漏报，其 0 例亦不可信。无论哪种解释成立，结论都是“现有 ADR 率估计不稳定”。",
+      "applicability": "用于解释 ADR 证据的不一致性与证据等级下调，不用于估计真实发生率。",
+      "uncertainty": "该推导不能区分两种解释的孰真孰假；需要统一判定标准的前瞻性监测才能定案。"
+    }
+  ]
+}

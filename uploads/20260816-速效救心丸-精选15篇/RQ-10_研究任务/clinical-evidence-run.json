@@ -1,0 +1,50 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸按需含服与抗高血压药物联用是否产生血压效应叠加与症状性低血压风险，及其适应症边界、人体药效学与临床终点的分层证据评价",
+  "title": "速效救心丸与抗高血压药物联用的血压效应叠加与症状性低血压风险：适应症边界、人体药效学与临床终点的分层证据分析",
+  "startedAt": "2026-08-13T17:52:00Z",
+  "completedAt": "2026-08-13T18:30:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate",
+    "evimed_biomedical_source_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC7759250/fulltext.md",
+    ".evimed-sources/PMC11309681/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC9428755/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "Cochrane CD004473 (suxiao jiuxin wan for angina) 全文：Europe PMC 与 cochranelibrary.com 均返回 403，未获全文，仅保留题录。",
+    "2021 AHA/ACC 胸痛指南全文（PMID 34709879）：无开放获取全文，仅保留摘要。",
+    "Tetramethylpyrazine 抗心绞痛研究（PMID 27476945）：开放获取 PDF 加密，未能读取。",
+    "NMPA 现行官方说明书原文：数据源目录标记为 blocked_no_api，仅获得说明书索引件，官方现行文本未核验。",
+    "ChiCTR 注册库直接检索：无可用连接器，ChiCTR 注册号经已发表试验方案文献转述。"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 26,
+    "recordsIdentified": 160,
+    "recordsAfterDeduplication": 50,
+    "sourcesIncluded": 17,
+    "distinctPreservedSources": 7
+  },
+  "status": "succeeded"
+}

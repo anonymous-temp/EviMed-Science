@@ -1,0 +1,59 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸与复方丹参滴丸的可核验差异（适应症、起效特征、证据强度对比），并追溯'本品可连续服用 3 个月'说法的可核验出处；无头对头证据时不得暗示任一药物优于另一药物。",
+  "title": "速效救心丸与复方丹参滴丸的可核验差异：适应症、起效特征与证据强度对比评价，兼溯\"可连续服用 3 个月\"之出处",
+  "startedAt": "2026-08-04T06:18:00Z",
+  "completedAt": "2026-08-04T06:35:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_clinical_trial_search",
+    "evimed_biomedical_source_search",
+    "evimed_evidence_deduplicate",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_pharmacy_reference_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC10240178/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC4617746/fulltext.md",
+    ".evimed-sources/PMC10206061/fulltext.md",
+    ".evimed-sources/PMC10796822/fulltext.md",
+    ".evimed-sources/PMC9428755/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md"
+  ],
+  "failedSources": [
+    "PMID:38395177 (Jia & Leung 2024 NMA) - not open access",
+    "PMID:25582415 (Luo 2015 overview of SRs) - not open access",
+    "PMID:21251721 (Jia 2011 DSP vs ISDN) - not open access",
+    "PMID:32744020 (Liu 2020 SJP ACS SR) - not open access",
+    "PMID:32716206 (Shen 2020 SJP ACS RCT) - not open access",
+    "PMID:37487965 (Ruan 2023 SJP stable angina RCT) - not open access",
+    "PMID:29908471 (Lei 2018 calcium antagonists) - not open access",
+    "PMID:18254051 (Duan 2008 Cochrane review) - Europe PMC retrieval failed",
+    "Crossref query '复方丹参滴丸临床应用专家共识' - HTTP 429",
+    "Europe PMC query 'Suxiao Jiuxin pill three-month course continuous' - HTTP 502",
+    "NMPA official label pages - outside fetch allowlist, verification pending"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 28,
+    "recordsIdentified": 235,
+    "recordsAfterDeduplication": 154,
+    "sourcesIncluded": 29,
+    "distinctPreservedSources": 9
+  }
+}

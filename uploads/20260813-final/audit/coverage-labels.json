@@ -1,0 +1,1512 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-16",
+  "purpose": "「答非所问 / 题面某一问消失 / 摘要改小问题数 / 缺口被写成结论」这一类缺陷的人工标注，作为门禁效果度量的分母。",
+  "corpus": {
+    "deliveries": "uploads/20260813-final/RQ-NN_研究任务/（29 份 clinical-evidence 包：RQ-01..RQ-30 去掉 RQ-06；RQ-06 是另一种交付形态、RQ-31 只有 run.json）",
+    "briefs": "uploads/20260812-sxjxw-33/briefs/RQ-NN_研究任务.md（33 份，每份题面恰有 5 条编号问题）",
+    "findingsSource": "uploads/20260813-final/audit/findings-all.json（104 条已确认缺陷）"
+  },
+  "inclusionRule": {
+    "tier1": "缺陷的落点在「题面所问」与「交付所答」之间：题面某一问（或其中某一列举项）无答案且无缺口声明；报告答的是另一个问题/人群/结局；摘要或引言把题面的问题数改小；报告自己写了未检索到/未核验，而摘要、结论或临床实践要点给出了答案（或反过来，手里有材料却登记为空缺）。",
+    "tier2": "落点在题面的交付/检索条款（分节格式、并列呈现、检索式落地位置）而非「需要回答的问题」，单独计数。",
+    "excluded": "落点在「来源↔陈述」保真度的缺陷（错引、断章、锚点错位、限定语脱落、参考文献字段编造），即使触及某一题面问题也不计入；「方法节声明了工具却未执行」（RQ-07 #7、RQ-21 #75、RQ-29 #97）不计入——门禁已有 declared-appraisal-must-execute 一族在管；RQ-01 #24（三层人群分层第二层消失）不计入——那是报告自己声明的分层，题面并无此要求。"
+  },
+  "defectTypes": {
+    "question_dropped": "题面某一问（或列举中的某一项）全篇无答案，且未写「未检索到」",
+    "question_substituted": "答非所问：用另一个问题/人群/结局的数据充当该问的答案",
+    "scope_understated": "摘要或引言重述研究范围时把题面的问题数改小",
+    "gap_as_conclusion": "报告自身写明未检索到/未核验，摘要、结论或临床实践要点却就同一事项给出答案",
+    "false_gap_declared": "反向：手里已有该问的材料，却登记/表述为证据空缺",
+    "brief_delivery_constraint_dropped": "tier2：题面交付或检索条款未落地"
+  },
+  "tier1Count": 55,
+  "tier2Count": 3,
+  "labels": [
+    {
+      "labelId": "COV-001",
+      "rq": "RQ-02",
+      "findingIndex": 23,
+      "findingTitle": "题面要求清点的中国指南与共识只出现在参考文献表，正文一次未引，也未申明未获取",
+      "briefQuestion": "第1问（并及第4问的中国来源部分）",
+      "briefItem": "AHA/ACC、ESC 及中国相关指南与专家共识…分别如何表述",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "11. 中华医学会急诊医学分会, 中国医疗保健国际交流促进会胸痛分会. 急性胸痛急诊诊疗专家共识. 2019.",
+      "verification": "正文（去掉参考文献节后）按 [n] 逐条计数：[10][11][13] 引用次数均为 0；13 条参考文献中仅这 3 条为零引用。中国一侧内容由 NHS 公众页替位（NHS 在正文出现 5 次）。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "AHA/ACC",
+          "present": true
+        },
+        {
+          "item": "ESC",
+          "present": true
+        },
+        {
+          "item": "中国指南与专家共识",
+          "present": false
+        }
+      ],
+      "note": "题面要求的中国指南/共识既未在正文使用，也未声明未获取。零引用这一表征现有检查能查出（参考文献未被引用），但'这一问没有被回答'需要题面才知道。",
+      "gate": "proxy",
+      "missReason": "R1",
+      "missReasonText": "参考文献未被引用这一条会阻断，但删掉该条即可解除——缺口原样留下。题面点名要清点的中国指南这一问没被回答，门禁看不见题面就无从知道。"
+    },
+    {
+      "labelId": "COV-002",
+      "rq": "RQ-04",
+      "findingIndex": 25,
+      "findingTitle": "把无时段分层的基层病因构成数据，直接写成「晨起头晕、胸闷」的病因分布",
+      "briefQuestion": "第3问",
+      "briefItem": "「晨起头晕、胸闷」这一主诉在未确诊冠心病人群中的病因分布如何？…各占多大比例",
+      "defectType": "question_substituted",
+      "secondaryType": null,
+      "reportQuote": "综合上述基层研究，未确诊人群的晨起头晕、胸闷病因高度异质：基层胸痛致命性病因占 8.4%，老年头晕以心血管（57%）、前庭（14%）、精神（10%）为前三位",
+      "verification": "支撑的三项研究（Bösner 2018、Maarsingh 2010、Hoorweg 2017）在矩阵中的 supportQuote 无 morning/晨间限定；报告正文「晨起」18 次、「时段」2 次，无一处是按发作时段分层的病因构成数据。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "把「晨起」这一题面限定保留在结论里，而数据无时段分层：换了一个更容易的问题作答。",
+      "gate": "miss",
+      "missReason": "R2",
+      "missReasonText": "正文有病因构成数据、有 claim 锚点、连「晨起」这个词都在；错在数据无时段分层。要判它必须比对题面限定与来源人群，正则无从下手。"
+    },
+    {
+      "labelId": "COV-003",
+      "rq": "RQ-05",
+      "findingIndex": 21,
+      "findingTitle": "题面第2问要求的 Valsalva 各时相实测数据全篇无一条来源，讨论却断言「机制层最扎实」",
+      "briefQuestion": "第2问",
+      "briefItem": "Valsalva 动作各时相中腹内压、胸内压、动脉血压、心率与冠脉灌注的变化，在冠心病人群中有哪些实测数据",
+      "defectType": "question_dropped",
+      "secondaryType": "gap_as_conclusion",
+      "reportQuote": "机制层最扎实。Valsalva 动作引起的胸内压升高、静脉回流减少与随后的血压过冲在生理学上反复证实",
+      "verification": "23 条参考文献中无 Valsalva 生理学研究；18 条 claim 无一条涉及腹内压/胸内压/动脉血压/冠脉灌注实测值；报告未写「未检索到」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "既未答也未申明缺口，反而在讨论里把这一层称为「最扎实」。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第2问逐项点名 Valsalva 各时相实测量；报告谈了 Valsalva 却无一条实测值/无生理学参考文献。有题面 + 逐项 claim 锚点要求即可判定。"
+    },
+    {
+      "labelId": "COV-004",
+      "rq": "RQ-05",
+      "findingIndex": 22,
+      "findingTitle": "题面点名要求的推荐类别与证据等级整项未给，指南内容改由学会科普摘要页承载",
+      "briefQuestion": "第5问",
+      "briefItem": "哪些表现与时间阈值被列为必须立即启动急救医疗服务的条件",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "指南（2021 AHA/ACC、ESC、国内共识）以正式题录与官方摘要页为依据，未逐条核对推荐类别与证据等级原文",
+      "verification": "报告全文「时间阈值」0 次；承载指南内容的 CLM-016 锚定 AHA 科普页（accessLevel: official_page）。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "缺口只写在局限性，正文读起来像已回答。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第5问要「时间阈值」；报告该词 0 次。有题面即可机械判定。"
+    },
+    {
+      "labelId": "COV-005",
+      "rq": "RQ-05",
+      "findingIndex": 22,
+      "findingTitle": "题面点名要求的推荐类别与证据等级整项未给，指南内容改由学会科普摘要页承载",
+      "briefQuestion": "第5问",
+      "briefItem": "其推荐类别与证据等级如何",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "未逐条核对推荐类别与证据等级原文",
+      "verification": "报告全文 Class 0 次、LOE 0 次；「推荐类别」1 次、「证据等级」2 次，均出现在局限性的「未逐条核对」句中，无任何 Class/LOE 取值。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第5问要推荐类别与证据等级；报告 Class 0 次、LOE 0 次，仅在局限性写「未逐条核对」。有题面即可判定。"
+    },
+    {
+      "labelId": "COV-006",
+      "rq": "RQ-07",
+      "findingIndex": 13,
+      "findingTitle": "题面第 5 问的三支（药代动力学 / 药效学 / 临床安全性）只答了「临床出血终点」一支，另两支被静默丢弃",
+      "briefQuestion": "第5问",
+      "briefItem": "在术后标准背景治疗之上加用本品，有无药代动力学…数据",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "未检索到以出血为终点、评价速效救心丸加用于双联抗血小板治疗的安全性研究。",
+      "verification": "报告全文「药代动力学」0 次、「川芎嗪」0 次；仅第三支（临床出血终点）被处理。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "药代动力学",
+          "present": false
+        },
+        {
+          "item": "药效学",
+          "present": false
+        },
+        {
+          "item": "临床安全性（出血终点）",
+          "present": true
+        }
+      ],
+      "note": "三支复合问被压缩成一支，另两支连「未检索到」都没写。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第5问三支并列，报告只答一支；另两支词频 0。有题面即可逐支判定。"
+    },
+    {
+      "labelId": "COV-007",
+      "rq": "RQ-07",
+      "findingIndex": 13,
+      "findingTitle": "题面第 5 问的三支（药代动力学 / 药效学 / 临床安全性）只答了「临床出血终点」一支，另两支被静默丢弃",
+      "briefQuestion": "第5问",
+      "briefItem": "…有无药效学…数据",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "未检索到以出血为终点、评价速效救心丸加用于双联抗血小板治疗的安全性研究。",
+      "verification": "报告全文「药效学」0 次。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-008",
+      "rq": "RQ-10",
+      "findingIndex": 4,
+      "findingTitle": "题面明确要求「检索不足时回到指南既有阈值并标注来源与推荐强度」，报告只写「未检索到」就停住，含服前血压下限与升级时间阈值都成了空白",
+      "briefQuestion": "第4问",
+      "briefItem": "指南或说明书是否给出…升级的时间阈值",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "未检索到任何指南或说明书为本品含服设定血压下限或禁用情形",
+      "verification": "报告全文「时间阈值」0 次、「升级」0 次。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第4问点名「升级的时间阈值」，报告 0 次。"
+    },
+    {
+      "labelId": "COV-009",
+      "rq": "RQ-10",
+      "findingIndex": 4,
+      "findingTitle": "题面明确要求「检索不足时回到指南既有阈值并标注来源与推荐强度」，报告只写「未检索到」就停住，含服前血压下限与升级时间阈值都成了空白",
+      "briefQuestion": "证据要求条款",
+      "briefItem": "若检索不足以支持给出独立的血压下限或时间阈值，应回到指南既有阈值并标注其来源与推荐强度",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "含服前血压下限的既有表述见于硝酸酯类，不能直接套用于本品",
+      "verification": "报告「血压下限」6 次，均为否定式表述；无任何硝酸酯类阈值数值、来源与推荐强度，亦未取用《中国高血压防治指南》或 2021 AHA/ACC 胸痛指南的既有阈值。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "题面写明了检索为阴性时的回退动作，报告把阴性检索当成了免答条款。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面证据要求写明检索为阴性时的回退动作；报告未取任何既有阈值。有题面即可判定「回退未执行」。"
+    },
+    {
+      "labelId": "COV-010",
+      "rq": "RQ-10",
+      "findingIndex": 9,
+      "findingTitle": "从同一句支持引文中只截取「不良事件无差异」，略去同句中与本题核心问题直接相关的「血压获得改善」，据此判定人体药效学层「证据空缺」",
+      "briefQuestion": "第2问",
+      "briefItem": "是否存在本品与钙通道阻滞剂、ACEI/ARB…之间的药代动力学或药效学相互作用研究",
+      "defectType": "false_gap_declared",
+      "secondaryType": null,
+      "reportQuote": "丹参川芎嗪注射液联合 ACEI/ARB 与单用 ACEI/ARB 相比不良反应无显著差异 [6]",
+      "verification": "CLM-017 的 supportQuote 同句含「enhanced results in blood glucose, blood pressure, lipids」；报告只截取后半句，据此判「人体药效学相互作用这一层次目前为证据空缺」。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "手里握着方向相同的人体层信号却登记为空缺——报告与自身矩阵的引文互相矛盾，不需要题面即可发现。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：报告的结论与它自己矩阵里 CLM-017 的 supportQuote 同句冲突（同句含 blood pressure 改善）。现有引文核对是数值级与存在级，不比较「同句中被略去的半句」。"
+    },
+    {
+      "labelId": "COV-011",
+      "rq": "RQ-11",
+      "findingIndex": 41,
+      "findingTitle": "题面点名的 Marburg Heart Score 全文只在局限性里露过一次面，从未给出其判别效能；GERD 指南进了参考文献却从不被使用",
+      "briefQuestion": "第2问",
+      "briefItem": "HEART、Marburg Heart Score、EDACS 等复合评分的判别效能与适用场景如何",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "以及 HEART、EDACS 的系统评价与 Marburg Heart Score 的导出研究 [14,15,16]…其定量结论只依据摘要或解读转述",
+      "verification": "报告全文「Marburg」1 次，唯一一次在局限性的引用清单里；复合风险评分一节只有 EDACS 与 HEART，无 Marburg 任何效能数据，也无「未检索到」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "HEART",
+          "present": true
+        },
+        {
+          "item": "EDACS",
+          "present": true
+        },
+        {
+          "item": "Marburg Heart Score",
+          "present": false
+        }
+      ],
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第2问点名 Marburg Heart Score；报告全文 1 次且在局限性引用清单里。有题面即可判定该点名项无效能数据、无缺口声明。"
+    },
+    {
+      "labelId": "COV-012",
+      "rq": "RQ-11",
+      "findingIndex": 41,
+      "findingTitle": "题面点名的 Marburg Heart Score 全文只在局限性里露过一次面，从未给出其判别效能；GERD 指南进了参考文献却从不被使用",
+      "briefQuestion": "第4问",
+      "briefItem": "胃食管反流病相关指南与共识所推荐的分诊路径，各由哪些步骤、决策节点与时间阈值构成",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "各指南在\"先完成心源性排查、再评估其他病因\"的次序上一致…[1,2,18,19,20]",
+      "verification": "ACG GERD 指南以 [17] 进参考文献，正文除局限性外零引用（[17] 不在 [1,2,18,19,20] 之列）；其分诊路径内容全文未呈现。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第4问点名 GERD 指南分诊路径；[17] 进了参考文献、正文零使用。有题面 + claim 锚点要求即可判定。"
+    },
+    {
+      "labelId": "COV-013",
+      "rq": "RQ-11",
+      "findingIndex": 42,
+      "findingTitle": "断言各指南「分歧在时间阈值与检测节点」，却一个阈值差异也没列出来，而题面正是要求逐一列出",
+      "briefQuestion": "第4问（并及交付条款「逐一列出出处与差异」）",
+      "briefItem": "在\"先完成心源性排查、再评估消化系统病因\"这一次序上各来源是否一致，不一致之处的差异有多大",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "各指南在\"先完成心源性排查、再评估其他病因\"的次序上一致，分歧主要在时间阈值与检测节点 [1,2,18,19,20]",
+      "verification": "读第 83 行整段与第 112 行结论：五份来源各介绍一遍，无任何阈值数值、无对照表；同段自陈「不逐条引用其推荐类别」「不一致之处的量化差异需以指南原文为准」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "「分歧在 X」被当成已完成的比较结论输出，而 X 一个也没列。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第4问与交付条款要求「逐一列出出处与差异」；报告断言分歧在时间阈值却一个值也没列。有题面即可判定「要求逐一列出而未列」。"
+    },
+    {
+      "labelId": "COV-014",
+      "rq": "RQ-11",
+      "findingIndex": 34,
+      "findingTitle": "把 0.13–0.41 这个区间套到了「与进食相关」头上——而全文从未检索到该特征的任何判别效能数据",
+      "briefQuestion": "第2问",
+      "briefItem": "常被用来排除心源性病因的那几项特征（与进食相关…），其阴性似然比是否足以…排除急性冠脉综合征",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "被用作\"排除\"的与进食相关、针刺样、按压可复现等特征的阴性似然比（0.13 至 0.41）不足以在缺少心电图与心肌肌钙蛋白时排除急性冠脉综合征",
+      "verification": "0.13–0.41 只出自 CLM-006（按压可复现痛）；矩阵 23 条主张无一条给出「与进食相关」的敏感度/特异度/似然比；第 65 行自陈「其判别效能集中于\"按压可复现\"」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "与进食相关",
+          "present": false
+        },
+        {
+          "item": "针刺样且数秒即止",
+          "present": false
+        },
+        {
+          "item": "按压可复现",
+          "present": true
+        }
+      ],
+      "note": "同一列举中的「针刺样且数秒即止」同样无数据、同样被并入该区间，此处从严只标注题面与结论都点名的「与进食相关」一项。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第2问把三项特征逐一点名并要求各自绑定判别效能数据；报告把一项的似然比套到三项头上。有题面 + 逐项绑定要求即可判定。"
+    },
+    {
+      "labelId": "COV-015",
+      "rq": "RQ-12",
+      "findingIndex": 40,
+      "findingTitle": "第一问点名的用法用量与含服方式、疗程与停药要求、处方/非处方属性三组条目整体消失，且未写「未检索到」",
+      "briefQuestion": "第1问",
+      "briefItem": "用法用量与含服方式",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "两者证型基础同为气滞血瘀，但适应症范围并不相等…麝香保心丸的禁忌与注意事项条目更多，并载有配伍禁忌。",
+      "verification": "报告正文词频：用法用量 0、含服方式 0、停药 0、处方药 0、非处方 0、OTC 0、甲类 0、乙类 0；「疗程」2 次分别在引言与一项试验描述中，均非说明书条目。规格 4、组方 10、功能主治 3、证型 6、禁忌 8、注意事项 2、不良反应 11。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "组方与规格",
+          "present": true
+        },
+        {
+          "item": "功能主治与中医证型限定",
+          "present": true
+        },
+        {
+          "item": "用法用量与含服方式",
+          "present": false
+        },
+        {
+          "item": "疗程与停药要求",
+          "present": false
+        },
+        {
+          "item": "禁忌与注意事项",
+          "present": true
+        },
+        {
+          "item": "不良反应记载",
+          "present": true
+        },
+        {
+          "item": "处方或非处方属性",
+          "present": false
+        }
+      ],
+      "note": "七组条目中较难获得的三组静默消失，且未写「未检索到」。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第1问逐条列出七组说明书条目；报告词频显示三组为 0。这是最机械的一类。"
+    },
+    {
+      "labelId": "COV-016",
+      "rq": "RQ-12",
+      "findingIndex": 40,
+      "findingTitle": "第一问点名的用法用量与含服方式、疗程与停药要求、处方/非处方属性三组条目整体消失，且未写「未检索到」",
+      "briefQuestion": "第1问",
+      "briefItem": "疗程与停药要求",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "两者证型基础同为气滞血瘀，但适应症范围并不相等…麝香保心丸的禁忌与注意事项条目更多，并载有配伍禁忌。",
+      "verification": "报告正文词频：用法用量 0、含服方式 0、停药 0、处方药 0、非处方 0、OTC 0、甲类 0、乙类 0；「疗程」2 次分别在引言与一项试验描述中，均非说明书条目。规格 4、组方 10、功能主治 3、证型 6、禁忌 8、注意事项 2、不良反应 11。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "组方与规格",
+          "present": true
+        },
+        {
+          "item": "功能主治与中医证型限定",
+          "present": true
+        },
+        {
+          "item": "用法用量与含服方式",
+          "present": false
+        },
+        {
+          "item": "疗程与停药要求",
+          "present": false
+        },
+        {
+          "item": "禁忌与注意事项",
+          "present": true
+        },
+        {
+          "item": "不良反应记载",
+          "present": true
+        },
+        {
+          "item": "处方或非处方属性",
+          "present": false
+        }
+      ],
+      "note": "七组条目中较难获得的三组静默消失，且未写「未检索到」。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-017",
+      "rq": "RQ-12",
+      "findingIndex": 40,
+      "findingTitle": "第一问点名的用法用量与含服方式、疗程与停药要求、处方/非处方属性三组条目整体消失，且未写「未检索到」",
+      "briefQuestion": "第1问",
+      "briefItem": "处方或非处方属性",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "两者证型基础同为气滞血瘀，但适应症范围并不相等…麝香保心丸的禁忌与注意事项条目更多，并载有配伍禁忌。",
+      "verification": "报告正文词频：用法用量 0、含服方式 0、停药 0、处方药 0、非处方 0、OTC 0、甲类 0、乙类 0；「疗程」2 次分别在引言与一项试验描述中，均非说明书条目。规格 4、组方 10、功能主治 3、证型 6、禁忌 8、注意事项 2、不良反应 11。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "组方与规格",
+          "present": true
+        },
+        {
+          "item": "功能主治与中医证型限定",
+          "present": true
+        },
+        {
+          "item": "用法用量与含服方式",
+          "present": false
+        },
+        {
+          "item": "疗程与停药要求",
+          "present": false
+        },
+        {
+          "item": "禁忌与注意事项",
+          "present": true
+        },
+        {
+          "item": "不良反应记载",
+          "present": true
+        },
+        {
+          "item": "处方或非处方属性",
+          "present": false
+        }
+      ],
+      "note": "七组条目中较难获得的三组静默消失，且未写「未检索到」。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-018",
+      "rq": "RQ-13",
+      "findingIndex": 43,
+      "findingTitle": "引言把「五个概念常被混为一谈」立为要解决的问题，结果只交付了两个，依赖与成瘾始终没有定义",
+      "briefQuestion": "第1问",
+      "briefItem": "依赖（如何定义与区分）",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "而耐受、快速耐受、依赖、成瘾与停药反跳这五个定义不同的概念在日常表述中又常被混为一谈",
+      "verification": "报告词频：耐受 36、快速耐受 5、依赖 11（全部为「依赖细胞内生物转化」这类动词用法或「依赖样行为」，无定义）、成瘾 1（仅引言列举）、反跳 12（仅硝酸酯停药反跳现象）、观察指标 0。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "耐受",
+          "present": true
+        },
+        {
+          "item": "快速耐受",
+          "present": true
+        },
+        {
+          "item": "依赖",
+          "present": false
+        },
+        {
+          "item": "成瘾",
+          "present": false
+        },
+        {
+          "item": "停药反跳",
+          "present": "partial"
+        },
+        {
+          "item": "各自需要何种观察指标才能确认",
+          "present": false
+        }
+      ],
+      "note": "报告在引言把这项混淆点名为核心问题，随后未兑现，也未写未检索到；「依赖」还在无定义前提下被直接作阴性检索陈述。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第1问点名五个概念的定义与区分；报告对「依赖」只有动词用法与「依赖样行为」。有题面 + 逐项要求即可判定。"
+    },
+    {
+      "labelId": "COV-019",
+      "rq": "RQ-13",
+      "findingIndex": 43,
+      "findingTitle": "引言把「五个概念常被混为一谈」立为要解决的问题，结果只交付了两个，依赖与成瘾始终没有定义",
+      "briefQuestion": "第1问",
+      "briefItem": "成瘾（如何定义与区分）",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "而耐受、快速耐受、依赖、成瘾与停药反跳这五个定义不同的概念在日常表述中又常被混为一谈",
+      "verification": "报告词频：耐受 36、快速耐受 5、依赖 11（全部为「依赖细胞内生物转化」这类动词用法或「依赖样行为」，无定义）、成瘾 1（仅引言列举）、反跳 12（仅硝酸酯停药反跳现象）、观察指标 0。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "耐受",
+          "present": true
+        },
+        {
+          "item": "快速耐受",
+          "present": true
+        },
+        {
+          "item": "依赖",
+          "present": false
+        },
+        {
+          "item": "成瘾",
+          "present": false
+        },
+        {
+          "item": "停药反跳",
+          "present": "partial"
+        },
+        {
+          "item": "各自需要何种观察指标才能确认",
+          "present": false
+        }
+      ],
+      "note": "报告在引言把这项混淆点名为核心问题，随后未兑现，也未写未检索到；「依赖」还在无定义前提下被直接作阴性检索陈述。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上（「成瘾」全文 1 次，仅引言列举）。"
+    },
+    {
+      "labelId": "COV-020",
+      "rq": "RQ-13",
+      "findingIndex": 43,
+      "findingTitle": "引言把「五个概念常被混为一谈」立为要解决的问题，结果只交付了两个，依赖与成瘾始终没有定义",
+      "briefQuestion": "第1问",
+      "briefItem": "各自需要何种观察指标才能确认",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "而耐受、快速耐受、依赖、成瘾与停药反跳这五个定义不同的概念在日常表述中又常被混为一谈",
+      "verification": "报告词频：耐受 36、快速耐受 5、依赖 11（全部为「依赖细胞内生物转化」这类动词用法或「依赖样行为」，无定义）、成瘾 1（仅引言列举）、反跳 12（仅硝酸酯停药反跳现象）、观察指标 0。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "耐受",
+          "present": true
+        },
+        {
+          "item": "快速耐受",
+          "present": true
+        },
+        {
+          "item": "依赖",
+          "present": false
+        },
+        {
+          "item": "成瘾",
+          "present": false
+        },
+        {
+          "item": "停药反跳",
+          "present": "partial"
+        },
+        {
+          "item": "各自需要何种观察指标才能确认",
+          "present": false
+        }
+      ],
+      "note": "报告在引言把这项混淆点名为核心问题，随后未兑现，也未写未检索到；「依赖」还在无定义前提下被直接作阴性检索陈述。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上（「观察指标」0 次）。"
+    },
+    {
+      "labelId": "COV-021",
+      "rq": "RQ-13",
+      "findingIndex": 44,
+      "findingTitle": "面向公众信息质量这一问，被替换成报告自办的三篇科普杂志抽样，用的正是它奉命批判的那种「说法是否出现」计数法",
+      "briefQuestion": "第5问",
+      "briefItem": "面向公众的用药信息，其质量在既有研究中以何种终点被评价…两类评价方式之间有无已发表的实证关联数据",
+      "defectType": "question_substituted",
+      "secondaryType": null,
+      "reportQuote": "本次检索在面向公众的资料中见到了与之一致的模式：既有资料以\"长期服用效果更加显著\"\"少量常服保护心脏\"等表述主张长期获益，均未附试验数据或可核验出处 [23][24][25]",
+      "verification": "[23][24][25] 为三篇科普杂志文章，均无 DOI/PMID；报告未检索任何信息质量评价方法学文献。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "方法学问题被换成报告自办的 n=3 内容抽样，且用的正是题面要它评价的那种「说法是否出现」计数法。",
+      "gate": "miss",
+      "missReason": "R2",
+      "missReasonText": "报告确实写了一节「面向公众的用药信息质量」，有内容、有引用；错在把方法学问题换成自办的 n=3 内容抽样。要判它必须理解题面问的是「以何种终点被评价」。"
+    },
+    {
+      "labelId": "COV-022",
+      "rq": "RQ-14",
+      "findingIndex": 48,
+      "findingTitle": "28 条参考文献中 11 条正文零引用，其中两条正是题面点名要求追溯的法规文本",
+      "briefQuestion": "第1问",
+      "briefItem": "《药品管理法》及药品说明书和标签管理相关规定的对应条款各自如何表述",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "未检索到全国性的法定家庭过期药品回收制度",
+      "verification": "参考文献计数：28 条中 [8][9][10][11][14][15][16][17][20][22][24] 共 11 条正文零引用；[14]《药品说明书和标签管理规定（局令第24号）》在正文中从未被提及。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "proxy",
+      "missReason": "R1",
+      "missReasonText": "参考文献 [14] 未被引用会阻断，但删条即可解除。题面第1问点名该规定，门禁看不见。"
+    },
+    {
+      "labelId": "COV-023",
+      "rq": "RQ-14",
+      "findingIndex": 48,
+      "findingTitle": "28 条参考文献中 11 条正文零引用，其中两条正是题面点名要求追溯的法规文本",
+      "briefQuestion": "第5问",
+      "briefItem": "家庭过期药品在…《国家危险废物名录》中的归类及豁免情形分别是什么",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "现行名录版本与家庭源废药品的豁免管理条款文字未能核验",
+      "verification": "[15]《国家危险废物名录》正文零引用；报告只写未能核验，豁免情形无任何内容。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "proxy",
+      "missReason": "R1",
+      "missReasonText": "参考文献 [15] 未被引用会阻断，同上。"
+    },
+    {
+      "labelId": "COV-024",
+      "rq": "RQ-14",
+      "findingIndex": 37,
+      "findingTitle": "承认劣药条款原文未核验，却把该条款「约束对象是谁」的法律解释写进了结论",
+      "briefQuestion": "第5问",
+      "briefItem": "其禁止性规定的约束对象是药品经营与使用单位，抑或同样及于个人自持",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "该禁止性规定的约束对象是药品生产、经营与使用单位（医疗机构等），其规范表述针对药品上市流通与使用环节",
+      "verification": "同段紧接着写「本次未能核验现行文本中劣药定义条款的条款号与逐字原文，亦未检索到该劣药条款及于个人自持…的权威解释」；该未溯源判断仍进入结论第五条并被临床实践要点引用。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "同一段落内自相矛盾——不需要题面即可发现；但「这一问是题面点名要答的」需要题面。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：同一段落里「未能核验条款原文」与「约束对象是……」直接冲突。现有检查没有「未核验→不得进结论」这一条跨句判据。"
+    },
+    {
+      "labelId": "COV-025",
+      "rq": "RQ-15",
+      "findingIndex": 32,
+      "findingTitle": "结果说这条分层阈值查无出处，临床实践要点转头自拟了同一条阈值，还挂到查不到它的说明书上",
+      "briefQuestion": "第4问",
+      "briefItem": "\"轻微反应可继续观察、严重反应需就医\"一类分层处置阈值，能否逐条追溯到现行说明书…具体条款",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "头晕、乏力、头痛、心悸或口干若为轻度且无其他警示征象，可先停用观察…[1]",
+      "verification": "结果与结论两处均写「未检索到\"轻微反应可继续观察\"这一分层阈值…的可核验出处」，第 49 行记明说明书不良反应项未列心悸；实践要点仍给出该分层并挂 [1]＝说明书。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "报告自身结果节与实践要点直接冲突。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：结果节两处写「未检索到该分层阈值的可核验出处」，实践要点给出该分层。这正是 coverage 检查想查的形态，但它只读运行自写的台账条目，且靠正则族匹配同主题句。"
+    },
+    {
+      "labelId": "COV-026",
+      "rq": "RQ-15",
+      "findingIndex": 49,
+      "findingTitle": "刚写完「两类评价方式之间未见实证关联数据」，下一句就用同一项研究给出了一个关联式判断",
+      "briefQuestion": "第5问",
+      "briefItem": "两类评价方式之间有无已发表的实证关联数据",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "两类评价方式之间未见直接的实证关联数据，但上述研究显示工具的\"质量评分\"与内容的急救安全覆盖可以显著背离 [16]",
+      "verification": "CLM-019 supportQuote 只说量表「不评价治疗有效性或临床疗效」，CLM-020 只说某些药物「鲜少被讨论」；两条都没有把量表得分与安全覆盖并置比较。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "先声明缺口、再用转折句把缺口填上，同句可见。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：同一句里「未见直接的实证关联数据，但……可以显著背离」。现有 gap-acknowledgement 正则把整句判为「已申明缺口」而豁免——这是豁免规则本身被用来绕开。"
+    },
+    {
+      "labelId": "COV-027",
+      "rq": "RQ-16",
+      "findingIndex": 51,
+      "findingTitle": "题面第 2 问点名的五类实测效应，有四类在正文里无声消失，摘要还把五个问题改写成三个",
+      "briefQuestion": "第2问",
+      "briefItem": "心率与血压",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "本文评价三个问题：（1）睡眠剥夺对心血管系统的实测效应及其能否对应到\"心悸\"这一具体主诉…",
+      "verification": "报告词频：儿茶酚胺 0、血压 0、炎症 0、内皮 0；「期前收缩」3 次全部在摘要/引言的鉴别诊断罗列里，从未作为睡眠剥夺的结局；心率变异性见第 58 行、QT 离散度见第 60 行、房颤见第 62/86 行，均为真答案。检索日志中 \"acute sleep deprivation blood pressure catecholamine healthy\" 返回 0 条，正文只字未提。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "心率与血压",
+          "present": false
+        },
+        {
+          "item": "心率变异性所反映的交感与迷走张力",
+          "present": true
+        },
+        {
+          "item": "儿茶酚胺水平",
+          "present": false
+        },
+        {
+          "item": "房性与室性期前收缩负荷",
+          "present": false
+        },
+        {
+          "item": "心房颤动发作",
+          "present": true
+        },
+        {
+          "item": "QT 间期",
+          "present": true
+        },
+        {
+          "item": "炎症与内皮功能指标",
+          "present": false
+        }
+      ],
+      "note": "七类实测效应中四类无声消失，既无答案也未按题面写成「未检索到」并附检索式。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第2问逐项点名七类实测效应；报告四类词频为 0，检索日志里对应检索式返回 0 条也未写进正文。"
+    },
+    {
+      "labelId": "COV-028",
+      "rq": "RQ-16",
+      "findingIndex": 51,
+      "findingTitle": "题面第 2 问点名的五类实测效应，有四类在正文里无声消失，摘要还把五个问题改写成三个",
+      "briefQuestion": "第2问",
+      "briefItem": "儿茶酚胺水平",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "本文评价三个问题：（1）睡眠剥夺对心血管系统的实测效应及其能否对应到\"心悸\"这一具体主诉…",
+      "verification": "报告词频：儿茶酚胺 0、血压 0、炎症 0、内皮 0；「期前收缩」3 次全部在摘要/引言的鉴别诊断罗列里，从未作为睡眠剥夺的结局；心率变异性见第 58 行、QT 离散度见第 60 行、房颤见第 62/86 行，均为真答案。检索日志中 \"acute sleep deprivation blood pressure catecholamine healthy\" 返回 0 条，正文只字未提。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "心率与血压",
+          "present": false
+        },
+        {
+          "item": "心率变异性所反映的交感与迷走张力",
+          "present": true
+        },
+        {
+          "item": "儿茶酚胺水平",
+          "present": false
+        },
+        {
+          "item": "房性与室性期前收缩负荷",
+          "present": false
+        },
+        {
+          "item": "心房颤动发作",
+          "present": true
+        },
+        {
+          "item": "QT 间期",
+          "present": true
+        },
+        {
+          "item": "炎症与内皮功能指标",
+          "present": false
+        }
+      ],
+      "note": "七类实测效应中四类无声消失，既无答案也未按题面写成「未检索到」并附检索式。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-029",
+      "rq": "RQ-16",
+      "findingIndex": 51,
+      "findingTitle": "题面第 2 问点名的五类实测效应，有四类在正文里无声消失，摘要还把五个问题改写成三个",
+      "briefQuestion": "第2问",
+      "briefItem": "房性与室性期前收缩负荷",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "本文评价三个问题：（1）睡眠剥夺对心血管系统的实测效应及其能否对应到\"心悸\"这一具体主诉…",
+      "verification": "报告词频：儿茶酚胺 0、血压 0、炎症 0、内皮 0；「期前收缩」3 次全部在摘要/引言的鉴别诊断罗列里，从未作为睡眠剥夺的结局；心率变异性见第 58 行、QT 离散度见第 60 行、房颤见第 62/86 行，均为真答案。检索日志中 \"acute sleep deprivation blood pressure catecholamine healthy\" 返回 0 条，正文只字未提。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "心率与血压",
+          "present": false
+        },
+        {
+          "item": "心率变异性所反映的交感与迷走张力",
+          "present": true
+        },
+        {
+          "item": "儿茶酚胺水平",
+          "present": false
+        },
+        {
+          "item": "房性与室性期前收缩负荷",
+          "present": false
+        },
+        {
+          "item": "心房颤动发作",
+          "present": true
+        },
+        {
+          "item": "QT 间期",
+          "present": true
+        },
+        {
+          "item": "炎症与内皮功能指标",
+          "present": false
+        }
+      ],
+      "note": "七类实测效应中四类无声消失，既无答案也未按题面写成「未检索到」并附检索式。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-030",
+      "rq": "RQ-16",
+      "findingIndex": 51,
+      "findingTitle": "题面第 2 问点名的五类实测效应，有四类在正文里无声消失，摘要还把五个问题改写成三个",
+      "briefQuestion": "第2问",
+      "briefItem": "炎症与内皮功能指标",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "本文评价三个问题：（1）睡眠剥夺对心血管系统的实测效应及其能否对应到\"心悸\"这一具体主诉…",
+      "verification": "报告词频：儿茶酚胺 0、血压 0、炎症 0、内皮 0；「期前收缩」3 次全部在摘要/引言的鉴别诊断罗列里，从未作为睡眠剥夺的结局；心率变异性见第 58 行、QT 离散度见第 60 行、房颤见第 62/86 行，均为真答案。检索日志中 \"acute sleep deprivation blood pressure catecholamine healthy\" 返回 0 条，正文只字未提。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "心率与血压",
+          "present": false
+        },
+        {
+          "item": "心率变异性所反映的交感与迷走张力",
+          "present": true
+        },
+        {
+          "item": "儿茶酚胺水平",
+          "present": false
+        },
+        {
+          "item": "房性与室性期前收缩负荷",
+          "present": false
+        },
+        {
+          "item": "心房颤动发作",
+          "present": true
+        },
+        {
+          "item": "QT 间期",
+          "present": true
+        },
+        {
+          "item": "炎症与内皮功能指标",
+          "present": false
+        }
+      ],
+      "note": "七类实测效应中四类无声消失，既无答案也未按题面写成「未检索到」并附检索式。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-031",
+      "rq": "RQ-16",
+      "findingIndex": 51,
+      "findingTitle": "题面第 2 问点名的五类实测效应，有四类在正文里无声消失，摘要还把五个问题改写成三个",
+      "briefQuestion": "全篇（摘要重述研究范围）",
+      "briefItem": "题面「需要回答的问题」共 5 条",
+      "defectType": "scope_understated",
+      "secondaryType": null,
+      "reportQuote": "本文评价三个问题：（1）…（2）…（3）…",
+      "verification": "题面编号问题 5 条；摘要第 5 行声明「本文评价三个问题」。被吞掉的恰是查无所获的那几项。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "hit",
+      "missReason": "-",
+      "missReasonText": "specialist_question_coverage_understated：「摘要一节声明本文回答 3 个问题，台账登记 5 个题面编号」。"
+    },
+    {
+      "labelId": "COV-032",
+      "rq": "RQ-17",
+      "findingIndex": 55,
+      "findingTitle": "结论把\"没查到直接证据\"升级为\"证据为阴性\"，靠的是换人群、换结局的另一项试验",
+      "briefQuestion": "第5问(c)",
+      "briefItem": "减少咖啡因摄入能否降低心悸发作频次——有无干预性研究的直接证据",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "第四，无心血管诊断青年人为预防猝死而常备自服本品缺乏临床结局证据；减少咖啡因对心悸发作的直接干预证据为弱或阴性。",
+      "verification": "支撑「阴性」的 DECAF 试验人群为电复律后持续性房颤患者、结局为房颤/房扑复发，无一项测量心悸发作频次；题面证据要求写明「检索为阴性时…不得反向表述为已证实无效」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "同一试验在正文与讨论里还给出两种相反口径，且实践要点第 7 条与「阴性」结论自相矛盾。",
+      "gate": "hit",
+      "missReason": "-",
+      "missReasonText": "specialist_question_coverage_gap_overstated 命中同一句（门禁在摘要第 27 行抓到，标注引的是结论里的同一句）。注意门禁把它归到相邻子问 5.3（(b) 支），子问归属不同、句子相同。"
+    },
+    {
+      "labelId": "COV-033",
+      "rq": "RQ-18",
+      "findingIndex": 50,
+      "findingTitle": "把一次薄检索的空手，写成了关于文献世界的事实断言，而同批次另外两篇已检出该药的英文临床证据",
+      "briefQuestion": "第4问",
+      "briefItem": "以运动诱发胸痛人群…为纳入对象、以本品为干预的临床研究是否存在",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "英文索引中与本品相关的临床相关记录仅 1 条，为 2011 年发表的动物实验…[8]",
+      "verification": "检索日志显示全篇对该药只跑了 2 条 PubMed 检索式，从未在自己声明的 Europe PMC 上检索该药；同批次 RQ-16/17/19/20 用几乎相同的词检出 Ren 2018 meta 分析、Hu 2024 多中心试验等。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "一次薄检索的空手被写成关于文献世界的事实断言，并顺势把缺口归因给中文库不可及。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：检索日志显示只跑了 2 条检索式、未在自己声明的 Europe PMC 上检索该药，却断言「英文索引中相关记录仅 1 条」。现有检查不比较断言的覆盖面与日志的检索面。"
+    },
+    {
+      "labelId": "COV-034",
+      "rq": "RQ-19",
+      "findingIndex": 60,
+      "findingTitle": "一项房颤筛查阴性试验被写成\"赠设备优于赠药\"的\"直接反证\"，而报告自己刚说过这类比较研究一项都没有",
+      "briefQuestion": "第5问",
+      "briefItem": "作为馈赠替代方案常被提及的体检服务与家用健康监测设备…与药品馈赠之间有无直接比较研究",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "这一阴性结果是对\"赠设备优于赠药\"这一未言明预设的直接反证，且其为整群随机对照设计，确定性为中等。",
+      "verification": "同一节上一段刚写「未检索到将药品馈赠与体检服务或家用监测设备作结局对照的研究」；Uittenbogaart 2020 无赠药对照臂、不以馈赠为暴露、不以心血管结局为终点。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "同节相邻两段自相矛盾。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：同一节相邻两段，前段「未检索到这类对照研究」，后段「这一阴性结果是直接反证」。"
+    },
+    {
+      "labelId": "COV-035",
+      "rq": "RQ-19",
+      "findingIndex": 61,
+      "findingTitle": "参考表里躺着一项 16856 例老年人用药的真实世界研究和一份专家共识，正文一次都没引用，同时报告在断言该人群证据空缺",
+      "briefQuestion": "第4问",
+      "briefItem": "与硝酸酯类及降压药联用的血流动力学风险…有哪些数据",
+      "defectType": "false_gap_declared",
+      "secondaryType": null,
+      "reportQuote": "仅有心血管危险因素而无冠心病诊断者：未检索到以该人群为对象、以速效救心丸为干预的临床研究…[1][4]",
+      "verification": "参考文献计数：18 条中 [14][17] 正文零引用；[17] 为 16856 例老年人用药真实世界研究、[14] 为速效救心丸中国专家共识，正是该人群基线构成与联合用药风险的直接材料。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "既拿到了相关材料又维持「证据空缺」的结论。",
+      "gate": "proxy",
+      "missReason": "R1",
+      "missReasonText": "参考文献 [14][17] 未被引用会阻断，但删条即可解除；题面第4问点名「与硝酸酯类及降压药联用」，门禁看不见。"
+    },
+    {
+      "labelId": "COV-036",
+      "rq": "RQ-21",
+      "findingIndex": 73,
+      "findingTitle": "结果一节说病因构成查无数据，结论却断言「急性高原病是最常见病因」，锚点是一条暴露人群患病率",
+      "briefQuestion": "第3问",
+      "briefItem": "以胸闷、心慌、气短为主诉的高原就诊人群，其病因构成有哪些证据…各占多大比例",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "现有证据仅支持\"急性高原病是最常见病因、高原肺水肿与高原脑水肿罕见但致命…\"这一较弱表述。[5]",
+      "verification": "结果一节写「未检索到…直接量化高原就诊人群中各实体的构成比」；结论后半句给出构成比排序并挂 CLM-002，而 CLM-002 的 supportQuote 是暴露人群患病率（AMS 40%–90% in unacclimatised individuals），分母不同。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "结果节与结论节直接冲突。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：结果节「未检索到直接量化构成比」与结论「最常见病因」冲突，且锚点 supportQuote 是暴露患病率。"
+    },
+    {
+      "labelId": "COV-037",
+      "rq": "RQ-21",
+      "findingIndex": 68,
+      "findingTitle": "未核验的说明书索引件被用来支撑「未出现在任何条目下」这一否定性断言，且说明书是全篇唯一无 claim 锚点的来源",
+      "briefQuestion": "第1问",
+      "briefItem": "「高原」「高海拔」「缺氧」「低氧」「高原反应」是否作为人群、诱因或场景出现在适应症、功能主治、用法用量、注意事项或禁忌项下",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "\"高原\"\"高海拔\"\"缺氧\"\"低氧\"\"高原反应\"未出现在适应症、功能主治、用法用量、注意事项或禁忌项下。[1]",
+      "verification": "结果一节自陈「说明书原文未能直接从国家药监局现行数据库核验，所据为索引件」「批准文号与历次修订的逐条溯源未能完成」；矩阵 22 条 claim 的 referenceNumber 只有 3/4/5/15/16，说明书 [1] 无任何 claim 锚点。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "未核验来源被升级为对全部条目的穷尽性否定；报告自身已写明来源层级。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：结果节自陈说明书未核验、矩阵里说明书 [1] 无任何 claim 锚点，摘要与结论却作穷尽性否定。"
+    },
+    {
+      "labelId": "COV-038",
+      "rq": "RQ-22",
+      "findingIndex": 82,
+      "findingTitle": "与题面第 2 问最对口的一篇研究（青年急诊胸痛队列）列进参考文献却一次未引",
+      "briefQuestion": "第2问",
+      "briefItem": "以 18–45 岁、以非特异性胸闷或胸部不适为主诉者为对象的…队列中，最终病因的构成比是多少",
+      "defectType": "false_gap_declared",
+      "secondaryType": null,
+      "reportQuote": "11. Walker NJ, Sites FD, Shofer FS, Hollander JE. Characteristics and outcomes of young adults who present to the emergency department with chest pain.",
+      "verification": "参考文献计数：19 条中唯 [11] 正文零引用；报告同时以「未检索到青年病因构成研究」作答。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "proxy",
+      "missReason": "R1",
+      "missReasonText": "参考文献 [11] 未被引用会阻断，但删条即可解除；题面第2问正是青年胸痛病因构成，门禁看不见。"
+    },
+    {
+      "labelId": "COV-039",
+      "rq": "RQ-22",
+      "findingIndex": 71,
+      "findingTitle": "临床实践要点的急诊警示征象清单是本文自拟的，却被挂到一篇肥厚型心肌病尸检队列上",
+      "briefQuestion": "第4问",
+      "briefItem": "哪些特征被列为须立即急诊评估的警示征象（运动中或运动后发作、晕厥、早发猝死家族史、持续不缓解、伴呼吸困难或咯血）",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "运动中或运动后发作、晕厥、早发猝死家族史、伴呼吸困难或咯血等特征同样属于须立即急诊评估的警示征象[4]",
+      "verification": "结果一节自陈这组特征「属于本评价所归纳的高风险警示组合」并承认「敏感度与特异度同样缺乏有分母的前瞻数据」；实践要点删去「本评价所归纳」改挂 [4]/CLM-018，而 CLM-018 的 supportQuote 未提咯血、未提急诊评估。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "题面的候选清单被回填成带引文的证据结论；结果节与实践要点的口径冲突在报告内部可见。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：结果节写「属于本评价所归纳」「缺乏有分母的前瞻数据」，实践要点删掉限定改挂 [4]/CLM-018，而该 claim 的 supportQuote 不含相应内容。"
+    },
+    {
+      "labelId": "COV-040",
+      "rq": "RQ-23",
+      "findingIndex": 85,
+      "findingTitle": "临床实践要点凭空多出「首次发生、性质改变」两个触发条件和「高敏肌钙蛋白」检查项，出处是一页 NHS 科普",
+      "briefQuestion": "证据要求条款",
+      "briefItem": "含服后症状不缓解时的处置路径以现行指南的既有阈值为准并标注其来源与推荐强度",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "首次发生、性质改变或持续不缓解的胸痛，应立即呼叫急救（在中国为 120）并接受心电图与高敏肌钙蛋白评估",
+      "verification": "结果一节可核到的只有 CLM-017 的「sudden pain or discomfort in your chest that does not go away … Call 999 straight away」，无「首次发生」「性质改变」两个触发条件，也无心电图与高敏肌钙蛋白；出处为一页 NHS 科普，未标推荐强度。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "实践要点补进了结果节没有的阈值与检查项，仍挂同一 claim。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：结果节可核到的只有一句 NHS 科普原文，实践要点补进了两个触发条件与两项检查。"
+    },
+    {
+      "labelId": "COV-041",
+      "rq": "RQ-25",
+      "findingIndex": 69,
+      "findingTitle": "题面第 3、4 问（渠道前置条件与网络销售规章要求）整问消失，摘要却仍把它列为本文目的",
+      "briefQuestion": "第3问",
+      "briefItem": "药品网络销售相关规章与公告对该类药品的销售主体资质、处方审核、第三方平台责任与信息展示有何要求",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "界定分类属性对各购买渠道设定的前置条件",
+      "verification": "报告词频：处方管理办法 0、第三方平台 0、信息展示 0；「网络销售」2 次、「执业药师」1 次均在引言/讨论的问题陈述句中，无任何规章条款内容，也未写「未检索到相关规章」。同批次 RQ-23 在同一检索环境下引到了《药品网络销售监督管理办法》第九条与《处方管理办法》第十九条。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "摘要仍把该问列为三大目的之一。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第3问后半段逐项点名网络销售规章的四项要求；报告四项词频全 0，且未写「未检索到相关规章」。"
+    },
+    {
+      "labelId": "COV-042",
+      "rq": "RQ-25",
+      "findingIndex": 69,
+      "findingTitle": "题面第 3、4 问（渠道前置条件与网络销售规章要求）整问消失，摘要却仍把它列为本文目的",
+      "briefQuestion": "第4问",
+      "briefItem": "非处方药说明书与警示语的规范要求、非处方药遴选原则、执业药师指导义务、包装与标签标识",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "界定分类属性对各购买渠道设定的前置条件",
+      "verification": "报告词频：警示语 0、遴选原则 0、包装标签 0；执业药师 1 次（讨论中的问题陈述句）。四项监管安排一条未答。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "非处方药说明书与警示语的规范要求",
+          "present": false
+        },
+        {
+          "item": "非处方药遴选原则",
+          "present": false
+        },
+        {
+          "item": "执业药师指导义务",
+          "present": false
+        },
+        {
+          "item": "包装与标签标识",
+          "present": false
+        }
+      ],
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第4问逐项点名四项监管安排；报告四项词频全 0。"
+    },
+    {
+      "labelId": "COV-043",
+      "rq": "RQ-26",
+      "findingIndex": 92,
+      "findingTitle": "摘要把题面五问改写成三问，第 2 问的病理生理支路（交感激活、过度换气与低碳酸血症、心率变异性各由何种研究类型支持）全文零命中且无缺口声明",
+      "briefQuestion": "第2问",
+      "briefItem": "其病理生理路径——交感激活——各由何种研究类型支持",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "**目的** 评价三件事所依赖的证据：其一…其二…其三…",
+      "verification": "报告词频：交感 0、低碳酸 0、心率变异 0。报告对甲状腺、贫血、共病率都写了「留作缺口」，唯独这几处既没答也没声明缺口。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "交感激活",
+          "present": false
+        },
+        {
+          "item": "过度换气与低碳酸血症",
+          "present": false
+        },
+        {
+          "item": "心率变异性改变",
+          "present": false
+        }
+      ],
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第2问逐项点名三条病理生理支路；报告三项词频全 0，且无缺口声明。"
+    },
+    {
+      "labelId": "COV-044",
+      "rq": "RQ-26",
+      "findingIndex": 92,
+      "findingTitle": "摘要把题面五问改写成三问，第 2 问的病理生理支路（交感激活、过度换气与低碳酸血症、心率变异性各由何种研究类型支持）全文零命中且无缺口声明",
+      "briefQuestion": "第2问",
+      "briefItem": "其病理生理路径——过度换气与低碳酸血症——各由何种研究类型支持",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "**目的** 评价三件事所依赖的证据：其一…其二…其三…",
+      "verification": "报告词频：交感 0、低碳酸 0、心率变异 0。报告对甲状腺、贫血、共病率都写了「留作缺口」，唯独这几处既没答也没声明缺口。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "交感激活",
+          "present": false
+        },
+        {
+          "item": "过度换气与低碳酸血症",
+          "present": false
+        },
+        {
+          "item": "心率变异性改变",
+          "present": false
+        }
+      ],
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-045",
+      "rq": "RQ-26",
+      "findingIndex": 92,
+      "findingTitle": "摘要把题面五问改写成三问，第 2 问的病理生理支路（交感激活、过度换气与低碳酸血症、心率变异性各由何种研究类型支持）全文零命中且无缺口声明",
+      "briefQuestion": "第2问",
+      "briefItem": "其病理生理路径——心率变异性改变——各由何种研究类型支持",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "**目的** 评价三件事所依赖的证据：其一…其二…其三…",
+      "verification": "报告词频：交感 0、低碳酸 0、心率变异 0。报告对甲状腺、贫血、共病率都写了「留作缺口」，唯独这几处既没答也没声明缺口。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": [
+        {
+          "item": "交感激活",
+          "present": false
+        },
+        {
+          "item": "过度换气与低碳酸血症",
+          "present": false
+        },
+        {
+          "item": "心率变异性改变",
+          "present": false
+        }
+      ],
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "同上。"
+    },
+    {
+      "labelId": "COV-046",
+      "rq": "RQ-26",
+      "findingIndex": 92,
+      "findingTitle": "摘要把题面五问改写成三问，第 2 问的病理生理支路（交感激活、过度换气与低碳酸血症、心率变异性各由何种研究类型支持）全文零命中且无缺口声明",
+      "briefQuestion": "第4问",
+      "briefItem": "情绪触发的急性冠脉事件的发生率",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "**目的** 评价三件事所依赖的证据…",
+      "verification": "报告词频：急性冠脉事件 0。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第4问点名「情绪触发的急性冠脉事件的发生率」；报告 0 次。"
+    },
+    {
+      "labelId": "COV-047",
+      "rq": "RQ-26",
+      "findingIndex": 92,
+      "findingTitle": "摘要把题面五问改写成三问，第 2 问的病理生理支路（交感激活、过度换气与低碳酸血症、心率变异性各由何种研究类型支持）全文零命中且无缺口声明",
+      "briefQuestion": "第4问",
+      "briefItem": "（情绪触发的急性冠脉事件的）触发时间窗",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "**目的** 评价三件事所依赖的证据…",
+      "verification": "报告词频：时间窗 0。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第4问点名「触发时间窗」；报告 0 次。"
+    },
+    {
+      "labelId": "COV-048",
+      "rq": "RQ-26",
+      "findingIndex": 92,
+      "findingTitle": "摘要把题面五问改写成三问，第 2 问的病理生理支路（交感激活、过度换气与低碳酸血症、心率变异性各由何种研究类型支持）全文零命中且无缺口声明",
+      "briefQuestion": "全篇（摘要重述研究范围）",
+      "briefItem": "题面「需要回答的问题」共 5 条",
+      "defectType": "scope_understated",
+      "secondaryType": null,
+      "reportQuote": "**目的** 评价三件事所依赖的证据：其一，工作压力与情绪激动后出现的心悸、胸闷，与心绞痛之间据以鉴别的证据；其二…；其三…",
+      "verification": "题面编号问题 5 条；摘要声明三件事。缺口被申明与问题被删除在交付物上看不出差别。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "有题面能把分母钉死为 5，但这一条漏在重述句的措辞：摘要写「评价三件事」——现有 cue 正则要求「本文/本研究/…」+「问题|方面」，「三件事」与无主语句式直接绕开。属正则军备竞赛的典型。"
+    },
+    {
+      "labelId": "COV-049",
+      "rq": "RQ-27",
+      "findingIndex": 91,
+      "findingTitle": "题面问的是「血管舒缩症状发作时」的心率、血压与交感张力，报告答的是「有无症状两组之间」的静息心率变异性；血压始终没有数据",
+      "briefQuestion": "第2问",
+      "briefItem": "血管舒缩症状发作时的心率、心率变异性与交感张力变化",
+      "defectType": "question_substituted",
+      "secondaryType": null,
+      "reportQuote": "就症状发作时的心率、血压与交感张力，现有研究结论并不一致：一篇系统评价汇总 3 项研究、231 例，发现有无血管舒缩症状的女性在低频、高频、LF/HF 比值、RMSSD 与 SDNN 上均无统计学差异",
+      "verification": "CLM-010 的 supportQuote 是「no difference in low frequency (LF) in women with VMS compared to those without VMS」——有症状与无症状女性的组间静息比较，不是发作当时的变化。参考文献计数：17 条中 [12][13][14][17] 正文零引用，其中 [13] Thurston《Hot flashes and cardiac vagal control during women's daily lives》与 [14] Stokes《…sympathetic activity, and blood pressure》正是发作期证据。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "难的问题（发作时）被换成手边现成的容易问题（有无症状两组之间）。",
+      "gate": "proxy",
+      "missReason": "R2",
+      "missReasonText": "参考文献 [13] Thurston（潮热发作时的心迷走控制）与 [14] Stokes（血管舒缩症状、交感活性与血压）正文零引用，门禁的『参考文献未被引用』会阻断；但删掉这两条即可解除，而答非所问原样留下。正文有一节直接回答「发作时的心率、血压与交感张力」，有 claim 锚点、词面全对；错在锚点 supportQuote 是「有症状 vs 无症状两组的静息比较」。要判它必须比对题面的问法与来源的设计。"
+    },
+    {
+      "labelId": "COV-050",
+      "rq": "RQ-27",
+      "findingIndex": 91,
+      "findingTitle": "题面问的是「血管舒缩症状发作时」的心率、血压与交感张力，报告答的是「有无症状两组之间」的静息心率变异性；血压始终没有数据",
+      "briefQuestion": "第2问",
+      "briefItem": "血管舒缩症状发作时的血压变化",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "就症状发作时的心率、血压与交感张力，现有研究结论并不一致…",
+      "verification": "「血压」在报告全文只出现这一次，即上面这句问题陈述本身，此后再无任何血压数据，也无缺口声明。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "proxy",
+      "missReason": "R1",
+      "missReasonText": "参考文献 [13] Thurston（潮热发作时的心迷走控制）与 [14] Stokes（血管舒缩症状、交感活性与血压）正文零引用，门禁的『参考文献未被引用』会阻断；但删掉这两条即可解除，而这一问仍然没有血压数据。题面第2问点名「发作时的血压」；报告「血压」全文只出现在那句问题陈述里，此后无任何数据、无缺口声明。"
+    },
+    {
+      "labelId": "COV-051",
+      "rq": "RQ-28",
+      "findingIndex": 90,
+      "findingTitle": "摘要把题面的五问改写成三问，第 5 问（公众用药表述的分歧定位与条件性表述）在全文无声消失",
+      "briefQuestion": "第5问",
+      "briefItem": "分歧的确切位置是在两个门槛互不相同，还是在「非安慰剂」与「作为心理安抚备药」这两种定位本身互不相容…一条能够被证据支持的条件性表述应当包含哪些要素",
+      "defectType": "question_dropped",
+      "secondaryType": null,
+      "reportQuote": "**目的** 本评价针对…这一行为，回答三个问题",
+      "verification": "报告词频：分歧 0、条件性 0；唯一的「不一致」出现在资料与方法里当作 GRADE 降级理由。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "问题本身被摘要重新编号后消掉了——摘要的三问是题面第 1、2、4 问的合并。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第5问点名「分歧的确切位置」与「条件性表述」；报告两词均 0 次。"
+    },
+    {
+      "labelId": "COV-052",
+      "rq": "RQ-28",
+      "findingIndex": 90,
+      "findingTitle": "摘要把题面的五问改写成三问，第 5 问（公众用药表述的分歧定位与条件性表述）在全文无声消失",
+      "briefQuestion": "全篇（摘要重述研究范围）",
+      "briefItem": "题面「需要回答的问题」共 5 条",
+      "defectType": "scope_understated",
+      "secondaryType": null,
+      "reportQuote": "**目的** 本评价针对\"以养生保健为由…\"这一行为，回答三个问题",
+      "verification": "题面编号问题 5 条；摘要声明三个问题。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "同 COV-048：摘要写「本评价……回答三个问题」——「本评价」不在现有 cue 正则的主语表（本文|本研究|本综述|本报告|本篇）内，直接绕开。"
+    },
+    {
+      "labelId": "COV-053",
+      "rq": "RQ-28",
+      "findingIndex": 95,
+      "findingTitle": "结果一节没有给出任何绝对风险数字、局限性说 China-PAR 只到题录，结论却写成「绝对风险与首发表现证据存在」",
+      "briefQuestion": "第4问",
+      "briefItem": "其在给定时间窗内的急性冠脉事件绝对风险是多少",
+      "defectType": "gap_as_conclusion",
+      "secondaryType": null,
+      "reportQuote": "以危险因素入组的绝对风险与首发表现证据存在（China-PAR、心脏性猝死综述、登记研究），但现行胸痛评估与心血管病防治指南对无诊断者家庭备置抗心绞痛药物未予述及",
+      "verification": "结果一节（第 69 行）对此只写「China-PAR 项目建立了中国人群动脉粥样硬化性心血管病风险预测模型 [16]」，无任何数字；局限性写「China-PAR 模型（题录）…未获全文核验」。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "未取得的量在结论里被升级为「证据存在」；结果节、局限性与结论三处冲突。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：结果节一个绝对风险数字都没有、局限性写 China-PAR 只到题录，结论写「证据存在」。三处冲突。"
+    },
+    {
+      "labelId": "COV-054",
+      "rq": "RQ-29",
+      "findingIndex": 100,
+      "findingTitle": "抗凝试验入组人群的「合并血管疾病 46%–56%」被用来回答房颤与冠心病的人群共病率，且「事件率均更高」半句在 supportQuote 里查无实据",
+      "briefQuestion": "第4问",
+      "briefItem": "二者（房颤与冠心病）在同一患者并存的比例有哪些人群数据",
+      "defectType": "question_substituted",
+      "secondaryType": null,
+      "reportQuote": "房颤与冠心病并存常见（抗凝试验中约 46% 至 56% 合并血管疾病）[9]",
+      "verification": "CLM-027 的 supportQuote 全文只有「Approximately half of the patients in the two trials had pre-existing vascular disease (56% and 46%).」；ARTESiA/NOAH 的入组构成是按入排标准筛出的人群，不是人群学分母，且 vascular disease 被写成「合并血管疾病（含冠心病）」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "该数字最终进入临床实践要点第 6 条。",
+      "gate": "miss",
+      "missReason": "R2",
+      "missReasonText": "正文有数字、有引文、有 claim 锚点；错在把两项试验的入组构成当成人群学分母。要判它必须比对题面问的「人群数据」与来源的抽样框。"
+    },
+    {
+      "labelId": "COV-055",
+      "rq": "RQ-30",
+      "findingIndex": 99,
+      "findingTitle": "临床实践要点把题面列举的候选干预原样回抛为「处置证据」，其锚点 CLM-008 说的恰恰是「没有指南可依」，全文推荐类别与证据等级零命中",
+      "briefQuestion": "第2问",
+      "briefItem": "现行指南、共识与系统评价对检查前焦虑推荐的处置手段…各自的推荐类别与证据等级如何",
+      "defectType": "question_dropped",
+      "secondaryType": "question_substituted",
+      "reportQuote": "3. 检查前紧张属检查相关焦虑，处置证据为结构化告知、行为与心理干预、音乐与虚拟现实等非药物手段，必要时短效镇静药；其证据不包含任何中成药 [5][8]",
+      "verification": "报告词频：推荐类别 0、证据等级 0；「结构化告知」只在讨论的研究设想句与这条要点里出现，结果一节从未出现；claim 锚点 CLM-008 的 supportQuote 是「there are no guidelines providing aid in selecting pharmacological strategies to reduce procedural anxiety」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "题面的候选清单被逐字复述回来当成答案，锚点来源说的恰是「无指南可依」。",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面第2问点名「各自的推荐类别与证据等级」；报告两词均 0 次，且把题面的候选清单逐字回抛为答案。"
+    },
+    {
+      "labelId": "COV-056",
+      "rq": "RQ-08",
+      "findingIndex": 10,
+      "findingTitle": "交付要求的「三层次分节 + 各层分别标注确定性」没有落地，正文却宣称已分别标注；未开封稳定性这一层根本没有自己的小节",
+      "briefQuestion": "交付条款",
+      "briefItem": "结果部分按未开封稳定性、开封后实测、理化性质推断三个层次分节呈现，各层分别标注证据确定性等级",
+      "defectType": "brief_delivery_constraint_dropped",
+      "secondaryType": null,
+      "reportQuote": "三个层次分别陈述、分别标注确定性。",
+      "verification": "实际结果小节为：理化性质与基质形式／开封后直接实测／含量下降与临床效应／贮藏规定与包装／出处追溯；「未开封稳定性」无独立小节；全文仅一处 GRADE 等级。方法学第 51 行仍宣称已分别标注。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": [
+        {
+          "item": "未开封稳定性",
+          "present": false
+        },
+        {
+          "item": "开封后实测",
+          "present": true
+        },
+        {
+          "item": "理化性质推断",
+          "present": "partial"
+        }
+      ],
+      "note": "方法节自述与结果节结构冲突，报告内部可见。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：方法节自称「三个层次分别陈述、分别标注确定性」，结果节的小节不是那三层。"
+    },
+    {
+      "labelId": "COV-057",
+      "rq": "RQ-05",
+      "findingIndex": 20,
+      "findingTitle": "用人群时间分布证据发出个体行为规避建议，且该建议单独成条，与题面「不单独成条」的交付约束相反",
+      "briefQuestion": "交付条款",
+      "briefItem": "临床实践要点中涉及排便场景的建议，须与指南推荐的胸痛急救路径并列呈现，不单独成条",
+      "defectType": "brief_delivery_constraint_dropped",
+      "secondaryType": null,
+      "reportQuote": "晨间 08:00～11:59 是心源性猝死与心肌梗死的高发时段 [4][3]，已确诊冠心病者晨起后应避免骤然的用力排便等用力活动",
+      "verification": "该建议在临床实践要点里独立成条；报告自己判定该关联 GRADE 极低、效应量未获量化、干预层「基本空缺」。",
+      "detectableWithoutBrief": false,
+      "siblingsChecked": null,
+      "note": "",
+      "gate": "miss",
+      "missReason": "R1",
+      "missReasonText": "题面交付条款写明「不单独成条」；报告独立成条。有题面即可判定。"
+    },
+    {
+      "labelId": "COV-058",
+      "rq": "RQ-26",
+      "findingIndex": 102,
+      "findingTitle": "资料与方法把逐条检索式、数据源与命中数推给一个并不存在的「附录」，而题面要求这些必须在资料与方法中逐项列出",
+      "briefQuestion": "检索范围条款",
+      "briefItem": "检索式、数据源、命中数与检索日期须在资料与方法中逐项列出",
+      "defectType": "brief_delivery_constraint_dropped",
+      "secondaryType": null,
+      "reportQuote": "检索日期为 2026-08-14，各查询、数据源与命中数见附录检索记录",
+      "verification": "报告以「参考文献」结束，无附录一节，全文「附录」仅此 1 次；clinical-evidence-search.json 里实有 11 条查询与 119/111/9 的筛选流程数，正文一个数字都没写。",
+      "detectableWithoutBrief": true,
+      "siblingsChecked": null,
+      "note": "指向一个不存在的附录，报告内部即可发现。",
+      "gate": "miss",
+      "missReason": "R3",
+      "missReasonText": "不需要题面：正文写「见附录检索记录」而报告没有附录一节。"
+    }
+  ],
+  "measurement": {
+    "gateRun": "node uploads/20260813-final/audit/rungate.mjs（29 份 clinical-evidence 包；question-coverage 台账用 audit/coverage/ 下 synth-coverage.mjs 合成的那批）",
+    "arms": {
+      "asDelivered": "交付物里本来没有 question-coverage.json（这个交付件在这批运行之后才存在）。不喂台账时 29 份全部命中 specialist_question_coverage_invalid：阻断率 29/29，定位到的具体缺陷 0 条。",
+      "withLedger": "喂合成台账后，coverage 一族在 29 份上只产出 3 条实质问题（RQ-15、RQ-16 的 understated，RQ-17 的 gap_overstated）。下面的召回/精确都在这一臂上算。"
+    },
+    "recall": {
+      "tier1": {
+        "labels": 55,
+        "directHit": 2,
+        "proxyOnly": 7,
+        "miss": 46
+      },
+      "tier2": {
+        "labels": 3,
+        "directHit": 0,
+        "proxyOnly": 0,
+        "miss": 3
+      },
+      "proxyNote": "proxy = 「参考文献 [n] 在正文中从未被引用」会阻断同一份交付，但把该条从参考表删掉即可解除阻断，而缺口原样留下——它检出的是征兆不是缺陷。"
+    },
+    "precision": {
+      "coverageFamilyIssues": 3,
+      "matchedLabel": 2,
+      "unmatched": 1,
+      "unmatchedDetail": "RQ-15：门禁判「引言把问题数从 5 改小到 3」。读报告后判为误伤——引言那句「回答发生率、归因与处置三个问题」是对答案的归并复述，题面第 3 问（人体血流动力学实测）与第 5 问（公众信息质量评价方法学）在结果一节各有独立小节（『机制证据』『面向公众的用药信息质量』）作答，没有一问消失。104 条已确认缺陷里也没有对应条目。",
+      "matchedDetail": [
+        "RQ-16 understated 对上 COV-031",
+        "RQ-17 gap_overstated 对上 COV-032（同一句；门禁把它归到相邻子问 5.3=(b) 支，标注归到 5(c) 支）"
+      ]
+    },
+    "answerableIfGateSawTheBrief": {
+      "tier1": 36,
+      "tier2": 1,
+      "total": 37,
+      "definition": "R1 = 门禁只要拿到题面原文，再要求「题面拆出的每一条目要么有 claim 锚点的正文行、要么有显式缺口声明」，就能判定；不需要语义模型。",
+      "R2": 4,
+      "R2Definition": "有题面也仍需语义判断：正文有内容、有锚点、词面吻合，错在人群/结局/口径与题面不是一回事（答非所问）。",
+      "R3": 15,
+      "R3Definition": "不需要题面，报告内部就能查；现有检查漏在判据本身或被措辞绕开（如「三件事」「本评价」绕过 scope 正则、gap 豁免语被用来豁免同句里的结论）。"
+    }
+  }
+}

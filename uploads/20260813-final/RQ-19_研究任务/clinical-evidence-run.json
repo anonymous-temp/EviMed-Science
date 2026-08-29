@@ -1,0 +1,57 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "速效救心丸作为馈赠礼品的受赠人群适应症边界、药品流通规范约束与无诊断者持药获益—风险的证据评价",
+  "title": "速效救心丸作为馈赠礼品的受赠人群适应症边界与无诊断者持药的获益—风险证据评价",
+  "startedAt": "2026-08-14T00:49:00Z",
+  "completedAt": "2026-08-14T01:05:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_drug_label_search",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_clinical_trial_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_pharmacy_reference_search",
+    "evimed_biomedical_source_search",
+    "evimed_web_search",
+    "evimed_evidence_deduplicate"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC12990816/fulltext.md",
+    ".evimed-sources/PMC5907402/fulltext.md",
+    ".evimed-sources/PMC9703419/fulltext.md",
+    ".evimed-sources/PMC7492823/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/official-pages/0420df80271693fc/page.md"
+  ],
+  "failedSources": [
+    "PMID:18254051 (Cochrane suxiao jiuxin wan, cochranelibrary 403)",
+    "PMC7137214 (Cochrane full text, upstream unavailable)",
+    "PMID:24524496 (Beyene 2014, no open-access PDF)",
+    "PMID:20938251 (Cao 2010, no open-access PDF)",
+    "DOI:10.1016/j.jep.2023.116959 (Sun 2023, no open-access PDF)",
+    "PMC8960369 (VITAL-AF, upstream unavailable)",
+    "PMC7905702 (STROKESTOP, upstream unavailable)",
+    "PMC9673231 (AF-SCREEN, upstream unavailable)"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 18,
+    "recordsIdentified": 175,
+    "recordsAfterDeduplication": 149,
+    "sourcesIncluded": 18,
+    "distinctPreservedSources": 9
+  },
+  "status": "succeeded"
+}

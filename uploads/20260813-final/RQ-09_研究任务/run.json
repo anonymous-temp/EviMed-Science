@@ -1,0 +1,38 @@
+{
+ "id": "run_1b68fbec2e9fd4be613ef5a3efb23f50",
+ "dispatchId": "rq-09-AoDB79",
+ "dispatchStatus": "accepted",
+ "sessionId": "ses_003edd79effeXFnPjzWRAoDB79",
+ "mode": "open-domain",
+ "agentId": null,
+ "agentVersion": null,
+ "runtimeAgent": null,
+ "effectiveAgentId": "clinical-evidence-synthesis",
+ "effectiveAgentVersion": "2.6.0",
+ "effectiveRuntimeAgent": "evimed-clinical-evidence-synthesis",
+ "effectiveRouteReason": "llm:0.92",
+ "model": "deepseek/deepseek-v4-pro",
+ "question": "# RQ-09 研究任务 ## 选题 **《舌下含服速效救心丸后的舌部麻木感：药理机制、与黏膜吸收及临床疗效的关联，以及作为药效指示的证据评价》** ## 研究背景 舌下含服速效救心丸后，不少使用者报告舌尖或舌面出现麻木、清凉、灼热或刺痛感，这一局部感受在用药经验交流与患者教育材料中常被解释为药物\"已经起效\"的信号。该…",
+ "status": "succeeded",
+ "createdAt": "2026-08-13T17:01:30.763Z",
+ "startedAt": "2026-08-13T17:01:30.763Z",
+ "finishedAt": "2026-08-13T17:52:24.406Z",
+ "durationMs": 3053643,
+ "errorCode": null,
+ "artifacts": [
+  "citation-audit.md",
+  "citation-ledger.csv",
+  "clinical-evidence-matrix.json",
+  "clinical-evidence-report.md",
+  "clinical-evidence-run.json",
+  "clinical-evidence-search.json",
+  "references.bib"
+ ],
+ "verification": "unverified",
+ "qualityNotices": [
+  "MUST FIX — The search log must exactly match successful evidence-search calls from the same run — missing from the log: \"nitroglycerin sublingual burning sensation tablet freshness\"; logged but never executed: \"速效救心丸\", \"速效救心丸 舌下含服 麻木 清凉 起效\", \"nmpa drug label 说明书 china regulatory\"."
+ ],
+ "observedMessages": 114,
+ "observedToolCalls": 160,
+ "lastProgressAt": "2026-08-13T17:52:03.757Z"
+}

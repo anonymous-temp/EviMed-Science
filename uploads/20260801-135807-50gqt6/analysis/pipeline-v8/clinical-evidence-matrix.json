@@ -1,0 +1,102 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "硝酸甘油舌下含服缓解胸痛的诊断敏感性为72%（95% CI 64%–80%），特异性为37%（34%–41%），阳性似然比为1.1（0.96–1.34），不可用于区分心源性与非心源性胸痛。",
+      "claimType": "direct",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "supportQuote": "The diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%–80%), and the specificity was 37% (34%–41%). The positive likelihood ratio for having coronary artery disease if nitroglycerin relieved chest pain was 1.1 (0.96–1.34).",
+      "applicability": "急诊科场景，外推至院外自救场景时有场景差异",
+      "uncertainty": "研究排除首份ECG即确诊AMI的患者（在院外自救中这正是最需识别的人群），场景外推不确定性为中等。来源文本未明示置信区间水平为95%，此系根据医学统计惯例推断。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "该项发现与此前Shry等、Henrikson等和Diercks等的独立研究一致，四项研究均发表于同行评审期刊且得出硝酸甘油缓解不能可靠区分心源性与非心源性胸痛的一致结论。",
+      "claimType": "direct",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "supportQuote": "This study corroborates recent work done by Shry and colleagues, … Henrikson and coworkers, … and Diercks and associates … (Table 2).",
+      "applicability": "Steele 2006全文Table 2中列出了四项研究（含本研究）的比较；其余三项研究的细节来自该表中的间接引述",
+      "uncertainty": "三项对照研究（Shry 2002, Henrikson 2003, Diercks 2005）未独立获取全文核实，其具体结果仅通过Steele 2006全文Table 2的摘要信息确认"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "速效救心丸在改善心电图结果方面优于对照组（RR 1.32, 95% CI 1.26 to 1.38, P < 0.001），荟萃分析纳入41项随机对照试验共6276例冠心病患者。",
+      "claimType": "direct",
+      "referenceNumber": 5,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001).",
+      "applicability": "已确诊冠心病患者的院内/门诊长期管理，不可外推至院外急性胸痛自救场景",
+      "uncertainty": "纳入研究方法学质量较低（多数Jadad评分低于3分），所有研究均在中国境内开展"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "ALDH2 rs671（12:112241766 G/A）在中国人群中属于人群特异性遗传变异，在非东亚gnomAD人群中该变异等位基因频率为零或极低。",
+      "claimType": "direct",
+      "referenceNumber": 6,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/34584183/",
+      "sourceTitle": "Genetic landscape of 125 pharmacogenes in Chinese from the Chinese Millionome Database",
+      "artifactPath": ".evimed-sources/PMC8478937/fulltext.md",
+      "identifier": "PMID:34584183",
+      "accessLevel": "full_text",
+      "supportQuote": "certain common functional variants including … ALDH2 12:112241766 G/A (rs671) were population-specific for CMDB Chinese because they were absent (with a zero of VAF) or very rare in other gnomAD populations",
+      "applicability": "以141,431名中国个体的CMDB全基因组数据为基础，适用于中国大陆汉族群体",
+      "uncertainty": "Table 1的具体变异等位基因频率（VAF）数字未在Markdown全文提取中呈现；报告中的等位基因频率范围（30%–45%）来自独立来源的综合估计而非本全文的直接提取"
+    },
+    {
+      "claimId": "CLM-005",
+      "claim": "Ren等（2018）荟萃分析中所有纳入的41项速效救心丸临床研究均在中国境内开展。",
+      "claimType": "direct",
+      "referenceNumber": 5,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "All of the included studies were conducted in China.",
+      "applicability": "全部纳入研究的情境为中国境内已确诊冠心病患者",
+      "uncertainty": "声明中的年份（2018）和纳入研究数（41项）不在该条支持引文中，年份来自源文献出版信息，研究数来自同一文献的摘要部分。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claim": "Steele等（2006）报告阳性似然比约为1，意味着验前疾病概率约等于验后概率，硝酸甘油反应对该断无增益价值。",
+      "claimType": "direct",
+      "referenceNumber": 1,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/17320010/",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "supportQuote": "The positive likelihood ratio was approximately 1, suggesting that the pretest probability of disease was equivalent to the post-test probability of disease.",
+      "applicability": "急诊科胸痛人群",
+      "uncertainty": "声明中的年份（2006）不在该条支持引文中，来自源文献出版信息。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claim": "速效救心丸在亚组分析中心电图改善优于硝酸甘油（RR 1.35, 95% CI 1.16 to 1.56, P < 0.001）。",
+      "claimType": "direct",
+      "referenceNumber": 5,
+      "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "suxiao jiuxin pill improved ECG results more than … nitroglycerin (RR 1.35, 95% CI 1.16 to 1.56, P < 0.001)",
+      "applicability": "已确诊冠心病患者的院内管理，不可外推至院外自救场景",
+      "uncertainty": "纳入该亚组的7项研究全部来自中国，方法学质量普遍较低；此为改善ECG的中间替代指标"
+    }
+  ]
+}

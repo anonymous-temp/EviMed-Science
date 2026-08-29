@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T07:40:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "ClinicalTrials.gov",
+    "guideline index",
+    "literature index",
+    "Crossref"
+  ],
+  "queries": [
+    {
+      "database": "literature index",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "literature index",
+      "query": "Suxiao Jiuxin Pill coronary heart disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "vasomotor symptoms hot flashes cardiovascular disease risk menopause prospective cohort",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PubMed",
+      "query": "hot flashes heart rate variability autonomic menopause",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Suxiao Jiuxin Wan",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "ClinicalTrials.gov (connector)",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "guideline index",
+      "query": "chest pain evaluation guideline acute coronary syndrome women",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "guideline index",
+      "query": "menopause vasomotor symptoms hormone therapy position statement",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed",
+      "query": "palpitations etiology causes women primary care evaluation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 7
+    },
+    {
+      "database": "PubMed",
+      "query": "ischemia no obstructive coronary arteries INOCA prevalence women",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "coronary microvascular dysfunction menopause estrogen women",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "sex differences acute coronary syndrome presentation chest pain women missed diagnosis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "palpitations menopause arrhythmia perimenopausal women etiology",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "ClinicalTrials.gov (trial registry)",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "estrogen withdrawal endothelial function flow-mediated dilation menopause",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1155/2018/9745804",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1002/14651858.CD004473.pub2",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 160,
+    "recordsAfterDeduplication": 140,
+    "sourcesIncluded": 9
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 2,
+      "citationKey": "Ruan2021SJPprotocol",
+      "identifier": "PMID:34281600; PMCID:PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸适应症与入组证型、试验设计"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "SJPmeta2018",
+      "identifier": "PMID:29770157; PMCID:PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸随机对照证据与人群构成"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Muka2016VMS",
+      "identifier": "PMID:27315068; PMCID:PMC4912069",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "血管舒缩症状与心血管事件关联"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Hira2026HRV",
+      "identifier": "PMID:42121335; PMCID:PMC13167700",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "血管舒缩症状与心率变异性"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Sickinghe2019estrogen",
+      "identifier": "PMID:31333587; PMCID:PMC6616854",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "雌激素撤退与微血管功能障碍机制"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Ferry2019symptoms",
+      "identifier": "PMID:31431112; PMCID:PMC6755854",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "女性心肌梗死症状特征"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Polyak2024INOCA",
+      "identifier": "PMID:38222977; PMCID:PMC10785769",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "无阻塞性冠状动脉缺血流行病学"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Carberry2023women",
+      "identifier": "PMID:39076281; PMCID:PMC11273011",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "女性缺血性心脏病性别差异与绝经激素治疗"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "NHSChestPain",
+      "identifier": "NHS Chest pain (sha256 e6143b76645a9461)",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "胸痛警示特征与急诊处置"
+    }
+  ]
+}

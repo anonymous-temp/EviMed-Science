@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-14T06:00:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "PMC",
+    "guideline source"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "respiratory sinus arrhythmia definition P-P interval diagnostic criteria",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "sinus arrhythmia prevalence healthy children adults electrocardiogram",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "nonrespiratory sinus arrhythmia prognosis elderly sick sinus syndrome",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "respiratory sinus arrhythmia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "sinus arrhythmia sick sinus syndrome sinoatrial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "sinus arrhythmia prognosis sudden cardiac death cohort",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 18
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "sinus arrhythmia normal finding children electrocardiogram criteria",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "PubMed",
+      "query": "2018 ACC/AHA/HRS Guideline Evaluation Management Patients Bradycardia Cardiac Conduction Delay",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "2024 ESC Guidelines management chronic coronary syndromes angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "sinus arrhythmia heart rate variability vagal tone healthy adults",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan arrhythmia heart rhythm",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "sinus arrhythmia prevalence elderly ambulatory ECG healthy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "2018 ACC/AHA/HRS bradycardia cardiac conduction delay Kusumoto",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Chinese herbal medicine suxiao jiuxin wan for angina pectoris",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "prevalence diagnostic prognostic utility sinus arrhythmia congenital long QT syndrome Johnson Ackerman",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "recommendations standardization interpretation electrocardiogram AHA ACC HRS 2009",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "Europe PMC",
+      "query": "sinus arrhythmia respiratory variation RR interval normal physiological young",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "2024 ESC chronic coronary syndromes angina pectoris diagnosis imaging",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Electrocardiography score Minnesota code predicts cardiovascular mortality asymptomatic low-risk population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Maturation cardiac autonomic nervous system activity children adolescents respiratory sinus arrhythmia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "JCS JHRS 2022 guideline diagnosis risk assessment arrhythmia sinus node dysfunction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 4
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Glasser frequent complex arrhythmias ambulatory monitoring healthy asymptomatic elderly population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Europe PMC",
+      "query": "20673812 prevalence diagnostic prognostic utility sinus arrhythmia congenital long QT",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PMC",
+      "query": "JCS/JHRS 2022 Guideline Diagnosis Risk Assessment Arrhythmia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PMC",
+      "query": "sinus arrhythmia normal variant electrocardiogram benign respiratory",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "PMC",
+      "query": "prevalence diagnostic prognostic utility sinus arrhythmia congenital long QT Johnson Ackerman Heart Rhythm",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "guideline source",
+      "query": "sinus arrhythmia sinus node dysfunction bradycardia",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 190,
+    "recordsAfterDeduplication": 140,
+    "sourcesIncluded": 7
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "nhs_chest_pain_2023",
+      "identifier": "official-page:e6143b76645a9461",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "safety boundary / angina vs myocardial infarction"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "harteveld2021maturation",
+      "identifier": "PMID:33525889",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "respiratory sinus arrhythmia definition and vagal mechanism"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "kim2023electrocardiography",
+      "identifier": "PMID:38052061",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "asymptomatic low-risk ECG findings and CV mortality"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "johnson2010prevalence",
+      "identifier": "PMID:20673812",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "sinus arrhythmia as nonpathologic respiratory variation (qualitative, abstract level)"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "glasser1979occurrence",
+      "identifier": "PMID:436484",
+      "accessLevel": "bibliographic",
+      "included": false,
+      "role": "title-only context reference; excluded from evidence synthesis"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "kusumoto2019guideline",
+      "identifier": "PMID:30586772",
+      "accessLevel": "bibliographic",
+      "included": false,
+      "role": "title-only context reference; excluded from evidence synthesis"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "hawks2021sinus",
+      "identifier": "PMID:34383451",
+      "accessLevel": "bibliographic",
+      "included": false,
+      "role": "title-only context reference; excluded from evidence synthesis"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "jcsjhrs2022diagnosis",
+      "identifier": "PMID:39139890",
+      "accessLevel": "bibliographic",
+      "included": false,
+      "role": "title-only context reference; excluded from evidence synthesis"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "nmpa_suxiao_jiuxin_wan_label",
+      "identifier": "NMPA label index: 速效救心丸",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "drug label function/indication and contraindication (indexed copy)"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "wang2018efficacy",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "suxiao jiuxin pill RCT meta-analysis"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "duan2008chinese",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane review suxiao jiuxin wan (qualitative, abstract level)"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "vrints2024esc",
+      "identifier": "PMID:39210710",
+      "accessLevel": "bibliographic",
+      "included": false,
+      "role": "title-only context reference; excluded from evidence synthesis"
+    }
+  ]
+}

@@ -1,0 +1,419 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T17:57:38Z",
+  "databases": [
+    "Europe PMC",
+    "EviMed 中文文献索引(internal)",
+    "EviMed 临床试验注册库",
+    "EviMed 指南索引",
+    "EviMed 药学参考索引",
+    "NMPA 说明书索引",
+    "PubMed"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "circadian variation frequency of onset acute myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "morning peak sudden cardiac death circadian variation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation stroke onset meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "sublingual nitroglycerin chest pain relief coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "EviMed 临床试验注册库",
+      "query": "suxiao jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "NMPA 说明书索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "morning blood pressure surge cardiovascular risk evidence",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation platelet aggregability morning increase",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian fluctuations fibrinolytic factors myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "myocardial infarction onset time after awakening morning activities",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "PubMed",
+      "query": "orthostatic hypotension dizziness prevalence community",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "chest pain emergency department final diagnosis noncardiac causes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "patient delay seeking treatment acute myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed 指南索引",
+      "query": "chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed 指南索引",
+      "query": "急性胸痛 急诊",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "EviMed 药学参考索引",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "circadian variation platelet aggregability sudden cardiac death norepinephrine",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "dizziness prevalence causes primary care diagnosis distribution",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital nitroglycerin use emergency department myocardial infarction delay",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "Europe PMC",
+      "query": "2023 ESC Guidelines for the management of acute coronary syndromes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "onset of myocardial infarction after awakening first three hours",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "symptom onset to first medical contact delay mortality ST elevation myocardial infarction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed 中文文献索引(internal)",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "EviMed 临床试验注册库",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "Europe PMC",
+      "query": "circadian variation stroke onset",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "increased morning incidence of myocardial infarction ISAM study beta-adrenergic blockade",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 278,
+    "recordsAfterDeduplication": 268,
+    "sourcesIncluded": 19
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Xin2022Circadian",
+      "identifier": "PMID:35839036",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "morning-peak MI cohort"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Yao2024SCA",
+      "identifier": "PMID:39414308",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "morning-peak SCA registry"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Motokawa2025JAMIR",
+      "identifier": "PMID:41081262",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "STEMI registry + outcome null"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Heidari2025StrokeSR",
+      "identifier": "PMID:41503592",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "stroke circadian systematic review"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Bilo2018MBPS",
+      "identifier": "PMID:29872338",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "morning blood pressure surge review"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Ibrahim2026Hemostasis",
+      "identifier": "PMID:42293739",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "circadian hemostasis systematic review"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Li2026AIS",
+      "identifier": "PMID:41695243",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "AIS circadian severity cohort"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Scholz2021FITT",
+      "identifier": "PMID:33958491",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "patient delay and reperfusion benefit"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Steele2006NTG",
+      "identifier": "DOI:10.1017/S1481803500013671",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "NTG relief diagnostic value"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Ruan2021Protocol",
+      "identifier": "PMID:34281600",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP stable angina RCT protocol"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Hu2024CCS",
+      "identifier": "PMID:39367481",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP CCS multicenter RCT"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Ren2018Meta",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "SJP meta-analysis (41 RCTs)"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Wertli2019NCCP",
+      "identifier": "PMID:30707725",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ED non-cardiac chest pain"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "Mateen2024ChestPain",
+      "identifier": "PMID:38618438",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ED chest pain etiology"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Pate2019Delay",
+      "identifier": "PMID:31312779",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "AMI treatment-seeking delay"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "official patient guidance"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "NMPA2026SuxiaoLabel",
+      "identifier": "nmpa-data-search:速效救心丸",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "label index candidate (official-current verification required)"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "NCT06531161",
+      "identifier": "NCT06531161",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "registry record: SJP for acute mountain sickness (not recruiting)"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "NCT05466968",
+      "identifier": "NCT05466968",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "registry record: SJP on vulnerable plaque in AMI (not recruiting)"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Muller1985NEJM",
+      "identifier": "PMID:2865677",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Willich1987Framingham",
+      "identifier": "PMID:3661393",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Willich1989ISAM",
+      "identifier": "PMID:2571430",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Cohen1997Meta",
+      "identifier": "PMID:9185643",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Elliott1998Meta",
+      "identifier": "PMID:9596248",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access; values quoted via included SR"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Henrikson2003",
+      "identifier": "PMID:14678917",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access"
+    },
+    {
+      "referenceNumber": null,
+      "citationKey": "Cochrane2008Suxiao",
+      "identifier": "PMID:18254051",
+      "accessLevel": "metadata",
+      "included": false,
+      "role": "excluded: full text not open-access"
+    }
+  ]
+}

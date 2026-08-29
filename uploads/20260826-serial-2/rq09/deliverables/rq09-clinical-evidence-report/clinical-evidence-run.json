@@ -1,0 +1,59 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "舌下含服速效救心丸后的舌部麻木感：药理机制、与黏膜吸收及临床疗效的关联，以及作为药效指示的证据评价",
+  "title": "舌下含服速效救心丸后的舌部麻木感：药理机制、与黏膜吸收及临床疗效的关联，以及作为药效指示的证据评价",
+  "startedAt": "2026-08-26T15:19:00Z",
+  "completedAt": "2026-08-26T15:45:00Z",
+  "tools": [
+    "mcp__evimed__literature_search",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__drug_label_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC4957794/fulltext.md",
+    ".evimed-sources/PMC7481425/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMID:18254051",
+      "reason": "No open-access PDF (www.cochranelibrary.com HTTP 403)"
+    },
+    {
+      "identifier": "PMID:38103845",
+      "reason": "No open-access PDF could be retrieved"
+    },
+    {
+      "identifier": "PMID:25469246",
+      "reason": "Open-access PDF retrieval failed"
+    },
+    {
+      "identifier": "PMID:37290679",
+      "reason": "No open-access PDF could be retrieved"
+    },
+    {
+      "identifier": "PMID:26142526",
+      "reason": "No Europe PMC record found"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 22,
+    "recordsIdentified": 76,
+    "recordsAfterDeduplication": 54,
+    "sourcesIncluded": 15,
+    "distinctPreservedSources": 3
+  },
+  "status": "succeeded"
+}

@@ -1,0 +1,65 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "心血管事件晨峰现象能否支持未确诊人群'床头常备'速效救心丸：流行病学证据强度与获益-风险边界评价",
+  "title": "心血管事件晨峰现象能否支持未确诊人群\"床头常备\"速效救心丸：流行病学证据强度与获益-风险边界评价",
+  "startedAt": "2026-08-11T17:40:00Z",
+  "completedAt": "2026-08-11T17:58:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_clinical_trial_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_biomedical_source_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC11132392/fulltext.md",
+    ".evimed-sources/PMC11487843/fulltext.md",
+    ".evimed-sources/PMC5973439/fulltext.md",
+    ".evimed-sources/PMC12769409/fulltext.md",
+    ".evimed-sources/PMC13264353/fulltext.md",
+    ".evimed-sources/PMC12510979/fulltext.md",
+    ".evimed-sources/PMC12894651/fulltext.md",
+    ".evimed-sources/PMC8103948/fulltext.md",
+    ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC11451125/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC6358153/fulltext.md",
+    ".evimed-sources/PMC11014751/fulltext.md",
+    ".evimed-sources/PMC6634169/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "PMID:2865677 Muller 1985 NEJM: full text not open access",
+    "PMID:3661393 Willich 1987 Am J Cardiol: full text not open access",
+    "PMID:2571430 Willich 1989 Circulation (ISAM): first attempt HTTP 502; retry returned metadata only, full text not open access",
+    "PMID:9185643 Cohen 1997 Am J Cardiol: full text not open access",
+    "PMID:9596248 Elliott 1998 Stroke: full text not open access",
+    "PMID:14678917 Henrikson 2003 Ann Intern Med: full text not open access",
+    "PMID:18254051 Cochrane CD004473: full text not open access (HTTP 403)",
+    "PMID:30525279 HOPE Asia Network 2019: full text not open access (HTTP 403)",
+    "PMID:32744020 J Tradit Chin Med 2020: unpaywall HTTP 404",
+    "DOI:10.1093/eurheartj/ehad191 2023 ESC ACS guideline: full text not open access (HTTP 403)",
+    "https://mpa.hunan.gov.cn/mpa/ official page: upstream unavailable"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 27,
+    "recordsIdentified": 278,
+    "recordsAfterDeduplication": 268,
+    "sourcesIncluded": 19,
+    "distinctPreservedSources": 16
+  },
+  "status": "succeeded"
+}

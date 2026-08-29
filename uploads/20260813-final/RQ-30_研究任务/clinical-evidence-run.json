@@ -1,0 +1,49 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "心血管检查前预防性备用速效救心丸：受检人群的适应症边界、检查相关焦虑的处置证据与检查自身风险的量化",
+  "title": "心血管检查前自备速效救心丸：适应症边界、检查相关焦虑与检查自身风险的证据评价",
+  "startedAt": "2026-08-14T10:14:00Z",
+  "completedAt": "2026-08-14T10:40:00Z",
+  "tools": [
+    "evimed_drug_label_search",
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_biomedical_source_search",
+    "evimed_clinical_trial_search",
+    "evimed_guideline_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC3997901/fulltext.md",
+    ".evimed-sources/PMC6157563/fulltext.md",
+    ".evimed-sources/PMC4777042/fulltext.md",
+    ".evimed-sources/PMC12491283/fulltext.md",
+    ".evimed-sources/PMC10989163/fulltext.md",
+    ".evimed-sources/PMC12034538/fulltext.md",
+    ".evimed-sources/PMC10435903/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md"
+  ],
+  "failedSources": [
+    "Cochrane review (PMID:18254051): full text not open access (cochranelibrary unreachable); abstract only",
+    "Music therapy meta-analysis (PMID:30415224): full text not open access; abstract only",
+    "NMPA official label (国药准字Z12020025): no official regulator gateway route in this environment; indexed copy only",
+    "ccfdie.org/zryyxxw (中成药信息网首页): not a drug-label database; not used as evidence"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 194,
+    "recordsAfterDeduplication": 148,
+    "sourcesIncluded": 15,
+    "distinctPreservedSources": 9
+  },
+  "status": "succeeded"
+}

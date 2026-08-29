@@ -1,0 +1,105 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "消费级可穿戴设备检出心房颤动后的处置路径：设备准确性证据、指南推荐路径，及中成药（速效救心丸）在该场景中的证据地位",
+  "title": "消费级可穿戴设备检出心房颤动后的处置路径：设备准确性证据、指南推荐路径，及中成药在该场景中的证据地位",
+  "startedAt": "2026-08-04T07:30:48+00:00",
+  "completedAt": "2026-08-04T07:50:00+00:00",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text",
+    "evimed_official_page_fetch",
+    "evimed_evidence_deduplicate",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC8433941/fulltext.md",
+    ".evimed-sources/PMC11083549/fulltext.md",
+    ".evimed-sources/PMC7843431/fulltext.md",
+    ".evimed-sources/PMC11666470/fulltext.md",
+    ".evimed-sources/PMC12811750/fulltext.md",
+    ".evimed-sources/PMC11436293/fulltext.md",
+    ".evimed-sources/PMC9753086/fulltext.md",
+    ".evimed-sources/PMC5892298/fulltext.md",
+    ".evimed-sources/PMC11678337/fulltext.md",
+    ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+    ".evimed-sources/PMC12074175/fulltext.md"
+  ],
+  "failedSources": [
+    {
+      "identifier": "PMC11095842 / PMC11104284",
+      "reason": "2023 ACC/AHA/ACCP/HRS 指南全文：Europe PMC 网关多次获取失败（5 次尝试）；经开放获取解读工件替代核读"
+    },
+    {
+      "identifier": "PMC9640290",
+      "reason": "Fitbit 心脏研究（Circulation 版）：Europe PMC 网关获取失败（5 次尝试）"
+    },
+    {
+      "identifier": "PMC8112605",
+      "reason": "苹果心脏研究作者手稿：Europe PMC 网关获取失败（3 次尝试）"
+    },
+    {
+      "identifier": "PMC8099048",
+      "reason": "苹果心脏研究设计稿：Europe PMC 网关获取失败"
+    },
+    {
+      "identifier": "PMC10662962",
+      "reason": "JACC 消费级可穿戴综述：Europe PMC 网关获取失败（3 次尝试）"
+    },
+    {
+      "identifier": "PMC7137214",
+      "reason": "Cochrane 速效救心丸评价：Europe PMC 网关获取失败"
+    },
+    {
+      "identifier": "PMID:39210723 (10.1093/eurheartj/ehae176)",
+      "reason": "ESC 2024 指南全文：出版方 403 关闭"
+    },
+    {
+      "identifier": "PMID:31722151 (10.1056/NEJMoa1901183)",
+      "reason": "NEJM 苹果心脏研究全文：403 关闭"
+    },
+    {
+      "identifier": "PMID:36148649 (10.1161/CIRCULATIONAHA.122.060291)",
+      "reason": "Fitbit 心脏研究（Circulation）：403 关闭"
+    },
+    {
+      "identifier": "PMID:38033089 (10.1161/CIR.0000000000001193)",
+      "reason": "ACC/AHA 指南（Circulation）：403 关闭"
+    },
+    {
+      "identifier": "ACC 官方要点速览页面（猜测 URL）",
+      "reason": "official_page_upstream_unavailable"
+    },
+    {
+      "identifier": "PMID:39210705",
+      "reason": "ESC 指南 PMID 首次猜测错误（正确为 39210723），未采用"
+    },
+    {
+      "identifier": "PMC11524244 / PMC10692030",
+      "reason": "PMCID 误查（返回不相干文献），已排除"
+    },
+    {
+      "identifier": "PubMed 连接器一次元数据查询",
+      "reason": "HTTP 502 失败，改以多条短查询重试成功"
+    }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionChecks": true,
+    "arithmeticChecks": true
+  },
+  "stats": {
+    "totalSearches": 35,
+    "recordsIdentified": 264,
+    "recordsAfterDeduplication": 89,
+    "sourcesIncluded": 23,
+    "distinctPreservedSources": 11
+  },
+  "status": "succeeded"
+}

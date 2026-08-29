@@ -1,0 +1,38 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "舌下含服硝酸甘油或速效救心丸后胸痛不缓解的时间阈值与院外升级路径：指南推荐的证据基础与一致性评价",
+  "title": "舌下含服硝酸甘油或速效救心丸后胸痛不缓解的时间阈值与院外升级路径：指南推荐的证据基础与一致性评价",
+  "startedAt": "2026-08-26T12:28:00Z",
+  "completedAt": "2026-08-26T12:48:31Z",
+  "tools": ["literature_search", "guideline_search", "drug_label_search", "clinical_trial_search", "biomedical_source_search", "open_access_full_text", "official_page_fetch", "evidence_deduplicate"],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/PMC4548722/fulltext.md",
+    ".evimed-sources/PMC12733498/fulltext.md"
+  ],
+  "failedSources": [
+    { "identifier": "PMID:15007008", "reason": "非开放获取（open_access_full_text 返回 no open-access PDF）", "handledAs": "摘要层级引用" },
+    { "identifier": "PMID:8813982", "reason": "非开放获取", "handledAs": "摘要层级引用" },
+    { "identifier": "PMID:34709879", "reason": "2021 AHA/ACC 胸痛指南，非开放获取", "handledAs": "未纳入编号表" },
+    { "identifier": "PMID:37622654", "reason": "2023 ESC ACS 指南，academic.oup.com HTTP 403", "handledAs": "经综述转述引用" },
+    { "identifier": "DOI:10.1016/j.annemergmed.2004.12.009", "reason": "非开放获取", "handledAs": "摘要层级引用" },
+    { "identifier": "web_search 硝酸甘油/胸痛共识", "reason": "开放网页检索未启用（web_search unconfigured）", "handledAs": "改用文献与指南索引" }
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true,
+    "safetyBoundaryCheck": true
+  },
+  "stats": {
+    "totalSearches": 21,
+    "recordsIdentified": 131,
+    "recordsAfterDeduplication": 118,
+    "sourcesIncluded": 9,
+    "distinctPreservedSources": 3
+  },
+  "status": "succeeded"
+}

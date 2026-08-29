@@ -1,0 +1,72 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claim": "硝酸甘油缓解胸痛的诊断灵敏度为72%、特异度为37%、阳性似然比为1.1，不能区分心源性与非心源性胸痛",
+      "referenceNumber": 1,
+      "sourceUrl": "https://doi.org/10.1017/s1481803500013671",
+      "sourceTitle": "Chest pain in emergency department patients: if the pain is relieved by nitroglycerin, is it more likely to be cardiac chest pain?",
+      "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+      "identifier": "PMID:17320010",
+      "accessLevel": "full_text",
+      "supportQuote": "diagnostic sensitivity of nitroglycerin to determine cardiac chest pain was 72% (64%–80%), and\nthe specificity was 37% (34%–41%). The positive likelihood ratio for having coronary artery dis -\nease if nitroglycerin relieved chest pain was 1.1 (0.96–1.34).",
+      "applicability": "direct",
+      "uncertainty": "low",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-002",
+      "claim": "中国汉族老年人群中ALDH2*2等位基因携带率为41.3%，ALDH2*2/*2纯合子占5.1%",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC7154495",
+      "sourceTitle": "ALDH2 rs671 polymorphisms and the risk of cerebral microbleeds in Chinese elderly: the Taizhou Imaging Study",
+      "artifactPath": ".evimed-sources/PMC7154495/fulltext.md",
+      "identifier": "PMC7154495",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one point three percent participants were with ALDH 2 *2 allele and 5.1% had ALDH 2 *2/*2 genotype.",
+      "applicability": "direct",
+      "uncertainty": "low",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-003",
+      "claim": "ALDH2 rs671 A等位基因携带者冠心病风险升高，加性模型调整OR为1.48",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC6026513",
+      "sourceTitle": "Interactions between ALDH2 rs671 polymorphism and lifestyle behaviors on coronary artery disease risk in a Chinese Han population with dyslipidemia",
+      "artifactPath": ".evimed-sources/PMC6026513/fulltext.md",
+      "identifier": "PMC6026513",
+      "accessLevel": "full_text",
+      "supportQuote": "adjusted OR = 1.483, 95% CI = 1.114–1.974).",
+      "applicability": "direct",
+      "uncertainty": "low",
+      "claimType": "direct"
+    },
+    {
+      "claimId": "CLM-004",
+      "claim": "硝酸甘油缓解胸痛不能用作诊断工具；突发持续性胸部压迫感或不适应立即拨打急救电话并到医院接受紧急评估",
+      "referenceNumber": 1,
+      "referenceNumbers": [1, 4],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://doi.org/10.1017/s1481803500013671",
+          "sourceTitle": "Chest pain in emergency department patients",
+          "artifactPath": ".evimed-sources/10.1017-s1481803500013671/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Relief of chest pain with nitroglycerin is not a reliable diagnostic test and does not\ndistinguish between cardiac and non-cardiac chest pain."
+        },
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS",
+          "artifactPath": ".evimed-sources/official-pages/f60ccb4779eccff7/page.md",
+          "accessLevel": "full_text",
+          "supportQuote": "you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion\n\nYou could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital."
+        }
+      ],
+      "applicability": "direct",
+      "uncertainty": "low",
+      "confidence": "high",
+      "claimType": "synthesized"
+    }
+  ]
+}

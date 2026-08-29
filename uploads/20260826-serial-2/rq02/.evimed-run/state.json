@@ -1,0 +1,58 @@
+{
+  "formatVersion": 1,
+  "runId": "run_c1a2a9312919a45159289914e82974d1",
+  "sessionId": "session-852ca226-acc7-4b22-aad7-ab2d35b851c4",
+  "bundleVersion": "0.1.0",
+  "domainVersion": "0.1.0",
+  "updatedAt": "2026-08-26T08:08:42.416Z",
+  "plan": {
+    "revision": 1,
+    "items": [
+      {
+        "id": "time-threshold-evidence-review",
+        "title": "舌下含服硝酸甘油或速效救心丸后胸痛不缓解的时间阈值与院外升级路径：指南推荐的证据基础与一致性评价",
+        "contractKind": "clinical-evidence-report",
+        "capability": "clinical-evidence-synthesis",
+        "dependsOn": [],
+        "status": "delegated",
+        "attempts": 0,
+        "issues": []
+      }
+    ]
+  },
+  "budget": {
+    "steps": 48,
+    "tokens": 266295,
+    "children": 1,
+    "limits": {
+      "maxSteps": 0,
+      "maxTokens": 0,
+      "maxChildren": 30
+    }
+  },
+  "evidence": {
+    "total": 91,
+    "byStatus": {
+      "stale": 91
+    }
+  },
+  "gateRuns": [],
+  "subagents": [
+    {
+      "deliverableId": "time-threshold-evidence-review",
+      "capability": "clinical-evidence-synthesis",
+      "skills": [
+        "clinical-evidence-synthesis",
+        "deep-research",
+        "biomedical-database-search",
+        "citation-integrity",
+        "manuscript-humanize"
+      ],
+      "status": "running"
+    }
+  ],
+  "qualityNotices": [],
+  "degraded": [
+    "capsule recall disabled: no endpoint configured"
+  ]
+}

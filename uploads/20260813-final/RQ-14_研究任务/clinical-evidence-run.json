@@ -1,0 +1,58 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "超过有效期的口服中成药（以速效救心丸为例）的质量与安全风险分层证据、失效识别的方法学状态及家庭处置路径的法规溯源",
+  "title": "超过有效期的口服中成药：质量与安全风险的分层证据及家庭处置路径——以速效救心丸为例",
+  "startedAt": "2026-08-13T20:52:00Z",
+  "completedAt": "2026-08-13T21:12:00Z",
+  "tools": [
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_official_page_fetch",
+    "evimed_open_access_full_text",
+    "evimed_evidence_deduplicate",
+    "evimed_biomedical_source_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_web_search"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC12546671/fulltext.md",
+    ".evimed-sources/PMC12804185/fulltext.md",
+    ".evimed-sources/PMC7040264/fulltext.md",
+    ".evimed-sources/PMC8287819/fulltext.md",
+    ".evimed-sources/PMC12075053/fulltext.md",
+    ".evimed-sources/PMC11117793/fulltext.md",
+    ".evimed-sources/PMC13271494/fulltext.md",
+    ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+    ".evimed-sources/official-pages/1991d92ed3d90b85/page.md"
+  ],
+  "failedSources": [
+    "Lyon 2006 SLEP (PMID:16721796) — J Pharm Sci 全文付费，未获取",
+    "Cantrell 2012 (PMID:23045150) — Arch Intern Med 全文付费，未获取",
+    "Zilker 2019 (PMID:30660807) — J Pharm Biomed Anal 全文付费，未获取",
+    "Khan 2014 (PMID:24623105) — J Pharm Sci 全文付费，未获取",
+    "Benitz 1964 (PMID:14166612) — 全文付费，未获取",
+    "Sun 2024 (PMID:37487965) — J Ethnopharmacol 全文付费，仅获摘要",
+    "中华人民共和国药品管理法官方文本 — 官方页抓取白名单外，未能核验条款原文",
+    "国家危险废物名录现行文本 — 未能核验版本与豁免条款原文",
+    "速效救心丸说明书有效期/性状/包装字段 — 索引记录未返回该字段",
+    "CNKI/万方/维普中文全文 — 数据库不可访问，仅据摘要"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "stats": {
+    "totalSearches": 34,
+    "recordsIdentified": 208,
+    "recordsAfterDeduplication": 165,
+    "sourcesIncluded": 28,
+    "distinctPreservedSources": 9
+  },
+  "status": "succeeded"
+}

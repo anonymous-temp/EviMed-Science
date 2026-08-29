@@ -1,0 +1,265 @@
+{
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "英国国家医疗服务体系（NHS）面向公众的胸痛指引要求：突发、持续不缓解的胸部疼痛或不适应立即拨打 999（中国对应 120），并明确提示「这可能是心脏病发作」；该页未给出任何具体的分钟数阈值，也未提及以含服药物后等待观察作为前置条件。",
+      "referenceNumber": 1,
+      "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+      "sourceTitle": "Chest pain - NHS",
+      "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+      "identifier": "NHS chest pain symptom page (reviewed 2023-08-08)",
+      "accessLevel": "official_page",
+      "supportQuote": "you get sudden pain or discomfort in your chest that does not go away – the pain can feel like squeezing or pressure inside your chest, burning or indigestion … You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+      "applicability": "适用于中国语境下的公众急性胸痛求救边界，急救电话 999 需本地化为 120；不涉及具体药物。",
+      "uncertainty": "该页为公众健康信息而非临床指南，未给出分钟阈值，故不能据此推断「等待若干分钟」是否恰当。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+      "claim": "2012 ACCF/AHA 等学会稳定型缺血性心脏病（SIHD）指南推荐舌下硝酸甘油或喷雾用于心绞痛即刻缓解（证据等级 B），并规定多数患者含服 0.3–0.6 mg 后 5 分钟内起效；如需追加，应每间隔 5 分钟给药，15 分钟内总量不超过 1.2 mg；此时间窗内症状不缓解即应「立即寻求医疗关注」。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "Most patients respond within 5 minutes of taking one to two sublingual dose(s) of 0.3–0.6 mg each … If additional doses are necessary, they should be taken at 5-minute intervals for a maximum dose of ≤1.2 mg within 15 minutes. During this timeframe, if relief does not occur, the patient should seek immediate medical attention.",
+      "applicability": "适用于已确诊稳定型缺血性心脏病人群的按需用药；不覆盖首次发生、病因未明的院外胸痛自救。",
+      "uncertainty": "该「15 分钟」上限为指南给出的用药边界，其证据等级（B）指向既有临床证据而非以时间阈值本身为变量的试验。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "2011 ACCF/AHA 不稳定型心绞痛/非 ST 段抬高心肌梗死（UA/NSTEMI）指南更新给出两条与硝酸甘油相关的升级界限：疑似急性冠脉综合征且既往处方硝酸甘油者，仅先含服 1 次，若 5 分钟后无缓解或疼痛加重，应立即拨打 9-1-1 再考虑追加；慢性稳定型心绞痛者症状明显改善后可每间隔 5 分钟重复给药，若未完全缓解则拨打 9-1-1（证据等级 C）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "Patients with suspected acute coronary syndrome who have been prescribed nitroglycerin previously should initially take no more than one nitroglycerin dose sublingually in response to chest discomfort/pain. If no relief occurs, or if pain worsens 5 minutes after taking one nitroglycerin dose, the patient or family member/friend/caregiver should call 9-1-1 immediately to access emergency medical services before taking additional nitroglycerin. In patients with chronic stable angina, if symptoms are significantly improved by one nitroglycerin dose, it is appropriate to instruct the patient or family member/friend/caregiver to repeat nitroglycerin every 5 minutes for a maximum of three doses, and call 9-1-1 if symptoms have not resolved completely (Level of Evidence: C).",
+      "applicability": "该分级（疑似 ACS 单次后 5 分钟升级 vs 稳定型心绞痛 3 次后升级）仅适用于已确诊或已被处方硝酸甘油的人群；急救电话 9-1-1 需本地化为 120。",
+      "uncertainty": "证据等级 C 提示以专家共识为主，两条界限的具体分钟数并非来自前瞻性阈值试验。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "2011 ACCF/AHA 指南对 UA/NSTEMI 抗缺血治疗给出 I 类推荐：持续缺血不适者应舌下含服硝酸甘油 0.4 mg、每间隔 5 分钟重复给药，此后评估是否需要静脉硝酸甘油（证据等级 C）。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "Class I = patients with unstable angina or non–ST-elevation myocardial infarction (UA/NSTEMI) with ongoing ischemic discomfort should receive sublingual nitroglycerin (0.4 mg) every 5 minutes for a total of three doses. Thereafter, these patients should be assessed for the need of intravenous nitroglycerin, unless contraindicated (Level of Evidence: C).",
+      "applicability": "医院内抗缺血处置的剂量-间隔规定，非院外自救场景；据此不能推出患者应在家中等满 3 次再呼叫。",
+      "uncertainty": "I 类指获益远大于风险的强推荐，但证据等级 C 表示证据为专家共识或有限数据，未量化该时间间隔本身的获益。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "2013 ESC 稳定型冠心病管理指南规定：心绞痛发作时应取坐位休息，舌下含服硝酸甘油 0.3 至 0.6 mg，每间隔 5 分钟给药，直至疼痛缓解或 15 分钟内达到最大 1.2 mg。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "When angina starts, the patient should rest in the sitting posture (standing promotes syncope and lying down enhances venous return and heart work) and take sublingual nitroglycerin (0.3 to 0.6 mg) every 5 minutes until the pain subsides or a maximum of 1.2 mg has been taken within 15 minutes.",
+      "applicability": "稳定型冠心病发作时的用药边界；ESC 文本未明确「15 分钟后仍未缓解」下一步的急救动作，仅设定剂量上限。",
+      "uncertainty": "与 ACC/AHA 相同，ESC 未为「每 5 分钟/15 分钟」这一间隔给出前瞻性试验依据。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "对短效硝酸甘油无反应（一般定义为每间隔 5 分钟重复给药后胸痛仍无改善）的心绞痛发作，应视为可能的急性心肌梗死并需即刻医疗关注与评估。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "an angina attack that does not respond to short-acting nitroglycerin (generally defined as a lack of improvement in chest discomfort following up to three short-acting nitrates every 5 minutes) should be regarded as consistent with a possible acute MI requiring immediate medical attention and evaluation.",
+      "applicability": "确立了「不缓解即升级」的方向；仅说明无反应与心梗可能性的关联，不构成病因诊断工具。",
+      "uncertainty": "该表述为综述转述的临床共识，未给出具体等待时长之外的可量化证据。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claimType": "direct",
+      "claim": "韩国 KAMIR-NIH 注册分析（4,874 例 STEMI）显示，使用急救医疗服务（EMS）是唯一能在所有血流动力学状态下缩短症状-到门时间（STDT≤60 分钟）的可干预因素（OR 0.20，95% CI 0.17 至 0.23，p<0.001）。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC6960059",
+      "sourceTitle": "Pre-hospital delay and emergency medical services in acute myocardial infarction (Korean J Intern Med. 2020)",
+      "artifactPath": ".evimed-sources/PMC6960059/fulltext.md",
+      "identifier": "PMID:31766823",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 4,874 patients were included in the analysis … Cardiogenic shock (OR, 0.67; 95% CI, 0.51 to 0.88; p = 0.003) and utilisation of EMS (OR, 0.20; 95% CI, 0.17 to 0.23; p < 0.001) were predictive factors for visiting a hospital within 60 minutes.",
+      "applicability": "STEMI 确诊人群的观察性证据，支持「呼叫急救先于自行前往」的次序；来自韩国高城市化环境，向中国外推受急救体系差异限制。",
+      "uncertainty": "回顾性观察设计，存在选择与混杂偏倚；作者亦指出随机试验在方法学与伦理上不可行。"
+    },
+    {
+      "claimId": "CLM-008",
+      "claimType": "direct",
+      "claim": "同一韩国注册中仅 28.4% 的患者在症状后 60 分钟内到达医院，总体 EMS 使用率仅 21.7%，说明自行前往与非 PCI 中心首诊仍占多数，构成院前延迟的主要来源。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC6960059",
+      "sourceTitle": "Pre-hospital delay and emergency medical services in acute myocardial infarction (Korean J Intern Med. 2020)",
+      "artifactPath": ".evimed-sources/PMC6960059/fulltext.md",
+      "identifier": "PMID:31766823",
+      "accessLevel": "full_text",
+      "supportQuote": "A total of 4,874 patients were included in the analysis, of whom 28.4% arrived at the hospital within 60 minutes of symptom-onset. … The overall frequency of EMS utilisation was low (21.7%).",
+      "applicability": "反映「自行前往/转诊仍普遍、呼叫急救比例偏低」的现实，为院外升级路径排序提供直接背景。",
+      "uncertainty": "注册数据来自韩国，中国农村与基层首诊比例更高，方向一致但具体数字不可直接平移。"
+    },
+    {
+      "claimId": "CLM-009",
+      "claimType": "direct",
+      "claim": "在 STEMI 中，症状-到门时间（STDT）与总缺血时间高度相关（r=0.989，p<0.001）；老年（OR 1.30）、女性（OR 1.27）与再发缺血（OR 1.32）是 STDT 延迟的独立预测因素。",
+      "referenceNumber": 2,
+      "sourceUrl": "https://europepmc.org/articles/PMC6960059",
+      "sourceTitle": "Pre-hospital delay and emergency medical services in acute myocardial infarction (Korean J Intern Med. 2020)",
+      "artifactPath": ".evimed-sources/PMC6960059/fulltext.md",
+      "identifier": "PMID:31766823",
+      "accessLevel": "full_text",
+      "supportQuote": "the most significant correlation was seen between STDT and TIT ( r = 0.989, p < 0.001). … Old age (OR, 1.30; 95% CI, 1.11 to 1.53; p < 0.001), female gender (OR, 1.27; 95% CI, 1.05 to 1.54; p = 0.012), and renewed ischemia (OR, 1.32; 95% CI, 1.12 to 1.57; p = 0.001) were identified as independent risk factors of delayed STDT",
+      "applicability": "定量确立「院前延迟是总缺血时间的主导成分」，为「时间就是心肌」提供观测依据。",
+      "uncertainty": "r=0.989 为同一次就医内两个时间变量的机械性相关，不应解读为因果；预测因素来自回顾性观察。"
+    },
+    {
+      "claimId": "CLM-010",
+      "claimType": "direct",
+      "claim": "中国江苏邳州前瞻性观察研究（394 例 STEMI）显示，农村患者症状-到门（S2D）时间显著长于城市患者（190 分钟对 75 分钟，p<0.001），1 年主要不良心血管事件发生率更高（24.5% 对 12.8%，p=0.008）。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC9677036",
+      "sourceTitle": "In-depth look into urban and rural disparities in prehospital delay in patients with acute ST-elevation myocardial infarction and its impact on prognosis (BMJ Open. 2022)",
+      "artifactPath": ".evimed-sources/PMC9677036/fulltext.md",
+      "identifier": "PMID:36396304",
+      "accessLevel": "full_text",
+      "supportQuote": "Our final analysis included 394 patients … S2D time was significantly longer for patients in the rural group than for those in the urban group (190 min vs 75 min, p<0.001). … During the 1-year follow-up, MACEs occurred in 66 patients in the rural group (24.5%, 66/269) and 16 patients (12.8%, 16/125) in the urban group (p=0.008).",
+      "applicability": "中国真实急救体系下的院前延迟与预后证据；该差异经校正年龄、心功能分级、S2D 时间与是否直接 PCI 后减弱，提示延迟是传递风险的中间环节。",
+      "uncertainty": "单中心观察性研究，样本量有限，结论外推到全中国受限。"
+    },
+    {
+      "claimId": "CLM-011",
+      "claimType": "direct",
+      "claim": "据该中国研究转引，成功再灌注每延迟 30 分钟，年死亡率增加约 7.5%。",
+      "referenceNumber": 3,
+      "sourceUrl": "https://europepmc.org/articles/PMC9677036",
+      "sourceTitle": "In-depth look into urban and rural disparities in prehospital delay in patients with acute ST-elevation myocardial infarction and its impact on prognosis (BMJ Open. 2022)",
+      "artifactPath": ".evimed-sources/PMC9677036/fulltext.md",
+      "identifier": "PMID:36396304",
+      "accessLevel": "full_text",
+      "supportQuote": "A previous study demonstrated a 7.5% increase in annual mortality for every 30 min delay in successful reperfusion.",
+      "applicability": "为「时间-结局」的定量梯度提供数量级参考；该梯度来自 STEMI 再灌注延迟的观察性研究，非院前用药观察窗本身。",
+      "uncertainty": "为二次转引（原研究 De Luca 2004），且为相对年死亡率的观察性估计，不宜线性外推到数分钟级等待。"
+    },
+    {
+      "claimId": "CLM-012",
+      "claimType": "direct",
+      "claim": "速效救心丸治疗冠心病的 Meta 分析纳入 41 项随机对照试验、6276 例患者，结局为心电图改善（RR 1.32，95% CI 1.26 至 1.38）及血脂、血流变指标；纳入研究总体方法学质量低（Jadad 评分低）、异质性显著，且未检索到以急性发作缓解时间或升级时间阈值为结局的研究。",
+      "referenceNumber": 5,
+      "sourceUrl": "https://europepmc.org/articles/PMC5892298",
+      "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on Coronary Heart Disease: A Meta-Analysis of Randomized Controlled Trials (Evid Based Complement Alternat Med. 2018)",
+      "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis. Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001). … Most of the clinical studies included in our meta-analysis were of poor quality based on their Jadad scores.",
+      "applicability": "速效救心丸的临床证据集中于慢性冠心病心绞痛的心电图与血脂等终点，未覆盖院外急性自救与时间阈值。",
+      "uncertainty": "结局为替代终点（心电图、血脂），非主要心血管事件；纳入试验均为中国发表、质量偏低，证据确定性按 GRADE 为低。"
+    },
+    {
+      "claimId": "CLM-013",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "claim": "各来源对「含服后不缓解应升级处置」给出的是时间界限（存在推荐），但其具体分钟数（单次后 5 分钟、或每间隔 5 分钟重复给药）均为专家共识/监管说明层面（证据等级 C 或说明书用法），未检索到以时间阈值本身为变量、以临床结局为终点的前瞻性研究；其依据是观察性证据支持的「时间就是心肌」原则，而非阈值本身的试验。",
+      "referenceNumber": 4,
+      "referenceNumbers": [
+        4,
+        2,
+        3
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+          "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+          "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "If no relief occurs, or if pain worsens 5 minutes after taking one nitroglycerin dose, the patient or family member/friend/caregiver should call 9-1-1 immediately … repeat nitroglycerin every 5 minutes for a maximum of three doses, and call 9-1-1 if symptoms have not resolved completely (Level of Evidence: C)."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC6960059",
+          "sourceTitle": "Pre-hospital delay and emergency medical services in acute myocardial infarction (Korean J Intern Med. 2020)",
+          "artifactPath": ".evimed-sources/PMC6960059/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Minimising total ischemic time (TIT) is important for improving clinical outcomes in patients with ST-segment elevation myocardial infarction … TIT has not shown a significant improvement due to persistent pre-hospital delay."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC9677036",
+          "sourceTitle": "In-depth look into urban and rural disparities in prehospital delay in patients with acute ST-elevation myocardial infarction and its impact on prognosis (BMJ Open. 2022)",
+          "artifactPath": ".evimed-sources/PMC9677036/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "Prehospital delays are highly associated with the outcomes of patients according to the results of this study."
+        }
+      ],
+      "applicability": "适用于对「推荐存在性与证据层级」的总体判断；就硝酸甘油一侧有明确的推荐等级文本，速效救心丸一侧则连推荐文本的时间界限也未检索到。",
+      "uncertainty": "为跨来源综合判断；「未检索到阈值试验」受检索范围（CNKI/万方不可及）限制，不能据此断言此类研究绝对不存在。"
+    },
+    {
+      "claimId": "CLM-014",
+      "claimType": "derived",
+      "claim": "〔推导〕若以每延迟 30 分钟再灌注对应约 7.5% 的相对年死亡率为梯度，则完整用完 15 分钟硝酸甘油观察窗至多使再灌注延迟增加约 15 分钟，按线性外推对应约 3.75% 的相对年死亡率增量；此为数量级意义上的上界示意，不是实测效应，也不进入任何实际操作建议。",
+      "derivedFrom": [
+        "CLM-011"
+      ],
+      "method": "以 7.5% / 30 min 的梯度做线性换算：15 min ×（7.5% / 30 min）= 3.75%。梯度取自 PMC9677036 全文（转引 De Luca 2004）。",
+      "assumptions": "假设该观察性梯度在 15 分钟量级内按线性外推成立，且院前观察等待时间等量、直接地转化为再灌注延迟。",
+      "sensitivity": "梯度为相对年死亡率而非绝对风险；其来自 STEMI 院内再灌注延迟人群，外推到院前自救等待存在人群与场景的间接性；若真实梯度不等于 7.5%/30min，或延迟不按线性累加，则 3.75% 相应等比变化。",
+      "applicability": "仅用于说明时间-结局梯度的数量级，论证方向（缩短等待有利于预后），不构成任何用药或呼叫时机的操作依据。",
+      "uncertainty": "外推本身不确定，故标注为推导，且不进入临床实践要点。"
+    },
+    {
+      "claimId": "CLM-015",
+      "claimType": "synthesized",
+      "confidence": "moderate",
+      "claim": "胸痛的病因不能仅凭症状或对药物的反应自行判断；含服后症状是否缓解既不能用于鉴别心源性与非心源性胸痛，也不改变对持续或新发胸痛立即评估的必要性。",
+      "referenceNumber": 1,
+      "referenceNumbers": [
+        1,
+        4
+      ],
+      "supportingSources": [
+        {
+          "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+          "sourceTitle": "Chest pain - NHS",
+          "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+          "accessLevel": "official_page",
+          "supportQuote": "Chest pain has many different causes. In most cases, chest pain is not caused by a heart problem. … Do not self-diagnose – see a GP if you're worried."
+        },
+        {
+          "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+          "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+          "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+          "accessLevel": "full_text",
+          "supportQuote": "an angina attack that does not respond to short-acting nitroglycerin (generally defined as a lack of improvement in chest discomfort following up to three short-acting nitrates every 5 minutes) should be regarded as consistent with a possible acute MI requiring immediate medical attention and evaluation."
+        }
+      ],
+      "applicability": "安全边界：无论何种药物，缓解现象都不是病因诊断，也不是延迟呼叫急救的理由。",
+      "uncertainty": "量化证据（硝酸甘油缓解在冠心病与非冠心病者中的比例接近）来自摘要级研究（Henrikson 2003、Diercks 2005），本综合判断的两条支持来源为公众指引与指南转述，确定性中等。"
+    },
+    {
+      "claimId": "CLM-016",
+      "claimType": "direct",
+      "claim": "硝酸甘油禁止与西地那非、伐地那非、他达拉非等 5 型磷酸二酯酶（PDE5）抑制剂合用，合用可致头晕或伴矛盾性心动过缓的全身性低血压，加重心绞痛。",
+      "referenceNumber": 4,
+      "sourceUrl": "https://europepmc.org/articles/PMC4548722",
+      "sourceTitle": "Role of short-acting nitroglycerin in the management of ischemic heart disease (Drug Des Devel Ther. 2015)",
+      "artifactPath": ".evimed-sources/PMC4548722/fulltext.md",
+      "identifier": "PMID:26316714",
+      "accessLevel": "full_text",
+      "supportQuote": "Sublingual nitroglycerin use should be avoided with the concomitant use of phosphodiesterase type 5 inhibitors such as sildenafil, vardenafil, and tadalafil. Combined use of these agents can cause dizziness or systemic hypotension accompanied by paradoxical bradycardia, leading to increased angina pectoris.",
+      "applicability": "硝酸甘油的安全禁忌，适用于所有考虑使用硝酸甘油的人群；速效救心丸无同类禁忌记载。",
+      "uncertainty": "该禁忌证据充分，为指南与说明书一致记载，无实质不确定性。"
+    }
+  ]
+}

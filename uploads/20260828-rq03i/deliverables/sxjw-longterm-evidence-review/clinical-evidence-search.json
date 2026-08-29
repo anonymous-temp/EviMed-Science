@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-28T15:50:00Z",
+  "databases": [
+    "PubMed",
+    "Europe PMC",
+    "Crossref",
+    "NMPA label index",
+    "CT.gov",
+    "ChiCTR"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "NMPA label index",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "CT.gov",
+      "query": "速效救心丸",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "CT.gov",
+      "query": "Suxiao Jiuxin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 长期 疗程 三个月",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Pill safety adverse drug reaction interaction",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 40
+    },
+    {
+      "database": "PubMed",
+      "query": "borneol L-borneol hepatotoxicity nephrotoxicity toxicity safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "ligustrazine tetramethylpyrazine adverse effects bleeding pregnancy safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 11
+    },
+    {
+      "database": "PubMed",
+      "query": "Clinical characteristics combined medication Suxiao Jiuxin Pills 16856 elderly real world",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 连续 三个月 疗程 专家共识 说明书",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "EXT_ID:32744020",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 236,
+    "recordsAfterDeduplication": 231,
+    "sourcesIncluded": 13
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "NMPALabelSXJWP",
+      "identifier": "NMPA label index (速效救心丸, 津药达仁堂第六中药厂)",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "regulatory label"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Sun2023SJPStableAngina",
+      "identifier": "PMID:37487965",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "randomized trial (24 weeks)"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Ruan2021Protocol",
+      "identifier": "PMID:34281600 / PMC8287819",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "trial protocol"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Ren2018MetaCHD",
+      "identifier": "PMID:29770157 / PMC5892298",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "meta-analysis"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Duan2008Cochrane",
+      "identifier": "PMID:18254051",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "Cochrane systematic review"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Liu2020ACSMeta",
+      "identifier": "PMID:32744020",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "meta-analysis (ACS)"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Sun2020RealWorld",
+      "identifier": "PMID:32495590",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "real-world utilization study"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Qiang2021CYP450",
+      "identifier": "PMID:34252529",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "in vitro interaction study"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "CAIM2019Consensus",
+      "identifier": "速效救心丸治疗冠心病中国专家共识 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "expert consensus"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Wang2019PerfusionRCT",
+      "identifier": "CQVIP 7100350311",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "randomized trial (6 months)"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Awate2025LBorneol",
+      "identifier": "PMID:41329215",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "animal toxicity study"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Qian1991LigustrazinePreg",
+      "identifier": "PMID:1773467",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "randomized trial (ligustrazine IV)"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Li2000LigustrazineVarices",
+      "identifier": "PMID:10861116",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "randomized trial (ligustrazine)"
+    }
+  ]
+}

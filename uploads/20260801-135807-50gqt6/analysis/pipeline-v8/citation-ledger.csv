@@ -1,0 +1,12 @@
+claimId,referenceNumber,citationKey,sourceType,accessLevel,identifier,claimSupportStatus,verificationNotes
+CLM-001,1,Steele2006NitroglycerinDiagnostic,prospective_observational_cohort,full_text,PMID:17320010,directly_supports,Full text verified; all claimed statistics (72% sensitivity, 37% specificity, LR+ 1.1) confirmed in text lines 249-257
+CLM-002,1-4,MultiStudyCorroboration,synthesized_multi_source,full_text+abstract,PMID:17320010 (primary),directly_supports,Steele full text explicitly corroborates Shry 2002, Henrikson 2003, Diercks 2005 in Table 2; three corroborating studies verified via Steele full text reference list
+CLM-003,5,Ren2018SuxiaoJiuxinMeta,systematic_review_meta_analysis,full_text,PMID:29770157,directly_supports,Full text verified; RR 1.32 (95% CI 1.26–1.38) confirmed in abstract and results section
+CLM-004,6,Qi2021PharmacogenesCMDB,pharmacogenomic_population_study,full_text,PMID:34584183,directly_supports,Full text verified; population-specific statement about ALDH2 rs671 confirmed in abstract and discussion
+CLM-005,8,Ushijima2021ALDH2EC50,pharmacological_study,abstract,PMID:33040175,supports_with_caveat,Abstract-only; title directly states increased EC50; no full text obtained (closed access)
+CLM-006,9,Zahn2001PrehospitalDelay,registry_study,abstract,PMID:11431665,supports_with_caveat,Abstract-only; title and journal indicate prehospital delay-mortality relationship; no full text obtained
+CLM-007,11,Peng2014PrehospitalDelayChina,cross_sectional,abstract,PMID:24512889,supports_with_caveat,Abstract-only; no full text obtained; specific delay and EMS usage numbers quoted from report text but not independently verified in source
+CLM-008,13,Duan2008CochraneSuxiaoJiuxin,cochrane_systematic_review,abstract,PMID:18254051,supports_with_caveat,Abstract-only; Cochrane full text not accessible (HTTP 403); conclusion wording derived from abstract/DB record
+CLM-009,5,Ren2018SuxiaoJiuxinMeta,meta_analysis,full_text,PMID:29770157,directly_supports,Full text confirms "All of the included studies were conducted in China" in Section 3.2
+CLM-010,1,Steele2006NitroglycerinDiagnostic,prospective_observational_cohort,full_text,PMID:17320010,directly_supports,Verified in full text: "The positive likelihood ratio was approximately 1, suggesting that the pretest probability of disease was equivalent to the post-test probability"
+CLM-011,5,Ren2018SuxiaoJiuxinMeta,meta_analysis_subgroup,full_text,PMID:29770157,directly_supports,Full text confirms RR 1.35 (95% CI 1.16–1.56) for nitroglycerin subgroup

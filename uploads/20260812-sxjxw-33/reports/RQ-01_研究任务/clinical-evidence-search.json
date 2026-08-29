@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-11T16:12:00Z",
+  "databases": [
+    "PubMed (evimed_literature_search)",
+    "Europe PMC",
+    "PMC",
+    "ClinVar",
+    "gnomAD",
+    "OpenAlex",
+    "guideline index (evimed_guideline_search)",
+    "NMPA label index (evimed_drug_label_search)"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "Suxiao Jiuxin Wan angina pectoris randomized trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 rs671 nitroglycerin efficacy Chinese population",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin response chest pain diagnostic test cardiac non-cardiac",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 2
+    },
+    {
+      "database": "PubMed",
+      "query": "prehospital delay acute myocardial infarction outcomes mortality",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 polymorphism nitroglycerin vasodilation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 30
+    },
+    {
+      "database": "PubMed",
+      "query": "aldehyde dehydrogenase 2 rs671 coronary artery disease",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "Diercks sublingual nitroglycerin numeric descriptive scale chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "nitroglycerin bioactivation mitochondrial aldehyde dehydrogenase",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "suxiao jiuxin wan meta-analysis angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "symptom onset to treatment delay myocardial infarction survival meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 9
+    },
+    {
+      "database": "PubMed",
+      "query": "ALDH2 Glu504Lys polymorphism nitroglycerin response angina patients",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "速效救心丸 心绞痛 系统评价 随机对照试验",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "Diercks Amsterdam Kirk chest pain nitroglycerin academic emergency medicine 2005",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "PubMed",
+      "query": "De Luca time delay treatment primary angioplasty mortality every minute",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:29770157",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:19906643",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:40979589",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:32403082",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:30745502",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:42171119",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PubMed",
+      "query": "PMID:31712344",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "numeric descriptive scale pain sublingual nitroglycerin predict cardiac etiology",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Li ALDH2 Glu504Lys polymorphism sublingual nitroglycerin 2006 Journal of Clinical Investigation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "Europe PMC",
+      "query": "suxiao jiuxin wan angina pectoris Cochrane review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 8
+    },
+    {
+      "database": "ClinVar",
+      "query": "rs671",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "gnomAD",
+      "query": "ALDH2",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PMC",
+      "query": "CD004473 suxiao jiuxin wan angina",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    },
+    {
+      "database": "PMC",
+      "query": "2013 ACCF/AHA guideline management ST-elevation myocardial infarction report",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PMC",
+      "query": "2021 AHA ACC guideline evaluation diagnosis chest pain",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "ALDH2 rs671 nitroglycerin response efficacy polymorphism",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "OpenAlex",
+      "query": "sublingual nitroglycerin chest pain not diagnostic test cardiac origin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "PMC",
+      "query": "ACC/AHA 2007 guidelines management patients unstable angina non-ST-elevation myocardial infarction Circulation",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PMC",
+      "query": "2023 ESC guidelines management acute coronary syndromes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "PMC",
+      "query": "2014 AHA ACC guideline management patients non-ST-elevation acute coronary syndromes",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 5
+    },
+    {
+      "database": "Europe PMC",
+      "query": "nitroglycerin response relief diagnostic value acute coronary syndrome chest pain review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "prehospital delay myocardial infarction mortality time to reperfusion",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "guideline index",
+      "query": "acute coronary syndrome ST-elevation myocardial infarction prehospital care",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 18
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1155/2018/9745804",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.1074/jbc.M109.014548",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "Crossref",
+      "query": "10.3389/fgene.2025.1543963",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 3
+    },
+    {
+      "database": "PMC",
+      "query": "16440063 mitochondrial aldehyde dehydrogenase Glu504Lys sublingual nitroglycerin",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 1
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 268,
+    "recordsAfterDeduplication": 40,
+    "sourcesIncluded": 10
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Ren2018Suxiao",
+      "identifier": "PMID:29770157",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "速效救心丸荟萃分析（慢性管理场景证据）"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Steele2006NTGCJEM",
+      "identifier": "DOI:10.1017/S1481803500013671",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "含服反应诊断价值（急诊队列）"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Beretta2010ALDH2",
+      "identifier": "PMID:19906643",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "ALDH2*2 酶动力学与临床转述"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Dong2025ALDH2China",
+      "identifier": "PMID:40979589",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "中国心绞痛患者 rs671 地域分布"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Chen2020ALDH2Variants",
+      "identifier": "PMID:32403082",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "汉族携带率与残余活性"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Yasue2019CAS",
+      "identifier": "PMID:30745502",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "冠脉痉挛与 ALDH2*2、硝酸甘油反应"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Akhter2026Prehospital",
+      "identifier": "PMID:42171119",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "STEMI 院前延迟叙述性综述"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Feng2019ChinaSTEMI",
+      "identifier": "PMID:31712344",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "中国 101 家非 PCI 医院延迟定量研究"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "NHS2023ChestPain",
+      "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "患者端急救行为官方指导"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "AHA2025CPRECC",
+      "identifier": "https://cpr.heart.org/en/resuscitation-science/cpr-and-ecc-guidelines",
+      "accessLevel": "official_page",
+      "included": true,
+      "role": "AHA CPR/ECC 指南时效性背景"
+    }
+  ]
+}

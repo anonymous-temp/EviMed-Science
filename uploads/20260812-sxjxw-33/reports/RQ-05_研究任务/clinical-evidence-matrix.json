@@ -1,0 +1,423 @@
+{
+ "claims": [
+  {
+   "claimId": "CLM-001",
+   "claimType": "direct",
+   "referenceNumber": 3,
+   "claim": "重庆 1,088 例原发性脑出血的病例交叉研究（自身对照，暴露窗口为发病前 0–2 小时）显示，Valsalva 动作（含排便用力）后 2 小时内脑出血风险为未暴露时的 3.05 倍（95%CI 2.43–3.83，p<0.001），白天暴露风险高于夜间（OR 1.38，1.04–1.82）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41030662/",
+   "sourceTitle": "Trigger factors of primary cerebral hemorrhage onset: a case-crossover study (Health Sci Rep 2025)",
+   "artifactPath": ".evimed-sources/PMC12477487/fulltext.md",
+   "identifier": "PMID:41030662",
+   "accessLevel": "full_text",
+   "supportQuote": "Significant triggers included Valsalva maneuvers (OR 3.05, 95% CI: 2.43–3.83, p < 0.001), strenuous exercise (OR 4.38, 95% CI: 3.53–5.45, p < 0.001), sudden change of position (OR 3.34, 95% CI: 2.65–4.21, p < 0.001)…Notably, daytime exposures to both Valsalva maneuvers (OR 1.38, 95% CI: 1.04–1.82, p = 0.024) and strenuous exercise (OR 3.75, 95% CI: 2.72–5.16, p < 0.001) were associated with significantly higher risks compared to nighttime exposures.",
+   "applicability": "直接支撑命题 A 的‘排便用力发作（Valsalva）触发血管事件’层面；终点为脑出血而非冠脉事件，暴露为广义 Valsalva 动作",
+   "uncertainty": "终点与暴露定义均与‘排便用力→急性冠脉事件’不完全一致；单中心、回忆偏倚；病例交叉设计控制了稳定的个体混杂"
+  },
+  {
+   "claimId": "CLM-002",
+   "claimType": "direct",
+   "referenceNumber": 3,
+   "claim": "同一研究纳入 1088 例首次原发性脑出血患者（平均年龄 59.6 岁，男性 58.1%），以 0–2 小时为触发期、前 2–24 小时为稳定期，报告剧烈运动 OR 4.38（3.53–5.45）、体位骤变 OR 3.34（2.65–4.21）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41030662/",
+   "sourceTitle": "Trigger factors of primary cerebral hemorrhage onset: a case-crossover study (Health Sci Rep 2025)",
+   "artifactPath": ".evimed-sources/PMC12477487/fulltext.md",
+   "identifier": "PMID:41030662",
+   "accessLevel": "full_text",
+   "supportQuote": "The study included 1088 ICH patients (mean age 59.6 ± 16.1 years; 632 males [58.1%])…We defined the 0–2 h preceding stroke onset as the trigger phase (primary exposure window for trigger factors), and the preceding 2–24 h as the stable phase.",
+   "applicability": "提供病例交叉研究的方法学要素（样本量、暴露窗口）与同队列其他触发因素的效应量参照",
+   "uncertainty": "暴露期定义由该研究自行设定；其他触发因素（运动、体位）与排便用力并非同一暴露"
+  },
+  {
+   "claimId": "CLM-003",
+   "claimType": "direct",
+   "referenceNumber": 1,
+   "claim": "丹麦全国匹配队列（83,239 例便秘患者对照 832,384 例匹配人群）中，便秘与心肌梗死（aHR 1.24，95%CI 1.14–1.35）、缺血性卒中（1.50，1.41–1.60）、出血性卒中（1.46，1.26–1.69）、外周动脉病（1.34，1.20–1.50）、房颤（1.27，1.20–1.34）、心衰（1.52，1.42–1.62）及静脉血栓栓塞（2.04，1.89–2.20）相关；关联在诊断后第一年最强。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/32873621/",
+   "sourceTitle": "Constipation and risk of cardiovascular diseases: a Danish population-based matched cohort study (BMJ Open 2020)",
+   "artifactPath": ".evimed-sources/PMC7473662/fulltext.md",
+   "identifier": "PMID:32873621",
+   "accessLevel": "full_text",
+   "supportQuote": "83 239 patients with constipation were matched to 832 384 individuals without constipation…Constipation was also associated with arterial events, including myocardial infarction (1.24, 95% CI 1.14 to 1.35), ischaemic stroke (1.50, 95% CI 1.41 to 1.60), haemorrhagic stroke (1.46, 95% CI 1.26 to 1.69), peripheral artery disease (1.34, 95% CI 1.20 to 1.50), atrial fibrillation or atrial flutter (1.27, 95% CI 1.20 to 1.34) and heart failure (1.52, 95% CI 1.42 to 1.62)…The excess risk of cardiovascular disease was highest during the first year following the diagnosis of constipation, with a 1.5-fold increased risk of myocardial infarction",
+   "applicability": "命题 A 的‘便秘→冠脉事件’人群队列关联层面；暴露=医生诊断的便秘（慢性），非单次用力发作",
+   "uncertainty": "观察性研究，残余混杂（体力活动、饮食等未测）；反向因果（心衰/房颤可致便秘）；MI 关联 E-value 1.79"
+  },
+  {
+   "claimId": "CLM-004",
+   "claimType": "direct",
+   "referenceNumber": 1,
+   "claim": "丹麦队列中便秘-心肌梗死关联的 E-value 为 1.79（95%CI 下限对应 1.54），即未测混杂需同时与暴露和结局相关达该强度才可能解释掉该关联。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/32873621/",
+   "sourceTitle": "Constipation and risk of cardiovascular diseases: a Danish population-based matched cohort study (BMJ Open 2020)",
+   "artifactPath": ".evimed-sources/PMC7473662/fulltext.md",
+   "identifier": "PMID:32873621",
+   "accessLevel": "full_text",
+   "supportQuote": "For myocardial infarction (aHR 1.24, 95% CI 1.14 to 1.35), the E-value was 1.79 (E-value for lower limit of 95% CI=1.54).",
+   "applicability": "用于评估便秘-冠脉关联对未测混杂的稳健性；提示关联强度有限、因果解读需谨慎",
+   "uncertainty": "E-value 仅衡量未测混杂强度，不排除多个弱混杂联合作用"
+  },
+  {
+   "claimId": "CLM-005",
+   "claimType": "direct",
+   "referenceNumber": 1,
+   "claim": "丹麦队列作者给出的机制表述：便秘导致排便用力，而排便用力与血压的瞬时升高相关（Constipation leads to straining at stool, which has been associated with transient increases in blood pressure）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/32873621/",
+   "sourceTitle": "Constipation and risk of cardiovascular diseases: a Danish population-based matched cohort study (BMJ Open 2020)",
+   "artifactPath": ".evimed-sources/PMC7473662/fulltext.md",
+   "identifier": "PMID:32873621",
+   "accessLevel": "full_text",
+   "supportQuote": "Constipation leads to straining at stool, which has been associated with transient increases in blood pressure.",
+   "applicability": "机制层面：连接‘用力排便’与‘血压瞬时升高’的中间环节；属作者机制讨论而非独立测量",
+   "uncertainty": "为文献引述的机制假设表述，非本队列直接测量"
+  },
+  {
+   "claimId": "CLM-006",
+   "claimType": "direct",
+   "referenceNumber": 2,
+   "claim": "9 项队列研究（283,070 例便秘、3,343,120 例对照）的 meta 分析：便秘使冠心病风险升高 10%（HR 1.10，95%CI 1.05–1.15），心肌梗死亚组 HR 1.14（1.05–1.23）；女性亚组不显著（HR 1.04，0.98–1.11），随访≥10 年亚组不显著（HR 1.08，0.97–1.19）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41425977/",
+   "sourceTitle": "Association between constipation and risk of coronary heart disease: a systematic review and meta-analysis of cohort studies (Front Cardiovasc Med 2025)",
+   "artifactPath": ".evimed-sources/PMC12711805/fulltext.md",
+   "identifier": "PMID:41425977",
+   "accessLevel": "full_text",
+   "supportQuote": "Nine studies involving 283,070 constipation cases and 3,343,120 controls were analyzed. Constipation was associated with a 10% increased CHD risk [hazard ratio (HR] = ).10, 95% confidence interval (CI): 1.05–1.15]…Subgroup analyses revealed a stronger association with myocardial infarction (HR = 1.14, 95% CI: 1.05–1.23)…constipation showed no CHD risk elevation in women (HR = 1.04, 95% CI: 0.98–1.11)…no statistically significant association emerged in cohorts with ≥10 years of surveillance (HR=1.08, 95% CI: 0.97–1.19)",
+   "applicability": "命题 A 的便秘-冠脉事件关联层级的汇总证据；暴露=便秘（各研究定义不一）",
+   "uncertainty": "纳入研究暴露定义异质（I²=42.5%）；绝大多数研究为观察性；女性与长随访亚组不显著提示效应脆弱"
+  },
+  {
+   "claimId": "CLM-007",
+   "claimType": "direct",
+   "referenceNumber": 10,
+   "claim": "泰国 SMART 病例交叉研究（506 例急性心梗）显示，中度/重度体力活动后 1 小时内心肌梗死风险 RR 3.0（95%CI 2.2–4.2），每周活动≤5 次者更高（RR 5.0，2.4–10.3）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/30653616/",
+   "sourceTitle": "Immediate risk of myocardial infarction following physical exertion, tea, and coffee: a case-crossover study in Thailand (PLoS One 2019)",
+   "artifactPath": ".evimed-sources/PMC6336317/fulltext.md",
+   "identifier": "PMID:30653616",
+   "accessLevel": "full_text",
+   "supportQuote": "A total of 506 Thai participants (women = 191, men = 315) were interviewed between 2014 and 2017 after sustaining an acute MI…The risk of MI was 3-fold higher (RR = 3.0; 95% CI: 2.2–4.2) within an hour of moderate or heavy physical exertion compared to other times…it was 5.0-fold higher (95% CI: 2.4–10.3, P -homogeneity = 0.17) for those who engaged in physical exertion 5 or fewer times a week.",
+   "applicability": "触发范式参照：间歇性负荷可在 1 小时窗口内触发心肌梗死；用于类比‘用力发作触发冠脉事件’的合理数量级",
+   "uncertainty": "暴露为体力活动而非排便用力；回忆偏倚；效应量因习惯性活动水平而不同"
+  },
+  {
+   "claimId": "CLM-008",
+   "claimType": "direct",
+   "referenceNumber": 11,
+   "claim": "健康成人逐搏超声实测（30 名健康男性，40 mmHg Valsalva 动作）：左心每搏充盈量自动作起始后第 1 搏不变、随后逐渐下降至第 11±1.2 搏最低，右心自第 1 搏即显著下降——印证用力相回心血量减少、心输出量下降。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/23342040/",
+   "sourceTitle": "Simultaneous beat-by-beat investigation of the effects of the Valsalva maneuver on left and right ventricular filling and the possible mechanism (PLoS One 2013)",
+   "artifactPath": ".evimed-sources/PMC3544743/fulltext.md",
+   "identifier": "PMID:23342040",
+   "accessLevel": "full_text",
+   "supportQuote": "The PV, VTI and IV of the left heart remained unchanged at the first beat after the Valsalva maneuver onset (compared with those at rest, p >0.1) and then decreased gradually to the lowest at the 11±1.2th beat…Thirty male adult volunteers aged from 20 years to 45 years (mean age, 31±7.7 years) participated in this study…A 40-mmHg VM was carried out by each subject with nose clips using a mask connected to a watch-shaped manometer.",
+   "applicability": "机制层面：Valsalva 动作期间心脏充盈（前负荷）的实测变化；对象为健康人而非冠心病患者",
+   "uncertainty": "健康志愿者数据，不能直接外推至冠心病/心衰人群；40 mmHg 标准化动作与真实排便用力强度未必一致"
+  },
+  {
+   "claimId": "CLM-009",
+   "claimType": "direct",
+   "referenceNumber": 4,
+   "claim": "排便姿势范围综述（42 篇研究）：蹲姿使直肠-肛管角变直、所需用力更小（Sikirov 等）；脚凳使排便时间从坐位的 113.4 秒降至 55.5 秒、主观用力评分从 2.5 降至 1.4；作者结论为方法学局限（样本小、混杂控制不足）使确定性结论无法得出。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/40604598/",
+   "sourceTitle": "Sitting vs. squatting: a scoping review of toilet postures and associated health outcomes (BMC Public Health 2025)",
+   "artifactPath": ".evimed-sources/PMC12219158/fulltext.md",
+   "identifier": "PMID:40604598",
+   "accessLevel": "full_text",
+   "supportQuote": "Methodological limitations, including small sample sizes and inadequate control of confounders, preclude definitive conclusions. … Sakakibara et al. compared abdominal pressure and anorectal angles across three positions—sitting, hip-flex sitting, and squatting—finding that squatting resulted in a straighter recto-anal canal requiring less strain for defecation … Similarly, Sikirov’s research found lower straining effort while squatting compared to sitting positions … Edgar et al.’s study reported that using a footstool reduced defecation time, averaging 55.5 seconds compared to 113.4 seconds in the seated position. Healthy participants reported a strain rating of 1.4 with the footstool versus 2.5 for the seated position",
+   "applicability": "命题 B 的中间终点层面：蹲姿/脚凳可减少排便用力与时间（自身对照/小型对照证据）",
+   "uncertainty": "样本量小、混杂控制不足；终点为排便力学而非心血管事件；一项脚凳研究（Trieu 等）未显示客观改善"
+  },
+  {
+   "claimId": "CLM-010",
+   "claimType": "direct",
+   "referenceNumber": 4,
+   "claim": "同一综述的心血管部分记录相反方向信号：印度研究（Chakrabarti 等）发现 36% 的卒中发生在蹲姿排便中、出血性卒中超过半数发生在该姿势，蹲姿在健康人与高血压者中均与血压显著升高相关。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/40604598/",
+   "sourceTitle": "Sitting vs. squatting: a scoping review of toilet postures and associated health outcomes (BMC Public Health 2025)",
+   "artifactPath": ".evimed-sources/PMC12219158/fulltext.md",
+   "identifier": "PMID:40604598",
+   "accessLevel": "full_text",
+   "supportQuote": "Chakrabarti et al. explored the correlation between squatting posture during defecation and stroke incidence in India. They found that 36% of strokes occurred while individuals were in a squatting position, with over half of hemorrhagic strokes occurring in this posture. The study reported significant increases in blood pressure associated with squatting in both healthy individuals and those with hypertension",
+   "applicability": "命题 B 的冲突证据：蹲姿升高血压、与卒中发作位置相关，方向与‘蹲姿保护心血管’假设相反",
+   "uncertainty": "为横断面相关性（卒中发生时处于蹲姿），不能因果解读；综述转述而非原始数据"
+  },
+  {
+   "claimId": "CLM-011",
+   "claimType": "direct",
+   "referenceNumber": 5,
+   "claim": "日本单中心开放标签单臂研究（18 例心衰合并慢性便秘，艾洛昔巴 10 mg/日，12 周）：排便用力程度第 12 周较基线显著下降（−0.79，95%CI −1.40 to −0.17）；排便前后血压差趋于缩小约 10 mmHg（收缩压 −10.50 mmHg，未达显著）；作者自述样本量小、无对照组、统计功效不足。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38464992/",
+   "sourceTitle": "Open-label, single-center, single-arm study evaluating the efficacy and safety of elobixibat for chronic constipation in patients with heart failure (Circ Rep 2024)",
+   "artifactPath": ".evimed-sources/PMC10920016/fulltext.md",
+   "identifier": "PMID:38464992",
+   "accessLevel": "full_text",
+   "supportQuote": "elobixibat (10 mg/day) was administered for 12 weeks to 18 HF patients with chronic constipation … The point estimates of the mean change in degree of straining during defecation (median of each evaluation interval) from baseline (3.11±0.85) were −0.53 (95% CI, −0.88 to −0.18) at Week 4, −0.57 (95% CI, −0.99 to −0.15) at Week 8, and −0.79 (95% CI, −1.40 to −0.17) at Week 12, showing significant decreases at all time points … The changes in BP by ABPM before and after defecation from baseline to Week 12 were as follows: systolic blood pressure, −10.50 mmHg; diastolic blood pressure, −11.93 mmHg; and mean blood pressure, −11.43 mmHg. Although these were not significant, the difference in BP before and after defecation tended to decrease by approximately 10 mmHg for all variables (systolic blood pressure, diastolic blood pressure, and mean blood pressure) at Week 12 from baseline … First, because the sample size was small, statistical power was not sufficient. Second, the study had an open-label, single-arm design",
+   "applicability": "命题 B 的通便干预层面：促排药可减少用力并缩小排便相关血压波动；终点为中间指标，无心血管事件",
+   "uncertainty": "开放标签、单臂、18 例、无安慰剂对照；血压差未达显著；对象为心衰患者而非冠脉事件人群"
+  },
+  {
+   "claimId": "CLM-012",
+   "claimType": "direct",
+   "referenceNumber": 5,
+   "claim": "该研究作者引述的机制表述：排便用力可升高血压，并通过增加后负荷升高心血管事件风险（Straining during defecation can elevate BP and increase the risk of cardiovascular events by increasing the afterload）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38464992/",
+   "sourceTitle": "Open-label, single-center, single-arm study evaluating the efficacy and safety of elobixibat for chronic constipation in patients with heart failure (Circ Rep 2024)",
+   "artifactPath": ".evimed-sources/PMC10920016/fulltext.md",
+   "identifier": "PMID:38464992",
+   "accessLevel": "full_text",
+   "supportQuote": "Straining during defecation can elevate BP and increase the risk of cardiovascular events 1 by increasing the afterload, leading to pulmonary edema.",
+   "applicability": "机制层面表述：用力→血压升高→心脏后负荷增加→心血管事件风险的链条",
+   "uncertainty": "为作者引述文献的机制观点，非本研究测量结果"
+  },
+  {
+   "claimId": "CLM-013",
+   "claimType": "direct",
+   "referenceNumber": 6,
+   "claim": "速效救心丸 meta 分析：41 项随机对照试验、6,276 例冠心病患者，全部在中国进行；与对照相比心电图改善 RR 1.32（95%CI 1.26–1.38），vs 硝酸甘油 RR 1.35（1.16–1.56）；不良反应率与对照组无显著差异（RR 1.12，0.50–2.51）；多数试验 Jadad 评分低（缺乏双盲）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+   "sourceTitle": "Efficacy of Suxiao Jiuxin Pill on coronary heart disease: a meta-analysis of randomized controlled trials (Evid Based Complement Alternat Med 2018)",
+   "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+   "identifier": "PMID:29770157",
+   "accessLevel": "full_text",
+   "supportQuote": "Forty-one trials involving 6276 patients were included in our analysis…The 41 studies consisted of 6276 patients with coronary heart disease…All of the included studies were conducted in China…Administration of suxiao jiuxin pill significantly improved electrocardiogram (ECG) results when compared with other therapies (RR 1.32, 95% CI 1.26 to 1.38, and P < 0.001)…nitroglycerin (RR 1.35, 95% CI 1.16 to 1.56, and P < 0.001)…There was no significant difference in the adverse reaction rates between the treatment and the control groups (RR 1.12, 95% CI 0.50 to 2.51, and P = 0.785)…The majority of the included studies received low Jadad scores due to the lack of a double-blind design",
+   "applicability": "命题 C 的人群边界：全部证据对象为确诊冠心病/心绞痛患者；说明本品证据不能外推至未分化急性胸痛",
+   "uncertainty": "试验质量低（Jadad）、异质性高（ECG I²=62.3%）、未分析心血管死亡终点；疗效判断需谨慎"
+  },
+  {
+   "claimId": "CLM-014",
+   "claimType": "direct",
+   "referenceNumber": 7,
+   "claim": "2021 年注册的速效救心丸随机双盲安慰剂对照试验（ChiCTR1800014258，324 例稳定型心绞痛、气滞血瘀证）方案要求入组者确诊冠心病（心梗病史；冠脉造影或 CTA 证实狭窄>50%；或无创负荷试验诊断冠心病，满足其一）。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/34281600/",
+   "sourceTitle": "Efficacy and safety of Suxiao Jiuxin Pill in the treatment of stable angina (Qi stagnation and blood stasis syndrome): study protocol… (Trials 2021)",
+   "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+   "identifier": "PMID:34281600",
+   "accessLevel": "full_text",
+   "supportQuote": "The diagnostic criteria for CHD will be ① history of myocardial infarction (MI); ② coronary angiography or computed tomography coronary angiography confirmation of stenosis greater than 50%; and ③ noninvasive imaging stress test diagnostic of coronary artery disease (CAD) (e.g., positive treadmill exercise test (male only), nuclear perfusion scan). Patients will be considered to be diagnosed with CHD if they meet at least one of these criteria…Trial registration: ChiCTR, ChiCTR1800014258. Registered on 13 March 2019 at chictr.org.cn…The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome)",
+   "applicability": "命题 C 的人群边界：当前注册研究仍限定确诊冠心病+气滞血瘀证，未覆盖未分化急性症状人群",
+   "uncertainty": "为试验方案而非结果；方案人群限定由研究者设定，不代表说明书表述本身"
+  },
+  {
+   "claimId": "CLM-015",
+   "claimType": "direct",
+   "referenceNumber": 9,
+   "claim": "2023 ESC ACS 指南（经开放获取权威解读）：约 80% 的 ACS 患者以胸痛或压迫感就诊；初始评估包括心电图、体格检查、临床病史、生命体征与高敏肌钙蛋白动态；STEMI 需立即血管造影/PCI，无极高危特征的 NSTE-ACS 应在 24 小时内考虑造影。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39129714/",
+   "sourceTitle": "What US cardiology can learn from the 2023 ESC guidelines for the management of acute coronary syndromes (Clin Cardiol 2024)",
+   "artifactPath": ".evimed-sources/PMC11317809/fulltext.md",
+   "identifier": "PMID:39129714",
+   "accessLevel": "full_text",
+   "supportQuote": "Because 80% of both women and men with ACS present with chest pain or pressure, this symptom is detailed in the guidelines…the initial ACS assessment includes the electrocardiogram, physical examination, clinical history, vital signs, and high‐sensitivity troponin trends…Patients with STEMI require immediate angiography and percutaneous coronary intervention (PCI) as appropriate (or thrombolysis if timely PCI is not feasible), as do the NSTE‐ACS patients with very high‐risk features. For NSTE‐ACS without very high‐risk features, angiography should be considered within the initial 24 h",
+   "applicability": "命题 5 的指南路径：急诊评估要素（ECG+体格检查+病史+生命体征+高敏肌钙蛋白）与再灌注时间框架",
+   "uncertainty": "为指南解读文献而非指南原文；原文全文未通过开放获取保全"
+  },
+  {
+   "claimId": "CLM-016",
+   "claimType": "direct",
+   "referenceNumber": 9,
+   "claim": "同一解读文献指出：总缺血时间由患者自行就诊延迟、急救系统延迟与院内系统延迟构成，患者教育旨在促进及时就诊。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39129714/",
+   "sourceTitle": "What US cardiology can learn from the 2023 ESC guidelines for the management of acute coronary syndromes (Clin Cardiol 2024)",
+   "artifactPath": ".evimed-sources/PMC11317809/fulltext.md",
+   "identifier": "PMID:39129714",
+   "accessLevel": "full_text",
+   "supportQuote": "These include patient self‐presentation delay or emergency medical system (EMS) delay and systems of care delay within the receiving medical center … all adding to the total ischemic time … will involve patient education for prompt presentation",
+   "applicability": "支撑‘就诊/呼叫延迟是总缺血时间的组成部分’及患者教育的重要性",
+   "uncertainty": "为指南解读内容；延迟的各组成部分的相对贡献随地区与系统而异"
+  },
+  {
+   "claimId": "CLM-017",
+   "claimType": "direct",
+   "referenceNumber": 12,
+   "claim": "澳大利亚 2025 ACS 指南（GRADE 方法）：ACS 评估包括心电图、临床病史、体格检查与肌钙蛋白检测；无缺血性心电图改变时推荐以高敏肌钙蛋白临床决策路径（0/1h 或 0/2h）做快速危险分层，高风险者应收治进一步评估。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41693087/",
+   "sourceTitle": "National Heart Foundation of Australia and Cardiac Society of Australia and New Zealand: Australian clinical guideline for diagnosing and managing acute coronary syndromes 2025 (Med J Aust 2026)",
+   "artifactPath": ".evimed-sources/PMC12907536/fulltext.md",
+   "identifier": "PMID:41693087",
+   "accessLevel": "full_text",
+   "supportQuote": "Assessment of ACS involves ECG evaluation, clinical history and physical examination, and troponin testing…In the absence of ischaemic ECG findings, CDPs incorporating hs‐cTn rather than contemporary troponin assays are recommended for safe, rapid risk stratification and decision‐making…People stratified as high risk of major adverse cardiovascular events (MACE) using hs‐cTn‐based CDPs should be admitted for further evaluation",
+   "applicability": "命题 5 的急诊评估标准：心电图与（高敏）肌钙蛋白构成 ACS 评估与分层的核心",
+   "uncertainty": "澳大利亚辖区指南；不同辖区流程（如中国胸痛中心路径）以此为准并作本地化"
+  },
+  {
+   "claimId": "CLM-018",
+   "claimType": "direct",
+   "referenceNumber": 12,
+   "claim": "澳大利亚 2025 ACS 指南的时间目标：STEMI/ACOMI 首次医疗接触到导丝通过时间，具备 PCI 能力中心应≤60 分钟、非 PCI 能力中心应≤90 分钟；及时再灌注通过缩短总缺血时间减少梗死范围与死亡率。",
+   "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41693087/",
+   "sourceTitle": "National Heart Foundation of Australia and Cardiac Society of Australia and New Zealand: Australian clinical guideline for diagnosing and managing acute coronary syndromes 2025 (Med J Aust 2026)",
+   "artifactPath": ".evimed-sources/PMC12907536/fulltext.md",
+   "identifier": "PMID:41693087",
+   "accessLevel": "full_text",
+   "supportQuote": "Timely reperfusion limits the extent of myocardial infarction and reduces mortality by minimising total ischaemic time…For people with STEMI/ACOMI presenting to primary PCI‐capable centres, first medical contact to wire crossing time should not exceed 60 min…For people presenting to non‐PCI‐capable centres, first medical contact to wire crossing time should not exceed 90 min",
+   "applicability": "命题 5 的时间阈值：STEMI 再灌注时间目标（60/90 分钟）为指南既有阈值",
+   "uncertainty": "该阈值针对已诊断 STEMI/ACOMI 的救治环节，非‘排便场景’专属呼叫阈值"
+  },
+  {
+   "claimId": "CLM-019",
+   "claimType": "direct",
+   "referenceNumber": 8,
+   "claim": "NHS 官方页面规定的急救呼叫条件：突发且不缓解的胸部疼痛或不适（可呈挤压/压迫感、灼烧或消化不良样）；疼痛放射至左或右臂、颈、颌、胃或背部；胸痛伴出汗、恶心、头晕或气促——满足其一即应立即呼叫 999，因为可能正在发生心肌梗死。",
+   "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+   "sourceTitle": "Chest pain (NHS, official patient page)",
+   "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+   "identifier": "https://www.nhs.uk/symptoms/chest-pain/",
+   "accessLevel": "official_page",
+   "supportQuote": "## Immediate action required: Call 999 if:\n- you get sudden pain or discomfort in your chest that does not go away - the pain can feel like squeezing or pressure inside your chest, burning or indigestion\n- you get pain that spreads to your left or right arm, or your neck, jaw, stomach or back\n- you have chest pain and you feel sweaty, sick, light headed or short of breath\nYou could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital.",
+   "applicability": "患者层面的急救呼叫边界：症状条件（突发、持续、放射、伴全身症状）触发立即呼叫；是实际处置部分的核心依据",
+   "uncertainty": "英国面向公众的建议；中国急救号码为 120；不能替代专业临床评估"
+  },
+  {
+   "claimId": "CLM-020",
+   "claimType": "synthesized",
+   "confidence": "moderate",
+   "referenceNumber": 1,
+   "referenceNumbers": [
+    1,
+    2,
+    3
+   ],
+   "claim": "命题 A 分解判定（部分支持）：‘便秘→冠脉事件’有人群队列关联证据（丹麦队列 MI aHR 1.24，95%CI 1.14–1.35；meta 亚组 HR 1.14，1.05–1.23）；‘排便用力发作（Valsalva）→脑出血’有病例交叉触发证据（OR 3.05，2.43–3.83）；但以冠脉事件为终点、以排便用力发作为暴露的病例交叉/触发研究未检索到。据此：机制上可解释成立、便秘-事件关联成立，而‘用力发作触发急性冠脉事件’判定为事件层面证据不足，不得由前两者推出。",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/32873621/",
+     "sourceTitle": "Danish population-based matched cohort study (BMJ Open 2020)",
+     "artifactPath": ".evimed-sources/PMC7473662/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Constipation was also associated with arterial events, including myocardial infarction (1.24, 95% CI 1.14 to 1.35), ischaemic stroke (1.50, 95% CI 1.41 to 1.60), haemorrhagic stroke (1.46, 95% CI 1.26 to 1.69)"
+    },
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41425977/",
+     "sourceTitle": "Systematic review and meta-analysis of cohort studies (Front Cardiovasc Med 2025)",
+     "artifactPath": ".evimed-sources/PMC12711805/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Subgroup analyses revealed a stronger association with myocardial infarction (HR = 1.14, 95% CI: 1.05–1.23)."
+    },
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/41030662/",
+     "sourceTitle": "Case-crossover study of primary cerebral hemorrhage onset (Health Sci Rep 2025)",
+     "artifactPath": ".evimed-sources/PMC12477487/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Significant triggers included Valsalva maneuvers (OR 3.05, 95% CI: 2.43–3.83, p < 0.001)"
+    }
+   ],
+   "applicability": "命题 A 的总判定（分解判定），按题面判定条件执行：不将慢性暴露关联或相邻终点触发证据冒充‘排便用力→急性冠脉事件’的事件层面证据",
+   "uncertainty": "三条证据的暴露定义与终点不同（慢性便秘/广义 Valsalva/脑出血）；直接研究的缺位以检索边界为准"
+  },
+  {
+   "claimId": "CLM-021",
+   "claimType": "synthesized",
+   "confidence": "moderate",
+   "referenceNumber": 4,
+   "referenceNumbers": [
+    4,
+    5
+   ],
+   "claim": "命题 B 判定（部分支持，仅限中间终点）：蹲姿、脚凳与促排药可减少排便用力（脚凳使排便时间 113.4→55.5 秒、用力评分 2.5→1.4；艾洛昔巴使用力程度 −0.79，95%CI −1.40 to −0.17，排便前后血压差缩小约 10 mmHg 但未达显著）；但没有任何以心血管事件为终点的对照研究，且蹲姿-血压升高/卒中位置相关性方向相反。结论只能写到‘可减少排便用力’，不得外推为‘降低心脏事件’。",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/40604598/",
+     "sourceTitle": "Scoping review of toilet postures (BMC Public Health 2025)",
+     "artifactPath": ".evimed-sources/PMC12219158/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Methodological limitations, including small sample sizes and inadequate control of confounders, preclude definitive conclusions. … Edgar et al.’s study reported that using a footstool reduced defecation time, averaging 55.5 seconds compared to 113.4 seconds in the seated position. Healthy participants reported a strain rating of 1.4 with the footstool versus 2.5 for the seated position"
+    },
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/38464992/",
+     "sourceTitle": "Elobixibat in heart failure patients (Circ Rep 2024)",
+     "artifactPath": ".evimed-sources/PMC10920016/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "−0.79 (95% CI, −1.40 to −0.17) at Week 12, showing significant decreases at all time points … Although these were not significant, the difference in BP before and after defecation tended to decrease by approximately 10 mmHg for all variables (systolic blood pressure, diastolic blood pressure, and mean blood pressure) at Week 12 from baseline"
+    }
+   ],
+   "applicability": "命题 B 的总判定：中间终点（用力、时间、血压波动）有据，事件终点无据",
+   "uncertainty": "姿势证据样本小、混杂控制不足；促排药研究开放标签单臂；无事件终点研究"
+  },
+  {
+   "claimId": "CLM-022",
+   "claimType": "synthesized",
+   "confidence": "high",
+   "referenceNumber": 6,
+   "referenceNumbers": [
+    6,
+    7
+   ],
+   "claim": "命题 C 判定（无证据支持）：(1) 未检索到以临床结局（事件发生率、就医延迟、病死率）为终点、检验药物放置位置或可及性的研究（文献与临床试验注册库检索均未命中）；(2) 速效救心丸现有研究全部以确诊冠心病/心绞痛患者为对象（41 项 RCT、6,276 例全部为冠心病患者；2021 年方案要求确诊冠心病），建议指向的‘排便时突发胸闷’未分化人群超出说明书适应症（气滞血瘀型冠心病，心绞痛）边界，该人群无适应症内证据。",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/29770157/",
+     "sourceTitle": "Meta-analysis of Suxiao Jiuxin Pill (Evid Based Complement Alternat Med 2018)",
+     "artifactPath": ".evimed-sources/PMC5892298/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "All of the included studies were conducted in China. …The 41 studies consisted of 6276 patients with coronary heart disease."
+    },
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/34281600/",
+     "sourceTitle": "SJP stable angina trial protocol (Trials 2021)",
+     "artifactPath": ".evimed-sources/PMC8287819/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Patients will be considered to be diagnosed with CHD if they meet at least one of these criteria…The trial will enroll 324 participants with chronic stable angina (Qi Stagnation and Blood Stasis syndrome)"
+    }
+   ],
+   "applicability": "命题 C 的两项判定条件均不满足：无可及性/放置位置干预研究；人群超出适应症边界",
+   "uncertainty": "NMPA 说明书条目为 EviMed 索引候选（官方现行版本核验中）；‘未检索到’仅界定本次检索范围（文献索引、指南索引、NMPA 说明书索引、注册库，双语）"
+  },
+  {
+   "claimId": "CLM-025",
+   "claimType": "synthesized",
+   "confidence": "high",
+   "referenceNumber": 8,
+   "referenceNumbers": [
+    8,
+    9
+   ],
+   "claim": "任何含服自救用药（包括速效救心丸）均不得作为延迟或替代呼叫急救与急诊评估的理由：急救呼叫以症状条件（突发、持续、放射、伴出汗/恶心/气促）为准，与是否用药、用药后是否缓解无关；ACS 的确认依赖急诊评估（心电图、体格检查、病史、生命体征、高敏肌钙蛋白），而非任何药物的反应。",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://www.nhs.uk/symptoms/chest-pain/",
+     "sourceTitle": "Chest pain (NHS official page)",
+     "artifactPath": ".evimed-sources/official-pages/e6143b76645a9461/page.md",
+     "accessLevel": "official_page",
+     "supportQuote": "You could be having a heart attack. Call 999 straight away as you need immediate treatment in hospital."
+    },
+    {
+     "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/39129714/",
+     "sourceTitle": "2023 ESC ACS guideline interpretation (Clin Cardiol 2024)",
+     "artifactPath": ".evimed-sources/PMC11317809/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "the initial ACS assessment includes the electrocardiogram, physical examination, clinical history, vital signs, and high‐sensitivity troponin trends"
+    }
+   ],
+   "applicability": "安全底线表述：自救用药不得延迟呼叫急救与急诊评估；实际处置部分的直接依据",
+   "uncertainty": "基于英国 NHS 呼叫边界与 ESC 评估要素的合成；中国 120 号本地化执行"
+  },
+  {
+   "claimId": "CLM-023",
+   "claimType": "derived",
+   "claim": "〔推导〕‘排便用力发作→急性冠脉事件’瞬时相对风险的数量级估计约为 1.1–3.0：以便秘-冠心病 meta 分析心肌梗死亚组 HR 1.14（暴露=慢性便秘）为下限参照，以脑出血病例交叉的 Valsalva OR 3.05（暴露=急性发作，2 小时窗）与体力活动触发心肌梗死 RR 3.0（暴露=急性发作，1 小时窗）为上限参照。该区间是跨暴露定义、跨终点的间接外推，不是点估计，不改变‘事件层面证据不足’的判定。",
+   "derivedFrom": [
+    "CLM-001",
+    "CLM-006",
+    "CLM-007"
+   ],
+   "method": "区间合成：下限取便秘-冠心病 meta 的心肌梗死亚组 HR=1.14（CLM-006 输入）；上限取病例交叉触发研究的效应量 Valsalva OR=3.05（CLM-001 输入）与体力活动 RR=3.0（CLM-007 输入）；合并为数量级区间 [1.14, 3.05] 并圆整为 1.1–3.0。三个输入分别来自‘慢性便秘×冠脉事件’、‘Valsalva 发作×脑出血（2h 窗）’与‘体力活动发作×心肌梗死（1h 窗）’，暴露与终点均不完全等于目标组合。",
+   "assumptions": "触发效应的血流动力学中介（血压/心率剧变）在不同血管事件类型间近似可迁移；排便用力的负荷强度介于‘日常活动’与‘剧烈用力’之间；目标组合的效应量落在此类研究的常见范围内。",
+   "sensitivity": "若冠脉易损斑块对触发刺激的阈值高于脑血管，真实值靠近下限 1.1；若便秘者用力更剧烈、或合并高血压者基线风险更高，则靠近上限 3.0；直接研究缺位使任何取值都不能获得区间估计意义上的置信度。",
+   "applicability": "命题 A 的量化外推：说明即使存在触发效应，其相对风险数量级也可预期；不构成事件层面确立",
+   "uncertainty": "外推链条包含两处间接性（终点由脑出血换为冠脉事件、暴露由慢性便秘换为急性发作）；人群归因比例受暴露窗口短（分钟级）与暴露频率限制，预期很小"
+  },
+  {
+   "claimId": "CLM-024",
+   "claimType": "derived",
+   "claim": "〔推导〕‘卫生间常备速效救心丸’获益链的环节检验：若常备干预能降低事件发生率或病死率，获益必须经由两条支路之一实现——(i) 放置→可及→含服→症状缓解→取消呼叫；(ii) 放置→可及→含服→缩短呼叫前时间。支路 (i) 与急救指南原则冲突（满足症状条件即应立即呼叫，与用药无关），其隐含的‘缓解=非急症’判别前提无任何测量证据；支路 (ii) 在‘无论是否含服都立即呼叫’的前提下，常备不改变呼叫决策。两条支路均无临床结局终点的证据连接，故‘常备→降低事件率/病死率’的因果链在每个环节都可被证伪，判定为无证据支持。",
+   "derivedFrom": [
+    "CLM-019",
+    "CLM-016"
+   ],
+   "method": "必要环节链检验（necessary-condition analysis）：将‘常备获益’分解为上述两条互斥支路，逐支路检查是否存在以临床结局（事件率、就医延迟、病死率）为终点的测量证据；支路 (i) 再与急救呼叫规则（CLM-019 输入）比对，支路 (ii) 再与总缺血时间构成（CLM-016 输入）比对。",
+   "assumptions": "任何获益必须经由‘取到药→含服→行为改变（取消或推迟呼叫/缩短呼叫前时间）’之一实现；不含呼叫决策改变的用药不产生本假设所检验的结局获益。",
+   "sensitivity": "若未来研究测量‘常备且无论缓解与否均立即呼叫’对呼叫前时间的影响，可能显示有限获益；若干预同时改变呼叫行为，获益来自教育而非药物放置本身；当前两类测量均不存在。",
+   "applicability": "命题 C 的因果链论证：常备干预与事件率/病死率终点之间无证据连接",
+   "uncertainty": "逻辑链分析本身不产生数据；结论强度等于‘无研究测量’这一检索发现的强度"
+  }
+ ]
+}
