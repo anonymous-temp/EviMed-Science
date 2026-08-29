@@ -78,7 +78,10 @@ export async function apply(ctx, config) {
       focus: { type: 'string', description: '想重点审查的实体或问题；留空则全篇。' },
     },
     async execute(args, call) {
-      const parent = call.agent ?? ctx.get('agents')?.get?.(call.agentId)
+      // `call.agent ??` came first here and `ToolCall` has no `agent`, so the
+      // lookup on the right was always the branch taken — a preference that
+      // read as deliberate and could never apply.
+      const parent = ctx.get('agents')?.get?.(call.agentId)
       if (!parent) return { ok: false, code: 'review_unavailable', issues: [{ code: 'review_unavailable', severity: 'advisory', message: '当前会话不可审查。' }] }
       const request = {
         capability: 'evimed-review',

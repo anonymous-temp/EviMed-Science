@@ -23,7 +23,19 @@ import {
   toUsage,
 } from "../index.mjs";
 
-/** A minimal cordis-shaped context with the seams the probe walks. */
+/** A minimal cordis-shaped context with the seams the probe walks.
+ *
+ *  The overrides are named, not `{}`: an untyped default erases every property
+ *  the cases set, so `overrides.enforcement` read as "does not exist" and the
+ *  whole fixture compiled to nothing checkable. `enforcement: null` is a case
+ *  in its own right — it means the sandbox answered without the field, which
+ *  the probe must report as unknown rather than as satisfied.
+ *  @param {{
+ *    services?: Record<string, unknown>,
+ *    denied?: boolean,
+ *    enforcement?: string | null,
+ *    runnerFailed?: unknown,
+ *  }} [overrides] */
 function fakeContext(overrides = {}) {
   const listeners = new Map();
   const services = new Map(Object.entries({
@@ -33,21 +45,21 @@ function fakeContext(overrides = {}) {
   }));
   const registered = new Map();
   const ctx = {
-    get: (key) => services.get(key),
-    on(event, handler) {
+    get: (/** @type {any} */ key) => services.get(key),
+    on(/** @type {any} */ event, /** @type {any} */ handler) {
       const list = listeners.get(event) ?? [];
       list.push(handler);
       listeners.set(event, list);
-      return () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== handler));
+      return () => listeners.set(event, (listeners.get(event) ?? []).filter((/** @type {any} */ item) => item !== handler));
     },
-    emit: (event, ...args) => (listeners.get(event) ?? []).map((handler) => handler(...args)),
+    emit: (/** @type {any} */ event, /** @type {any[]} */ ...args) => (listeners.get(event) ?? []).map((/** @type {any} */ handler) => handler(...args)),
     listeners,
     registered,
   };
   services.set("tools", {
-    register(tool) { registered.set(tool.name, tool); return () => registered.delete(tool.name); },
+    register(/** @type {any} */ tool) { registered.set(tool.name, tool); return () => registered.delete(tool.name); },
     guard: () => () => {},
-    async execute(input) {
+    async execute(/** @type {any} */ input) {
       const chain = listeners.get(SEAMS.events.toolPolicy) ?? [];
       let index = 0;
       const next = async () => (index < chain.length ? chain[index++](input, next) : { kind: "allow" });
@@ -72,8 +84,8 @@ function fakeContext(overrides = {}) {
   // died on "Cannot destructure property 'mode' of 'policy'". The double now
   // refuses a raw request the same way the real one does.
   services.set("shell", {
-    resolve: (request) => ({ ...request, workdir: "/workspace", timeoutMs: 10_000, sandboxPolicy: { mode: "workspace-write" } }),
-    run: async (spec) => {
+    resolve: (/** @type {any} */ request) => ({ ...request, workdir: "/workspace", timeoutMs: 10_000, sandboxPolicy: { mode: "workspace-write" } }),
+    run: async (/** @type {any} */ spec) => {
       if (!spec?.sandboxPolicy) throw new TypeError("Cannot destructure property 'mode' of 'policy' as it is undefined.");
       return {
         sandbox: {
@@ -97,7 +109,7 @@ function fakeContext(overrides = {}) {
 /** The pieces of `@deepseek-ai/dsh-tools` the port actually calls. */
 function fakeDshTools() {
   return {
-    defineTool(options) {
+    defineTool(/** @type {any} */ options) {
       return {
         name: options.name,
         description: options.description,
@@ -170,7 +182,7 @@ test("a tool outcome flattens content and preserves the failure identity", () =>
   assert.deepEqual(bad.error, { name: "ToolError", code: "full_text_not_available", message: "no full text for this DOI" });
   // Negative control: reading one level too shallow must NOT satisfy this.
   const shallow = toToolOutcome({ isError: true, error: { name: "ToolError", code: "flat" }, content: [] });
-  assert.equal(shallow.error.code, "", "a flat name/code is not the kernel's shape and must not be mistaken for it");
+  assert.equal(shallow.error?.code, "", "a flat name/code is not the kernel's shape and must not be mistaken for it");
   // `info` is optional — a failure without it is still a failure, with a message.
   const bare = toToolOutcome({ isError: true, error: { message: "boom" }, content: [] });
   assert.equal(bare.status, "error");
@@ -302,19 +314,24 @@ test("a policy listener that denies still delegates the rest of the waterfall", 
     seen += 1;
     return call.name === "blocked" ? { allow: false, code: "path_guard_denied", reason: "no" } : { allow: true };
   });
+  /** @type {string[]} */
   const observed = [];
   onToolObserved(ctx, (call) => observed.push(call.name));
   const tool = await defineTool({ name: "allowed", description: "d", parameters: {}, execute: async () => ({ ok: true }) });
-  ctx.get("tools").register(tool);
-  await ctx.get("tools").execute({ callId: "1", name: "allowed", arguments: {}, signal: AbortSignal.timeout(100) });
+  // The registry double, named once: `ctx.get` answers from a Map of unknowns,
+  // and asserting the shape here is what the case is about.
+  const tools = /** @type {{ register: (tool: any) => void, execute: (input: any) => Promise<any> }} */ (ctx.get("tools"));
+  tools.register(tool);
+  await tools.execute({ callId: "1", name: "allowed", arguments: {}, signal: AbortSignal.timeout(100) });
   assert.equal(seen, 1);
   assert.deepEqual(observed, ["allowed"]);
-  const denied = await ctx.get("tools").execute({ callId: "2", name: "blocked", arguments: {}, signal: AbortSignal.timeout(100) });
+  const denied = await tools.execute({ callId: "2", name: "blocked", arguments: {}, signal: AbortSignal.timeout(100) });
   assert.equal(denied.error.code, "DENIED");
 });
 
 test("onTurnEnd fires only for turn/end and classifies it", () => {
   const ctx = fakeContext();
+  /** @type {string[][]} */
   const seen = [];
   onTurnEnd(ctx, (session, end) => seen.push([session.sessionId, end.kind]));
   const session = { id: "s1", header: { cwd: "/w" } };
@@ -346,7 +363,12 @@ test("a renamed event shows up as a silent seam, not as a passing probe", async 
   const realOn = ctx.on;
   // Simulate DSH renaming the observation event: registering succeeds, the
   // listener simply never fires. This is the failure mode the probe exists for.
-  ctx.on = (event, handler) => (event === SEAMS.events.toolObserved ? () => {} : realOn.call(ctx, event, handler));
+  // The rename simulation returns a disposer, like the real `on` does; the
+  // fake's own `on` happens to return the listener Map, so the union has to be
+  // spelled or the assignment reads as a signature change rather than a stub.
+  ctx.on = /** @type {any} */ ((/** @type {any} */ event, /** @type {any} */ handler) => (
+    event === SEAMS.events.toolObserved ? () => {} : realOn.call(ctx, event, handler)
+  ));
   const result = await probeSeams(ctx, { dshVersion: SEAMS.dsh });
   assert.ok(result.fatal.some((line) => line.includes("seam silent")), JSON.stringify(result));
 });
@@ -371,6 +393,7 @@ test("a sandbox that cannot enforce fails a hosted profile closed", async () => 
 // can present has to be fatal on its own.
 test("a runtime that cannot run a command does not pass as healthy", async () => {
   __setHarnessModule("@deepseek-ai/dsh-tools", fakeDshTools());
+  /** @type {{ dshVersion: string, requiredEnforcement: "full" | "partial" }} */
   const options = { dshVersion: SEAMS.dsh, requiredEnforcement: "full" };
 
   const failed = await probeSeams(fakeContext({ runnerFailed: true }), options);

@@ -37,7 +37,7 @@ import {
 
 /** The pieces of `@deepseek-ai/dsh-tools` the port calls. */
 __setHarnessModule("@deepseek-ai/dsh-tools", {
-  defineTool: (options) => ({ ...options }),
+  defineTool: (/** @type {any} */ options) => ({ ...options }),
 });
 
 // The plugins declare their config with schemastery at module load. Only the
@@ -45,23 +45,25 @@ __setHarnessModule("@deepseek-ai/dsh-tools", {
 // are about, and a real schemastery here would make the suite need a harness
 // install to run at all.
 const schema = Object.assign(
-  (shape) => ({ shape, __schema: "object" }),
+  (/** @type {any} */ shape) => ({ shape, __schema: "object" }),
   {
-    object: (shape) => ({ shape, __schema: "object" }),
+    object: (/** @type {any} */ shape) => ({ shape, __schema: "object" }),
     string: () => chainable("string"),
     number: () => chainable("number"),
     boolean: () => chainable("boolean"),
-    array: (item) => chainable("array", { item }),
-    union: (options) => chainable("union", { options }),
-    const: (value) => chainable("const", { value }),
-    dict: (value) => chainable("dict", { value }),
+    array: (/** @type {any} */ item) => chainable("array", { item }),
+    union: (/** @type {any} */ options) => chainable("union", { options }),
+    const: (/** @type {any} */ value) => chainable("const", { value }),
+    dict: (/** @type {any} */ value) => chainable("dict", { value }),
   },
 );
 
-function chainable(kind, extra = {}) {
+function chainable(/** @type {any} */ kind, extra = {}) {
+  /** Indexed by method name below, so the shape has to admit it.
+   *  @type {Record<string, any>} */
   const node = { __schema: kind, ...extra };
   for (const method of ["default", "description", "required", "min", "max", "role", "hidden", "comment", "deprecated"]) {
-    node[method] = (value) => Object.assign(node, { [method]: value });
+    node[method] = (/** @type {any} */ value) => Object.assign(node, { [method]: value });
   }
   return node;
 }
@@ -107,7 +109,7 @@ function mcpTool(execute) {
   return {
     name: "mcp__evimed__literature_search",
     execute,
-    output: { schema: { type: "object", additionalProperties: true }, render: (_args, value) => [{ type: "text", text: JSON.stringify(value) }] },
+    output: { schema: { type: "object", additionalProperties: true }, render: (/** @type {any} */ _args, /** @type {any} */ value) => [{ type: "text", text: JSON.stringify(value) }] },
   };
 }
 
@@ -122,15 +124,21 @@ function harness() {
   /** @type {Function[]} */
   const disposers = [];
   const registry = {
-    register(tool) {
+    register(/** @type {any} */ tool) {
       assertRegistrable(tool);
       tools.set(tool.name, tool);
       return () => tools.delete(tool.name);
     },
-    guard(fn) {
+    guard(/** @type {any} */ fn) {
       guards.push(fn);
       return () => guards.splice(guards.indexOf(fn), 1);
     },
+    /** One shape covering both answers, because that is what a caller sees.
+     *  Inferred, the two `return`s form a union and every `result.value` in this
+     *  file reads as "does not exist" — two dozen errors from one un-named
+     *  return type.
+     *  @param {any} input
+     *  @returns {Promise<{ value?: any, error?: { name: string, code: string }, content: any, concluded?: boolean }>} */
     async execute(input) {
       // A monotonic guard is final and runs before anything else.
       for (const guard of guards) {
@@ -154,20 +162,20 @@ function harness() {
     },
   };
   const ctx = {
-    get: (key) => (key === "tools" ? registry : services.get(key)),
-    on(event, handler) {
+    get: (/** @type {any} */ key) => (key === "tools" ? registry : services.get(key)),
+    on(/** @type {any} */ event, /** @type {any} */ handler) {
       const list = listeners.get(event) ?? [];
       list.push(handler);
       listeners.set(event, list);
-      return () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== handler));
+      return () => listeners.set(event, (listeners.get(event) ?? []).filter((/** @type {any} */ item) => item !== handler));
     },
-    emit: (event, ...args) => (listeners.get(event) ?? []).map((handler) => handler(...args)),
-    effect(fn) {
+    emit: (/** @type {any} */ event, /** @type {any[]} */ ...args) => (listeners.get(event) ?? []).map((/** @type {any} */ handler) => handler(...args)),
+    effect(/** @type {any} */ fn) {
       const dispose = fn();
       if (typeof dispose === "function") disposers.push(dispose);
       return dispose;
     },
-    provide(key, value) {
+    provide(/** @type {any} */ key, /** @type {any} */ value) {
       services.set(key, value);
     },
     unmount() {
@@ -218,7 +226,7 @@ test("a deliverable is rejected as a value, and the model can act on the issues"
   const first = await ctx.tools.execute({ callId: "1", name: "evimed_submit_deliverable", arguments: { deliverableId: "d1" }, signal: AbortSignal.timeout(100) });
   assert.equal(first.error, undefined, "a rejection must arrive as a value, not as a tool failure");
   assert.equal(first.value.ok, false);
-  assert.ok(first.value.issues.some((issue) => issue.path === "sources.csv"), "the issue must name the file to fix");
+  assert.ok(first.value.issues.some((/** @type {any} */ issue) => issue.path === "sources.csv"), "the issue must name the file to fix");
 
   const second = await ctx.tools.execute({ callId: "2", name: "evimed_submit_deliverable", arguments: { deliverableId: "d1" }, signal: AbortSignal.timeout(100) });
   assert.equal(second.value.ok, true);
@@ -227,7 +235,7 @@ test("a deliverable is rejected as a value, and the model can act on the issues"
 test("the attempt ceiling is a guard, and it says what to do next", async () => {
   const ctx = harness();
   const attempts = new Map();
-  ctx.effect(() => ctx.tools.guard((exec) => {
+  ctx.effect(() => ctx.tools.guard((/** @type {any} */ exec) => {
     if (exec.name !== "evimed_submit_deliverable") return undefined;
     const used = attempts.get("d1") ?? 0;
     return used >= 3 ? "交付物「d1」已提交 3 次，达到本部署上限。请调用 evimed_complete_run{partial:true} 交付已完成的部分。" : undefined;
@@ -246,7 +254,7 @@ test("the attempt ceiling is a guard, and it says what to do next", async () => 
     await ctx.tools.execute({ callId: String(index), name: "evimed_submit_deliverable", arguments: { deliverableId: "d1" }, signal: AbortSignal.timeout(100) });
   }
   const blocked = await ctx.tools.execute({ callId: "4", name: "evimed_submit_deliverable", arguments: { deliverableId: "d1" }, signal: AbortSignal.timeout(100) });
-  assert.equal(blocked.error.code, "GUARDED");
+  assert.equal(blocked.error?.code, "GUARDED");
   assert.match(blocked.content[0].text, /partial/, "a ceiling that does not say what to do next strands the run");
 });
 
@@ -283,7 +291,7 @@ test("the terminal tool ends the turn only when it succeeds", async () => {
 test("the policy seam denies a write to the question and delegates everything else", async () => {
   const ctx = harness();
   const limits = { maxSteps: 100, maxTokens: 100000, maxChildren: 30 };
-  ctx.effect(() => ctx.on(SEAMS.events.toolPolicy, async (exec, next) => {
+  ctx.effect(() => ctx.on(SEAMS.events.toolPolicy, async (/** @type {any} */ exec, /** @type {any} */ next) => {
     const decision = toolPolicy(
       { name: exec.name, args: exec.arguments ?? {} },
       { budget: { steps: 1, tokens: 1, children: 0 }, limits, submitAttempts: 0, deliveryAttemptLimit: 3 },
@@ -294,7 +302,7 @@ test("the policy seam denies a write to the question and delegates everything el
   ctx.effect(() => ctx.tools.register(write));
 
   const denied = await ctx.tools.execute({ callId: "1", name: "write", arguments: { path: workspaceLayout.briefFile }, signal: AbortSignal.timeout(100) });
-  assert.equal(denied.error.code, "DENIED");
+  assert.equal(denied.error?.code, "DENIED");
   const allowed = await ctx.tools.execute({ callId: "2", name: "write", arguments: { path: "deliverables/d1/report.md" }, signal: AbortSignal.timeout(100) });
   assert.equal(allowed.error, undefined);
 });
@@ -303,7 +311,7 @@ test("evidence is ingested from the observation seam and never changes the resul
   const ctx = harness();
   /** @type {any[]} */
   const recorded = [];
-  ctx.effect(() => ctx.on(SEAMS.events.toolObserved, (exec, result) => {
+  ctx.effect(() => ctx.on(SEAMS.events.toolObserved, (/** @type {any} */ exec, /** @type {any} */ result) => {
     recorded.push(...evidenceFromOutcome(
       { name: exec.name, args: exec.arguments ?? {} },
       { status: result.error ? "error" : "completed", structured: result.value, text: "" },
@@ -341,7 +349,7 @@ test("unmounting removes every tool and every listener it added", async () => {
   const ctx = harness();
   const tool = await defineTool({ name: "evimed_plan", description: "d", parameters: {}, execute: async () => ({ ok: true }) });
   ctx.effect(() => ctx.tools.register(tool));
-  ctx.effect(() => ctx.on(SEAMS.events.toolPolicy, async (_exec, next) => next()));
+  ctx.effect(() => ctx.on(SEAMS.events.toolPolicy, async (/** @type {any} */ _exec, /** @type {any} */ next) => next()));
   assert.deepEqual(ctx.toolNames(), ["evimed_plan"]);
   assert.equal((ctx.listeners.get(SEAMS.events.toolPolicy) ?? []).length, 1);
 
@@ -363,12 +371,16 @@ test("a malicious workstyle pack cannot change a single gate verdict", () => {
     files: new Map([["brief.md", "# 标题\n结论。"]]),
     expectedOutputs: [{ path: "brief.md", required: true }],
   });
-  const withPack = gateDeliverable({
+  // `capsuleMethods` is a `buildDelegation` input and deliberately not a gate
+  // one; passing it here is the point of the case. The cast says so out loud —
+  // TypeScript is right that the field does not belong, and the assertion below
+  // is that the gate agrees.
+  const withPack = gateDeliverable(/** @type {any} */ ({
     contractKind: "research-brief",
     files: new Map([["brief.md", "# 标题\n结论。"]]),
     expectedOutputs: [{ path: "brief.md", required: true }],
     capsuleMethods: [{ name: "hostile", body: hostileMethod }],
-  });
+  }));
   assert.deepEqual(withPack, clean, "the gate reads the deliverable, and nothing a capsule says reaches it");
 
   const check = completionCheck({
@@ -462,7 +474,7 @@ test("every plugin mounts against a registry with the harness's own precondition
     // Applied for real. If a plugin hands the registry something that is not a
     // tool definition, this is where it throws — as it would on a real kernel,
     // on the first second of the first run.
-    await apply(ctx, config);
+    await (/** @type {(ctx: any, config: any) => Promise<void>} */ (apply))(ctx, config);
     mounted.push([label, ctx.toolNames()]);
   }
 
@@ -474,7 +486,7 @@ test("every plugin mounts against a registry with the harness's own precondition
 
   // And every registered name is one the vocabulary knows about, so a tool
   // renamed in a plugin cannot quietly stop being the tool the skills call.
-  for (const [label, names] of mounted) {
+  for (const [label, names] of /** @type {[string, string[]][]} */ (mounted)) {
     for (const registered of names) {
       assert.ok(SOCKET_TOOL_NAME_LIST.includes(registered), `${label} registered ${registered}, which is not in the socket tool vocabulary`);
     }
@@ -510,7 +522,7 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   const ctx = harness();
   const rows = new Map();
   ctx.provide("evimedRun", {
-    runMirror: { put: async (key, value) => rows.set(key, value), entries: () => [...rows.entries()] },
+    runMirror: { put: async (/** @type {any} */ key, /** @type {any} */ value) => rows.set(key, value), entries: () => [...rows.entries()] },
     planIndex: { put: async () => {} },
     gateRuns: { put: async () => {} },
     evidence: { put: async () => {} },
@@ -518,8 +530,8 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   // The brief index is where the run's identity comes from.
   ctx.provide("fs", {
-    resolve: async (relative, { cwd }) => `${cwd}/${relative}`,
-    readText: async (target) => (target.endsWith(workspaceLayout.briefIndexFile)
+    resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`,
+    readText: async (/** @type {any} */ target) => (target.endsWith(workspaceLayout.briefIndexFile)
       ? JSON.stringify({ runId: "run_42", budget: { maxSteps: 10, maxTokens: 100, maxChildren: 2 } })
       : null),
   });
@@ -557,9 +569,10 @@ test("mounting the run policy produces a run mirror row, not just the ability to
 test("the safety scan reads the reply the user will actually see", async () => {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
+  /** @type {string[]} */
   const notices = [];
-  ctx.provide("evimedDiagnostics", { degrade: (line) => notices.push(`degrade:${line}`), notice: (line) => notices.push(line) });
-  ctx.provide("fs", { resolve: async (relative, { cwd }) => `${cwd}/${relative}`, readText: async () => null });
+  ctx.provide("evimedDiagnostics", { degrade: (/** @type {any} */ line) => notices.push(`degrade:${line}`), notice: (/** @type {any} */ line) => notices.push(line) });
+  ctx.provide("fs", { resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`, readText: async () => null });
   await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });
 
   const onEvent = ctx.listeners.get(SEAMS.events.sessionEvent) ?? [];
@@ -609,13 +622,16 @@ test("the safety scan reads the reply the user will actually see", async () => {
 test("a screening ledger path aimed at a protected file is refused, not written", async () => {
   const { apply: applyScreening } = await import("../plugins/screening.mjs");
   const ctx = harness();
+  /** @type {string[]} */
   const written = [];
   ctx.provide("fs", {
-    resolve: async (relative, { cwd }) => `${cwd}/${relative}`,
-    writeText: async (target) => { written.push(target); },
+    resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`,
+    writeText: async (/** @type {any} */ target) => { written.push(target); },
   });
   // One child, one verdict, so the tool reaches the ledger write.
-  ctx.subagents = {
+  // `subagents` is provided as a property here, the way the kernel exposes it;
+  // the literal above does not declare it.
+  /** @type {Record<string, any>} */ (ctx).subagents = {
     start: async () => ({
       info: { stopReason: "completed" },
       result: Promise.resolve({ structured: { verdicts: [{ id: "r1", decision: "include" }] } }),
@@ -623,7 +639,7 @@ test("a screening ledger path aimed at a protected file is refused, not written"
   };
   await applyScreening(ctx, { batchSize: 25, maxParallelChildren: 4 });
 
-  const call = (ledgerPath) => ({
+  const call = (/** @type {any} */ ledgerPath) => ({
     callId: "1",
     name: "evimed_screen_batch",
     arguments: { criteria: "adults only", records: [{ id: "r1", title: "t" }], ...(ledgerPath === undefined ? {} : { ledgerPath }) },
@@ -669,11 +685,14 @@ test("a mirror write produces the workspace projection the control plane reads",
   const written = new Map();
   /** @type {Map<string, Map<string, any>>} */
   const tables = new Map();
-  const table = (name) => {
+  const table = (/** @type {any} */ name) => {
     if (!tables.has(name)) tables.set(name, new Map());
-    const rows = tables.get(name);
+    // Non-null because the line above created it. Declared, not asserted at each
+    // use: three `rows.` reads per table double, and `?.` on all of them would
+    // hide a genuinely missing table behind a silent no-op.
+    const rows = /** @type {Map<string, any>} */ (tables.get(name));
     return {
-      put: async (key, value) => { rows.set(key, value); ctx.emit("domain/changed", { domain: "evimed_run", table: name, key, operation: "put", value }); },
+      put: async (/** @type {any} */ key, /** @type {any} */ value) => { rows.set(key, value); ctx.emit("domain/changed", { domain: "evimed_run", table: name, key, operation: "put", value }); },
       entries: () => [...rows.entries()],
       values: () => [...rows.values()],
     };
@@ -685,22 +704,22 @@ test("a mirror write produces the workspace projection the control plane reads",
     // The write path the projection uses. Records rather than touching a disk:
     // what is under test is that it is *called*, with which base and path.
     ["fs", {
-      resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`,
-      writeText: async (target, content) => { written.set(target, content); },
+      resolve: async (/** @type {any} */ relative, /** @type {any} */ options) => `${options?.cwd ?? ""}/${relative}`,
+      writeText: async (/** @type {any} */ target, /** @type {any} */ content) => { written.set(target, content); },
     }],
   ]);
   const disposers = [];
   const ctx = {
-    get: (key) => services.get(key),
-    on(event, handler) {
+    get: (/** @type {any} */ key) => services.get(key),
+    on(/** @type {any} */ event, /** @type {any} */ handler) {
       const list = listeners.get(event) ?? [];
       list.push(handler);
       listeners.set(event, list);
-      return () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== handler));
+      return () => listeners.set(event, (listeners.get(event) ?? []).filter((/** @type {any} */ item) => item !== handler));
     },
-    emit: (event, ...args) => (listeners.get(event) ?? []).map((handler) => handler(...args)),
-    effect(fn) { const dispose = fn(); if (typeof dispose === "function") disposers.push(dispose); return dispose; },
-    provide(name, value) { services.set(name, value); },
+    emit: (/** @type {any} */ event, /** @type {any[]} */ ...args) => (listeners.get(event) ?? []).map((/** @type {any} */ handler) => handler(...args)),
+    effect(/** @type {any} */ fn) { const dispose = fn(); if (typeof dispose === "function") disposers.push(dispose); return dispose; },
+    provide(/** @type {any} */ name, /** @type {any} */ value) { services.set(name, value); },
   };
   for (const key of ["storageDomain", "fs"]) {
     Object.defineProperty(ctx, key, { get: () => services.get(key), configurable: true });
@@ -710,7 +729,7 @@ test("a mirror write produces the workspace projection the control plane reads",
   const store = ctx.get("evimedRun");
   assert.ok(store, "evidence-store must publish the run store the policy plugin writes through");
 
-  await store.runMirror.put("run_test", { runId: "run_test", sessionId: "s1", cwd: "/workspace", startedAt: "2026-01-01T00:00:00Z" });
+  await (/** @type {any} */ (store)).runMirror.put("run_test", { runId: "run_test", sessionId: "s1", cwd: "/workspace", startedAt: "2026-01-01T00:00:00Z" });
   await new Promise((resolve) => setTimeout(resolve, 40));
 
   const target = [...written.keys()].find((key) => key.endsWith("state.json"));
@@ -743,28 +762,28 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
     const listeners = new Map();
     /** @type {Map<string, Map<string, any>>} */
     const tables = new Map();
-    const table = (name) => {
+    const table = (/** @type {any} */ name) => {
       if (!tables.has(name)) tables.set(name, new Map());
-      const rows = tables.get(name);
+      const rows = /** @type {Map<string, any>} */ (tables.get(name));
       return {
-        put: async (key, value) => { rows.set(key, value); },
+        put: async (/** @type {any} */ key, /** @type {any} */ value) => { rows.set(key, value); },
         entries: () => [...rows.entries()],
         values: () => [...rows.values()],
       };
     };
     const services = new Map([
       ["storageDomain", { open: async () => ({ table, close: async () => {} }) }],
-      ["fs", { resolve: async (relative, options) => `${options?.cwd ?? ""}/${relative}`, writeText: async () => {} }],
+      ["fs", { resolve: async (/** @type {any} */ relative, /** @type {any} */ options) => `${options?.cwd ?? ""}/${relative}`, writeText: async () => {} }],
     ]);
     const ctx = {
-      get: (key) => services.get(key),
-      on(event, handler) {
+      get: (/** @type {any} */ key) => services.get(key),
+      on(/** @type {any} */ event, /** @type {any} */ handler) {
         listeners.set(event, [...(listeners.get(event) ?? []), handler]);
-        return () => listeners.set(event, (listeners.get(event) ?? []).filter((item) => item !== handler));
+        return () => listeners.set(event, (listeners.get(event) ?? []).filter((/** @type {any} */ item) => item !== handler));
       },
-      emit: (event, ...args) => (listeners.get(event) ?? []).map((handler) => handler(...args)),
-      effect(fn) { fn(); },
-      provide(name, value) { services.set(name, value); },
+      emit: (/** @type {any} */ event, /** @type {any[]} */ ...args) => (listeners.get(event) ?? []).map((/** @type {any} */ handler) => handler(...args)),
+      effect(/** @type {any} */ fn) { fn(); },
+      provide(/** @type {any} */ name, /** @type {any} */ value) { services.set(name, value); },
     };
     for (const key of ["storageDomain", "fs"]) {
       Object.defineProperty(ctx, key, { get: () => services.get(key), configurable: true });
@@ -777,7 +796,7 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
   // Retrieval runs in a subagent session, which is why keying rows by session
   // could not have worked even if the ids had been comparable: one run's ledger
   // would be split across every session that fetched anything.
-  const observe = (ctx) => ctx.emit(
+  const observe = (/** @type {any} */ ctx) => ctx.emit(
     SEAMS.events.toolObserved,
     {
       name: "mcp__evimed__open_access_full_text",
@@ -797,9 +816,9 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
   );
 
   const stamped = await build();
-  await stamped.store.runMirror.put("run_real", { runId: "run_real", cwd: "/workspace" });
+  await (/** @type {any} */ (stamped.store)).runMirror.put("run_real", { runId: "run_real", cwd: "/workspace" });
   observe(stamped.ctx);
-  const rows = stamped.store.evidence.entries().map(([, value]) => value);
+  const rows = (/** @type {any} */ (stamped.store)).evidence.entries().map((/** @type {[string, any]} */ [, value]) => value);
   assert.equal(rows.length, 1, "the observation produced no evidence row at all");
   assert.equal(rows[0].runId, "run_real", "the row must name the run, not the session that fetched it");
   assert.deepEqual(
@@ -813,7 +832,7 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
   // id which looks valid and belongs to nothing.
   const early = await build();
   observe(early.ctx);
-  const earlyRows = early.store.evidence.entries().map(([, value]) => value);
+  const earlyRows = (/** @type {any} */ (early.store)).evidence.entries().map((/** @type {[string, any]} */ [, value]) => value);
   assert.equal(earlyRows[0].runId, "", "an unknown run must be blank, not the session id");
   assert.notEqual(earlyRows[0].runId, "sess_child");
   assert.deepEqual(

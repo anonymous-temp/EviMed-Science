@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
@@ -1405,4 +1405,56 @@ test("a capability's two skill copies never drift apart by more than their known
     `the two copies drifted: ${wrong.join("; ")} — an edit to one has to be made in both,`
     + " and a deliberate kernel difference has to be recorded in knownDivergence",
   );
+});
+
+test("a package that can be typechecked is typechecked by the pipeline", async () => {
+  // `packages/socket` and `packages/harness-port` each shipped a `typecheck`
+  // script and neither was ever called: `test:web` linted them and stopped
+  // there. Between them they had 210 type errors, and among those were four
+  // dead `call.agent ?? …` fallbacks — `ToolCall` has no `agent`, so the right
+  // branch was always the one taken — plus one live defect where a RETRIED
+  // subagent was spawned with `parent: undefined` while the first attempt got a
+  // real parent. A whole package outside the type gate is how that survives.
+  //
+  // The rule is not "every package must have a typecheck script"; it is that a
+  // package which HAS one is a package whose author expected it to run.
+  const root = new URL("../../../", import.meta.url);
+  const rootPackage = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  const pipeline = String(rootPackage.scripts?.["test:web"] ?? "");
+  assert.ok(pipeline, "test:web is the pipeline this asserts about");
+
+  const packagesDir = new URL("packages/", root);
+  const names = (await readdir(packagesDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  assert.ok(names.length >= 4, `only ${names.length} packages found — the scan did not read the workspace`);
+
+  let checked = 0;
+  for (const name of names) {
+    let manifest;
+    try {
+      manifest = JSON.parse(await readFile(new URL(`${name}/package.json`, packagesDir), "utf8"));
+    } catch {
+      continue;
+    }
+    if (!manifest?.scripts?.typecheck) continue;
+    checked += 1;
+    // The alias has to run THIS package's typecheck, not merely mention the
+    // package. Matching on the name alone passed through `lint:socket`, which
+    // is in the pipeline and checks nothing about types — the first version of
+    // this test stayed green with `typecheck:socket` deleted from `test:web`,
+    // which is the exact failure it was written to prevent.
+    const invoked = Object.entries(rootPackage.scripts ?? {})
+      .filter(([alias, body]) => (
+        pipeline.includes(`pnpm ${alias}`)
+        && String(body).includes(manifest.name)
+        && /(^|\s)typecheck(\s|$)/.test(String(body))
+      ))
+      .map(([alias]) => alias);
+    assert.ok(
+      invoked.length > 0,
+      `${manifest.name} has a typecheck script that test:web never runs — add an alias and put it in the pipeline`,
+    );
+  }
+  assert.ok(checked >= 3, `only ${checked} packages declare a typecheck script — the scan found too few to be meaningful`);
 });

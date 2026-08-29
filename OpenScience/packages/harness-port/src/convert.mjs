@@ -219,6 +219,10 @@ function isThenable(value) {
   return Boolean(value) && typeof (/** @type {any} */ (value)?.then) === 'function'
 }
 
+/** @param {any} run @param {any} [settled] the awaited `run.result`, when the
+ *   caller has it. Optional on purpose: `settled ?? …` below is the whole point
+ *   of the parameter, and a caller handing over only the run must get
+ *   `stopReason: 'unknown'` rather than a shape read off an unresolved Promise. */
 export function toSubagentOutcome(run, settled) {
   const source = record(run)
   // `SubagentRun.result` is a Promise. Reading fields off it yields an empty

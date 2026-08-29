@@ -118,7 +118,7 @@ function recordSubagent(ctx, key, record) {
   store.subagents.set(key, record)
 }
 
-export async function apply(ctx, config) {
+export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** Per-session state. A run is one session, and the sessions in one host are separate runs. */
   const state = new Map()
 
@@ -167,14 +167,19 @@ export async function apply(ctx, config) {
       // Still before the model's first step, so the context is first-class and
       // early exactly as it was meant to be — only the trigger is later.
       if (!entry.contextInjected) {
-        await injectBrief(ctx, ctx.get('agents')?.get?.(step.agentId) ?? step.agent, sessionState, config)
+        // `?? step.agent` used to sit here. `StepInfo` carries `agentId` and no
+        // `agent`, so that fallback was `undefined` every time it was reached —
+        // the same never-fires shape as `ctx.get('evimedRunId')`, and just as
+        // reassuring to read. If the lookup misses, `injectBrief` must see the
+        // miss rather than a second name for the same nothing.
+        await injectBrief(ctx, ctx.get('agents')?.get?.(step.agentId), sessionState, config)
       }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
         // Rejecting a step without saying why teaches the model nothing. The
         // explanation is injected first so it arrives on the next step the
         // model does get.
-        injectContext(ctx.get('agents')?.get?.(step.agentId) ?? step.agent, `<evimed-budget>${decision.reason}</evimed-budget>`, name)
+        injectContext(ctx.get('agents')?.get?.(step.agentId), `<evimed-budget>${decision.reason}</evimed-budget>`, name)
         diagnostics()?.notice?.(decision.reason)
       }
       return decision.allow ? { allow: true } : { allow: false, code: decision.code, reason: decision.reason }
@@ -204,8 +209,8 @@ export async function apply(ctx, config) {
     // are not shown to the user, and scanning them would report on text nobody
     // reads.
     const text = (event.data?.message?.content ?? [])
-      .filter((part) => part?.type === 'text')
-      .map((part) => String(part.text ?? ''))
+      .filter((/** @type {any} */ part) => part?.type === 'text')
+      .map((/** @type {any} */ part) => String(part.text ?? ''))
       .join('\n')
       .trim()
     if (text) entry.finalReply = text
@@ -241,7 +246,7 @@ export async function apply(ctx, config) {
       limits: entry.limits,
       submitAttempts: entry.attempts.get(String(call.args?.deliverableId ?? '')) ?? 0,
       deliveryAttemptLimit: config.deliveryAttemptLimit,
-      acceptedDeliverables: entry.items.filter((item) => item.status === 'accepted').map((item) => item.id),
+      acceptedDeliverables: entry.items.filter((/** @type {any} */ item) => item.status === 'accepted').map((/** @type {any} */ item) => item.id),
     })
   }))
 
@@ -279,7 +284,7 @@ export async function apply(ctx, config) {
     const path = String(call.args?.path ?? call.args?.file_path ?? '')
     if (!path) return
     const entry = sessionState(call.sessionId)
-    entry.producedTexts = entry.producedTexts.filter((item) => item.path !== path)
+    entry.producedTexts = entry.producedTexts.filter((/** @type {any} */ item) => item.path !== path)
     entry.producedTexts.push({ path, text: String(call.args?.content ?? call.args?.new_string ?? '') })
   }))
 
@@ -302,7 +307,7 @@ export async function apply(ctx, config) {
     const entry = sessionState(sessionId)
     if (entry.completed || entry.steered) return
     if (!entry.items.length) return
-    if (entry.items.every((item) => item.status === 'accepted')) return
+    if (entry.items.every((/** @type {any} */ item) => item.status === 'accepted')) return
     entry.steered = true
     // isolated: evimed_steer_failures_total — a nudge that throws must not turn
     // a finishing turn into a failed one.
@@ -380,7 +385,7 @@ export async function apply(ctx, config) {
         if (!ok) return { ok: false, code: 'plan_invalid', issues: issues.map(withSeverity) }
         // A revision keeps what was already accepted: re-planning must not undo
         // delivered work, or a model that adds one deliverable loses five.
-        const previous = new Map(entry.items.map((item) => [item.id, item]))
+        const previous = new Map(entry.items.map((/** @type {any} */ item) => [item.id, item]))
         entry.plan = indexed
         entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
         await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
@@ -404,14 +409,14 @@ export async function apply(ctx, config) {
       },
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
-        const item = entry.items.find((candidate) => candidate.id === args.deliverableId)
+        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
         if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
         const ready = delegatableItems(entry.plan, entry.items).some((candidate) => candidate.id === item.id)
         if (!ready) {
-          const pending = item.dependsOn.filter((dep) => entry.items.find((candidate) => candidate.id === dep)?.status !== 'accepted')
+          const pending = item.dependsOn.filter((/** @type {any} */ dep) => entry.items.find((/** @type {any} */ candidate) => candidate.id === dep)?.status !== 'accepted')
           return { ok: false, code: 'deliverable_dependency_pending', issues: [issue('deliverable_dependency_pending', `它依赖 ${pending.join('、')}，等这些通过后再委派。`)] }
         }
-        const manifest = (ctx.get('evimedCapabilities') ?? []).find((candidate) => candidate.id === item.capability)
+        const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
         if (!manifest) return { ok: false, code: 'capability_unknown', issues: [issue('capability_unknown', `能力目录里没有「${item.capability}」。`)] }
         const kind = resolveContractKind(manifest, item.contractKind)
         if (!kind.ok) return { ok: false, code: kind.code, issues: [issue(kind.code, kind.message)] }
@@ -442,7 +447,7 @@ export async function apply(ctx, config) {
         // call can only ever conclude the skill was missing.
         const injected = skillBodies.map((skill) => skill.name)
         recordSubagent(ctx, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
-        const run = await startSubagent(ctx, request, call.agent ?? ctx.get('agents')?.get?.(call.agentId), call.signal)
+        const run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), call.signal)
         const outcome = toSubagentOutcome(run, await run.result)
         item.childSessionId = outcome.childSessionId
         recordSubagent(ctx, item.id, {
@@ -455,7 +460,13 @@ export async function apply(ctx, config) {
         const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
         if (settlement.action === 'redelegate') {
           entry.redelegated.add(item.id)
-          const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, call.agent, call.signal)
+          // The same parent the first attempt was given. This read `call.agent`,
+          // which `ToolCall` does not have, so every retried child was spawned
+          // with `parent: undefined` while the first attempt got a real one —
+          // two different spawns for the same delegation, and only reachable
+          // after a child had already failed, which is why nothing ever saw it.
+          const parent = ctx.get('agents')?.get?.(call.agentId)
+          const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
           const retried = toSubagentOutcome(retry, await retry.result)
           recordSubagent(ctx, item.id, {
             deliverableId: item.id,
@@ -495,14 +506,14 @@ export async function apply(ctx, config) {
       },
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
-        const item = entry.items.find((candidate) => candidate.id === args.deliverableId)
+        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
         if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
         const attempts = (entry.attempts.get(item.id) ?? 0) + 1
         entry.attempts.set(item.id, attempts)
         item.attempts = attempts
 
-        const manifest = (ctx.get('evimedCapabilities') ?? []).find((candidate) => candidate.id === item.capability)
-        const expectedOutputs = manifest?.produces?.find((entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
+        const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+        const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
         const files = await readDeliverableFiles(ctx, entry.cwd || call.cwd, item.id, expectedOutputs)
         const sourceArtifacts = await collectSourceArtifacts(ctx, entry, call)
         const verdict = gateDeliverable({
@@ -831,7 +842,7 @@ async function collectSourceArtifacts(ctx, entry, call) {
 async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
   const cwd = entry.cwd || call.cwd
   const existing = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
-  const entries = Array.isArray(existing?.entries) ? existing.entries.filter((item) => item.deliverableId !== receiptEntry.deliverableId) : []
+  const entries = Array.isArray(existing?.entries) ? existing.entries.filter((/** @type {any} */ item) => item.deliverableId !== receiptEntry.deliverableId) : []
   const receipt = {
     formatVersion: 1,
     runId: entry.runId,

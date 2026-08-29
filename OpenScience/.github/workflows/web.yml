@@ -68,6 +68,8 @@ jobs:
         run: |
           pnpm lint
           pnpm typecheck:domain
+          pnpm typecheck:port
+          pnpm typecheck:socket
           pnpm typecheck:server
           pnpm audit:source-secrets
           pnpm check:community-skills
