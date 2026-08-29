@@ -1,0 +1,10 @@
+{
+  "id": "2026-08-27-rq03e-rob2-declared-never-applied",
+  "genre": "register-drift",
+  "observedIn": "uploads/20260827-rq03e/deliverables/sxjw-longterm-evidence/clinical-evidence-report.md",
+  "line": 11,
+  "verbatim": "随机对照试验用 RoB 2 评估偏倚风险",
+  "whyItIsWrong": "The method section promises a bias tool and no result or discussion paragraph ever applies it to a named study. A tool name is a commitment, not a credential; stating it without a rating reads as rigour the report does not have.",
+  "caughtBy": "gate",
+  "note": "Same run also declared ROBINS-I and AGREE II this way. Three tools, one behaviour — a fix has to see the behaviour, not the three names."
+}

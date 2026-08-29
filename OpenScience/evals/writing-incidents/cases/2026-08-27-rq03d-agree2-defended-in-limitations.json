@@ -1,0 +1,10 @@
+{
+  "id": "2026-08-27-rq03d-agree2-defended-in-limitations",
+  "genre": "register-drift",
+  "observedIn": "uploads/20260827-rq03d/deliverables/suxiao-jiuxin-longterm-evidence/clinical-evidence-report.md",
+  "line": 47,
+  "verbatim": "指南/共识方法学质量用 AGREE II 说明——本评价未检索到可用 AGREE II 评定的",
+  "whyItIsWrong": "The limitations section argues for a methodological step the body never performed. Limitations may bound a finding; they may not stand in for work that was not done.",
+  "caughtBy": "gate",
+  "note": "The honest form is a gap statement in the results, where a reader looking for the rating would find it."
+}
