@@ -138,6 +138,7 @@ def main() -> int:
         caught: list[str] = []
         survived: list[str] = []
         unlocatable: list[str] = []
+        attribution: dict[str, list[str]] = {}
         for index, rule in enumerate(rules, start=1):
             function = str(rule["check"]).split(".")[-1]
             match = re.search(rf"(def {re.escape(function)}\([^)]*\)[^:]*:\n)", original)
@@ -147,12 +148,22 @@ def main() -> int:
             # Neuter it: the check can no longer produce an issue, so the rule
             # can no longer block. Anything still red is a test that proves it.
             source.write_text(original[: match.end(1)] + "    return []\n" + original[match.end(1):], encoding="utf-8")
+            # No -x: which tests failed is the evidence that the rule is proved.
+            # "the suite went red" is not enough — a globally fragile test goes
+            # red for every mutation and makes every rule look covered, which is
+            # exactly how this measurement lied the first time.
             proc = subprocess.run(
-                [sys.executable, "-m", "pytest", "tests", "-q", "--no-header", "-x", "--deselect", COUNT_PIN],
+                [sys.executable, "-m", "pytest", "tests", "-q", "--no-header", "--deselect", COUNT_PIN],
                 cwd=scripts, capture_output=True, text=True, timeout=600,
             )
-            (caught if proc.returncode != 0 else survived).append(rule["id"])
-            print(f"  [{index}/{len(rules)}] {rule['id']:<10} {'caught' if proc.returncode != 0 else 'SURVIVED'}")
+            failures = sorted(set(re.findall(r"^FAILED (\S+)", proc.stdout, re.M)))
+            if proc.returncode != 0:
+                caught.append(rule["id"])
+                attribution[rule["id"]] = failures
+            else:
+                survived.append(rule["id"])
+            print(f"  [{index}/{len(rules)}] {rule['id']:<10} "
+                  f"{('caught by ' + str(len(failures)) + ': ' + ', '.join(f.split('::')[-1] for f in failures[:2])) if proc.returncode != 0 else 'SURVIVED'}")
     finally:
         source.write_text(original, encoding="utf-8")
         if not had_injected:
@@ -166,7 +177,17 @@ def main() -> int:
         "caught": sorted(caught),
         "survived": sorted(survived),
         "unlocatable": sorted(unlocatable),
+        "caughtBy": attribution,
     }
+    # A rule whose only witness fails for every other rule too is not proved by
+    # it; that witness is just fragile. Name any test that fires on more than a
+    # quarter of the mutations so it cannot hide inside a headline number.
+    fires = {}
+    for tests in attribution.values():
+        for test in tests:
+            fires[test] = fires.get(test, 0) + 1
+    promiscuous = {t: n for t, n in fires.items() if n > max(3, len(caught) // 4)}
+    result["promiscuousWitnesses"] = promiscuous
     if args.json:
         args.json.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"\nBLOCK rules mutated : {result['blockRules']}")
@@ -176,6 +197,10 @@ def main() -> int:
         print("  " + ", ".join(sorted(survived)))
     if unlocatable:
         print(f"  not locatable     : {', '.join(sorted(unlocatable))}")
+    if promiscuous:
+        print("\n  tests that fire on many unrelated mutations (they prove nothing in particular):")
+        for test, count in sorted(promiscuous.items(), key=lambda kv: -kv[1]):
+            print(f"    {count:>3}x  {test}")
 
     if args.record_baseline:
         baseline = {**baseline, "treeDigest": digest, "version": version, "survivors": sorted(survived)}

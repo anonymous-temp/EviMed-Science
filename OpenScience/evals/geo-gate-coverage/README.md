@@ -7,7 +7,8 @@ The package under measurement ships 88 rules, 78 of them BLOCK, and a suite of
 question this harness answers is different and harder: **switch a rule off
 entirely — does anything go red?**
 
-Today the answer is **59 of 78 yes, 19 no**.
+Today the answer is **78 of 78 yes**. It was 59 of 78 when this harness was written;
+`tests/test_uncovered_gates.py` closed the other nineteen.
 
 A surviving rule is not necessarily wrong. It is unproved: it can be deleted,
 inverted, or quietly broken by a refactor and every test still passes. For a
@@ -26,8 +27,10 @@ Needs `pytest` and `pyyaml`; about six minutes (one full suite run per rule).
 result. No network, no credentials, no probe host — the sweep is static.
 
 `baseline.json` is a ratchet: survivors may shrink freely, and a rule that used
-to be proved and now is not fails the run. That is the only way "we will add
-the missing tests later" survives contact with a second refactor.
+to be proved and now is not fails the run. It currently lists none, so any
+regression — a control deleted, a new BLOCK rule arriving without one — fails
+immediately. That is the only way "we will add the missing tests later"
+survives contact with a second refactor.
 
 `provenance.json` records the archive this was measured against, because the
 package is not vendored into this repository and a number that names no
@@ -54,6 +57,15 @@ before and after and a delta of zero is fatal.
 The shape is the recurring one in this codebase: *a failure that looks exactly
 like nothing having happened.*
 
+**Which test caught it, not just that something went red.** A perfect score is
+the exact number that was wrong the first time, so the run records the failing
+test ids per rule (`caughtBy` in `--json`) and names any test that fires on
+more than a quarter of the mutations. A witness like that is fragile, not
+probative, and it inflates every rule it touches. `last-run.json` is the
+recorded result: for each of the nineteen closed rules the witness is a test
+from `test_uncovered_gates.py` whose name contains that rule id, and no
+promiscuous witnesses were found.
+
 ## tests/test_uncovered_gates.py
 
 Negative controls for rules that had none, written to the package's own
@@ -62,3 +74,14 @@ block list. Testing that compliant data passes is not enough — a check that
 always returns `[]` passes that too.
 
 Each one was verified to bite: switch its rule off and the test names it.
+
+Positive controls are included where the rule has a shape it must *not* block —
+X-JARGON must let `依据 G10、E1` through, because banning the traceability
+anchors along with the jargon removes the reachback that makes the report
+checkable at all; VF-G01 must let separate 实测/预估 columns through, since
+separate columns are what the rule is asking for.
+
+One of these tests passed for the wrong reason at first. `CN-G04` "blocked" a
+node phrase because `label_parse` raised `KeyError: 'field'` on the fixture —
+a crashed check and an enforced rule look identical in the block list. The test
+now pins the phrase in the message, which a crash cannot produce.
