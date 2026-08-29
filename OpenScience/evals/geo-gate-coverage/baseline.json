@@ -1,0 +1,27 @@
+{
+  "note": "Rewritten by run_gate_coverage.py --record-baseline. `survivors` is the ratchet: it may shrink, never grow.",
+  "recordedAt": "2026-08-29",
+  "version": "2.0.0",
+  "treeDigest": "e21925ab5b92e05bfabcc17496c6411e458355eaff96fdaa5a90069c51cbc660",
+  "survivors": [
+    "CN-G04",
+    "CN-G06",
+    "CP-G01",
+    "CP-G07",
+    "DM-G02",
+    "DM-G03",
+    "DM-G04",
+    "DM-G06",
+    "EF-G04",
+    "EF-G08",
+    "HR-E3",
+    "HR-E4",
+    "PB-G03",
+    "PJ-G01",
+    "PJ-G03",
+    "VF-G01",
+    "VF-G05",
+    "X-JARGON",
+    "X-WRITE"
+  ]
+}
