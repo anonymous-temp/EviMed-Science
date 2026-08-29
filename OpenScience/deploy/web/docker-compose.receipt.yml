@@ -1,0 +1,69 @@
+# Unattended renewal of the DeepSeek release receipt.
+#
+# The receipt attests that the model gateway ran a live probe — it certifies the
+# model that actually answers rather than the one named in source — and it
+# expires in 24 hours for that reason. Nothing renewed it, so `/api/ready`
+# reported `deepseek_release_receipt_stale` every day and kept reporting it. An
+# alarm that is always red is one everybody learns to skip, which costs more
+# than the check was ever worth.
+#
+# Same shape as `docker-compose.backup.yml` on purpose: one scheduler service,
+# `run` in the command and `health` in the healthcheck, state in a JSON file on
+# a named volume. A second scheduling idiom is a second thing to learn and a
+# second thing to get wrong.
+services:
+  open-science-release-receipt:
+    image: ${OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0.1.3}
+    command: ["node", "scripts/ops/release-receipt-scheduler.mjs", "run"]
+    profiles: ["receipt"]
+    environment:
+      NODE_ENV: production
+      OPEN_SCIENCE_RECEIPT_STATE_FILE: /receipts/.release-receipt-state.json
+      # Half the receipt's own 24h life: renewing at the deadline makes one slow
+      # probe an outage, renewing at half leaves a whole cycle to retry in.
+      OPEN_SCIENCE_RECEIPT_INTERVAL_SECONDS: ${OPEN_SCIENCE_RECEIPT_INTERVAL_SECONDS:-43200}
+      OPEN_SCIENCE_RECEIPT_RETRY_SECONDS: ${OPEN_SCIENCE_RECEIPT_RETRY_SECONDS:-900}
+      # Health tracks the receipt's remaining life, not the last attempt: a
+      # failed renewal with twenty hours left is a warning, the same failure
+      # with one hour left is an outage, and reporting both as red is how a red
+      # light stops meaning anything.
+      OPEN_SCIENCE_RECEIPT_HEALTH_GRACE_SECONDS: ${OPEN_SCIENCE_RECEIPT_HEALTH_GRACE_SECONDS:-64800}
+      OPEN_SCIENCE_RECEIPT_MAX_FAILURES: ${OPEN_SCIENCE_RECEIPT_MAX_FAILURES:-3}
+      # The gate needs the same gateway and signing material the web service
+      # uses; both arrive by path, never by value.
+      OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-secret
+      OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
+      OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-}
+      OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-}
+    volumes:
+      - open-science-receipts:/receipts
+    secrets:
+      - source: open-science-model-gateway-signing-secret
+        target: model-gateway-signing-secret
+        mode: 0400
+      - source: open-science-deepseek-api-key
+        target: deepseek-api-key
+        mode: 0400
+    healthcheck:
+      test: ["CMD", "node", "scripts/ops/release-receipt-scheduler.mjs", "health"]
+      interval: 300s
+      timeout: 30s
+      retries: 3
+      start_period: 10m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+    restart: unless-stopped
+
+volumes:
+  open-science-receipts:
+
+secrets:
+  open-science-model-gateway-signing-secret:
+    file: ${OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE:-./secrets/model-gateway-signing-secret.txt}
+  open-science-deepseek-api-key:
+    file: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE:-./secrets/deepseek-api-key.txt}

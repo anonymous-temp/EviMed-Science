@@ -75,7 +75,9 @@
     "check:runtime-image": "node scripts/ops/check-runtime-image-current.mjs",
     "replay:clinical-gate": "node scripts/ops/replay-clinical-gate.mjs",
     "typecheck:socket": "pnpm --filter @evimed/dsh-socket typecheck",
-    "typecheck:port": "pnpm --filter @evimed/harness-port typecheck"
+    "typecheck:port": "pnpm --filter @evimed/harness-port typecheck",
+    "receipt:renew": "node scripts/ops/release-receipt-scheduler.mjs once",
+    "receipt:health": "node scripts/ops/release-receipt-scheduler.mjs health"
   },
   "engines": {
     "node": ">=22.22.0"
