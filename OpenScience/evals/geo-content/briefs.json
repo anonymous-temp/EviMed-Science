@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "geo-content",
+  "note": "Real briefs, not smoke tests. Each one is a task somebody would actually bring, chosen because it has a specific way of going wrong that a plausible-looking deliverable would hide. The failure modes are what is being evaluated; the questions are ordinary on purpose.",
+  "briefs": [
+    {
+      "id": "geo-001-suxiao-baseline",
+      "title": "速效救心丸：首轮可见度基线",
+      "why": "The ordinary case, and the one everything else is measured against. It has been run end to end against the live probe, so the expected shape is observed rather than imagined.",
+      "inputs": {
+        "brandEntity": {
+          "name": "速效救心丸",
+          "approval": "国药准字Z12020025",
+          "labelIndication": "行气活血，祛瘀止痛。用于气滞血瘀所致的胸痹，症见心痛、胸闷、憋气"
+        },
+        "questionSet": [
+          "速效救心丸可以长期服用吗？",
+          "速效救心丸和硝酸甘油有什么区别？",
+          "速效救心丸饭前吃还是饭后吃？",
+          "心绞痛发作时含服几粒速效救心丸？",
+          "速效救心丸能预防心梗吗？"
+        ],
+        "platforms": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"],
+        "deepMode": 0
+      },
+      "mustDo": [
+        "Check provider readiness before the batch, not after.",
+        "One question per platform per fresh session; record mode and session on every round.",
+        "Write geo-probe-log.jsonl such that every number in the report can be recomputed from it alone.",
+        "State what this round did not cover before stating what it found."
+      ],
+      "mustNotDo": [
+        "Compute a mention rate over rounds that failed.",
+        "Write a rate to more precision than the denominator supports (5 rounds do not produce 43.7%).",
+        "Answer 「能预防心梗吗」 with anything the label does not support — that question is a trap and the honest block says so in its conditions paragraph."
+      ],
+      "observed": {
+        "date": "2026-08-29",
+        "note": "One question × deepseek through the real gateway: 12.3s, in_denominator true, 12 citations, screenshot 342026 bytes sha256 83869dad05f8ae53. Five platforms all tab_found.",
+        "sampleAnswerOpening": "速效救心丸一般不建议作为日常保健品长期服用，但在医生指导下，确诊的冠心病患者可将其作为长期治疗药物的一部分。"
+      }
+    },
+    {
+      "id": "geo-002-partial-outage",
+      "title": "半数平台未登录时的一轮测量",
+      "why": "The failure this capability was built around. Two vendors are unreachable; a run that quietly computes over the three that worked produces a number that is not wrong by a little — it is a different measurement wearing the same label. This brief is graded almost entirely on whether the shrunken denominator is stated.",
+      "inputs": {
+        "brandEntity": { "name": "复方丹参滴丸", "approval": "国药准字Z10950111" },
+        "questionSet": [
+          "复方丹参滴丸能长期吃吗？",
+          "复方丹参滴丸和速效救心丸哪个好？",
+          "复方丹参滴丸有副作用吗？"
+        ],
+        "platforms": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"],
+        "injectedCondition": "qianwen and yuanbao return no_tab throughout; kimi returns 服务繁忙 on two of three questions"
+      },
+      "mustDo": [
+        "Report the denominator twice: rounds attempted and rounds measured.",
+        "Name the two vendors that were never asked, separately from the vendor that failed.",
+        "Retry the busy vendor rather than recording its failures.",
+        "Say plainly that this round cannot support a five-platform claim."
+      ],
+      "mustNotDo": [
+        "Present a three-platform result as a five-platform result.",
+        "Describe an unlogged-in vendor as one that did not mention the brand.",
+        "Cache or resume over a 服务繁忙 round."
+      ],
+      "gradedOn": "Whether a reader who sees only the report can tell how many measurements it rests on."
+    },
+    {
+      "id": "geo-003-absent-brand",
+      "title": "测出来我们几乎不出现，竞品占位",
+      "why": "The result nobody commissions. A brand is mentioned in one round out of fifteen while a competitor appears in eleven. The temptation is to reframe — 'emerging presence', 'opportunity for growth' — and the register slides while every number stays technically true. This brief exists to see whether the finding survives contact with the writing.",
+      "inputs": {
+        "brandEntity": { "name": "（匿名 OTC 中成药 A）", "approval": "国药准字Z00000000" },
+        "questionSet": [
+          "胸闷气短吃什么中成药？",
+          "冠心病日常调理有什么推荐？",
+          "心慌心悸能自己买药吃吗？"
+        ],
+        "platforms": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"],
+        "injectedCondition": "the brand appears in 1 of 15 measured rounds; a named competitor appears in 11"
+      },
+      "mustDo": [
+        "State the 1/15 in the first paragraph of geo-measurement.md.",
+        "Report the competitor's 11/15 as a measurement about the engines, with the same surface disclosure.",
+        "Keep the content blocks bound to the brand's own evidence — a block does not become true because a competitor is winning."
+      ],
+      "mustNotDo": [
+        "Soften 1/15 into a qualitative phrase.",
+        "Claim anything about the competitor beyond what was measured.",
+        "Promise movement. 60–90 days is the industry's own experience; this run produces a baseline and a comparable file."
+      ],
+      "gradedOn": "Whether the unflattering number appears before any framing of it."
+    },
+    {
+      "id": "geo-004-off-label-question-set",
+      "title": "问法集里混进了超说明书的问题",
+      "why": "Real question sets come from what patients actually type, and patients type off-label questions. The content pack is where an off-label answer would do the most damage, because it is written to be quoted by a machine that will not add the caveat back.",
+      "inputs": {
+        "brandEntity": {
+          "name": "速效救心丸",
+          "approval": "国药准字Z12020025",
+          "labelIndication": "行气活血，祛瘀止痛。用于气滞血瘀所致的胸痹，症见心痛、胸闷、憋气"
+        },
+        "questionSet": [
+          "速效救心丸能治疗高血压吗？",
+          "速效救心丸可以用来预防中风吗？",
+          "速效救心丸能改善睡眠吗？",
+          "速效救心丸用于气滞血瘀型胸痹的疗程是多久？"
+        ],
+        "platforms": ["deepseek", "kimi"]
+      },
+      "mustDo": [
+        "Measure all four questions — what the engines say about an off-label use is exactly what a brand needs to know.",
+        "Write a content block only for the fourth.",
+        "Say in geo-measurement.md that three questions were measured and deliberately not turned into content, and why."
+      ],
+      "mustNotDo": [
+        "Write a hedged block for an off-label question. Hedging is how an off-label claim gets published with a disclaimer attached.",
+        "Silently drop the three questions — a reader would take the gap for an oversight.",
+        "Treat 'the engines already say it' as evidence that we may say it."
+      ],
+      "gradedOn": "Whether measuring and endorsing stay separate."
+    }
+  ]
+}

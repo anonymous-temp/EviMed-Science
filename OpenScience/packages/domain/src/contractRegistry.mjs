@@ -480,6 +480,136 @@ function checkHypothesisSet(value) {
 }
 
 /**
+ * Reads the probe ledger: one JSON object per line, one line per probe call.
+ *
+ * Malformed lines are counted rather than thrown away. A ledger that half
+ * parses is the shape this codebase keeps rediscovering — the run looks
+ * complete and the count is quietly short — so the number of unreadable lines
+ * is reported as its own finding instead of silently reducing the denominator.
+ * @param {GateInput} input
+ * @returns {{ rounds: any[], unreadable: number, present: boolean }}
+ */
+function probeLedger(input) {
+  // input.files directly, not text(): that helper collapses a missing file and
+  // an empty one to the same '', and those are the two facts this whole
+  // function exists to keep apart.
+  const raw = input.files.get('geo-probe-log.jsonl')
+  if (raw == null) return { rounds: [], unreadable: 0, present: false }
+  const rounds = []
+  let unreadable = 0
+  for (const line of String(raw).split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (isRecord(parsed)) rounds.push(parsed)
+      else unreadable += 1
+    } catch {
+      unreadable += 1
+    }
+  }
+  return { rounds, unreadable, present: true }
+}
+
+/**
+ * Measurement honesty, as notices.
+ *
+ * Everything else in this file grades a document. These grade a number, and a
+ * number has a failure the document does not: a visibility rate computed over
+ * rounds that never happened is wrong in a way that is invisible on the page.
+ * "The vendor answered and did not mention us", "the vendor errored" and "the
+ * vendor was never logged in" are three different facts that produce one
+ * identical-looking absence, and collapsing them inflates the finding.
+ *
+ * These are advisory on purpose. The system blocks in six places; a seventh
+ * needs an observed distribution first, and this capability has produced no
+ * real runs yet. The metrics beside them are how that distribution gets
+ * collected. When the shape of real failures is known, the ones that earn it
+ * can be promoted — and the argument will be made from data rather than from
+ * how bad the failure sounds.
+ * @param {GateInput} input @returns {{ issues: GateIssue[], metrics: Record<string, unknown> }}
+ */
+function geoMeasurementNotices(input) {
+  /** @type {GateIssue[]} */
+  const issues = []
+  /** @param {string} code @param {string} message */
+  const notice = (code, message) => issues.push(issue(code, message, { severity: 'advisory', path: 'geo-probe-log.jsonl' }))
+  const { rounds, unreadable, present } = probeLedger(input)
+  const measured = rounds.filter((row) => row.inDenominator === true)
+  const failed = rounds.filter((row) => row.inDenominator !== true)
+
+  if (!present) {
+    notice('geo_measurement_absent', 'geo-probe-log.jsonl is not in the deliverable, so no number in this pack can be recomputed from what was actually asked.')
+  } else if (!measured.length) {
+    notice(
+      'geo_measurement_absent',
+      rounds.length
+        ? `all ${rounds.length} probe round(s) failed, so nothing was measured. A pack built on zero measurements states what the engines were not observed to say.`
+        : 'the probe ledger is empty, so nothing was measured.',
+    )
+  }
+  if (unreadable) {
+    notice('geo_probe_log_unreadable', `${unreadable} line(s) of geo-probe-log.jsonl could not be parsed; every rate computed from it is short by an unknown amount.`)
+  }
+
+  // A round that failed and was counted anyway. The two fields disagree, and
+  // whichever is right the rate is wrong.
+  const countedFailures = rounds.filter((row) => row.inDenominator === true && String(row.status ?? 'ok') !== 'ok')
+  if (countedFailures.length) {
+    notice('geo_failed_round_counted', `${countedFailures.length} probe round(s) are marked as counting toward the denominator while their status is not ok. A failed probe is not a measurement.`)
+  }
+
+  // The surface is part of the finding: the same question in deep mode from a
+  // fresh session is a different claim about the vendor than one from a warm
+  // session, and a client reproducing it on a phone sees a contradiction.
+  const surfaceless = measured.filter((row) => {
+    const surface = isRecord(row.surface) ? row.surface : {}
+    return !String(surface.mode ?? '').trim() || !String(surface.session ?? '').trim()
+  })
+  if (surfaceless.length) {
+    notice('geo_surface_undeclared', `${surfaceless.length} measured round(s) do not record both a mode and a session. Without the surface the measurement cannot be reproduced or compared with the next one.`)
+  }
+
+  // The declared denominator against the one the ledger supports. Compared as
+  // numbers from a JSON field rather than read out of prose: a denominator
+  // typed into a sentence is a number nobody can re-derive.
+  const pack = json(input, 'geo-content-pack.json')
+  const declared = isRecord(pack) && isRecord(pack.measurement) ? pack.measurement : null
+  if (declared && Number.isFinite(Number(declared.measured)) && Number(declared.measured) > measured.length) {
+    notice(
+      'geo_denominator_overstated',
+      `the pack declares ${Number(declared.measured)} measured round(s) but the ledger contains ${measured.length}. A denominator that includes rounds which did not happen overstates every rate built on it.`,
+    )
+  }
+
+  // The probe host, leaked into client-facing prose. The shared leakage rule
+  // already covers tool names, gateway words and retrieval narration — it is
+  // derived from toolNames.mjs, so geo_visibility_probe came under it the
+  // moment the tool was registered. A bare address is the one shape it does not
+  // match, and it is specific to this capability because no other deliverable
+  // has an infrastructure host anywhere near it.
+  for (const path of proseFilesOf(input)) {
+    const found = /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/.exec(text(input, path))
+    if (found) {
+      issues.push(issue('geo_probe_host_in_prose', `${path} contains what looks like a probe host (${found[0]}). The reader needs the finding, not the machine it came from.`, { severity: 'advisory', path }))
+    }
+  }
+
+  const platforms = [...new Set(measured.map((row) => String(row.provider ?? '').trim()).filter(Boolean))].sort()
+  return {
+    issues,
+    metrics: {
+      geoProbeRounds: rounds.length,
+      geoMeasuredRounds: measured.length,
+      geoFailedRounds: failed.length,
+      geoUnreadableLedgerLines: unreadable,
+      geoPlatformsMeasured: platforms,
+      geoQuestionsMeasured: new Set(measured.map((row) => String(row.question ?? ''))).size,
+    },
+  }
+}
+
+/**
  * GEO content blocks are mechanically checkable, so they block (§9.11).
  * @param {GateInput} input @returns {GateVerdict}
  */
@@ -507,12 +637,17 @@ function validateGeoContentPack(input) {
     if (!String(pack.llmsTxt ?? '').trim()) issues.push(issue('deliverable_rejected', 'the pack is missing its llms.txt fragment.'))
     if (!Array.isArray(pack.faq) || !pack.faq.length) issues.push(issue('deliverable_rejected', 'the pack is missing its FAQ block.'))
   }
+  const measurement = geoMeasurementNotices(input)
+  issues.push(...measurement.issues)
   return {
-    ok: issues.length === 0,
+    // By severity, not by count. Written as `issues.length === 0` this validator
+    // would have turned its own first notice into a rejection, which is exactly
+    // how "ships as a notice first" quietly becomes a seventh blocking point.
+    ok: issues.every((item) => item.severity !== 'required'),
     contractKind: input.contractKind,
     issues,
-    metrics: {},
-    errorCode: issues.length ? 'deliverable_rejected' : null,
+    metrics: measurement.metrics,
+    errorCode: issues.some((item) => item.severity === 'required') ? 'deliverable_rejected' : null,
   }
 }
 
