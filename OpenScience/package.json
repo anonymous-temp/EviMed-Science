@@ -25,7 +25,6 @@
     "audit:capabilities": "python3 evals/capability-audit/verify_release_audit.py",
     "audit:dependencies": "pnpm audit --prod --audit-level moderate --registry=https://registry.npmjs.org",
     "configure:monitoring": "node scripts/ops/configure-monitoring.mjs",
-    "check:dsh-upstream": "node scripts/ops/check-dsh-upstream.mjs",
     "check:monitoring": "node scripts/ops/configure-monitoring.mjs --check",
     "check:evidence-connectors": "node scripts/ops/check-evidence-connectors.mjs",
     "probe:monitoring": "node scripts/ops/configure-monitoring.mjs --probe",
@@ -73,7 +72,8 @@
     "vendor:community-skills": "node scripts/dev/vendor-community-skills.mjs",
     "check:community-skills": "node scripts/dev/vendor-community-skills.mjs --check",
     "try:community-bundles": "node scripts/dev/try-community-bundles.mjs",
-    "check:runtime-image": "node scripts/ops/check-runtime-image-current.mjs"
+    "check:runtime-image": "node scripts/ops/check-runtime-image-current.mjs",
+    "replay:clinical-gate": "node scripts/ops/replay-clinical-gate.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

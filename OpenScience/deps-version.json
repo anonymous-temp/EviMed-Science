@@ -5,8 +5,10 @@
     "cordis": "4.0.1",
     "npmPackage": "@deepseek-ai/dsh",
     "contractDir": "packages/contracts/dsh",
-    "notes": "Pre-release: no compatibility promise, no tagged release. Subpackage `latest` dist-tags mostly still point at 0.0.1-rc.1, so every install writes an exact version. `dsh plugin` manages a profile with pnpm and writes a pnpm-workspace.yaml listing the profile itself, which pnpm 9 refuses to add into without -w; this pin tracks DSH's own packageManager, not the workspace's.",
-    "pnpm": "11.7.0"
+    "notes": "Pre-release: no compatibility promise, no tagged release. Subpackage `latest` dist-tags mostly still point at 0.0.1-rc.1, so every install writes an exact version. `dsh plugin` manages a profile with pnpm and writes a pnpm-workspace.yaml listing the profile itself, which pnpm 9 refuses to add into without -w; this pin tracks DSH's own packageManager, not the workspace's. Upstream also tags prereleases on GitHub that npm never receives (0.1.2-alpha.1, 2026-08-27, has no npm version and no release asset), so the matrix reports the GitHub tag as `upstreamTag` beside the npm `latest`: npm is what is installable and what `behind` means, the tag is the early warning.",
+    "pnpm": "11.7.0",
+    "githubRepo": "deepseek-ai/deepseek-harness",
+    "releaseTagPattern": "^dsh-v\\d+\\.\\d+"
   },
   "memos": {
     "version": "2.0.30",
