@@ -32,7 +32,7 @@
 - [ ] **D4 批测前置与批测**：一次新鲜单跑到 `accepted`；核一遍分类器超时/重试参数（S162：链路 ~35KB/s 时 classifier timeout 且正则兜底未接住，临床题面被派去 open-domain——批测会被路由错误污染）；然后 33 篇谷时批测（对照组干净后，生态一期合入镜像）。
 - [~] **D5 `audit:capabilities` 刷新**（2026-08-29 推进）：17/26 → **22/26**。五个专家 agent 真跑出新回执（药物安全/文献计量/科研选题/论文审稿 succeeded，meta blocked 但产出完整手稿）；顺带修好文献计量的 CJK 字体崩溃（两份副本）与验证器把 26 个工具硬编码成 25（改为从 `server.list_tools()` 推导）。**剩 4 项全部为凭证阻塞**：web_search / patent_search / pharmacy_reference_search 缺 key；MR 的真实阻塞点实测为 OpenGWAS JWT（HTTP 401）——环境侧已打通（装 R 4.3.3 + 补齐 .r-lib 整条依赖链）。探针按设计拒绝写出部分证据，故仍红；凭证到位后重跑一次即转绿。
 - [ ] **D6 翻默认内核 → 附 B 删除**：四个发布硬门（P0 真跑验收、capabilities 重探、F0 会话页真 RQ 验收、部署宿主 hosted e2e）达成后翻 `runtimeKernel` 默认，同一 PR 删旧 store / `packages/sdk` / `src-tauri` / `runtime/harness` / `deploy/runtime-opencode`。双栈每多活一天，一切改动双倍成本。
-- [ ] **D7 生产 receipt 续期机制**：deepseek release receipt 24h 窗口无续期 = 永远红的告警；随 DSH 版 release-gate 重写解决为「可无人值守续期」，期间手动 mint 保绿。红着的告警教会所有人忽略告警。
+- [~] **D7 生产 receipt 续期机制**（2026-08-29：机制已建，生产仍红且根因已定位）：`release-receipt-scheduler.mjs` + `docker-compose.receipt.yml`（照 backup-scheduler 范式：run/health/状态文件，12h 续期＝回执 24h 寿命的一半，健康按回执剩余寿命判而非按上次尝试）已实现并测。**但生产此刻铸不出回执**：`preflight:deepseek:release` 在 web 容器里返回 `opencode_binary_missing` —— `OPEN_SCIENCE_OPENCODE_BIN` 是空串，于是回退到 `apps/desktop/src-tauri/binaries/`，而服务器镜像根本不含桌面壳目录，宿主与容器里也都找不到该二进制。故 08-15 那张回执从签发当天起就无法续期。**裁决**：不要为它把二进制塞进服务器镜像（那会把已在退役的 OpenCode 依赖重新钉进生产）——这条并入 D6 的内核翻默认，届时 release-gate 改为认证 DSH 内核，scheduler 直接可用；在此之前生产 readiness 的 modelGateway 一项保持已知红，且它是**唯一**红的一项。：deepseek release receipt 24h 窗口无续期 = 永远红的告警；随 DSH 版 release-gate 重写解决为「可无人值守续期」，期间手动 mint 保绿。红着的告警教会所有人忽略告警。
 - [ ] **D8 推送积压**：**231 个未推送提交**（08-24 时为 161），单机磁盘风险；需操作者在持有 gitee 凭证处 push。
 
 ## E. 运维必要项

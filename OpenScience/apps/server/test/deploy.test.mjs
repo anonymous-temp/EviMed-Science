@@ -1530,3 +1530,42 @@ test("every capability fixes the two pre-delivery steps instead of leaving them 
     );
   }
 });
+
+test("the release receipt renews without anyone watching, and health tracks the receipt not the attempt", async () => {
+  // Plan D7. The receipt attests that the model gateway ran a live probe, so it
+  // expires in 24 hours by design — that window is the point, not the defect.
+  // Nothing renewed it, `/api/ready` answered `deepseek_release_receipt_stale`
+  // every day, and a red light that is always red is one everybody skips.
+  const root = new URL("../../../", import.meta.url);
+  const scheduler = await readFile(new URL("scripts/ops/release-receipt-scheduler.mjs", root), "utf8");
+  const compose = await readFile(new URL("deploy/web/docker-compose.receipt.yml", root), "utf8");
+
+  // Minting goes through the one command an operator already runs by hand. A
+  // second way to produce receipts would be a second thing to keep signing
+  // correctly.
+  assert.match(scheduler, /deepseek-opencode-release-gate\.mjs/, "the scheduler must mint through the existing gate");
+  assert.ok(!/signDeepSeekReleaseReceipt|RECEIPT_MAC_DOMAIN/.test(scheduler), "the scheduler must not sign receipts itself");
+
+  // Renewal has to beat the deadline with room to retry. Half of 24h.
+  assert.match(scheduler, /OPEN_SCIENCE_RECEIPT_INTERVAL_SECONDS", 43_200/, "renewal must be scheduled well inside the receipt's life");
+
+  // Health is about remaining life, not the last attempt: a failed renewal with
+  // twenty hours left is a warning and the same failure with one is an outage.
+  assert.match(scheduler, /healthGraceSeconds/);
+  assert.match(scheduler, /no receipt has been minted/, "never minted must read as unknown, not as healthy");
+
+  // Secrets by path, never by value — the standing rule for this deployment.
+  assert.match(compose, /OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: \/run\/secrets\//);
+  assert.match(compose, /OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: \/run\/secrets\//);
+  assert.ok(!/sk-[A-Za-z0-9]{10,}/.test(compose), "no literal key may appear in a compose file");
+
+  // And the scheduler redacts before anything reaches a log or the state file:
+  // a provider error is exactly where a key or an endpoint leaks.
+  assert.match(scheduler, /function operationalError/);
+  assert.match(scheduler, /<redacted>/);
+
+  const rootPackage = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  for (const script of ["receipt:renew", "receipt:health"]) {
+    assert.ok(rootPackage.scripts?.[script], `package.json is missing ${script}`);
+  }
+});

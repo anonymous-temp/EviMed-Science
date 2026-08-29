@@ -58,6 +58,17 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+/** A data directory the way the deployment lays one out: per-user project
+ *  trees with real files in them. The restore drill asserts this shape, and a
+ *  fixture that skips it tests nothing about the check. */
+async function seedDataDirectory(dataDir) {
+  const workspace = path.join(dataDir, "users", "tester", "projects", "p1", "workspace");
+  await mkdir(workspace, { recursive: true });
+  for (let index = 0; index < 24; index += 1) {
+    await writeFile(path.join(workspace, `file-${index}.md`), `# note ${index}\n`);
+  }
+}
+
 test("restore extraction does not require archived ownership privileges", async () => {
   const source = await readFile(restoreScript, "utf8");
   assert.match(source, /tar --no-same-owner -xzf/);
@@ -203,6 +214,10 @@ test("backup scheduler creates an encrypted archive, runs a restore drill, and r
   const secretFile = path.join(tmp, "backup-passphrase.txt");
   await mkdir(dataDir, { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   await writeFile(secretFile, "correct horse battery staple for scheduler\n", { mode: 0o600 });
   const env = {
     ...process.env,
@@ -242,6 +257,10 @@ test("backup scheduler records object-upload failures and fails health closed", 
   const secretFile = path.join(tmp, "backup-passphrase.txt");
   await mkdir(dataDir, { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   await writeFile(secretFile, "correct horse battery staple for scheduler\n", { mode: 0o600 });
   const env = {
     ...process.env,
@@ -288,6 +307,10 @@ test("backup scheduler retries a failed object upload until one cycle succeeds",
   const objectCli = path.join(tmp, "flaky-object-cli.mjs");
   await mkdir(dataDir, { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   await writeFile(secretFile, "correct horse battery staple for scheduler\n", { mode: 0o600 });
   await writeFile(
     objectCli,
@@ -335,6 +358,10 @@ test("ops backup and restore round-trip OPEN_SCIENCE_DATA_DIR contents", async (
   await mkdir(path.join(dataDir, "users", "alice", "projects", "paper1", "workspace"), { recursive: true });
   await mkdir(path.join(dataDir, ".openscience"), { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   await writeFile(path.join(dataDir, ".openscience", "security.jsonl"), '{"event":"login"}\n');
   await writeFile(path.join(dataDir, "users", "alice", "projects", "paper1", "workspace", "report.md"), "# Report\n");
 
@@ -461,6 +488,10 @@ test("object backup upload rejects plaintext, unsafe locations, and checksum dri
   const backupDir = path.join(tmp, "backups");
   await mkdir(dataDir, { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   const backup = await run(backupScript, [dataDir, backupDir]);
   const archive = backup.stdout.trim();
 
@@ -503,7 +534,16 @@ test("ops restore drill validates a backup in a disposable directory", async () 
   const drillDir = path.join(tmp, "drills");
   await mkdir(dataDir, { recursive: true });
   await mkdir(drillDir, { recursive: true });
-  await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The shape a real data directory has: per-user project trees, many files.
+  // The fixture used to be one `users.json`, and the drill accepted it — which
+  // is what let the drill accept an EMPTY restore in production for months. A
+  // fixture that does not look like the thing cannot test a check about the
+  // thing.
+  const projectDir = path.join(dataDir, "users", "tester", "projects", "p1", "workspace");
+  await mkdir(projectDir, { recursive: true });
+  for (let index = 0; index < 24; index += 1) {
+    await writeFile(path.join(projectDir, `file-${index}.md`), `# note ${index}\n`);
+  }
 
   const backup = await run(backupScript, [dataDir, backupDir]);
   const archive = backup.stdout.trim();
@@ -512,7 +552,22 @@ test("ops restore drill validates a backup in a disposable directory", async () 
   });
 
   assert.match(drill.stdout.trim(), /^restore drill ok:/);
+  assert.match(drill.stdout, /users\/ present/, "the drill must say what it verified, not only that it ran");
   assert.deepEqual(await readdir(drillDir), []);
+
+  // Negative control: an archive that unpacks to an empty data directory must
+  // fail. This is the production case — the drill ran daily, asserted only that
+  // `data/` existed, and recorded a successful drill either way.
+  const hollow = path.join(tmp, "hollow");
+  await mkdir(path.join(hollow, "data"), { recursive: true });
+  const hollowBackup = await run(backupScript, [path.join(hollow, "data"), path.join(hollow, "backups")]);
+  await assert.rejects(
+    run(restoreDrillScript, [hollowBackup.stdout.trim()], {
+      env: { ...process.env, OPEN_SCIENCE_RESTORE_DRILL_DIR: drillDir },
+    }),
+    /no users\/ tree|recovered only/,
+    "a restore that recovered nothing must not pass the drill",
+  );
 });
 
 test("ops backup retention prunes old matching archives and checksum sidecars", async () => {
@@ -522,6 +577,10 @@ test("ops backup retention prunes old matching archives and checksum sidecars", 
   await mkdir(dataDir, { recursive: true });
   await mkdir(backupDir, { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   const oldArchive = path.join(backupDir, "open-science-data-20000101T000000Z.tar.gz");
   await writeFile(oldArchive, "old archive\n");
   await writeFile(`${oldArchive}.sha256`, "old checksum\n");
@@ -549,6 +608,10 @@ test("ops restore refuses to replace a non-empty data directory unless explicitl
   const restoreDir = path.join(tmp, "restored");
   await mkdir(dataDir, { recursive: true });
   await writeFile(path.join(dataDir, "users.json"), '{"version":1}\n');
+  // The restore drill checks the archive carries a data directory's shape, so a
+  // fixture has to have one. One `users.json` used to satisfy it, which is the
+  // same blind spot the drill had in production.
+  await seedDataDirectory(dataDir);
   const backup = await run(backupScript, [dataDir, backupDir]);
   const archive = backup.stdout.trim();
   await mkdir(restoreDir, { recursive: true });
