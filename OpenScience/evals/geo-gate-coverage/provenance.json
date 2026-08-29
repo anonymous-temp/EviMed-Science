@@ -1,0 +1,22 @@
+{
+  "note": "The package this harness measures is not vendored here. Without this record the 59/19 result names no artefact and cannot be recomputed.",
+  "package": "geo-skills",
+  "version": "2.0.0",
+  "released": "2026-08-10",
+  "archive": "geo-skills-2.0.0.zip",
+  "archiveSha256": "0e4290f17ebf31b57eabc325b7184831eadf41dae1d097705cbe2e748680053e",
+  "archiveBytes": 798262,
+  "archiveFiles": 322,
+  "obtained": "supplied by the repository owner on 2026-08-29 as a Google Drive download; not published to a package registry",
+  "measurementInputs": [
+    "shared/scripts/validate.py",
+    "shared/rules/catalogue.yaml",
+    "shared/scripts/tests/test_*.py (excluding the file this harness injects)"
+  ],
+  "environment": {
+    "note": "The probe channel needs a desktop host with five vendor tabs already logged in and Chrome DevTools Protocol reachable. Gate coverage does NOT need any of that — it is pure static mutation and runs anywhere Python and pytest do.",
+    "probeChannel": "http://43.248.117.249:9999",
+    "socialChannel": "http://43.248.117.249:9966",
+    "cdp": "127.0.0.1:9222"
+  }
+}
