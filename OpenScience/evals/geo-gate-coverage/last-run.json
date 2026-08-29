@@ -1,0 +1,395 @@
+{
+  "package": "/tmp/geo-dl/geo-skills-2.0.0",
+  "version": "2.0.0",
+  "treeDigest": "e21925ab5b92e05bfabcc17496c6411e458355eaff96fdaa5a90069c51cbc660",
+  "blockRules": 78,
+  "caught": [
+    "CN-G01",
+    "CN-G02",
+    "CN-G03",
+    "CN-G04",
+    "CN-G05",
+    "CN-G06",
+    "CP-G01",
+    "CP-G02",
+    "CP-G03",
+    "CP-G04",
+    "CP-G06",
+    "CP-G07",
+    "DM-G01",
+    "DM-G02",
+    "DM-G03",
+    "DM-G04",
+    "DM-G06",
+    "EF-G01",
+    "EF-G02",
+    "EF-G03",
+    "EF-G04",
+    "EF-G05",
+    "EF-G06",
+    "EF-G07",
+    "EF-G08",
+    "EF-G09",
+    "GEO-M01",
+    "GEO-M03",
+    "GEO-M04",
+    "GEO-M05",
+    "HR-E1",
+    "HR-E2",
+    "HR-E3",
+    "HR-E4",
+    "HR-E5",
+    "IRON-01",
+    "IRON-02",
+    "IRON-03",
+    "IRON-04",
+    "IRON-05",
+    "IRON-06",
+    "LABEL-02",
+    "LABEL-05",
+    "PB-G01",
+    "PB-G02",
+    "PB-G03",
+    "PB-G04",
+    "PJ-G01",
+    "PJ-G02",
+    "PJ-G03",
+    "PJ-G04",
+    "PJ-G05",
+    "PJ-G06",
+    "ST-G01",
+    "ST-G02",
+    "ST-G03",
+    "ST-G04",
+    "ST-G05",
+    "ST-G06",
+    "VF-G01",
+    "VF-G02",
+    "VF-G03",
+    "VF-G04",
+    "VF-G05",
+    "VF-G06",
+    "VF-G07",
+    "VF-G08",
+    "VF-G09",
+    "VF-G10",
+    "VF-G11",
+    "X-CLOSE",
+    "X-COMPLY",
+    "X-JARGON",
+    "X-SAFE",
+    "X-SEAL",
+    "X-SUBST",
+    "X-TRACE",
+    "X-WRITE"
+  ],
+  "survived": [],
+  "unlocatable": [],
+  "caughtBy": {
+    "IRON-01": [
+      "tests/test_gates.py::TestMetricGates::test_p3_target_cannot_exceed_rival",
+      "tests/test_gates.py::TestNegationAwareness::test_affirmative_overtake_blocked",
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
+    ],
+    "IRON-02": [
+      "tests/test_gates.py::TestMetricGates::test_k_value_must_be_measured",
+      "tests/test_gates.py::TestMetricGates::test_sov_block_names_the_competitor_coverage_gap",
+      "tests/test_gates.py::TestMetricGates::test_sov_block_omits_coverage_hint_when_competitors_are_adequate",
+      "tests/test_gates.py::TestMetricGates::test_sov_ratio_above_block_line",
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
+    ],
+    "IRON-03": [
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
+    ],
+    "IRON-04": [
+      "tests/test_gates.py::TestMetricGates::test_demand_strength_is_checked_on_deliverables_not_a_phantom_field",
+      "tests/test_gates.py::TestTierShapeAndCap::test_demand_strength_100_in_deliverable_blocks",
+      "tests/test_gates.py::TestTierShapeAndCap::test_numeric_target_over_cap_still_blocks",
+      "tests/test_uncovered_gates.py::TestCapAndCoherenceGates::test_iron04_blocks_a_group_reference_above_the_cap",
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
+    ],
+    "IRON-05": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_internal_language_blocked",
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
+    ],
+    "IRON-06": [
+      "tests/test_gates.py::TestSnapshotBinding::test_counted_snapshot_without_screenshot_blocks",
+      "tests/test_gates.py::TestSnapshotBindingWithRounds::test_genuinely_missing_snapshot_still_blocks"
+    ],
+    "X-SAFE": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_red_flag_denominator_cannot_be_swapped"
+    ],
+    "X-COMPLY": [
+      "tests/test_gates.py::TestClaimTypeWordlists::test_immunity_generalisation_is_off_label",
+      "tests/test_gates.py::TestClaimTypeWordlists::test_vernacular_absolutes_are_caught",
+      "tests/test_gates.py::TestClaimTypeWordlists::test_vernacular_disparagement_is_caught",
+      "tests/test_gates.py::TestNegationAwareness::test_affirmative_off_label_blocked",
+      "tests/test_gates.py::TestNegationScope::test_end_to_end_gate_catches_it",
+      "tests/test_gates.py::TestQuotedErrorExemption::test_unquoted_wrong_approval_number_still_blocks",
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_foreign_approval_number_blocked",
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_off_label_positioning_blocked",
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_rx_public_promotion_blocked"
+    ],
+    "X-WRITE": [
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_x_write_blocks_a_declaration_repeated_verbatim",
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_x_write_blocks_a_done_claim_with_nothing_to_open"
+    ],
+    "X-TRACE": [
+      "tests/test_gates.py::TestTraceGate::test_unresolvable_ref_blocked"
+    ],
+    "X-CLOSE": [
+      "tests/test_wiring.py::TestCitationClosure::test_citation_number_beyond_source_count_is_caught"
+    ],
+    "CN-G01": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_node_provenance_rejects_borrowed_stage"
+    ],
+    "CN-G02": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_fifth_population_required"
+    ],
+    "CN-G03": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_red_flag_denominator_cannot_be_swapped",
+      "tests/test_gates.py::TestSkipIsNotPass::test_missing_data_is_skipped_not_passed"
+    ],
+    "CN-G04": [
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_cn_g04_blocks_a_node_phrase_absent_from_the_label"
+    ],
+    "CN-G05": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_rx_first_boundary_must_be_diagnosis"
+    ],
+    "CN-G06": [
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_cn_g06_blocks_corpus_refs_when_nothing_was_collected"
+    ],
+    "DM-G01": [
+      "tests/test_gates.py::TestSkipIsNotPass::test_missing_data_is_skipped_not_passed"
+    ],
+    "DM-G02": [
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g02_blocks_a_known_content_farm_domain",
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g02_blocks_seo_farm_content_left_in_the_corpus"
+    ],
+    "DM-G03": [
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_a_group_in_an_illegal_pool",
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_a_primary_group_that_does_not_exist",
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g03_blocks_an_utterance_with_no_primary_group"
+    ],
+    "DM-G04": [
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g04_blocks_coverage_above_one_hundred_percent",
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g04_blocks_coverage_under_the_floor"
+    ],
+    "DM-G06": [
+      "tests/test_uncovered_gates.py::TestCorpusAndDemandGates::test_dm_g06_blocks_a_population_share_inferred_from_engagement"
+    ],
+    "EF-G01": [
+      "tests/test_gates.py::TestEvidenceGates::test_control_group_evidence_cannot_be_product_level",
+      "tests/test_gates.py::TestSkipIsNotPass::test_missing_data_is_skipped_not_passed",
+      "tests/test_wiring.py::TestShapeGate::test_broken_json_is_block_not_skip",
+      "tests/test_wiring.py::TestShapeGate::test_checks_reading_broken_contract_are_not_counted_as_verified",
+      "tests/test_wiring.py::TestShapeGate::test_report_header_names_the_broken_contracts"
+    ],
+    "EF-G02": [
+      "tests/test_gates.py::TestEvidenceGates::test_untraceable_and_draft_guideline_rejected"
+    ],
+    "EF-G03": [
+      "tests/test_gates.py::TestEvidenceGates::test_off_label_evidence_cannot_be_product_level",
+      "tests/test_wiring.py::TestShapeGate::test_checks_reading_broken_contract_are_not_counted_as_verified"
+    ],
+    "EF-G04": [
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g04_blocks_a_reprint_counted_as_independent",
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g04_blocks_reprints_with_no_independent_count_declared"
+    ],
+    "EF-G05": [
+      "tests/test_wiring.py::TestShapeGate::test_checks_reading_broken_contract_are_not_counted_as_verified"
+    ],
+    "EF-G06": [
+      "tests/test_gates.py::TestEvidenceGates::test_manufacturer_claim_must_be_chased"
+    ],
+    "EF-G07": [
+      "tests/test_gates.py::TestEvidenceGates::test_confirmed_absent_needs_non_ai_search_ref"
+    ],
+    "EF-G08": [
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g08_blocks_a_silent_absence_of_fact_differences",
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_ef_g08_blocks_a_verifiable_fact_marked_off_label"
+    ],
+    "EF-G09": [
+      "tests/test_gates.py::TestCounterEvidenceRegistry::test_counter_evidence_without_disposition_blocks",
+      "tests/test_gates.py::TestCounterEvidenceRegistry::test_missing_counter_evidence_field_blocks"
+    ],
+    "VF-G01": [
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g01_blocks_measured_and_estimated_in_one_cell"
+    ],
+    "VF-G02": [
+      "tests/test_gates.py::TestSnapshotBinding::test_counted_snapshot_without_screenshot_blocks",
+      "tests/test_gates.py::TestSnapshotBindingWithRounds::test_genuinely_missing_snapshot_still_blocks"
+    ],
+    "VF-G03": [
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data",
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_warns_about_partially_skipped_laws"
+    ],
+    "VF-G04": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_decimal_score_and_rank_blocked"
+    ],
+    "VF-G05": [
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_a_client_file_that_never_says_what_was_measured",
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_an_incomplete_surface_triple",
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_vf_g05_blocks_metrics_without_a_probe_surface"
+    ],
+    "VF-G06": [
+      "tests/test_gates.py::TestMetricGates::test_rival_axes_required"
+    ],
+    "VF-G07": [
+      "tests/test_wiring.py::TestFailClosedRestored::test_vf_g03_skips_when_all_iron_laws_lack_data"
+    ],
+    "VF-G08": [
+      "tests/test_gates.py::TestMetricGates::test_anchor_hash_tamper_detected"
+    ],
+    "VF-G09": [
+      "tests/test_gates.py::TestMetricGates::test_unmeasured_rival_cannot_have_strategy"
+    ],
+    "VF-G10": [
+      "tests/test_gates.py::TestMetricGates::test_provider_sample_loss_blocks_when_deliverable_hides_it",
+      "tests/test_gates.py::TestMetricGates::test_provider_sample_loss_is_warned_before_assembly"
+    ],
+    "PJ-G01": [
+      "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_a_merged_skeleton",
+      "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_a_not_applicable_stage_with_no_reason",
+      "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g01_blocks_an_otc_product_on_the_rx_skeleton"
+    ],
+    "PJ-G02": [
+      "tests/test_uncovered_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_an_unlabelled_cell",
+      "tests/test_uncovered_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_measured_cells_in_a_pure_inference_run",
+      "tests/test_uncovered_gates.py::TestPatientJourneyGates::test_pj_g02_blocks_measured_without_a_source"
+    ],
+    "PJ-G03": [
+      "tests/test_uncovered_gates.py::TestJourneySkeletonGates::test_pj_g03_blocks_an_invented_patient_quote"
+    ],
+    "PJ-G04": [
+      "tests/test_uncovered_gates.py::TestJourneyStructureGates::test_pj_g04_blocks_a_score_without_a_driver"
+    ],
+    "PJ-G05": [
+      "tests/test_uncovered_gates.py::TestJourneyStructureGates::test_pj_g05_blocks_an_opportunity_from_a_single_lane"
+    ],
+    "PJ-G06": [
+      "tests/test_uncovered_gates.py::TestJourneyStructureGates::test_pj_g06_blocks_a_window_missing_one_of_its_three_numbers"
+    ],
+    "VF-G11": [
+      "tests/test_gates.py::TestEvenDenominator::test_message_names_the_short_questions",
+      "tests/test_gates.py::TestEvenDenominator::test_uneven_sample_sizes_are_blocked"
+    ],
+    "X-JARGON": [
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_x_jargon_blocks_an_internal_id_used_as_content"
+    ],
+    "X-SEAL": [
+      "tests/test_gates.py::TestIdentityHashSeal::test_gate_blocks_content_changed_without_reseal"
+    ],
+    "ST-G01": [
+      "tests/test_gates.py::TestSubtypeTreeGates::test_off_label_subtype_must_not_get_priority",
+      "tests/test_gates.py::TestSubtypeTreeGates::test_subtype_without_clause_and_without_off_label_flag"
+    ],
+    "ST-G02": [
+      "tests/test_gates.py::TestSubtypeTreeGates::test_shares_not_summing_to_one_without_other_branch"
+    ],
+    "ST-G03": [
+      "tests/test_gates.py::TestSubtypeTreeGates::test_low_tier_source_must_give_a_range_not_a_point",
+      "tests/test_gates.py::TestSubtypeTreeGates::test_size_without_source_is_blocked",
+      "tests/test_gates.py::TestSubtypeTreeGates::test_tier_six_ai_estimate_is_blocked"
+    ],
+    "ST-G04": [
+      "tests/test_gates.py::TestSubtypeTreeGates::test_single_method_is_blocked",
+      "tests/test_gates.py::TestSubtypeTreeGates::test_wide_range_without_reconciliation_note"
+    ],
+    "ST-G05": [
+      "tests/test_gates.py::TestSubtypeTreeGates::test_leaf_without_pool_must_say_so"
+    ],
+    "ST-G06": [
+      "tests/test_gates.py::TestSubtypeTreeGates::test_market_sizing_language_is_blocked"
+    ],
+    "PB-G01": [
+      "tests/test_gates.py::TestProposalAndPilotGates::test_new_kpi_number_in_proposal_blocked"
+    ],
+    "PB-G02": [
+      "tests/test_gates.py::TestProposalAndPilotGates::test_must_not_do_minimum"
+    ],
+    "PB-G03": [
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_pb_g03_blocks_a_concept_set_over_the_cap",
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_pb_g03_blocks_a_concept_with_no_definition"
+    ],
+    "PB-G04": [
+      "tests/test_gates.py::TestProposalAndPilotGates::test_override_without_reason_blocked"
+    ],
+    "CP-G01": [
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g01_blocks_an_asset_bound_to_an_off_label_claim",
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g01_blocks_an_asset_bound_to_nothing"
+    ],
+    "CP-G02": [
+      "tests/test_gates.py::TestProposalAndPilotGates::test_correction_table_columns_required"
+    ],
+    "CP-G03": [
+      "tests/test_gates.py::TestProposalAndPilotGates::test_imposter_source_blocked"
+    ],
+    "CP-G04": [
+      "tests/test_gates.py::TestProposalAndPilotGates::test_brand_must_stay_in_fourth_cell"
+    ],
+    "CP-G06": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_cognition_promise_blocked"
+    ],
+    "CP-G07": [
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g07_blocks_an_asset_with_no_qualification_note",
+      "tests/test_uncovered_gates.py::TestClientFacingGates::test_cp_g07_blocks_an_rx_asset_aimed_at_the_public"
+    ],
+    "GEO-M01": [
+      "tests/test_gates.py::TestGeoMechanicsGates::test_missing_answer_sentence_blocked",
+      "tests/test_gates.py::TestGeoMechanicsGates::test_narrative_leadin_blocked"
+    ],
+    "GEO-M03": [
+      "tests/test_gates.py::TestGeoMechanicsGates::test_missing_machine_credentials_blocked"
+    ],
+    "GEO-M04": [
+      "tests/test_gates.py::TestGeoMechanicsGates::test_entity_audit_required",
+      "tests/test_gates.py::TestGeoMechanicsGates::test_entity_variant_blocked"
+    ],
+    "GEO-M05": [
+      "tests/test_gates.py::TestGeoMechanicsGates::test_promotional_register_blocked_for_visibility_reason"
+    ],
+    "X-SUBST": [
+      "tests/test_gates.py::TestSubstanceGate::test_action_without_object_blocked",
+      "tests/test_gates.py::TestSubstanceGate::test_hollow_report_is_blocked",
+      "tests/test_gates.py::TestSubstanceGate::test_no_signal_saturation_blocked",
+      "tests/test_gates.py::TestSubstanceGate::test_thesis_with_dangling_support_blocked",
+      "tests/test_gates.py::TestSubstanceGate::test_thesis_without_support_blocked"
+    ],
+    "LABEL-02": [
+      "tests/test_gates.py::TestClaimTypeWordlists::test_immunity_generalisation_is_off_label",
+      "tests/test_gates.py::TestClaimTypeWordlists::test_vernacular_absolutes_are_caught",
+      "tests/test_gates.py::TestClaimTypeWordlists::test_vernacular_disparagement_is_caught",
+      "tests/test_gates.py::TestNegationAwareness::test_affirmative_off_label_blocked",
+      "tests/test_gates.py::TestNegationScope::test_end_to_end_gate_catches_it",
+      "tests/test_gates.py::TestQuotedErrorExemption::test_unquoted_wrong_approval_number_still_blocks",
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_foreign_approval_number_blocked",
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_off_label_positioning_blocked",
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_rx_public_promotion_blocked"
+    ],
+    "LABEL-05": [
+      "tests/test_gates.py::TestEvidenceGates::test_control_group_evidence_cannot_be_product_level",
+      "tests/test_gates.py::TestSkipIsNotPass::test_missing_data_is_skipped_not_passed",
+      "tests/test_wiring.py::TestShapeGate::test_broken_json_is_block_not_skip",
+      "tests/test_wiring.py::TestShapeGate::test_checks_reading_broken_contract_are_not_counted_as_verified",
+      "tests/test_wiring.py::TestShapeGate::test_report_header_names_the_broken_contracts"
+    ],
+    "HR-E1": [
+      "tests/test_gates.py::TestEvidenceGates::test_counter_evidence_must_be_registered",
+      "tests/test_wiring.py::TestShapeGate::test_checks_reading_broken_contract_are_not_counted_as_verified"
+    ],
+    "HR-E2": [
+      "tests/test_gates.py::TestEvidenceGates::test_manufacturer_claim_must_be_chased"
+    ],
+    "HR-E3": [
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_hr_e3_blocks_a_numeric_evidence_score_in_a_client_file"
+    ],
+    "HR-E4": [
+      "tests/test_uncovered_gates.py::TestEvidenceBoundaryGates::test_hr_e4_blocks_a_real_utterance_used_as_product_evidence"
+    ],
+    "HR-E5": [
+      "tests/test_gates.py::TestSafetyAndComplianceGates::test_icd_without_disclaimer_blocked"
+    ]
+  },
+  "promiscuousWitnesses": {}
+}
