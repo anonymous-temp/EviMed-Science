@@ -28,6 +28,7 @@ import {
   PUBLIC_SOURCE_GATEWAY_PATH,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
+import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -200,14 +201,17 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/files/download/")) return "/api/files/download/:path";
   if (pathname === "/api/files/upload") return pathname;
   if (pathname.startsWith("/api/")) return "/api/:route";
-  // The three internal gateways carry the runtime's entire outbound traffic —
-  // every model call, every source fetch, every search. They used to fall
-  // through to "/static", so a provider 401 storm and a wave of images were the
-  // same line on the dashboard.
+  // The four internal gateways carry the runtime's entire outbound traffic —
+  // every model call, every source fetch, every search, every probe. They used
+  // to fall through to "/static", so a provider 401 storm and a wave of images
+  // were the same line on the dashboard. The probe keeps its own label rather
+  // than sharing the source gateway's: it is metered and audited separately
+  // because it is a different kind of traffic with a different failure mode.
   if (
     pathname === MODEL_GATEWAY_PATH ||
     pathname === PUBLIC_SOURCE_GATEWAY_PATH ||
-    pathname === WEB_SEARCH_GATEWAY_PATH
+    pathname === WEB_SEARCH_GATEWAY_PATH ||
+    pathname === GEO_PROBE_GATEWAY_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -488,6 +492,9 @@ export function createWebApiApp(overrides = {}) {
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
   });
+  const geoProbeGatewayHandler = createGeoProbeGatewayHandler(config, runtimeManager, {
+    fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
+  });
   const commands = createCommandRegistry({ config, runtimeManager });
   const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx));
   const rateLimiter = new FixedWindowRateLimiter();
@@ -541,7 +548,9 @@ export function createWebApiApp(overrides = {}) {
         ? publicSourceGatewayHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
           ? webSearchGatewayHandler
-          : null;
+          : pathname === GEO_PROBE_GATEWAY_PATH
+            ? geoProbeGatewayHandler
+            : null;
     if (gateway) {
       try {
         await gateway(req, res, recordGatewayFailure);

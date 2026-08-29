@@ -51,6 +51,8 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'open_access_full_text',
   'official_page_fetch',
   'web_search',
+  // measured visibility (the consumer LLM front-ends, not the record)
+  'geo_visibility_probe',
   // pharmacy data
   'drug_label_search',
   'pharmacy_reference_search',

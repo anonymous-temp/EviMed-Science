@@ -343,6 +343,16 @@ export function loadConfig(overrides = {}) {
     codePrefix: "model_gateway_signing_secret",
     defaultFile: localSecretFile("model-gateway.signing"),
   });
+  // Optional. Empty means the probe hop is unauthenticated, which is stated in
+  // every answer rather than left for someone to discover.
+  const geoProbeSecret = preferredFileSecret(overrides, {
+    overrideValue: "geoProbeSigningSecret",
+    overrideFile: "geoProbeSigningSecretFile",
+    valueEnv: "OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET",
+    fileEnv: "OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE",
+    codePrefix: "geo_probe_signing_secret",
+    defaultFile: localSecretFile("geo-probe.signing"),
+  });
   const materialsProjectSecret = preferredFileSecret(overrides, {
     overrideValue: "materialsProjectApiKey",
     overrideFile: "materialsProjectApiKeyFile",
@@ -905,6 +915,31 @@ export function loadConfig(overrides = {}) {
     webSearchTimeoutMs: Number(
       overrides.webSearchTimeoutMs ?? process.env.OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS ?? 30_000,
     ),
+    // The GEO probe origin: an internal service this platform runs, not a
+    // public source. Empty means the deployment has no measured-visibility
+    // channel, and the tool says so instead of the runtime silently getting
+    // nothing back and reporting a brand as absent.
+    geoProbeUrl: overrides.geoProbeUrl ?? process.env.OPEN_SCIENCE_GEO_PROBE_URL ?? "",
+    geoProbeGatewayInternalUrl:
+      overrides.geoProbeGatewayInternalUrl ??
+      process.env.OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL ??
+      (production
+        ? "http://open-science-web:8787/internal/geo-probe/v1"
+        : `http://127.0.0.1:${port}/internal/geo-probe/v1`),
+    // One probe drives a browser through a whole answer; the upstream's own
+    // ceiling is about five minutes.
+    geoProbeTimeoutMs: Number(
+      overrides.geoProbeTimeoutMs ?? process.env.OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS ?? 360_000,
+    ),
+    // Plaintext to a public address is refused unless the operator says
+    // otherwise. The questions are not secret; the measurements are the
+    // product, and an unauthenticated hop means a wrong number is
+    // indistinguishable from a tampered one.
+    geoProbeAllowPlaintext:
+      overrides.geoProbeAllowPlaintext ?? process.env.OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT === "1",
+    geoProbeSigningSecret: geoProbeSecret.value,
+    geoProbeSigningSecretSource: geoProbeSecret.source,
+    geoProbeSigningSecretError: geoProbeSecret.error,
     // Idle time, not total time: the deadline is re-armed on every streamed
     // chunk. As a total it cut reasoning turns off mid-answer — one measured
     // run spent 68 of 87 minutes re-issuing calls killed while they were

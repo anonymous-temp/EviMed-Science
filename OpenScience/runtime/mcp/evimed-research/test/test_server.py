@@ -59,6 +59,7 @@ class ToolContractTests(unittest.TestCase):
             "official_page_fetch",
             "open_access_full_text",
             "web_search",
+            "geo_visibility_probe",
             "term_normalize",
             "drug_term_normalize",
             "evidence_deduplicate",

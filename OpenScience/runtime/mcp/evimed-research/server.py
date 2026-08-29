@@ -26,6 +26,7 @@ import official_pages
 import meta_agent
 import specialist_jobs
 import source_catalog
+import geo_probe
 import web_search
 
 
@@ -300,6 +301,31 @@ TOOL_DEFINITIONS = [
                 "timeRange": {"type": "string", "enum": ["day", "week", "month", "year"]},
             },
             ("query",),
+        ),
+    },
+    {
+        "name": "geo_visibility_probe",
+        "description": (
+            "Ask the consumer LLM front-ends (DeepSeek, Doubao, Kimi, Qianwen, Yuanbao) a question the way a patient would, "
+            "and record what they answer. This is a measurement with a denominator, not a retrieval: a vendor that failed to "
+            "answer is not a vendor that did not mention the product, and a vendor that is not logged in was never asked. "
+            "Use op=providers before a batch, op=ask per question, op=screenshot to retrieve the evidence image by name."
+        ),
+        "inputSchema": object_schema(
+            {
+                "op": {"type": "string", "enum": ["providers", "ask", "screenshot"]},
+                "question": {"type": "string", "minLength": 1, "maxLength": 2000},
+                "providers": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "items": {"type": "string", "enum": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"]},
+                },
+                "deep": {"type": "integer", "enum": [0, 1]},
+                "newChat": {"type": "integer", "enum": [0, 1]},
+                "name": {"type": "string", "minLength": 1, "maxLength": 160},
+            },
+            ("op",),
         ),
     },
     {
@@ -1505,6 +1531,23 @@ def call_tool(name, arguments):
                 [
                     "Retry once the backend recovers." if error.retryable
                     else "Continue with the bibliographic channels; do not read an unavailable web search as an empty field.",
+                ],
+            )
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name == "geo_visibility_probe":
+        try:
+            result = geo_probe.probe(arguments)
+        except geo_probe.GeoProbeError as error:
+            return failure(
+                error.code,
+                str(error),
+                error.retryable,
+                "retry" if error.retryable else "unsupported",
+                [
+                    "Retry the same question; the probe serves one caller at a time and a busy answer is not a result."
+                    if error.retryable
+                    else "Do not read an unavailable probe as an absence of mentions. Say the channel was not measured.",
                 ],
             )
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
