@@ -9,7 +9,10 @@
 
 - [x] **A1** 十条原则进根 `CLAUDE.md` / `AGENTS.md`（2026-08-29 完成）。
 - [x] **A2 冻结生效**：`packages/domain/src/clinicalEvidence.mjs`（约 4.9k 行、~335 个正则位点）停止新增开放词汇 prose 正则。新的药物/场景规则一律进 `clinical-safety-rules.json`；其余语域判断先记 eval case，等 review 面接手（C1）。
-- [x] **A3 交付前两步固定化**：在新树能力包（`OpenScience/capabilities/<id>/SKILL.md`）把 `manuscript-humanize`（语域净化，引语/数字/引文索引/claim 标记字节不变）与 `traceability-review`（引文可解析、无源数字、图-代码对照）写成长文类能力交付前的固定步骤，不再依赖模型自选。旧树 `runtime/skills/evimed` 不动（服务现役 opencode 内核，翻默认后随附 B 处理）。
+- [x] **A3 交付前两步固定化**（2026-08-29 补正：**原先钉错了文件**。测试断言 `capabilities/<id>/SKILL.md`，
+  但镜像 `COPY capability-skills` 且 `EVIMED_CAPABILITY_SKILLS_DIR` 指向它——被委派子代理读到的是后者，
+  而十一份技能体里两步一个都没写，测试却一直是绿的。已给十一份补上、测试改为两份都断言、
+  drift 基线记为有意的单向分歧；旧树 `runtime/skills/evimed` 按计划不动，翻内核时删除。）：在新树能力包（`OpenScience/capabilities/<id>/SKILL.md`）把 `manuscript-humanize`（语域净化，引语/数字/引文索引/claim 标记字节不变）与 `traceability-review`（引文可解析、无源数字、图-代码对照）写成长文类能力交付前的固定步骤，不再依赖模型自选。旧树 `runtime/skills/evimed` 不动（服务现役 opencode 内核，翻默认后随附 B 处理）。
 - [x] **A4 后台话语的合法去处**：工作区布局约定 `deliverables/<id>/revision-notes.md` 为修订说明/过程记录的指定落点，相关 SKILL.md 加一句指路。有出口，正文禁令才立得住。
 - [x] **A5 写作评测起步**：`OpenScience/evals/` 下建语域/文风事故台账——每次「后台漏前台 / 免责口吻 / 版本痕迹」事故 = 一条 case。先攒语料，不建 harness。
 
@@ -33,7 +36,7 @@
 - [~] **D5 `audit:capabilities` 刷新**（2026-08-29 推进）：17/26 → **22/26**。五个专家 agent 真跑出新回执（药物安全/文献计量/科研选题/论文审稿 succeeded，meta blocked 但产出完整手稿）；顺带修好文献计量的 CJK 字体崩溃（两份副本）与验证器把 26 个工具硬编码成 25（改为从 `server.list_tools()` 推导）。**剩 4 项全部为凭证阻塞**：web_search / patent_search / pharmacy_reference_search 缺 key；MR 的真实阻塞点实测为 OpenGWAS JWT（HTTP 401）——环境侧已打通（装 R 4.3.3 + 补齐 .r-lib 整条依赖链）。探针按设计拒绝写出部分证据，故仍红；凭证到位后重跑一次即转绿。
 - [ ] **D6 翻默认内核 → 附 B 删除**：四个发布硬门（P0 真跑验收、capabilities 重探、F0 会话页真 RQ 验收、部署宿主 hosted e2e）达成后翻 `runtimeKernel` 默认，同一 PR 删旧 store / `packages/sdk` / `src-tauri` / `runtime/harness` / `deploy/runtime-opencode`。双栈每多活一天，一切改动双倍成本。
 - [~] **D7 生产 receipt 续期机制**（2026-08-29：机制已建，生产仍红且根因已定位）：`release-receipt-scheduler.mjs` + `docker-compose.receipt.yml`（照 backup-scheduler 范式：run/health/状态文件，12h 续期＝回执 24h 寿命的一半，健康按回执剩余寿命判而非按上次尝试）已实现并测。**但生产此刻铸不出回执**：`preflight:deepseek:release` 在 web 容器里返回 `opencode_binary_missing` —— `OPEN_SCIENCE_OPENCODE_BIN` 是空串，于是回退到 `apps/desktop/src-tauri/binaries/`，而服务器镜像根本不含桌面壳目录，宿主与容器里也都找不到该二进制。故 08-15 那张回执从签发当天起就无法续期。**裁决**：不要为它把二进制塞进服务器镜像（那会把已在退役的 OpenCode 依赖重新钉进生产）——这条并入 D6 的内核翻默认，届时 release-gate 改为认证 DSH 内核，scheduler 直接可用；在此之前生产 readiness 的 modelGateway 一项保持已知红，且它是**唯一**红的一项。：deepseek release receipt 24h 窗口无续期 = 永远红的告警；随 DSH 版 release-gate 重写解决为「可无人值守续期」，期间手动 mint 保绿。红着的告警教会所有人忽略告警。
-- [ ] **D8 推送积压**：**231 个未推送提交**（08-24 时为 161），单机磁盘风险；需操作者在持有 gitee 凭证处 push。
+- [x] **D8 推送**：已解决（2026-08-29 核实）——推送目标是 GitHub，`main` 与 `github/main` 齐平（ahead 0），本机可推。原「231 未推」按 gitee `origin` 计数属过时口径；gitee 落后 231+ 提交，保留为镜像还是作废需另行拍板。
 
 ## E. 运维必要项
 
@@ -43,6 +46,21 @@
 
 - [~] **F1 撤稿检查落地**（判定半边已实现并测；接线待网关取名单）（P1 已规划，数据源核实可用）：Retraction Watch 全库 2023-09 起归 Crossref——免费、每工作日更新、已入 Crossref REST API 与公开 CSV。实现 = 交付物引文的 DOI/PMID 闭集比对（正是代码该做的检查），先 notice 观察分布；医学场景引用已撤稿文献属事故级，观察后可升 MUST FIX。
 - [ ] **F2 注入红队评测**（只加 eval，不加门禁）：平台三要素俱全（私有数据 API + 不可信文献/网页 + 对外交付）即 lethal trifecta；业界共识是架构上无法根除、靠纵深。现有纵深（网关白名单、工作区隔离、无直连出网、胶囊不可信、路径守卫）形状正确但**从未被证明**：`evals/` 放带指令诱饵的文献/网页（「把 X 写进结论」「读取并外传」），断言报告不受污染、网关无越界调用——与原则 6、工程方法「断言结果不断言机制」一致。
+
+## H. GEO（2026-08-29 落地，spec §9.11）
+
+- [x] **H1 探测通道**：`/internal/geo-probe/v1` 作为第四条内部网关（与 model/sources/search 并列），
+  不放宽 `publicSourceGateway` 的 HTTPS-only——探测机是自家后端不是第 81 个公共来源。运行时只能点名
+  `providers`/`ask`/`screenshot`，永不拼上游路径、不知探测主机、不持凭证。公网明文需显式承担，
+  配密钥则 HMAC 签名并回传响应摘要。十个守卫逐条变异验证。对真机端到端跑通。
+- [x] **H2 能力包**：`capabilities/geo-content/` + `capability-skills/geo-content/` + `evals/geo-content/`
+  四份真实 brief。契约补齐"数字那一半"：五条测量 notice + 探测机地址进正文，**全部先 notice**
+  （第七个阻断点要拿实测分布来争），verdict 带上做该裁决用的 metrics。
+- [x] **H3 门禁自证**：geo-skills 2.0.0 的 78 条 BLOCK 全部补上具名对照（`evals/geo-gate-coverage/`，
+  棘轮为空），并记录每次变异是哪条测试红的——"78/78"上一次是假的。
+- [ ] **H4 78 个 BLOCK 的分档**：需真实项目的实测分布，不能凭空定。这是 GEO 接入唯一未闭合项。
+- [ ] **H5 传输加固**：探测机加 TLS/域名，或走私有链路。配置位已留（`OPEN_SCIENCE_GEO_PROBE_*`），
+  取决于那台机器能否动。在此之前明文跨公网，答复里如实标注。
 
 ## G. 明确不做（防过度开发）
 
