@@ -202,8 +202,30 @@ test("a matrix written before its sources were preserved is one behaviour, not t
     reportText: report,
   }).issues.filter((issue) => /artifactPath/.test(issue));
   assert.equal(many.length, 1, `twelve claims, one omission, got ${many.length}: ${many.slice(0, 3).join(" | ")}`);
-  assert.match(many[0], /12 条主张的 artifactPath 是空的/);
+  assert.match(many[0], /另有 11 条主张的 artifactPath 是同一个值/);
   assert.match(many[0], /evimed_open_access_full_text/, "the collapsed message must still say how to repair it");
+  assert.match(many[0], /写在保全原文之前/, "an empty value has a cause worth naming");
+
+  // The same rule on a value that is wrong rather than absent. RQ-03 rewrote
+  // its matrix to the right schema and then cited the run's own notes file on
+  // all twenty claims, with an accessLevel outside the vocabulary: 83 required
+  // issues for two decisions, on a budget of seven submissions.
+  const wrongValue = validateClinicalEvidencePackage({
+    keepCoverage: true,
+    matrix: {
+      claims: Array.from({ length: 20 }, (_, i) => ({
+        ...bare(i),
+        accessLevel: "regulatory_record",
+        artifactPath: "source-quotes.md",
+      })),
+    },
+    reportText: report,
+  }).issues.filter((issue) => /artifactPath|accessLevel/.test(issue));
+  assert.equal(wrongValue.length, 2, `two decisions, got ${wrongValue.length}`);
+  // The rule's own wording survives intact — it is the half that says what to do.
+  assert.ok(wrongValue.some((issue) => /which is not a preserved artifact\. Preserve the source first/.test(issue)));
+  assert.ok(wrongValue.some((issue) => /use exactly one of full_text, official_page, abstract, structured_record/.test(issue)));
+  for (const issue of wrongValue) assert.match(issue, /另有 19 条主张的/);
 
   // Negative control 1: below the threshold the per-claim finding stands, so a
   // single missing path is not buried in a summary about the matrix.
