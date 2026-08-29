@@ -4423,8 +4423,15 @@ export class RuntimeManager {
     }
     this.beginProxy(project);
     try {
-      /** @type {Record<string, any>[]} */
-      const entries = [];
+      // Pages, not one flat array, because they are joined with `flat()` at the
+      // end rather than spread into `unshift`. Spreading passes every element
+      // as a call argument, and the comment below records pages of 130k chunk
+      // events: `entries.unshift(...pageEntries)` threw `Maximum call stack
+      // size exceeded` on exactly such a page, every poll, so a finished run
+      // sat `running` forever while the monitor logged the same line each time.
+      // The engine's argument limit is not a number this code should be near.
+      /** @type {Record<string, any>[][]} */
+      const pages = [];
       /** @type {number | undefined} */
       let beforeSeq;
       // 200 pages x 25 messages bounds a transcript at 5000 messages -- the
@@ -4457,13 +4464,13 @@ export class RuntimeManager {
           throw error;
         }
         const pageEntries = Array.isArray(value?.events) ? value.events : [];
-        entries.unshift(...pageEntries);
+        pages.unshift(pageEntries);
         if (!value?.hasMore || !pageEntries.length) break;
         const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
         if (!Number.isFinite(firstSeq)) break;
         beforeSeq = firstSeq;
       }
-      return normalizeTranscript(sessionId, entries);
+      return normalizeTranscript(sessionId, pages.flat());
     } finally {
       this.endProxy(project);
     }
