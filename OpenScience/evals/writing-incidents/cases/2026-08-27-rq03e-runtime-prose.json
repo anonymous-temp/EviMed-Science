@@ -1,0 +1,10 @@
+{
+  "id": "2026-08-27-rq03e-runtime-prose",
+  "genre": "backstage-prose",
+  "observedIn": "uploads/20260827-rq03e/deliverables/sxjw-longterm-evidence/clinical-evidence-report.md",
+  "line": 172,
+  "verbatim": "工件保存与抓取时间均为 2026-08-27；访问层级与保存状态见引文台账与引文审计。",
+  "whyItIsWrong": "A sentence about how the run stored its files, in a section a clinician reads for evidence. Retrieval bookkeeping belongs in the citation ledger and audit, which this sentence itself points at.",
+  "caughtBy": "gate",
+  "note": "The outlet did not exist when this was written. With revision-notes.md available the same sentence has somewhere to go; the case stays because the fix has to keep catching it in the report."
+}

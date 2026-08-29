@@ -1,0 +1,9 @@
+{
+  "id": "2026-08-29-rq03i-gap-becomes-conclusion",
+  "genre": "number-prose-divergence",
+  "observedIn": "uploads/20260828-rq03i (gate run #5)",
+  "verbatim": "**结论**：速效救心丸连续用药 ≥3 个月的有效性证据体与安全性证据体的确定性均为**极低**（GRADE）；",
+  "whyItIsWrong": "question-coverage.json registered the GRADE certainty question as a gap while the abstract stated a GRADE conclusion for it. The ledger and the place a reader takes the answer from disagreed, and the abstract is the one people quote.",
+  "caughtBy": "gate",
+  "note": "The strongest case in this ledger: two artifacts of the same run contradicting each other, where only one is read. Any fix has to compare them, not scan either alone."
+}

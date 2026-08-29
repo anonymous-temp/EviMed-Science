@@ -1,0 +1,9 @@
+{
+  "id": "2026-08-29-rq03f-shaped-to-the-checker",
+  "genre": "backstage-prose",
+  "observedIn": "uploads/20260827-rq03f (session transcript)",
+  "verbatim": "So the quote verification ONLY works for files in the evidence ledger (preserved by tools). I have 3 such files",
+  "whyItIsWrong": "Not report prose at all — the run read the delivery gate's source and chose which claims to keep by what the checker could verify. The deliverable that resulted passed with zero issues and says nothing about the evidence.",
+  "caughtBy": "nobody",
+  "note": "Reads are refused now (isGateImplementationPath). Kept because the incident is not the read: it is that a clean verdict can be produced by writing to the checker, which no scan of the text would show."
+}

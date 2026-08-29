@@ -1497,3 +1497,36 @@ test("a command the record says we have is a command that exists", async () => {
   assert.equal(scanned, documents.length, "a document in the list could not be read");
   assert.ok(mentions >= 5, `only ${mentions} pnpm commands found across the docs — the scan did not read them`);
 });
+
+test("every capability fixes the two pre-delivery steps instead of leaving them to the model", async () => {
+  // Plan item A3. `manuscript-humanize` was named by one capability of eleven
+  // and `traceability-review` by none — so a register pass and a citation sweep
+  // happened when the model thought of them, which is on the easy runs and not
+  // the hard ones. They are steps of the capability now.
+  //
+  // Asserted on the package the delegated run reads, not on prose anywhere: a
+  // capability added next month gets the same two steps or fails here.
+  const root = new URL("../../../capabilities/", import.meta.url);
+  const names = (await readdir(root, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  assert.ok(names.length >= 10, `only ${names.length} capabilities found — the scan did not read the tree`);
+
+  for (const name of names) {
+    let skill;
+    try {
+      skill = await readFile(new URL(`${name}/SKILL.md`, root), "utf8");
+    } catch {
+      assert.fail(`${name} has no SKILL.md`);
+    }
+    for (const step of ["traceability-review", "manuscript-humanize"]) {
+      assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
+    }
+    // The outlet has to be pointed at wherever the ban is stated, or the ban is
+    // the only thing the run reads.
+    assert.ok(
+      skill.includes("revision-notes.md"),
+      `${name}/SKILL.md bans backstage prose from the report without naming where it goes`,
+    );
+  }
+});
