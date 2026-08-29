@@ -74,13 +74,23 @@ def verify_tools():
     document = read("tool-probe-v3.json")
     parsed_fresh(document.get("probedAt"), "tool audit")
     require(document.get("schemaVersion") == 3, "tool audit schema is stale")
-    require(document.get("registered") == 25, "tool registry count is not 25")
-    require(document.get("executionCertified") == 25, "all 25 tools are not execution-certified")
-    require(document.get("operational") == 25, "tool operational count is not 25")
+    # Derived from the live registry, never written down.
+    #
+    # Four checks said 25 while the registry had grown to 26 and the probe's own
+    # fixtures covered all 26 — so a perfect, freshly certified run still failed,
+    # with "tool registry count is not 25". A number in one file and a registry
+    # in another drift the moment a tool is added, and the failure names the
+    # count rather than the addition. The connector audit below already derives
+    # its expected count for exactly this reason.
+    server = load_module("evimed_release_tool_registry", REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+    expected = len({item["name"] for item in server.list_tools()})
+    require(expected > 0, "the MCP registry declares no tools")
+    require(document.get("registered") == expected, "tool registry count is not %d" % expected)
+    require(document.get("executionCertified") == expected, "all %d tools are not execution-certified" % expected)
+    require(document.get("operational") == expected, "tool operational count is not %d" % expected)
     require(document.get("unverified") == 0 and document.get("errors") == 0, "tool audit contains unverified or errored tools")
     results = document.get("results", [])
-    require(len(results) == 25, "tool audit does not contain 25 results")
-    server = load_module("evimed_release_tool_registry", REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
+    require(len(results) == expected, "tool audit does not contain %d results" % expected)
     execution_evidence = load_module(
         "evimed_release_execution_evidence",
         REPO / "runtime" / "mcp" / "evimed-research" / "execution_evidence.py",
