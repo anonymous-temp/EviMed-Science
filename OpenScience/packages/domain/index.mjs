@@ -170,6 +170,7 @@ export {
 export {
   CONTRACT_VALIDATOR_KINDS,
   layeredIssues,
+  unreadableSubmission,
   runGate,
 } from './src/contractRegistry.mjs'
 

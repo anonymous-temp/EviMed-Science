@@ -64,6 +64,7 @@ import {
 } from '../src/runPolicy.mjs'
 import { advancePlanItem } from '../src/runMirror.mjs'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
+import { unreadableSubmission } from '@evimed/domain'
 
 const Schema = await configSchema()
 
@@ -74,6 +75,7 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
 /**
  * @typedef {object} Config
  * @property {number} deliveryAttemptLimit
+ * @property {number} structuralAttemptAllowance
  * @property {number} maxParallelChildren
  * @property {number} maxSteps
  * @property {number} maxTokens
@@ -88,6 +90,8 @@ export const Config = Schema.object({
   // control plane's config and derived down through the profile patch.
   deliveryAttemptLimit: Schema.number().default(3)
     .description('How many times one deliverable may be submitted before the run must finish partially. Set by the control plane.'),
+  structuralAttemptAllowance: Schema.number().default(3)
+    .description('How many submissions the gate could not read at all — wrong matrix schema, a required file absent — are charged apart from the content repair budget. Beyond it they count normally, so a run cannot loop on malformed packages.'),
   maxParallelChildren: Schema.number().default(30)
     .description('Concurrent delegations per run. The control plane owns it; a smaller container sets it lower.'),
   maxSteps: Schema.number().default(0)
@@ -138,6 +142,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         budget: { steps: 0, tokens: 0, children: 0 },
         limits: { maxSteps: config.maxSteps, maxTokens: config.maxTokens, maxChildren: config.maxParallelChildren },
         attempts: new Map(),
+        /** Submissions the gate could not read, budgeted apart from content repairs. */
+        structuralAttempts: new Map(),
         redelegated: new Set(),
         producedTexts: [],
         finalReply: '',
@@ -508,9 +514,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         const entry = sessionState(call.sessionId)
         const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
         if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
+        // Counted after the verdict, not before it: what a submission costs
+        // depends on whether the gate could read it. See below.
         const attempts = (entry.attempts.get(item.id) ?? 0) + 1
-        entry.attempts.set(item.id, attempts)
-        item.attempts = attempts
 
         const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
         const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
@@ -527,7 +533,25 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           sourceArtifacts,
           staleEvidenceCount: 0,
         })
-        await recordGateRun(store(), entry, item, verdict, attempts)
+        // The late avalanche, charged honestly.
+        //
+        // A submission the gate could not read — wrong matrix schema, a required
+        // file absent — teaches the run the contract, not the work. Two runs
+        // spent four such submissions each before any content rule had run at
+        // all, then met eighty-three findings with three attempts left. Those
+        // four are counted against a small separate allowance so a run cannot
+        // loop on malformed packages, and they do not spend the attempts
+        // reserved for repairing content.
+        const unreadable = unreadableSubmission(verdict)
+        const structural = (entry.structuralAttempts.get(item.id) ?? 0) + (unreadable ? 1 : 0)
+        if (unreadable && structural <= config.structuralAttemptAllowance) {
+          entry.structuralAttempts.set(item.id, structural)
+        } else {
+          entry.attempts.set(item.id, attempts)
+          item.attempts = attempts
+        }
+        const charged = entry.attempts.get(item.id) ?? 0
+        await recordGateRun(store(), entry, item, verdict, charged)
         // The attempt count the mirror carries is what the control plane reads
         // to tell a run being repaired from one that has stopped.
         await putRunMirror(ctx, entry, config.bundleVersion)

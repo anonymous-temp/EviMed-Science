@@ -3958,7 +3958,11 @@ export function validateClinicalEvidencePackage({
     const absent = "clinical-evidence-matrix.json uses a different claim shape from the contract's."
       + ` Every one of its ${objectClaims.length} claims is missing \`claimId\`; the keys present are: ${found.join(", ")}.`
       + ` Each claim needs ${claimFields.join(", ")} — \`claimId\` matching CLM-NNN, \`supportQuote\` quoted verbatim`
-      + " from the file named by `artifactPath`. Rewrite the matrix to that shape and resubmit.";
+      + " from the file named by `artifactPath`. Rewrite the matrix to that shape and resubmit."
+      + " Nothing below the schema has been checked yet: every content rule reads the matrix, so the next"
+      + " submission will be the first that can report on the work itself, and it will report on all of it"
+      + " at once. A long list then is the checks running for the first time, not the package getting worse."
+      + " This submission is charged against a separate allowance and does not spend a content repair attempt.";
     return {
       valid: false,
       issues: [...issues, absent],

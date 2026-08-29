@@ -841,3 +841,47 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
     "a row written before the mirror latched still belongs to the table it is in",
   );
 });
+
+test("learning the contract does not spend the budget for doing the work", async () => {
+  // Plan D1, as the property rather than as the wiring. Two runs met this exact
+  // sequence: four submissions the gate could not read, then eighty-odd
+  // findings the first time it could, with three attempts left. Charging both
+  // kinds alike is what made the fourth round fatal.
+  const { unreadableSubmission } = await import("@evimed/domain");
+
+  // The real trajectory, as verdicts. `required` counts are from rq03k's ledger.
+  const sequence = [
+    { label: "manifest", issues: [{ code: "required_output_missing", message: "clinical-evidence-matrix.json is missing.", severity: "required" }] },
+    { label: "schema", issues: [{ code: "clinical_evidence_issue", message: "clinical-evidence-matrix.json uses a different claim shape from the contract's.", severity: "required" }] },
+    { label: "content", issues: [{ code: "clinical_evidence_issue", message: "claims[0].artifactPath is not listed as a successful source artifact for this run.", severity: "required" }] },
+    { label: "content", issues: [{ code: "clinical_evidence_issue", message: "claims[0].supportQuote was not found in its preserved source artifact.", severity: "required" }] },
+    { label: "content", issues: [{ code: "clinical_evidence_issue", message: "The clinical evidence run receipt is not succeeded.", severity: "required" }] },
+  ];
+
+  /** @param {{ issues: any[] }[]} verdicts @param {number} allowance */
+  const charge = (verdicts, allowance) => {
+    let content = 0;
+    let structural = 0;
+    for (const verdict of verdicts) {
+      if (unreadableSubmission(verdict) && structural + 1 <= allowance) structural += 1;
+      else content += 1;
+    }
+    return { content, structural };
+  };
+
+  const split = charge(sequence, 3);
+  assert.equal(split.structural, 2, "the manifest and schema rounds are the gate unable to read the package");
+  assert.equal(split.content, 3, "only the three judged submissions spend content attempts");
+
+  // Without the split — how it behaved — the same five rounds spend five, and a
+  // deployment allowing three would have stopped before the first content
+  // answer was ever read.
+  const flat = charge(sequence, 0);
+  assert.equal(flat.content, 5);
+  assert.ok(flat.content > split.content, "the split has to actually save attempts, or it is decoration");
+
+  // And the allowance is a ceiling, not a loophole: a run that keeps submitting
+  // unreadable packages starts paying.
+  const looping = Array.from({ length: 6 }, () => sequence[1]);
+  assert.equal(charge(looping, 3).content, 3, "beyond the allowance an unreadable submission is charged normally");
+});
