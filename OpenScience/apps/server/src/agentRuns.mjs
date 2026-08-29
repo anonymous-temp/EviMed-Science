@@ -2469,6 +2469,38 @@ export class AgentRunStore {
     // the digests they were accepted under, none of them seen by any gate. The
     // verification was written for the rare case and skipped on the ordinary
     // one.
+    // And a deliverable no gate ever accepted must not be recorded as a success.
+    //
+    // The check below only fires when a receipt exists. RQ-03 ran out its seven
+    // attempts with the last submission still two required issues short, wrote
+    // 「部分交付」 in its own summary, produced no receipt at all — and the
+    // ledger recorded `succeeded` with 16 artifacts. Absence of the durable
+    // record read as nothing to check rather than as nothing accepted, which is
+    // the empty-is-not-error shape one more time.
+    //
+    // Read from the run's own projection, so this only speaks about runs that
+    // planned a contract deliverable: an answer-line turn plans none and is
+    // unaffected.
+    //
+    // The artifacts stay, unlike the digest-mismatch branch above. There a
+    // receipt asserts an acceptance that is false, and shipping the files is a
+    // lie about them; here nothing claims they were graded, the run's own
+    // delivery summary says 部分交付, and discarding the work would help nobody.
+    if (terminal.status === "succeeded") {
+      const projection = await readRunStateProjection(project, project.workspaceDir);
+      const planned = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
+        ? projection.projection.plan.items
+        : [];
+      const accepted = planned.filter((item) => item?.status === "accepted");
+      if (planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project))) {
+        terminal.status = "failed";
+        terminal.errorCode = "specialist_deliverable_not_accepted";
+        terminal.qualityNotices = [
+          ...(terminal.qualityNotices ?? []),
+          `本次运行计划了 ${planned.length} 件交付物，没有一件通过契约校验，因此产物未经质量门。`,
+        ];
+      }
+    }
     const finalReceipt = await readDeliveryReceipt(project);
     if (finalReceipt) {
       const verified = await verifiedReceiptArtifacts(project, finalReceipt);

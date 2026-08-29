@@ -661,6 +661,70 @@ async function withAnswerModeRun(fn) {
   }
 }
 
+test("a deliverable no gate accepted is not a success, receipt or no receipt", async () => {
+  // RQ-03 spent all seven attempts and its last submission was still two
+  // required issues short. It wrote 「部分交付」 in its own summary and produced
+  // no receipt — and the ledger recorded `succeeded` with 16 artifacts. The
+  // digest check above cannot see this: there is nothing to compare against.
+  // An absent durable record read as nothing to check rather than as nothing
+  // accepted.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_unaccepted",
+      plan: { revision: 1, items: [{ id: "d1", status: "submitted", attempts: 7 }] },
+      budget: { steps: 57, tokens: 1, children: 1, limits: {} },
+      evidence: { total: 0, byStatus: {} },
+      gateRuns: [],
+      subagents: [],
+      qualityNotices: [],
+      degraded: [],
+    }, null, 2), "utf8");
+
+    await dispatch("turn_never_accepted");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "failed", "seven rejections is not a success");
+    assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
+    assert.ok(
+      (run.qualityNotices ?? []).some((line) => /没有一件通过契约校验/.test(String(line))),
+      "the verdict must say why",
+    );
+  });
+});
+
+test("an accepted deliverable and an answer-line turn are both still successes", async () => {
+  // Two negative controls in one, because the rule above must not fire on a run
+  // that passed, nor on one that never planned a deliverable at all — the
+  // answer line plans none and produces no projection.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_accepted",
+      plan: { revision: 1, items: [{ id: "d1", status: "accepted", attempts: 4 }] },
+      budget: { steps: 30, tokens: 1, children: 1, limits: {} },
+      evidence: { total: 0, byStatus: {} },
+      gateRuns: [],
+      subagents: [],
+      qualityNotices: [],
+      degraded: [],
+    }, null, 2), "utf8");
+    await dispatch("turn_accepted_item");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const passed = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(passed.status, "succeeded", (passed.qualityNotices ?? []).join(" | "));
+  });
+
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await dispatch("turn_answer_only");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const answered = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(answered.status, "succeeded", "an answer-line turn plans no deliverable and must be unaffected");
+  });
+});
+
 test("a run whose files drifted from its receipt does not ship, container alive or not", async () => {
   // The digest check was written for the container-gone path and only reached
   // there. With the container alive, reconciliation finished from the transcript
