@@ -571,3 +571,52 @@ test("the open-vocabulary prose patterns are frozen at their current count", asy
       + "Removing them is the direction of travel — lower this number and say which rule moved where.",
   );
 });
+
+test("a submission the gate could not read is not a submission that was judged", async () => {
+  // The late avalanche. Two runs spent seven submissions each on the trajectory
+  // 8 → 13 → 1 → 83 → 7 → 13 → 2, and the 83 arrived the moment the matrix
+  // schema was finally right: every content rule ran for the first time and
+  // reported at once. That report was correct. What was wrong is that the four
+  // submissions before it — which the gate could not evaluate at all — had
+  // already spent more than half the budget on learning the contract.
+  const { unreadableSubmission } = await import("../index.mjs");
+
+  /** @param {string} code @param {string} message @returns {any} */
+  const required = (code, message) => ({ code, message, severity: "required" });
+  assert.equal(
+    unreadableSubmission({ issues: [required("required_output_missing", "citation-ledger.csv is missing.")] }),
+    true,
+    "an absent required file is the gate unable to read the package",
+  );
+  assert.equal(
+    unreadableSubmission({
+      issues: [required("clinical_evidence_issue", "clinical-evidence-matrix.json uses a different claim shape from the contract's.")],
+    }),
+    true,
+    "a matrix in another schema is the same fact reported in prose",
+  );
+
+  // Negative controls — the three ways this could give away the budget.
+  // 1. A content rejection is what the budget is FOR.
+  assert.equal(
+    unreadableSubmission({
+      issues: [required("clinical_evidence_issue", "claims[0].supportQuote was not found in its preserved source artifact.")],
+    }),
+    false,
+  );
+  // 2. Mixed is judged: the gate read enough to say something about the work,
+  //    so the attempt bought a content answer and must be charged for one.
+  assert.equal(
+    unreadableSubmission({
+      issues: [
+        required("required_output_missing", "references.bib is missing."),
+        required("clinical_evidence_issue", "claims[0].supportQuote was not found in its preserved source artifact."),
+      ],
+    }),
+    false,
+    "one readable finding makes the submission a judged one",
+  );
+  // 3. An accepted package is not an unreadable one.
+  assert.equal(unreadableSubmission({ issues: [] }), false);
+  assert.equal(unreadableSubmission({ issues: [{ code: "x", message: "y", severity: "advisory" }] }), false);
+});

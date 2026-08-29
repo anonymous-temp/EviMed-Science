@@ -516,6 +516,46 @@ function validateGeoContentPack(input) {
   }
 }
 
+/** Codes that mean the gate could not read the package, not that the work is wrong. */
+const UNREADABLE_CODES = Object.freeze(['required_output_missing', 'required_output_empty'])
+
+/** Text that means the same for the clinical validator, which reports in prose. */
+const UNREADABLE_MARKERS = Object.freeze([
+  'uses a different claim shape',
+  'is not in the deliverable, or is empty',
+])
+
+/**
+ * Whether a rejection is about the package being unreadable rather than wrong.
+ *
+ * The late avalanche: two runs spent seven submissions each on the trajectory
+ * 8 → 13 → 1 → **83** → 7 → 13 → 2. The 83 arrived the moment the matrix schema
+ * was finally right — every content rule ran for the first time and reported at
+ * once. Nothing was wrong with that report; what was wrong is that the four
+ * submissions before it, which the gate could not evaluate at all, had already
+ * spent more than half the budget.
+ *
+ * A submission the gate could not read teaches the run the contract, not the
+ * work. It is still counted, against a small separate allowance, so a run
+ * cannot loop on malformed packages forever — but it does not consume the
+ * attempts reserved for repairing content.
+ *
+ * Takes anything carrying `issues`, because that is all it reads: a caller
+ * holding a partial verdict — or a test naming the one field the rule depends
+ * on — should not have to build a whole one to ask.
+ *
+ * @param {{ issues?: readonly GateIssue[] } | null | undefined} verdict
+ * @returns {boolean}
+ */
+export function unreadableSubmission(verdict) {
+  const required = (verdict?.issues ?? []).filter((entry) => entry?.severity === 'required')
+  if (!required.length) return false
+  return required.every((entry) => (
+    UNREADABLE_CODES.includes(String(entry.code))
+    || UNREADABLE_MARKERS.some((marker) => String(entry.message ?? '').includes(marker))
+  ))
+}
+
 /**
  * Splits a verdict's issues into the three layers a repair instruction uses
  * (§8.1): must fix, should fix, may fix.
