@@ -620,3 +620,47 @@ test("a submission the gate could not read is not a submission that was judged",
   assert.equal(unreadableSubmission({ issues: [] }), false);
   assert.equal(unreadableSubmission({ issues: [{ code: "x", message: "y", severity: "advisory" }] }), false);
 });
+
+test("citing a retracted paper is reported, and not looking is not the same as finding nothing", async () => {
+  // Plan F1. Retraction Watch has been Crossref's since 2023-09 — free, daily,
+  // and both hosts are already on the gateway allowlist — so this is a closed-
+  // set comparison between the identifiers a package cites and a list of
+  // retracted ones. Notice first (principle #4, six blocking points), because a
+  // real distribution has to exist before anything blocks on it.
+  const { citedIdentifiers, retractionNotices } = await import("../index.mjs");
+
+  const pkg = {
+    referencesText: "[1] Someone A, et al. A trial. J Test. 2019. https://doi.org/10.1000/Retracted.1\n"
+      + "[2] Другой B. Another. 2021. PMID: 34281600\n",
+    citationLedgerText: "ref,identifier\n3,PMC8287819\n",
+    matrix: { claims: [{ identifier: "10.1000/kept.2", artifactPath: ".evimed-sources/PMC5892298/fulltext.md" }] },
+  };
+
+  // Read from wherever the package names them: a claim can carry an identifier
+  // the prose never prints, and the question is what the work rests on.
+  const cited = citedIdentifiers(pkg);
+  assert.ok(cited.dois.includes("10.1000/retracted.1"), `DOIs: ${cited.dois}`);
+  assert.ok(cited.dois.includes("10.1000/kept.2"), "an identifier that appears only in the matrix still counts");
+  assert.ok(cited.pmids.includes("34281600"), `PMIDs: ${cited.pmids}`);
+  assert.ok(cited.pmcids.includes("8287819") && cited.pmcids.includes("5892298"), `PMCIDs: ${cited.pmcids}`);
+
+  const notices = retractionNotices(pkg, [
+    { doi: "10.1000/RETRACTED.1", title: "A trial", retractionDate: "2024-02-01" },
+  ]);
+  assert.equal(notices.length, 1, `expected one hit: ${notices}`);
+  assert.match(notices[0], /已撤稿/);
+  assert.match(notices[0], /2024-02-01/);
+
+  // Negative controls.
+  // 1. A clean package earns no notice — the check must not fire on everything.
+  assert.deepEqual(retractionNotices(pkg, [{ doi: "10.9999/unrelated" }]), []);
+  // 2. Not looking is its own answer. An absent list used to be indistinguishable
+  //    from a clean result, which is the empty-is-not-error shape this codebase
+  //    keeps meeting; here it would let a run say "no retracted sources" having
+  //    never checked.
+  const unchecked = retractionNotices(pkg, null);
+  assert.equal(unchecked.length, 1);
+  assert.match(unchecked[0], /未执行/);
+  // 3. A package citing nothing has nothing to check, and that is silence.
+  assert.deepEqual(retractionNotices({}, []), []);
+});
