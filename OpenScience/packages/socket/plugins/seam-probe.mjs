@@ -36,7 +36,18 @@ export const Config = Schema.object({
   // closed while the runtime still looks healthy. A laptop on macOS gets
   // Seatbelt, which reports `partial`, and refusing to start there would make
   // the local profile unusable for the sake of a guarantee it cannot give.
-  requiredEnforcement: Schema.union(['full', 'partial']).default('full')
+  //
+  // So the default is `partial` and hosted says `full` out loud. It used to be
+  // the other way round, and the cost was paid by everyone the bundle was not
+  // built for: an ordinary Linux box or a Mac could not start the composition
+  // at all, on a line nobody had chosen for them.
+  //
+  // This is not a weakening. The control plane computes
+  // `production ? 'full' : 'partial'` (config.mjs) and writes the field
+  // explicitly into every patch it generates (dshProfilePatch.mjs), so this
+  // default is only ever reached when there is no control plane — which is the
+  // case where refusing to start protects nothing and prevents everything.
+  requiredEnforcement: Schema.union(['full', 'partial']).default('partial')
     .description('Minimum sandbox enforcement. Hosted deployments set full; a local profile may set partial.'),
   // Written by the image build. Empty skips the check, which is what a
   // development checkout wants.

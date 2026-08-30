@@ -21,7 +21,12 @@ from datetime import datetime, timezone
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_GATEWAY_CONFIG_BYTES = 1024 * 1024
-EVIMED_EVIDENCE_BASE_URL = "https://www.evimed.com/api-evimed/medicine-api/ai-api"
+# The one private endpoint in this file, and the only hardcoded host. It is
+# env-overridable because a deployment that is not ours has no business calling
+# ours, and because the value is a deployment fact rather than a code fact.
+EVIMED_EVIDENCE_BASE_URL = os.environ.get(
+    "EVIMED_EVIDENCE_BASE_URL", "https://www.evimed.com/api-evimed/medicine-api/ai-api",
+).strip() or "https://www.evimed.com/api-evimed/medicine-api/ai-api"
 _OPENFDA_CASE_BATCH_SIZE = 5
 _OPENFDA_PUBLIC_CASE_LIMIT = 25
 MAX_ABSTRACT_CHARS = 4000
@@ -558,7 +563,30 @@ def _crossref(query, limit):
     return {"summary": "Retrieved %d traceable Crossref records." % len(items), "data": {"items": items}, "sources": sources}
 
 
+def evimed_evidence_configured():
+    """Whether this deployment can reach the private evidence API at all.
+
+    Without it every search still fired the first hop at www.evimed.com and
+    waited for the failure — a request nobody outside this platform can ever
+    have answered, on the critical path of a tool that otherwise works entirely
+    from keyless public sources. Refusing up front costs one round trip less and
+    says why.
+    """
+    try:
+        return _direct_credential("evimed-evidence") is not None or _gateway_settings() is not None
+    except PublicSourceError:
+        return False
+
+
 def _evimed_post(path, body):
+    if not evimed_evidence_configured():
+        raise PublicSourceError(
+            "evimed_evidence_unconfigured",
+            "The private EviMed evidence API is not configured for this deployment. "
+            "The keyless public sources (PubMed, Europe PMC, ClinicalTrials.gov, openFDA, Crossref, "
+            "OpenAlex) remain available and are what this tool falls back to.",
+            False,
+        )
     url = "%s/%s" % (EVIMED_EVIDENCE_BASE_URL, path.lstrip("/"))
     payload = _get_json(
         url,

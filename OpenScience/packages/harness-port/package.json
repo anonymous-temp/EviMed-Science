@@ -1,7 +1,6 @@
 {
   "name": "@evimed/harness-port",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "The only package allowed to touch @deepseek-ai/*. Owns its own type vocabulary and converts shapes, so a harness rename is one file.",
   "license": "MIT",
@@ -24,7 +23,7 @@
     "node": ">=22.22.0"
   },
   "dependencies": {
-    "@evimed/domain": "workspace:*"
+    "@evimed/domain": "workspace:^0.1.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.1",
@@ -49,5 +48,14 @@
     "eslint": "^9.39.0",
     "typescript": "^5.6.3",
     "zod": "4.4.3"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anonymous-temp/EviMed-Science.git",
+    "directory": "OpenScience/packages/harness-port"
+  },
+  "directory": null
 }

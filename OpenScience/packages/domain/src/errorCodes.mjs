@@ -194,6 +194,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_probe_gateway_failed",
   "geo_probe_gateway_token_missing",
   "geo_probe_gateway_token_invalid",
+  // The private evidence API is not configured for this deployment. It is host
+  // configuration, like the Unpaywall case above, and the keyless public
+  // sources are what the tool falls back to — failing a run over it would
+  // punish an agent that did exactly what it was told.
+  "evimed_evidence_unconfigured",
 ]);
 
 
