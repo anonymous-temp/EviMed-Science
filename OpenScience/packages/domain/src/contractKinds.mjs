@@ -65,6 +65,20 @@ export const CLINICAL_CONTRACT_KINDS = Object.freeze([
   'off-label-report',
   'adr-analysis-report',
   'clinical-decision-brief',
+  // A GEO content pack about a medicine is medicine advice. Spec 9.11 says so —
+  // "含用药 / 急症指导的块必须同时满足 clinical 契约，营销文案不能绕过安全规则" —
+  // and until this line existed the implementation did the opposite of what that
+  // sentence asks: it rejected every such pack with
+  // `clinical_content_without_clinical_contract`, advice the capability could
+  // not act on, because there is no clinical GEO kind and removing the medicine
+  // removes the deliverable. Found by assembling a real pack and running it
+  // through the real gate.
+  //
+  // This line alone would have been worse than the defect. It only silences the
+  // trigger check; the safety rules have to be applied by the validator, which
+  // is the other half of the same change in contractRegistry.mjs. A kind that
+  // calls itself clinical and enforces nothing is a label.
+  'geo-content-pack',
 ])
 
 /** @param {string} kind @returns {boolean} */

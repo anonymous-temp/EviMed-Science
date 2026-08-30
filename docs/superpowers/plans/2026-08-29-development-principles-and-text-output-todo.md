@@ -58,6 +58,10 @@
   （第七个阻断点要拿实测分布来争），verdict 带上做该裁决用的 metrics。
 - [x] **H3 门禁自证**：geo-skills 2.0.0 的 78 条 BLOCK 全部补上具名对照（`evals/geo-gate-coverage/`，
   棘轮为空），并记录每次变异是哪条测试红的——"78/78"上一次是假的。
+- [x] **H6 GEO 包的临床契约**(2026-08-30):`geo-content-pack` 进 `CLINICAL_CONTRACT_KINDS`,
+  同时 `validateGeoContentPack` 调用共享的 `evaluateClinicalSafetyRules`(导出复用不重写)。
+  两半必须一起 —— 只加前者会让触发器不再触发而无人接手,比原来的拒绝更糟。
+  真跑验证:同一份交付物从"拒绝理由无法执行"→"拒绝理由具体可修"→`ok: true`。
 - [ ] **H4 78 个 BLOCK 的分档**：需真实项目的实测分布，不能凭空定。这是 GEO 接入唯一未闭合项。
 - [ ] **H5 传输加固**：探测机加 TLS/域名，或走私有链路。配置位已留（`OPEN_SCIENCE_GEO_PROBE_*`），
   取决于那台机器能否动。在此之前明文跨公网，答复里如实标注。

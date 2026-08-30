@@ -11,7 +11,7 @@
  * to write a `catch` that means "read the issues".
  */
 
-import { clinicalEvidenceAdvisoryNotes, clinicalEvidencePackageErrorCode, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
+import { clinicalEvidenceAdvisoryNotes, clinicalEvidencePackageErrorCode, evaluateClinicalSafetyRules, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { matchedClinicalTriggers } from './safetyRules.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
@@ -637,6 +637,29 @@ function validateGeoContentPack(input) {
     if (!String(pack.llmsTxt ?? '').trim()) issues.push(issue('deliverable_rejected', 'the pack is missing its llms.txt fragment.'))
     if (!Array.isArray(pack.faq) || !pack.faq.length) issues.push(issue('deliverable_rejected', 'the pack is missing its FAQ block.'))
   }
+  // The clinical half of the contract. A content block is written to be quoted
+  // by a machine that will not add the caveat back, so the same rules that
+  // govern a clinical report's practical advice govern it — the pack's prose is
+  // both the report and the practical section, and there is no originating
+  // question, which is exactly why `entity_requires_question_mention` does not
+  // fire: it asks whether a medicine was dragged into an answer that was not
+  // about it, and a brand's own content block is about that brand.
+  //
+  // Called, not reimplemented. A "GEO version" of these rules is how the pair
+  // that drifted three times got started.
+  // The blocks themselves, not only the rendered Markdown. The content lives in
+  // geo-content-pack.json and `proseFilesOf` yields .md files, so a pack whose
+  // Markdown is a stub — "三段见 JSON" — would have had its every block go
+  // unexamined while the check reported clean. Found by writing a test whose
+  // assertion could not fail and then asking what it should have asserted.
+  const blockProse = /** @type {any[]} */ (Array.isArray(pack?.blocks) ? pack.blocks : [])
+    .flatMap((/** @type {any} */ block) => (isRecord(block) ? [block.conclusion, block.basis, block.conditions] : []))
+    .map((/** @type {any} */ value) => String(value ?? ''))
+  const packProse = [...proseFilesOf(input).map((path) => text(input, path)), ...blockProse].join('\n')
+  for (const message of evaluateClinicalSafetyRules({ reportText: packProse, practical: packProse })) {
+    issues.push(issue('clinical_safety_rule', message))
+  }
+
   const measurement = geoMeasurementNotices(input)
   issues.push(...measurement.issues)
   return {

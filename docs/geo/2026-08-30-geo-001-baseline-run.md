@@ -1,4 +1,4 @@
-# geo-001 首轮基线：跑完之后学到的三件事
+# geo-001 首轮基线：跑完之后学到的三件事(以及修完之后的第四件)
 
 日期：2026-08-30。方法：走真网关打真探测机，50 轮真实测量，再把交付物送进真门禁。
 所有数字来自 `geo-probe-log.jsonl`,可逐条复算。
@@ -77,20 +77,54 @@ GEO 内容包都会被拒,而门禁给出的两条建议这个能力包一条也
 **spec §9.11 其实已经定了**:「GEO 内容同样过内容触发器 —— 含用药/急症指导的块必须**同时满足**
 `clinical` 契约,营销文案不能绕过安全规则」。规格说的是「也要满足」,实现做的是「直接拒绝」。
 
-### 为什么我没有直接改
+### 已修(2026-08-30 当天)
 
-把 `geo-content-pack` 加进 `CLINICAL_CONTRACT_KINDS` 是一行,但**只加这一行会比现在更糟**:
-`isClinicalContractKind` 在全仓只有一处用途 —— 决定要不要跑触发器检查。加进去之后触发器不再触发,
-而 `validateGeoContentPack` 并不调用任何临床安全检查,**结果是药品内容一路畅通、无人把关**。
+两半一起改的:
 
-要做对,得决定「一个三段式内容块怎样才算满足了临床契约」。现有的 4 条数据化安全规则
-(`clinical-safety-rules.json`)全部挂在临床证据报告的「实际处置」章节上,而内容块没有那个结构。
-这是一个关于**临床交付物**的设计决定,不是我该单方面放宽的边界 —— 何况今天我已经因为
-"自己再造一份实现"栽过一次。
+1. `geo-content-pack` 进 `CLINICAL_CONTRACT_KINDS` —— 规格本来就是这么说的。
+2. `validateGeoContentPack` **调用**(不是重写)共享的 `evaluateClinicalSafetyRules`。
+   哪几条规则适用,由调用方传什么决定而不是由开关决定:内容包没有「实际处置」章节也没有
+   原始问题,于是把正文同时当作 `reportText` 与 `practical` 传入、不传 `question` ——
+   `entity_requires_question_mention` 因此不触发,这是对的,因为那条问的是「有没有把某个药
+   硬塞进一个本来不是问它的回答里」,而一个品牌自己的内容块本来就是关于这个品牌的。
 
-**建议**:`geo-content-pack` 进 `CLINICAL_CONTRACT_KINDS`,同时 `validateGeoContentPack` 接上
-临床安全检查中可迁移的那部分(至少:急救指令不得以「服药无效」为条件、标外主张不得进包)。
-两件事必须同一次改完。
+**必须两半一起改**:只加第 1 行的话,触发器不再触发,而验证器不跑任何临床检查 ——
+药品内容一路畅通、无人把关,比原来的拒绝更糟。
+
+### 修完之后的真实回路
+
+同一份交付物再送一次,门禁给的是**具体且可修**的拒绝:
+
+```
+[clinical_safety_rule] The practical answer must explicitly state that Suxiao
+Jiuxin Wan must not delay emergency care.
+```
+
+我写的「服药不是等待的理由,应在服药的同时呼叫急救」不满足那条规则要的句式。改成
+「速效救心丸不构成对急救的替代;出现持续胸痛应在服药的同时呼叫急救,服药不得延误就医」
+之后再交 —— **`ok: true`**。
+
+从「拒绝理由无法执行」到「拒绝理由具体可修」再到「通过」,这才是这套门禁设计的样子。
+
+### 写测试时又挖出一个洞
+
+给这个修法配对照测试时,我写了一条断言:
+
+```js
+assert.ok(pack.files["geo-content-pack.md"].includes("速效救心丸") === false || true, ...)
+```
+
+`X || true` 恒真,什么都没断言。追问「它本该断言什么」时发现:夹具的 `.md` 是个占位
+(「三段见 JSON」),而内容块真正住在 `geo-content-pack.json` 里 —— **安全规则和临床触发器
+都只扫 `.md`,所以两者都没有任何药品可查**。一个正文写着危险内容、Markdown 写着占位的包,
+会一路通过。已修:验证器改为同时读取块的 conclusion/basis/conditions;夹具改为按真实
+方式从块渲染 Markdown。五条变异全部被抓(此前「从列表里删掉 geo-content-pack」是存活的)。
+
+### 一句话记住这条
+
+`isClinicalContractKind` 在全仓只有一处用途:决定要不要跑触发器检查。所以**把一个种类
+标成 clinical,本身只会让检查变少**。让它变多的是验证器去调用规则 —— 两件事必须同一次做完,
+否则「clinical」就只是个标签。
 
 ---
 
@@ -110,5 +144,6 @@ geoPlatformsMeasured deepseek,doubao,kimi,qianwen,yuanbao
 
 ## 产物
 
-`uploads/20260830-geo-001-baseline/`:`measure.mjs`(可断点续跑的采集器)、
-`build_pack.py`(所有数字由它从账本算出,正文里没有手打数字)、两份账本、`deliverable/` 九个文件。
+`OpenScience/evals/geo-content/`:`measure.mjs`(可断点续跑的采集器)、
+`build_pack.py`(所有数字由它从账本算出,正文里没有手打数字)、
+`results/2026-08-30-geo-001/` 两份账本与 `deliverable/` 九个文件 —— 那份交付物现在门禁判 `ok: true`。

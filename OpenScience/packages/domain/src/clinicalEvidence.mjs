@@ -1532,8 +1532,22 @@ const clinicalSafetyRules = /** @type {any} */ (loadClinicalSafetyRules());
 /**
  * @param {{ reportText?: unknown, practical?: unknown, question?: unknown }} input
  * @returns {string[]} the `message` of each rule that fired
+ *
+ * Exported so a second clinical deliverable can be graded by these rules
+ * instead of by a copy of them. The GEO content pack is the second: it carries
+ * medicine advice written to be quoted by a machine that will not add the
+ * caveat back, so it is under the clinical contract and has to satisfy the
+ * same rules — and writing a "GEO version" of them is how the pair that drifted
+ * three times got started.
+ *
+ * Which rules apply is decided by what a caller passes, not by a flag. A pack
+ * has no practical section and no originating question, so it passes its prose
+ * as both `reportText` and `practical` and omits `question`:
+ * `entity_requires_question_mention` then does not fire, which is correct — it
+ * asks whether a medicine was dragged into an answer that was not about it, and
+ * a brand's content block is legitimately about that brand.
  */
-function evaluateClinicalSafetyRules({ reportText, practical, question }) {
+export function evaluateClinicalSafetyRules({ reportText, practical, question }) {
   const report = String(reportText ?? "");
   const practicalText = String(practical ?? "");
   const found = [];
