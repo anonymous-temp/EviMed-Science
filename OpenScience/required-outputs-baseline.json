@@ -1,0 +1,347 @@
+{
+  "note": "A ratchet on required outputs. A new required file is a new way for a finished package to be rejected, which makes it the same kind of decision as a new blocking point — and the budget that counts gates does not see it. Adding one means: ship it as `required: false`, watch gate-health.mjs, then promote it here in a separate change that says why.",
+  "rule": "required: false first, then promote. Same weight as a seventh blocking point.",
+  "recordedAt": "2026-08-30",
+  "history": {
+    "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15"
+  },
+  "contracts": {
+    "adr-analysis-report": {
+      "capability": "adr-analysis",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "safety-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "signals.csv",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "bibliometric-analysis-report": {
+      "capability": "bibliometric-analysis",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "bibliometric-analysis-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "bibliometric-analysis-run.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "clinical-evidence-report": {
+      "capability": "clinical-evidence-synthesis",
+      "requiredCount": 8,
+      "outputs": [
+        {
+          "path": "clinical-evidence-report.md",
+          "required": true,
+          "addedOn": "2026-07-22"
+        },
+        {
+          "path": "clinical-evidence-matrix.json",
+          "required": true,
+          "addedOn": "2026-07-22"
+        },
+        {
+          "path": "clinical-evidence-search.json",
+          "required": true,
+          "addedOn": "2026-07-23"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-07-23"
+        },
+        {
+          "path": "references.bib",
+          "required": true,
+          "addedOn": "2026-07-23"
+        },
+        {
+          "path": "citation-audit.md",
+          "required": true,
+          "addedOn": "2026-07-23"
+        },
+        {
+          "path": "clinical-evidence-run.json",
+          "required": true,
+          "addedOn": "2026-07-22"
+        },
+        {
+          "path": "question-coverage.json",
+          "required": true,
+          "addedOn": "2026-08-15"
+        }
+      ]
+    },
+    "drug-evaluation-report": {
+      "capability": "comprehensive-drug-evaluation",
+      "requiredCount": 4,
+      "outputs": [
+        {
+          "path": "comprehensive-evaluation-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-table.csv",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evaluation-summary.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-snapshot.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "dataset-scoping-package": {
+      "capability": "dataset-research-scoping",
+      "requiredCount": 10,
+      "outputs": [
+        {
+          "path": "data-profile.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "data-profile.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "data-profile.py",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "data-quality.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-map.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "feasibility-matrix.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "external-linkage.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "research-portfolio.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "study-protocol.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "scoping-run.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "drug-selection-report": {
+      "capability": "drug-selection",
+      "requiredCount": 4,
+      "outputs": [
+        {
+          "path": "drug-selection-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "selection-scorecard.csv",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "decision-summary.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-snapshot.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "geo-content-pack": {
+      "capability": "geo-content",
+      "requiredCount": 9,
+      "outputs": [
+        {
+          "path": "geo-measurement.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "geo-monitor.csv",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "geo-probe-log.jsonl",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "geo-content-pack.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "geo-content-pack.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "llms.txt",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-07-23"
+        },
+        {
+          "path": "brand-entity.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "mendelian-randomization-report": {
+      "capability": "mendelian-randomization",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "mendelian-randomization-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "mendelian-randomization-run.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "meta-analysis-report": {
+      "capability": "meta-analysis",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "meta-analysis-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "meta-analysis-run.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "off-label-report": {
+      "capability": "off-label-analysis",
+      "requiredCount": 4,
+      "outputs": [
+        {
+          "path": "off-label-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-table.csv",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "assessment-result.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-snapshot.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "peer-review-report": {
+      "capability": "peer-review",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "peer-review-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "peer-review-run.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "research-topic-report": {
+      "capability": "research-topic-selection",
+      "requiredCount": 3,
+      "outputs": [
+        {
+          "path": "research-topic-report.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "evidence-map.md",
+          "required": true,
+          "addedOn": "2026-08-30"
+        },
+        {
+          "path": "research-topic-run.json",
+          "required": true,
+          "addedOn": "2026-08-30"
+        }
+      ]
+    }
+  }
+}

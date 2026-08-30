@@ -1,0 +1,376 @@
+{
+  "schemaVersion": 1,
+  "searchedAt": "2026-08-30T09:15:00Z",
+  "databases": [
+    "PubMed",
+    "guideline sources",
+    "DailyMed",
+    "Europe PMC",
+    "PubMed Central (PMC)"
+  ],
+  "queries": [
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate nasal spray allergic rhinitis meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate nasal spray chronic rhinosinusitis nasal polyps randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate inhaled asthma randomized controlled trial",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate cream atopic dermatitis efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate psoriasis randomized",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "intranasal corticosteroids allergic rhinitis network meta-analysis comparative efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "intranasal steroids chronic rhinosinusitis nasal polyps Cochrane systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "intranasal corticosteroids children growth hypothalamic pituitary adrenal suppression",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate safety epistaxis ocular intraocular pressure cataract glaucoma",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "guideline sources",
+      "query": "EPOS 2020 chronic rhinosinusitis nasal polyps mometasone",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "guideline sources",
+      "query": "ARIA allergic rhinitis guideline intranasal corticosteroids",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "guideline sources",
+      "query": "GINA asthma inhaled corticosteroids mometasone",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "DailyMed",
+      "query": "mometasone furoate nasal spray",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 0
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate versus fluticasone propionate nasal spray allergic rhinitis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "indacaterol mometasone furoate asthma combination inhaled corticosteroid",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 25
+    },
+    {
+      "database": "PubMed",
+      "query": "intranasal corticosteroids nasal polyps Cochrane review Chong",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "allergic rhinitis intranasal corticosteroid efficacy meta-analysis symptom score nasal",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate pregnancy allergic rhinitis asthma safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "intranasal corticosteroids allergic rhinitis meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "Europe PMC",
+      "query": "intranasal steroids chronic rhinosinusitis nasal polyps Cochrane",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed",
+      "query": "mometasone furoate nasal spray seasonal perennial allergic rhinitis efficacy meta-analysis symptom",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 20
+    },
+    {
+      "database": "PubMed Central (PMC)",
+      "query": "intranasal corticosteroids children growth hypothalamic pituitary adrenal safety",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "PubMed Central (PMC)",
+      "query": "mometasone furoate nasal spray allergic rhinitis efficacy",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "PubMed Central (PMC)",
+      "query": "intranasal corticosteroid epistaxis adverse events systematic review",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 12
+    },
+    {
+      "database": "PubMed",
+      "query": "ARIA EAACI 2024 2025 guideline intranasal antihistamine corticosteroid part",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 15
+    },
+    {
+      "database": "Europe PMC",
+      "query": "mometasone furoate nasal spray allergic rhinitis systematic review meta-analysis total nasal symptom score",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 10
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Topical intranasal corticosteroids growth velocity children meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    },
+    {
+      "database": "Europe PMC",
+      "query": "Epistaxis Risk Associated with Intranasal Corticosteroid Sprays meta-analysis",
+      "dateFrom": null,
+      "dateTo": null,
+      "resultsRetrieved": 6
+    }
+  ],
+  "screening": {
+    "recordsIdentified": 360,
+    "recordsAfterDeduplication": 54,
+    "sourcesIncluded": 20
+  },
+  "sourceRecords": [
+    {
+      "referenceNumber": 1,
+      "citationKey": "Passali2016MFreview",
+      "identifier": "PMC4852427 / doi:10.1186/s40248-016-0054-3",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy AR"
+    },
+    {
+      "referenceNumber": 2,
+      "citationKey": "Song2021MFasthma",
+      "identifier": "PMC8610064 / doi:10.5114/ada.2020.93273 / PMID:34849118",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy asthma children"
+    },
+    {
+      "referenceNumber": 3,
+      "citationKey": "Beasley2015QUARTZ",
+      "identifier": "PMC4322191 / doi:10.1136/bmjopen-2014-006131 / PMID:25649209",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy asthma combo"
+    },
+    {
+      "referenceNumber": 4,
+      "citationKey": "Kerstjens2020IRIDIUM",
+      "identifier": "doi:10.1016/S2213-2600(20)30190-9 / PMID:32653074",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy asthma triple"
+    },
+    {
+      "referenceNumber": 5,
+      "citationKey": "Alghazi2025INCSinCRS",
+      "identifier": "PMC12335323 / doi:10.7759/cureus.87674 / PMID:40786257",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy CRS"
+    },
+    {
+      "referenceNumber": 6,
+      "citationKey": "Improda2024adrenal",
+      "identifier": "PMC11729088 / doi:10.1007/s40618-024-02461-9 / PMID:39352628",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "safety HPA"
+    },
+    {
+      "referenceNumber": 7,
+      "citationKey": "Rollema2023INCpharmacology",
+      "identifier": "PMC9804774 / doi:10.1111/cea.14212",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "pharmacology"
+    },
+    {
+      "referenceNumber": 8,
+      "citationKey": "Stolovitzky2019MFimplant",
+      "identifier": "PMC6728749 / doi:10.1177/1945892419850924",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy CRSwNP"
+    },
+    {
+      "referenceNumber": 9,
+      "citationKey": "Antila2021PUMA",
+      "identifier": "PMC9444672 / doi:10.1016/j.bjorl.2015.11.009",
+      "accessLevel": "full_text",
+      "included": true,
+      "role": "efficacy AR"
+    },
+    {
+      "referenceNumber": 10,
+      "citationKey": "Sampieri2022HPA",
+      "identifier": "doi:10.1002/alr.22863 / PMID:34260153",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "safety HPA"
+    },
+    {
+      "referenceNumber": 11,
+      "citationKey": "Mener2015growth",
+      "identifier": "doi:10.1002/alr.21417 / PMID:25367369",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "safety growth"
+    },
+    {
+      "referenceNumber": 12,
+      "citationKey": "Valenzuela2018ocular",
+      "identifier": "PMID:30229924",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "safety ocular"
+    },
+    {
+      "referenceNumber": 13,
+      "citationKey": "Wu2019epistaxis",
+      "identifier": "PMID:30779679",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "safety epistaxis"
+    },
+    {
+      "referenceNumber": 14,
+      "citationKey": "2024INCSchildrenNMA",
+      "identifier": "doi:10.1111/jebm.12645 / PMID:39313999",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "comparative"
+    },
+    {
+      "referenceNumber": 15,
+      "citationKey": "Fokkens2020EPOS",
+      "identifier": "doi:10.4193/Rhin20.600 / PMID:32077450",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline CRS"
+    },
+    {
+      "referenceNumber": 16,
+      "citationKey": "ARIA2026PartII",
+      "identifier": "doi:10.1111/all.70305 / PMID:41877472",
+      "accessLevel": "abstract",
+      "included": true,
+      "role": "guideline AR"
+    },
+    {
+      "referenceNumber": 17,
+      "citationKey": "GINA2025",
+      "identifier": "ginasthma.org GINA report",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline asthma"
+    },
+    {
+      "referenceNumber": 18,
+      "citationKey": "ChinaCRS2024guideline",
+      "identifier": "中华耳鼻咽喉头颈外科杂志 2024指南",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline CRS China"
+    },
+    {
+      "referenceNumber": 19,
+      "citationKey": "ChinaChildAR2019guideline",
+      "identifier": "中国实用儿科杂志 2019",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline AR children China"
+    },
+    {
+      "referenceNumber": 20,
+      "citationKey": "ChinaINCSchild2023consensus",
+      "identifier": "儿童变应性鼻炎鼻用糖皮质激素规范使用专家共识 2023",
+      "accessLevel": "structured_record",
+      "included": true,
+      "role": "guideline AR children China"
+    }
+  ]
+}

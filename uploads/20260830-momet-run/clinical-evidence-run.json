@@ -1,0 +1,57 @@
+{
+  "reportProfile": "academic_deep_research_v1",
+  "question": "对糠酸莫米松（mometasone furoate）的循证证据进行全景分析：剂型与适应证、分适应证与分剂型的疗效证据、安全性、与其他糖皮质激素的比较证据、指南定位、特殊人群、证据争议与空白。",
+  "title": "糠酸莫米松（mometasone furoate）的疗效、安全性与指南定位：一项循证证据分析",
+  "startedAt": "2026-08-30T09:05:00Z",
+  "completedAt": "2026-08-30T09:20:00Z",
+  "tools": [
+    "evimed_health",
+    "evimed_data_source_catalog",
+    "evimed_literature_search",
+    "evimed_guideline_search",
+    "evimed_drug_label_search",
+    "evimed_pharmacy_reference_search",
+    "evimed_biomedical_source_search",
+    "evimed_open_access_full_text"
+  ],
+  "successfulSourceArtifacts": [
+    ".evimed-sources/PMC4852427/fulltext.md",
+    ".evimed-sources/PMC8610064/fulltext.md",
+    ".evimed-sources/PMC4322191/fulltext.md",
+    ".evimed-sources/10.1016-s2213-2600-20-30190-9/fulltext.md",
+    ".evimed-sources/PMC12335323/fulltext.md",
+    ".evimed-sources/PMC11729088/fulltext.md",
+    ".evimed-sources/PMC9804774/fulltext.md",
+    ".evimed-sources/PMC6728749/fulltext.md",
+    ".evimed-sources/PMC9444672/fulltext.md",
+    ".evimed-sources/PMC8436259/fulltext.md"
+  ],
+  "failedSources": [
+    "EPOS 2020 (doi:10.4193/Rhin20.600, PMID:32077450): open-access full text not retrievable (doi.org unreachable)",
+    "Sampieri 2022 HPA meta-analysis (PMID:34260153): Wiley, not open access (HTTP 403)",
+    "Mener 2015 growth meta-analysis (PMID:25367369): Wiley, not open access (HTTP 403)",
+    "Valenzuela 2018 ocular meta-analysis (PMID:30229924): not open access",
+    "Wu 2019 epistaxis meta-analysis (PMID:30779679): not open access",
+    "2024 children INCS network meta-analysis (PMID:39313999): Wiley, not open access (HTTP 403)",
+    "Cochrane intranasal steroids for CRS (PMC9393647): Europe PMC full-text retrieval failed",
+    "Cochrane different types of intranasal steroids (PMC8939045): Europe PMC full-text retrieval failed",
+    "NMPA label index returned no mometasone furoate product labels (returned fluticasone/triamcinolone instead)",
+    "DailyMed returned no records for mometasone furoate nasal spray"
+  ],
+  "qualityChecks": {
+    "claimTraceability": true,
+    "sourceQuoteMatching": true,
+    "citationIntegrity": true,
+    "searchReproducibility": true,
+    "contradictionCheck": true,
+    "arithmeticCheck": true
+  },
+  "status": "succeeded",
+  "stats": {
+    "totalSearches": 28,
+    "recordsIdentified": 360,
+    "recordsAfterDeduplication": 54,
+    "sourcesIncluded": 20,
+    "distinctPreservedSources": 10
+  }
+}
