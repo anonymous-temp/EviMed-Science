@@ -2778,7 +2778,37 @@ export class AgentRunStore {
           artifacts: [],
         });
       }
-    })().finally(() => {
+    })().catch(async (error) => {
+      // Nobody awaits this promise. It is stored in `this.monitors` so shutdown
+      // can wait on it — and `closeProject` does `await monitor?.promise?.catch()`
+      // — but on the detached path a rejection here is an unhandled rejection,
+      // which Node turns into process exit.
+      //
+      // That is not theoretical. Production crash-looped 48 times on
+      // 2026-08-30: startup adopted the previous life's running runs, a monitor
+      // called through to the runtime controller, the controller answered 502
+      // `runtime_cleanup_failed`, and the whole web boundary died two seconds
+      // after it began listening. An orphaned container that will not go away
+      // is a housekeeping problem; it took down the API for every user.
+      //
+      // A monitor observes one run. Its failures belong to that run.
+      const code = error instanceof HttpError ? error.code : "runtime_monitor_failed";
+      process.stderr.write(`${JSON.stringify({
+        at: new Date().toISOString(), event: "agent_run.monitor_failed", runId, code,
+      })}\n`);
+      try {
+        await this.finishInternal(project, runId, {
+          status: "failed",
+          errorCode: code,
+          artifacts: [],
+        });
+      } catch {
+        // The ledger write failing is the second failure of the same run, and
+        // there is no third place to report it. It must not re-throw: that
+        // would land back here as the very unhandled rejection this catch
+        // exists to prevent.
+      }
+    }).finally(() => {
       if (this.monitors.get(runId)?.promise === promise) this.monitors.delete(runId);
     });
     this.monitors.set(runId, { promise, cancel: () => { canceled = true; wake?.(); } });
