@@ -123,6 +123,22 @@
   而 healthcheck 红了 1276 次没有任何通道告诉任何人**——与 D7 同一条病。磁盘已释放,
   熔断按时自愈即可验证;告警缺口本身待补。
 
+## J. 开源即插即用轨道（2026-08-30 核查；Apodex 对照后立项）
+
+核查结论：**代码是真诚可移植的，被少数发布性障碍挡在门外**——socket 无一处 import 控制面；MCP 27 工具中 16 个 keyless 直连公共源（网关是 opt-in 不是硬耦合）；`@evimed/domain` 零运行时依赖、门禁随 bundle 走。六大功能盘点：综述/ADR/资料查询/申报书可开源首发（降级可用）；meta/选题是引擎背书型——引擎在 `项目代码/` 且 MCP 已有本地子进程模式（`EVIMED_*_AGENT_ROOT` + evimed_runner.py），开源引擎仓库即可点亮。
+
+发布前 P0（按杠杆排序）：
+- [ ] **J1** `seam-probe` 的 `requiredEnforcement` 默认改 `partial`（托管部署经 patch 显式回 `full`）——一行之差 = 陌生人 mac/普通 Linux 能不能启动。
+- [ ] **J2** 三包去 `private:true`、真版本、publishConfig：`@evimed/domain` / `@evimed/harness-port` / `@evimed/dsh-socket`；`workspace:*` 依赖改可解析版本。
+- [ ] **J3** bundle 自带 `mcp-evimed` 配置行（现在只有控制面 `dshProfilePatch.mjs` 会生成，没有它整个能力目录是装饰）。
+- [ ] **J4** capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一**（已实测漂移一句）。
+- [ ] **J5** 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
+- [ ] **J6** 补三个 keyless 直连模式（可后置）：web_search（SearXNG/Brave 直连档）、patent_search（Google Patents/EPO OPS 连接器）、open_access PDF 直连 Unpaywall 分支；pharmacy 出「自建 SQLite 的 recipe」而非数据。
+- [ ] **J7** 课题申报书从 curated 技能升为正式能力包（目前只有 `research-grant-development` 技能，无 capability/契约）。
+- [ ] **J8** 引擎开源包装（点亮 meta/选题/MR/审稿/文献计量/药安 六个管理作业）：六个 Python agent 独立仓库 + evimed_runner CLI 文档 + 本地模式直连 DeepSeek key（现在要求走网关且钉死 deepseek-v4-pro）。
+
+分界（开源 vs 平台专属）：**开代码、留数据**——socket/domain 门禁/MCP/能力包/技能全开；平台专属 = 私有数据 API 与药学库数据本身、胶囊/记忆服务、计量与额度、服务端独立复核即服务、托管运维。`build-smoke.sh` 已是陌生人 README 的八成。
+
 ## G. 明确不做（防过度开发）
 
 - 不新增任何开放词汇 prose 正则；不为语域问题继续扩 `clinicalEvidence.mjs`。
