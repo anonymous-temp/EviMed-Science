@@ -1,0 +1,9 @@
+{
+  "id": "2026-08-30-geo-003-mention-context-not-weighted",
+  "genre": "measurement-conflation",
+  "observedIn": "OpenScience/evals/geo-content/results/2026-08-30-geo-003/geo-probe-log.unbranded.jsonl",
+  "verbatim": "30种心悸常用药物清单 生活小百科 / 胸闷心慌别慌！先分清类型再用药 食养搭配体验官 / 被心悸折腾到崩溃，终于靠稳心颗粒救回来了 运动打卡员",
+  "whyItIsWrong": "The ledger recorded this as mentionsBrand: true, identically to doubao's 「安神、稳心类中成药…只能辅助，不能替代检查」. One is a scraped social-post headline, the other a pharmacological framing. For GEO that difference is the entire finding: one is an asset, the other is noise and arguably a risk. A count cannot tell them apart.",
+  "caughtBy": "nobody",
+  "note": "Cannot be fixed with a pattern. Whether a mention sits in a clinical recommendation or in a UGC headline is a judgment about language, and regex never does language (principle #1). This is the second confirmed scenario for the review plugin (TODO I2): model judges the context class, code re-verifies the checkable part — that the quoted span really appears in the recorded answer — and the verdict starts as a notice. Filed here rather than as a rule so the fix has a case to be measured against."
+}

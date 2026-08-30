@@ -1,0 +1,26 @@
+claimId,referenceNumber,supportQuote
+CLM-001,1,"MF usage for treatment and/or prophylaxis of the nasal symptoms of seasonal allergic rhinitis and perennial allergic rhinitis has been fully established and a level of evidence Ia (Centre for Evidence Based Medicine, Oxford 2009) has been provided"
+CLM-002,7,"INCs are considered to be the most effective therapy for moderate‐to‐severe AR, as they are effective against nasal and ocular symptoms and improve quality of life."
+CLM-003,2,"mometasone furoate is associated with substantially increased predicted forced expiratory volume in 1 s (FEV 1 ) (mean difference (MD) = 7.53; 95% CI: 7.02–8.04; p < 0.00001), FEV 1 (MD = 0.11; 95% CI: 0.10–0.12; p < 0.00001), and morning peak expiratory flow (AM PEF) (MD = 17.70; 95% CI: 9.91–25.49; p < 0.00001) … sample sizes ranged from 89 to 225 with a total of 704."
+CLM-004,2,"but demonstrates no obvious effect on pharyngitis (RR = 0.96; 95% CI: 0.59–1.58; p = 0.89), upper respiratory tract infections (RR = 0.73; 95% CI: 0.50–1.05; p = 0.09), or adverse events (RR = 1.05; 95% CI: 0.84–1.31; p = 0.69)"
+CLM-005,3,"1519 adolescents and adults with persistent asthma who were treated or qualified for treatment with combination LABA/ICS were randomised, and 1508 were included in the intention-to-treat analysis. … Patients were randomised to QMF149 (indacaterol maleate 500 µg/MF 400 µg) or MF (400 µg) once daily … QMF149 significantly reduced the annual rate of exacerbations requiring systemic corticosteroids (rate ratio=0.71; 95% CI 0.55 to 0.90, p=0.005)."
+CLM-006,3,"Treatment with QMF149 resulted in no significant difference in time to first serious exacerbation compared to MF (2 (0.3%) vs 6 events (0.8%); difference −0.52 percentage point; 95% CI −1.25 to 0.21, p=0.160, HR=0.31; 95% CI 0.06 to 1.54, p=0.151)."
+CLM-007,4,"3092 of 4851 patients screened were randomly assigned … Medium-dose MF–IND–GLY (treatment 
+difference [Δ] 76 mL [95% CI 41–111]; p<0·001) and high-dose MF–IND–GLY (Δ 65 mL [31–99]; p<0·001) 
+showed superior improvement in trough FEV
+1 versus corresponding doses of MF–IND at week 26. 
+Improvements in trough FEV 1 were greater for both medium-dose MF–IND–GLY (99 mL [64–133]; p<0·001) 
+and high-dose MF–IND–GLY (119 mL [85–154]; p<0·001) than for high-dose FLU–SAL at week 26."
+CLM-008,5,"Intranasal corticosteroids (INCS) are the cornerstone of medical management in both CRSwNP and CRSsNP, acting locally to reduce mucosal inflammation and alleviate symptoms."
+CLM-009,5,mometasone plus saline reduced SN-5 by −0.58 (p=0.009)
+CLM-010,8,"59% reduction in the proportion of patients indicated for RESS at day 90 (from 100% at the onset to 41%), compared to 31% reduction (from 100% to 69%) among control patients."
+CLM-011,7,"Commonly used INCs (e.g. mometasone furoate, fluticasone propionate, fluticasone furoate and ciclesonide) have pharmacokinetic properties that minimize systemic bioavailability (<1%) compared with other INCs (e.g. triamcinolone acetonide, flunisolide, beclomethasone and dexamethasone) and oral corticosteroids."
+CLM-012,7,"The ranked order of INCs, from highest to lowest lipid solubility, is mometasone furoate, fluticasone propionate, beclomethasone dipropionate, budesonide, triamcinolone acetonide and flunisolide."
+CLM-013,7,"INCs are not associated with a significant increased risk of elevating the intraocular pressure (relative risk 2.24 [95% CI: 0.68–7.34, 494 studies]) or developing cataracts (absolute increased incidence 0.02% [95% CI: −0.3% to 0.4%, 494 studies]). An association with the risk of occurrence of glaucoma cannot be ruled out."
+CLM-014,7,"several RCTs have studied the effects of INCs on the growth of children (i.e. aged 3 or older) and demonstrated contrasting results. 32 , 35 , 36 , 37 In some studies, no significant changes were found, but a temporary reduction in short‐time growth velocity was evident."
+CLM-015,6,"intra-articular, oral, and multiple formulations are associated with the higher risk (about 50%), while topical or intranasal routes may result in a lower risk (about 5%)"
+CLM-016,6,"all types of topical GCs (inhaled, intranasal, intra-articular, transcutaneous) have a significant bioavailability in the systemic circulation, with reproducible suppressive effects on the HPA axis, especially when compounds with higher potency and long half-life are used"
+CLM-017,1,Its dosage is 2 sprays/nostril once a day (50 mcg in each spray) and the dosage for children is halved to 1 spray for each nostril daily.
+CLM-018,9,The latter are recognized as the first-choice drugs in anti-inflammatory treatment of moderate to severe allergic diseases.
+CLM-019,2,"but demonstrates no obvious effect on pharyngitis (RR = 0.96; 95% CI: 0.59–1.58; p = 0.89), upper respiratory tract infections (RR = 0.73; 95% CI: 0.50–1.05; p = 0.09), or adverse events (RR = 1.05; 95% CI: 0.84–1.31; p = 0.69)"
+CLM-020,10,"Despite differences in topical potency, physicochemical and pharmacokinetic properties between INCSs, clinical studies of INCSs in the treatment of AR generally show no clinically important differences between these compounds, and poor correlation between INCS topical potency and clinical response. However, the lack of head-to-head comparisons of INCSs in clinical studies conducted in more severe AR patients should be noted."
