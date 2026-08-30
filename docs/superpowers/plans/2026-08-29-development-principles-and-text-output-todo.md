@@ -95,6 +95,34 @@
 
 不做（继承 G，另加）：不因 rq03 的痛削减必需文件清单（先看 I1 数据）；不设 GEO 第七阻断点（采纳 geo-002/003 结论）；不用正则猜提及语境。
 
+### I6/清理裁决（2026-08-30，生产崩溃修复后拍板）
+
+- **热修追认**：`.catch` 外科补丁 + 4 条阴性对照的做法正确；孤儿容器已清（时间线上很可能是当日上午糠酸莫米松真跑的运行时容器触发了潜伏缺陷——任何用户的运行都会触发，修法不变）。manifest 重生成时在 STATUS/release 备注里记录补丁来源 commit 与校验和。
+- **全量部署：不开窗口。** I6 窗口前置条件定为四条：① 生产静养 ≥72h（restarts=0，readiness 收敛到唯一已知红 receipt）；② 四道发布硬门补齐——F0 会话页真 RQ 验收、capabilities 转绿（等 I7 凭证）、108 提交 delta 在宿主 acceptance 目录彩排 hosted e2e（不碰生产栈）；③ I5 批测完成（顺带验证 D1 修复）；④ 窗口内容一次做完：翻内核 + `.env` 五值 + receipt 续期 + geo 上生产 + 附 B 删除，保留回滚 release。
+- **别人的镜像：不清。** 87%/23G 非紧急；tcm-cdss 21 分钟前还在出新镜像，旧标签是活跃项目的回滚路径。改为策略：磁盘 ≥90% 告警时由各栈 owner 自行收敛，不代删。
+- **33 个 release：清到保留 3 个**（current + 2 回滚位），两个前置：先 grep 全部 .env/compose/systemd 无旧 release 路径引用；等在飞修复收尾、readiness 收敛后再动。今日此机不再做非必要状态变更。
+- **backup_external_unconfirmed：现在就诊断**，不许成为第三个常红（D7 同一条理由：红着的告警教会所有人忽略告警；E1 刚抓过「恢复了空」）。
+- **生产删除三判据（新纪律）**：删除任何镜像/文件前须同时满足——无运行使用 ∧ 无配置引用（grep .env/compose/systemd）∧ 无清单/回执引用。「没有容器在用」单独不构成删除理由（今日实证）。
+- **重建容器必须用完整 compose 文件集**：文件列表照抄部署脚本，不手拼（今日丢过两个 secret 挂载）。
+
+
+## J. 生产纪律（2026-08-30，源自当天两次真实失误）
+
+- **J1 生产删除三判据**：无运行使用 ∧ 无配置引用（grep `.env` / compose / systemd）∧ 无清单/回执引用，
+  **三者同时满足才可删**。当天教训：`open-science-opencode:…d0505d25` 没有任何容器在用,
+  但 `.env` 的 `OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE` 和 `release-manifest.json` 的
+  `runtime.imageId` 都指着它。删掉之后 readiness 多两条红,且**镜像 ID 不可复原**——
+  重建出来的不是同一份字节,manifest 只能改钉,原来的"运行的就是当初认证过的那一份"这条链断了。
+  删除的代价不止是"再建一次"。
+- **J2 重建容器必须用完整 compose 文件集**：文件列表照抄部署脚本/既有容器的
+  `com.docker.compose.project.config_files` 标签,**不手拼**。当天教训：用
+  `-f docker-compose.yml -f docker-compose.saas.yml` 重建,丢掉了 local-auth 与 monitoring
+  定义的 `bootstrap-password`、`operator_metrics_token` 两个 secret 挂载,readiness 立刻多两条红。
+- **J3 备份红不许挂着**：当天诊断 `backup_external_unconfirmed` = 2026-08-29 磁盘满
+  (`ENOSPC`) 导致连续 3 次失败、熔断器开启睡 24h。**117 次连续成功(含恢复演练)之后断的,
+  而 healthcheck 红了 1276 次没有任何通道告诉任何人**——与 D7 同一条病。磁盘已释放,
+  熔断按时自愈即可验证;告警缺口本身待补。
+
 ## G. 明确不做（防过度开发）
 
 - 不新增任何开放词汇 prose 正则；不为语域问题继续扩 `clinicalEvidence.mjs`。
