@@ -106,19 +106,19 @@
 - **重建容器必须用完整 compose 文件集**：文件列表照抄部署脚本，不手拼（今日丢过两个 secret 挂载）。
 
 
-## J. 生产纪律（2026-08-30，源自当天两次真实失误）
+## K. 生产纪律（2026-08-30，源自当天两次真实失误）
 
-- **J1 生产删除三判据**：无运行使用 ∧ 无配置引用（grep `.env` / compose / systemd）∧ 无清单/回执引用，
+- **K1 生产删除三判据**：无运行使用 ∧ 无配置引用（grep `.env` / compose / systemd）∧ 无清单/回执引用，
   **三者同时满足才可删**。当天教训：`open-science-opencode:…d0505d25` 没有任何容器在用,
   但 `.env` 的 `OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE` 和 `release-manifest.json` 的
   `runtime.imageId` 都指着它。删掉之后 readiness 多两条红,且**镜像 ID 不可复原**——
   重建出来的不是同一份字节,manifest 只能改钉,原来的"运行的就是当初认证过的那一份"这条链断了。
   删除的代价不止是"再建一次"。
-- **J2 重建容器必须用完整 compose 文件集**：文件列表照抄部署脚本/既有容器的
+- **K2 重建容器必须用完整 compose 文件集**：文件列表照抄部署脚本/既有容器的
   `com.docker.compose.project.config_files` 标签,**不手拼**。当天教训：用
   `-f docker-compose.yml -f docker-compose.saas.yml` 重建,丢掉了 local-auth 与 monitoring
   定义的 `bootstrap-password`、`operator_metrics_token` 两个 secret 挂载,readiness 立刻多两条红。
-- **J3 备份红不许挂着**：当天诊断 `backup_external_unconfirmed` = 2026-08-29 磁盘满
+- **K3 备份红不许挂着**：当天诊断 `backup_external_unconfirmed` = 2026-08-29 磁盘满
   (`ENOSPC`) 导致连续 3 次失败、熔断器开启睡 24h。**117 次连续成功(含恢复演练)之后断的,
   而 healthcheck 红了 1276 次没有任何通道告诉任何人**——与 D7 同一条病。磁盘已释放,
   熔断按时自愈即可验证;告警缺口本身待补。
@@ -128,11 +128,20 @@
 核查结论：**代码是真诚可移植的，被少数发布性障碍挡在门外**——socket 无一处 import 控制面；MCP 27 工具中 16 个 keyless 直连公共源（网关是 opt-in 不是硬耦合）；`@evimed/domain` 零运行时依赖、门禁随 bundle 走。六大功能盘点：综述/ADR/资料查询/申报书可开源首发（降级可用）；meta/选题是引擎背书型——引擎在 `项目代码/` 且 MCP 已有本地子进程模式（`EVIMED_*_AGENT_ROOT` + evimed_runner.py），开源引擎仓库即可点亮。
 
 发布前 P0（按杠杆排序）：
-- [ ] **J1** `seam-probe` 的 `requiredEnforcement` 默认改 `partial`（托管部署经 patch 显式回 `full`）——一行之差 = 陌生人 mac/普通 Linux 能不能启动。
-- [ ] **J2** 三包去 `private:true`、真版本、publishConfig：`@evimed/domain` / `@evimed/harness-port` / `@evimed/dsh-socket`；`workspace:*` 依赖改可解析版本。
+- [x] **J1**（2026-08-30 完成，含阴性对照）`seam-probe` 的 `requiredEnforcement` 默认改 `partial`（托管部署经 patch 显式回 `full`）——一行之差 = 陌生人 mac/普通 Linux 能不能启动。
+- [x] **J2**（2026-08-30 完成）三包去 `private:true`、真版本、publishConfig：`@evimed/domain` / `@evimed/harness-port` / `@evimed/dsh-socket`；`workspace:*` 依赖改可解析版本。
 - [ ] **J3** bundle 自带 `mcp-evimed` 配置行（现在只有控制面 `dshProfilePatch.mjs` 会生成，没有它整个能力目录是装饰）。
 - [ ] **J4** capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一**（已实测漂移一句）。
-- [ ] **J5** 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
+- [~] **J5** 去硬编码：**前半已完成**（`EVIMED_EVIDENCE_BASE_URL` 改 env-overridable，且无凭证时
+  `_evimed_post` 直接以 `evimed_evidence_unconfigured` 拒绝并指明"keyless 公共源仍可用"——
+  陌生人不再每次检索都先对 evimed.com 发一个注定失败的请求；错误码已归类为 recoverable）。
+  **后半不是一次 sed,需要一个决定**：48 个引用写的是扁平的 `$XDG_CONFIG_HOME/opencode/skills/<名>/…`,
+  而 DSH 镜像把它们放在**三个不同的根**下——`curated-scientific` → `/usr/local/share/evimed/skills/…`、
+  `core` → `/opt/evimed/skills/core/…`、preset skills → `/opt/evimed/socket/presets/evimed-universal/skills`。
+  单一 sed 必然把其中两组指错。**而且这 48 个里有 45 个(36 curated-scientific + 9 core)是 DSH 镜像真的 COPY 进去的**,
+  也就是说这不只是可移植性瑕疵,是现役 DSH 运行里就指着一个不存在的 OpenCode 配置目录。
+  待定的是"SKILL.md 该怎么引用自己的脚本"这个跨内核约定,不是文本替换。
+- [ ] ~~**J5 原文**~~ 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
 - [ ] **J6** 补三个 keyless 直连模式（可后置）：web_search（SearXNG/Brave 直连档）、patent_search（Google Patents/EPO OPS 连接器）、open_access PDF 直连 Unpaywall 分支；pharmacy 出「自建 SQLite 的 recipe」而非数据。
 - [ ] **J7** 课题申报书从 curated 技能升为正式能力包（目前只有 `research-grant-development` 技能，无 capability/契约）。
 - [ ] **J8** 引擎开源包装（点亮 meta/选题/MR/审稿/文献计量/药安 六个管理作业）：六个 Python agent 独立仓库 + evimed_runner CLI 文档 + 本地模式直连 DeepSeek key（现在要求走网关且钉死 deepseek-v4-pro）。

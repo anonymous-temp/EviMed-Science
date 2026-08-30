@@ -18,7 +18,8 @@ import build_pharmacy_reference as pharmacy_builder
 class PublicSourceConnectorTests(unittest.TestCase):
     def test_clinpgx_uses_the_current_official_api_domain(self):
         payload = {"data": [{"id": "PA451906", "name": "warfarin", "types": ["Drug"]}]}
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources._clinpgx("warfarin", 2)
 
         self.assertTrue(request.call_args.args[0].startswith("https://api.clinpgx.org/v1/data/chemical?"))
@@ -143,7 +144,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 "fda": [], "ema": [], "pmda": [],
             },
         }
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources.labels({"drug": "观察药", "product": "观察品牌 观察厂家", "jurisdiction": "NMPA", "limit": 3})
         self.assertEqual(result["status"], "warning")
         self.assertEqual(result["data"]["items"][0]["jurisdiction"], "China (NMPA)")
@@ -164,7 +166,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 }],
             },
         }
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources.literature({"query": "观察药 综合评价", "limit": 3})
         self.assertEqual(result["data"]["items"][0]["id"], "EVIMED-LITERATURE:paper-1")
         self.assertEqual(result["sources"][0]["source"], "evimed-literature")
@@ -190,7 +193,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 ],
             },
         }
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources._evimed_literature_records({
                 "query": "metformin polycystic ovary syndrome",
                 "requiredConcepts": ["metformin", "polycystic ovary syndrome"],
@@ -217,7 +221,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
             "openfda": {"brand_name": ["Observed"], "generic_name": ["observed"]},
         }]}
         with mock.patch.object(sources, "_evimed_instruction_records", return_value=empty):
-            with mock.patch.object(sources, "_get_json", return_value=payload):
+            with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload):
                 result = sources.labels({"drug": "observed", "jurisdiction": "US", "limit": 1})
         self.assertEqual(result["data"]["items"][0]["id"], "set-1")
         self.assertEqual(result["sources"][0]["source"], "openfda-label")
@@ -257,7 +262,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 "region": "European Union",
             }]},
         }
-        with mock.patch.object(sources, "_get_json", return_value=payload):
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload):
             result = sources._evimed_guidelines({
                 "query": "obesity",
                 "jurisdiction": "United States",
@@ -662,7 +668,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
              "abstractText": "An <i>important</i>   abstract."},
             {"pmid": "102", "title": "Without abstract"},
         ]}}
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources.biomedical_search({"source": "europe-pmc", "query": "observed", "limit": 2})
         self.assertIn("resultType=core", request.call_args.args[0])
         first, second = result["data"]["items"]
@@ -679,7 +686,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
              "abstract_inverted_index": {"Observed": [0], "abstract": [1], "text.": [2]}},
             {"id": "https://openalex.org/W2", "title": "No abstract"},
         ]}
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources.biomedical_search({"source": "openalex", "query": "observed", "limit": 2})
         self.assertIn("abstract_inverted_index", request.call_args.args[0])
         first, second = result["data"]["items"]
@@ -763,7 +771,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
         payload = {"drugGroup": {"conceptGroup": [
             {"tty": "IN", "conceptProperties": [{"rxcui": "1191", "name": "Aspirin", "tty": "IN"}]},
         ]}}
-        with mock.patch.object(sources, "_get_json", return_value=payload) as request:
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", return_value=payload) as request:
             result = sources.biomedical_search({"source": "rxnorm", "query": "aspirin", "limit": 5})
         self.assertIn("drugs.json", request.call_args.args[0])
         self.assertEqual(result["data"]["items"][0]["id"], "1191")
@@ -1003,7 +1012,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 {"term": "Oral pain", "count": 30112},
             ]}
 
-        with mock.patch.object(sources, "_get_json", side_effect=fake_get_json):
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", side_effect=fake_get_json):
             found, url = sources._openfda_term_candidates(
                 "https://api.fda.gov", "patient.reaction.reactionmeddrapt", "Oral paraesthesia",
             )
@@ -1027,7 +1037,8 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 return {"results": []}
             return {"results": [{"term": "Stress cardiomyopathy", "count": 5710}]}
 
-        with mock.patch.object(sources, "_get_json", side_effect=fake_get_json):
+        with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(sources, "_get_json", side_effect=fake_get_json):
             found, _ = sources._openfda_term_candidates(
                 "https://api.fda.gov", "patient.reaction.reactionmeddrapt", "Takotsubo cardiomyopathy",
             )

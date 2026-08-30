@@ -523,7 +523,8 @@ class AdapterTests(unittest.TestCase):
             calls.append((url, kwargs))
             return next(value for suffix, value in responses.items() if url.endswith(suffix))
 
-        with mock.patch.object(self.server.public_sources, "_get_json", side_effect=fake_get_json):
+        with mock.patch.object(self.server.public_sources, "evimed_evidence_configured", return_value=True), \
+             mock.patch.object(self.server.public_sources, "_get_json", side_effect=fake_get_json):
             literature = self.server.call_tool("literature_search", {"query": "observed", "limit": 2})
             guideline = self.server.call_tool("guideline_search", {"query": "observed", "mode": "blocks", "publisher": "NCCN"})
             trial = self.server.call_tool("clinical_trial_search", {"query": "observed", "registry": 1})

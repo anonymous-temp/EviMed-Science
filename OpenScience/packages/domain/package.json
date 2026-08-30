@@ -1,7 +1,6 @@
 {
   "name": "@evimed/domain",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Pure EviMed domain vocabulary: contract kinds, gate rules, state machines, error codes, workspace layout. Zero dependencies, browser-safe.",
   "license": "MIT",
@@ -26,5 +25,14 @@
     "@eslint/js": "^9.39.0",
     "eslint": "^9.39.0",
     "typescript": "^5.6.3"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anonymous-temp/EviMed-Science.git",
+    "directory": "OpenScience/packages/domain"
+  },
+  "directory": null
 }
