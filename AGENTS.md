@@ -192,6 +192,21 @@ cd proto && buf generate && buf lint   # regenerate + lint proto (Go + TS + Open
 
 Go conventions there: `errors.Wrap` from `github.com/pkg/errors` (not `fmt.Errorf`), `status.Errorf` for service errors, doc comments on exported identifiers. Frontend conventions: `@/` absolute imports, Biome (2-space, double quotes, semicolons, 140-col), React Query hooks for server state, Tailwind v4 + `cn()` + CVA.
 
+## Development principles (platform-wide)
+
+Adopted 2026-08-29 from the regex/gate root-cause review; action items and rationale in `docs/superpowers/plans/2026-08-29-development-principles-and-text-output-todo.md`. These distill the DSH spec (`docs/superpowers/specs/`) for day-to-day work; the spec stays authoritative on decisions.
+
+1. **Place logic by capability class.** Deterministic properties (schemas, file existence, verbatim quote matching, numbers, closed vocabularies such as tool names) → code. Language judgment (intent, tone, register, prose quality) → model. "LLM never does statistics" has a twin: **regex never does language**. Both misplacements are defects.
+2. **Contracts bind outputs, not inputs.** Enforcement validates deliverables against decidable contracts; behavior shaping lives in prompts/skills. Input-side keyword walls over open language never converge — do not extend them.
+3. **A gate verdict is a return value** carrying specific, actionable issues the run repairs in place (compiler-style). Never silent blocking, never wholesale regeneration.
+4. **Blocking points are budgeted: 6 system-wide.** A new check ships as a notice/metric first and needs an observed real-world distribution before it may block.
+5. **No new open-vocabulary prose regex.** Closed-vocabulary checks (tool names derived from `toolNames.mjs`) and format checks (DOI/PMID/CLM ids) are fine; medicine/scenario rules go in `clinical-safety-rules.json`; every other register/prose judgment goes to the model-judge path — model judges, code re-verifies the checkable parts, failed verdicts are dropped, not softened. Tempted to widen a prose pattern? Write an eval case instead.
+6. **Every incident becomes an eval case, not a keyword.** Evals are what make general fixes safe to attempt.
+7. **Priors live in context, not control flow.** Domain knowledge goes into SKILL.md/prompts — editable text that degrades gracefully and does not cap the model — not into `if`/regex.
+8. **Build to delete.** Harness scaffolding is a depreciating asset; when adding some, note which model capability would make it deletable. The moat (contract and gate rules, source catalog and private data APIs, specialist engines, capsule distillation, eval corpora) stays outside the harness.
+9. **New features are capability packages** (`capability.yaml` + SKILL.md + a contract validator + ≥3 real briefs in `evals/`), not new code paths. Write a DSH plugin only to touch a seam — the socket is the only plugin surface.
+10. **Text-output layer.** (a) Channel separation: every backstage genre (revision notes, review findings, process logs) has a designated file — that is what entitles report prose to ban them. (b) Register cleanup (`manuscript-humanize`) is a final pass that keeps quotes, numbers, citations, and claim markers byte-identical; the reviewer is never the writer (fresh context). (c) Numbers are rendered artifacts, not typed prose — until "no hand-typed numbers" lands, changing any number is a sweep operation: enumerate every occurrence and every dependent derived claim, re-verify, then done.
+
 ## Security notes
 
 - **Committed secrets exist in Java source**: hardcoded tokens/API keys in `constants/Constants.java` (循证, 超说明书, 安全性分析), `ERNIE_Bot.java` (循证, 超说明书), and `TencentTranSmartApi.java` (安全性分析). The `application-*.yml` files themselves use env-var references with empty defaults, but they do commit infra hosts/URLs. (Archived tree, but the exposure stands.)
