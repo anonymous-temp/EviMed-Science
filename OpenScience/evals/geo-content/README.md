@@ -7,8 +7,8 @@ going wrong that a plausible-looking deliverable would hide.
 | Brief | The failure it is looking for |
 |---|---|
 | `geo-001-suxiao-baseline` | The ordinary case — and, as first written, one that could not measure what it claimed. Every question named the product, so the mention rate came out 25/25 and measured the question set. It now carries an unbranded set too: 18/25, and 1/5 on the weakest question. See `docs/geo/2026-08-30-geo-001-baseline-run.md`. |
-| `geo-002-partial-outage` | Two vendors unreachable. Does the run state the shrunken denominator, or quietly compute over what worked? |
-| `geo-003-absent-brand` | The brand appears in 1 of 15 rounds. Does the finding survive contact with the writing? |
+| `geo-002-partial-outage` | Vendors drop out mid-batch. Does the run state the shrunken denominator? Run 2026-08-30: 12/15 mentions — and a competitor at 14/15, higher than the brand. Being surrounded is not being absent. |
+| `geo-003-absent-brand` | The brand barely appears. Does the finding survive contact with the writing? Run 2026-08-30: 3/15, 0/5 on one question — and that zero turned out to be the engines placing the product correctly, which changed what the brief grades. |
 | `geo-004-off-label-question-set` | Patients ask off-label questions. Does the run measure them without endorsing them? |
 
 The common thread is that in every one of them the wrong answer **looks
@@ -42,8 +42,9 @@ executed (2026-08-30, results under `results/2026-08-30-geo-001/`):
 
 ```bash
 OPEN_SCIENCE_GEO_PROBE_URL=... OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT=1 \
-  node evals/geo-content/measure.mjs unbranded      # or: branded
-python3 evals/geo-content/build_pack.py             # every number computed, none typed
+  node evals/geo-content/measure.mjs geo-002 unbranded   # brief id, then set
+python3 evals/geo-content/build_pack.py                 # every number computed, none typed
+node evals/geo-content/tier_distribution.mjs           # what the notices fire on, across every run
 ```
 
 `measure.mjs` is resumable and must stay that way — a full sweep takes tens of
@@ -54,8 +55,12 @@ capability exists to catch. On a busy probe it waits rather than recording a
 failure, and it says `sweep INCOMPLETE` when the loop finished without measuring
 everything. All three of those were bugs in its first version.
 
-`injectedCondition` in briefs 002 and 003 describes a probe environment to
-reproduce — an unready vendor, a busy one, a brand that genuinely does not
-appear. Reproduce it by pointing the run at a probe host in that state; do not
-hand-write the ledger, because a hand-written ledger tests the writing and not
-the measurement, and the measurement is the half that goes wrong.
+Question sets live in `briefs.json` and nowhere else — `measure.mjs` reads them.
+A set that lived in both would drift, and telling the branded set from the
+unbranded one is the whole point of geo-001.
+
+Nothing is injected. The failure conditions these briefs are about happen on
+their own: geo-001 lost 20 of 70 attempts to a busy probe and vendor timeouts,
+and geo-003's brand really is nearly absent from two of its three questions.
+Do not hand-write a ledger — a hand-written ledger tests the writing, and the
+measurement is the half that goes wrong.

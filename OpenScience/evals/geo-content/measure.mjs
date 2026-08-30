@@ -17,41 +17,28 @@ import path from "node:path";
 import { createGeoProbeGatewayHandler, GEO_PROBE_GATEWAY_PATH } from
   "../../apps/server/src/geoProbeGateway.mjs";
 
-// Two sets, because the first one cannot answer the question it looks like it
-// answers. Every branded question names the product, so the model has to say
-// the name back — a 25/25 mention rate there measures the question set, not the
-// brand's visibility. The unbranded set is how a patient actually asks, and it
-// is the only one where "did we come up" has content.
-const SETS = {
-  branded: [
-    "速效救心丸可以长期服用吗？",
-    "速效救心丸和硝酸甘油有什么区别？",
-    "速效救心丸饭前吃还是饭后吃？",
-    "心绞痛发作时含服几粒速效救心丸？",
-    "速效救心丸能预防心梗吗？",
-  ],
-  unbranded: [
-    "胸闷气短心慌吃什么中成药？",
-    "冠心病心绞痛平时含服什么药应急？",
-    "家里给老人常备哪种救心药比较好？",
-    "突然心口疼含什么药能缓解？",
-    "心绞痛发作时应该怎么办？",
-  ],
-};
-const SET_NAME = process.argv[2] ?? "branded";
-const QUESTIONS = SETS[SET_NAME];
-if (!QUESTIONS) {
-  console.error(`unknown question set "${SET_NAME}"; known: ${Object.keys(SETS).join(", ")}`);
+// The brief is the source of truth. Question sets used to live in this file and
+// in briefs.json at once, which is a question set that drifts — and the branded
+// set here is exactly the thing geo-001 showed you must be able to tell apart
+// from the unbranded one.
+const briefs = JSON.parse(readFileSync(new URL("./briefs.json", import.meta.url), "utf8")).briefs;
+const BRIEF_ID = process.argv[2] ?? "geo-001-suxiao-baseline";
+const SET_NAME = process.argv[3] ?? "unbranded";
+const brief = briefs.find((entry) => entry.id === BRIEF_ID || entry.id.startsWith(`${BRIEF_ID}-`));
+if (!brief?.run) {
+  console.error(`no runnable brief "${BRIEF_ID}"; known: ${briefs.filter((b) => b.run).map((b) => b.id).join(", ")}`);
   process.exit(2);
 }
-const PLATFORMS = ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"];
-const BRAND = "速效救心丸";
-const COMPETITORS = ["复方丹参滴丸", "麝香保心丸", "硝酸甘油", "稳心颗粒", "通心络"];
+const QUESTIONS = brief.run.sets[SET_NAME];
+if (!QUESTIONS) {
+  console.error(`brief ${brief.id} has no set "${SET_NAME}"; it has: ${Object.keys(brief.run.sets).join(", ")}`);
+  process.exit(2);
+}
+const PLATFORMS = brief.run.platforms;
+const BRAND = brief.run.brand;
+const COMPETITORS = brief.run.competitors;
 
-// Ledgers land under results/<run-id>/, not beside the script: a second run is
-// a second directory, and a sweep that overwrote the first one would destroy
-// the only thing the next round has to compare against.
-const runId = process.env.GEO_RUN_ID ?? "2026-08-30-geo-001";
+const runId = process.env.GEO_RUN_ID ?? `2026-08-30-${brief.id.split("-").slice(0, 2).join("-")}`;
 const runDir = path.join(path.dirname(new URL(import.meta.url).pathname), "results", runId);
 const ledgerPath = path.join(runDir, SET_NAME === "branded" ? "geo-probe-log.jsonl" : `geo-probe-log.${SET_NAME}.jsonl`);
 
@@ -113,7 +100,7 @@ if (notReady.length) console.log(`NOT ready (never asked, not silent): ${notRead
 
 const already = measuredAlready();
 const total = QUESTIONS.length * PLATFORMS.length;
-console.log(`set "${SET_NAME}": ledger holds ${already.size} measured round(s); ${total - already.size} to go`);
+console.log(`${brief.id} / ${BRAND} / set "${SET_NAME}": ledger holds ${already.size} measured round(s); ${total - already.size} to go`);
 console.log("");
 
 for (const question of QUESTIONS) {
