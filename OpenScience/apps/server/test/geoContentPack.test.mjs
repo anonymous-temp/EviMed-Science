@@ -31,7 +31,7 @@ function block(over = {}) {
     id: "B-01",
     conclusion: "速效救心丸不作为日常保健长期服用；确诊冠心病患者可在医师指导下按疗程使用。",
     basis: "说明书【功能主治】为行气活血、祛瘀止痛，用于气滞血瘀所致的胸痹；疗程与随访见指南建议。",
-    conditions: "不适用于非气滞血瘀证型、孕妇及对本品过敏者；出现持续胸痛应立即就医而非自行加量。",
+    conditions: "不适用于非气滞血瘀证型、孕妇及对本品过敏者。速效救心丸不构成对急救的替代；出现持续胸痛应在服药的同时呼叫急救，服药不得延误就医。",
     citations: [{ id: "LB-0006" }, { id: "10.1000/guideline" }],
     jsonLd: { "@type": "MedicalWebPage" },
     author: "临床药师 张××（主管药师）",
@@ -67,7 +67,11 @@ function goodPack() {
         llmsTxt: "# llms.txt\nContent: /geo/suxiao\n",
         faq: [{ q: "可以长期吃吗？", a: "见结论段。" }],
       }),
-      "geo-content-pack.md": "# 内容包\n\n结论、依据、适用条件三段见 JSON。\n",
+      // Rendered from the blocks, the way a real pack is built. A stub here —
+      // "三段见 JSON" — meant neither the clinical trigger check nor the safety
+      // rules had a medicine to find, so two tests passed against a fixture
+      // that could not have failed them.
+      "geo-content-pack.md": `# 内容包\n\n${[block()].map((b) => `## ${b.conclusion}\n\n${b.basis}\n\n${b.conditions}\n`).join("\n")}`,
       "llms.txt": "# llms.txt\nContent: /geo/suxiao\n",
       "citation-ledger.csv": "id,title,url\nLB-0006,说明书,https://example.org/label\n10.1000/guideline,指南,https://doi.org/10.1000/guideline\n",
       "brand-entity.json": JSON.stringify({ name: "速效救心丸", approval: "国药准字Z12020025" }),
@@ -242,6 +246,105 @@ test("the metrics carry the distribution the tiering decision will need", () => 
   assert.equal(verdict.metrics.geoFailedRounds, 0);
   assert.deepEqual(verdict.metrics.geoPlatformsMeasured, ["deepseek", "kimi"]);
   assert.equal(verdict.metrics.geoQuestionsMeasured, 1);
+});
+
+// ------------------------------------------------- the clinical half
+
+test("a pack about a medicine is graded, not turned away", () => {
+  // It used to be turned away. geo-content-pack was not in
+  // CLINICAL_CONTRACT_KINDS, so every pack mentioning a trigger medicine failed
+  // with clinical_content_without_clinical_contract — and neither remedy the
+  // message offers can be followed: there is no clinical GEO kind, and removing
+  // the medicine removes the deliverable. Found by assembling a real pack from a
+  // real measurement and running it through this gate.
+  const pack = goodPack();
+  // The fixture has to actually contain the medicine or this test proves
+  // nothing. It is asserted in the blocks rather than in the Markdown because
+  // that is where a pack's content really lives — and checking only the
+  // Markdown was the hole this assertion found.
+  const blocks = JSON.parse(pack.files["geo-content-pack.json"]).blocks;
+  assert.ok(blocks.some((block) => block.conclusion.includes("速效救心丸")), "the fixture must be about a medicine");
+  const verdict = gate(pack);
+  assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
+  assert.equal(
+    verdict.issues.some((entry) => entry.code === "clinical_content_without_clinical_contract"),
+    false,
+  );
+});
+
+test("a block that carries the danger is read, even when the Markdown is a stub", () => {
+  // The pack's Markdown may be a pointer — "三段见 JSON" — and the blocks are
+  // still the deliverable. Checking only the rendered file let every block
+  // through unexamined.
+  const pack = goodPack();
+  const parsed = JSON.parse(pack.files["geo-content-pack.json"]);
+  parsed.blocks[0].conditions = "含服后疼痛缓解，说明是心绞痛而不是胃病。";
+  pack.files["geo-content-pack.json"] = JSON.stringify(parsed);
+  const verdict = gate(pack);
+  assert.equal(verdict.ok, false, "a dangerous block must not pass because the Markdown is clean");
+  assert.ok(verdict.issues.some((entry) => /diagnose or exclude/.test(entry.message)));
+});
+
+test("the required emergency sentence is required here too", () => {
+  // The other half of the same change. Adding the kind to CLINICAL_CONTRACT_KINDS
+  // only silences the trigger check; if the validator then applied no safety
+  // rule, "clinical" would be a label and medicine content would pass
+  // unexamined — worse than the rejection it replaced.
+  const pack = goodPack();
+  const parsed = JSON.parse(pack.files["geo-content-pack.json"]);
+  parsed.blocks[0].conditions = "不适用于非气滞血瘀证型、孕妇及对本品过敏者。";
+  pack.files["geo-content-pack.json"] = JSON.stringify(parsed);
+  pack.files["geo-content-pack.md"] = "# 内容包\n\n速效救心丸用于气滞血瘀所致的胸痹，含服即可。\n";
+  const verdict = gate(pack);
+  assert.equal(verdict.ok, false);
+  const raised = verdict.issues.filter((entry) => entry.code === "clinical_safety_rule");
+  assert.equal(raised.length, 1);
+  assert.match(raised[0].message, /must not delay emergency care/);
+});
+
+test("drug response presented as a diagnosis is blocked in a content block", () => {
+  // A content block is written to be quoted by a machine that will not add the
+  // caveat back, so this is more dangerous here than in a report a clinician
+  // reads whole.
+  const pack = goodPack();
+  pack.files["geo-content-pack.md"] = "# 内容包\n\n速效救心丸不构成对急救的替代，服药不得延误就医。含服后疼痛缓解，说明是心绞痛而不是胃病。\n";
+  const verdict = gate(pack);
+  assert.equal(verdict.ok, false);
+  assert.ok(verdict.issues.some((entry) => /diagnose or exclude/.test(entry.message)));
+});
+
+test("unsupported self-care advice is blocked in a content block", () => {
+  const pack = goodPack();
+  pack.files["geo-content-pack.md"] = "# 内容包\n\n速效救心丸不构成对急救的替代，服药不得延误就医。也可以先吃点胃药观察一下，看症状会不会变化。\n";
+  const verdict = gate(pack);
+  assert.equal(verdict.ok, false);
+  assert.ok(verdict.issues.some((entry) => entry.code === "clinical_safety_rule"));
+});
+
+test("a brand's own block is not treated as dragging the medicine into someone else's question", () => {
+  // entity_requires_question_mention asks whether a medicine was introduced into
+  // an answer that was not about it. A GEO pack is legitimately about its brand,
+  // so the pack passes no `question` and that rule does not fire. Applying it
+  // would fail every GEO pack ever written, which is why "which rules apply" is
+  // decided by what the caller passes rather than by a flag someone can flip.
+  const verdict = gate(goodPack());
+  assert.equal(verdict.ok, true);
+  assert.equal(verdict.issues.some((entry) => /must not introduce/.test(entry.message)), false);
+});
+
+test("a pack that mentions no medicine is not asked for a medicine's safety sentence", () => {
+  const pack = goodPack();
+  const parsed = JSON.parse(pack.files["geo-content-pack.json"]);
+  for (const block of parsed.blocks) {
+    block.conclusion = "本类产品的登记用途以说明书为准。";
+    block.basis = "依据公开说明书条目。";
+    block.conditions = "不适用于说明书未覆盖的情形。";
+  }
+  pack.files["geo-content-pack.json"] = JSON.stringify(parsed);
+  pack.files["geo-content-pack.md"] = "# 内容包\n\n本类产品的登记用途以说明书为准。\n";
+  pack.files["geo-measurement.md"] = "# 测量说明\n\n本轮未覆盖 App 端。共 2 轮，均取得答案。\n";
+  const verdict = gate(pack);
+  assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
 });
 
 test("naming the probe tool in pack prose is blocked by the shared leakage rule", () => {
