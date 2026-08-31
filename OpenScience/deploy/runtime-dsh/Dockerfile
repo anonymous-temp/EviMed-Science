@@ -109,15 +109,6 @@ RUN set -eux; \
 RUN set -eux; \
   npm config set registry "${NPM_REGISTRY}"; \
   npm install -g --no-fund --no-audit "@deepseek-ai/dsh@${DSH_VERSION}"; \
-  # The pin below was asserted and never applied. `dsh` declares cordis as a
-  # RANGE (^4.0.1), so npm floats it, and this build worked only for as long as
-  # the pinned version happened to be the newest one. Cordis 4.0.2 was published
-  # 2026-08-30 and every runtime image build failed from that moment — correctly,
-  # but at the assertion rather than at the cause. Installing the pinned cordis
-  # into the kernel's own tree makes the next line true by construction instead
-  # of by luck, which is what "exact pin" was supposed to mean.
-  npm install --no-fund --no-audit --prefix /usr/local/lib/node_modules/@deepseek-ai/dsh \
-    "@deepseek-ai/cordis@${DSH_CORDIS_VERSION}"; \
   dsh --version; \
   installed="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json').version")"; \
   test "${installed}" = "${DSH_VERSION}" || { echo "installed dsh ${installed} != pinned ${DSH_VERSION}" >&2; exit 1; }; \
