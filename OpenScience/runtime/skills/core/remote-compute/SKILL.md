@@ -145,7 +145,7 @@ the helper pins whatever you pass:
   (not just the global Runs view). Pass it verbatim as shown; it's empty-safe.
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/remote-compute/record_run.py" \
+python "record_run.py" \
   --surface ssh --command "bash run.sh" --status <ok|failed> --host <host> \
   --hardware "<hardware the job used>" \
   --code run.sh --code <each other script> \

@@ -81,7 +81,7 @@ fresh `RESULT` directory; the helper refuses to record paths used by earlier
 runs.
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/modal-run/record_run.py" \
+python "record_run.py" \
   --surface modal --command "modal run compute.py" \
   --status <ok|failed> --host "modal:<app-name>" \
   --hardware "<the gpu= from @app.function, e.g. A10G — or 'CPU'>" \

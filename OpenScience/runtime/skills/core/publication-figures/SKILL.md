@@ -29,7 +29,7 @@ For a bounded two-column CSV line chart, the bundled CLI applies this style and
 writes a real PNG artifact directly:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/publication-figures/render_csv_figure.py" \
+python "render_csv_figure.py" \
   --input results.csv --output figure.png \
   --x-label "Time (days)" --y-label "Response (%)" --title "Observed response"
 ```

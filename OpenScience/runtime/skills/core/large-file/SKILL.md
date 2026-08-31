@@ -20,7 +20,7 @@ The probe ships beside this SKILL.md. Run it on any data file **before** opening
 it:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/large-file/large_file_probe.py" DATA_FILE [--sample N]
+python "large_file_probe.py" DATA_FILE [--sample N]
 ```
 
 It prints one compact JSON pointer on stdout — always tiny, regardless of file

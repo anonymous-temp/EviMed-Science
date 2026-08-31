@@ -18,7 +18,7 @@ Write `bulk-rnaseq.ipynb`, `differential-expression.csv`, `qc-report.md`, and `a
 For a bounded executable baseline, prepare a JSON request or supported data file and run:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/_runtime/execute_skill.py" --skill bulk-rna-seq --input REQUEST.json --output-dir OUTPUT_DIR
+python "../_runtime/execute_skill.py" --skill bulk-rna-seq --input REQUEST.json --output-dir OUTPUT_DIR
 ```
 
 Review `execution-receipt.json`, `results.json`, and the generated report before interpretation. The baseline is deliberately limited; when its report names an unsupported method or input, use the broader notebook workflow above and preserve the same provenance and failure boundaries.

@@ -61,7 +61,7 @@ The deterministic gate ships beside this SKILL.md. Run it on the workspace (or
 named files) before you report results:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/stats-integrity/stats_integrity_check.py" [files...]
+python "stats_integrity_check.py" [files...]
 ```
 
 It prints one ` ```review ` fenced JSON block covering three risks:

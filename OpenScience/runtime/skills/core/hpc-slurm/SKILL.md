@@ -30,7 +30,7 @@ Prefer the bundled renderer so job names and optional resource directives are
 validated before a file is produced:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/hpc-slurm/render_job.py" \
+python "render_job.py" \
   --job-name <job-name> --command '<actual command>' \
   --output "slurm/<job-name>.sbatch"
 ```
