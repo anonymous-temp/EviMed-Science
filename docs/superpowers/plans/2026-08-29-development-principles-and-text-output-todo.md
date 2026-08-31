@@ -140,7 +140,26 @@
 发布前 P0（按杠杆排序）：
 - [x] **J1**（2026-08-30 完成，含阴性对照）`seam-probe` 的 `requiredEnforcement` 默认改 `partial`（托管部署经 patch 显式回 `full`）——一行之差 = 陌生人 mac/普通 Linux 能不能启动。
 - [x] **J2**（2026-08-30 完成）三包去 `private:true`、真版本、publishConfig：`@evimed/domain` / `@evimed/harness-port` / `@evimed/dsh-socket`；`workspace:*` 依赖改可解析版本。
-- [ ] **J3** bundle 自带 `mcp-evimed` 配置行（现在只有控制面 `dshProfilePatch.mjs` 会生成，没有它整个能力目录是装饰）。
+- [~] **J3**（2026-08-31 考古完成，实现待做——裁决设想的机制不存在，正确形状已定）bundle 自带 `mcp-evimed` 配置行（现在只有控制面 `dshProfilePatch.mjs` 会生成，没有它整个能力目录是装饰）。
+
+  **考古结论（拉了 `@deepseek-ai/dsh@0.1.1-rc.2` 与 `dsh-app-boot` 读源码）**：
+  1. **补丁栈有确定顺序**：`bundlePatches → profile.patches → homePatches → overlays`，
+     所以 bundle 插的行**可以**被控制面生成的 profile 补丁改写——这一半成立。
+  2. **但改写是浅赋值,不是深合并**：`applyEntryPatches` 里就一句
+     `target[key] = value`。控制面一旦覆盖 `config:`，**整个 config 对象被替换**，
+     bundle 提供的静态部分全部丢失。所以「静态进 bundle、控制面只补部署专属字段」**做不到**。
+  3. **补丁里没有 env 占位符**：全仓所有补丁文件的值都是字面量，裁决设想的
+     `env 占位符` 机制在 0.1.1-rc.2 里找不到证据。
+  4. **控制面现在是 `insert` 而不是 override**：bundle 若也 insert 会出现**同 id 两行**，
+     两个 MCP 进程。
+
+  **因此正确形状是**：bundle **insert 一份完整的、单机可用的默认行**（用镜像的约定路径），
+  控制面从 `insert` 改为 **override by id**（整体替换 config，它本来就构造完整 config）。
+  **风险点必须同时处理**：override 因 name 不匹配等原因被跳过时只 warn，
+  运行会带着 bundle 的默认 env（没有网关地址）启动——**行看起来配好了而工具全部失效**，
+  正是最坏的那种形状。缓解手段现成：seam-probe 本来就"逐行复查我们覆盖过的行"
+  （bundle patch 文件头自己写的），把 mcp 行纳入复查即可把静默降级变成响亮启动失败。
+  实现须连带改 `build-smoke-patch.yml` 与 `dshProfilePatch.test.mjs`，并由 build-smoke 真启动验证。
 - [~] **J4**（2026-08-31：两树合一已完成，另两项未做）capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一 —— 已完成，但裁决的方向要反过来**：
   「单一作者树 = capabilities/」这个方向若照做会**毁掉真内容**。实测三方对照：
   `runtime/skills/evimed`（那条测试实际校验的副本）与 `capability-skills/`（运行真正读到的）
