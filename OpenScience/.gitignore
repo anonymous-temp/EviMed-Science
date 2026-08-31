@@ -77,3 +77,8 @@ evals/capability-audit/tool-probe-workspace/
 # capability.yaml files.
 packages/socket/capabilities/
 packages/socket/capability-skills/
+
+# Raw F0 session-stream recordings: megabytes of one run's wire, kept on the
+# acceptance host. The bounded, verbatim selection that the tests read lives in
+# apps/desktop/src/lib/__fixtures__/.
+evals/session-stream/recordings/

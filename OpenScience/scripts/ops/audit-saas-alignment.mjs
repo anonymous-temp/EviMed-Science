@@ -140,7 +140,14 @@ for (const component of ["WebProjectsCard", "WebResourcesCard", "WebReadinessCar
   requireBoundary(account.includes(component), `account_${component}`, `Hosted account surface is missing ${component}.`);
 }
 requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE: \$\{OPEN_SCIENCE_DEPLOYMENT_PROFILE:-controlled-pilot\}/.test(compose), "compose_default", "Base Compose must default to controlled-pilot.");
-requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE: individual-saas/.test(saasOverlay) && /OPEN_SCIENCE_BACKUP_MODE: external/.test(saasOverlay), "compose_saas", "SaaS overlay must select individual-saas and external recovery.");
+// The overlay still selects external recovery — as its default. It may no
+// longer pin it as a literal: two overlays setting this key literally on the
+// same service made the winner depend on -f order, and production ran for
+// months with the web container believing "external" and the backup container
+// believing "local". The profile keeps its posture; the operator keeps the
+// ability to declare a different one, and readinessSaasProfile still reports
+// external-recovery as unmet when they do.
+requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE: individual-saas/.test(saasOverlay) && /OPEN_SCIENCE_BACKUP_MODE: \$\{OPEN_SCIENCE_BACKUP_MODE:-external\}/.test(saasOverlay), "compose_saas", "SaaS overlay must select individual-saas and default to external recovery.");
 requireBoundary(rootPackage.scripts?.["audit:saas-alignment"]?.includes("audit-saas-alignment.mjs"), "audit_script", "Root package lacks the SaaS alignment audit.");
 requireBoundary(rootPackage.scripts?.["ci:web"]?.includes("audit:saas-alignment"), "audit_ci", "SaaS alignment audit is not release-gated.");
 requireBoundary(Object.keys(curated.policy?.delivery?.executable ?? {}).length === 38, "curated_38", "All 38 curated skills must have executable delivery contracts.");
