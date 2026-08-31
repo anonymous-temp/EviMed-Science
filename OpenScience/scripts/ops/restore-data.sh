@@ -103,6 +103,18 @@ if [ -e "$target" ]; then
   rm -rf "$target"
 fi
 mv "$tmp" "$target"
-trap - EXIT
+# `$tmp` has been moved, so cleanup must not remove it — but the decrypted
+# archive still has to go. Disarming the whole trap took `decrypt_tmp_dir` with
+# it, and only the SUCCESS path reaches this line: a failing restore exited with
+# the trap still armed and cleaned up properly, while every successful one left
+# 404MB behind.
+#
+# Five of those filled the backup container's 2GB /tmp between 2026-08-24 and
+# 08-28. The run on 08-29 failed with ENOSPC and every run since has failed the
+# same way — the restore drill, which exists to prove a backup can be restored,
+# consumed the space the backups needed. Clearing the variable instead of the
+# trap keeps the one thing that still needs removing.
+tmp=""
+
 
 echo "$target"
