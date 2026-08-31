@@ -207,6 +207,13 @@
   （封闭路径词表，正是代码该做的检查）；② build-smoke 从声明根真跑一个 curated 脚本（断言能力不断言机制）。
   **优先级：升级为活缺陷修复，插队先于 J4/J7/J3。**
 - [ ] ~~**J5 原文**~~ 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
+- [ ] **J9**（2026-08-31 彩排发现，开源与可复现的硬伤）**仓库自己建不出自己的 web 镜像**：
+  `deploy/web/Dockerfile:57` 硬 `COPY runtime/skills/external/ai4s-skills`，而
+  `OpenScience/.gitignore:62` 把 `runtime/skills/external/` 整个忽略掉。宿主上的构建之所以一直成功，
+  只因为发布目录里恰好有这份未受版本控制的 4.6MB 内容。**陌生人克隆仓库无法构建**，
+  而我们自己的镜像也依赖着版本控制之外的东西——这两件是同一个洞。
+  修法二选一：vendored 内容入库（体积可接受）、或改为构建期按清单拉取并校验 sha256（与
+  runtime-opencode 拉 opencode/uv 的写法一致）。
 - [ ] **J6** 补三个 keyless 直连模式（可后置）：web_search（SearXNG/Brave 直连档）、patent_search（Google Patents/EPO OPS 连接器）、open_access PDF 直连 Unpaywall 分支；pharmacy 出「自建 SQLite 的 recipe」而非数据。
 - [x] **J7**（2026-08-31 完成）课题申报书从 curated 技能升为正式能力包：新增契约种类 `grant-proposal-package` + 验证器、`capabilities/research-grant-development/`
   （manifest + SKILL）、`capability-skills/` 同名技能体、`evals/research-grant-development/` 三份 brief。
