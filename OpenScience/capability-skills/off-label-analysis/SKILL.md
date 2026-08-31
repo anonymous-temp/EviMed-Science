@@ -79,4 +79,5 @@ ones.
 
 Write what changed and why to `revision-notes.md` in this deliverable's
 directory. That file is the designated home for revision notes, replies to a
-rejection, and process description; the report itself carries none of them.
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.

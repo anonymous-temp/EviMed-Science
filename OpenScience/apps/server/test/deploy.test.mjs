@@ -1379,18 +1379,22 @@ test("a capability's two skill copies never drift apart by more than their known
   //
   // Raising an entry means a deliberate kernel-specific edit; a capability
   // absent here must have identical copies.
+  // Raised by one on 2026-08-31 when the two DSH trees were merged into one
+  // document: the authored copy's fuller revision-notes sentence went into the
+  // shipped copy, which the OpenCode tree does not have. Deliberate and
+  // one-directional, like the entry above — that tree is deleted at the flip.
   const knownDivergence = {
-    "adr-analysis": 17,
-    "bibliometric-analysis": 17,
-    "clinical-evidence-synthesis": 30,
-    "comprehensive-drug-evaluation": 17,
-    "dataset-research-scoping": 27,
-    "drug-selection": 17,
-    "mendelian-randomization": 17,
-    "meta-analysis": 17,
-    "off-label-analysis": 17,
-    "peer-review": 17,
-    "research-topic-selection": 27,
+    "adr-analysis": 18,
+    "bibliometric-analysis": 18,
+    "clinical-evidence-synthesis": 31,
+    "comprehensive-drug-evaluation": 18,
+    "dataset-research-scoping": 28,
+    "drug-selection": 18,
+    "mendelian-randomization": 18,
+    "meta-analysis": 18,
+    "off-label-analysis": 18,
+    "peer-review": 18,
+    "research-topic-selection": 28,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

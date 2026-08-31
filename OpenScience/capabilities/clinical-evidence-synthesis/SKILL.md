@@ -195,9 +195,11 @@ Give every entry exactly one status:
   `searchedAt` (`YYYY-MM-DD`). Every query must match an entry in
   `clinical-evidence-search.json`'s `queries[]` (whitespace, quoting and case may
   differ; the terms may not), under the same database, on the log's own
-  `searchedAt` date. The search log is written by the retrieval tools, not by
-  you, so 「我查了但没查到」 is a falsifiable sentence — and one you have not run
-  the search for will be caught at once.
+  `searchedAt` date. You write that log yourself, one entry per search as you
+  run it, so 「我查了但没查到」 is falsifiable against it — and a search you never
+  ran will be caught at once. Its `queries[]` holds objects, never bare strings:
+  a log of strings loses the database each search was run against, which is half
+  of what makes a declared gap checkable.
 
 **A `gap` is a result, not a failure.** A sub-question you searched for and did
 not find is registered as `gap`, written into the body in those same words, and
@@ -1073,9 +1075,9 @@ Every claim also carries `pico`, `picoMatch`, `denominatorKind`, and `requiredCa
 
 Quote contiguously by default. You may elide a passage you do not need by marking the gap with `…`, as any scholarly quotation does; each side of the gap is then checked on its own and must appear in the source in the order you wrote it. Never join two passages without marking the gap, and never elide across a qualification — a quote reading "the effect was significant … in the subgroup analysis" that hides "not" is a misquotation whether or not the words are all in the document. Copy sentences as they read: an inline citation marker the extractor left mid-sentence ("…in coronary spasm patients.23 Li Jin et al…") is not part of the sentence and may be left out.
 
-**`artifactPath` is copied from a tool result — never typed by hand.** Only two tools preserve an artifact you may cite: `mcp__evimed__open_access_full_text` (papers, by DOI or PMCID) and `mcp__evimed__official_page_fetch` (labels, guidelines, regulatory and institutional pages). Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
+**`artifactPath` is copied from a tool result — never typed by hand.** Three tools preserve an artifact you may cite: `mcp__evimed__open_access_full_text` (papers, by DOI or PMCID), `mcp__evimed__official_page_fetch` (labels, regulatory and institutional pages), and `mcp__evimed__guideline_search`, which preserves a guideline's own text when the record carries it. Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
 
-So when you want to cite something you have only seen in search results, **preserve it first**: fetch the full text by its DOI or PMCID, or fetch its official page by URL. If neither preserves it — no open-access copy, no reachable official page — then you have not read that source and it cannot carry a claim. Cite the sources you did preserve instead, and if that leaves the point unsupported, say in the report that the evidence was not obtainable. Do not describe the gap in the path field: a string like `abstract-only PMID:15940087` or `regulatory-record NMPA速效救心丸` is not a path, and writing one asserts a verification that never happened.
+So when you want to cite something you have only seen in search results, **preserve it first**: fetch the full text by its DOI or PMCID, or fetch its official page by URL. A guideline retrieved through `mcp__evimed__guideline_search` may already carry its own preserved text — check the result for an `artifactPath` before assuming you must fetch it elsewhere. If neither preserves it — no open-access copy, no reachable official page — then you have not read that source and it cannot carry a claim. Cite the sources you did preserve instead, and if that leaves the point unsupported, say in the report that the evidence was not obtainable. Do not describe the gap in the path field: a string like `abstract-only PMID:15940087` or `regulatory-record NMPA速效救心丸` is not a path, and writing one asserts a verification that never happened.
 
 `accessLevel` is exactly one of `full_text`, `official_page`, `abstract`, `structured_record` — no other value is accepted. It records how much of the source the preserved artifact actually contains, so `abstract` and `structured_record` still require a preserved artifact to quote from; they mark a partial document, not a missing one.
 
@@ -1391,6 +1393,14 @@ Never structure the paper as a specification being checked off.
 The paper describes evidence and reasoning, not itself. Do not write about what
 this report is, what it refuses to do, what role something plays in it, or whom
 it is addressed to.
+
+**Where it goes instead: `revision-notes.md`, beside the report in this
+deliverable's own directory.** Revision notes, what you changed after a
+rejection and why, replies to a reviewer, process diaries and version scars are all
+legitimate writing — they are simply not report prose. That file is not read as
+report prose by any check, so write them there plainly. A prohibition with no
+destination is one a run satisfies by hiding the same sentences inside the
+report, which is worse than either.
 
 - 反例：`本报告检验……的学术化版本`、`……只作为被评价对象出现`、`本报告的判定条件（与任务书一致）`
   正例：`本文的目的是评价……`（其余删去）。
