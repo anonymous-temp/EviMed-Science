@@ -12,7 +12,7 @@
 // upload is an incident, and a successful upload is the only one that means the
 // data exists in two places.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -53,4 +53,41 @@ test("an unconfigured deployment is still a working one", async () => {
   const source = await readFile(path.join(repoRoot, "scripts/ops/backup-scheduler.mjs"), "utf8");
   assert.match(source, /let offsite = "not_configured"/);
   assert.match(source, /if \(config\.objectBackupUri\) \{/, "an empty URI must skip the upload rather than fail the backup");
+});
+
+// The deployment's declaration has to reach every container, and on 2026-08-31
+// it did not. `.env` said `local`; the web container reported `external`.
+//
+// Both overlays set the same key on the same service as a literal, so which
+// value a container ended up with was decided by nothing but the order its `-f`
+// files were passed: the web container was created from `yml,saas,local-auth,
+// monitoring` and got `external`, the backup container from `yml,local-auth,
+// backup,monitoring` and got `local`. One stack, two containers, two beliefs
+// about whether backups leave the machine — and no place where they met.
+//
+// A literal here cannot be overridden by an operator, so the check is not that
+// the two agree today but that the declaration is what decides. Profiles keep
+// their own defaults; `.env` outranks all of them.
+test("every compose file lets the deployment declare its own backup mode", async () => {
+  const dir = path.join(repoRoot, "deploy/web");
+  const files = (await readdir(dir)).filter((name) => name.startsWith("docker-compose") && name.endsWith(".yml"));
+  assert.ok(files.length >= 3, `expected the web compose set, found ${files.length}`);
+
+  let setters = 0;
+  for (const name of files) {
+    const body = await readFile(path.join(dir, name), "utf8");
+    for (const line of body.split("\n")) {
+      const match = /^\s*OPEN_SCIENCE_BACKUP_MODE:\s*(.+?)\s*$/.exec(line);
+      if (!match) continue;
+      setters += 1;
+      assert.match(
+        match[1],
+        /^\$\{OPEN_SCIENCE_BACKUP_MODE(:-[a-z]+)?\}$/,
+        `${name} pins the backup mode to the literal ${match[1]}, so a deployment that declares `
+        + `a different one is silently overruled — and which literal wins depends on -f order`,
+      );
+    }
+  }
+  // Without this the loop passes on a directory it failed to read.
+  assert.ok(setters >= 3, `expected every overlay to carry the key, saw ${setters}`);
 });
