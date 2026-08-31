@@ -462,7 +462,10 @@ test("backup compose overlay runs an unexposed least-privilege encrypted schedul
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.backup.yml"), "utf8");
   const backupStart = compose.indexOf("  open-science-backup:");
   const backupService = compose.slice(backupStart, compose.indexOf("\nsecrets:"));
-  assert.match(compose, /OPEN_SCIENCE_BACKUP_MODE:\s+local/);
+  // Defaults to local, but as a default the operator can override: a literal
+  // here and a literal in the SaaS overlay made the winning value depend on the
+  // order the -f files were passed.
+  assert.match(compose, /OPEN_SCIENCE_BACKUP_MODE:\s+\$\{OPEN_SCIENCE_BACKUP_MODE:-local\}/);
   assert.match(compose, /OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK:\s+"true"/);
   assert.match(compose, /OPEN_SCIENCE_RESTORE_DRILL_ACK:\s+"true"/);
   assert.match(backupService, /command:\s+\["node", "scripts\/ops\/backup-scheduler\.mjs", "run"\]/);
@@ -494,7 +497,7 @@ test("OIDC compose overlay mounts separate file-backed client and flow secrets",
 test("individual SaaS overlay opts in explicitly and requires external recovery evidence", async () => {
   const overlay = await readFile(path.join(repoRoot, "deploy/web/docker-compose.saas.yml"), "utf8");
   assert.match(overlay, /OPEN_SCIENCE_DEPLOYMENT_PROFILE:\s+individual-saas/);
-  assert.match(overlay, /OPEN_SCIENCE_BACKUP_MODE:\s+external/);
+  assert.match(overlay, /OPEN_SCIENCE_BACKUP_MODE:\s+\$\{OPEN_SCIENCE_BACKUP_MODE:-external\}/);
   assert.match(overlay, /OPEN_SCIENCE_BACKUP_EXTERNAL_ACK:\s+\$\{OPEN_SCIENCE_BACKUP_EXTERNAL_ACK:\?/);
   assert.match(overlay, /OPEN_SCIENCE_RESTORE_DRILL_ACK:\s+\$\{OPEN_SCIENCE_RESTORE_DRILL_ACK:\?/);
 });
