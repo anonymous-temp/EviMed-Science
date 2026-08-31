@@ -76,7 +76,7 @@ the humanizer rules do not cover them:
 5. When the pass is done, verify mechanically before declaring it finished:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/manuscript-humanize/scripts/verify_preserved.py" \
+python "scripts/verify_preserved.py" \
   --before <original> --after <edited> --matrix clinical-evidence-matrix.json
 ```
 

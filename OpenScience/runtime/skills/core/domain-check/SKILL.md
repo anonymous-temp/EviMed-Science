@@ -27,7 +27,7 @@ The gate ships beside this SKILL.md. Run it on the code files in play (or with
 no arguments to scan the workspace):
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/domain-check/domain_check.py" <file.py|notebook.ipynb|analysis.R ...>
+python "domain_check.py" <file.py|notebook.ipynb|analysis.R ...>
 ```
 
 It prints exactly one ` ```review ` fenced JSON block on stdout.

@@ -118,6 +118,12 @@
   `com.docker.compose.project.config_files` 标签,**不手拼**。当天教训：用
   `-f docker-compose.yml -f docker-compose.saas.yml` 重建,丢掉了 local-auth 与 monitoring
   定义的 `bootstrap-password`、`operator_metrics_token` 两个 secret 挂载,readiness 立刻多两条红。
+- **K4 放宽任何默认值之前,先证明严格值在真正需要的地方是被显式写出来的**:今天救了两次——
+  ① `geo-content-pack` 进 `CLINICAL_CONTRACT_KINDS`,查出 `isClinicalContractKind` 全仓只有一处用途,
+  只加那一行会让检查变少而非变多,于是两半同改;② `seam-probe` 默认 `full`→`partial`,查出
+  `config.mjs:723` 生产算 `full` 且 `dshProfilePatch.mjs:243` 把它显式写进每份 patch,
+  所以插件默认只在无控制面时被读到。**做法固定为三步**:找到该默认值的全部读取点 →
+  确认严格路径显式赋值 → 配阴性对照钉住两头(默认是宽的、严格路径仍是严的)。
 - **K3 备份红不许挂着**：当天诊断 `backup_external_unconfirmed` = 2026-08-29 磁盘满
   (`ENOSPC`) 导致连续 3 次失败、熔断器开启睡 24h。**117 次连续成功(含恢复演练)之后断的,
   而 healthcheck 红了 1276 次没有任何通道告诉任何人**——与 D7 同一条病。磁盘已释放,
@@ -141,10 +147,20 @@
   单一 sed 必然把其中两组指错。**而且这 48 个里有 45 个(36 curated-scientific + 9 core)是 DSH 镜像真的 COPY 进去的**,
   也就是说这不只是可移植性瑕疵,是现役 DSH 运行里就指着一个不存在的 OpenCode 配置目录。
   待定的是"SKILL.md 该怎么引用自己的脚本"这个跨内核约定,不是文本替换。
+  **裁决（2026-08-30，两路核验后）**：采用 Agent Skills 开放标准原文——**技能体内一律相对技能根引用**
+  （`scripts/x.py`；curated 共享执行器写 `../_runtime/execute_skill.py`，与家族根同拷贝故相对性天然保持）；
+  **绝对根是部署真相，只在一处声明**——DSH 面由 guidance/profile patch 注入一行「技能根清单」
+  （决定性事实：DSH skill 子系统对模型隐藏技能路径、`resourceBase` 只按需解析，模型必须用声明的根
+  拼绝对路径去 bash 执行）；opencode 面由其运行时同理声明。配套两条：
+  ① 闭集钉住测试——技能体禁含 `$XDG_CONFIG_HOME/opencode` / `/opt/evimed` / `/usr/local/share`
+  （封闭路径词表，正是代码该做的检查）；② build-smoke 从声明根真跑一个 curated 脚本（断言能力不断言机制）。
+  **优先级：升级为活缺陷修复，插队先于 J4/J7/J3。**
 - [ ] ~~**J5 原文**~~ 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
 - [ ] **J6** 补三个 keyless 直连模式（可后置）：web_search（SearXNG/Brave 直连档）、patent_search（Google Patents/EPO OPS 连接器）、open_access PDF 直连 Unpaywall 分支；pharmacy 出「自建 SQLite 的 recipe」而非数据。
 - [ ] **J7** 课题申报书从 curated 技能升为正式能力包（目前只有 `research-grant-development` 技能，无 capability/契约）。
 - [ ] **J8** 引擎开源包装（点亮 meta/选题/MR/审稿/文献计量/药安 六个管理作业）：六个 Python agent 独立仓库 + evimed_runner CLI 文档 + 本地模式直连 DeepSeek key（现在要求走网关且钉死 deepseek-v4-pro）。
+
+顺序裁决（2026-08-30）：**J5b（活缺陷，插队）→ J7（小、独立）→ J4（单独一轮，赶在 33 篇批测之前落地，让批测覆盖合并后的树；方向=单一作者树 `capabilities/`，镜像树由它生成/拷贝，漂移测试改为相等测试）→ J3（先考古 `dshProfilePatch.mjs:145-176` 那行的生成参数，静态部分进 bundle patch 带 env 占位，控制面只留部署专属覆盖）**。
 
 分界（开源 vs 平台专属）：**开代码、留数据**——socket/domain 门禁/MCP/能力包/技能全开；平台专属 = 私有数据 API 与药学库数据本身、胶囊/记忆服务、计量与额度、服务端独立复核即服务、托管运维。`build-smoke.sh` 已是陌生人 README 的八成。
 
