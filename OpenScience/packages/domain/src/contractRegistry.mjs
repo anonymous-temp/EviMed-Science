@@ -354,6 +354,7 @@ const VALIDATORS = Object.freeze({
   'research-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   'appraisal-table': (input) => validateReportShaped(input, proseFilesOf(input)),
   'manuscript-section': (input) => validateReportShaped(input, proseFilesOf(input)),
+  'grant-proposal-package': validateGrantProposalPackage,
   'geo-content-pack': validateGeoContentPack,
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   'episode-plan': (input) => validateJsonShaped(input, { file: 'episode-plan.json', check: checkEpisodePlan }),
@@ -606,6 +607,83 @@ function geoMeasurementNotices(input) {
       geoPlatformsMeasured: platforms,
       geoQuestionsMeasured: new Set(measured.map((row) => String(row.question ?? ''))).size,
     },
+  }
+}
+
+/**
+ * A grant package, graded on the two things a reviewer cannot recover for
+ * themselves.
+ *
+ * The skill's own rules name what goes wrong: "do not invent a funding rule or
+ * reuse a requirement from another call", and do not fabricate institutional
+ * resources or preliminary results. Neither is decidable from prose. What is
+ * decidable is whether every requirement the run says the call imposes carries a
+ * quote from the call it was read out of — a fabricated rule has no quote to
+ * give — and whether the audit actually covers each of them rather than the
+ * three that were easy.
+ *
+ * Blocking stays at what the skill already declared: the four files, and a
+ * milestones table that parses. The two above are notices, because they are new
+ * and the budget is six.
+ * @param {GateInput} input @returns {GateVerdict}
+ */
+function validateGrantProposalPackage(input) {
+  const issues = [...requiredOutputIssues(input), ...proseHygieneIssues(input, proseFilesOf(input))]
+
+  // Milestones are a table, so they are checked as one. A milestone with no date
+  // is a plan item; a milestone with no measurable outcome is a wish.
+  const milestones = text(input, 'milestones.csv')
+  if (milestones.trim()) {
+    const [header = '', ...rows] = milestones.trim().split('\n')
+    const columns = header.split(',').map((name) => name.trim().toLowerCase())
+    for (const required of ['milestone', 'date', 'outcome']) {
+      if (!columns.includes(required)) {
+        issues.push(issue('deliverable_rejected', `milestones.csv has no "${required}" column; it has: ${columns.join(', ')}.`, { path: 'milestones.csv' }))
+      }
+    }
+    const dateAt = columns.indexOf('date')
+    const undated = rows.filter((row) => row.trim() && !String(row.split(',')[dateAt] ?? '').trim()).length
+    if (dateAt >= 0 && undated) {
+      issues.push(issue('deliverable_rejected', `${undated} milestone(s) have no date. A milestone without one is a plan item.`, { path: 'milestones.csv' }))
+    }
+  }
+
+  const requirements = json(input, 'call-requirements.json')
+  const entries = isRecord(requirements) && Array.isArray(requirements.requirements) ? requirements.requirements : []
+  if (entries.length) {
+    // A rule invented or carried over from another call has no quote to give.
+    const unquoted = entries.filter((entry) => !isRecord(entry) || !String(entry.sourceQuote ?? '').trim())
+    if (unquoted.length) {
+      issues.push(issue(
+        'grant_requirement_unquoted',
+        `${unquoted.length} of ${entries.length} stated call requirement(s) carry no quote from the call. A requirement nobody can trace to the instructions is one the reviewer will not find either.`,
+        { severity: 'advisory', path: 'call-requirements.json' },
+      ))
+    }
+    // Coverage by id, not by reading the prose: the audit names each id or it
+    // does not.
+    const audit = text(input, 'grant-audit.md')
+    const uncovered = entries
+      .map((entry) => String(isRecord(entry) ? entry.id ?? '' : '').trim())
+      .filter((id) => id && !audit.includes(id))
+    if (uncovered.length) {
+      issues.push(issue(
+        'grant_requirement_unaudited',
+        `${uncovered.length} requirement(s) are absent from grant-audit.md: ${uncovered.slice(0, 5).join(', ')}. The audit exists to map every criterion to a location.`,
+        { severity: 'advisory', path: 'grant-audit.md' },
+      ))
+    }
+  }
+
+  return {
+    ok: issues.every((item) => item.severity !== 'required'),
+    contractKind: input.contractKind,
+    issues,
+    metrics: {
+      grantRequirements: entries.length,
+      grantMilestones: milestones.trim() ? milestones.trim().split('\n').length - 1 : 0,
+    },
+    errorCode: issues.some((item) => item.severity === 'required') ? 'deliverable_rejected' : null,
   }
 }
 
