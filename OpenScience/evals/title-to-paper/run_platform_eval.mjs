@@ -56,6 +56,38 @@ async function command(name, args, headers) {
   });
 }
 
+/**
+ * Holds the run's event stream open for as long as we wait on it.
+ *
+ * Measured 2026-08-31: three cases driven by polling alone ended
+ * `runtime_stopped` after ~75 seconds, at concurrency 1 and 2 alike, while the
+ * same prompt with a subscriber attached ran for minutes. Whatever the
+ * mechanism, a batch is the one caller that has no browser attached, so it has
+ * to attach one itself. The frames are drained and discarded — the ledger is
+ * still what this harness reads.
+ * @param {string} runId @param {Record<string,string>} headers
+ */
+function attachToRun(runId, headers) {
+  const controller = new AbortController();
+  const done = (async () => {
+    try {
+      const response = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, {
+        headers: { ...headers, Accept: "text/event-stream" },
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) return;
+      const reader = response.body.getReader();
+      while (true) {
+        const { done: finished } = await reader.read();
+        if (finished) break;
+      }
+    } catch {
+      // A dropped stream is not a failed case; the ledger decides the outcome.
+    }
+  })();
+  return { close: () => { controller.abort(); return done; } };
+}
+
 async function waitForRun(runId, headers) {
   const started = Date.now();
   while (Date.now() - started < runTimeoutMs) {
@@ -194,7 +226,13 @@ async function runCase(testCase, outer) {
     headers: { "Content-Type": "application/json", ...context.scopedHeaders },
     body: JSON.stringify({ sessionId, dispatchId, text: testCase.prompt }),
   });
-  const terminal = await waitForRun(dispatched.data.data.id, context.scopedHeaders);
+  const attached = attachToRun(dispatched.data.data.id, context.scopedHeaders);
+  let terminal;
+  try {
+    terminal = await waitForRun(dispatched.data.data.id, context.scopedHeaders);
+  } finally {
+    await attached.close();
+  }
   const transcript = await jsonFetch(
     `${base}/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`,
     { headers: context.scopedHeaders },
