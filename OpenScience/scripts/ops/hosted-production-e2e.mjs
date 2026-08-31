@@ -157,9 +157,17 @@ async function main() {
 
     const runtime = await command(base, "start_runtime", {}, scoped);
     runtimeStarted = true;
+    // The control plane's own surface, not a kernel's. This used to assert the
+    // pass-through base `/api/opencode/:projectId`, a route retired when the
+    // browser stopped speaking a kernel's protocol — so this gate would have
+    // failed against a DSH deployment on its first request, in the same hour
+    // the kernel default is flipped and it is most needed.
     const runtimeUrl = runtime.body?.data;
-    if (typeof runtimeUrl !== "string" || !runtimeUrl.endsWith(`/api/opencode/${projectId}`)) {
+    if (typeof runtimeUrl !== "string" || !runtimeUrl.endsWith("/api/runtime")) {
       throw failure("hosted_e2e_runtime_url_invalid", "The hosted runtime URL is invalid.");
+    }
+    if (/opencode|dsh/.test(runtimeUrl)) {
+      throw failure("hosted_e2e_runtime_url_invalid", "start_runtime handed back a kernel-shaped URL.");
     }
     const agents = await jsonFetch(`${base}/api/agents`, { headers: scoped });
     const agent = agents.body?.data?.find((item) => item.id === "adr-analysis");
@@ -174,13 +182,13 @@ async function main() {
         throw failure("hosted_e2e_specialist_contract_invalid", `The specialist does not require ${requiredPath}.`);
       }
     }
-    const session = await jsonFetch(`${runtimeUrl}/session`, {
+    const session = await jsonFetch(`${runtimeUrl}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...scoped },
       body: "{}",
     });
-    const sessionId = session.body?.id;
-    if (!sessionId) throw failure("hosted_e2e_session_invalid", "OpenCode did not return a real session id.");
+    const sessionId = session.body?.data?.id;
+    if (!sessionId) throw failure("hosted_e2e_session_invalid", "The control plane returned no real session id.");
     if (/^web_mock_/.test(sessionId)) throw failure("hosted_e2e_runtime_not_real", "Mock session ids are forbidden in production E2E.");
     await jsonFetch(`${base}/api/research-sessions/${encodeURIComponent(sessionId)}`, {
       method: "PUT",
@@ -220,10 +228,31 @@ async function main() {
         throw failure("hosted_e2e_specialist_output_untracked", `The run ledger does not track ${requiredPath}.`);
       }
     }
-    const messages = await jsonFetch(`${runtimeUrl}/session/${encodeURIComponent(sessionId)}/message`, { headers: scoped });
-    const userMessage = messages.body?.find((message) => message?.info?.role === "user");
-    if (userMessage?.info?.agent !== "evimed-adr-analysis") {
-      throw failure("hosted_e2e_specialist_not_pinned", "OpenCode history does not show the pinned specialist agent.");
+    const transcript = await jsonFetch(
+      `${runtimeUrl}/sessions/${encodeURIComponent(sessionId)}/transcript`,
+      { headers: scoped },
+    );
+    const messages = transcript.body?.data?.messages ?? [];
+    if (!Array.isArray(messages) || !messages.some((message) => message?.role === "user")) {
+      throw failure("hosted_e2e_transcript_invalid", "The run transcript carries no user message.");
+    }
+    // Independent confirmation that the specialist actually ran, read from the
+    // transcript rather than from the ledger that already claims it.
+    //
+    // The old check read `info.agent` off OpenCode's own message record. The
+    // control plane's transcript has no per-message agent — it is deliberately
+    // kernel-neutral — so the equivalent evidence is the specialist's own tool
+    // appearing in the run: a package that merely says it routed to the drug
+    // safety agent, without ever calling it, fails here.
+    const calledTools = messages
+      .flatMap((message) => message?.parts ?? [])
+      .filter((part) => part?.type === "tool")
+      .map((part) => String(part.tool ?? ""));
+    if (!calledTools.some((tool) => tool.includes("drug_safety_analysis"))) {
+      throw failure(
+        "hosted_e2e_specialist_not_pinned",
+        `The transcript shows no drug_safety_analysis call, so the specialist did not run (tools: ${[...new Set(calledTools)].slice(0, 12).join(", ") || "none"}).`,
+      );
     }
     const artifact = await command(base, "read_artifact", { path: artifactPath }, scoped);
     const artifactText = artifact.body?.data?.data;

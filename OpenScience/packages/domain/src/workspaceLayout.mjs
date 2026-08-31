@@ -20,6 +20,23 @@ export const SOURCES_DIR = '.evimed-sources'
 export const DELIVERABLES_DIR = 'deliverables'
 /** Read-only mount point for authorized dataset partitions (§24.5). */
 export const DATA_DIR = 'data'
+/**
+ * Where the workspace is mounted inside the runtime container.
+ *
+ * Every path in this module is workspace-relative, and the guards compare
+ * against that shape. A model does not: it writes what its own `read` tool
+ * handed back, and that is absolute — `/workspace/deliverables/<id>/report.md`.
+ * Stripping the leading `/` alone turns it into `workspace/deliverables/...`,
+ * which starts with neither `deliverables/` nor any protected prefix, so
+ * `deliverableIdOfPath` returned null and `isProtectedWritePath` returned false
+ * for the entire absolute form.
+ *
+ * On 2026-08-31 that let an accepted deliverable be edited seven times after
+ * its receipt was written: the freeze was in place, correct, and matched
+ * nothing. The same hole covered the brief, the run-state projection, the
+ * capsule, the data mount and the receipt itself.
+ */
+export const RUNTIME_WORKSPACE_ROOT = '/workspace'
 
 export const workspaceLayout = Object.freeze({
   briefDir: BRIEF_DIR,
@@ -93,6 +110,10 @@ export function normalizeWorkspacePath(value) {
   const raw = String(value ?? '').replace(/\\/g, '/').trim()
   if (!raw) return null
   if (/^[a-zA-Z]:\//.test(raw)) return null
+  // Only for an absolute path, and only the root segment: a relative
+  // `workspace/notes.md` is an ordinary file the run may own, and stripping it
+  // there would make two different paths compare equal.
+  const absolute = raw.startsWith('/')
   const segments = raw.replace(/^\/+/, '').split('/')
   /** @type {string[]} */
   const out = []
@@ -104,6 +125,10 @@ export function normalizeWorkspacePath(value) {
       continue
     }
     out.push(segment)
+  }
+  const rootSegments = RUNTIME_WORKSPACE_ROOT.split('/').filter(Boolean)
+  if (absolute && rootSegments.every((segment, index) => out[index] === segment)) {
+    out.splice(0, rootSegments.length)
   }
   return out.length ? out.join('/') : null
 }

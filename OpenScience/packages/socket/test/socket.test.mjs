@@ -448,10 +448,24 @@ test("an accepted deliverable is finished, and polishing it cannot cost the deli
     deliveryAttemptLimit: 7,
     acceptedDeliverables: ["sxjw-longterm-evidence-review"],
   };
+  // Both shapes, because only one of them is what a model actually writes.
+  //
+  // This test used to list relative paths only. It was correct and it passed,
+  // and on 2026-08-31 an accepted deliverable was edited seven times after its
+  // receipt: the model wrote `/workspace/deliverables/<id>/report.md`, the
+  // absolute form its own `read` tool had just handed back. Normalizing dropped
+  // the leading slash and left `workspace/deliverables/...`, which starts with
+  // neither `deliverables/` nor any protected prefix — so the freeze matched
+  // nothing, the run repaired a package that no longer matched its receipt, and
+  // 38 minutes of work was discarded at the end as a digest mismatch.
   for (const call of [
     { name: "write", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-report.md" } },
     { name: "edit", args: { file_path: "deliverables/sxjw-longterm-evidence-review/clinical-evidence-matrix.json" } },
     { name: "bash", args: { command: "rm -f deliverables/sxjw-longterm-evidence-review/citation-audit.md" } },
+    { name: "write", args: { file_path: "/workspace/deliverables/sxjw-longterm-evidence-review/clinical-evidence-report.md" } },
+    { name: "edit", args: { file_path: "/workspace/deliverables/sxjw-longterm-evidence-review/clinical-evidence-matrix.json" } },
+    { name: "edit", args: { path: "/workspace/deliverables/sxjw-longterm-evidence-review/citation-audit.md" } },
+    { name: "bash", args: { command: "rm -f /workspace/deliverables/sxjw-longterm-evidence-review/citation-audit.md" } },
   ]) {
     const verdict = toolPolicy(call, state);
     assert.equal(verdict.allow, false, `accepted deliverable was editable: ${JSON.stringify(call.args)}`);
@@ -469,6 +483,26 @@ test("an accepted deliverable is finished, and polishing it cannot cost the deli
   ]) {
     assert.equal(toolPolicy(call, state).allow, true, `wrongly refused: ${JSON.stringify(call.args)}`);
   }
+
+  // The brief, the run-state projection, the capsule, the data mount and the
+  // receipt were all reachable in absolute form by the same route. The receipt
+  // is the one that matters most: a run that can rewrite it can name any bytes
+  // it likes as the ones the gate accepted.
+  for (const target of [
+    "/workspace/delivery-receipt.json",
+    "/workspace/.evimed-brief/research-brief.md",
+    "/workspace/.evimed-run/mirror.json",
+    "/workspace/.evimed-capsule/view.json",
+    "/workspace/data/private.csv",
+  ]) {
+    const verdict = toolPolicy({ name: "write", args: { file_path: target } }, state);
+    assert.equal(verdict.allow, false, `absolute protected path was writable: ${target}`);
+    assert.equal(verdict.code, "path_guard_denied");
+  }
+
+  // A relative directory that merely happens to be called `workspace` belongs
+  // to the run. Stripping it there would make two different files compare equal.
+  assert.equal(toolPolicy({ name: "write", args: { file_path: "workspace/scratch.md" } }, state).allow, true);
 
   // And with nothing accepted yet, the deliverable is ordinary.
   assert.equal(

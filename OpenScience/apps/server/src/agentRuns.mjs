@@ -2207,11 +2207,16 @@ export class AgentRunStore {
       // A file that does not match the digest it was graded under is not the
       // file that was graded. Refusing is the only honest answer: the
       // alternative is delivering something no gate has seen.
+      //
+      // No amendment on this path, unlike the live one. This runs when the
+      // container is gone, so the gate cannot be re-run over the bytes on disk
+      // and nothing has judged them — which is precisely the case the receipt
+      // exists to catch.
       return this.finishInternal(project, run.id, {
         status: "failed",
         errorCode: "specialist_receipt_digest_mismatch",
         artifacts: [],
-        qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches`),
+        qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`),
       });
     }
     return this.finishInternal(project, run.id, {
@@ -2537,15 +2542,43 @@ export class AgentRunStore {
       }
       const verified = await verifiedReceiptArtifacts(project, finalReceipt);
       if (verified.mismatched.length) {
-        return this.finishInternal(project, run.id, {
-          status: "failed",
-          errorCode: "specialist_receipt_digest_mismatch",
-          artifacts: [],
-          qualityNotices: [
-            ...(terminal.qualityNotices ?? []),
-            ...verified.mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches`),
-          ].slice(0, 20),
-        });
+        // Changed bytes and a broken delivery are not the same thing.
+        //
+        // Every industry that ships artifacts says the same: a verified thing
+        // that is modified becomes a new thing to verify, never a thing to
+        // destroy. This branch destroyed it — `artifacts: []` on a package the
+        // gate had accepted — and on 2026-08-31 that discarded 38 minutes of
+        // work whose files were, at that moment, gate-clean.
+        //
+        // We are in the one position where re-verification is free: on this
+        // path `specialistCompletionOutcome` has already run the same domain
+        // gate over the bytes now on disk (`readRequiredFile` reads current
+        // content, not the receipt's copy), and `terminal.status` carries its
+        // verdict. So a mismatch here means the run changed accepted files and
+        // the changed files still pass — amend, and say which moved.
+        //
+        // The receipt file itself is not rewritten: workspaceLayout records
+        // that it is written only by evimed_submit_deliverable, and the ledger
+        // entry this returns is the control plane's own durable record of what
+        // it verified and shipped.
+        const amendable = terminal.status === "succeeded" && artifacts.length > 0;
+        if (!amendable) {
+          return this.finishInternal(project, run.id, {
+            status: "failed",
+            errorCode: "specialist_receipt_digest_mismatch",
+            artifacts: [],
+            qualityNotices: [
+              ...(terminal.qualityNotices ?? []),
+              ...verified.mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`),
+            ].slice(0, 20),
+          });
+        }
+        terminal.qualityNotices = [
+          ...(terminal.qualityNotices ?? []),
+          `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
+          + "服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。"
+          + "若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
+        ].slice(0, 20);
       }
     }
     return this.finishInternal(project, run.id, { ...terminal, artifacts });
