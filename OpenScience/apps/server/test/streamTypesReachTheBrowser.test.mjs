@@ -82,3 +82,19 @@ test("a type with no publisher is named, not assumed to work", async () => {
     + "check the browser registers a listener for it first",
   );
 });
+
+// Routing attribution, checked where it is actually written. The regex net
+// catching a request after the model declined to answer looks identical, in the
+// ledger, to the net catching one after the model said "no specialist fits" —
+// and only the first means the model never got a vote.
+test("the regex net says when it caught a request the model never judged", async () => {
+  const source = await readFile(path.join(repoRoot, "apps/server/src/server.mjs"), "utf8");
+  assert.match(
+    source,
+    /routedSpecialist = net && classifierTrace\.failure/,
+    "a net match after a classifier failure must be distinguishable from one after a clean verdict",
+  );
+  assert.match(source, /\$\{net\.reason\}\(classifier:\$\{classifierTrace\.failure\}\)/);
+  // And the answer-line fallback keeps its own attribution.
+  assert.match(source, /`unrouted:open-domain\(classifier:\$\{classifierTrace\.failure\}\)`/);
+});
