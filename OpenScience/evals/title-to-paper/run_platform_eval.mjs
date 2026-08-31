@@ -129,7 +129,17 @@ async function runCase(testCase, context) {
   const resultPath = path.join(outputDir, `${testCase.caseId}.json`);
   try {
     const existing = JSON.parse(await fs.readFile(resultPath, "utf8"));
-    if (existing.run?.status === "succeeded" && existing.assistantText) {
+    // Done means done, whatever the delivery looked like.
+    //
+    // This used to require `assistantText`, which was right when every case in
+    // this corpus answered on the open-domain line and the reply WAS the
+    // deliverable. Today they route to a file-delivery specialist whose reply
+    // is empty by design — the assistant emits reasoning and tool calls, and
+    // the answer is the files. So a finished case looked unfinished, and an
+    // overnight batch resumed after an interruption would have redone all of
+    // it at ~40 minutes each while reporting itself as making progress.
+    const produced = Boolean(existing.assistantText) || (existing.artifacts?.length ?? 0) > 0;
+    if (existing.run?.status === "succeeded" && produced) {
       if (!Array.isArray(existing.artifacts)) {
         existing.artifacts = await captureArtifacts(
           existing.run?.artifacts,
@@ -200,6 +210,17 @@ async function main() {
   const cases = requestedCaseIds.length > 0
     ? corpus.cases.filter((testCase) => requestedCaseIds.includes(testCase.caseId))
     : corpus.cases.slice(start, start + limit);
+  // Said out loud at the start, because "resumed 18 of 33" and "restarted all
+  // 33" produce the same log for the first forty minutes otherwise.
+  const alreadyDone = (await Promise.all(cases.map(async (testCase) => {
+    try {
+      const prior = JSON.parse(await fs.readFile(path.join(outputDir, `${testCase.caseId}.json`), "utf8"));
+      return prior.run?.status === "succeeded" && (Boolean(prior.assistantText) || (prior.artifacts?.length ?? 0) > 0);
+    } catch {
+      return false;
+    }
+  }))).filter(Boolean).length;
+  process.stdout.write(`[resume] ${alreadyDone} of ${cases.length} case(s) already finished; ${cases.length - alreadyDone} to run\n`);
   if (requestedCaseIds.length > 0 && cases.length !== new Set(requestedCaseIds).size) {
     const found = new Set(cases.map((testCase) => testCase.caseId));
     const missing = [...new Set(requestedCaseIds)].filter((caseId) => !found.has(caseId));
