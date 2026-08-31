@@ -94,17 +94,30 @@ export class SpecialistClassifier {
     return this.enabled && this.config?.deepseekProviderEnabled === true && Boolean(this.config?.deepseekApiKey);
   }
 
-  /** A classification that never happened, as opposed to one that concluded
-   *  "no specialist". Both send the turn to the answer line, but only this one
-   *  means the fallback is not working — and for six of six live calls it was
-   *  not, silently, because the token budget cut the verdict off. */
-  declined(reason) {
+  /**
+   * A classification that never happened, as opposed to one that concluded
+   * "no specialist". Both send the turn to the answer line, but only this one
+   * means the fallback is not working — and for six of six live calls it was
+   * not, silently, because the token budget cut the verdict off.
+   *
+   * Which is why the reason now leaves this method. It used to go to stderr and
+   * to `lastFailure`, a field nothing reads; the ledger recorded the same route
+   * reason either way, so after a batch there was no telling which runs were
+   * answered on the open-domain line because they belonged there and which were
+   * sent there by a timeout. `trace` is per-call because a batch runs
+   * concurrently, and a field on the shared classifier would attribute one
+   * request's timeout to another's question.
+   * @param {string} reason @param {{ failure?: string }} [trace]
+   */
+  declined(reason, trace) {
+    if (trace) trace.failure = reason;
     this.lastFailure = reason;
     process.stderr.write(`specialist classifier produced no verdict: ${reason}\n`);
     return null;
   }
 
-  async classify(query, agents) {
+  /** @param {{ failure?: string }} [trace] */
+  async classify(query, agents, trace) {
     if (!this.available) return null;
     if (typeof query !== "string" || !query.trim()) return null;
     if (!Array.isArray(agents) || agents.length === 0) return null;
@@ -157,7 +170,7 @@ export class SpecialistClassifier {
         }),
         signal: controller.signal,
       });
-      if (!response.ok) return this.declined(`http_${response.status}`);
+      if (!response.ok) return this.declined(`http_${response.status}`, trace);
       const body = await boundedJsonResponse(response);
       // Read the verdict wherever the model put it. A reasoning model that
       // runs its budget close still often carries the JSON in
@@ -168,7 +181,7 @@ export class SpecialistClassifier {
       // No verdict at all is a broken classifier; "none" and a low-confidence
       // guess are verdicts. Only the first is worth reporting, and it used to
       // be indistinguishable from the other two.
-      if (!parsed) return this.declined(message?.content?.trim() ? "unparseable" : "empty_content");
+      if (!parsed) return this.declined(message?.content?.trim() ? "unparseable" : "empty_content", trace);
       if (parsed.agentId.toLowerCase() === "none") return null;
       const agent = byId.get(parsed.agentId);
       if (!agent) return null;
@@ -181,7 +194,7 @@ export class SpecialistClassifier {
         confidence: parsed.confidence,
       });
     } catch (error) {
-      return this.declined(error?.name === "AbortError" ? "timeout" : `error_${error?.code ?? "unknown"}`);
+      return this.declined(error?.name === "AbortError" ? "timeout" : `error_${error?.code ?? "unknown"}`, trace);
     } finally {
       clearTimeout(timeout);
     }

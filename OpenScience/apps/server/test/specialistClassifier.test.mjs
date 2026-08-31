@@ -138,3 +138,31 @@ test("a classifier that produced no verdict is distinguishable from one that sai
   assert.equal(await decided.classify("帮我润色一句话", agents), null);
   assert.equal(decided.lastFailure, undefined, "a verdict of none is not a failure");
 });
+
+// A classification that never happened and a question with no specialist both
+// return null, and the dispatcher wrote the same route reason for both. After a
+// 33-run batch that difference is unrecoverable: you cannot tell which runs
+// answered on the open-domain line because they belonged there, and which were
+// sent there by a timeout on a slow link. S162 was that failure, once already.
+test("a decline says why, and a real verdict says nothing", async () => {
+  const aborting = async () => { throw Object.assign(new Error("aborted"), { name: "AbortError" }); };
+  const trace = {};
+  assert.equal(await new SpecialistClassifier(baseConfig(), { fetchImpl: aborting })
+    .classify("请开展一项荟萃分析", agents, trace), null);
+  assert.equal(trace.failure, "timeout");
+
+  // "No specialist fits" is a verdict, not a failure, and must leave the trace
+  // clean — otherwise every open-domain question reads as a broken router.
+  const clean = {};
+  const saysNone = new SpecialistClassifier(baseConfig(), {
+    fetchImpl: fetchReturning(JSON.stringify({ agentId: "none", confidence: 0.9 })),
+  });
+  assert.equal(await saysNone.classify("今天天气怎么样", agents, clean), null);
+  assert.equal(clean.failure, undefined);
+
+  // An HTTP failure is a decline too, and names its status.
+  const broken = {};
+  await new SpecialistClassifier(baseConfig(), { fetchImpl: fetchReturning("", { ok: false }) })
+    .classify("请开展一项荟萃分析", agents, broken);
+  assert.match(String(broken.failure), /^http_/);
+});

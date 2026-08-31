@@ -939,10 +939,12 @@ export function createWebApiApp(overrides = {}) {
         // high-risk medicine asked about in a report request always reaches the
         // clinical gate — without letting keyword matching outrank judgement.
         let routedSpecialist = null;
+        /** @type {{ failure?: string }} */
+        const classifierTrace = {};
         if (boundSession?.mode === "open-domain") {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents);
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
           if (!routedSpecialist) routedSpecialist = routeOpenDomainSpecialist(text, routableAgents);
         }
         // Unrouted open-domain questions still run on a managed EviMed agent
@@ -958,7 +960,12 @@ export function createWebApiApp(overrides = {}) {
               runtimeAgent: answerAgent.runtimeAgent,
               // Falling through to the answer line is a routing outcome like any
               // other, and the one most often mistaken for a failure to route.
-              reason: "unrouted:open-domain",
+              // So when the classifier never got to decide, the ledger says so:
+              // a batch cannot be read afterwards if a timed-out routing and a
+              // genuinely open-domain question leave the same record.
+              reason: classifierTrace.failure
+                ? `unrouted:open-domain(classifier:${classifierTrace.failure})`
+                : "unrouted:open-domain",
             }
           : null);
         const run = await agentRuns.dispatch(ctx.project, {
