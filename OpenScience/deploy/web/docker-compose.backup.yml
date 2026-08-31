@@ -36,12 +36,29 @@ services:
       OPEN_SCIENCE_OBJECT_BACKUP_KMS_KEY_ID: ${OPEN_SCIENCE_OBJECT_BACKUP_KMS_KEY_ID:-}
       AWS_REGION: ${AWS_REGION:-}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      # The CLI reads the mounted credentials file itself.
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/object-backup-credentials
+      # S3-compatible stores (Tencent COS, MinIO) need the endpoint named; AWS
+      # itself ignores an empty value.
+      AWS_ENDPOINT_URL: ${OPEN_SCIENCE_OBJECT_BACKUP_ENDPOINT:-}
     volumes:
       - open-science-data:/data:ro
       - open-science-backups:/backups
     secrets:
       - source: open-science-backup-passphrase
         target: backup-passphrase
+        mode: 0400
+      # Object-storage credentials arrive as a file, by path, like every other
+      # secret here — never as a value in .env, which is read by more things and
+      # copied to more places than anyone tracks. The aws CLI reads this format
+      # natively, so nothing has to parse or re-export it.
+      #
+      # Optional on purpose: a deployment with no off-box copy is a decision, and
+      # `backup_external_unconfirmed` is what says so out loud. What must not
+      # happen is the state this replaced — external mode declared, no bucket
+      # configured, and 119 backups that never left the machine.
+      - source: open-science-object-backup-credentials
+        target: object-backup-credentials
         mode: 0400
     healthcheck:
       test: ["CMD", "node", "scripts/ops/backup-scheduler.mjs", "health"]
@@ -61,3 +78,5 @@ services:
 secrets:
   open-science-backup-passphrase:
     file: ${OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-./secrets/backup-passphrase.txt}
+  open-science-object-backup-credentials:
+    file: ${OPEN_SCIENCE_OBJECT_BACKUP_CREDENTIALS_FILE:-./secrets/object-backup-credentials.ini}

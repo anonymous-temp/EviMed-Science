@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const backupScript = path.join(scriptDir, "backup-data.sh");
 const restoreDrillScript = path.join(scriptDir, "restore-drill.sh");
+const objectBackupScript = path.join(scriptDir, "object-backup.mjs");
 const archivePattern = /^open-science-data-\d{8}T\d{6}Z\.tar\.gz\.enc$/;
 const outputLimit = 64 * 1024;
 let activeChild = null;
@@ -61,6 +62,8 @@ function schedulerConfig() {
     retrySeconds: integerEnv("OPEN_SCIENCE_BACKUP_RETRY_SECONDS", 300, { min: 1, max: 86_400 }),
     maxFailures: integerEnv("OPEN_SCIENCE_BACKUP_MAX_FAILURES", 3, { min: 1, max: 100 }),
     drillEvery: integerEnv("OPEN_SCIENCE_BACKUP_RESTORE_DRILL_EVERY", 1, { min: 1, max: 10_000 }),
+    // Empty means this deployment keeps backups on one machine and has said so.
+    objectBackupUri: String(process.env.OPEN_SCIENCE_OBJECT_BACKUP_URI ?? "").trim(),
     initialDelaySeconds: integerEnv("OPEN_SCIENCE_BACKUP_INITIAL_DELAY_SECONDS", 0, { min: 0, max: 86_400 }),
     runOnce: boolEnv("OPEN_SCIENCE_BACKUP_RUN_ONCE"),
   };
@@ -179,13 +182,46 @@ async function runCycle(config, previous) {
     lastDrillAt = new Date().toISOString();
     restoreDrill = "completed";
   }
+  // Copy it off the machine, if this deployment has somewhere to copy it to.
+  //
+  // Nothing here did that. The scheduler made encrypted archives, drilled the
+  // restore, and reported success — while every copy stayed on one disk. On
+  // 2026-08-31 that had been true for 119 backups: the readiness probe said
+  // `backup_external_unconfirmed`, the operator acknowledgement was unsigned,
+  // and the object-storage URI was empty. A backup that has never left the
+  // machine it protects is a backup for the failures that do not take the
+  // machine with them.
+  //
+  // Three outcomes, kept apart on purpose. "This deployment has no off-box
+  // target" is a decision and reports as `not_configured`. "The upload failed"
+  // is an incident and must not be reported as a completed backup — but neither
+  // may it discard the local archive, which is real and was just verified.
+  let offsite = "not_configured";
+  if (config.objectBackupUri) {
+    try {
+      await runProcess("node", [objectBackupScript, "upload", archive, config.objectBackupUri]);
+      offsite = "uploaded";
+    } catch (error) {
+      offsite = "failed";
+      log("backup.offsite_failed", {
+        archive: path.basename(archive),
+        error: String(error?.message ?? error).slice(0, 400),
+      }, true);
+    }
+  }
+
   const state = {
     schemaVersion: 1,
-    status: "healthy",
+    // A local archive with no off-box copy is not the same health as one with
+    // it. `degraded` keeps the distinction visible without discarding a backup
+    // that did succeed locally.
+    status: offsite === "failed" ? "degraded" : "healthy",
     lastAttemptAt: attemptAt,
     lastSuccessAt: new Date().toISOString(),
     lastDrillAt,
     lastArchive: path.basename(archive),
+    lastOffsite: offsite,
+    lastOffsiteAt: offsite === "uploaded" ? new Date().toISOString() : (previous?.lastOffsiteAt ?? null),
     successfulBackups,
     consecutiveFailures: 0,
   };
@@ -194,6 +230,7 @@ async function runCycle(config, previous) {
     archive: state.lastArchive,
     successfulBackups,
     restoreDrill,
+    offsite,
   });
   return state;
 }
