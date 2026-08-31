@@ -141,7 +141,15 @@
 - [x] **J1**（2026-08-30 完成，含阴性对照）`seam-probe` 的 `requiredEnforcement` 默认改 `partial`（托管部署经 patch 显式回 `full`）——一行之差 = 陌生人 mac/普通 Linux 能不能启动。
 - [x] **J2**（2026-08-30 完成）三包去 `private:true`、真版本、publishConfig：`@evimed/domain` / `@evimed/harness-port` / `@evimed/dsh-socket`；`workspace:*` 依赖改可解析版本。
 - [ ] **J3** bundle 自带 `mcp-evimed` 配置行（现在只有控制面 `dshProfilePatch.mjs` 会生成，没有它整个能力目录是装饰）。
-- [ ] **J4** capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一**（已实测漂移一句）。
+- [~] **J4**（2026-08-31：两树合一已完成，另两项未做）capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一 —— 已完成，但裁决的方向要反过来**：
+  「单一作者树 = capabilities/」这个方向若照做会**毁掉真内容**。实测三方对照：
+  `runtime/skills/evimed`（那条测试实际校验的副本）与 `capability-skills/`（运行真正读到的）
+  都写 **three tools preserve**，而 `capabilities/`（被指定为权威的那棵）还写 **two** ——
+  照 capabilities 覆盖过去，等于把「只有两个工具保全产物」这个**错误事实**重新灌进每一次委派运行，
+  运行会因为拿不到 artifact 而丢掉本可成立的主张。镜像树同时还多一段「后台话语该去哪」的出口说明。
+  所以是**按内容合并**（镜像的三处更正 + 作者树那一句更完整的表述），不是按方向拷贝。
+  合并后新增 `skillTreesAreOneTree.test.mjs` 相等测试（变异验证：把镜像改离作者树当场点名到行号），
+  DSH↔OpenCode 那条 drift 测试是**另一对**（内核差异，旧树待删），基线相应 +1。
 - [x] **J5**（2026-08-31 完成，两条配套齐）去硬编码：**前半已完成**（`EVIMED_EVIDENCE_BASE_URL` 改 env-overridable，且无凭证时
   `_evimed_post` 直接以 `evimed_evidence_unconfigured` 拒绝并指明"keyless 公共源仍可用"——
   陌生人不再每次检索都先对 evimed.com 发一个注定失败的请求；错误码已归类为 recoverable）。
