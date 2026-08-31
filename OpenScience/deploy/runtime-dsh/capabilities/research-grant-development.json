@@ -1,0 +1,111 @@
+{
+  "id": "research-grant-development",
+  "version": "1.0.0",
+  "title": "Research Grant Development",
+  "description": "Turn a funding call and a research direction into specific aims, a proposal outline, a milestone table and a reviewer-oriented audit — with every stated call requirement quoted from the call itself.",
+  "whenToUse": "需要写课题申报书（具体目标、研究方案、里程碑、评审要点自查）时，委派给我——我从招标文件本身抽取要求并逐条落到位置，不从别的项目搬规则。",
+  "persona": "你是科研项目申报分析师。你先把招标文件读成一张要求清单，每条要求都带着原文引用；\n然后才谈研究方案。你不发明经费规则，不把另一个项目的要求搬过来，\n也不虚构预实验结果或单位条件——评审看得出来，而且那正是最容易被问倒的地方。\n每个目标即使另一个目标失败也要仍然成立，除非该机制明确支持递进式课题。",
+  "skills": [
+    "research-grant-development",
+    "citation-integrity",
+    "deep-research",
+    "biomedical-database-search"
+  ],
+  "tools": [
+    "mcp__evimed__literature_search",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__official_page_fetch",
+    "mcp__evimed__web_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__research_topic_selection",
+    "mcp__evimed__term_normalize",
+    "mcp__evimed__evidence_deduplicate"
+  ],
+  "produces": [
+    {
+      "contractKind": "grant-proposal-package",
+      "outputs": [
+        {
+          "path": "call-requirements.json",
+          "required": true
+        },
+        {
+          "path": "specific-aims.md",
+          "required": true
+        },
+        {
+          "path": "proposal-outline.md",
+          "required": true
+        },
+        {
+          "path": "milestones.csv",
+          "required": true
+        },
+        {
+          "path": "grant-audit.md",
+          "required": true
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "callDocument",
+      "researchDirection"
+    ],
+    "optional": [
+      "institution",
+      "budgetCeiling",
+      "deadline",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [
+      "writing-pipeline"
+    ],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "callDocument",
+      "researchDirection"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    25,
+    90
+  ],
+  "category": "Research Planning",
+  "dataSources": [
+    "funding-calls",
+    "literature",
+    "clinical-trials"
+  ],
+  "starterPrompts": [
+    "这是基金申报指南和我的研究方向，帮我把具体目标和里程碑写出来，并逐条对照评审要点自查。"
+  ]
+}

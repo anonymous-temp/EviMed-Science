@@ -29,6 +29,7 @@ export const CONTRACT_KINDS = Object.freeze([
   // P2 — planned capabilities
   'appraisal-table',
   'manuscript-section',
+  'grant-proposal-package',
   // P3 — GEO
   'geo-content-pack',
   // Reserved: regulated, ships only when product and compliance decide (§9.9)
@@ -110,6 +111,7 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'research-brief': '研究简报',
   'appraisal-table': '证据质量评价表',
   'manuscript-section': '稿件章节',
+  'grant-proposal-package': '课题申报包',
   'geo-content-pack': 'GEO 内容包',
   'clinical-decision-brief': '临床决策辅助简报',
   'episode-plan': '回合计划',

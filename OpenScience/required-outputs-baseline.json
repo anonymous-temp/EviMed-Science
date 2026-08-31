@@ -342,6 +342,52 @@
           "addedOn": "2026-08-30"
         }
       ]
+    },
+    "grant-proposal-package": {
+      "capability": "research-grant-development",
+      "requiredCount": 7,
+      "outputs": [
+        {
+          "path": "call-requirements.json",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "specific-aims.md",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "proposal-outline.md",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "milestones.csv",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "grant-audit.md",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-08-31"
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false,
+          "addedOn": "2026-08-31"
+        }
+      ]
     }
   }
 }

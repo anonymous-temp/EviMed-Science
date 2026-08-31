@@ -166,7 +166,12 @@
   **优先级：升级为活缺陷修复，插队先于 J4/J7/J3。**
 - [ ] ~~**J5 原文**~~ 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
 - [ ] **J6** 补三个 keyless 直连模式（可后置）：web_search（SearXNG/Brave 直连档）、patent_search（Google Patents/EPO OPS 连接器）、open_access PDF 直连 Unpaywall 分支；pharmacy 出「自建 SQLite 的 recipe」而非数据。
-- [ ] **J7** 课题申报书从 curated 技能升为正式能力包（目前只有 `research-grant-development` 技能，无 capability/契约）。
+- [x] **J7**（2026-08-31 完成）课题申报书从 curated 技能升为正式能力包：新增契约种类 `grant-proposal-package` + 验证器、`capabilities/research-grant-development/`
+  （manifest + SKILL）、`capability-skills/` 同名技能体、`evals/research-grant-development/` 三份 brief。
+  **阻断只在原技能已声明的东西上**（四件产物 + milestones 表可解析、每条里程碑有日期）；
+  两条新判据「要求无原文引用」「要求未进自查」按纪律**先 notice**，五条变异全被抓。
+  **必需产物棘轮当场接住了它**——新契约七件必需文件必须先记进 `required-outputs-baseline.json`
+  才放行，这是那条棘轮第一次真用上。
 - [ ] **J8** 引擎开源包装（点亮 meta/选题/MR/审稿/文献计量/药安 六个管理作业）：六个 Python agent 独立仓库 + evimed_runner CLI 文档 + 本地模式直连 DeepSeek key（现在要求走网关且钉死 deepseek-v4-pro）。
 
 顺序裁决（2026-08-30）：**J5b（活缺陷，插队）→ J7（小、独立）→ J4（单独一轮，赶在 33 篇批测之前落地，让批测覆盖合并后的树；方向=单一作者树 `capabilities/`，镜像树由它生成/拷贝，漂移测试改为相等测试）→ J3（先考古 `dshProfilePatch.mjs:145-176` 那行的生成参数，静态部分进 bundle patch 带 env 占位，控制面只留部署专属覆盖）**。

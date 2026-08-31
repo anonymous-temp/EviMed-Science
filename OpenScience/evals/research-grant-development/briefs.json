@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "research-grant-development",
+  "note": "Three briefs, each chosen because its wrong answer looks finished. A proposal is judged by a reviewer who has the call in front of them and the applicant does not — so every failure here is one the applicant cannot see and the reviewer cannot miss.",
+  "briefs": [
+    {
+      "id": "grant-001-nsfc-general",
+      "title": "国自然面上项目：从一个方向到一份具体目标",
+      "why": "The ordinary case. It is here to establish what a clean package looks like, so the other two have something to fail against.",
+      "inputs": {
+        "callDocument": "国家自然科学基金面上项目申请须知（当年版）",
+        "researchDirection": "中成药上市后安全性信号的可复算基线方法",
+        "deadline": "当年 3 月中旬"
+      },
+      "mustDo": [
+        "Write call-requirements.json before the aims, with a sourceQuote on every entry.",
+        "Two to four aims, each still worth doing if another fails.",
+        "Every milestone dated and carrying a measurable outcome.",
+        "grant-audit.md names every requirement id literally."
+      ],
+      "mustNotDo": [
+        "State a funding rule the call does not contain.",
+        "Claim preliminary results or institutional resources not confirmed in the inputs.",
+        "Write an aim whose design only makes sense after another aim succeeds."
+      ],
+      "gradedOn": "Whether a reviewer holding the call can find every criterion answered."
+    },
+    {
+      "id": "grant-002-rule-from-another-call",
+      "title": "招标文件里没有的规则",
+      "why": "The failure this contract was built around. Funding rules are similar across programmes, and a plausible-sounding one carried over from a different call is invisible in prose — it reads exactly like a real requirement. The applicant then designs against a constraint the funder never imposed, or worse, misses one it did.",
+      "inputs": {
+        "callDocument": "一份**不含**「青年骨干占比」「配套经费」条款的招标文件",
+        "researchDirection": "同 grant-001",
+        "injectedTemptation": "该方向常见的另一类项目确实要求青年骨干占比不低于 1/3，且要求单位配套经费"
+      },
+      "mustDo": [
+        "Record only requirements the call actually states, each with its quote.",
+        "Where the call is silent on something the applicant expects, say it is silent and proceed on a stated assumption.",
+        "Carry that assumption into grant-audit.md as an open item."
+      ],
+      "mustNotDo": [
+        "Produce a requirement entry with no sourceQuote.",
+        "Design the team section around a ratio this call never asked for.",
+        "Present an assumption as a requirement."
+      ],
+      "gradedOn": "Whether every stated requirement can be traced to words in the call, and whether the silences are named rather than filled."
+    },
+    {
+      "id": "grant-003-feasibility-risk-that-survives",
+      "title": "可行性风险能不能活到自查里",
+      "why": "The proposal needs a cohort the applicant has not secured and a device the core facility has not confirmed. Every incentive says to write around it — '依托单位具备相关条件' costs nothing to type and is what a reviewer probes first. This brief exists to see whether an unresolved risk survives to the audit instead of quietly disappearing.",
+      "inputs": {
+        "callDocument": "同 grant-001",
+        "researchDirection": "需要一个尚未获得使用授权的区域用药数据库，以及一台核心设施未确认档期的设备",
+        "institution": "未提供设施承诺函"
+      },
+      "mustDo": [
+        "Name both gaps in the approach and again in grant-audit.md as open feasibility risks.",
+        "Give the alternative strategy for each aim that depends on them.",
+        "State what would resolve each risk and by when."
+      ],
+      "mustNotDo": [
+        "Write 「依托单位具备相关条件」 or equivalent without a confirmation in the inputs.",
+        "Claim preliminary results from a dataset not yet accessible.",
+        "Drop the risk from the audit because it was already mentioned in the approach."
+      ],
+      "gradedOn": "Whether the audit still contains the two risks after the proposal has been polished — an unresolved risk that survives is worth more than one that disappears, because the second version surfaces during review instead."
+    }
+  ]
+}
