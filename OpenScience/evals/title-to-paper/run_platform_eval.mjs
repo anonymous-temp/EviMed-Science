@@ -111,22 +111,39 @@ async function captureArtifacts(paths, headers) {
   return captured;
 }
 
-async function ensureProject(headers) {
-  const projectId = "eval-title-to-paper-v1";
+/**
+ * One project per case, because a project is one workspace.
+ *
+ * This used to return a single fixed id for the whole corpus. That was
+ * harmless when every case answered on the open-domain line and wrote nothing:
+ * the deliverable was the reply. These cases now route to a file-delivery
+ * specialist, and a shared workspace means a shared `deliverables/` tree, a
+ * shared `.evimed-run` projection and a shared `delivery-receipt.json` — so at
+ * --concurrency 2 each run read whichever run had written last. Two cases ran
+ * for 23 and 27 minutes, produced seven gate cycles and eight artifacts each,
+ * and were both failed for a required skill neither of them was missing.
+ * Sequentially it is no better: the previous case's deliverables and receipt
+ * are still sitting there when the next one starts.
+ * @param {Record<string, string>} headers @param {string} caseId
+ */
+async function ensureProject(headers, caseId) {
+  const projectId = `eval-t2p-${label}-${caseId}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60);
   const existing = await jsonFetch(`${base}/api/projects`, { headers });
   const projects = existing.data?.data ?? [];
   if (!projects.some((project) => project.id === projectId)) {
     await jsonFetch(`${base}/api/projects`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ id: projectId, name: "题目到正文开放获取评测" }),
+      body: JSON.stringify({ id: projectId, name: `题目到正文开放获取评测 ${caseId}` }),
     });
   }
   return projectId;
 }
 
-async function runCase(testCase, context) {
+async function runCase(testCase, outer) {
   const resultPath = path.join(outputDir, `${testCase.caseId}.json`);
+  const projectId = await ensureProject(outer.authHeaders, testCase.caseId);
+  const context = { scopedHeaders: { ...outer.authHeaders, "X-Open-Science-Project": projectId } };
   try {
     const existing = JSON.parse(await fs.readFile(resultPath, "utf8"));
     // Done means done, whatever the delivery looked like.
@@ -153,6 +170,9 @@ async function runCase(testCase, context) {
   } catch {}
 
   process.stdout.write(`[start] ${testCase.caseId} ${testCase.title}\n`);
+  // Booted through the control plane, per project. Its URL is no longer a
+  // thing this harness talks to.
+  await command("start_runtime", {}, context.scopedHeaders);
   // POST /api/runtime/sessions, not a passthrough to the kernel: the runtime
   // pass-through route was retired with the OpenCode kernel, and this harness
   // was still calling it — so it could not run against DSH at all.
@@ -236,12 +256,7 @@ async function main() {
   const csrf = login.data?.data?.csrfToken ?? "";
   if (!cookie || !csrf) throw new Error("Local EviMed login did not return cookie and CSRF token");
   const authHeaders = { Cookie: cookie, "X-Open-Science-CSRF": csrf };
-  const projectId = await ensureProject(authHeaders);
-  const scopedHeaders = { ...authHeaders, "X-Open-Science-Project": projectId };
-  // Still booted through the control plane; its URL is no longer a thing this
-  // harness talks to.
-  await command("start_runtime", {}, scopedHeaders);
-  const context = { scopedHeaders };
+  const context = { authHeaders };
   const results = [];
   let cursor = 0;
   async function worker() {
