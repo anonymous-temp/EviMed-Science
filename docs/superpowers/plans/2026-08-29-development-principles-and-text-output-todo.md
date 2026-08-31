@@ -148,19 +148,34 @@
   2. **但改写是浅赋值,不是深合并**：`applyEntryPatches` 里就一句
      `target[key] = value`。控制面一旦覆盖 `config:`，**整个 config 对象被替换**，
      bundle 提供的静态部分全部丢失。所以「静态进 bundle、控制面只补部署专属字段」**做不到**。
-  3. **补丁里没有 env 占位符**：全仓所有补丁文件的值都是字面量，裁决设想的
-     `env 占位符` 机制在 0.1.1-rc.2 里找不到证据。
+  3. **补丁里没有 env 占位符**：全仓所有补丁文件的值都是字面量。
+     **但这条结论下得太窄，须更正（2026-08-31 补）**：机制确实存在，只是不在 patch 而在
+     **preset** —— `presets/evimed-universal/agent.cordis.yml` 已经用了七处
+     `!!js process.env.X`（`capabilitiesDir`、`askUserEnabled`、`maxSteps`…），
+     而 preset 就在 socket 包的 `files[]` 里随 bundle 发布。裁决的直觉是对的，是我只看了 patch。
   4. **控制面现在是 `insert` 而不是 override**：bundle 若也 insert 会出现**同 id 两行**，
      两个 MCP 进程。
 
-  **因此正确形状是**：bundle **insert 一份完整的、单机可用的默认行**（用镜像的约定路径），
-  控制面从 `insert` 改为 **override by id**（整体替换 config，它本来就构造完整 config）。
+  **因此正确形状是（已按上述更正改写，比先前设想的干净得多）**：把 `mcp-evimed` 行放进
+  **bundle 自己的 preset**，路径与 env 一律 `!!js process.env.X ?? <默认>`，与
+  `capabilitiesDir` 现在的写法完全一致；控制面**不再 patch 这一行**，只负责把那些环境变量
+  设进容器（它本来就在设 `EVIMED_PRESET_SKILLS_DIR` 等）。这样既没有同 id 两行，
+  也不依赖"浅赋值覆盖"，陌生人拿 bundle 直接就有研究工具。
   **风险点必须同时处理**：override 因 name 不匹配等原因被跳过时只 warn，
   运行会带着 bundle 的默认 env（没有网关地址）启动——**行看起来配好了而工具全部失效**，
   正是最坏的那种形状。缓解手段现成：seam-probe 本来就"逐行复查我们覆盖过的行"
   （bundle patch 文件头自己写的），把 mcp 行纳入复查即可把静默降级变成响亮启动失败。
   实现须连带改 `build-smoke-patch.yml` 与 `dshProfilePatch.test.mjs`，并由 build-smoke 真启动验证。
-- [~] **J4**（2026-08-31：两树合一已完成，另两项未做）capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一 —— 已完成，但裁决的方向要反过来**：
+- [x] **J4**（2026-08-31 完成）capability 层去平台假设：**`generate-capability-manifests.mjs` 已进 socket 的 `prepack`** —— 13 份清单原本只生成到
+  `deploy/runtime-dsh/capabilities/`（一个**部署**目录），三个可发布包一个都不带它，
+  所以从 npm 装 `@evimed/dsh-socket` 的人拿到插件与 preset、**拿到一个空目录当能力目录**，
+  每一次委派都被拒，错误信息还是在讲请求而不是讲部署。现在 prepack 生成清单并拷贝
+  `capability-skills/`，两者都进 `files[]`；测试**真跑一次 prepack** 再核对
+  「每个能力一份清单」「清单点名的每个技能体都在包里」。；**5 份 SKILL.md 的分支——查下来是伪问题，不做**：`evimed_submit_deliverable` 由
+  `evimed-run-policy` 提供，而该插件就在 **bundle 自己的 preset** 里，任何拿到 bundle 的人都有它，
+  根本不是平台假设；`.evimed-brief` 五份里只有 clinical-evidence-synthesis 引用了一次，
+  且**已经写好了降级**（「若该文件不在，说明门禁也在没有题面的情况下检查，并会在交付上说明」）。
+  没有需要分支的东西。；**capabilities/ 与 capability-skills/ 两树合一 —— 已完成，但裁决的方向要反过来**：
   「单一作者树 = capabilities/」这个方向若照做会**毁掉真内容**。实测三方对照：
   `runtime/skills/evimed`（那条测试实际校验的副本）与 `capability-skills/`（运行真正读到的）
   都写 **three tools preserve**，而 `capabilities/`（被指定为权威的那棵）还写 **two** ——

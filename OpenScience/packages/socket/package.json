@@ -9,7 +9,9 @@
     "plugins",
     "presets",
     "src",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "capabilities",
+    "capability-skills"
   ],
   "exports": {
     ".": "./index.mjs",
@@ -26,7 +28,8 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "lint": "eslint plugins src test index.mjs --ext .mjs --max-warnings 0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepack": "node ../../scripts/build/generate-capability-manifests.mjs --out packages/socket/capabilities && node -e \"require('node:fs').cpSync('../../capability-skills','capability-skills',{recursive:true})\""
   },
   "engines": {
     "node": ">=22.22.0"
