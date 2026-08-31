@@ -252,3 +252,69 @@ test("asking for a specialty's own deliverable still reaches it", async () => {
     assert.equal(routeOpenDomainSpecialist(query, agents)?.agentId, expected, query);
   }
 });
+
+// The net is a safety net under an ABSENT decision. It was overriding a
+// present one.
+//
+// Measured 2026-08-31 on the real title-to-paper corpus: fifty paper-rewrite
+// briefs ("以已发表论文题目为检索入口……重写一份结构化科研正文") drew a clean
+// `none` from the classifier — no specialist fits, which is correct — and were
+// routed to clinical-evidence-synthesis anyway, because they name research
+// subjects and ask for a structured write-up. Four runs out of four then did
+// the rewrite the brief asked for and were failed for not loading a clinical
+// skill nobody had asked them to use.
+//
+// Fixing this by narrowing the prose patterns would be extending the keyword
+// wall (principles 2 and 5). The defect is not in the rules, it is in when they
+// are consulted.
+test("a clean 'no specialist fits' is a decision the regex net does not overturn", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  const paperRewrite = "请以已发表论文题目《Empagliflozin in Patients with Chronic Kidney Disease.》为检索入口，"
+    + "检索其开放获取原始全文，并重写一份结构化科研正文（摘要、引言、方法、结果、讨论）。";
+
+  assert.equal(
+    routeOpenDomainSpecialist(paperRewrite, agents, { afterCleanNone: true }),
+    null,
+    "the model said no specialist fits; the net must leave the answer line alone",
+  );
+
+  // The same brief with no verdict to respect — classifier disabled, timed out,
+  // or unreachable — still reaches the net, because that is what it is for.
+  assert.equal(
+    routeOpenDomainSpecialist(paperRewrite, agents)?.agentId,
+    "clinical-evidence-synthesis",
+    "with no model decision the net must still run in full",
+  );
+
+  // What changes is not "the model spoke" but "which rule answered". A specific,
+  // high-signal rule still overrides a clean `none`, because that is the case
+  // where the model is simply wrong: asked about a drug's pharmacovigilance
+  // signals it sometimes answers "none", and FAERS vocabulary is not ambiguous.
+  assert.equal(
+    routeOpenDomainSpecialist("分析奥希替尼的 FAERS 药物警戒信号", agents, { afterCleanNone: true })?.agentId,
+    "adr-analysis",
+    "a specific rule is a correction, not an override of a judgement",
+  );
+});
+
+test("one rule still outranks a clean 'none', and it is the one made of data", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+  // 速效救心丸 is named in clinical-safety-rules.json, the pharmacist-owned file
+  // — a closed vocabulary, not prose matching. A high-risk medicine asked about
+  // in a report request reaches the clinical gate whatever the model thinks,
+  // which is the property the net was built to preserve.
+  const medicine = "请就速效救心丸的疗效与安全性做一份循证证据综述报告。";
+  const routed = routeOpenDomainSpecialist(medicine, agents, { afterCleanNone: true });
+  assert.equal(routed?.agentId, "clinical-evidence-synthesis");
+  assert.match(
+    routed.reason,
+    /safety-medicine/,
+    "the ledger must say the net overrode a model verdict, and on what grounds",
+  );
+
+  // And a request that names no such medicine does not get there this way.
+  assert.equal(
+    routeOpenDomainSpecialist("请就某种保健品的口碑做一份综述报告。", agents, { afterCleanNone: true }),
+    null,
+  );
+});

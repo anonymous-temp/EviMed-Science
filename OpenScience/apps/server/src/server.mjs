@@ -939,14 +939,16 @@ export function createWebApiApp(overrides = {}) {
         // high-risk medicine asked about in a report request always reaches the
         // clinical gate — without letting keyword matching outrank judgement.
         let routedSpecialist = null;
-        /** @type {{ failure?: string }} */
+        /** @type {{ failure?: string, verdict?: string }} */
         const classifierTrace = {};
         if (boundSession?.mode === "open-domain") {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
           routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
           if (!routedSpecialist) {
-            const net = routeOpenDomainSpecialist(text, routableAgents);
+            const net = routeOpenDomainSpecialist(text, routableAgents, {
+              afterCleanNone: classifierTrace.verdict === "none",
+            });
             // The net catching a request is normal after the model has said "no
             // specialist fits". It is a different event after the model never
             // answered, and the two are the same string in the ledger unless

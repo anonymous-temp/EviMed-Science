@@ -155,7 +155,7 @@ export function routeNamedSpecialist(query, agents) {
   return named ? selection(named, `matched:named:${named.id}`) : null;
 }
 
-export function routeOpenDomainSpecialist(query, agents) {
+export function routeOpenDomainSpecialist(query, agents, { afterCleanNone = false } = {}) {
   if (typeof query !== "string" || !query.trim() || !Array.isArray(agents)) return null;
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   const named = routeNamedSpecialist(query, agents);
@@ -187,12 +187,39 @@ export function routeOpenDomainSpecialist(query, agents) {
   // in the sentence. The router reads the prompt, not the workspace, so that
   // request could not reach the report line however it was phrased. A request
   // to report on data or on research design is not generic conversation.
-  const clinicalSubjectMatch = clinicalSubject.test(query)
-    || researchSubject.test(query)
-    || (clinicalRoutingMedicinePattern != null && clinicalRoutingMedicinePattern.test(query));
+  //
+  // What a clean `none` from the model changes, and what it does not.
+  //
+  // The specific rules above stay in force whatever the model said. They carry
+  // a strong signal — FAERS vocabulary, an explicit meta-analysis intent, a
+  // dataset in hand — and the net exists precisely because the model gets one
+  // of those wrong occasionally: asked about 奥希替尼's pharmacovigilance
+  // signals it can still answer "none", and that answer is simply wrong.
+  //
+  // This last rule is different. It is the broad catch-all: any clinical or
+  // research subject plus any request for a write-up. Measured 2026-08-31 on
+  // the real title-to-paper corpus, it claimed fifty paper-rewrite briefs the
+  // model had correctly declined — each run then produced the rewrite the brief
+  // asked for and was failed for not loading a clinical skill nobody asked it
+  // to use, four times out of four. A broad rule overturning a considered "no
+  // specialist fits" is the shape that keeps being wrong.
+  //
+  // So after a clean `none`, the only thing that still reaches the clinical
+  // line here is the medicine list — data, owned by pharmacists in
+  // clinical-safety-rules.json, a closed vocabulary rather than prose matching.
+  // Narrowing the prose patterns instead would be extending the keyword wall
+  // (principles 2 and 5); the rules are fine, the question is when to consult
+  // them.
+  const namedMedicine = clinicalRoutingMedicinePattern != null && clinicalRoutingMedicinePattern.test(query);
+  const clinicalSubjectMatch = afterCleanNone
+    ? namedMedicine
+    : (clinicalSubject.test(query) || researchSubject.test(query) || namedMedicine);
   if (clinicalSubjectMatch && explicitReportIntent.test(query)) {
     if (dataInHand) return selection(byId.get("dataset-research-scoping"), "matched:dataset-research-scoping");
-    return selection(byId.get("clinical-evidence-synthesis"), "matched:clinical-evidence-synthesis");
+    return selection(
+      byId.get("clinical-evidence-synthesis"),
+      afterCleanNone ? "matched:clinical-evidence-synthesis(safety-medicine)" : "matched:clinical-evidence-synthesis",
+    );
   }
   return null;
 }
