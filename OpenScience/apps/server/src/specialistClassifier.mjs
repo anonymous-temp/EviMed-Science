@@ -107,7 +107,7 @@ export class SpecialistClassifier {
    * sent there by a timeout. `trace` is per-call because a batch runs
    * concurrently, and a field on the shared classifier would attribute one
    * request's timeout to another's question.
-   * @param {string} reason @param {{ failure?: string }} [trace]
+   * @param {string} reason @param {{ failure?: string, verdict?: string }} [trace]
    */
   declined(reason, trace) {
     if (trace) trace.failure = reason;
@@ -116,7 +116,7 @@ export class SpecialistClassifier {
     return null;
   }
 
-  /** @param {{ failure?: string }} [trace] */
+  /** @param {{ failure?: string, verdict?: string }} [trace] */
   async classify(query, agents, trace) {
     if (!this.available) return null;
     if (typeof query !== "string" || !query.trim()) return null;
@@ -182,7 +182,15 @@ export class SpecialistClassifier {
       // guess are verdicts. Only the first is worth reporting, and it used to
       // be indistinguishable from the other two.
       if (!parsed) return this.declined(message?.content?.trim() ? "unparseable" : "empty_content", trace);
-      if (parsed.agentId.toLowerCase() === "none") return null;
+      // An affirmative "no specialist fits" is a decision, and the caller has to
+      // be able to tell it from a classification that never happened: the regex
+      // net is a safety net under an ABSENT decision, and it was overriding this
+      // one. Only the explicit `none` is recorded — a low-confidence guess or an
+      // invented id is a verdict the caller should still let the net back up.
+      if (parsed.agentId.toLowerCase() === "none") {
+        if (trace) trace.verdict = "none";
+        return null;
+      }
       const agent = byId.get(parsed.agentId);
       if (!agent) return null;
       if (parsed.confidence < this.threshold) return null;
