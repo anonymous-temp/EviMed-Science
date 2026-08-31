@@ -234,9 +234,11 @@
 - **L0b 不留退路 = 不维持双内核**，不是不要证据、也不是窗口当天没有安全绳：内核平价改用**历史 opencode 交付作基线**（不再双内核并行对照）；变更窗口保留一个 release 回滚位，窗口后 72h 稳定即按既定裁决清至 3 个。
 
 **决胜关键路径（顺序即依赖）**：
-- [ ] **L1** J5b 技能路径缺陷修复（已裁决插队：相对根引用 + 根声明单点 + 闭集钉住测试 + build-smoke 真跑一个脚本）。
-- [ ] **L2** J4 两树合一（单一作者树 `capabilities/`，镜像树由它生成；漂移测试改相等测试）——必须在批测前落地。
-- [ ] **L3** F0：会话页在 DSH 内核下过一次真 RQ 验收（strangler 前端已建，缺这次验收）。
+- [x] **L1**（2026-08-31 核实为**已于 S216–S220 完成**，不重做）：仓库现存 36 处 `XDG_CONFIG_HOME/opencode` 全在审计账本 `digest-repins.jsonl` 的**理由字段**里；活引用只剩 3 处，都在 `runtime/skills/evimed/` 旧 OpenCode 树（镜像不 COPY，随 L7 附 B 删除）。根声明单点 `packages/domain/src/skillRoots.mjs` 在位，三条配套测试在位，build-smoke 真跑已于 S239 在真镜像上验过。
+- [x] **L2**（2026-08-31 核实为**已于 S227–S231 完成**）：`capabilities/` 与 `capability-skills/` **13 对 SKILL.md 逐字节相等**（本轮用 `cmp` 全量复核）。注意合并方向按 S227 反转过：被裁决指定为权威的那棵当时是过期的一棵。
+- [x] **L3 F0 完成（2026-08-31）**：`scripts/ops/session-stream-acceptance.mjs` 在 HEAD + 新镜像上跑真问题，**3981 帧 / `succeeded` / 第 40 帧掐断后 `?since=40` 续订零重放零 gap**；实况帧入库为前端测试输入（`runStreamLiveFrames.test.ts`）。
+  - **查出三个"声明了没人发"的流类型**：`deliverable/update`（浏览器有监听、有 fold、有数组，**每次运行那块面板都是空的**）、`approval/requested`、`question/requested`（浏览器连监听都没注册；内核确实会问，属 F2）。已由 `streamTypesReachTheBrowser.test.mjs` 钉住三个集合。**`deliverable/update` 是否补发布方，是产品决定，未擅动。**
+  - **验收环境的一条隐性依赖**：内网到宿主只有一条**手工装的 ufw 规则**放行 18787，代码里无迹可寻；换端口起控制面就"运行什么都不产出"。已补同形规则。**生产不受影响**（走容器 DNS）。
 - [ ] **L4** 一次新鲜单跑到 `accepted`（验证 D1 雪崩修复 + S162 分类器超时参数）→ **33 篇谷时批测全部跑在 DSH 内核上**，与历史 opencode 基线对照。
 - [ ] **L5** hosted e2e：先在宿主 acceptance 目录彩排（108+ 提交 delta），过了才谈生产。
 - [ ] **L6** capabilities 收口（二选一，用户拍板）：①补 4 项凭证（web_search / patent / pharmacy key + OpenGWAS JWT）重探转绿；②明确声明这 4 项为未配置面、门禁按"已配置面全绿 + 未配置面具名申明"收口。
