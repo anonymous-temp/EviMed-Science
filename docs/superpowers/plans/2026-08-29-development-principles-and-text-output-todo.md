@@ -138,7 +138,7 @@
 - [x] **J2**（2026-08-30 完成）三包去 `private:true`、真版本、publishConfig：`@evimed/domain` / `@evimed/harness-port` / `@evimed/dsh-socket`；`workspace:*` 依赖改可解析版本。
 - [ ] **J3** bundle 自带 `mcp-evimed` 配置行（现在只有控制面 `dshProfilePatch.mjs` 会生成，没有它整个能力目录是装饰）。
 - [ ] **J4** capability 层去平台假设：`generate-capability-manifests.mjs` 进 prepack（guidance 只读 JSON）；5 份 SKILL.md 的 `.evimed-brief` / `evimed_submit_deliverable` 行为按「门禁是否挂载」分支；**capabilities/ 与 capability-skills/ 两树合一**（已实测漂移一句）。
-- [~] **J5** 去硬编码：**前半已完成**（`EVIMED_EVIDENCE_BASE_URL` 改 env-overridable，且无凭证时
+- [x] **J5**（2026-08-31 完成，两条配套齐）去硬编码：**前半已完成**（`EVIMED_EVIDENCE_BASE_URL` 改 env-overridable，且无凭证时
   `_evimed_post` 直接以 `evimed_evidence_unconfigured` 拒绝并指明"keyless 公共源仍可用"——
   陌生人不再每次检索都先对 evimed.com 发一个注定失败的请求；错误码已归类为 recoverable）。
   **后半不是一次 sed,需要一个决定**：48 个引用写的是扁平的 `$XDG_CONFIG_HOME/opencode/skills/<名>/…`,
@@ -146,7 +146,12 @@
   `core` → `/opt/evimed/skills/core/…`、preset skills → `/opt/evimed/socket/presets/evimed-universal/skills`。
   单一 sed 必然把其中两组指错。**而且这 48 个里有 45 个(36 curated-scientific + 9 core)是 DSH 镜像真的 COPY 进去的**,
   也就是说这不只是可移植性瑕疵,是现役 DSH 运行里就指着一个不存在的 OpenCode 配置目录。
-  待定的是"SKILL.md 该怎么引用自己的脚本"这个跨内核约定,不是文本替换。
+  **约定已按裁决落地**：技能体只写相对根引用（45 条已改，闭集禁词测试钉住）；绝对根声明在
+  `@evimed/domain/skillRoots.mjs` 一处，由 guidance 注入运行读到的一段（"你的 shell 从工作区起步，
+  所以把相对引用解析到这些根下的技能目录"）。两条配套齐：① 闭集禁词测试 + 前提钉住（`_runtime`
+  必须是真实兄弟目录）；② **build-smoke 真跑**——`cd <skill> && python3 ../_runtime/execute_skill.py`，
+  与技能体现在写的引用同一条路径，本地已验证可解析可执行。另加漂移守卫：声明的根必须与
+  Dockerfile 的 COPY 目的地一致（三条变异全被抓）。
   **裁决（2026-08-30，两路核验后）**：采用 Agent Skills 开放标准原文——**技能体内一律相对技能根引用**
   （`scripts/x.py`；curated 共享执行器写 `../_runtime/execute_skill.py`，与家族根同拷贝故相对性天然保持）；
   **绝对根是部署真相，只在一处声明**——DSH 面由 guidance/profile patch 注入一行「技能根清单」

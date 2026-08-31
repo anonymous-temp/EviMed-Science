@@ -48,6 +48,35 @@ for root in core curated-scientific office community evimed; do
     exit 1
   }
 done
+
+# And one curated skill actually RUNS, from the declared root, the way a skill
+# body now says to reach it.
+#
+# The loop above asserts a mechanism: the directory is there. That is the exact
+# class of check this whole file was written to replace — every skill root
+# existed on the day 45 skill bodies were pointing at
+# $XDG_CONFIG_HOME/opencode, a path this image has never had. Existence proved
+# nothing, because nothing here had ever executed one.
+#
+# Skill bodies reference `../_runtime/execute_skill.py` relative to their own
+# directory; the roots are declared in @evimed/domain and stated to the run in
+# the guidance block. This resolves that reference the same way and runs it.
+curated_root=/usr/local/share/evimed/skills/curated-scientific
+[ -x "$(command -v python3)" ] || { echo "build smoke: python3 missing" >&2; exit 1; }
+[ -f "${curated_root}/_runtime/execute_skill.py" ] || {
+  echo "build smoke: ${curated_root}/_runtime/execute_skill.py is absent — the shared executor every curated skill calls as ../_runtime/execute_skill.py" >&2
+  exit 1
+}
+# Resolved exactly as a skill would: from the skill's own directory, relatively.
+smoke_skill="${curated_root}/exploratory-data-analysis"
+[ -d "${smoke_skill}" ] || { echo "build smoke: ${smoke_skill} is absent" >&2; exit 1; }
+if ! (cd "${smoke_skill}" && python3 ../_runtime/execute_skill.py --help >/dev/null 2>&1); then
+  echo "build smoke: a curated skill could not run its shared executor from the declared root." >&2
+  echo "  tried: cd ${smoke_skill} && python3 ../_runtime/execute_skill.py --help" >&2
+  echo "  this is the reference every curated SKILL.md now carries; if it fails here it fails in every run." >&2
+  exit 1
+fi
+
 export EVIMED_CAPABILITIES_DIR=/opt/evimed/capabilities
 export EVIMED_CAPABILITY_SKILLS_DIR=/opt/evimed/capability-skills
 export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL=""
