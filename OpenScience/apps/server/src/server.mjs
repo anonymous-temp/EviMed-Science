@@ -945,7 +945,17 @@ export function createWebApiApp(overrides = {}) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
           routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace);
-          if (!routedSpecialist) routedSpecialist = routeOpenDomainSpecialist(text, routableAgents);
+          if (!routedSpecialist) {
+            const net = routeOpenDomainSpecialist(text, routableAgents);
+            // The net catching a request is normal after the model has said "no
+            // specialist fits". It is a different event after the model never
+            // answered, and the two are the same string in the ledger unless
+            // this says so: one is the design working, the other is the design
+            // not running.
+            routedSpecialist = net && classifierTrace.failure
+              ? { ...net, reason: `${net.reason}(classifier:${classifierTrace.failure})` }
+              : net;
+          }
         }
         // Unrouted open-domain questions still run on a managed EviMed agent
         // (persona + proportional quality floor) instead of the bare coding
