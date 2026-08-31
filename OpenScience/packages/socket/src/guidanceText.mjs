@@ -14,7 +14,7 @@
  * @module @evimed/dsh-socket/src/guidanceText
  */
 
-import { CONTRACT_KIND_LABELS, capabilityCatalogueLine, contractKindLabel } from '@evimed/domain'
+import { CONTRACT_KIND_LABELS, capabilityCatalogueLine, contractKindLabel, skillRootGuidance } from '@evimed/domain'
 
 /** DSH's tool-guidance band. */
 export const GUIDANCE_SECTION_ORDER = 120
@@ -22,7 +22,7 @@ export const GUIDANCE_SECTION_NAME = 'evimed:orchestration'
 
 /**
  * @param {readonly Record<string, any>[]} capabilities
- * @param {{ askUserEnabled: boolean, capsuleActive: boolean, reviewEnabled: boolean }} options
+ * @param {{ askUserEnabled: boolean, capsuleActive: boolean, reviewEnabled: boolean, skillRoots?: readonly any[] }} options
  * @returns {string}
  */
 export function buildGuidanceText(capabilities, options) {
@@ -90,6 +90,14 @@ export function buildGuidanceText(capabilities, options) {
       : '## 追问\n\n本部署不接受运行中追问。把你所做的假设写进 `evimed_plan` 的澄清里——一个没写下来的假设，等于没有假设。',
     '',
     options.reviewEnabled ? '## 审查\n\n综合完成后可调用 `evimed_review_run` 做跨交付物冲突审查。它给建议，不作裁定。' : null,
+    '',
+    // The one place a deployment path is stated to a run. Skill bodies carry
+    // relative references, which is what makes them portable; without this
+    // block a relative reference has nothing to resolve against, because the
+    // shell starts in the workspace. Declared once here rather than repeated
+    // into every skill body, which is how 45 of them came to name a directory
+    // the image had stopped having.
+    skillRootGuidance(options.skillRoots),
     '</evimed-orchestration>',
   ].filter((line) => line !== null).join('\n')
 }

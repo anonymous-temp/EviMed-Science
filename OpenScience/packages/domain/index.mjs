@@ -194,6 +194,13 @@ export {
   totalOutputTokens,
 } from './src/runTranscript.mjs'
 
+// skillRoots — 3 exports
+export {
+  RUNTIME_SKILL_ROOTS,
+  runtimeSkillRootPaths,
+  skillRootGuidance,
+} from './src/skillRoots.mjs'
+
 // safetyRules — 4 exports
 export {
   CLINICAL_CONTENT_TRIGGER_ENTITIES,
