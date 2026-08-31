@@ -103,7 +103,7 @@ export const dshReleaseManifestFixture = Object.freeze({
     image: "evimed-runtime-dsh:dsh-0.1.1-rc.2-uv-0.11.26",
     imageId: `sha256:${"a".repeat(64)}`,
     dshVersion: "0.1.1-rc.2",
-    cordisVersion: "4.0.1",
+    cordisVersion: "4.0.2",
     socketVersion: "0.1.0",
     domainVersion: "0.1.0",
     uvVersion: "0.11.26",

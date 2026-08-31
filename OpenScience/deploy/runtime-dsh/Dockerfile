@@ -13,7 +13,7 @@ ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
 ARG DSH_VERSION=0.1.1-rc.2
-ARG DSH_CORDIS_VERSION=4.0.1
+ARG DSH_CORDIS_VERSION=4.0.2
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
