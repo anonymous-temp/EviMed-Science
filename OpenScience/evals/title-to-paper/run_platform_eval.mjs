@@ -218,6 +218,12 @@ async function runCase(testCase, outer) {
     capturedAt: new Date().toISOString(),
   };
   await fs.writeFile(resultPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  // Give the slot back. Each case has its own project and therefore its own
+  // container, and the server caps how many may run at once — so a batch that
+  // never stops one gets three cases in and then fails the rest with
+  // runtime_limit_exceeded. Done after the artifacts are read, because that
+  // reads through the control plane while the project is still live.
+  await command("stop_runtime", {}, context.scopedHeaders).catch(() => {});
   process.stdout.write(
     `[done] ${testCase.caseId} ${terminal.status} ${record.assistantText.length} chars ${record.toolTrace.length} tools\n`,
   );
@@ -266,6 +272,11 @@ async function main() {
       try {
         results[index] = await runCase(cases[index], context);
       } catch (error) {
+        // The slot has to come back even when the case did not finish.
+        await command("stop_runtime", {}, {
+          ...context.authHeaders,
+          "X-Open-Science-Project": `eval-t2p-${label}-${cases[index].caseId}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60),
+        }).catch(() => {});
         const failed = {
           schemaVersion: 1,
           label,
