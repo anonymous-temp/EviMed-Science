@@ -19,6 +19,13 @@ const label = option("label", "baseline").replace(/[^a-zA-Z0-9_-]/g, "-");
 const start = Number(option("start", "0"));
 const limit = Number(option("limit", "50"));
 const concurrency = Number(option("concurrency", "1"));
+const username = option("user", process.env.OPEN_SCIENCE_EVAL_USERNAME ?? "evimed");
+// The ceiling used to be 30 minutes, written when every case in this corpus ran
+// on the open-domain answer line and finished in two. Today the same prompts
+// route to a file-delivery specialist: the first one measured took 38.8. A
+// ceiling below the run time turns every case into a timeout and reports it as
+// a platform failure.
+const runTimeoutMs = Number(option("run-timeout-ms", process.env.OPEN_SCIENCE_EVAL_RUN_TIMEOUT_MS ?? String(75 * 60 * 1000)));
 const requestedCaseIds = option("cases", "")
   .split(",")
   .map((value) => value.trim())
@@ -51,20 +58,23 @@ async function command(name, args, headers) {
 
 async function waitForRun(runId, headers) {
   const started = Date.now();
-  while (Date.now() - started < 30 * 60 * 1000) {
+  while (Date.now() - started < runTimeoutMs) {
     const listed = await jsonFetch(`${base}/api/agent-runs?limit=200`, { headers });
     const run = listed.data?.data?.find((item) => item.id === runId);
     if (run && !["queued", "dispatching", "running"].includes(run.status)) return run;
     await new Promise((resolve) => setTimeout(resolve, 3000));
   }
-  throw new Error(`Run ${runId} did not reach a terminal state within 30 minutes`);
+  throw new Error(`Run ${runId} did not reach a terminal state within ${Math.round(runTimeoutMs / 60000)} minutes`);
 }
 
+// The control plane's own transcript shape, not a kernel's: `role` at the top
+// level, and parts of type text | reasoning | tool. The browser stopped speaking
+// a kernel's vocabulary and so did this.
 function messageText(messages, role) {
   return messages
-    .filter((message) => message.info?.role === role)
+    .filter((message) => message.role === role)
     .flatMap((message) => message.parts ?? [])
-    .filter((part) => part.type === "text" && !part.synthetic && typeof part.text === "string")
+    .filter((part) => part.type === "text" && typeof part.text === "string")
     .map((part) => part.text.trim())
     .filter(Boolean)
     .join("\n\n");
@@ -76,11 +86,11 @@ function toolTrace(messages) {
     .filter((part) => part.type === "tool")
     .map((part) => ({
       tool: part.tool ?? "",
-      status: part.state?.status ?? "",
-      title: part.state?.title ?? "",
-      input: part.state?.input ?? null,
-      output: typeof part.state?.output === "string" ? part.state.output.slice(0, 20_000) : null,
-      time: part.state?.time ?? null,
+      status: part.status ?? "",
+      callId: part.callId ?? "",
+      input: part.input ?? null,
+      output: typeof part.output === "string" ? part.output.slice(0, 20_000) : null,
+      error: part.error ?? null,
     }));
 }
 
@@ -133,12 +143,16 @@ async function runCase(testCase, context) {
   } catch {}
 
   process.stdout.write(`[start] ${testCase.caseId} ${testCase.title}\n`);
-  const session = await jsonFetch(`${context.runtimeUrl}/session`, {
+  // POST /api/runtime/sessions, not a passthrough to the kernel: the runtime
+  // pass-through route was retired with the OpenCode kernel, and this harness
+  // was still calling it — so it could not run against DSH at all.
+  const session = await jsonFetch(`${base}/api/runtime/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...context.scopedHeaders },
     body: "{}",
   });
-  const sessionId = session.data.id;
+  const sessionId = session.data?.data?.id;
+  if (!sessionId) throw new Error("The control plane returned no session id");
   await jsonFetch(`${base}/api/research-sessions/${encodeURIComponent(sessionId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...context.scopedHeaders },
@@ -151,11 +165,11 @@ async function runCase(testCase, context) {
     body: JSON.stringify({ sessionId, dispatchId, text: testCase.prompt }),
   });
   const terminal = await waitForRun(dispatched.data.data.id, context.scopedHeaders);
-  const messagesResponse = await jsonFetch(
-    `${context.runtimeUrl}/session/${encodeURIComponent(sessionId)}/message`,
+  const transcript = await jsonFetch(
+    `${base}/api/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`,
     { headers: context.scopedHeaders },
   );
-  const messages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
+  const messages = Array.isArray(transcript.data?.data?.messages) ? transcript.data.data.messages : [];
   const record = {
     schemaVersion: 1,
     label,
@@ -165,6 +179,8 @@ async function runCase(testCase, context) {
     prompt: testCase.prompt,
     sessionId,
     run: terminal,
+    routedTo: terminal?.effectiveAgentId ?? null,
+    routeReason: terminal?.effectiveRouteReason ?? null,
     userText: messageText(messages, "user"),
     assistantText: messageText(messages, "assistant"),
     toolTrace: toolTrace(messages),
@@ -193,7 +209,7 @@ async function main() {
   const login = await jsonFetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: "evimed", password }),
+    body: JSON.stringify({ username, password }),
   });
   const cookie = login.response.headers.get("set-cookie")?.split(";")[0] ?? "";
   const csrf = login.data?.data?.csrfToken ?? "";
@@ -201,9 +217,10 @@ async function main() {
   const authHeaders = { Cookie: cookie, "X-Open-Science-CSRF": csrf };
   const projectId = await ensureProject(authHeaders);
   const scopedHeaders = { ...authHeaders, "X-Open-Science-Project": projectId };
-  const runtime = await command("start_runtime", {}, scopedHeaders);
-  const runtimeUrl = runtime.data.data;
-  const context = { scopedHeaders, runtimeUrl };
+  // Still booted through the control plane; its URL is no longer a thing this
+  // harness talks to.
+  await command("start_runtime", {}, scopedHeaders);
+  const context = { scopedHeaders };
   const results = [];
   let cursor = 0;
   async function worker() {
