@@ -4912,3 +4912,121 @@ test("a restarted control plane adopts runs a previous process left running", as
     await rm(root, { recursive: true, force: true });
   }
 });
+
+async function withSpecialistRun(fn) {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-specialist-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_specialist",
+      mode: "specialist",
+      agentId: "note-writer",
+      agentVersion: "1.0.0",
+      runtimeAgent: "evimed-note-writer",
+    };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "note-writer",
+          version: "1.0.0",
+          runtimeAgent: "evimed-note-writer",
+          skill: "note-writer",
+          companionSkills: [],
+          outputs: [{ path: "note.md", required: true }],
+          completionChecks: ["requiredOutputsExist"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const dispatch = (dispatchId) => store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId,
+      effectiveAgentId: "note-writer",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-note-writer",
+    }, async () => ({ accepted: true }));
+    const appendHistory = (parts) => {
+      history = [...history, {
+        info: { id: `msg_spec_${Math.random().toString(16).slice(2, 10)}`, role: "assistant", time: { completed: Date.now() + 10 } },
+        parts,
+      }];
+    };
+    await fn({ project, binding, dispatch, appendHistory, store });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+/** @param {string} workspaceDir @param {string} digest */
+async function writeReceiptNaming(workspaceDir, digest) {
+  await writeFile(path.join(workspaceDir, "delivery-receipt.json"), JSON.stringify({
+    formatVersion: 1,
+    runId: "run_live",
+    bundleVersion: "0.1.0",
+    domainVersion: "0.1.0",
+    entries: [{
+      deliverableId: "d1",
+      contractKind: "clinical-evidence-report",
+      capability: "clinical-evidence-synthesis",
+      files: [{ path: "note.md", sha256: digest, bytes: 1 }],
+      acceptedAt: "2026-01-01T00:00:00.000Z",
+      attempt: 3,
+      notices: [],
+    }],
+  }, null, 2), "utf8");
+}
+
+test("a package edited after its receipt is re-judged, not destroyed", async () => {
+  // 2026-08-31: a run submitted, was told by evimed_complete_run what to fix,
+  // fixed exactly that in clinical-evidence-report.md, and finished. The files
+  // no longer matched the receipt, so the run was recorded failed with zero
+  // artifacts — 38 minutes of work discarded over bytes that were, at that
+  // moment, gate-clean.
+  //
+  // Changed is not broken. On this path the server has already run the same
+  // domain gate over the bytes on disk, so the honest answer is to amend and
+  // say which files moved.
+  await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
+    await dispatch("turn_amend");
+    await writeFile(path.join(project.workspaceDir, "note.md"), "# repaired after the verdict\n", "utf8");
+    await writeReceiptNaming(project.workspaceDir, "0".repeat(64));
+    appendHistory([{ type: "text", text: "done" }]);
+
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
+    assert.deepEqual(run.artifacts, ["note.md"], "the bytes the server itself verified are what ships");
+    assert.ok(
+      (run.qualityNotices ?? []).some((line) => /回执之后被改动/.test(String(line))),
+      "an amended delivery must say so, and name what moved",
+    );
+  });
+});
+
+test("a package edited after its receipt into something that fails is still refused", async () => {
+  // The negative control that makes the test above mean anything: amendment is
+  // conditional on the current bytes passing. Remove the required output and
+  // the same drift must still be refused, with nothing shipped.
+  await withSpecialistRun(async ({ project, dispatch, appendHistory, binding, store }) => {
+    await dispatch("turn_amend_fail");
+    await writeReceiptNaming(project.workspaceDir, "0".repeat(64));
+    appendHistory([{ type: "text", text: "done" }]);
+
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "failed");
+    assert.deepEqual(run.artifacts, []);
+  });
+});

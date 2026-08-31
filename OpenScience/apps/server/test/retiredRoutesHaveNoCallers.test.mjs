@@ -49,22 +49,21 @@ test("nothing calls the retired runtime pass-through", async () => {
     // The shape a caller has: a runtime URL with the kernel's own session path
     // appended. server.mjs itself names the route in its retirement message,
     // which is not a call.
-    if (/\$\{\s*(?:context\.)?runtimeUrl\s*\}\/session/.test(body)) {
+    // `/session` singular, which is the kernel's route. `${runtimeUrl}/sessions`
+    // is the control plane's own and must not match: a guard that cries wolf
+    // teaches people to add exceptions to it, and this one did — it flagged
+    // deployment-smoke.mjs, which had already been ported correctly.
+    if (/\$\{\s*(?:context\.)?runtimeUrl\s*\}\/session(?![s\w])/.test(body)) {
       offenders.push(path.relative(repoRoot, file));
     }
   }
-  // Two callers remain, both release-gate tooling written against the OpenCode
-  // kernel. They still work against production because production still runs
-  // that kernel — and they stop working the hour the default is flipped, which
-  // is the same hour they are most needed. They are listed rather than tolerated:
-  // this set may shrink by a deliberate edit and may never grow.
-  const KNOWN = [
-    "scripts/ops/deployment-smoke.mjs",
-    "scripts/ops/hosted-production-e2e.mjs",
-  ];
+  // Empty, and it has to stay empty. A caller of this route cannot run against
+  // the DSH kernel at all, and the ones that had it were release-gate tooling:
+  // they worked only because production still ran OpenCode, and would have
+  // failed in the same hour the default is flipped.
   assert.deepEqual(
     offenders.sort(),
-    KNOWN,
+    [],
     "the set of callers of the retired pass-through changed; a new one cannot run against the "
     + "DSH kernel at all. Sessions come from POST /api/runtime/sessions and transcripts from "
     + "GET /api/runtime/sessions/:id/transcript",

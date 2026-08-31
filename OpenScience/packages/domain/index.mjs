@@ -60,13 +60,14 @@ export {
   isRegulatedContractKind,
 } from './src/contractKinds.mjs'
 
-// workspaceLayout — 13 exports
+// workspaceLayout — 14 exports
 export {
   BRIEF_DIR,
   CAPSULE_DIR,
   DATA_DIR,
   DELIVERABLES_DIR,
   PROTECTED_WRITE_PREFIXES,
+  RUNTIME_WORKSPACE_ROOT,
   RUN_STATE_DIR,
   SOURCES_DIR,
   deliverableDir,

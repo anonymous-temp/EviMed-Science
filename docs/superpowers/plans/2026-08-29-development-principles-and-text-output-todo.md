@@ -240,6 +240,21 @@
   - **查出三个"声明了没人发"的流类型**：`deliverable/update`（浏览器有监听、有 fold、有数组，**每次运行那块面板都是空的**）、`approval/requested`、`question/requested`（浏览器连监听都没注册；内核确实会问，属 F2）。已由 `streamTypesReachTheBrowser.test.mjs` 钉住三个集合。**`deliverable/update` 是否补发布方，是产品决定，未擅动。**
   - **验收环境的一条隐性依赖**：内网到宿主只有一条**手工装的 ufw 规则**放行 18787，代码里无迹可寻；换端口起控制面就"运行什么都不产出"。已补同形规则。**生产不受影响**（走容器 DNS）。
 - [ ] **L4** 一次新鲜单跑到 `accepted`（验证 D1 雪崩修复 + S162 分类器超时参数）→ **33 篇谷时批测全部跑在 DSH 内核上**，与历史 opencode 基线对照。
+  **L4 前置裁决（2026-08-31，`specialist_receipt_digest_mismatch` 与批测跑法）**：
+  ① **回执保留**——它是 S165（"没有任何门禁看过实际发出去的字节"）的直接解药，等价于工业界
+  attestation-绑-digest / test-what-you-ship；拿掉=交付门禁变剧场。
+  ② **但失败姿势要改，三层**：防——验收即冻结，receipt 写下后被验收路径进路径守卫保护面，
+  运行再写当场收到可行动拒绝（"该文件已验收，要改请重新提交"），错误以返回值形态出现在写的瞬间；
+  治——仍出现 mismatch 时**不直接 failed**：服务端用同一份 domain 门禁对实际字节重判（单实现，边际成本≈0），
+  过 → 换发新回执、succeeded + `amended` notice；不过 → 才是真事故按既有降级/失败逻辑走。
+  mismatch 错误码只在"实际字节没过门禁"时出现；账——notices 记录哪些文件在验收后被谁的哪一步改
+  （从转录工具调用归因；首要嫌疑：提交后才跑的 humanize/摘要步——执行侧核一下上一跑的实际改动者，
+  若 SKILL 步序含糊则把"humanize 在提交之前"写死一行）。
+  这是既有服务端外部门禁（6 之一）内部的策略修正，方向是减少阻断，不是第 7 个阻断点。
+  ③ **批测跑法**：修完上面再开跑（单跑到 accepted 即其验证载体）；11 小时不是问题——谷时批测本来就是过夜
+  （22:00–09:00 恰好一夜），**并发保持 2–3**（15GB 宿主、生产同机、容器各 4g，并发 4 是在赌 OOM，
+  OOM 的账单是整夜作废）；**断点续跑是硬要求**（每完成一条落盘一条、重跑跳过已完成，outputs/audit 的
+  RESUME 模式照用）；走真临床线不打折——批测的全部价值是给翻默认供证据，换轻量线=证据作废，40 分钟/条是真实成本，认。
 - [ ] **L5** hosted e2e：先在宿主 acceptance 目录彩排（108+ 提交 delta），过了才谈生产。
 - [ ] **L6** capabilities 收口（二选一，用户拍板）：①补 4 项凭证（web_search / patent / pharmacy key + OpenGWAS JWT）重探转绿；②明确声明这 4 项为未配置面、门禁按"已配置面全绿 + 未配置面具名申明"收口。
 - [ ] **L7 变更窗口（一次做完）**：静养期满（约 09-02）+ L1–L6 绿 → 翻 `runtimeKernel` 默认 dsh + `.env` 五值 + **附 B 删除**（旧 store / packages/sdk / src-tauri / runtime/harness / deploy/runtime-opencode / fetch-opencode）+ OpenCode 版 release-gate 死、DSH 版 release-gate + receipt scheduler 上线（D7 收尾）+ geo-content 上生产 + manifest 重生成。窗口内保留一个回滚 release，72h 后撤。
