@@ -227,6 +227,24 @@
 
 分界（开源 vs 平台专属）：**开代码、留数据**——socket/domain 门禁/MCP/能力包/技能全开；平台专属 = 私有数据 API 与药学库数据本身、胶囊/记忆服务、计量与额度、服务端独立复核即服务、托管运维。`build-smoke.sh` 已是陌生人 README 的八成。
 
+## L. DSH 决胜线（2026-08-31 用户拍板：不留退路，坚持把 DSH 内核做好）
+
+两个用户决定，立即生效：
+- **L0a 备份 = 本机副本即最终形态**：不配对象存储桶。执行方式是**声明不是删除**——离盘状态按 `not_configured`（"是决定，不是故障"）落案，readiness 的 backup 项据此收绿；本地备份 + 恢复演练机制（刚修好并验证的）**保留**，三结局代码保留。单机风险作为已接受项记录在案；若日后翻案，平台侧已就绪，只差桶名与凭证。
+- **L0b 不留退路 = 不维持双内核**，不是不要证据、也不是窗口当天没有安全绳：内核平价改用**历史 opencode 交付作基线**（不再双内核并行对照）；变更窗口保留一个 release 回滚位，窗口后 72h 稳定即按既定裁决清至 3 个。
+
+**决胜关键路径（顺序即依赖）**：
+- [ ] **L1** J5b 技能路径缺陷修复（已裁决插队：相对根引用 + 根声明单点 + 闭集钉住测试 + build-smoke 真跑一个脚本）。
+- [ ] **L2** J4 两树合一（单一作者树 `capabilities/`，镜像树由它生成；漂移测试改相等测试）——必须在批测前落地。
+- [ ] **L3** F0：会话页在 DSH 内核下过一次真 RQ 验收（strangler 前端已建，缺这次验收）。
+- [ ] **L4** 一次新鲜单跑到 `accepted`（验证 D1 雪崩修复 + S162 分类器超时参数）→ **33 篇谷时批测全部跑在 DSH 内核上**，与历史 opencode 基线对照。
+- [ ] **L5** hosted e2e：先在宿主 acceptance 目录彩排（108+ 提交 delta），过了才谈生产。
+- [ ] **L6** capabilities 收口（二选一，用户拍板）：①补 4 项凭证（web_search / patent / pharmacy key + OpenGWAS JWT）重探转绿；②明确声明这 4 项为未配置面、门禁按"已配置面全绿 + 未配置面具名申明"收口。
+- [ ] **L7 变更窗口（一次做完）**：静养期满（约 09-02）+ L1–L6 绿 → 翻 `runtimeKernel` 默认 dsh + `.env` 五值 + **附 B 删除**（旧 store / packages/sdk / src-tauri / runtime/harness / deploy/runtime-opencode / fetch-opencode）+ OpenCode 版 release-gate 死、DSH 版 release-gate + receipt scheduler 上线（D7 收尾）+ geo-content 上生产 + manifest 重生成。窗口内保留一个回滚 release，72h 后撤。
+- [ ] **L8 窗口后主线（把 DSH 内核"做好"的三件深化）**：① review 插件三场景（语域泄漏 / GEO 提及语境 / 跨源冲突裁决——Apodex 差距 #3）；② 模型网关按角色配模型槽位（审查者/检索手可换模型，为 Apodex-mini 类开源权重留门——差距 #1 的不训练解法）；③ Hard Medical Research 确定性内评基准（30–50 道封闭答案中文医学题 + hard negatives——差距 #4）。J 轨其余（J3/J6/J7/J8 + 开源首批发布）随后。
+
+**等用户的清单（已缩短）**：① L6 的二选一；② GEO 探测机 TLS/域名可否（H5）；③ gitee 镜像去留。桶已从清单移除。
+
 ## G. 明确不做（防过度开发）
 
 - 不新增任何开放词汇 prose 正则；不为语域问题继续扩 `clinicalEvidence.mjs`。
