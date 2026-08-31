@@ -198,12 +198,19 @@ async function main() {
   // Cut the first connection deliberately, so resumption is exercised by this
   // acceptance rather than assumed. A tab that reloads mid-run does exactly
   // this, and it is the path no unit test covers.
-  const first = await readStream(base, runId, scoped, frames, { stopAfter: 40, connection: 1 });
+  const cutAfter = Number(process.env.OPEN_SCIENCE_E2E_CUT_AFTER ?? 40);
+  const first = await readStream(base, runId, scoped, frames, { stopAfter: cutAfter, connection: 1 });
   const cutAt = first.lastSeq;
   console.log(`first connection: ${frames.length} frame(s), last seq ${cutAt}${first.terminal ? ` (already ${first.terminal})` : ""}`);
 
   let terminal = first.terminal;
+  // Whether the cut actually happened. A run that settles inside the first
+  // window skips the resume entirely, and every resumption assertion below is
+  // then vacuously true — which is how an acceptance ends up printing
+  // "resumption clean" about a reconnect it never made.
+  let resumeExercised = false;
   if (!terminal) {
+    resumeExercised = true;
     const second = await readStream(base, runId, scoped, frames, { since: cutAt, connection: 2 });
     terminal = second.terminal;
     console.log(`resumed at since=${cutAt}: ${frames.filter((f) => f.connection === 2).length} more frame(s), last seq ${second.lastSeq}`);
@@ -212,7 +219,7 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const recording = path.join(outDir, `${new Date().toISOString().slice(0, 10)}-${marker}.jsonl`);
   writeFileSync(recording, `${frames.map((frame) => JSON.stringify(frame)).join("\n")}\n`, "utf8");
-  analyse(frames, { cutAt, terminal, recording });
+  analyse(frames, { cutAt, terminal, recording, resumeExercised });
 }
 
 /**
@@ -221,7 +228,7 @@ async function main() {
  * live run to learn what a stricter rule would have said.
  * @param {any[]} frames
  */
-function analyse(frames, { cutAt, terminal, recording }) {
+function analyse(frames, { cutAt, terminal, recording, resumeExercised = null }) {
 
   const problems = [];
 
@@ -268,6 +275,13 @@ function analyse(frames, { cutAt, terminal, recording }) {
   }
 
   const resumed = frames.filter((frame) => frame.connection === 2 && Number.isFinite(frame.id));
+  if (resumeExercised === false || (resumeExercised === null && !resumed.length)) {
+    problems.push(
+      `resumption was never exercised: the run settled inside the first ${cutAt} frame(s), so the cut never `
+      + "happened and every check below it is vacuously true. Rerun with a longer question, or a smaller "
+      + "OPEN_SCIENCE_E2E_CUT_AFTER, so the reconnect this acceptance exists to prove actually occurs",
+    );
+  }
   if (resumed.length) {
     const replayed = resumed.filter((frame) => frame.id <= cutAt && frame.event !== "run/state");
     if (replayed.length) problems.push(`resuming at since=${cutAt} replayed ${replayed.length} frame(s) the first connection already had`);
@@ -305,7 +319,11 @@ function analyse(frames, { cutAt, terminal, recording }) {
     process.exitCode = 1;
     return;
   }
-  console.log("\nF0 acceptance passed: a real run on the DSH kernel, both unions exhausted, resumption clean, content present.");
+  console.log(
+    "\nF0 acceptance passed: a real run on the DSH kernel. Every type seen was inside the closed"
+    + `\nunions (the members not seen are listed above), the reconnect at seq ${cutAt} lost and repeated`
+    + "\nnothing, and the stream carried a conversation with tool cards in it.",
+  );
 }
 
 main().catch((error) => {
