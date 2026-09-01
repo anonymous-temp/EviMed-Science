@@ -603,7 +603,25 @@ test("evidence is trimmed to what the memory service accepts, and never sent emp
     sourceRef: "sessions/s/messages/1",
     quote: "q".repeat(5_000),
   });
-  assert.equal(sent.at(-1).evidence.quote.length, 4_000, "a quote past the bound is trimmed, not left to be refused");
+  assert.ok(
+    Buffer.byteLength(sent.at(-1).evidence.quote, "utf8") <= 4_000,
+    "a quote past the bound is trimmed, not left to be refused",
+  );
+
+  // Bytes, not characters. The service is Go and counts `len(s)`; this client is
+  // JavaScript. On English fixtures the two agree, and on the Chinese
+  // conversations this product actually holds they differ threefold — so the
+  // first fix for this trimmed to 4000 characters, looked right, and changed
+  // nothing.
+  await send({
+    sourceType: "conversation_message",
+    sourceRef: "sessions/s/messages/3",
+    quote: "证据引语。".repeat(2_000),
+  });
+  const chinese = sent.at(-1).evidence.quote;
+  assert.ok(Buffer.byteLength(chinese, "utf8") <= 4_000, "a multi-byte quote must be bounded in bytes");
+  assert.ok(chinese.length > 0 && chinese.length < 2_000, "and still carry a usable excerpt");
+  assert.equal(chinese, [...chinese].join(""), "the cut must land on a character boundary");
 
   // A required field that is empty is not evidence, and attaching it fails the
   // whole record. Better an unevidenced record than no record at all.
