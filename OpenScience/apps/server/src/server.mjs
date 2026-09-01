@@ -2883,6 +2883,19 @@ function readinessRelease(config) {
     return { required: false, tracked: false };
   }
 
+  // A manifest describes one kernel, and the rollback lever moves the kernel
+  // without moving the manifest. Left to the field-by-field comparison below,
+  // that reports `release_manifest_mismatch` on `runtimeContainerImage` — which
+  // reads as a bad build, and sends an operator mid-rollback to look at the
+  // image they just deliberately changed. Same failure, said properly: this
+  // release's manifest is for the other kernel, so a kernel rollback needs that
+  // release's manifest with it. No new gate; the deployment was already red.
+  const manifestKernel = Object.hasOwn(manifest.runtime, "dshVersion") ? "dsh" : "opencode";
+  const configuredKernel = runtimeKernelName(config);
+  if (configuredKernel !== manifestKernel) {
+    throw readinessFailure("release_manifest_kernel_mismatch", { configured: configuredKernel, manifest: manifestKernel });
+  }
+
   // The kernel row follows whichever kernel the manifest names. Comparing
   // `config.opencodeVersion` against `manifest.runtime.opencodeVersion`
   // unconditionally meant that under DSH the expected side was `undefined`
