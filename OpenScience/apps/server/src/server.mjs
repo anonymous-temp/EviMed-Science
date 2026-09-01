@@ -477,8 +477,20 @@ export function createWebApiApp(overrides = {}) {
         runStatus: run.status,
         extracted: memoryResult.extracted,
         activated: memoryResult.activated,
-        transcriptMessages: messages.length,
-        ...(historyError ? { historyError } : {}),
+        // The counts this handler already computes, in the one field the ledger
+        // keeps. `extracted: 0` has several causes — no transcript, no
+        // candidates proposed, every candidate rejected — and they were
+        // indistinguishable.
+        detail: [
+          `messages=${messages.length}`,
+          `source=${memoryResult.source}`,
+          `proposed=${memoryResult.proposed}`,
+          `extracted=${memoryResult.extracted}`,
+          `rejected=${memoryResult.rejected}`,
+          ...(memoryResult.rejectionReasons?.length ? [`why=${memoryResult.rejectionReasons.slice(0, 3).join("|")}`] : []),
+          ...(memoryResult.extractionError ? [`error=${memoryResult.extractionError}`] : []),
+          ...(historyError ? [`history=${historyError}`] : []),
+        ].join(" "),
         extractionSource: memoryResult.source,
         proposed: memoryResult.proposed,
         rejected: memoryResult.rejected,
