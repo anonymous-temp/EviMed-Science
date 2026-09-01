@@ -52,22 +52,37 @@ export function isAllowedWireMethod(method) {
  * visible in metrics instead of being folded into "the runtime is unhappy".
  */
 const WIRE_ERROR_CODES = Object.freeze({
+  // 0.1.2 namespaced every code: `session-not-found` became `session/not-found`
+  // and the transport-level ones moved under `gateway/`. Each name below was
+  // confirmed to exist in the 0.1.2 sources; a stale bare code would not error,
+  // it would fold every kernel failure into the unknown branch and report a
+  // protocol mismatch for a session that simply does not exist.
+  //
   // A session the kernel has never heard of has produced nothing, which is a
   // different fact from "the session failed" and callers act on it differently:
   // reading the history of a not-yet-started run is normal, and folding it into
   // a generic session error made a run that had simply not begun look broken.
-  "session-not-found": "runtime_session_not_found",
-  "session-conflict": "runtime_session_error",
-  "agent-preset-not-found": "runtime_preset_unavailable",
-  "agent-preset-invalid": "runtime_preset_unavailable",
-  "agent-preset-locked": "runtime_preset_unavailable",
-  "agent-preset-conflict": "runtime_preset_unavailable",
-  "agent-busy": "runtime_session_error",
-  "model-unavailable": "runtime_session_error",
-  "fork-unavailable": "runtime_session_error",
-  "bad-request": "runtime_wire_protocol_mismatch",
-  cancelled: "runtime_canceled",
-  internal: "runtime_session_error",
+  "session/not-found": "runtime_session_not_found",
+  "session/conflict": "runtime_session_error",
+  "session/disposed": "runtime_session_error",
+  "session/agent-busy": "runtime_session_error",
+  "session/model-unavailable": "runtime_session_error",
+  "session/fork-unavailable": "runtime_session_error",
+  "agent-preset/not-found": "runtime_preset_unavailable",
+  "agent-preset/invalid": "runtime_preset_unavailable",
+  "agent-preset/locked": "runtime_preset_unavailable",
+  "agent-preset/conflict": "runtime_preset_unavailable",
+  "workspace/not-found": "runtime_session_error",
+  // Transport-level refusals. `arguments-invalid`, `input-invalid` and
+  // `signature-invalid` all mean this control plane sent something the wire
+  // does not accept — a protocol mismatch on our side, which is exactly what
+  // that code is for and what it should keep saying out loud.
+  "gateway/bad-request": "runtime_wire_protocol_mismatch",
+  "gateway/arguments-invalid": "runtime_wire_protocol_mismatch",
+  "gateway/input-invalid": "runtime_wire_protocol_mismatch",
+  "gateway/signature-invalid": "runtime_wire_protocol_mismatch",
+  "gateway/cancelled": "runtime_canceled",
+  "gateway/internal": "runtime_session_error",
 });
 
 /**
@@ -297,16 +312,22 @@ export class DshRuntimeAdapter {
         onEvent?.(frame);
         continue;
       }
-      const [payload] = Array.isArray(frame.args) ? frame.args : [];
-      const sessionId = String(payload?.sessionId ?? "");
-      if (frame.event === "api-session/status" && sessionId) {
-        this.runningBySession.set(sessionId, Boolean(payload?.running));
-      }
-      if (frame.event === "api-session/added" && sessionId) {
-        this.runningBySession.set(sessionId, Boolean(payload?.running));
-      }
-      if (frame.event === "api-session/removed" && sessionId) {
-        this.runningBySession.delete(sessionId);
+      // Two argument shapes, transcribed from a live recording rather than
+      // assumed: `api-session/added(summary)` puts an OBJECT in args[0], while
+      // `api-session/status(sessionId, running)` and
+      // `api-session/removed(sessionId)` are POSITIONAL — args[0] is a bare
+      // string. Reading `args[0].sessionId` for all three finds `undefined` on
+      // the positional ones, so every status change is dropped and a running
+      // session reads `idle` forever off the opening summary. Nothing errors,
+      // nothing logs: the failure looks exactly like nothing having happened.
+      const args = Array.isArray(frame.args) ? frame.args : [];
+      const [first, second] = args;
+      const summary = first && typeof first === "object" ? first : null;
+      const sessionId = String(summary?.sessionId ?? (typeof first === "string" ? first : ""));
+      if (sessionId) {
+        if (frame.event === "api-session/status") this.runningBySession.set(sessionId, Boolean(second));
+        else if (frame.event === "api-session/added") this.runningBySession.set(sessionId, Boolean(summary?.running));
+        else if (frame.event === "api-session/removed") this.runningBySession.delete(sessionId);
       }
       onEvent?.(frame);
     }
