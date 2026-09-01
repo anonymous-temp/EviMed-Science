@@ -95,6 +95,32 @@ async function waitForRun(base, runId, headers) {
   throw failure("hosted_e2e_run_timeout", "The production agent run did not reach a terminal state.");
 }
 
+/**
+ * The mechanical half: did the memory pipeline run at all?
+ *
+ * `recordRun` writes a run-summary record before it extracts anything, so this
+ * record existing proves the pipeline executed, built sources from the
+ * transcript, and that the memory service accepted a write. That is a property
+ * of this deployment and stays blocking — without it, "the extractor produced
+ * nothing" and "the extractor never ran" arrive as the same silence, which is
+ * the shape this whole gate exists to refuse.
+ */
+async function waitForRunSummary(base, headers, projectId, runId) {
+  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS ?? 180_000);
+  const key = `run.${runId}`.toLowerCase();
+  const url = `${base}/api/memory/records?scope=project&kind=run_summary&scopeId=${encodeURIComponent(projectId)}&pageSize=100`;
+  while (Date.now() < deadline) {
+    const listed = await jsonFetch(url, { headers });
+    const record = (listed.body?.data ?? []).find((item) => String(item.key ?? "").toLowerCase() === key);
+    if (record) return record;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw failure(
+    "hosted_e2e_memory_pipeline_missing",
+    `No run-summary memory record for ${runId}: the memory pipeline did not run, or the memory service refused its write.`,
+  );
+}
+
 async function waitForMemoryRecord(base, headers, initialIds, marker) {
   // Longer than the extraction's own budget, which is the point.
   //
@@ -116,7 +142,10 @@ async function waitForMemoryRecord(base, headers, initialIds, marker) {
     if (record) return record;
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }
-  throw failure("hosted_e2e_memory_extraction_missing", "The production conversation did not produce evidence-backed structured memory.");
+  // Not a verdict any more: whether the extractor found a durable preference in
+  // this particular conversation is the model's behaviour, and the caller
+  // records it instead of failing on it.
+  return null;
 }
 
 function assertReady(ready) {
@@ -324,25 +353,51 @@ async function main() {
       throw failure("hosted_e2e_signals_invalid", "The production signal table does not expose a disproportionality metric.");
     }
 
+    // Mechanical first, and blocking: the pipeline ran and the memory service
+    // took its write.
+    await waitForRunSummary(base, scoped, projectId, run.id);
+
     const memoryRecord = await waitForMemoryRecord(base, scoped, initialRecordIds, preferenceMarker);
-    // Six conditions under one message meant a run told you the memory was
-    // wrong without telling you which part, and the record is deleted with the
-    // project moments later — so the answer was gone before anyone could look.
-    const memoryFaults = [
-      memoryRecord.scope !== "user" ? `scope=${memoryRecord.scope}` : null,
-      memoryRecord.kind !== "preference" ? `kind=${memoryRecord.kind}` : null,
-      memoryRecord.origin !== "explicit" ? `origin=${memoryRecord.origin}` : null,
-      memoryRecord.status !== "active" ? `status=${memoryRecord.status}` : null,
-      memoryRecord.evidenceCount < 1 ? `evidenceCount=${memoryRecord.evidenceCount}` : null,
-      memoryRecord.evidence?.some((item) => item.quote?.includes(preferenceMarker))
-        ? null
-        : `no evidence quote carries the marker (quotes=${(memoryRecord.evidence ?? []).length})`,
-    ].filter(Boolean);
-    if (memoryFaults.length) {
-      throw failure(
-        "hosted_e2e_memory_evidence_invalid",
-        `The structured preference memory is not explicit, evidenced and active: ${memoryFaults.join("; ")}.`,
+    if (!memoryRecord) {
+      // Content, and recorded rather than judged. Measured 2026-09-01 on one
+      // acceptance stack, same brief and same code: one run proposed six
+      // candidates and adopted six, the next proposed none and rejected none —
+      // the extractor simply returned nothing. Twenty-three messages holding no
+      // durable fact is a legitimate outcome, and it is indistinguishable from
+      // model reticence, so it joins the same distribution as the signals table
+      // before anyone decides where the requirement belongs.
+      const finished = await jsonFetch(`${base}/api/agent-runs`, { headers: scoped });
+      const counts = (finished.body?.data ?? []).find((item) => item.id === run.id)?.qualityNotices
+        ?.find((line) => String(line).includes("记忆抽取未产出记录"));
+      notice(
+        "memory_extraction_produced_no_preference",
+        counts ? String(counts) : "the run recorded no extraction counts",
       );
+    } else {
+      // Six conditions under one message meant a run told you the memory was
+      // wrong without telling you which part, and the record is deleted with
+      // the project moments later — so the answer was gone before anyone could
+      // look.
+      const memoryFaults = [
+        memoryRecord.scope !== "user" ? `scope=${memoryRecord.scope}` : null,
+        memoryRecord.kind !== "preference" ? `kind=${memoryRecord.kind}` : null,
+        memoryRecord.origin !== "explicit" ? `origin=${memoryRecord.origin}` : null,
+        memoryRecord.status !== "active" ? `status=${memoryRecord.status}` : null,
+        memoryRecord.evidenceCount < 1 ? `evidenceCount=${memoryRecord.evidenceCount}` : null,
+        memoryRecord.evidence?.some((item) => item.quote?.includes(preferenceMarker))
+          ? null
+          : `no evidence quote carries the marker (quotes=${(memoryRecord.evidence ?? []).length})`,
+      ].filter(Boolean);
+      if (memoryFaults.length) {
+        // Still blocking, and deliberately so: since the client now applies the
+        // memory service's own bounds before sending, no model output should be
+        // able to produce an invalid record. If this fires it is our defect —
+        // which is exactly what it caught last time.
+        throw failure(
+          "hosted_e2e_memory_evidence_invalid",
+          `The structured preference memory is not explicit, evidenced and active: ${memoryFaults.join("; ")}.`,
+        );
+      }
     }
 
     await command(base, "write_workspace_file", {

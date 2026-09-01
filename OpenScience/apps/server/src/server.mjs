@@ -470,6 +470,22 @@ export function createWebApiApp(overrides = {}) {
         historyError = error?.code ?? error?.name ?? "runtime_history_unavailable";
       }
       const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
+      // A run that extracted nothing, said so on the run itself.
+      //
+      // Extracting nothing is a legitimate outcome — twenty-three messages can
+      // hold no durable fact — and it is also what a broken extractor looks
+      // like. The counts separate them, and they were only in the security
+      // ledger, which no API exposes. Appended only when the count is zero, so
+      // an ordinary run gains no notice, and readable through /api/agent-runs
+      // where the batch can collect the distribution.
+      if (memoryResult.extracted === 0) {
+        await agentRuns.appendQualityNotices(project, run.id, [
+          `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
+          + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
+          + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
+          + "。空对话与抽取失效在结果上一样，这行区分它们。",
+        ], { unchecked: true }).catch(() => {});
+      }
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
         projectId: project.id,
