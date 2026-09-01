@@ -193,7 +193,7 @@ export function startMockDshRuntime() {
       res.writeHead(200, { "Content-Type": "application/json" });
 
       if (method === "host.describe") {
-        res.end(JSON.stringify(ok(rpcId, { name: "mock-dsh", version: "0.1.1-rc.2", methods: [...MOCK_METHODS] })));
+        res.end(JSON.stringify(ok(rpcId, { name: "mock-dsh", version: "0.1.2-alpha.3", methods: [...MOCK_METHODS] })));
         return;
       }
       if (method === "session.create") {

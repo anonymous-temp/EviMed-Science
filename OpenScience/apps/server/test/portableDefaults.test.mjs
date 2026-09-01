@@ -54,7 +54,7 @@ test("the generated patch writes enforcement out loud rather than inheriting it"
     capsuleGatewayUrl: "https://open-science-web:8787/internal/capsule/v1",
     workloadTokenFile: "/runtime/secrets/workload-token",
     bundleVersion: "0.1.0",
-    dshVersion: "0.1.1-rc.2",
+    dshVersion: "0.1.2-alpha.3",
     limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 },
     flags: { hosted: true, askUser: false, review: true, capsule: false, requiredEnforcement: "full" },
   });
