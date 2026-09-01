@@ -1,18 +1,20 @@
 # == @deepseek-ai/dsh-base
 - id: timer
   name: '@deepseek-ai/cordis-plugin-timer'
-# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: hmr
   name: '@deepseek-ai/cordis-plugin-hmr'
+  disabled: true
   config:
     root:
       - .
-  disabled: true
-# == @deepseek-ai/dsh-base
 - id: llm
   name: '@deepseek-ai/dsh-llm'
+- id: deepseek-llm-api-extensions
+  name: '@deepseek-ai/dsh-deepseek-llm-api-extensions'
 - id: session
   name: '@deepseek-ai/dsh-session'
+- id: session-log-deepseek
+  name: '@deepseek-ai/dsh-session-log-deepseek'
 - id: typert
   name: '@deepseek-ai/dsh-typert-registry'
 - id: typert-loader
@@ -37,6 +39,11 @@
   name: '@deepseek-ai/dsh-user-questions'
 - id: agent
   name: '@deepseek-ai/dsh-agent'
+# == @deepseek-ai/dsh-base, patched by @evimed/dsh-socket
+- id: plugin-package-inventory-deepseek
+  name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
+  disabled: true
+# == @deepseek-ai/dsh-base
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
   config:
@@ -65,11 +72,26 @@
     openAt: never
 - id: session-projection
   name: '@deepseek-ai/dsh-session-projection'
+- id: storage
+  name: '@deepseek-ai/dsh-storage'
+- id: storage-json
+  name: '@deepseek-ai/dsh-storage-json'
+  config:
+    root: !!js dshHomePath('storages')
+- id: storage-domain
+  name: '@deepseek-ai/dsh-storage-domain'
+  config:
+    backend: json
+- id: session-projection-cache
+  name: '@deepseek-ai/dsh-session-projection-cache'
+  config:
+    writeEveryEvents: 200
+    writeIntervalMs: 5000
 # == @deepseek-ai/dsh-base, patched by @evimed/dsh-socket
 - id: session-telemetry-otel
   name: '@deepseek-ai/dsh-session-telemetry-otel'
   config:
-    mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
+    mode: !!js process.env.DSH_TELEMETRY_MODE || 'FEEDBACK_ONLY'
     shutdownTimeoutMillis: 3000
     exporter:
       url: !!js >-
@@ -173,9 +195,10 @@
   name: '@deepseek-ai/dsh-goal'
 - id: goal-round-driver
   name: '@deepseek-ai/dsh-goal-round-driver'
+# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: command-goal
   name: '@deepseek-ai/dsh-command-goal'
-# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
+  disabled: true
 - id: plan-mode
   name: '@deepseek-ai/dsh-plan-mode'
   config:
@@ -332,10 +355,15 @@
   name: '@deepseek-ai/dsh-web'
   config:
     searchProvider: deepseek-official
+    fetchProvider: http
 - id: web-search-deepseek
   name: '@deepseek-ai/dsh-web-search-deepseek'
   config:
     apiKeyEnv: DEEPSEEK_API_KEY
+# == @deepseek-ai/dsh-base, patched by @evimed/dsh-socket
+- id: web-fetch-http
+  name: '@deepseek-ai/dsh-web-fetch-http'
+  disabled: true
 # == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
@@ -363,18 +391,10 @@
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek'
 # == @deepseek-ai/dsh-web-app
+- id: subagent-model-selection-settings
+  name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
 - id: code-runtime
   name: '@deepseek-ai/dsh-code-runtime-worker-thread'
-- id: storage
-  name: '@deepseek-ai/dsh-storage'
-- id: storage-json
-  name: '@deepseek-ai/dsh-storage-json'
-  config:
-    root: !!js dshHomePath('storages')
-- id: storage-domain
-  name: '@deepseek-ai/dsh-storage-domain'
-  config:
-    backend: json
 - id: message-feedback
   name: '@deepseek-ai/dsh-message-feedback'
   config:
@@ -383,23 +403,24 @@
   name: '@deepseek-ai/dsh-session-log-export'
 - id: workspace
   name: '@deepseek-ai/dsh-workspace'
-- id: session-projection-cache
-  name: '@deepseek-ai/dsh-session-projection-cache'
-  config:
-    writeEveryEvents: 200
-    writeIntervalMs: 5000
 - id: session-reference
   name: '@deepseek-ai/dsh-session-reference'
 - id: file-reference-local
   name: '@deepseek-ai/dsh-file-reference-local'
 - id: session-stats
   name: '@deepseek-ai/dsh-session-stats'
+- id: session-turn-outline
+  name: '@deepseek-ai/dsh-session-turn-outline'
 - id: directory-picker
   name: '@deepseek-ai/dsh-host-directory-picker-auto'
 - id: plugin-inventory
   name: '@deepseek-ai/dsh-host-plugin-inventory'
-- id: api-gateway
-  name: '@deepseek-ai/dsh-host-apiproxy'
+- id: session-controller
+  name: '@deepseek-ai/dsh-api-session-controller'
+- id: settings-controller
+  name: '@deepseek-ai/dsh-api-settings-controller'
+- id: workspace-controller
+  name: '@deepseek-ai/dsh-api-workspace-controller'
 - id: cordis-host-runner
   name: '@deepseek-ai/dsh-cordis-host-runner'
 - id: web-startup
@@ -411,6 +432,9 @@
   config:
     host: !!js ctx.webStartup.host ?? '127.0.0.1'
     port: !!js ctx.webStartup.port ?? 3080
+    compression: gzip
+    compressionLevel: 1
+    compressionThresholdBytes: 1024
 - id: web-runtime
   name: '@deepseek-ai/dsh-web-app'
   inject:
@@ -432,8 +456,6 @@
     trustedHosts: !!js ctx.webRuntime.trustedHosts
 - id: api-remotes
   name: '@deepseek-ai/dsh-api-remotes'
-- id: client-runtime
-  name: '@deepseek-ai/dsh-client-runtime'
 - id: cordis-client-runner
   name: '@deepseek-ai/dsh-cordis-client-runner'
 - id: ui-theme
@@ -444,6 +466,8 @@
   name: '@deepseek-ai/dsh-client-ui-layout'
 - id: ui-renderer
   name: '@deepseek-ai/dsh-client-ui-renderer'
+- id: ui-session
+  name: '@deepseek-ai/dsh-client-ui-session'
 - id: ui-sidebar
   name: '@deepseek-ai/dsh-client-ui-sidebar'
 - id: ui-settings
@@ -456,6 +480,10 @@
   name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
 - id: ui-conversation
   name: '@deepseek-ai/dsh-client-ui-conversation'
+- id: ui-approval
+  name: '@deepseek-ai/dsh-client-ui-approval'
+- id: ui-chat
+  name: '@deepseek-ai/dsh-client-ui-chat'
 - id: ui-brand-official
   name: '@deepseek-ai/dsh-client-ui-brand-official'
 - id: ui-attachment
@@ -480,6 +508,9 @@
   name: '@deepseek-ai/dsh-client-ui-subagent'
 - id: ui-reference
   name: '@deepseek-ai/dsh-client-ui-reference'
+- id: ui-schedule
+  name: '@deepseek-ai/dsh-client-ui-schedule'
+  disabled: true
 - id: ui-jobs
   name: '@deepseek-ai/dsh-client-ui-jobs'
 - id: ui-goal
