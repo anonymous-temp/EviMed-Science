@@ -1,7 +1,7 @@
 {
   "$comment": "The single definition of every version we track upstream. A Dockerfile ARG, a seam manifest, a peerDependency and a release manifest that each carried their own copy meant 'bump the pin' was four edits and one of them was always missed. Tests assert every derived copy equals the value here; the nightly compatibility matrix is one job that loops over these keys.",
   "dsh": {
-    "version": "0.1.1-rc.2",
+    "version": "0.1.2-alpha.3",
     "cordis": "4.0.2",
     "npmPackage": "@deepseek-ai/dsh",
     "contractDir": "packages/contracts/dsh",

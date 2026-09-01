@@ -935,12 +935,12 @@ services:
   # launches project containers itself, so neither of these services runs — they
   # exist so `--profile runtime-image build` produces both.
   dsh-runtime-image:
-    image: ${OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.1-rc.2-uv-0.11.26}
+    image: ${OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26}
     build:
       context: ../..
       dockerfile: deploy/runtime-dsh/Dockerfile
       args:
-        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.1-rc.2}
+        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.2-alpha.3}
         DSH_CORDIS_VERSION: ${OPEN_SCIENCE_DSH_CORDIS_VERSION:-4.0.2}
         SOCKET_VERSION: ${OPEN_SCIENCE_SOCKET_VERSION:-0.1.0}
         NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-22.22.0}

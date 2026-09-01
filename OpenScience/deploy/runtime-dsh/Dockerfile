@@ -12,7 +12,7 @@ FROM ${RUNTIME_BASE_IMAGE}
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
-ARG DSH_VERSION=0.1.1-rc.2
+ARG DSH_VERSION=0.1.2-alpha.3
 ARG DSH_CORDIS_VERSION=4.0.2
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0

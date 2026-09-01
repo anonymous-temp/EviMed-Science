@@ -696,7 +696,7 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DSH_VERSION ??
       release.manifest?.runtime?.dshVersion ??
       depsVersions.dsh?.version ??
-      "0.1.1-rc.2",
+      "0.1.2-alpha.3",
     socketBundleVersion:
       overrides.socketBundleVersion ??
       process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??
