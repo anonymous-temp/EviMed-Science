@@ -2,312 +2,36 @@
  * The live wire from a project's kernel to the browser's SSE stream.
  *
  * Hidden knowledge: nothing in this control plane used to open the kernel's
- * downlink. `DshRuntimeAdapter.watchSessions()` decoded it and was tested
- * against a scripted transport, but no production code ever constructed a
- * real one — so `run/event`, and everything a browser reads that only rides
- * `run/event` (the live transcript, tool calls, subagent starts), had no
- * publisher. `run/state` alone kept working because it is published from the
- * ledger's own state machine, not from the kernel's stream.
+ * downlink. `DshRuntimeAdapter` decoded it and was tested against a scripted
+ * transport, but no production code ever constructed a real one — so
+ * `run/event`, and everything a browser reads that only rides `run/event`
+ * (the live transcript, tool calls, subagent starts), had no publisher.
+ * `run/state` alone kept working because it is published from the ledger's own
+ * state machine, not from the kernel's stream.
  *
- * The client here is hand-rolled over `http.request`'s own `upgrade` event —
- * the same primitive `requestRuntime` already uses for unix-socket and TCP
- * dialing — rather than Node's native `WebSocket`. That was not a style
- * choice: the native client threw an internal `TypeError` inside undici's own
- * close handler against this exact handshake (confirmed against
- * `mockDshRuntime.mjs` before writing this), and a live-event pipeline is the
- * wrong place to depend on an edge a stdlib client has not proven it handles.
- * `mockDshRuntime.mjs` hand-rolls the write side of the same frame format for
- * the same reason: sixteen lines of framing does not justify a dependency in
- * the control plane's request path, and here it does not justify one in the
- * control plane's socket path either.
+ * DSH 0.1.2 changed the shape of that wire. There is no all-sessions stream
+ * any more: one WebSocket carries independently cancellable logical streams,
+ * and a session's events arrive on the stream opened for that session. So this
+ * pump now owns a pairing it never had to hold before — which session each
+ * open stream belongs to — and opening one is a decision rather than a
+ * subscription. It follows exactly the sessions the ledger says are running,
+ * plus the subagent sessions those runs spawn.
  *
- * A dropped downlink reconnects rather than failing the run: `session.prompt`
- * and `session.history` are unary calls this pump never touches, so a run
- * keeps working from the request/response side even while this side is
- * between connections. What is lost during a gap is made whole again by the
- * transcript endpoint any (re)connecting tab reads first — this pump is the
- * addition for a tab that is already open, never the source of truth.
+ * A dropped mux reconnects rather than failing the run: `session/prompt` and
+ * `session/page` are unary calls this pump never touches, so a run keeps
+ * working from the request/response side even while this side is between
+ * connections. What is lost during a gap is made whole again by the transcript
+ * endpoint any (re)connecting tab reads first — this pump is the addition for
+ * a tab that is already open, never the source of truth.
  *
  * @module dshEventPump
  */
 
-import { randomBytes, createHash } from "node:crypto";
-import { EventEmitter, on } from "node:events";
-import http from "node:http";
-
 import { DshRuntimeAdapter } from "./dshRuntimeAdapter.mjs";
+import { DshMux } from "./dshMux.mjs";
 
-const WS_ACCEPT_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-/** How long to wait before retrying a dropped or refused downlink connection. */
+/** How long to wait before retrying a dropped or refused mux connection. */
 export const RUNTIME_DOWNLINK_RECONNECT_MS = 2_000;
-
-/**
- * @param {string} password
- * @returns {string}
- */
-function basicAuth(password) {
-  return `Basic ${Buffer.from(`:${password}`, "utf8").toString("base64")}`;
-}
-
-/**
- * One masked client-to-server frame. Only pongs use this — nothing else on
- * this downlink writes back — but a pong must echo the ping's payload
- * exactly, and a client frame must be masked or a strict server may close on
- * it, so both rules live here rather than being approximated.
- *
- * @param {number} opcode
- * @param {Buffer} payload
- * @returns {Buffer}
- */
-function encodeClientFrame(opcode, payload) {
-  const maskKey = randomBytes(4);
-  const masked = Buffer.alloc(payload.length);
-  for (let i = 0; i < payload.length; i += 1) masked[i] = payload[i] ^ maskKey[i % 4];
-  /** @type {Buffer} */
-  let header;
-  if (payload.length < 126) {
-    header = Buffer.from([0x80 | opcode, 0x80 | payload.length]);
-  } else if (payload.length < 65_536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x80 | opcode;
-    header[1] = 0x80 | 126;
-    header.writeUInt16BE(payload.length, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x80 | opcode;
-    header[1] = 0x80 | 127;
-    header.writeBigUInt64BE(BigInt(payload.length), 2);
-  }
-  return Buffer.concat([header, maskKey, masked]);
-}
-
-/**
- * Decodes a byte stream into WebSocket frames, incrementally.
- *
- * A single `data` event carries no guarantee about how many frames — or how
- * much of one — it holds: a slow link can split one frame across several
- * chunks, and a fast one can coalesce several frames into a single chunk.
- * Handling only the second and assuming the first cannot happen is how a
- * parser passes every quick test and misdecodes the first frame that lands on
- * a chunk boundary in production.
- *
- * Fragmented text messages (a `FIN`-less frame followed by continuations) are
- * reassembled; control frames are unmasked-or-masked either way tolerated,
- * because nothing here needs an interoperability failure with a peer that
- * masked when the spec did not require it, only a correct decode.
- */
-class WebSocketFrameReader {
-  /**
-   * @param {{ onText: (text: string) => void, onPing: (payload: Buffer) => void, onClose: () => void }} handlers
-   */
-  constructor({ onText, onPing, onClose }) {
-    this.onText = onText;
-    this.onPing = onPing;
-    this.onClose = onClose;
-    /** @type {Buffer} */
-    this.buffer = Buffer.alloc(0);
-    /** @type {Buffer[] | null} */
-    this.fragments = null;
-  }
-
-  /** @param {Buffer} chunk */
-  push(chunk) {
-    this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
-    for (;;) {
-      const frame = this.#readOne();
-      if (!frame) return;
-      this.#dispatch(frame);
-    }
-  }
-
-  /** @returns {{ fin: boolean, opcode: number, payload: Buffer } | null} */
-  #readOne() {
-    const buf = this.buffer;
-    if (buf.length < 2) return null;
-    const fin = (buf[0] & 0x80) !== 0;
-    const opcode = buf[0] & 0x0f;
-    const masked = (buf[1] & 0x80) !== 0;
-    let len = buf[1] & 0x7f;
-    let offset = 2;
-    if (len === 126) {
-      if (buf.length < offset + 2) return null;
-      len = buf.readUInt16BE(offset);
-      offset += 2;
-    } else if (len === 127) {
-      if (buf.length < offset + 8) return null;
-      const big = buf.readBigUInt64BE(offset);
-      if (big > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Runtime downlink sent a frame too large to decode.");
-      len = Number(big);
-      offset += 8;
-    }
-    /** @type {Buffer | null} */
-    let maskKey = null;
-    if (masked) {
-      if (buf.length < offset + 4) return null;
-      maskKey = buf.subarray(offset, offset + 4);
-      offset += 4;
-    }
-    if (buf.length < offset + len) return null;
-    let payload = buf.subarray(offset, offset + len);
-    if (maskKey) {
-      const unmasked = Buffer.alloc(len);
-      for (let i = 0; i < len; i += 1) unmasked[i] = payload[i] ^ maskKey[i % 4];
-      payload = unmasked;
-    }
-    this.buffer = buf.subarray(offset + len);
-    return { fin, opcode, payload };
-  }
-
-  /** @param {{ fin: boolean, opcode: number, payload: Buffer }} frame */
-  #dispatch({ fin, opcode, payload }) {
-    if (opcode === 0x9) {
-      this.onPing(payload);
-      return;
-    }
-    if (opcode === 0xa) return; // pong: nothing here ever awaits one
-    if (opcode === 0x8) {
-      this.onClose();
-      return;
-    }
-    if (opcode === 0x1 || opcode === 0x0) {
-      this.fragments = this.fragments ? [...this.fragments, payload] : [payload];
-      if (fin) {
-        const text = Buffer.concat(this.fragments).toString("utf8");
-        this.fragments = null;
-        this.onText(text);
-      }
-      return;
-    }
-    // Binary (0x2) or anything else: the protocol is JSON text only, so an
-    // unrecognized opcode is dropped rather than guessed at.
-  }
-}
-
-/**
- * Opens one connection to a runtime's downlink and yields decoded JSON
- * frames until the peer closes it, it errors, or `signal` aborts.
- *
- * This is the `WireTransport.stream` half `DshRuntimeAdapter` has always
- * expected and never had a production implementation of. It ends cleanly
- * (no throw) on a peer close or on `signal` abort, and throws on a genuine
- * failure — a refused connection, a handshake that did not upgrade, an
- * undecodable frame — so a caller's reconnect loop can tell "try again" from
- * "stop".
- *
- * @param {{ url: string, socketPath?: string|null, password?: string|null }} runtime
- * @param {string} downlinkPath
- * @param {{ signal: AbortSignal }} options
- * @returns {AsyncGenerator<Record<string, any>>}
- */
-export async function* openRuntimeDownlink(runtime, downlinkPath, { signal }) {
-  if (signal.aborted) return;
-  const target = new URL(downlinkPath, runtime.url);
-  const key = randomBytes(16).toString("base64");
-  /** @type {Record<string, string>} */
-  const headers = {
-    Connection: "Upgrade",
-    Upgrade: "websocket",
-    "Sec-WebSocket-Version": "13",
-    "Sec-WebSocket-Key": key,
-  };
-  if (runtime.password) headers.authorization = basicAuth(runtime.password);
-
-  const request = runtime.socketPath
-    ? http.request({ method: "GET", headers, socketPath: runtime.socketPath, path: `${target.pathname}${target.search}` })
-    : http.request(target, { method: "GET", headers });
-
-  const frames = new EventEmitter();
-  // A second controller, not `signal` itself: a peer closing the socket ends
-  // this generator so the caller's loop can reconnect, but it must not also
-  // abort the caller's own signal, which governs whether to reconnect at all.
-  const local = new AbortController();
-  const stop = () => local.abort();
-  signal.addEventListener("abort", stop, { once: true });
-  // `EventEmitter` throws an emitted `"error"` that has no listener left to
-  // catch it — and `on()` removes its internal listener the moment this
-  // generator's own loop below exits. `request.destroy()` in the `finally`
-  // block can still raise a deferred socket-hang-up after that point, so
-  // every emit past teardown is dropped here rather than left to find out.
-  let finished = false;
-
-  /** @type {import("node:net").Socket | null} */
-  let socket = null;
-  request.once("error", (error) => {
-    if (!finished) frames.emit("error", error);
-  });
-  request.once("response", (res) => {
-    // The seam manifest's own contract for this path: a plain GET where a
-    // WebSocket is expected answers 426, so anything else answering here
-    // means the peer is not the kernel this pump was told to expect.
-    if (!finished) frames.emit("error", new Error(`Runtime downlink answered HTTP ${res.statusCode} instead of upgrading.`));
-    res.resume();
-  });
-  request.once("upgrade", (res, sock, head) => {
-    socket = sock;
-    const expectedAccept = createHash("sha1").update(`${key}${WS_ACCEPT_GUID}`).digest("base64");
-    if (res.statusCode !== 101 || res.headers["sec-websocket-accept"] !== expectedAccept) {
-      if (!finished) frames.emit("error", new Error("Runtime downlink handshake did not return the expected WebSocket accept."));
-      sock.destroy();
-      return;
-    }
-    const reader = new WebSocketFrameReader({
-      onText: (text) => {
-        try {
-          frames.emit("frame", JSON.parse(text));
-        } catch {
-          // isolated: evimed_runtime_downlink_decode_failures_total — one
-          // malformed frame must not end a connection every other frame on
-          // it decodes fine.
-        }
-      },
-      onPing: (payload) => {
-        try {
-          sock.write(encodeClientFrame(0xa, payload));
-        } catch {
-          // The socket is already gone; the close/error handler covers it.
-        }
-      },
-      onClose: stop,
-    });
-    sock.on("data", (chunk) => {
-      if (finished) return;
-      try {
-        // The socket is never put into a string encoding mode, so this is
-        // always a Buffer in practice; the event's own type is the union
-        // every `'data'` listener carries regardless.
-        reader.push(/** @type {Buffer} */ (chunk));
-      } catch (error) {
-        frames.emit("error", error);
-        sock.destroy();
-      }
-    });
-    sock.once("close", stop);
-    sock.once("error", (error) => {
-      if (!finished) frames.emit("error", error);
-    });
-    // Bytes the server sent right after the 101 response arrive bundled into
-    // this event rather than as a first `data` event — Node hands them back
-    // once, here, and never replays them. A downlink that pushes a frame
-    // before the handshake's own network round-trip completes (the common
-    // case: kernel and control plane on the same host) would otherwise lose
-    // exactly that frame, silently, every time.
-    if (head?.length) reader.push(head);
-  });
-  request.end();
-
-  try {
-    for await (const [frame] of on(frames, "frame", { signal: local.signal })) yield frame;
-  } catch (error) {
-    if (local.signal.aborted && (!error || error.name === "AbortError")) return;
-    throw error;
-  } finally {
-    finished = true;
-    signal.removeEventListener("abort", stop);
-    socket?.destroy();
-    request.destroy();
-  }
-}
 
 /**
  * @param {number} ms
@@ -330,10 +54,28 @@ function delay(ms, signal) {
 }
 
 /**
+ * Opens one multiplexed connection to a runtime's kernel.
+ *
+ * Separate from the pump so a test can hand in a scripted mux, and so the one
+ * place that knows how to dial a kernel stays one place.
+ *
+ * @param {{ url: string, socketPath?: string|null, cookie?: string|null, authority?: string|null }} runtime
+ * @param {{ signal: AbortSignal }} options
+ * @returns {Promise<DshMux>}
+ */
+export async function openRuntimeMux(runtime, { signal }) {
+  const mux = new DshMux(runtime);
+  await mux.connect({ signal });
+  return mux;
+}
+
+/**
  * @typedef {object} PumpProjectState
  * @property {AbortController} controller
  * @property {Map<string, string>} rootSessions - kernel sessionId -> run id, for a run's own top-level session
  * @property {Map<string, { runId: string, label: string, capability: string }>} childSessions - kernel sessionId -> owning run, for a subagent's session
+ * @property {Map<string, AbortController>} follows - kernel sessionId -> the follow stream open for it
+ * @property {(() => void) | null} resync - wakes the follow reconciler when the session maps change
  */
 
 /**
@@ -347,12 +89,12 @@ function delay(ms, signal) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openDownlink?: typeof openRuntimeDownlink, reconnectDelayMs?: number }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, reconnectDelayMs?: number }} options
    */
-  constructor({ runEvents, isDshKernel, openDownlink = openRuntimeDownlink, reconnectDelayMs = RUNTIME_DOWNLINK_RECONNECT_MS }) {
+  constructor({ runEvents, isDshKernel, openMux = openRuntimeMux, reconnectDelayMs = RUNTIME_DOWNLINK_RECONNECT_MS }) {
     this.runEvents = runEvents;
     this.isDshKernel = isDshKernel;
-    this.openDownlink = openDownlink;
+    this.openMux = openMux;
     this.reconnectDelayMs = reconnectDelayMs;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
@@ -380,7 +122,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { controller, rootSessions: new Map(), childSessions: new Map() };
+    const state = { controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null };
     this.projects.set(key, state);
     this.#run(project, runtime, state, controller.signal).catch(() => {
       // isolated: evimed_runtime_event_pump_fatal_total — the loop below
@@ -413,6 +155,11 @@ export class RuntimeEventPump {
     if (!state || !run?.sessionId) return;
     if (run.status === "running") state.rootSessions.set(run.sessionId, run.id);
     else state.rootSessions.delete(run.sessionId);
+    // A session added to the map is not followed until something opens a
+    // stream for it. Before 0.1.2 the map was only a routing table over one
+    // stream that already carried every session; now it decides what is
+    // listened to at all, so every edit has to reach the reconciler.
+    state.resync?.();
   }
 
   /**
@@ -422,26 +169,105 @@ export class RuntimeEventPump {
    * @param {AbortSignal} signal
    */
   async #run(project, runtime, state, signal) {
-    const transport = {
-      async call() {
-        throw new Error("dshEventPump's transport does not support unary calls.");
-      },
-      stream: (path, options) => this.openDownlink(runtime, path, options),
-    };
-    const adapter = new DshRuntimeAdapter(transport);
     while (!signal.aborted) {
+      /** @type {DshMux | null} */
+      let mux = null;
       try {
-        for await (const { sessionId, event } of adapter.watchSessions({ signal })) {
-          this.#handle(state, sessionId, event);
+        mux = await this.openMux(runtime, { signal });
+        const transport = {
+          async call() {
+            throw new Error("dshEventPump's transport does not support unary calls.");
+          },
+          stream: (endpoint, args, options) => /** @type {DshMux} */ (mux).open(endpoint, args, options),
+        };
+        const adapter = new DshRuntimeAdapter(transport);
+        const generation = new AbortController();
+        const stopGeneration = () => generation.abort();
+        signal.addEventListener("abort", stopGeneration, { once: true });
+        try {
+          // The host stream and the per-session follows share one socket and
+          // one generation: if the socket dies, both end, and the outer loop
+          // rebuilds the whole set rather than leaving half of it attached to
+          // a connection that is gone.
+          await Promise.race([
+            adapter.watchHost({ signal: generation.signal }).catch(() => {}),
+            this.#followSessions(state, adapter, generation.signal),
+          ]);
+        } finally {
+          signal.removeEventListener("abort", stopGeneration);
+          generation.abort();
+          for (const controller of state.follows.values()) controller.abort();
+          state.follows.clear();
         }
         if (signal.aborted) return;
       } catch {
-        // isolated: evimed_runtime_event_pump_reconnect_total — a dropped
-        // downlink reconnects; it never fails the run, which does not read
-        // through this pump for anything the request/response path needs.
+        // isolated: evimed_runtime_event_pump_reconnect_total — a dropped mux
+        // reconnects; it never fails the run, which does not read through this
+        // pump for anything the request/response path needs.
+      } finally {
+        mux?.close();
       }
       await delay(this.reconnectDelayMs, signal);
     }
+  }
+
+  /**
+   * Keeps one follow stream open per session this project cares about, for as
+   * long as the mux generation lasts.
+   *
+   * Reconciled rather than opened once: a run's session appears when the
+   * ledger notes it and a subagent's appears mid-run, so the set this pump
+   * must listen to is not knowable when the connection is made. It resolves
+   * only when the generation ends, which is what makes it a peer of
+   * `watchHost` in the race above.
+   *
+   * @param {PumpProjectState} state
+   * @param {DshRuntimeAdapter} adapter
+   * @param {AbortSignal} signal
+   * @returns {Promise<void>}
+   */
+  async #followSessions(state, adapter, signal) {
+    await new Promise((resolve) => {
+      const reconcile = () => {
+        if (signal.aborted) return;
+        const wanted = new Set([...state.rootSessions.keys(), ...state.childSessions.keys()]);
+        for (const sessionId of wanted) {
+          if (state.follows.has(sessionId)) continue;
+          const controller = new AbortController();
+          state.follows.set(sessionId, controller);
+          const stop = () => controller.abort();
+          signal.addEventListener("abort", stop, { once: true });
+          (async () => {
+            try {
+              for await (const { event } of adapter.watchSession({ sessionId, signal: controller.signal })) {
+                this.#handle(state, sessionId, event);
+              }
+            } catch {
+              // isolated: evimed_runtime_session_follow_failures_total — one
+              // session's stream ending must not take the others with it; the
+              // mux itself dying is what ends the generation.
+            } finally {
+              signal.removeEventListener("abort", stop);
+              // Deleted only if this controller is still the registered one,
+              // so a reconnect that already replaced it is not undone here.
+              if (state.follows.get(sessionId) === controller) state.follows.delete(sessionId);
+            }
+          })();
+        }
+        for (const [sessionId, controller] of state.follows) {
+          if (!wanted.has(sessionId)) {
+            controller.abort();
+            state.follows.delete(sessionId);
+          }
+        }
+      };
+      state.resync = reconcile;
+      signal.addEventListener("abort", () => {
+        state.resync = null;
+        resolve(undefined);
+      }, { once: true });
+      reconcile();
+    });
   }
 
   /**
@@ -457,6 +283,7 @@ export class RuntimeEventPump {
       // which by then is already in this map, so nesting resolves without
       // the ledger ever having to enumerate it.
       state.childSessions.set(event.childSessionId, { runId, label: event.label, capability: event.capability });
+      state.resync?.();
     }
     if (!runId) return; // isolated: evimed_runtime_event_pump_unrouted_total
     this.runEvents.publish(runId, "run/event", { event });

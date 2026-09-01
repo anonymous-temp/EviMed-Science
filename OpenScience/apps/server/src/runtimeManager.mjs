@@ -15,6 +15,7 @@ import {
 import { deepSeekModelDisplayName, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockOpenCodeRuntime } from "./mockRuntime.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
+import { browserSessionCookie, generateBrowserSessionSecret } from "./dshBrowserAuth.mjs";
 import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
@@ -2360,7 +2361,7 @@ export async function syncRuntimeDshProfile(
   plan,
   { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow } = {},
 ) {
-  if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null, token: null, payload: null };
+  if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null, token: null, payload: null, browserSessionSecret: null };
   if (!plan.dshHomeDir || !plan.proxyWorkspaceDir) {
     throw new HttpError(500, "runtime_dsh_profile_plan_invalid", "Runtime launch plan is missing its DSH bootstrap paths.");
   }
@@ -2397,7 +2398,14 @@ export async function syncRuntimeDshProfile(
   const patch = renderProfilePatch(profileInput);
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, "control-plane-patch.yml"), patch, { encoding: "utf8", mode: 0o600 });
 
-  const credentials = renderCredentialsFile({ token: modelGatewayToken });
+  // The kernel's browser-session signing secret, chosen here rather than by the
+  // kernel. 0.1.2 authenticates every `/api` request, including on loopback,
+  // and the kernel's own route to a credential is a launch token printed on
+  // stdout — which would mean scraping a container's log for a secret and
+  // racing its boot. Seeding it into the credentials file this function already
+  // writes lets the control plane mint the cookie before the container exists.
+  const browserSessionSecret = generateBrowserSessionSecret();
+  const credentials = renderCredentialsFile({ token: modelGatewayToken, browserSessionSecret });
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, ".credentials.yaml"), credentials, { encoding: "utf8", mode: 0o600 });
 
   // The same gateway token, in a file the MCP server can read.
@@ -2423,6 +2431,7 @@ export async function syncRuntimeDshProfile(
 
   return {
     configured: true,
+    browserSessionSecret,
     workloadTokenFile,
     workloadTokenRefreshMs: evimedWorkloadRefreshIntervalMs(config),
     // Handed back, not just written to the credentials file. The gateway
@@ -3917,6 +3926,8 @@ export class RuntimeManager {
     };
     let modelGatewaySync = { configured: 0, token: null, payload: null };
     try {
+      /** @type {string | null} */
+      let browserSessionSecret = null;
       if (runtimeKernelName(this.config) === "dsh") {
         // DSH takes the general skills, the specialist packages and the MCP
         // command as rows of one generated file (`renderProfilePatch`) rather
@@ -3936,6 +3947,7 @@ export class RuntimeManager {
           token: dshSync.token ?? null,
           payload: dshSync.payload ?? null,
         };
+        browserSessionSecret = dshSync.browserSessionSecret ?? null;
       } else {
         skillSync = await syncRuntimeSkills(this.config, project, plan);
         const loadedAgentRegistry = this.agentRegistry ? await this.agentRegistry : null;
@@ -4046,6 +4058,17 @@ export class RuntimeManager {
       url: plan.runtimeUrl ?? `http://127.0.0.1:${port}`,
       socketPath: plan.socketPath ?? null,
       password,
+      // Bound to the authority the kernel will actually receive in the `Host`
+      // header, which is the URL's host even when the connection is dialled
+      // over a unix socket. The kernel derives its cookie name from what it
+      // received, so a cookie minted for anything else is not a weaker
+      // credential — it is a different cookie the kernel never looks for.
+      cookie: browserSessionSecret
+        ? browserSessionCookie({
+          secret: browserSessionSecret,
+          authority: new URL(plan.runtimeUrl ?? `http://127.0.0.1:${port}`).host,
+        })
+        : null,
       sandboxMode: plan.sandboxMode,
       networkMode: this.config.runtimeNetworkMode,
       workspaceDir: project.workspaceDir,
@@ -4264,18 +4287,27 @@ export class RuntimeManager {
         // question the caller has — is the protocol up — rather than whether
         // something is listening.
         const dsh = runtimeKernelName(this.config) === "dsh";
-        const target = dsh ? `${runtime.url}/api/host.describe` : `${runtime.url}/config`;
+        // 0.1.2 removed `host.describe` with the rest of ApiProxy, and renamed
+        // every method from dotted to slashed. `session/list` is the probe now:
+        // a real wire call, so it answers whether the protocol is up, and —
+        // because 0.1.2 authenticates on loopback where 0.1.1 did not — it also
+        // proves the browser-session cookie. A probe that only found a
+        // listening port would pass against a kernel that refuses every call.
+        const target = dsh ? `${runtime.url}/api/session/list` : `${runtime.url}/config`;
         const headers = runtime.password && !dsh ? { authorization: basicAuth(runtime.password) } : {};
         const res = await requestRuntime(runtime, target, {
           ...(dsh
             ? {
                 method: "POST",
-                headers: { ...headers, "content-type": "application/json" },
+                headers: {
+                  ...(runtime.cookie ? { cookie: runtime.cookie } : {}),
+                  "content-type": "application/json",
+                },
                 body: Buffer.from(JSON.stringify({
                   type: "client-request",
                   rpcId: randomId("rpc_"),
-                  method: "host.describe",
-                  payload: {},
+                  method: "session/list",
+                  payload: { args: { _request: {} } },
                 }), "utf8"),
               }
             : { headers }),
@@ -4289,6 +4321,11 @@ export class RuntimeManager {
               ? "runtime is listening but its /api routes are not mounted yet"
               : "runtime answered HTTP 404 for /config",
           );
+        } else if (status === 401) {
+          // Distinct from "not up yet" on purpose: retrying will never fix it,
+          // and before the cookie existed this arrived as a three-minute
+          // timeout with nothing said about authentication.
+          lastError = new Error("runtime refused the probe as unauthenticated (HTTP 401); its browser-session cookie is missing or was minted for another authority");
         } else if (status < 500) {
           return;
         } else {

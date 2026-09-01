@@ -39,3 +39,45 @@
 # mistake away from being unset.
 - id: session-telemetry-otel
   disabled: true
+
+# Everything below arrived as a NEW DEFAULT in DSH 0.1.2 and had to be turned
+# back off. They were not found by reading a changelog: the image's
+# `--dump-config` baseline diff prints every resolved row and refuses the build
+# when one moves, and these are what it printed.
+
+# 0.1.2 moved this plugin's default mode from `DISABLED` to `FEEDBACK_ONLY`.
+# The row above already disables the whole plugin, so the move could not reach
+# us — but only because we disable the plugin rather than set its mode. Setting
+# `mode: DISABLED` would have looked equivalent and would have quietly started
+# shipping feedback telemetry the day the default moved. The test that pins
+# this asserts the row is disabled, not that a mode is chosen.
+
+# Direct HTTP fetching from inside the sandbox: a provider plugin that is new
+# in 0.1.2 and registered by default. Every source this platform retrieves goes
+# through the control plane's own gateway, which resolves DOIs, refuses private
+# and link-local addresses before it fetches, and records what it fetched. A
+# second, unrecorded egress path defeats all three at once, and it defeats them
+# silently — a run that fetched directly looks exactly like one that did not.
+#
+# The primary defence is that `tool-web` is not in this composition at all (see
+# the preset's "deliberately absent" list, which names web_fetch as an SSRF
+# surface), so the model has no fetch tool to reach this provider with. This row
+# is the second one, for the same reason telemetry is off in three places: a
+# composition is one edit away from gaining a tool, and a provider sitting ready
+# for it is not a state worth being one edit from.
+#
+# `web.fetchProvider` is deliberately left alone. It is a free-form string
+# naming a registered provider, so writing `none` there would not be a
+# configured refusal — it would be a name that happens to match nothing, which
+# reads as a typo to the next person and stops protecting anything the day
+# someone registers a provider by that name.
+- id: web-fetch-http
+  disabled: true
+
+# Reports the deployment's enabled plugin list to the model provider on every
+# request, new in 0.1.2. The plugin list is this platform's composition — which
+# capability packages exist, which gates are mounted — and it is not the
+# provider's business. It is also exactly the kind of thing that is impossible
+# to un-send.
+- id: plugin-package-inventory-deepseek
+  disabled: true
