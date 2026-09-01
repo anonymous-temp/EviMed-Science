@@ -69,3 +69,26 @@ test("nothing calls the retired runtime pass-through", async () => {
     + "GET /api/runtime/sessions/:id/transcript",
   );
 });
+
+// A gate that waits less than the thing it waits for reports a timing accident
+// as a content verdict.
+//
+// The hosted e2e allowed the memory extraction 90 seconds; the server allows
+// that extraction 120 (`memoryExtractionTimeoutMs`). A slow-but-successful
+// extraction therefore always lost, and the gate said the conversation had
+// produced no structured memory. The batch harness had the same inversion at a
+// different scale — a 30-minute ceiling over runs that take forty.
+test("the e2e waits longer than the work it is waiting for", async () => {
+  const e2e = await readFile(path.join(repoRoot, "apps/server/../../scripts/ops/hosted-production-e2e.mjs"), "utf8")
+    .catch(() => readFile(path.join(repoRoot, "scripts/ops/hosted-production-e2e.mjs"), "utf8"));
+  const config = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+
+  const waited = Number(/OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS \?\? ([0-9_]+)/.exec(e2e)?.[1].replace(/_/g, ""));
+  const budget = Number(/memoryExtractionTimeoutMs \?\? [\s\S]{0,120}?([0-9_]+),/.exec(config)?.[1].replace(/_/g, ""));
+  assert.ok(Number.isFinite(waited), "could not read the e2e memory wait");
+  assert.ok(Number.isFinite(budget), "could not read the server extraction budget");
+  assert.ok(
+    waited > budget,
+    `the e2e waits ${waited}ms for an extraction the server gives ${budget}ms; a slow success would be reported as no memory at all`,
+  );
+});
