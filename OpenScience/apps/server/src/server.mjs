@@ -493,6 +493,10 @@ export function createWebApiApp(overrides = {}) {
         runId: run.id,
         runStatus: run.status,
         code: typeof error?.code === "string" ? error.code : "memory_unavailable",
+        // The code alone says a call was rejected, not which one. Six different
+        // requests reach this handler under one code, so without the message
+        // the only way to find the failing endpoint is to probe each by hand.
+        detail: String(error?.message ?? "").slice(0, 300),
       });
     },
   });
