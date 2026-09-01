@@ -148,9 +148,32 @@ function selection(agent, reason) {
  *  "请按 dataset-research-scoping 出一份报告" was once routed elsewhere because
  *  the name matched no topic pattern and nothing looked at it.
  *  @param {any} query @param {any} agents */
+/**
+ * A capability id inside 《》 is the title of a document, not an instruction.
+ *
+ * `《…》` marks the name of a work, and only that — unlike 「」 or quotation
+ * marks, which a user may reasonably put around a package name for emphasis.
+ * So the span is removed before the name match, and nothing else is.
+ *
+ * Measured 2026-08-31: two of thirty-three batch cases were routed to
+ * meta-analysis by their own paper titles — 《… large-scale meta-analysis of 192
+ * epidemiological studies.》 and 《… an individual patient data meta-analysis.》 —
+ * and were then failed for not producing meta-analysis-report.md, which nobody
+ * had asked for. Naming outranks the classifier, so in both runs the model was
+ * never consulted at all.
+ *
+ * This is a structural check on a delimiter, not a widening of any prose
+ * pattern: the capability ids are a closed list, and 《》 either encloses a span
+ * or does not.
+ * @param {string} query @returns {string}
+ */
+function withoutTitledWorks(query) {
+  return query.replace(/《[^》]*》/g, " ");
+}
+
 export function routeNamedSpecialist(query, agents) {
   if (typeof query !== "string" || !query.trim() || !Array.isArray(agents)) return null;
-  const lowered = query.toLowerCase();
+  const lowered = withoutTitledWorks(query).toLowerCase();
   const named = agents.find((agent) => lowered.includes(agent.id));
   return named ? selection(named, `matched:named:${named.id}`) : null;
 }
