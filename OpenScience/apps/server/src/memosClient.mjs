@@ -131,6 +131,34 @@ function enumName(group, value) {
   return reverseMemoryEnums[group]?.[String(value ?? "")] ?? null;
 }
 
+/**
+ * Trim to a byte budget, not a character count.
+ *
+ * The memory service is Go and its limits are `len(s)` — bytes. This client is
+ * JavaScript and `slice` counts UTF-16 units. For the English test fixtures the
+ * two agree, and for the Chinese conversations this product actually holds they
+ * differ by a factor of three: a 4000-character quote is about 12000 bytes, so
+ * a "trimmed" quote was still refused, and the first fix for this looked right
+ * and changed nothing.
+ *
+ * Cuts on a character boundary — a truncated multi-byte sequence would be
+ * invalid UTF-8 rather than merely short.
+ * @param {unknown} value @param {number} maxBytes @returns {string}
+ */
+function boundedUtf8(value, maxBytes) {
+  const text = String(value ?? "").trim();
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+  let out = "";
+  let used = 0;
+  for (const character of text) {
+    const size = Buffer.byteLength(character, "utf8");
+    if (used + size > maxBytes) break;
+    out += character;
+    used += size;
+  }
+  return out;
+}
+
 function boundedScore(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0;
@@ -514,9 +542,9 @@ export class MemosClient {
       // over a long quotation. A quote is an excerpt already and `sourceRef`
       // still points at the whole message, so trimming it keeps the provenance
       // that dropping the record would have destroyed.
-      const quote = String(evidence.quote ?? "").trim().slice(0, 4_000);
-      const sourceType = String(evidence.sourceType ?? "").trim().slice(0, 64);
-      const sourceRef = String(evidence.sourceRef ?? "").trim().slice(0, 500);
+      const quote = boundedUtf8(evidence.quote, 4_000);
+      const sourceType = boundedUtf8(evidence.sourceType, 64);
+      const sourceRef = boundedUtf8(evidence.sourceRef, 500);
       // An empty required field is not evidence, and attaching it fails the
       // record too. Better an unevidenced record than no record.
       if (quote && sourceType && sourceRef) {
