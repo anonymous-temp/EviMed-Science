@@ -5123,10 +5123,19 @@ export class RuntimeManager {
     }
     const target = new URL(`${runtime.url}/api/${method}`);
     const rpcId = randomId("rpc_");
-    const body = Buffer.from(JSON.stringify({ type: "client-request", rpcId, method, payload }), "utf8");
+    // The envelope belongs to the carrier, not to the caller: 0.1.2 requires
+    // `payload.args` to be exactly one plain object, and a caller that had to
+    // remember to wrap would be one forgetful call site away from
+    // `gateway/internal: Remote payload must contain exactly one plain-object
+    // args field` — an error that names the wire and not the caller. Callers
+    // pass the arguments; this wraps them.
+    const body = Buffer.from(JSON.stringify({ type: "client-request", rpcId, method, payload: { args: payload ?? {} } }), "utf8");
     const response = await requestRuntime(runtime, target, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        ...(runtime.cookie ? { cookie: runtime.cookie } : {}),
+        "content-type": "application/json",
+      },
       body,
       signal,
     });
