@@ -73,7 +73,15 @@ async function waitForRun(base, runId, headers) {
 }
 
 async function waitForMemoryRecord(base, headers, initialIds, marker) {
-  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS ?? 90_000);
+  // Longer than the extraction's own budget, which is the point.
+  //
+  // This waited 90s for a pipeline the server gives 120s
+  // (`memoryExtractionTimeoutMs`), so an extraction that was merely slow lost a
+  // race it had not been told it was in, and the gate reported it as "the
+  // conversation produced no structured memory" — a content verdict about a
+  // timing accident. Same shape as the batch harness waiting 30 minutes for
+  // runs that take forty.
+  const deadline = Date.now() + Number(process.env.OPEN_SCIENCE_E2E_MEMORY_TIMEOUT_MS ?? 180_000);
   while (Date.now() < deadline) {
     const profile = await jsonFetch(`${base}/api/memory/profile`, { headers });
     const record = profile.body?.data?.records?.find((item) =>

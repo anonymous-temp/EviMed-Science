@@ -122,5 +122,5 @@
 
 1. 建 `skills/community/` 根(customSkillDirs 追加一行,§9.2 已改),首批放技能形态五件:`dsh-cite`、`academic-writing`、`translation`、`writing-guard`、`dsh-ppt`;各记来源 URL + commit。
 2. dev profile 试装工具形态四件:`univer-office`、`cowork`、`mineru` 插件、`drawio`;跑各自冒烟,能用的进镜像 pin。
-3. 本地面(evimed-web)组一个「科研者桌面」推荐组:Origin + Stata + Zotero + Overleaf + dsh-market——**连接用户自己已有的桌面工具,是托管 SaaS 给不了、我们本地 profile 白捡的差异化**。
+3. 本地面(evimed-web)组一个「科研者桌面」推荐组:Origin + Stata + Zotero + Overleaf + dsh-market + UI 组(执行细则与候选表:`2026-09-01-frontend-ecosystem-adoption-plan.md`)——**连接用户自己已有的桌面工具,是托管 SaaS 给不了、我们本地 profile 白捡的差异化**。
 4. 借模式四件落到对应章节的待办:review-workflow → §8.3;vision-guard → G1 适配器;memory-porter → §19 胶囊导入;SkillOpt-Sleep/stylotrace → §19.22/§27.2 对照。
