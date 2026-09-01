@@ -230,6 +230,10 @@ export class DshMux {
     // — it is a different cookie the kernel never looks for, and the request
     // reads as unauthenticated with nothing said about a name mismatch.
     if (this.runtime.cookie) headers.cookie = this.runtime.cookie;
+    // Left to Node, which sets `Host` from the URL — the same value the cookie
+    // was minted against. An override exists only for a caller that must dial
+    // one address and be seen as another; setting it by hand in the ordinary
+    // case would be a second copy of a value that must not diverge.
     if (this.runtime.authority) headers.host = this.runtime.authority;
 
     const request = this.runtime.socketPath

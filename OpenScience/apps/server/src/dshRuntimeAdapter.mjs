@@ -86,7 +86,7 @@ export function mapWireError(error) {
  *
  * @typedef {object} WireTransport
  * @property {(method: string, payload: Record<string, unknown>, options: { signal?: AbortSignal }) => Promise<{ ok: boolean, value?: any, error?: any }>} call
- * @property {(path: string, options: { signal?: AbortSignal }) => AsyncIterable<Record<string, any>>} stream
+ * @property {(endpoint: string, args: Record<string, unknown>, options: { signal: AbortSignal }) => AsyncIterable<Record<string, any>>} stream
  */
 
 export class DshRuntimeAdapter {
@@ -119,9 +119,37 @@ export class DshRuntimeAdapter {
     throw new HttpError(502, mapped.code, mapped.message);
   }
 
-  /** @param {{ signal?: AbortSignal }} [options] @returns {Promise<Record<string, any>>} */
+  /**
+   * Proves the kernel's `/api` surface is mounted and this control plane is
+   * authenticated to it.
+   *
+   * 0.1.2 removed `host.describe` with the rest of ApiProxy, so there is no
+   * "describe the host" call left to probe with. `session/list` is the right
+   * replacement rather than the nearest one: it is a real wire call, so it
+   * answers the question a readiness probe actually has — is the protocol up —
+   * and because 0.1.2 authenticates on loopback it also proves the cookie. A
+   * probe that only checked for a listening port would pass against a kernel
+   * that will refuse every subsequent call as unauthenticated.
+   *
+   * Host facts themselves now arrive once, in the `$events` stream's opening
+   * `ready` frame; nothing here needs them.
+   *
+   * @param {{ signal?: AbortSignal }} [options] @returns {Promise<Record<string, any>>}
+   */
   async describe(options = {}) {
-    return this.call("host.describe", {}, options);
+    const value = await this.call("session/list", { _request: {} }, options);
+    return { sessions: Array.isArray(value?.items) ? value.items.length : 0 };
+  }
+
+  /**
+   * Every session the kernel holds, with the head sequence and running flag it
+   * publishes for each.
+   * @param {{ signal?: AbortSignal }} [options]
+   * @returns {Promise<Record<string, any>[]>}
+   */
+  async listSessions(options = {}) {
+    const value = await this.call("session/list", { _request: {} }, options);
+    return Array.isArray(value?.items) ? value.items : [];
   }
 
   /**
@@ -130,8 +158,8 @@ export class DshRuntimeAdapter {
    */
   async createSession({ cwd, sessionId, signal }) {
     const value = await this.call(
-      "session.create",
-      { cwd, agentPreset: this.agentPreset, ...(sessionId ? { sessionId } : {}) },
+      "session/create",
+      { request: { cwd, agentPreset: this.agentPreset, ...(sessionId ? { sessionId } : {}) } },
       { signal },
     );
     return { sessionId: String(value?.sessionId ?? ""), agentPreset: String(value?.agentPreset ?? this.agentPreset) };
@@ -150,9 +178,14 @@ export class DshRuntimeAdapter {
    * @returns {Promise<{ accepted: boolean }>}
    */
   async prompt({ sessionId, text, mode = "queue", signal }) {
+    // `requestId` is required by 0.1.2 and is the client's own identity for
+    // this submission: the kernel echoes it on the queued message so a client
+    // can retire its local echo. Minted here rather than defaulted by the
+    // kernel, because two dispatches sharing one id would be indistinguishable
+    // in the queue.
     const value = await this.call(
-      "session.prompt",
-      { sessionId, mode, content: [{ type: "text", text }] },
+      "session/prompt",
+      { request: { requestId: this.newId(), sessionId, mode, content: [{ type: "text", text }] } },
       { signal },
     );
     return { accepted: Boolean(value?.accepted) };
@@ -160,12 +193,12 @@ export class DshRuntimeAdapter {
 
   /** @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<void>} */
   async cancel({ sessionId, signal }) {
-    await this.call("session.cancel", { sessionId }, { signal });
+    await this.call("session/cancel", { request: { sessionId } }, { signal });
   }
 
   /** @param {{ sessionId: string, atSeq?: number, signal?: AbortSignal }} input @returns {Promise<{ sessionId: string }>} */
   async fork({ sessionId, atSeq, signal }) {
-    const value = await this.call("session.fork", { sessionId, ...(atSeq == null ? {} : { atSeq }) }, { signal });
+    const value = await this.call("session/fork", { request: { sessionId, ...(atSeq == null ? {} : { atSeq }) } }, { signal });
     return { sessionId: String(value?.sessionId ?? "") };
   }
 
@@ -187,17 +220,30 @@ export class DshRuntimeAdapter {
     // exceeded`. The control plane's copy of this loop hit it first and left a
     // finished run reading `running` for an hour, one identical log line per
     // poll.
+    // 0.1.2 requires the caller to name the sequence it is reading through, and
+    // a number past the end returns nothing rather than the tail — asking for
+    // "everything" with a large constant reads as an empty run, which is the
+    // failure this whole file exists to make impossible. The head sequence is
+    // published per session by `session/list` as `projections.asOfSeq`.
+    const head = (await this.listSessions({ signal })).find((item) => String(item?.sessionId) === String(sessionId));
+    const throughSeq = Number(head?.projections?.asOfSeq ?? NaN);
+    if (!Number.isFinite(throughSeq)) {
+      // Not an empty transcript: the kernel does not know this session, which
+      // is a different fact and one the gate must not grade as "produced
+      // nothing".
+      throw new HttpError(502, "runtime_session_not_found", `The kernel published no head sequence for session ${sessionId}.`);
+    }
     /** @type {Record<string, any>[][]} */
     const pages = [];
     /** @type {number | undefined} */
     let beforeSeq;
     for (let page = 0; page < maxPages; page += 1) {
       const value = await this.call(
-        "session.history",
-        { sessionId, maxMessages, ...(beforeSeq == null ? {} : { beforeSeq }) },
+        "session/page",
+        { request: { address: { kind: "session", sessionId }, throughSeq, maxMessages, ...(beforeSeq == null ? {} : { beforeSeq }) } },
         { signal },
       );
-      const pageEntries = Array.isArray(value?.events) ? value.events : [];
+      const pageEntries = Array.isArray(value?.records) ? value.records : [];
       pages.unshift(pageEntries);
       if (!value?.hasMore || !pageEntries.length) break;
       const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
@@ -209,7 +255,7 @@ export class DshRuntimeAdapter {
 
   /** @param {{ sessionId: string, signal?: AbortSignal }} input @returns {Promise<Record<string, any>[]>} */
   async subagents({ sessionId, signal }) {
-    const value = await this.call("subagent.list", { sessionId }, { signal });
+    const value = await this.call("subagents/list", { parentSessionId: sessionId }, { signal });
     return Array.isArray(value?.items) ? value.items : [];
   }
 
@@ -235,25 +281,65 @@ export class DshRuntimeAdapter {
    */
   async watchHost({ signal, onEvent }) {
     this.runningBySession = this.runningBySession ?? new Map();
-    for await (const frame of this.transport.stream(SEAMS.wire.downlink[1], { signal })) {
-      if (frame?.type === "host/session-status") {
-        this.runningBySession.set(String(frame.sessionId), Boolean(frame.running));
+    for await (const frame of this.transport.stream(SEAMS.wire.streamEndpoints.events, {}, { signal })) {
+      // `ready` carries the host facts `host.describe` used to answer, and it
+      // arrives exactly once per connection generation.
+      if (frame?.type === "ready") {
+        this.hostInfo = frame.host ?? null;
+        onEvent?.(frame);
+        continue;
       }
-      if (frame?.type === "host/session-removed") {
-        this.runningBySession.delete(String(frame.sessionId));
+      if (frame?.type !== "emit") {
+        // `waterfall` is the kernel asking this control plane a question it
+        // expects an answer to. Nothing here answers one yet, and a silent
+        // drop would leave the kernel waiting for a reply that never comes —
+        // so it is surfaced to the caller rather than filtered out here.
+        onEvent?.(frame);
+        continue;
+      }
+      const [payload] = Array.isArray(frame.args) ? frame.args : [];
+      const sessionId = String(payload?.sessionId ?? "");
+      if (frame.event === "api-session/status" && sessionId) {
+        this.runningBySession.set(sessionId, Boolean(payload?.running));
+      }
+      if (frame.event === "api-session/added" && sessionId) {
+        this.runningBySession.set(sessionId, Boolean(payload?.running));
+      }
+      if (frame.event === "api-session/removed" && sessionId) {
+        this.runningBySession.delete(sessionId);
       }
       onEvent?.(frame);
     }
   }
 
   /**
-   * Subscribes to the multiplexed session stream and yields decoded RunEvents.
-   * @param {{ signal: AbortSignal }} input
+   * Follows one session and yields decoded RunEvents for it.
+   *
+   * 0.1.2 has no multiplexed all-sessions stream: a session's events arrive on
+   * the stream opened for that session and no longer carry a session id, so
+   * the pairing is whatever opened the stream. That is why the id is an
+   * argument here — inferring it from a frame is no longer possible, and a
+   * decoder that quietly used an empty string would attribute every subagent's
+   * events to nobody.
+   *
+   * The opening `snapshot` is replayed as events too. It is not redundant with
+   * the transcript endpoint: a tab that connects mid-run gets the window it
+   * missed from here, in the same vocabulary as everything after it.
+   *
+   * @param {{ sessionId: string, signal: AbortSignal }} input
    * @returns {AsyncGenerator<{ sessionId: string, event: import('@evimed/domain').RunEvent }>}
    */
-  async *watchSessions({ signal }) {
-    for await (const frame of this.transport.stream(SEAMS.wire.downlink[0], { signal })) {
-      const decoded = decodeMuxFrame(frame);
+  async *watchSession({ sessionId, signal }) {
+    const args = { request: { address: { kind: "session", sessionId } } };
+    for await (const frame of this.transport.stream(SEAMS.wire.streamEndpoints.session, args, { signal })) {
+      if (frame?.type === "snapshot") {
+        for (const record of Array.isArray(frame.records) ? frame.records : []) {
+          const decoded = decodeSessionFrame(sessionId, record);
+          if (decoded) yield decoded;
+        }
+        continue;
+      }
+      const decoded = decodeSessionFrame(sessionId, frame);
       if (decoded) yield decoded;
     }
   }
@@ -466,7 +552,29 @@ function contentText(content) {
 }
 
 /**
- * Decodes one multiplexed frame into the browser-facing union.
+ * Decodes one `session/follow` record, given the session it was opened for.
+ *
+ * @param {string} sessionId the session this stream was opened for
+ * @param {Record<string, any>} frame
+ * @returns {{ sessionId: string, event: import('@evimed/domain').RunEvent } | null}
+ */
+export function decodeSessionFrame(sessionId, frame) {
+  if (!frame || typeof frame !== "object") return null;
+  // A `session/follow` record is `{type:"event", event:{...}}`; the 0.1.1 mux
+  // put the same inner event inside `{type:"session/event", sessionId, event}`.
+  // Only the envelope changed, so the one decoder below still owns the
+  // vocabulary and this adapts the wrapper rather than duplicating the switch.
+  if (frame.type === "event" && frame.event && typeof frame.event === "object") {
+    return decodeMuxFrame({ type: "session/event", sessionId: String(sessionId), event: frame.event });
+  }
+  // A `chunks` record is a run of assistant deltas already summarised by the
+  // message that follows it; replaying it would double the text.
+  if (frame.type === "chunks") return null;
+  return null;
+}
+
+/**
+ * Decodes one session event into the browser-facing union.
  *
  * An unrecognized frame becomes an `unknown` RunEvent carrying its raw type,
  * so a kernel that adds a frame shows up as a counted unknown in the trajectory
@@ -477,14 +585,11 @@ function contentText(content) {
  */
 export function decodeMuxFrame(frame) {
   if (!frame || typeof frame !== "object") return null;
-  // The downlink wraps every frame in an RPC envelope — `{type:"server-request",
-  // rpcId, method, payload}` — with `method` mirroring `payload.type`. Recorded
-  // against a live kernel: the synthetic fixtures had the bare inner frame, and
-  // matching method names hid it, which is the exact failure the file header
-  // warns about. Bare frames are still accepted so a fixture is readable.
-  if (frame.type === "server-request" && frame.payload && typeof frame.payload === "object") {
-    return decodeMuxFrame(frame.payload);
-  }
+  // `{type:"session/event", sessionId, event}` is this function's own shape,
+  // built by `decodeSessionFrame` from what the mux delivers. The 0.1.1 wire
+  // put the same inner event inside an RPC envelope on a stream that no longer
+  // exists; the envelope changed, the vocabulary below did not, which is why
+  // only one decoder was ever needed.
   const sessionId = String(frame.sessionId ?? "");
   if (frame.type !== "session/event") {
     if (frame.type === "session/jobs" || frame.type === "session/queue" || frame.type === "session/subscribed" || frame.type === "session/projection") return null;

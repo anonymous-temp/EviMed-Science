@@ -105,94 +105,148 @@
   },
   "wire": {
     "unary": [
-      "host.describe",
-      "session.create",
-      "session.prompt",
-      "session.cancel",
-      "session.history",
-      "session.fork",
-      "session.list",
-      "subagent.list",
-      "subagent.history",
-      "skill.list",
-      "agentPreset.list"
+      "session/create",
+      "session/prompt",
+      "session/cancel",
+      "session/page",
+      "session/fork",
+      "session/list",
+      "subagents/list",
+      "skills/list",
+      "agentPresets/list"
     ],
     "denied": [
-      "settings.describe",
-      "settings.openDocument",
-      "settings.update",
-      "settings.replace",
-      "settings.mutate",
-      "credentials.describe",
-      "credentials.set",
-      "credentials.unset",
-      "host.pickDirectory",
-      "host.openPath",
-      "host.listDirectory",
-      "host.createDirectory",
-      "workspace.list",
-      "workspace.create",
-      "workspace.rename",
-      "workspace.delete",
-      "workspace.insertBefore",
-      "workspace.insertSessionBefore",
-      "workspace.archiveSession",
-      "session.selectModel",
-      "session.models",
-      "session.rename",
-      "session.search",
-      "session.attachment",
-      "session.updateQueue",
-      "subagent.prompt",
-      "subagent.interrupt",
-      "agentPreset.select",
-      "agentPreset.read",
-      "agentPreset.copy",
-      "agentPreset.openDocument",
-      "agentPreset.remove",
-      "goal.create",
-      "goal.edit",
-      "goal.pause",
-      "goal.resume",
-      "goal.complete",
-      "goal.clear",
-      "llm.providers",
-      "llm.models",
-      "llm.discoverModels"
+      "agentPresets/copy",
+      "agentPresets/deletePreset",
+      "agentPresets/read",
+      "agentPresets/select",
+      "agentTeams/createTask",
+      "agentTeams/updateTask",
+      "agentTeams/view",
+      "credentials/describe",
+      "credentials/set",
+      "credentials/unset",
+      "directoryPicker/createDirectory",
+      "directoryPicker/list",
+      "directoryPicker/pick",
+      "goals/clear",
+      "goals/complete",
+      "goals/create",
+      "goals/edit",
+      "goals/pause",
+      "goals/resume",
+      "llm/discoverModels",
+      "messageFeedback/delete",
+      "messageFeedback/list",
+      "messageFeedback/put",
+      "session/attachment",
+      "session/modelCatalog",
+      "session/openWorkspacePath",
+      "session/rename",
+      "session/search",
+      "session/selectModel",
+      "session/updateQueue",
+      "sessionReferenceResolver/candidates",
+      "settings/describe",
+      "settings/update",
+      "subagents/interruptByParent",
+      "subagents/prompt",
+      "workspace/archiveSession",
+      "workspace/create",
+      "workspace/delete",
+      "workspace/insertBefore",
+      "workspace/insertSessionBefore",
+      "workspace/rename"
     ],
-    "respond": "/api/respond",
     "downlink": [
       "/api/events.mux",
       "/api/events.host"
     ],
     "downlinkTransport": "websocket",
-    "muxFrameTypes": [
-      "session/event",
-      "session/subscribed",
-      "approval/requested",
-      "approval/resolved",
-      "question/requested",
-      "question/resolved",
-      "session/queue",
-      "session/jobs",
-      "session/projection",
-      "stream/error"
+    "unaryArgs": {
+      "session/create": [
+        "request"
+      ],
+      "session/prompt": [
+        "request"
+      ],
+      "session/cancel": [
+        "request"
+      ],
+      "session/page": [
+        "request"
+      ],
+      "session/fork": [
+        "request"
+      ],
+      "session/list": [
+        "_request"
+      ],
+      "subagents/list": [
+        "parentSessionId"
+      ],
+      "skills/list": [
+        "request"
+      ],
+      "agentPresets/list": []
+    },
+    "mux": "/api/remote.mux",
+    "streamEndpoints": {
+      "events": "$events",
+      "session": "session/follow",
+      "workspace": "workspace/follow"
+    },
+    "clientEnvelope": {
+      "type": "client-request",
+      "fields": [
+        "type",
+        "rpcId",
+        "method",
+        "payload"
+      ],
+      "payload": [
+        "args"
+      ]
+    },
+    "serverEnvelope": {
+      "type": "server-response",
+      "fields": [
+        "type",
+        "rpcId",
+        "result"
+      ],
+      "result": [
+        "ok",
+        "value",
+        "error"
+      ]
+    },
+    "muxClientFrames": [
+      "open",
+      "cancel"
     ],
-    "hostFrameTypes": [
-      "host/session-added",
-      "host/session-removed",
-      "host/session-status",
-      "host/agent-error",
-      "host/workspace-changed",
-      "host/workspace-removed",
-      "host/workspace-order-changed",
-      "host/archived-sessions-changed",
-      "host/remote-event",
-      "stream/error"
-    ]
+    "muxServerFrames": [
+      "item",
+      "error",
+      "end"
+    ],
+    "eventStreamFrames": [
+      "ready",
+      "emit",
+      "waterfall",
+      "cancel"
+    ],
+    "sessionStreamFrames": [
+      "snapshot",
+      "event"
+    ],
+    "auth": "browser-session-cookie"
   },
   "notes": {
-    "sessionStatusAbsent": "There is no session.status method; running state comes from the events.host running-status frame.",
+    "sessionStatusAbsent": "There is no session status method. Running state arrives as an `api-session/status` emit on the Gateway-internal `$events` stream.",
+    "hostDescribeRemoved": "0.1.2 removed host.describe with the rest of ApiProxy. Host facts arrive once, in the `$events` stream's opening `ready` frame. The readiness probe is session/list, which is a real wire call and therefore also proves authentication.",
+    "methodsRenamed": "0.1.2 renamed every method from dotted to slashed and moved arguments into a named descriptor: session.list became session/list taking {_request}. Verified against a running 0.1.2-alpha.3 binary, which 404s the dotted form and names the missing args field itself.",
+    "sessionIdNotInFrame": "A session's events arrive on the `session/follow` stream opened for that session and no longer carry a session id. Whatever opens the stream owns the pairing.",
     "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does."
   }
 }
