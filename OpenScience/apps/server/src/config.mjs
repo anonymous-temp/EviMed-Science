@@ -863,6 +863,10 @@ export function loadConfig(overrides = {}) {
     materialsProjectApiKey: materialsProjectSecret.value,
     materialsProjectApiKeySource: materialsProjectSecret.source,
     materialsProjectApiKeyError: materialsProjectSecret.error,
+    // Which individual-saas requirements this deployment knowingly does not
+    // meet. Comma-separated requirement ids; see readinessSaasProfile.
+    saasProfileUnconfigured:
+      overrides.saasProfileUnconfigured ?? process.env.OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED ?? "",
     requireMaterialsProject:
       overrides.requireMaterialsProject ?? boolEnv("OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT", true),
     publicSourceCredentials: Object.fromEntries(
