@@ -121,13 +121,33 @@ function fakeDshTools() {
   };
 }
 
-test("the manifest is the single source: services, events and wire methods are disjoint and complete", () => {
+test("the manifest is the single source: services, events and wire methods are disjoint and well-formed", () => {
   const allMethods = new Set([...SEAMS.wire.unary, ...SEAMS.wire.denied]);
   assert.equal(allMethods.size, SEAMS.wire.unary.length + SEAMS.wire.denied.length, "a method is both allowed and denied");
-  assert.equal(allMethods.size, 52, "the apiproxy publishes 52 unary methods; the split must cover all of them");
-  assert.ok(!SEAMS.wire.unary.includes("session.status"), "session.status does not exist; running state comes from events.host");
-  assert.ok(SEAMS.wire.denied.includes("settings.update"));
-  assert.ok(SEAMS.wire.denied.includes("credentials.set"));
+
+  // This used to assert a hand-maintained total — "the apiproxy publishes 52
+  // unary methods; the split must cover all of them". 0.1.2 deleted ApiProxy
+  // outright, so that number lost its subject: there is no single published
+  // surface to be complete against, because what a kernel exposes now follows
+  // the composition it was started with.
+  //
+  // What the assertion was really protecting has also changed shape. It guarded
+  // against a method existing that we neither allow nor deny, back when the
+  // browser could reach the kernel through a pass-through proxy. That route is
+  // retired; `isAllowedWireMethod` now guards only the control plane's own
+  // calls, so an unlisted method is not a hole — it is simply uncallable.
+  //
+  // So the count is gone rather than updated to 50. Restating a number that no
+  // longer counts anything would be worse than not checking: it would read as
+  // coverage while measuring nothing. What is checked below still means
+  // something on the 0.1.2 wire.
+  assert.ok(SEAMS.wire.unary.length > 0 && SEAMS.wire.denied.length > 0, "neither half of the split may be empty");
+  for (const method of allMethods) {
+    assert.match(method, /^[a-zA-Z][a-zA-Z0-9]*\/[a-zA-Z][a-zA-Z0-9]*$/, `${method} is not a 0.1.2 endpoint name`);
+  }
+  assert.ok(!SEAMS.wire.unary.some((method) => method.includes(".")), "0.1.2 renamed every method from dotted to slashed");
+  assert.ok(SEAMS.wire.denied.includes("settings/update"));
+  assert.ok(SEAMS.wire.denied.includes("credentials/set"));
   const required = new Set(SEAMS.services.required);
   for (const key of SEAMS.services.optional) assert.ok(!required.has(key), `${key} is both required and optional`);
 });

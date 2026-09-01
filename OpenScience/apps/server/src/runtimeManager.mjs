@@ -4493,6 +4493,26 @@ export class RuntimeManager {
       // size exceeded` on exactly such a page, every poll, so a finished run
       // sat `running` forever while the monitor logged the same line each time.
       // The engine's argument limit is not a number this code should be near.
+      // 0.1.2 makes the caller name the sequence it is reading through, and a
+      // number past the end returns NOTHING rather than the tail — so asking
+      // for "everything" with a large constant would read as an empty run,
+      // which is the exact failure this whole transcript path exists to make
+      // impossible. The head sequence is published per session by
+      // `session/list` as `projections.asOfSeq`.
+      const listed = await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
+        "runtime_history_unavailable",
+        "Runtime session list did not answer in time.",
+      );
+      const head = (Array.isArray(listed?.items) ? listed.items : [])
+        .find((item) => String(item?.sessionId) === String(sessionId));
+      const throughSeq = Number(head?.projections?.asOfSeq ?? NaN);
+      if (!Number.isFinite(throughSeq)) {
+        // Not an empty transcript: the kernel does not know this session. A run
+        // that has not started yet is the baseline, and the caller below
+        // already treats `runtime_session_not_found` as one.
+        throw new HttpError(502, "runtime_session_not_found", `The kernel published no head sequence for session ${sessionId}.`);
+      }
       /** @type {Record<string, any>[][]} */
       const pages = [];
       /** @type {number | undefined} */
@@ -4503,8 +4523,10 @@ export class RuntimeManager {
         let value;
         try {
           value = await this.withRuntimeDeadline(
-            (signal) => this.callKernel(runtime, project, "session.history", {
-              sessionId,
+            (signal) => this.callKernel(runtime, project, "session/page", {
+              request: {
+                address: { kind: "session", sessionId },
+                throughSeq,
               // The kernel pages by MESSAGE, but each page carries every
               // assistant/chunk delta between its messages. A real run's
               // single 74-step turn put 130k chunk events under 49 messages:
@@ -4513,8 +4535,9 @@ export class RuntimeManager {
               // progress events, no turn/end, a finished run left running.
               // Small pages bound the per-read weight; the raised byte cap
               // below absorbs the worst single page.
-              maxMessages: 25,
-              ...(beforeSeq == null ? {} : { beforeSeq }),
+                maxMessages: 25,
+                ...(beforeSeq == null ? {} : { beforeSeq }),
+              },
             }, signal, { maxBytes: HISTORY_PAGE_MAX_BYTES }),
             "runtime_history_unavailable",
             "Runtime session history did not answer in time.",
@@ -4526,7 +4549,7 @@ export class RuntimeManager {
           if (error?.code === "runtime_session_not_found") break;
           throw error;
         }
-        const pageEntries = Array.isArray(value?.events) ? value.events : [];
+        const pageEntries = Array.isArray(value?.records) ? value.records : [];
         pages.unshift(pageEntries);
         if (!value?.hasMore || !pageEntries.length) break;
         const firstSeq = Number(pageEntries[0]?.event?.seq ?? NaN);
@@ -4558,7 +4581,7 @@ export class RuntimeManager {
     this.beginProxy(project);
     try {
       const value = await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session.list", {}, signal),
+        (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
         "runtime_status_unavailable",
         "Runtime session status did not answer in time.",
       );
@@ -4601,19 +4624,28 @@ export class RuntimeManager {
     this.beginProxy(project);
     try {
       await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session.create", {
-          sessionId,
-          cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
-          agentPreset: EVIMED_AGENT_PRESET,
+        (signal) => this.callKernel(runtime, project, "session/create", {
+          request: {
+            sessionId,
+            cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
+            agentPreset: EVIMED_AGENT_PRESET,
+          },
         }, signal),
         "runtime_prompt_rejected",
         "The runtime did not create the session in time.",
       );
       await this.withRuntimeDeadline(
-        (signal) => this.callKernel(runtime, project, "session.prompt", {
-          sessionId,
-          mode: "queue",
-          content: [{ type: "text", text }],
+        (signal) => this.callKernel(runtime, project, "session/prompt", {
+          request: {
+            // 0.1.2 requires the client's own identity for this submission; the
+            // kernel echoes it on the queued message so a client can retire its
+            // local echo. Two dispatches sharing one id would be
+            // indistinguishable in the queue, so it is minted per call.
+            requestId: randomId("req_"),
+            sessionId,
+            mode: "queue",
+            content: [{ type: "text", text }],
+          },
         }, signal),
         "runtime_prompt_acceptance_unknown",
         "Runtime prompt acceptance could not be confirmed.",
@@ -5077,9 +5109,11 @@ export class RuntimeManager {
     try {
       if (runtimeKernelName(this.config) === "dsh") {
         const value = await this.withRuntimeDeadline(
-          (signal) => this.callKernel(runtime, project, "session.create", {
-            cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
-            agentPreset: EVIMED_AGENT_PRESET,
+          (signal) => this.callKernel(runtime, project, "session/create", {
+            request: {
+              cwd: runtime.proxyWorkspaceDir ?? project.workspaceDir,
+              agentPreset: EVIMED_AGENT_PRESET,
+            },
           }, signal),
           "runtime_session_create_failed",
           "The runtime did not create a session in time.",
