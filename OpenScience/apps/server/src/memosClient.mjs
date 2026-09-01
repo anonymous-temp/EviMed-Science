@@ -503,13 +503,31 @@ export class MemosClient {
       reason: String(reason ?? "").slice(0, 500),
     };
     if (evidence) {
-      body.evidence = {
-        sourceType: String(evidence.sourceType ?? ""),
-        sourceRef: String(evidence.sourceRef ?? ""),
-        quote: String(evidence.quote ?? ""),
-        observedTime: evidence.observedAt ?? new Date().toISOString(),
-        weight: boundedScore(evidence.weight ?? 1),
-      };
+      // The memory service's own bounds, applied here rather than discovered by
+      // a rejection: quote 1..4000, sourceType 1..64, sourceRef 1..500
+      // (memory_service.go validateMemoryEvidenceInput).
+      //
+      // These were sent unbounded. A conversation quote longer than 4000
+      // characters made the service answer 400 "memory evidence is invalid",
+      // and because evidence rides along with the record, the whole upsert
+      // failed — the run summary and the extracted preference were both lost
+      // over a long quotation. A quote is an excerpt already and `sourceRef`
+      // still points at the whole message, so trimming it keeps the provenance
+      // that dropping the record would have destroyed.
+      const quote = String(evidence.quote ?? "").trim().slice(0, 4_000);
+      const sourceType = String(evidence.sourceType ?? "").trim().slice(0, 64);
+      const sourceRef = String(evidence.sourceRef ?? "").trim().slice(0, 500);
+      // An empty required field is not evidence, and attaching it fails the
+      // record too. Better an unevidenced record than no record.
+      if (quote && sourceType && sourceRef) {
+        body.evidence = {
+          sourceType,
+          sourceRef,
+          quote,
+          observedTime: evidence.observedAt ?? new Date().toISOString(),
+          weight: boundedScore(evidence.weight ?? 1),
+        };
+      }
     }
     const result = await this.#request("/api/v1/memoryRecords:upsert", { method: "POST", body });
     return publicMemoryRecord(result, namespace);

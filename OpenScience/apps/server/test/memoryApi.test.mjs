@@ -561,3 +561,57 @@ test("memory status reports missing configuration without pretending to be conne
     (error) => error?.status === 503 && error?.code === "memory_url_missing",
   );
 });
+
+// The memory service's own bounds, applied before the request rather than
+// learned from a rejection.
+//
+// 2026-09-01 on the acceptance stack: every run's memory write came back
+// `memory_upstream_error`, and because evidence rides along with the record in
+// one upsert, a single over-long conversation quote lost the run summary and
+// the extracted preference together. The service caps a quote at 4000
+// characters (记忆模块 memory_service.go, validateMemoryEvidenceInput) and this
+// client sent it unbounded — a contract that existed on one side of the
+// boundary and was discovered on the other by a 400.
+test("evidence is trimmed to what the memory service accepts, and never sent empty", async () => {
+  const sent = [];
+  const fetchImpl = async (url, init) => {
+    sent.push(JSON.parse(String(init.body)));
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      text: async () => JSON.stringify({ name: "memoryRecords/abc", namespace: "n", scope: "MEMORY_SCOPE_USER" }),
+    };
+  };
+  const client = new MemosClient(clientConfig(), { fetchImpl });
+  const record = {
+    scope: "user", kind: "preference", key: "k", value: "v", summary: "s",
+    origin: "explicit", status: "active", confidence: 0.9, importance: 0.5,
+  };
+
+  // What matters here is the request, which is captured before the client
+  // parses the reply; the stub reply is deliberately minimal, so the parse is
+  // allowed to fail after the fact.
+  const send = async (evidence) => {
+    try {
+      await client.upsertRecord("user-1", record, evidence);
+    } catch { /* the assertion is on what went out */ }
+  };
+
+  await send({
+    sourceType: "conversation_message",
+    sourceRef: "sessions/s/messages/1",
+    quote: "q".repeat(5_000),
+  });
+  assert.equal(sent.at(-1).evidence.quote.length, 4_000, "a quote past the bound is trimmed, not left to be refused");
+
+  // A required field that is empty is not evidence, and attaching it fails the
+  // whole record. Better an unevidenced record than no record at all.
+  await send({
+    sourceType: "conversation_message",
+    sourceRef: "sessions/s/messages/2",
+    quote: "   ",
+  });
+  assert.equal(sent.at(-1).evidence, undefined, "empty evidence is omitted rather than sent and refused");
+  assert.ok(sent.at(-1).memoryRecord, "and the record itself is still written");
+});
