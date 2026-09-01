@@ -60,3 +60,4 @@ test("the generated patch writes enforcement out loud rather than inheriting it"
   });
   assert.match(patch, /requiredEnforcement:\s*['"]?full['"]?/, "hosted must state full, not inherit a default");
 });
+

@@ -177,8 +177,16 @@ export function loadConfig(overrides = {}) {
   // delivery gate's newer rules — those live on the run side now — and the test
   // suite must therefore pin `dsh` explicitly rather than inherit this default,
   // or flipping it would silently move every test onto the retiring kernel.
+  // DSH is the kernel. OpenCode remains reachable by setting this explicitly,
+  // and that is the rollback lever for the change window — a configuration
+  // value, revertible in a minute, which is the only reason the appendix-B
+  // trees are still in the repository. They are frozen: nobody maintains them,
+  // nothing new lands in them, and they come out in their own change once the
+  // quiet period after the flip has passed. A frozen rollback lever is not a
+  // second stack; two stacks both alive and both growing is what that rule was
+  // written against.
   const runtimeKernel = String(
-    overrides.runtimeKernel ?? process.env.OPEN_SCIENCE_RUNTIME_KERNEL ?? "opencode",
+    overrides.runtimeKernel ?? process.env.OPEN_SCIENCE_RUNTIME_KERNEL ?? "dsh",
   ).trim().toLowerCase();
   if (!["dsh", "opencode"].includes(runtimeKernel)) {
     throw new Error(`OPEN_SCIENCE_RUNTIME_KERNEL must be "dsh" or "opencode", got "${runtimeKernel}".`);
