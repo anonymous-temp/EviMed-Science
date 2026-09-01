@@ -76,14 +76,21 @@ export const releaseManifestFixture = Object.freeze({
   },
 });
 
+// A manifest describes one kernel, and readiness now says so when the
+// deployment is on the other one. So each release fixture names the kernel it
+// belongs to: a fixture that calls itself a ready production deployment while
+// describing one kernel and running the other is not a baseline anything can be
+// measured against, and it was only ever passing because nothing compared them.
 export const productionReleaseConfig = Object.freeze({
   releaseManifest: releaseManifestFixture,
   materialsProjectApiKey: "test-materials-project-key",
+  runtimeKernel: "opencode",
 });
 
 export const runtimeReleaseConfig = Object.freeze({
   releaseManifest: releaseManifestFixture,
   materialsProjectApiKey: "test-materials-project-key",
+  runtimeKernel: "opencode",
   runtimeContainerImage: releaseManifestFixture.runtime.image,
   opencodeVersion: releaseManifestFixture.runtime.opencodeVersion,
   uvVersion: releaseManifestFixture.runtime.uvVersion,
@@ -113,6 +120,7 @@ export const dshReleaseManifestFixture = Object.freeze({
 export const dshProductionReleaseConfig = Object.freeze({
   releaseManifest: dshReleaseManifestFixture,
   materialsProjectApiKey: "test-materials-project-key",
+  runtimeKernel: "dsh",
   runtimeContainerImage: dshReleaseManifestFixture.runtime.image,
   dshVersion: dshReleaseManifestFixture.runtime.dshVersion,
   socketBundleVersion: dshReleaseManifestFixture.runtime.socketVersion,

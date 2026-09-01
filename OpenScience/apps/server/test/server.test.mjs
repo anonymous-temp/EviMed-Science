@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 import { createWebApiApp } from "../src/server.mjs";
-import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
+import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 const hasPython3 = spawnSync("python3", ["--version"], { stdio: "ignore" }).status === 0;
 const hasR = spawnSync("Rscript", ["--version"], { stdio: "ignore" }).status === 0;
@@ -1329,6 +1329,81 @@ test("readiness accepts a DSH release the way it accepts an opencode one", async
       operatorMetricsToken: "metrics-token-for-production-readiness-tests",
       trustProxy: true,
       ...dshProductionReleaseConfig,
+    },
+  );
+});
+
+test("a kernel rolled back without its manifest says so, and does not blame the image", async () => {
+  // Found by drilling the rollback rather than reading it. Flipping
+  // OPEN_SCIENCE_RUNTIME_KERNEL back to opencode moved the kernel — readiness
+  // reported `kernel: "opencode"` — and turned readiness red on
+  // `release_manifest_mismatch { field: "runtimeContainerImage" }`, because the
+  // release's manifest still describes the DSH runtime image. An operator
+  // mid-incident reads that as a bad build and goes to look at an image they
+  // changed on purpose.
+  //
+  // So the lever alone is not a rollback: the manifest travels with the
+  // release, and restoring the kernel means restoring that release's manifest
+  // too. The failure now names both sides, which is the whole difference
+  // between a dead end and an instruction.
+  await withApp(
+    async ({ base }) => {
+      const res = await fetch(`${base}/api/ready`);
+      assert.equal(res.status, 503);
+      const check = (await res.json()).data.checks.release;
+      assert.equal(check.ok, false);
+      assert.equal(check.code, "release_manifest_kernel_mismatch");
+      assert.equal(check.configured, "opencode");
+      assert.equal(check.manifest, "dsh");
+    },
+    {
+      production: true,
+      devAuth: false,
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      runtimeMode: "mock",
+      allowMockRuntime: true,
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      operatorMetricsToken: "metrics-token-for-production-readiness-tests",
+      trustProxy: true,
+      ...dshProductionReleaseConfig,
+      runtimeKernel: "opencode",
+    },
+  );
+});
+
+test("the window-day direction is named too: DSH kernel against the outgoing opencode manifest", async () => {
+  // The same disagreement the other way round, and the one the change window
+  // actually risks: HEAD defaults to DSH, and a release deployed with the
+  // previous manifest still describes opencode.
+  await withApp(
+    async ({ base }) => {
+      const res = await fetch(`${base}/api/ready`);
+      assert.equal(res.status, 503);
+      const check = (await res.json()).data.checks.release;
+      assert.equal(check.code, "release_manifest_kernel_mismatch");
+      assert.equal(check.configured, "dsh");
+      assert.equal(check.manifest, "opencode");
+    },
+    {
+      production: true,
+      devAuth: false,
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      runtimeMode: "mock",
+      allowMockRuntime: true,
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      operatorMetricsToken: "metrics-token-for-production-readiness-tests",
+      trustProxy: true,
+      ...productionReleaseConfig,
+      ...runtimeReleaseConfig,
+      runtimeKernel: "dsh",
     },
   );
 });
