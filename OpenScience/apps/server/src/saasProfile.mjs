@@ -39,6 +39,7 @@ export function readinessSaasProfile(config, checks) {
   }
   if (!config.production) throw profileFailure("saas_profile_production_required");
 
+  /** @type {[string, boolean][]} */
   const requirements = [
     ["public-origin", checkMatches(checks.publicUrl, (check) => check.secure === true)],
     ["oidc-identity", checkMatches(checks.auth, (check) => check.mode === "oidc")],
@@ -74,15 +75,45 @@ export function readinessSaasProfile(config, checks) {
       checkMatches(checks.observability, (check) => check.required === true && check.mode === "protected"),
     ],
   ];
-  const missing = requirements.filter(([, passed]) => !passed).map(([id]) => id);
+  // A surface this deployment has chosen not to configure, named one by one.
+  //
+  // Three of these requirements are not defects and never will be: this
+  // deployment authenticates with local-auth rather than OIDC, holds no
+  // Materials Project credential, and keeps its backups on one machine by
+  // decision. Left undeclared they read exactly like the fourth — a stale model
+  // gateway receipt, which IS a defect — and a readiness probe that is red for
+  // four reasons, three of them permanent, is one nobody reads.
+  //
+  // So the gate closes on "every configured surface green, every unconfigured
+  // one named". The declaration is per item, it cannot drift (an undeclared
+  // miss still fails), and it hides nothing: what was declared comes back in
+  // the readiness body next to what was validated.
+  const declared = new Set(
+    String(config.saasProfileUnconfigured ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+  const requirementIds = new Set(requirements.map(([id]) => id));
+  // A declaration naming something that is not a requirement is a misspelling
+  // of one that is, and it would quietly protect nothing.
+  const unknown = [...declared].filter((id) => !requirementIds.has(id));
+  if (unknown.length > 0) {
+    throw profileFailure("saas_profile_declaration_unknown", { unknown, known: [...requirementIds] });
+  }
+
+  const failed = requirements.filter(([, passed]) => !passed).map(([id]) => id);
+  const missing = failed.filter((id) => !declared.has(id));
+  const declaredUnconfigured = failed.filter((id) => declared.has(id));
   if (missing.length > 0) {
-    throw profileFailure("saas_profile_requirements_missing", { missing });
+    throw profileFailure("saas_profile_requirements_missing", { missing, declaredUnconfigured });
   }
 
   return {
     ...common,
     technicalSaas: true,
-    validatedBoundaries: requirements.map(([id]) => id),
+    validatedBoundaries: requirements.filter(([, passed]) => passed).map(([id]) => id),
+    declaredUnconfigured,
   };
 }
 
