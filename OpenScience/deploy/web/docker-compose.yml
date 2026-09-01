@@ -131,6 +131,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       OPEN_SCIENCE_DEPLOYMENT_PROFILE: ${OPEN_SCIENCE_DEPLOYMENT_PROFILE:-controlled-pilot}
+      OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED:
       OPEN_SCIENCE_HOST: 0.0.0.0
       OPEN_SCIENCE_PORT: 8787
       OPEN_SCIENCE_PUBLIC_URL: ${OPEN_SCIENCE_PUBLIC_URL:-http://localhost:8787}
@@ -185,6 +186,14 @@ services:
       OPEN_SCIENCE_OIDC_TIMEOUT_MS: ${OPEN_SCIENCE_OIDC_TIMEOUT_MS:-10000}
       OPEN_SCIENCE_OIDC_FLOW_TTL_MS: ${OPEN_SCIENCE_OIDC_FLOW_TTL_MS:-600000}
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-opencode}
+      # The kernel rollback lever, and the only way back to the previous kernel
+      # without a redeploy. Written in the value-less form on purpose: unset, it
+      # is absent from the container rather than empty, so the code default
+      # stands alone and this file never holds a second copy of it. Both the web
+      # service and the controller read the same variable, because a deployment
+      # whose two halves disagree about which kernel it runs has no answer to
+      # give an operator asking which one it is.
+      OPEN_SCIENCE_RUNTIME_KERNEL:
       OPEN_SCIENCE_ALLOW_MOCK_RUNTIME: ${OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:-false}
       OPEN_SCIENCE_OPENCODE_BIN: ${OPEN_SCIENCE_OPENCODE_BIN:-}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
@@ -221,6 +230,8 @@ services:
       OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
       OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-v4-pro}
+      OPEN_SCIENCE_LLM_ROUTING_ENABLED:
+      OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without
@@ -842,6 +853,7 @@ services:
       OPEN_SCIENCE_RELEASE_MANIFEST_FILE: /run/open-science/release-manifest.json
       OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE: direct
       OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET: /run/open-science-controller/controller.sock
+      OPEN_SCIENCE_RUNTIME_KERNEL:
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-opencode}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
