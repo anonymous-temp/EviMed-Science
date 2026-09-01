@@ -3783,6 +3783,12 @@ export class RuntimeManager {
         url: mock.url,
         close: mock.close,
         password: null,
+        // The mock authenticates exactly as the real 0.1.2 kernel does,
+        // including on loopback, and it mints its own browser-session cookie
+        // for us. Leaving it off the record here would answer 401 to every
+        // call, which arrives at a caller as a bare 502 — the whole suite
+        // failing on a missing credential and reporting a protocol mismatch.
+        cookie: mock.cookie ?? null,
         sandboxMode: "mock",
         networkMode: null,
         workspaceDir: project.workspaceDir,
@@ -4508,10 +4514,19 @@ export class RuntimeManager {
         .find((item) => String(item?.sessionId) === String(sessionId));
       const throughSeq = Number(head?.projections?.asOfSeq ?? NaN);
       if (!Number.isFinite(throughSeq)) {
-        // Not an empty transcript: the kernel does not know this session. A run
-        // that has not started yet is the baseline, and the caller below
-        // already treats `runtime_session_not_found` as one.
-        throw new HttpError(502, "runtime_session_not_found", `The kernel published no head sequence for session ${sessionId}.`);
+        // A session the kernel has not created yet has produced nothing, and
+        // that is the baseline every run starts from rather than a failure —
+        // the paging loop below has always treated `runtime_session_not_found`
+        // exactly this way, and reading the head sequence first must not turn
+        // the same fact into an error one step earlier. It did: every dispatch
+        // began by reading a transcript for a session that does not exist yet,
+        // so the whole ledger answered 502 before any gate ran.
+        //
+        // The adapter's own `transcript()` throws on the same condition on
+        // purpose, and the two are not in conflict: it is read once a run has
+        // finished, where "the kernel never heard of this session" really is an
+        // error, while this path is read from the first moment of a run.
+        return normalizeTranscript(sessionId, []);
       }
       /** @type {Record<string, any>[][]} */
       const pages = [];
