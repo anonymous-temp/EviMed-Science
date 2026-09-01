@@ -207,7 +207,7 @@
   （封闭路径词表，正是代码该做的检查）；② build-smoke 从声明根真跑一个 curated 脚本（断言能力不断言机制）。
   **优先级：升级为活缺陷修复，插队先于 J4/J7/J3。**
 - [ ] ~~**J5 原文**~~ 去硬编码：`EVIMED_EVIDENCE_BASE_URL`（evimed.com）改 env-overridable 且无凭证时跳过首跳（现在陌生人每次检索都先对 evimed.com 发一个注定失败的请求）；48 个技能文件的 `$XDG_CONFIG_HOME/opencode/...` 路径一次 sed。
-- [ ] **J9**（2026-08-31 彩排发现，开源与可复现的硬伤）**仓库自己建不出自己的 web 镜像**：
+- [x] **J9 完成（2026-08-31）**：`deploy/web/Dockerfile` 在 build 阶段先检查被 `.gitignore` 有意排除的技能包并**指名要跑 `scripts/dev/fetch-skills.sh`**；配 `webImageBuildsFromAClone.test.mjs`（用 `git check-ignore` 问 git 本人，构建阶段自产的路径由同一份 Dockerfile 里的 RUN 作证豁免，不靠白名单）。按行为验证：挪走包 → `exit=1` 并打印补救；放回 → 镜像正常建成。
   `deploy/web/Dockerfile:57` 硬 `COPY runtime/skills/external/ai4s-skills`，而
   `OpenScience/.gitignore:62` 把 `runtime/skills/external/` 整个忽略掉。宿主上的构建之所以一直成功，
   只因为发布目录里恰好有这份未受版本控制的 4.6MB 内容。**陌生人克隆仓库无法构建**，
@@ -260,7 +260,7 @@
 - [x] **L5 完成（2026-09-01）**：在宿主 acceptance 目录搭起 production 形态的栈（独立 postgres ＋ memos ＋ drug-safety 适配器 ＋ release manifest ＋ kernel），hosted e2e **跑出全绿**：`every mechanical assertion passed, with 1 notice`（notice ＝ signals.csv 0 数据行）。
   - 途中修掉四处真缺陷：已退役直通路由（移植）、记忆证据**按字节**越界（跨语言边界，阻断了全部记忆写入）、e2e 等待短于被等待者预算、三处诊断吞噬（`securityAudit` 丢弃调用方上下文 / memos 拒绝不带路径 / e2e 六条件一句话）。
   - 判据按 §16 #24 切分：机械面阻断（含新增的 run_summary 见证），内容面 notice 带观测值。
-- [ ] **L6** capabilities 收口（二选一，用户拍板）：①补 4 项凭证（web_search / patent / pharmacy key + OpenGWAS JWT）重探转绿；②明确声明这 4 项为未配置面、门禁按"已配置面全绿 + 未配置面具名申明"收口。
+- [x] **L6 完成（2026-09-01，取②）**：新增 `OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED` 逐项具名申明——未申明的缺口照旧判失败（不漂移）、申明过的原样回到 readiness body（`declaredUnconfigured`）、不算进 `validatedBoundaries`（不冒充已验证）、申明不存在的要求直接报错（防拼错）。`server-model-gateway` **不申明**（挂 D7 回执，是真缺陷）。**注意**：`audited-science-connectors` 实际要的是 Materials Project 的 key（`enabled: key ? 7 : 6`），不是计划原文写的四项凭证。机制已就位，**申明值随窗口的 `.env` 生效**。
 - [ ] **L7 变更窗口（一次做完）**：静养期满（约 09-02）+ L1–L6 绿 → 翻 `runtimeKernel` 默认 dsh + `.env` 五值 + **附 B 删除**（旧 store / packages/sdk / src-tauri / runtime/harness / deploy/runtime-opencode / fetch-opencode）+ OpenCode 版 release-gate 死、DSH 版 release-gate + receipt scheduler 上线（D7 收尾）+ geo-content 上生产 + manifest 重生成。窗口内保留一个回滚 release，72h 后撤。
 - [ ] **L8 窗口后主线（把 DSH 内核"做好"的三件深化）**：① review 插件三场景（语域泄漏 / GEO 提及语境 / 跨源冲突裁决——Apodex 差距 #3）；② 模型网关按角色配模型槽位（审查者/检索手可换模型，为 Apodex-mini 类开源权重留门——差距 #1 的不训练解法）；③ Hard Medical Research 确定性内评基准（30–50 道封闭答案中文医学题 + hard negatives——差距 #4）。J 轨其余（J3/J6/J7/J8 + 开源首批发布）随后。
 
