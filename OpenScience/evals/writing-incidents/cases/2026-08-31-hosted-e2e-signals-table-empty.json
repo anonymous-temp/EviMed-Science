@@ -1,0 +1,10 @@
+{
+  "id": "2026-08-31-hosted-e2e-signals-table-empty",
+  "genre": "nondeterministic-deliverable",
+  "observedIn": "scripts/ops/hosted-production-e2e.mjs (acceptance stack, four consecutive runs)",
+  "line": null,
+  "verbatim": "hosted_e2e_signals_invalid: The production signal table is missing or has no data rows.",
+  "whyItIsWrong": "Same stack, same brief, same adapter, same model: run 3 wrote signals.csv with data rows and reached the final stage; run 4 produced a signals.csv with none. Whether the drug-safety specialist transcribes the disproportionality figures it retrieved into its own table is not stable across runs, so a release gate that asserts on it passes or fails by luck. The retrieval was not the variable — the adapter reached openFDA in both runs.",
+  "caughtBy": "gate",
+  "note": "Filed rather than fixed by re-running until green. A gate whose verdict moves between identical runs is measuring the model's habits, and the right response is a distribution: run the specialist brief N times and count how often the table is populated, before deciding whether the deliverable contract should require the rows (a contract binds outputs and could) or the skill should be told to write them (behaviour shaping belongs in prompts). Re-running to obtain one green would certify nothing. Principle 6."
+}
