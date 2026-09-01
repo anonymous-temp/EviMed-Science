@@ -325,10 +325,24 @@ async function main() {
     }
 
     const memoryRecord = await waitForMemoryRecord(base, scoped, initialRecordIds, preferenceMarker);
-    if (memoryRecord.scope !== "user" || memoryRecord.kind !== "preference" || memoryRecord.origin !== "explicit"
-      || memoryRecord.status !== "active" || memoryRecord.evidenceCount < 1
-      || !memoryRecord.evidence?.some((item) => item.quote?.includes(preferenceMarker))) {
-      throw failure("hosted_e2e_memory_evidence_invalid", "The structured preference memory lacks explicit user evidence or active status.");
+    // Six conditions under one message meant a run told you the memory was
+    // wrong without telling you which part, and the record is deleted with the
+    // project moments later — so the answer was gone before anyone could look.
+    const memoryFaults = [
+      memoryRecord.scope !== "user" ? `scope=${memoryRecord.scope}` : null,
+      memoryRecord.kind !== "preference" ? `kind=${memoryRecord.kind}` : null,
+      memoryRecord.origin !== "explicit" ? `origin=${memoryRecord.origin}` : null,
+      memoryRecord.status !== "active" ? `status=${memoryRecord.status}` : null,
+      memoryRecord.evidenceCount < 1 ? `evidenceCount=${memoryRecord.evidenceCount}` : null,
+      memoryRecord.evidence?.some((item) => item.quote?.includes(preferenceMarker))
+        ? null
+        : `no evidence quote carries the marker (quotes=${(memoryRecord.evidence ?? []).length})`,
+    ].filter(Boolean);
+    if (memoryFaults.length) {
+      throw failure(
+        "hosted_e2e_memory_evidence_invalid",
+        `The structured preference memory is not explicit, evidenced and active: ${memoryFaults.join("; ")}.`,
+      );
     }
 
     await command(base, "write_workspace_file", {
