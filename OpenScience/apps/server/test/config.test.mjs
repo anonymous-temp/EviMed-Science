@@ -165,16 +165,29 @@ test("the agent run monitor timeout is configurable", () => {
 });
 
 // The shipped default is a posture, not a preference, so it is pinned by a test
-// rather than left to whoever edits the file next. Flipping it belongs to the
-// change that lands the DSH session view (§16 #15) — and that change should have
-// to delete this assertion to do it, which is the point.
-test("the shipped kernel default is the rollback kernel until the DSH session view lands", () => {
+// rather than left to whoever edits the file next.
+//
+// It read `opencode` "until the DSH session view lands", and that condition was
+// met on 2026-08-31: the session layer was accepted on a real DSH run — 3981
+// frames, terminal `succeeded`, a reconnect at seq 40 that lost and repeated
+// nothing. So this now pins the other side.
+//
+// The environment variable is the rollback lever for the change window, and it
+// is the only reason the appendix-B trees still exist. Deleting them in the same
+// change as the flip would have removed every way back in the same second the
+// switch was thrown; they are frozen instead, and come out in their own change
+// after the quiet period. A frozen rollback lever is not a second stack.
+test("dsh is the shipped kernel default, and the rollback lever still works", () => {
   const saved = process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
   delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
   try {
-    assert.equal(loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel, "opencode");
-    process.env.OPEN_SCIENCE_RUNTIME_KERNEL = "dsh";
     assert.equal(loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel, "dsh");
+    process.env.OPEN_SCIENCE_RUNTIME_KERNEL = "opencode";
+    assert.equal(
+      loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel,
+      "opencode",
+      "if this stops working the appendix-B deletion has effectively happened already",
+    );
   } finally {
     if (saved == null) delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
     else process.env.OPEN_SCIENCE_RUNTIME_KERNEL = saved;
