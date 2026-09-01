@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadAgentRegistry } from "../src/agentRegistry.mjs";
-import { routeOpenDomainSpecialist } from "../src/specialistRouting.mjs";
+import { routeNamedSpecialist, routeOpenDomainSpecialist } from "../src/specialistRouting.mjs";
 
 
 const packageRoot = path.resolve(
@@ -316,5 +316,38 @@ test("one rule still outranks a clean 'none', and it is the one made of data", a
   assert.equal(
     routeOpenDomainSpecialist("请就某种保健品的口碑做一份综述报告。", agents, { afterCleanNone: true }),
     null,
+  );
+});
+
+// Naming a package is an instruction; a paper's own title is not.
+//
+// Measured 2026-08-31 across the 33-case batch: the only two failures were both
+// routed to meta-analysis by their own titles — 《… large-scale meta-analysis of
+// 192 epidemiological studies.》 and 《… an individual patient data
+// meta-analysis.》 — and then failed for not writing meta-analysis-report.md,
+// which nobody had asked for. Naming outranks the classifier, so neither run
+// was ever put to the model.
+test("a capability named inside 《》 is a document title, not an instruction", async () => {
+  const agents = (await loadAgentRegistry({ packageDirs: [packageRoot] })).list();
+
+  assert.equal(
+    routeNamedSpecialist(
+      "请以已发表论文题目《Age at onset of mental disorders worldwide: large-scale meta-analysis of 192 "
+      + "epidemiological studies.》为检索入口，检索其开放获取原始全文，并重写一份结构化科研正文。",
+      agents,
+    ),
+    null,
+    "a title is the name of a work, not a request for that capability",
+  );
+
+  // Only 《》 is stripped. Someone may reasonably put a package name in ordinary
+  // quotes for emphasis, and that is still naming it.
+  assert.equal(routeNamedSpecialist("请用 meta-analysis 能力包把这些试验合并成一个效应量", agents)?.agentId, "meta-analysis");
+  assert.equal(routeNamedSpecialist("请用「meta-analysis」跑一遍", agents)?.agentId, "meta-analysis");
+
+  // And a title does not silence a real instruction sitting beside it.
+  assert.equal(
+    routeNamedSpecialist("请以《… meta-analysis of 192 studies.》为入口，然后用 meta-analysis 能力包重跑一次合并", agents)?.agentId,
+    "meta-analysis",
   );
 });
