@@ -16,6 +16,24 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+
+# The third-party skill packs are deliberately absent from git history — they
+# are fetched, pinned by commit, by scripts/dev/fetch-skills.sh. The runtime
+# stage below hard-COPYs one of them, so a clone that has not fetched them
+# fails there with `"/app/runtime/skills/external/ai4s-skills": not found`,
+# which names neither the cause nor the remedy.
+#
+# Every image built on this host succeeded only because the release directory
+# happened to hold 4.6 MB of content that no version control tracked. This says
+# so before the build gets far enough to be confusing.
+RUN for pack in runtime/skills/external/ai4s-skills; do \
+      test -d "$pack" || { \
+        echo "missing: $pack" >&2; \
+        echo "It is git-ignored on purpose and fetched by commit pin. Run scripts/dev/fetch-skills.sh in the repo root, then rebuild." >&2; \
+        exit 1; \
+      }; \
+    done
+
 ARG VITE_OPEN_SCIENCE_API_URL=/api
 ENV VITE_OPEN_SCIENCE_API_URL=${VITE_OPEN_SCIENCE_API_URL}
 RUN pnpm --filter @ai4s/desktop build
