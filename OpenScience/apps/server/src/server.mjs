@@ -1977,7 +1977,21 @@ export function ledgerWriteFailureCounts() {
   return { ...ledgerWriteFailures };
 }
 
+/**
+ * One line in the security ledger.
+ *
+ * The record shape is fixed on purpose — this is an audit log, not a debug
+ * stream — but it was fixed at six fields while call sites passed run ids,
+ * project ids, counters and error text, all of which were silently dropped.
+ * Every caller looked like it was recording context and none of it was written,
+ * which is how `memory_upstream_error` stayed unattributable across six
+ * different requests: the answer had been passed in and thrown away.
+ *
+ * `detail` is the one addition: bounded, and it must never carry a credential —
+ * callers put the failing method, path and upstream status there, not headers.
+ */
 async function securityAudit(config, action, status, details = {}) {
+  const detail = String(details.detail ?? "").slice(0, 300);
   const record = {
     createdAt: new Date().toISOString(),
     action,
@@ -1985,6 +1999,7 @@ async function securityAudit(config, action, status, details = {}) {
     username: details.username ?? null,
     userId: details.userId ?? null,
     code: details.code ?? null,
+    ...(detail ? { detail } : {}),
   };
   const file = path.join(config.dataDir, ".openscience", "security.jsonl");
   await trackLedgerWrite(
