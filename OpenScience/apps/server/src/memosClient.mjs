@@ -716,7 +716,16 @@ export class MemosClient {
             ? "memory_conflict"
           : "memory_upstream_error";
       const status = response.status === 404 ? 404 : response.status === 409 ? 409 : 502;
-      throw new HttpError(status, code, upstreamMessage(parsed) || "The memory service rejected the request.");
+      // Which call was rejected, and with what upstream status.
+      //
+      // The memory pipeline makes half a dozen different requests per run, and
+      // every rejection arrived as the same `memory_upstream_error` with the
+      // same sentence. Chasing one on the acceptance stack meant probing each
+      // endpoint by hand to find which had failed — and the answer was already
+      // in a response nobody kept. The path is not a secret; the bearer token
+      // is, and it is not in here.
+      const detail = upstreamMessage(parsed) || "The memory service rejected the request.";
+      throw new HttpError(status, code, `${method} ${relative} -> ${response.status}: ${detail}`);
     }
     return parsed;
   }
