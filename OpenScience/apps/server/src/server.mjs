@@ -457,9 +457,18 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
       let messages = [];
+      let historyError = null;
       try {
         messages = await runtimeManager.sessionMessages(project, run.sessionId, { wake: false });
-      } catch { /* a structured run summary remains durable even if runtime history is unavailable */ }
+      } catch (error) {
+        // A structured run summary stays durable without the transcript, so this
+        // is not fatal — but it was swallowed whole, and no transcript means no
+        // memory sources, which means recordRun extracts nothing and reports
+        // `source: "none"` as if the conversation simply held nothing worth
+        // keeping. The two are indistinguishable in the audit line unless the
+        // reason travels with it.
+        historyError = error?.code ?? error?.name ?? "runtime_history_unavailable";
+      }
       const memoryResult = await memoryIntelligence.recordRun(project, run, messages);
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
@@ -468,6 +477,8 @@ export function createWebApiApp(overrides = {}) {
         runStatus: run.status,
         extracted: memoryResult.extracted,
         activated: memoryResult.activated,
+        transcriptMessages: messages.length,
+        ...(historyError ? { historyError } : {}),
         extractionSource: memoryResult.source,
         proposed: memoryResult.proposed,
         rejected: memoryResult.rejected,
