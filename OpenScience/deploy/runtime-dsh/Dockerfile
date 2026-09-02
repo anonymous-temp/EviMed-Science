@@ -14,6 +14,13 @@ ARG TARGETARCH
 # asserts they are equal, so a pin bump is one edit in one file.
 ARG DSH_VERSION=0.1.2-alpha.3
 ARG DSH_CORDIS_VERSION=4.0.2
+# The instant the pin was published. `@deepseek-ai/dsh` declares all 61 of its
+# subpackages as `^0.1.2-alpha.3`, so naming an exact version pins one package
+# and floats the other 214: installing the pin on 2026-09-02 resolved 213 of
+# them to 0.1.2-alpha.4, published the day before. npm's `--before` resolves
+# every dependency to what existed at this instant, which is the only way to
+# ask the registry for the tree this pin was tested against.
+ARG DSH_PUBLISHED_BEFORE=2026-09-01T00:00:00.000Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
@@ -103,15 +110,38 @@ RUN set -eux; \
   node --version; \
   uv --version
 
-# The kernel, installed at an exact version. Subpackage `latest` dist-tags still
-# point at 0.0.1-rc.1 for most of the tree, so a range here would install a
-# mixture of releases that no test has ever seen together.
+# The kernel, and its whole subpackage tree, at one version.
+#
+# Naming an exact version here is not enough and the comment that used to sit
+# here said why without noticing it was describing this build: a range installs
+# "a mixture of releases that no test has ever seen together". The ranges are
+# inside `@deepseek-ai/dsh`'s own dependencies — 61 of them at
+# `^0.1.2-alpha.3` — so `npm install @deepseek-ai/dsh@0.1.2-alpha.3` on
+# 2026-09-02 produced a root at alpha.3 and 213 subpackages at alpha.4, while
+# the version assertion below it passed. An image labelled with one kernel
+# containing another, reporting success: the failure looked exactly like
+# nothing having happened.
+#
+# So the resolution is fixed by `--before` and then *verified across the whole
+# tree*, because a date filter is a request and the assertion is the guarantee.
+# The scan fails when it finds implausibly few packages, so a broken readdir
+# reports a broken scan rather than a clean tree.
 RUN set -eux; \
   npm config set registry "${NPM_REGISTRY}"; \
-  npm install -g --no-fund --no-audit "@deepseek-ai/dsh@${DSH_VERSION}"; \
+  npm install -g --no-fund --no-audit --before="${DSH_PUBLISHED_BEFORE}" "@deepseek-ai/dsh@${DSH_VERSION}"; \
   dsh --version; \
   installed="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json').version")"; \
   test "${installed}" = "${DSH_VERSION}" || { echo "installed dsh ${installed} != pinned ${DSH_VERSION}" >&2; exit 1; }; \
+  node -e '\
+    const fs = require("fs"), path = require("path"); \
+    const [pin] = process.argv.slice(1); \
+    const dir = "/usr/local/lib/node_modules/@deepseek-ai"; \
+    const names = fs.readdirSync(dir).filter((n) => n.startsWith("dsh")); \
+    if (names.length < 50) { console.error("only " + names.length + " @deepseek-ai/dsh* packages found; the scan, not the tree, is wrong"); process.exit(2); } \
+    const drifted = names.map((n) => [n, JSON.parse(fs.readFileSync(path.join(dir, n, "package.json"), "utf8")).version]).filter(([, v]) => v !== pin); \
+    if (drifted.length) { console.error(drifted.length + " of " + names.length + " @deepseek-ai/dsh* packages are not " + pin + "; the registry resolved newer subpackages, which usually means NPM_REGISTRY is a mirror that does not honour --before (its packuments carry no publish times). Point NPM_REGISTRY at a registry that does, or vendor the tree."); for (const [n, v] of drifted.slice(0, 8)) console.error("  " + n + " = " + v); process.exit(1); } \
+    console.log("all " + names.length + " @deepseek-ai/dsh* packages are " + pin); \
+  ' "${DSH_VERSION}"; \
   cordis="$(node -p "require('/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/package.json').version" 2>/dev/null || node -p "require('@deepseek-ai/cordis/package.json').version")"; \
   test "${cordis}" = "${DSH_CORDIS_VERSION}" || { echo "resolved cordis ${cordis} != pinned ${DSH_CORDIS_VERSION}" >&2; exit 1; }
 

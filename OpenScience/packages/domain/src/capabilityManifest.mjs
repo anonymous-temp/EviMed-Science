@@ -17,7 +17,25 @@ import { isContractKind } from './contractKinds.mjs'
 import { SAFETY_CLASSES } from './contractKinds.mjs'
 import { MCP_TOOL_NAMES, SOCKET_TOOL_NAME_LIST, mcpToolBaseName, mcpToolName } from './toolNames.mjs'
 
-/** Tools every delegated child gets regardless of its manifest (§9.5 step 3). */
+/**
+ * Tools every delegated child gets regardless of its manifest (§9.5 step 3).
+ *
+ * Every name here must be a tool the kernel has already registered on the
+ * inherited plane when the child's composition is applied, because this list
+ * becomes `toolFilter.allow` and the kernel resolves it with
+ * `tools.restrict()`, which **throws on a name it does not know** rather than
+ * ignoring it. An unknown name therefore does not narrow a child's tools; it
+ * turns every delegation into an exception.
+ *
+ * `report` used to be here and was exactly that defect. It is registered by
+ * `@deepseek-ai/dsh-tool-subagent-report` into a child's *own* layer, and two
+ * independent things put it out of reach: own-layer names are excluded from
+ * `restrictableNames`, and the kernel applies the composition *before* it runs
+ * the continuable-setup contributions that would register it
+ * (`dsh-subagent`: `applyChildComposition(...)` then `setupRegistry.apply(...)`).
+ * Our result channel was never `report` anyway — it is
+ * `DELEGATION_REPORT_SCHEMA` through `outputSchema`.
+ */
 export const DELEGATION_BASE_TOOLS = Object.freeze([
   'read',
   'write',
@@ -26,8 +44,30 @@ export const DELEGATION_BASE_TOOLS = Object.freeze([
   'grep',
   'skill',
   'evimed_submit_deliverable',
-  'report',
 ])
+
+/**
+ * Tool names the kernel registers globally, which is the set
+ * `DELEGATION_BASE_TOOLS` may draw from.
+ *
+ * Derived from the plugin rows our preset mounts: `tool-fs` publishes
+ * read/write/edit, `tool-fs-search` glob/grep, `tool-skill` skill, `tool-bash`
+ * bash, `tool-subagent` subagent, `tool-ask-user` ask_user. Kept as data next
+ * to the list it constrains so that adding a name to one without the other is
+ * a test failure rather than a runtime exception at the first delegation.
+ * @type {ReadonlySet<string>}
+ */
+export const KERNEL_GLOBAL_TOOL_NAMES = Object.freeze(new Set([
+  'read',
+  'write',
+  'edit',
+  'glob',
+  'grep',
+  'skill',
+  'bash',
+  'subagent',
+  'ask_user',
+]))
 
 /** Autopilot task types a capability may declare (§24.3). */
 export const AUTOPILOT_TASK_TYPES = Object.freeze([
