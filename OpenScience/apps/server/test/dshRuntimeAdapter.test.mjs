@@ -148,9 +148,28 @@ test("how the turn ended reaches the ledger instead of being computed and droppe
 /* ------------------------------------------------------- the 0.1.2 method set */
 
 test("the method allow-list is derived from the seam manifest, and 0.1.1's dotted names are not on it", () => {
-  assert.equal(ALLOWED_WIRE_METHODS.size, SEAMS.wire.unary.length);
+  // The allow-list is the service methods plus the gateway's own pseudo-
+  // endpoints, and the two are separate manifest fields because they are
+  // different kinds of thing: `$events/result` is claimed by the gateway before
+  // any method lookup, so it obeys neither the `namespace/method` grammar nor
+  // the `unaryArgs` contract every typert call has. Folding it into
+  // `wire.unary` would have meant relaxing the grammar assertion that proves
+  // 0.1.2 renamed every method dotted-to-slashed -- trading a real guarantee
+  // for one endpoint that was never of that kind.
+  const gateway = Object.values(SEAMS.wire.gatewayEndpoints);
+  assert.equal(ALLOWED_WIRE_METHODS.size, SEAMS.wire.unary.length + gateway.length);
   assert.equal(DENIED_WIRE_METHODS.size, SEAMS.wire.denied.length);
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 50);
+  for (const endpoint of gateway) assert.ok(isAllowedWireMethod(endpoint), `${endpoint} must be callable`);
+  assert.ok(isAllowedWireMethod("$events/result"), "answering a kernel question is a call this control plane makes");
+  // The split used to be pinned as a total ("allowed + denied === 50"). Kept,
+  // adjusted, rather than dropped when the gateway endpoint arrived: the number
+  // is what notices a method being added to one half without a decision about
+  // the other. Disjointness is asserted beside it, because a method that is
+  // both allowed and denied would keep the total right.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 51);
+  for (const method of ALLOWED_WIRE_METHODS) {
+    assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
+  }
 
   for (const method of ["session/create", "session/prompt", "session/cancel", "session/page", "session/fork", "session/list", "subagents/list", "skills/list", "agentPresets/list"]) {
     assert.ok(isAllowedWireMethod(method), method);
