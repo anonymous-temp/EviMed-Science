@@ -32,11 +32,68 @@ import { SEAMS, toArgs, toTurnEnd, toUsage } from "@evimed/harness-port";
 
 import { HttpError } from "./security.mjs";
 
-/** Methods the control plane may call. Derived, never restated (§5.5). */
-export const ALLOWED_WIRE_METHODS = Object.freeze(new Set(SEAMS.wire.unary));
+/**
+ * Methods the control plane may call. Derived, never restated (§5.5).
+ *
+ * The gateway's own pseudo-endpoints are listed separately in the manifest and
+ * folded in here, because they are not service methods: the gateway claims
+ * `$events/result` before any method lookup, so it obeys neither the
+ * `namespace/method` grammar nor the `unaryArgs` contract that describes a
+ * typert call. Putting it among the service methods would have meant relaxing
+ * the grammar check that proves 0.1.2 renamed every method from dotted to
+ * slashed — losing a real guarantee to accommodate one endpoint that was never
+ * of that kind.
+ */
+export const ALLOWED_WIRE_METHODS = Object.freeze(
+  new Set([...SEAMS.wire.unary, ...Object.values(SEAMS.wire.gatewayEndpoints)]),
+);
 
 /** Methods explicitly refused, so a new one cannot arrive by being unlisted. */
 export const DENIED_WIRE_METHODS = Object.freeze(new Set(SEAMS.wire.denied));
+
+/**
+ * Decodes one non-`emit` host frame into the interaction it represents.
+ *
+ * Pure, and separate from the pump, because this is the shape a golden frame
+ * can pin. Recorded live from 0.1.2-alpha.3 by driving a run into a sandbox
+ * escalation:
+ *
+ *   { type: "waterfall", event: "approval/request",
+ *     eventId: "ba9a5930-…", agentId: "session-acbc4383-…",
+ *     request: { toolName: "bash", callId: "call_…",
+ *                reason: "escalate sandbox to danger-full-access: …" } }
+ *
+ * `agentId` is the **session id**, not an opaque agent handle — that is what
+ * makes a question routable to the run that asked it, and it is the single
+ * fact a reader is most likely to get wrong from the field's name.
+ *
+ * @param {Record<string, any>} frame
+ * @returns {{ kind: 'approval'|'question', eventId: string, sessionId: string, request: Record<string, any> }
+ *          | { kind: 'withdrawn', eventId: string }
+ *          | null}
+ */
+export function decodeHostInteraction(frame) {
+  if (frame?.type === "cancel") {
+    const eventId = String(frame.eventId ?? "");
+    return eventId ? { kind: "withdrawn", eventId } : null;
+  }
+  if (frame?.type !== "waterfall") return null;
+  const events = SEAMS.wire.hostInteractionEvents;
+  const kind = Object.keys(events).find((name) => events[name] === frame.event);
+  // An unlisted waterfall is not decoded into a guess. The caller declines it,
+  // which is the only answer that neither invents a decision nor leaves the
+  // kernel holding a tool call open.
+  if (!kind) return null;
+  const eventId = String(frame.eventId ?? "");
+  const sessionId = String(frame.agentId ?? "");
+  if (!eventId) return null;
+  return {
+    kind: /** @type {'approval'|'question'} */ (kind),
+    eventId,
+    sessionId,
+    request: frame.request && typeof frame.request === "object" ? frame.request : {},
+  };
+}
 
 /**
  * @param {string} method
@@ -290,6 +347,41 @@ export class DshRuntimeAdapter {
   }
 
   /**
+   * Answers one question the kernel asked on the host stream.
+   *
+   * The reply is an ordinary RPC (`$events/result`) rather than a frame back
+   * up the stream, and the gateway validates it with exact-key equality: an
+   * outcome carrying one field more than its kind allows is refused as
+   * "invalid Remote event result", not ignored. All four shapes below were
+   * probed against a running 0.1.2-alpha.3 kernel, including the refusals —
+   * the frame this replaces in our fixtures was hand-written and named an
+   * event (`tools/pre-execute`) the kernel never sends.
+   *
+   * `next` is not "do nothing". The gateway settles a waterfall as `next` only
+   * once every client it delivered to has declined, so declining is how a
+   * control plane that cannot route a question hands it back instead of
+   * holding the run open. Not replying at all is the one option that stalls
+   * the kernel.
+   *
+   * @param {{ eventId: string, outcome: { kind: 'result', value?: unknown } | { kind: 'next' } | { kind: 'rejected', error: unknown }, signal?: AbortSignal }} input
+   * @returns {Promise<void>}
+   */
+  async answerHostEvent({ eventId, outcome, signal }) {
+    const clientId = this.clientId ?? null;
+    if (!clientId) {
+      // Named rather than swallowed: no client id means the `$events` stream
+      // never opened or has been replaced, so the pending question belongs to
+      // a generation that no longer exists. Answering it would be refused by
+      // the gateway anyway, and reporting nothing would look like success.
+      throw new HttpError(409, "runtime_host_stream_unavailable", "The kernel's host event stream is not subscribed, so there is nothing to answer on.");
+    }
+    if (!SEAMS.wire.hostInteractionOutcomeKinds.includes(String(outcome?.kind))) {
+      throw new HttpError(400, "runtime_interaction_outcome_invalid", `Outcome kind ${String(outcome?.kind)} is not one the kernel accepts.`);
+    }
+    await this.call(SEAMS.wire.gatewayEndpoints.hostInteractionResult, { clientId, eventId: String(eventId), outcome }, { signal });
+  }
+
+  /**
    * Subscribes to the host stream and keeps running state current.
    * @param {{ signal: AbortSignal, onEvent?: (frame: Record<string, any>) => void }} input
    * @returns {Promise<void>}
@@ -301,14 +393,21 @@ export class DshRuntimeAdapter {
       // arrives exactly once per connection generation.
       if (frame?.type === "ready") {
         this.hostInfo = frame.host ?? null;
+        // The gateway mints one client id per `$events` subscription and
+        // refuses any result that does not carry it back — a reply keyed by
+        // the event alone is rejected with "identifies no active event
+        // stream". So this is not diagnostic data: without it there is no way
+        // to answer a question the kernel asks, and the id exists only here.
+        this.clientId = typeof frame.clientId === "string" ? frame.clientId : null;
         onEvent?.(frame);
         continue;
       }
       if (frame?.type !== "emit") {
         // `waterfall` is the kernel asking this control plane a question it
-        // expects an answer to. Nothing here answers one yet, and a silent
-        // drop would leave the kernel waiting for a reply that never comes —
-        // so it is surfaced to the caller rather than filtered out here.
+        // expects an answer to, and `cancel` is it withdrawing one. Both are
+        // surfaced rather than filtered: the kernel holds the tool call open
+        // until every client it delivered to has replied, so dropping a
+        // waterfall silently stalls the run at the moment it asked for help.
         onEvent?.(frame);
         continue;
       }
