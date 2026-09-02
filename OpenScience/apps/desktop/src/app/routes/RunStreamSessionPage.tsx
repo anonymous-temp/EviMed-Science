@@ -94,6 +94,12 @@ export function RunStreamSessionPage() {
     <div className="mx-auto flex h-full w-full max-w-content flex-col gap-4 p-4">
       <div className="flex-1 overflow-y-auto">
         {runId ? (
+          // No `onAnswerInteraction`: the control plane does not forward the
+          // kernel's `waterfall` frames and has no route that accepts a reply
+          // for one, so there is nothing to hand an answer to. The thread still
+          // shows the request and says the channel is missing — see
+          // `RunInteractionPrompt`. Passing a sender here is the whole change
+          // once the server half exists.
           <RunStreamThread view={view} status={status} retries={retries} onReconnect={reconnect} />
         ) : (
           <EmptyState

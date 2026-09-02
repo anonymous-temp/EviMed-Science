@@ -115,6 +115,16 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.getByText("run-degraded")).toBeInTheDocument();
   });
 
+  it("says which phase an open run is in, not only that it is running", async () => {
+    // The projection was already on the wire and read by exactly one filter
+    // chip; the row itself never mentioned it, so "已排队，尚未派发" and
+    // "按门禁意见修复中" both rendered as 执行中 for as long as they lasted.
+    listWebAgentRuns.mockResolvedValue([webRun({ id: "run-repairing", status: "running", phase: "repairing" })]);
+    renderPage();
+    await screen.findByText("run-repairing");
+    expect(screen.getByText("按门禁意见修复中")).toBeInTheDocument();
+  });
+
   it("does not show the 待人工复核 chip when nothing needs it", async () => {
     listWebAgentRuns.mockResolvedValue([webRun({ status: "succeeded", phase: "accepted" })]);
     renderPage();

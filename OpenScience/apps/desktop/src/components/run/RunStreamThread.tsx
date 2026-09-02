@@ -1,8 +1,10 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { BlockList } from "@/components/thread/BlockList";
+import { RunInteractionPrompt } from "@/components/run/RunInteractionPrompt";
+import { RunTree } from "@/components/run/RunTree";
 import { cn } from "@/lib/cn";
 import type { RunStreamStatus } from "@/lib/useRunStream";
-import { TERMINAL_RUN_STATUSES, type RunIssue, type RunView } from "@/lib/runStream";
+import { budgetLimit, TERMINAL_RUN_STATUSES, type RunView } from "@/lib/runStream";
 
 // Imported rather than repeated: a run the control plane considers finished
 // beside a badge that still spins is the kind of disagreement nobody reports,
@@ -27,12 +29,6 @@ const STATE_LABEL: Record<string, string> = {
   succeeded: "已交付",
   failed: "未完成",
   canceled: "已取消",
-};
-
-const SEVERITY_LABEL: Record<RunIssue["severity"], string> = {
-  required: "必须修正",
-  advisory: "建议修正",
-  optional: "可选",
 };
 
 function StateBadge({ state, errorCode }: { state: string; errorCode: string | null }) {
@@ -64,7 +60,14 @@ function StateBadge({ state, errorCode }: { state: string; errorCode: string | n
  * A deliverable's *issues* are shown even when the run is still going, because
  * the gate returns its verdict as a value and the run repairs in place — a user
  * watching a run that has been rejected twice should be able to see what for,
- * rather than learn it from a final failure.
+ * rather than learn it from a final failure. They live in the *run tree* now,
+ * beside the child that produced them: the flat 交付物/分工 pair this used to
+ * draw showed both facts and neither relation, so a reader could see that a
+ * package was rejected and not who had been asked for it.
+ *
+ * A *request from the kernel* is drawn above the transcript. A run blocked on
+ * an approval or a question is doing nothing, visibly, and the reason has to be
+ * the first thing on screen rather than the last.
  *
  * A *gap* is shown, because the replay buffer is bounded and a client that fell
  * behind it has a hole in its picture. Silently continuing would render a
@@ -79,11 +82,18 @@ export function RunStreamThread({
   status,
   retries,
   onReconnect,
+  onAnswerInteraction,
 }: {
   view: RunView;
   status: RunStreamStatus;
   retries: number;
   onReconnect: () => void;
+  /**
+   * Answers a request from the kernel. Absent while the control plane has no
+   * channel for one — see `RunInteractionPrompt`, which then says so rather
+   * than offering a button that cannot work.
+   */
+  onAnswerInteraction?: (answer: { requestId: string; decision: "allow" | "deny" | "answer"; text?: string }) => Promise<void>;
 }) {
   const unknown = Object.entries(view.unknownEvents);
   return (
@@ -118,65 +128,29 @@ export function RunStreamThread({
         </div>
       ) : null}
 
+      {/* Above the transcript, not below it: a blocked run is waiting on this
+        * and only this, and a person should not have to scroll a long
+        * conversation to find out what it is waiting for. */}
+      {view.interactions.map((interaction) => (
+        <RunInteractionPrompt
+          key={interaction.requestId}
+          interaction={interaction}
+          {...(onAnswerInteraction ? { onAnswer: onAnswerInteraction } : {})}
+        />
+      ))}
+
       <BlockList blocks={view.blocks} />
 
-      {view.deliverables.length ? (
-        <section className="rounded-card border border-border bg-surface p-4 shadow-card">
-          <h2 className="text-ui-sm font-medium text-text">交付物</h2>
-          <ul className="mt-3 flex flex-col gap-3">
-            {view.deliverables.map((item) => (
-              <li key={item.id} className="flex flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-ui-sm text-text">{item.id}</span>
-                  <span className="rounded-input bg-surface-2 px-1.5 py-0.5 text-caption text-muted">
-                    {item.contractKind}
-                  </span>
-                  <span className="text-caption text-muted">{item.status}</span>
-                </div>
-                {item.issues.length ? (
-                  <ul className="flex flex-col gap-1 pl-3">
-                    {item.issues.map((issue, index) => (
-                      <li key={`${item.id}:${issue.code}:${index}`} className="text-caption text-muted">
-                        <span className={cn(issue.severity === "required" && "text-error")}>
-                          [{SEVERITY_LABEL[issue.severity]}]
-                        </span>{" "}
-                        {issue.message}
-                        {issue.path ? <span className="text-muted"> · {issue.path}</span> : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {view.subagents.length ? (
-        <section className="rounded-card border border-border bg-surface p-4 shadow-card">
-          <h2 className="text-ui-sm font-medium text-text">分工</h2>
-          <ul className="mt-3 flex flex-col gap-2">
-            {view.subagents.map((child) => (
-              <li key={child.childSessionId} className="flex flex-wrap items-center gap-2 text-ui-sm text-text">
-                <span>{child.label}</span>
-                <span className="rounded-input bg-surface-2 px-1.5 py-0.5 text-caption text-muted">
-                  {child.capability}
-                </span>
-                <span className="text-caption text-muted">{child.status}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <RunTree view={view} />
 
       <footer className="flex flex-wrap gap-4 text-caption text-muted">
         <span>
           步骤 {view.budget.steps}
-          {view.budget.limits.steps ? ` / ${view.budget.limits.steps}` : ""}
+          {budgetLimit(view.budget.limits, "steps") ? ` / ${budgetLimit(view.budget.limits, "steps")}` : ""}
         </span>
         <span>
           令牌 {view.budget.tokens}
-          {view.budget.limits.tokens ? ` / ${view.budget.limits.tokens}` : ""}
+          {budgetLimit(view.budget.limits, "tokens") ? ` / ${budgetLimit(view.budget.limits, "tokens")}` : ""}
         </span>
         {view.evidence.total ? <span>证据 {view.evidence.total} 条</span> : null}
         {unknown.length ? (

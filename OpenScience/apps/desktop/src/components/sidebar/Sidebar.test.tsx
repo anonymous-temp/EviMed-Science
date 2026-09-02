@@ -85,7 +85,7 @@ describe("Sidebar research-agent navigation", () => {
     const files = screen.getByRole("button", { name: "知识库" });
     const notebooks = screen.getByRole("button", { name: "科研笔记本" });
     const memory = screen.getByRole("button", { name: "科研记忆" });
-    const researchAgents = screen.getByRole("button", { name: "科研工作流" });
+    const researchAgents = screen.getByRole("button", { name: "能力模板" });
     expect(files.compareDocumentPosition(notebooks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(notebooks.compareDocumentPosition(memory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(memory.compareDocumentPosition(researchAgents) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -117,7 +117,7 @@ describe("Sidebar research-agent navigation", () => {
     mocks.hasWebApi = false;
     renderSidebar();
     expect(screen.queryByRole("button", { name: "科研记忆" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "科研工作流" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "能力模板" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "知识库" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "科研笔记本" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "运行记录" })).toBeInTheDocument();

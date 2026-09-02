@@ -2,7 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentsPage } from "./AgentsPage";
+import { AgentsPage, capabilityBrief } from "./AgentsPage";
+import { useUiStore } from "@/lib/store";
 
 const agents = [
   {
@@ -71,6 +72,7 @@ const agents = [
 const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
   hasWebApi: true,
+  kernel: "dsh" as "dsh" | "opencode",
 }));
 
 vi.mock("@/lib/apiClient", () => ({
@@ -78,6 +80,10 @@ vi.mock("@/lib/apiClient", () => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
+  webRuntimeProfile: () => ({
+    kernel: mocks.kernel,
+    sessionView: mocks.kernel === "dsh" ? "run-stream" : "legacy",
+  }),
 }));
 
 function LocationProbe() {
@@ -90,6 +96,8 @@ describe("AgentsPage", () => {
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     mocks.hasWebApi = true;
+    mocks.kernel = "dsh";
+    useUiStore.setState({ composerDraft: null });
   });
 
   it("points desktop users to the hosted workspace instead of an empty catalog", () => {
@@ -101,7 +109,7 @@ describe("AgentsPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(screen.getByText("科研工作流仅在 EviMed 在线工作空间中可用")).toBeInTheDocument();
+    expect(screen.getByText("能力模板仅在 EviMed 在线工作空间中可用")).toBeInTheDocument();
     expect(screen.getByText("请在 EviMed 在线工作空间中使用此功能。")).toBeInTheDocument();
     expect(mocks.listWebResearchAgents).not.toHaveBeenCalled();
   });
@@ -125,7 +133,7 @@ describe("AgentsPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole("heading", { name: "科研工作流" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "能力模板" })).toBeInTheDocument();
     expect(await screen.findByText("药品安全性分析")).toBeInTheDocument();
     expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
     expect(screen.getByText("自动化 Meta 分析")).toBeInTheDocument();
@@ -150,17 +158,21 @@ describe("AgentsPage", () => {
     );
     await screen.findByText("药品安全性分析");
 
-    await userEvent.type(screen.getByRole("searchbox", { name: "搜索科研工作流" }), "超说明书");
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索能力模板" }), "超说明书");
     expect(screen.queryByText("药品安全性分析")).not.toBeInTheDocument();
     expect(screen.getByText("超说明书用药分析")).toBeInTheDocument();
 
-    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索科研工作流" }));
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索能力模板" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "按分类筛选" }), "药物警戒");
     expect(screen.getByText("药品安全性分析")).toBeInTheDocument();
     expect(screen.queryByText("超说明书用药分析")).not.toBeInTheDocument();
   });
 
-  it("opens the shared live-session route with a specialist draft selection", async () => {
+  it("prefills a brief that names the capability, and binds nothing (§9.8)", async () => {
+    // The change F1 makes here is what a click *means*. Under one composition a
+    // template is a suggestion the orchestrator reads out of the brief, not a
+    // package the session is married to — so the URL carries no agent and the
+    // draft carries the capability by name.
     render(
       <MemoryRouter initialEntries={["/agents"]}>
         <Routes>
@@ -169,8 +181,44 @@ describe("AgentsPage", () => {
         </Routes>
       </MemoryRouter>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /打开药品安全性分析/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析模板/ }));
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/live"));
+    expect(screen.getByTestId("location")).not.toHaveTextContent("agent=");
+    const draft = useUiStore.getState().composerDraft ?? "";
+    expect(draft).toContain("药品安全性分析");
+    expect(draft).toContain("分析奥希替尼相关的心脏安全性信号");
+    expect(draft).toBe(capabilityBrief("药品安全性分析", "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"));
+  });
+
+  it("keeps the retiring view's session binding, because the kernel rollback is one line", async () => {
+    mocks.kernel = "opencode";
+    render(
+      <MemoryRouter initialEntries={["/agents"]}>
+        <Routes>
+          <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/live" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析模板/ }));
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/live?agent=adr-analysis"));
+    expect(useUiStore.getState().composerDraft).toBeNull();
+  });
+
+  it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
+    mocks.listWebResearchAgents.mockRejectedValueOnce(new Error("HTTP 503"));
+    render(
+      <MemoryRouter>
+        <AgentsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 503");
+
+    mocks.listWebResearchAgents.mockResolvedValue(agents);
+    await userEvent.click(screen.getByRole("button", { name: /重试/ }));
+    expect(await screen.findByText("药品安全性分析")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

@@ -31,6 +31,10 @@ const mocks = vi.hoisted(() => {
     getWebOidcStartUrl: vi.fn(() => "/api/auth/oidc/start?returnTo=%2Fsettings"),
     loginWeb: vi.fn(),
     workspaceBase: vi.fn(),
+    // The kernel the control plane reports. `opencode` is the default because
+    // that is what these tests were written against and what a rollback
+    // restores; the F1 settings cleanup is asserted separately, under `dsh`.
+    kernel: "opencode" as "dsh" | "opencode",
   };
 });
 
@@ -66,6 +70,7 @@ vi.mock("@/lib/apiClient", () => ({
   hasCommandBackend: true,
   hasWebApi: true,
   loginWeb: mocks.loginWeb,
+  webRuntimeProfile: () => ({ kernel: mocks.kernel, sessionView: mocks.kernel === "dsh" ? "run-stream" : "legacy" }),
   WEB_SESSION_ENDED_EVENT: "open-science:web-session-ended",
 }));
 
@@ -259,5 +264,39 @@ describe("SettingsPage hosted web model configuration", () => {
     expect(screen.getByRole("radio", { name: "浅色" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "深色" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "跟随系统" })).toBeInTheDocument();
+  });
+});
+
+describe("SettingsPage under the DSH kernel (F1 settings cleanup, §18.3)", () => {
+  beforeEach(() => {
+    mocks.kernel = "dsh";
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u1", name: "Alice" } });
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "password" });
+    mocks.workspaceBase.mockResolvedValue("/workspace/default");
+  });
+
+  it("drops the retiring kernel's runtime, model and MCP cards, and keeps account / projects / resources / readiness", async () => {
+    render(<SettingsPage />);
+    await screen.findByText("Alice");
+
+    // Gone: three cards that would let a person configure nothing. The runtime
+    // URL card is the one that matters most — it offered a text field and a
+    // Connect button for a runtime the control plane starts.
+    expect(screen.queryByText("模型")).toBeNull();
+    expect(screen.queryByText("MCP 服务器")).toBeNull();
+    expect(screen.queryByPlaceholderText("托管运行时代理")).toBeNull();
+    expect(screen.queryByRole("button", { name: "重新连接" })).toBeNull();
+
+    // Kept: everything that belongs to the control plane rather than the kernel.
+    expect(screen.getByText("托管账户")).toBeInTheDocument();
+    expect(screen.getByText("托管项目")).toBeInTheDocument();
+    expect(screen.getByText("托管资源")).toBeInTheDocument();
+    expect(screen.getByText("部署就绪检查")).toBeInTheDocument();
+    expect(screen.getByText("外观")).toBeInTheDocument();
+
+    // And the runtime card is replaced rather than silently missing: a reader
+    // who went looking for it is told where the configuration went.
+    expect(screen.getByText("智能体运行时")).toBeInTheDocument();
+    expect(screen.getByText(/由控制面启动并管理/)).toBeInTheDocument();
   });
 });

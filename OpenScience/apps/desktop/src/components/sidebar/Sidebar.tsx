@@ -156,7 +156,7 @@ export function Sidebar() {
         <NavRow icon={<FolderTree size={16} />} label="知识库" active={location.pathname === "/files"} onClick={() => navigate("/files")} />
         <NavRow icon={<NotebookPen size={16} />} label="科研笔记本" active={location.pathname === "/notebooks"} onClick={() => navigate("/notebooks")} />
         {hostedWeb && <NavRow icon={<Brain size={16} />} label="科研记忆" active={location.pathname === "/memory"} onClick={() => navigate("/memory")} />}
-        {hostedWeb && <NavRow icon={<Bot size={16} />} label="科研工作流" active={location.pathname === "/agents"} onClick={() => navigate("/agents")} />}
+        {hostedWeb && <NavRow icon={<Bot size={16} />} label="能力模板" active={location.pathname === "/agents"} onClick={() => navigate("/agents")} />}
         <NavRow icon={<FlaskConical size={16} />} label="运行记录" active={location.pathname === "/runs"} onClick={() => navigate("/runs")} />
       </nav>
 

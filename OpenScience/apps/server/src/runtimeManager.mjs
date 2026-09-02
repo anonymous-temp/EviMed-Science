@@ -3931,9 +3931,14 @@ export class RuntimeManager {
       workloadTokenRefreshMs: null,
     };
     let modelGatewaySync = { configured: 0, token: null, payload: null };
+    // Declared beside the other sync results rather than inside the `try`
+    // below: the runtime record that mints the cookie from it is built after
+    // that block closes, and a `let` inside it is simply not in scope there.
+    // Tests never caught it because they take the mock path, which carries its
+    // own cookie; lint did.
+    /** @type {string | null} */
+    let browserSessionSecret = null;
     try {
-      /** @type {string | null} */
-      let browserSessionSecret = null;
       if (runtimeKernelName(this.config) === "dsh") {
         // DSH takes the general skills, the specialist packages and the MCP
         // command as rows of one generated file (`renderProfilePatch`) rather
