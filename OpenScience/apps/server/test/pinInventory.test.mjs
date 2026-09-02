@@ -28,7 +28,25 @@ test("every occurrence of the pin is classified", async () => {
   // Not a floor: an inventory that suddenly finds a handful of sites has a
   // broken search, and a broken search reports nothing wrong.
   assert.ok(report.occurrences.length > 50, `only ${report.occurrences.length} occurrences; the sweep is broken`);
-  assert.ok(report.counts.pin > 0 && report.counts.provenance > 0 && report.counts.history > 0);
+  for (const kind of ["pin", "provenance", "history", "prose"]) {
+    assert.ok(report.counts[kind] > 0, `no ${kind} occurrences; a whole category vanished from the sweep`);
+  }
+});
+
+test("a record of what a live kernel did outranks the prose rule that would swallow it", async () => {
+  // Rule order is load-bearing, and getting it wrong is silent. The prose rule
+  // ("a comment naming a version something happened at") was written first
+  // because it is the narrowest test, and it promptly absorbed six real
+  // provenance records — "Confirmed against a running 0.1.2-alpha.3",
+  // "established by booting", "not inferred". The inventory stayed green the
+  // whole time: nothing was unclassified, protection had just moved to a
+  // weaker bucket. That is this repository's most familiar failure shape.
+  const report = await checkPinInventory({});
+  const kindOf = (needle) => report.occurrences.find((entry) => entry.file.includes(needle))?.verdict?.kind;
+  for (const file of ["src/dshMux.mjs", "src/mockDshRuntime.mjs", "src/dshRuntimeAdapter.mjs"]) {
+    assert.equal(kindOf(file), "provenance", `${file} records what a running kernel did and must not be filed as prose`);
+  }
+  assert.ok(report.counts.provenance >= 13, `only ${report.counts.provenance} provenance records; a rule is swallowing them`);
 });
 
 test("what a live kernel produced is never filed as a pin", async () => {
@@ -43,7 +61,7 @@ test("what a live kernel produced is never filed as a pin", async () => {
 });
 
 test("the escaped spelling is swept, which is what the rewriter missed", async () => {
-  // `assert.match(dockerfile, /ARG DSH_VERSION=0\.1\.2-alpha\.3/)` is this
+  // `assert.match(dockerfile, /ARG DSH_VERSION=0\.1\.2-alpha\.5/)` is this
   // repository's house style for a pin assertion, and it is invisible to a
   // search for the literal. Ten such sites existed while a tool reported the
   // tree fully swept.
@@ -67,11 +85,11 @@ test("a file no rule claims is reported rather than absorbed", () => {
     "OpenScience/runtime/mcp/evimed-research/server.py",
     "OpenScience/capabilities/clinical-evidence-synthesis/capability.yaml",
   ]) {
-    assert.equal(classify({ file, line: 1, text: "0.1.2-alpha.3" }), null, `${file} must be reported, not defaulted`);
+    assert.equal(classify({ file, line: 1, text: "0.1.2-alpha.5" }), null, `${file} must be reported, not defaulted`);
   }
   // And a rule cannot claim everything: the catch-all that would make this
   // test pass forever is the failure mode, so assert a real path still lands
   // where it should.
-  assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.1.2-alpha.3"' })?.kind, "pin");
+  assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.1.2-alpha.5"' })?.kind, "pin");
   assert.ok(RULES.every((rule) => rule.why && rule.why.length > 20), "every rule states why its kind is the right one");
 });

@@ -235,7 +235,11 @@ async function checkRuntimePins() {
   const kernelTreePinned =
     /^ARG DSH_PUBLISHED_BEFORE=\d{4}-\d{2}-\d{2}T/m.test(dockerfile) &&
     /--before="\$\{DSH_PUBLISHED_BEFORE\}"/.test(dockerfile) &&
-    /names\.length < 50/.test(dockerfile) &&
+    // The plausibility floor, wherever the packages live. alpha.5 stopped
+    // hoisting the 223 subpackages beside the pin and left them under its own
+    // `node_modules`, so the scan searches both layouts now; what this check
+    // holds is that a floor still exists, not where the readdir points.
+    /dsh\*\)? packages found|length >= 50/.test(dockerfile) &&
     /filter\(\(\[, v\]\) => v !== pin\)/.test(dockerfile);
   if (
     digestArgs.every((name) => new RegExp(`^ARG ${name}=[a-f0-9]{64}$`, "m").test(dockerfile)) &&

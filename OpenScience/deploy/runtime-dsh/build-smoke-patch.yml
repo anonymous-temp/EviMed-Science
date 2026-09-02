@@ -58,8 +58,17 @@
 # The preset ships with the bundle as a system-trusted root, so a copy a user
 # made into their own root cannot shadow it: the first root wins a name
 # collision, and system roots come first.
+# The preset root this image ships, named the same way the control plane's
+# generated profile patch names it. It was absent here while the image copied
+# the preset into the kernel's own directory; alpha.5 moved that directory into
+# a package and made configured roots work, so both patches name the root now.
+# Without it the boot is fine and the session is not: "preset
+# \"evimed-universal\" not found (available: standard, ptc, minimal, cordis)".
 - id: agent-presets
   config:
+    roots:
+      - path: /opt/evimed/dsh/presets
+        trust: system
     default: 'evimed-universal'
 
 # The research tools. The MCP process runs outside the kernel's sandbox by
@@ -88,7 +97,7 @@
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'
-    dshVersion: '0.1.2-alpha.3'
+    dshVersion: '0.1.2-alpha.5'
 
 
 # Inside a container whose only writable place is the workspace nothing

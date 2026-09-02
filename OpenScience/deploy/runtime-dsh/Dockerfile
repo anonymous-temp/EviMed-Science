@@ -12,15 +12,23 @@ FROM ${RUNTIME_BASE_IMAGE}
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
-ARG DSH_VERSION=0.1.2-alpha.3
+ARG DSH_VERSION=0.1.2-alpha.5
 ARG DSH_CORDIS_VERSION=4.0.2
 # The instant the pin was published. `@deepseek-ai/dsh` declares all 61 of its
-# subpackages as `^0.1.2-alpha.3`, so naming an exact version pins one package
+# subpackages as `^0.1.2-alpha.5`, so naming an exact version pins one package
 # and floats the other 214: installing the pin on 2026-09-02 resolved 213 of
 # them to 0.1.2-alpha.4, published the day before. npm's `--before` resolves
 # every dependency to what existed at this instant, which is the only way to
 # ask the registry for the tree this pin was tested against.
-ARG DSH_PUBLISHED_BEFORE=2026-09-01T00:00:00.000Z
+#
+# It has to move with DSH_VERSION and it is not a version string, so no sweep
+# for the old pin will ever find it. Left behind at 2026-09-01 while the pin
+# moved to alpha.5 (published 2026-09-02T08:38:34.797Z), this line made the
+# image unable to build the version named three lines above it — the exact
+# failure an adversarial review predicted of a rewriter that moved versions and
+# nothing else. `apps/server/test/deploy.test.mjs` now asks the registry
+# whether this instant admits the pin.
+ARG DSH_PUBLISHED_BEFORE=2026-09-02T09:38:34.797Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
@@ -123,7 +131,7 @@ RUN set -eux; \
 # here said why without noticing it was describing this build: a range installs
 # "a mixture of releases that no test has ever seen together". The ranges are
 # inside `@deepseek-ai/dsh`'s own dependencies — 61 of them at
-# `^0.1.2-alpha.3` — so `npm install @deepseek-ai/dsh@0.1.2-alpha.3` on
+# `^0.1.2-alpha.5` — so `npm install @deepseek-ai/dsh@0.1.2-alpha.5` on
 # 2026-09-02 produced a root at alpha.3 and 213 subpackages at alpha.4, while
 # the version assertion below it passed. An image labelled with one kernel
 # containing another, reporting success: the failure looked exactly like
@@ -132,7 +140,13 @@ RUN set -eux; \
 # So the resolution is fixed by `--before` and then *verified across the whole
 # tree*, because a date filter is a request and the assertion is the guarantee.
 # The scan fails when it finds implausibly few packages, so a broken readdir
-# reports a broken scan rather than a clean tree.
+# reports a broken scan rather than a clean tree. It did, on the alpha.5 build:
+# npm placed all 223 subpackages under the pin's own `node_modules` instead of
+# hoisting them beside it, and a scan that knew only the hoisted layout found
+# one package and said so. Both layouts are searched now, and the one in use is
+# printed — a layout change should be visible in the log rather than inferred
+# from a count. (The cordis check below already looked nested first; the two
+# halves of this RUN had disagreed about the tree shape since it was written.)
 RUN set -eux; \
   npm config set registry "${NPM_REGISTRY}"; \
   npm install -g --no-fund --no-audit --before="${DSH_PUBLISHED_BEFORE}" "@deepseek-ai/dsh@${DSH_VERSION}"; \
@@ -142,9 +156,11 @@ RUN set -eux; \
   node -e '\
     const fs = require("fs"), path = require("path"); \
     const [pin] = process.argv.slice(1); \
-    const dir = "/usr/local/lib/node_modules/@deepseek-ai"; \
+    const roots = ["/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai", "/usr/local/lib/node_modules/@deepseek-ai"]; \
+    const dir = roots.find((candidate) => { try { return fs.readdirSync(candidate).filter((n) => n.startsWith("dsh")).length >= 50; } catch { return false; } }); \
+    if (!dir) { console.error("no @deepseek-ai directory holds 50+ dsh* packages; looked in " + roots.join(" and ") + " — the scan, not the tree, is wrong"); process.exit(2); } \
+    console.log("scanning " + dir); \
     const names = fs.readdirSync(dir).filter((n) => n.startsWith("dsh")); \
-    if (names.length < 50) { console.error("only " + names.length + " @deepseek-ai/dsh* packages found; the scan, not the tree, is wrong"); process.exit(2); } \
     const drifted = names.map((n) => [n, JSON.parse(fs.readFileSync(path.join(dir, n, "package.json"), "utf8")).version]).filter(([, v]) => v !== pin); \
     if (drifted.length) { console.error(drifted.length + " of " + names.length + " @deepseek-ai/dsh* packages are not " + pin + "; the registry resolved newer subpackages, which usually means NPM_REGISTRY is a mirror that does not honour --before (its packuments carry no publish times). Point NPM_REGISTRY at a registry that does, or vendor the tree."); for (const [n, v] of drifted.slice(0, 8)) console.error("  " + n + " = " + v); process.exit(1); } \
     console.log("all " + names.length + " @deepseek-ai/dsh* packages are " + pin); \
@@ -355,9 +371,19 @@ RUN set -eux; \
 # only as a failed session in production. (No comments inside the RUN: a
 # backslash-continued line and a `#` comment do not mix, and the silent result
 # is the rest of the command disappearing.)
-ARG DSH_PRESET_ROOT=/usr/local/lib/node_modules/@deepseek-ai/dsh/config/agent-presets
+# A root this image owns, named by the profile patch's `agent-presets.roots`.
+#
+# It used to be copied into the kernel's own preset directory, because at
+# 0.1.2-alpha.3 `composeProfile` overwrote the row's `roots` on every boot and
+# a configured root was silently discarded. That directory no longer exists at
+# alpha.5 — the presets moved inside `@deepseek-ai/dsh-agent-presets` — and the
+# behaviour it forced is gone with it: the shipped root is now *prepended*
+# before configured roots rather than replacing them, so naming our own root
+# works and is documented. Which returns this image to the rule it should never
+# have bent: a container does not write into its own installation.
+ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
 RUN set -eux; \
-  test -d "${DSH_PRESET_ROOT}"; \
+  mkdir -p "${DSH_PRESET_ROOT}"; \
   cp -a /opt/evimed/socket/presets/evimed-universal "${DSH_PRESET_ROOT}/evimed-universal"; \
   chmod -R a-w "${DSH_PRESET_ROOT}/evimed-universal"; \
   grep -q "^name: evimed-universal$" "${DSH_PRESET_ROOT}/evimed-universal/preset.yml"; \

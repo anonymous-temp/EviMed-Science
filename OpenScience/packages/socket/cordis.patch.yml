@@ -74,6 +74,21 @@
 - id: web-fetch-http
   disabled: true
 
+# The third condition, and it is third because upstream moved. 0.1.2-alpha.4
+# turned `fetch` on by default "for the Python SDK, Headless, ACP and custom
+# Profiles" — we are a custom profile — so the value this composition had been
+# inheriting flipped underneath it while every file here stayed the same. The
+# image's own dump-config comparison caught it, which is the only reason it is
+# not still true and unnoticed.
+#
+# Pinned rather than accepted: an inherited default that changed once can change
+# again, and the two defences above (the tool is absent, the provider is
+# disabled) are exactly the ones a single edit can undo.
+- id: tool-web
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
+
 # Reports the deployment's enabled plugin list to the model provider on every
 # request, new in 0.1.2. The plugin list is this platform's composition — which
 # capability packages exist, which gates are mounted — and it is not the

@@ -549,14 +549,14 @@ test("web compose includes a buildable runtime image profile with every download
   assert.match(compose, /dsh-runtime-image:/);
   assert.match(
     compose,
-    /image:\s+\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0\.1\.2-alpha\.3-uv-0\.11\.26\}/,
+    /image:\s+\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0\.1\.2-alpha\.5-uv-0\.11\.26\}/,
   );
   assert.match(compose, /dockerfile:\s+deploy\/runtime-dsh\/Dockerfile/);
   assert.match(compose, /profiles:\s+\["runtime-image"\]/);
   // The kernel arrives as an npm global at a pinned version rather than as a
   // fetched archive, so what is version-pinned and what is digest-pinned are
   // different lists now. Both still have to be pinned.
-  assert.match(compose, /DSH_VERSION:\s+\$\{OPEN_SCIENCE_DSH_VERSION:-0\.1\.2-alpha\.3\}/);
+  assert.match(compose, /DSH_VERSION:\s+\$\{OPEN_SCIENCE_DSH_VERSION:-0\.1\.2-alpha\.5\}/);
   assert.match(compose, /DSH_CORDIS_VERSION:\s+\$\{OPEN_SCIENCE_DSH_CORDIS_VERSION:-4\.0\.2\}/);
   assert.match(compose, /SOCKET_VERSION:\s+\$\{OPEN_SCIENCE_SOCKET_VERSION:-0\.1\.0\}/);
   assert.match(compose, /UV_VERSION:\s+\$\{OPEN_SCIENCE_UV_VERSION:-0\.11\.26\}/);
@@ -592,7 +592,7 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
   const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
   assert.match(dockerfile, /^ARG TARGETARCH$/m);
   assert.doesNotMatch(dockerfile, /^ARG TARGETARCH=/m);
-  assert.match(dockerfile, /ARG DSH_VERSION=0\.1\.2-alpha\.3/);
+  assert.match(dockerfile, /ARG DSH_VERSION=0\.1\.2-alpha\.5/);
   assert.match(dockerfile, /ARG UV_VERSION=0\.11\.26/);
   // Both architectures of both downloads. `NODE_SHA256_ARM64` used to be absent
   // from this list and empty in the Dockerfile, where the verification sat
@@ -613,12 +613,16 @@ test("the runtime image pins and verifies tools, architectures, and licenses", a
   // one stops the build rather than skipping the check.
   assert.match(dockerfile, /if \[ -z "\$\{NODE_SHA256\}" \]; then .*refusing to install an unverified runtime.*exit 1; fi/);
   // The kernel's substitute for an archive digest. `npm install
-  // @deepseek-ai/dsh@0.1.2-alpha.3` on its own resolved a root at alpha.3 with
+  // @deepseek-ai/dsh@0.1.2-alpha.5` on its own resolved a root at alpha.3 with
   // 213 subpackages at alpha.4 and reported success, so the date filter states
   // the request and the scan over every installed package is the guarantee.
   assert.match(dockerfile, /^ARG DSH_PUBLISHED_BEFORE=\d{4}-\d{2}-\d{2}T/m);
   assert.match(dockerfile, /--before="\$\{DSH_PUBLISHED_BEFORE\}"/);
-  assert.match(dockerfile, /names\.length < 50/);
+  // The floor survives, wherever the packages sit: alpha.5 nests the 223
+  // subpackages under the pin instead of hoisting them, so the scan tries both
+  // roots and this asserts a plausibility floor still exists rather than which
+  // directory it counts.
+  assert.match(dockerfile, /length >= 50/);
   assert.match(dockerfile, /filter\(\(\[, v\]\) => v !== pin\)/);
   assert.match(dockerfile, /LABEL io\.open-science\.dsh\.version="\$\{DSH_VERSION\}"/);
   assert.match(dockerfile, /LABEL io\.open-science\.uv\.version="\$\{UV_VERSION\}"/);
@@ -786,7 +790,7 @@ test("web deployment env example documents required hosted settings", async () =
   // launching the image it just built.
   const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
-  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26");
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.2-alpha.5-uv-0.11.26");
   assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
@@ -1727,4 +1731,31 @@ test("the release receipt renews without anyone watching, and health tracks the 
   for (const script of ["receipt:renew", "receipt:health"]) {
     assert.ok(rootPackage.scripts?.[script], `package.json is missing ${script}`);
   }
+});
+
+test("the image's install cutoff admits the version the image pins", async () => {
+  // A coupled value that must move with the pin and is not a version string,
+  // so no sweep for the old pin can find it. It was left at 2026-09-01 while
+  // the pin moved to a release published on 2026-09-02: `npm install
+  // --before=<cutoff> @deepseek-ai/dsh@<pin>` then asks the registry for a
+  // version that did not exist yet, and the image cannot build the version
+  // named three lines above the cutoff. An adversarial review predicted
+  // exactly this of a tool that moved versions and nothing else; the review
+  // was right, and this is the check that would have caught it.
+  //
+  // The publish instant comes from the registry rather than a table here: a
+  // second copy of "when was this published" is a second thing to get wrong.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const pin = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8")).dsh.version;
+  const cutoff = /^ARG DSH_PUBLISHED_BEFORE=(\S+)$/m.exec(dockerfile)?.[1];
+  assert.ok(cutoff, "the Dockerfile no longer declares DSH_PUBLISHED_BEFORE; this check has stopped checking");
+
+  const response = await fetch("https://registry.npmjs.org/@deepseek-ai%2Fdsh", { signal: AbortSignal.timeout(20_000) });
+  assert.equal(response.status, 200, "the registry did not answer; this assertion cannot be made offline");
+  const published = (await response.json())?.time?.[pin];
+  assert.ok(published, `the registry has no publish time for the pinned ${pin}`);
+  assert.ok(
+    Date.parse(cutoff) >= Date.parse(published),
+    `--before=${cutoff} precedes the publication of ${pin} (${published}); the image cannot install the version it pins`,
+  );
 });

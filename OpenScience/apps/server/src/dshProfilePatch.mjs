@@ -59,8 +59,8 @@ export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
  * @property {Record<string, string>} mcpEnvironment
  * @property {string} [toolUniverseUrl]   MCP endpoint of the ToolUniverse sidecar; omitted
  *   when the deployment does not run one, and then no row is emitted at all
- * @property {string} presetRoot             absolute path to the read-only preset root (kept for the
- *   record and the literal check; the kernel reads its own root, see below)
+ * @property {string} presetRoot             absolute path to the read-only preset root the image
+ *   ships; named in the agent-presets row's `roots` since alpha.5 made configured roots work
  * @property {string} presetSkillsDir        absolute path to the preset's shipped skill roots
  * @property {string} capabilitiesDir
  * @property {string} capabilitySkillsDir
@@ -130,18 +130,24 @@ export function renderProfilePatch(input) {
     "- id: session-telemetry-otel",
     "  disabled: true",
     "",
-    "# The preset ships with the bundle as a system-trusted root, so a copy a user",
-    "# made into their own root cannot shadow it: the first root wins a name",
-    "# collision, and system roots come first.",
+    "# The preset ships with the image in a root this deployment owns.",
+    "#",
+    "# Naming a root here was useless at 0.1.2-alpha.3: `composeProfile` pushed a",
+    "# final overlay that overwrote this one key on every boot, so a configured",
+    "# root vanished while the row still looked configured — and the image copied",
+    "# the preset into the kernel's own directory to work around it. alpha.5",
+    "# documents the opposite behaviour: the shipped root is *prepended* before",
+    "# every configured root rather than replacing the list. So the root is named",
+    "# again, and the image stopped writing into its own installation.",
+    "#",
+    "# `trust: system` is what lets a user's own copy under `<dshHome>/.agent-presets`",
+    "# fail to shadow it; the shipped root still wins an id collision ahead of both,",
+    "# which is why the preset id is ours and not a name upstream might ship.",
     "- id: agent-presets",
     "  config:",
-    // No `roots` here. The kernel replaces this row's `roots` with its own
-    // shipped preset directory on every boot — `composeProfile` pushes a final
-    // overlay that keeps the rest of the row and overwrites that one key — so a
-    // root named here is discarded, and the only visible symptom is a session
-    // that cannot find the preset while the row looks configured. The image
-    // installs the preset into the kernel's own root instead; see the
-    // `DSH_PRESET_ROOT` step in deploy/runtime-dsh/Dockerfile.
+    "    roots:",
+    "      - path: " + yamlScalar(input.presetRoot ?? "/opt/evimed/dsh/presets"),
+    "        trust: system",
     "    default: " + yamlScalar(EVIMED_PRESET),
     "",
     "# The research tools. The MCP process runs outside the kernel's sandbox by",

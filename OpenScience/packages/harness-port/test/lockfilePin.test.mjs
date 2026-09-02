@@ -3,15 +3,15 @@
 // `deps-version.json` pins `@deepseek-ai/dsh`, and every workspace manifest
 // wrote that exact string, so every check we had said the pin held. It did
 // not: the lockfile resolved twelve `@deepseek-ai/dsh-*` packages to
-// `0.1.1-rc.2` while five sat at `0.1.2-alpha.3`, and `rc.2` does not satisfy
-// the `^0.1.2-alpha.3` peer range those five declare. The tree we tested
+// `0.1.1-rc.2` while five sat at `0.1.2-alpha.5`, and `rc.2` does not satisfy
+// the `^0.1.2-alpha.5` peer range those five declare. The tree we tested
 // against was one no release had ever shipped.
 //
 // Two upstream behaviours produced it, and both are worth naming because the
 // obvious fix does not address either:
 //
 //   1. pnpm's `auto-install-peers` cannot resolve a prerelease range. Given
-//      `^0.1.2-alpha.3` it falls back to the `latest` dist-tag, and DSH
+//      `^0.1.2-alpha.5` it falls back to the `latest` dist-tag, and DSH
 //      publishes prereleases under a separate `alpha` tag — so `latest` was
 //      still `0.1.1-rc.2`, a *lower* version that the range excludes.
 //   2. `pnpm.overrides` does not reach an auto-installed peer. Adding the

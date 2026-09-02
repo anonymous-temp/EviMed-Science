@@ -28,8 +28,45 @@ chmod -R u+w "${home}"
 # Not a credential: the boot must reach the plugin tree, and the credentials
 # provider refuses to load a file it cannot parse. Nothing here is ever used to
 # reach a network — the smoke boot is killed before a session exists.
-cat > "${home}/.credentials.yaml" <<'CRED'
+#
+# The browser-session grant is a real one, minted here for this boot only. Since
+# 0.1.2-alpha.5 the web surface refuses an unauthenticated call — the probe
+# below returned "HTTP 401: unauthorized" and the whole build stopped on it —
+# where alpha.3 accepted a request whose Host matched `--trusted-host`. The
+# control plane has always authenticated with this cookie in production, so
+# minting one here makes the smoke resemble a real session rather than a
+# special case that stopped working the moment upstream tightened the surface.
+#
+# Shapes must match apps/server/src/dshBrowserAuth.mjs and the file layout
+# `dshProfilePatch.mjs` writes. They are re-derived rather than imported because
+# this script runs inside the image, where the control plane's source is not
+# present; the wire is the contract, and `apps/server/test/deploy.test.mjs`
+# holds the two spellings together.
+#
+# The grant is a `records:` entry, not a top-level key. Written at the top level
+# it fails the whole plugin tree at boot with `unknown top-level key` — which is
+# the credential store refusing loudly rather than ignoring what it cannot
+# place, and is the behaviour that caught this.
+smoke_secret="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("base64url"))')"
+smoke_cookie="$(SMOKE_SECRET="${smoke_secret}" SMOKE_AUTHORITY=dsh.runtime node -e '
+  const c = require("node:crypto");
+  const b64 = (b) => Buffer.from(b).toString("base64url");
+  const authority = process.env.SMOKE_AUTHORITY;
+  const name = "dsh-auth-" + b64(c.createHash("sha256").update(authority).digest());
+  const now = Date.now();
+  const body = b64(Buffer.from(JSON.stringify({ version: 1, authority, issuedAt: now, expiresAt: now + 86400000 })));
+  const sig = b64(c.createHmac("sha256", Buffer.from(process.env.SMOKE_SECRET, "base64url")).update(body).digest());
+  process.stdout.write(name + "=v1." + body + "." + sig);
+')"
+
+cat > "${home}/.credentials.yaml" <<CRED
 version: 1
+records:
+  client-connection/browser-session:
+    kind: grant
+    payload:
+      version: 1
+      secret: '${smoke_secret}'
 refs:
   EVIMED_WORKLOAD_TOKEN: 'build-smoke-not-a-credential'
 CRED
@@ -152,18 +189,26 @@ grep -q "dsh web: " "${log}" || fail "the kernel never began serving"
 #
 # Same wire shape the control plane uses: POST /api/<method> with a
 # client-request envelope, Host set to the declared trusted host.
+#
+# `session/create`, slashed, and the arguments nested under `args.request` —
+# the shape `dshRuntimeAdapter` uses. 0.1.2 renamed every method from dotted to
+# slashed (the seam manifest records it), and this script kept the old spelling
+# because nothing here had ever reached a method: the boot failed earlier, so
+# `session.create` was never called until the auth above started working. It
+# then answered 404, which is the honest reply to a route that no longer
+# exists.
 session_probe=$(cat <<PROBE
 import json, sys, urllib.error, urllib.request
 body = json.dumps({
     "type": "client-request",
     "rpcId": "rpc_build_smoke",
-    "method": "session.create",
-    "payload": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"},
+    "method": "session/create",
+    "payload": {"args": {"request": {"cwd": "${workspace}", "agentPreset": "${profile_preset}"}}},
 }).encode()
 request = urllib.request.Request(
-    "http://127.0.0.1:${port}/api/session.create",
+    "http://127.0.0.1:${port}/api/session/create",
     data=body,
-    headers={"content-type": "application/json", "Host": "dsh.runtime"},
+    headers={"content-type": "application/json", "Host": "dsh.runtime", "Cookie": "${smoke_cookie}"},
 )
 try:
     envelope = json.load(urllib.request.urlopen(request, timeout=60))

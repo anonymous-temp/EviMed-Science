@@ -46,9 +46,16 @@ const workspaceRoot = path.resolve(repoRoot, "..");
  * Ordered; first match wins, so a narrower rule precedes a broader one.
  * `where` matches the path from the workspace root; `line` narrows it when one
  * file holds more than one kind.
- * @type {{ kind: "pin"|"provenance"|"history", where: RegExp, line?: RegExp, why: string }[]}
+ * @type {{ kind: "pin"|"provenance"|"history"|"prose", where: RegExp, line?: RegExp, notCurrentPin?: boolean, why: string }[]}
  */
 export const RULES = [
+  {
+    // Scratch from a past analysis. Kept out of the product's inventory
+    // deliberately: `uploads/` is ephemeral and is an input to nothing.
+    kind: "history",
+    where: /^uploads\//,
+    why: "a saved artifact of a past run, and an input to no build",
+  },
   {
     kind: "provenance",
     where: /^OpenScience\/apps\/server\/test\/fixtures\/dsh\/golden-frames\.json$/,
@@ -71,6 +78,21 @@ export const RULES = [
     why: "a statement about what a running kernel produced, or an assertion about that statement",
   },
 
+  {
+    // A fourth kind, found by sweeping every version rather than only the pin:
+    // a comment that names a version while explaining what happened at it.
+    // "DSH 0.1.2-alpha.4 deleted this package" is neither a pin nor a record
+    // of recorded evidence — it is the reason a line of code exists, and it
+    // stops being true if it is moved forward. Placed first because it is the
+    // narrowest test: a comment line, in code, naming a version.
+    kind: "prose",
+    where: /^OpenScience\/(apps|packages|scripts|deploy)\//,
+    // Also a quoted YAML comment: the profile-patch generator emits its own
+    // comments as JS string literals, so the marker sits one character in.
+    line: /^\s*(\/\/|\*|#|"#)/,
+    notCurrentPin: true,
+    why: "explanatory prose naming the version something happened at; moving it forward makes the explanation false",
+  },
   { kind: "history", where: /^STATUS$/, why: "an execution log entry" },
   { kind: "history", where: /PROGRESS\.md$/, why: "a milestone entry, dated when it happened" },
   { kind: "history", where: /^docs\/superpowers\//, why: "a dated design or decision record" },
@@ -126,22 +148,70 @@ export async function findOccurrences(version) {
  * @param {{ file: string, line: number, text: string }} occurrence
  * @returns {{ kind: "pin"|"provenance"|"history", why: string } | null}
  */
-export function classify(occurrence) {
+export function classify(occurrence, options = {}) {
   for (const rule of RULES) {
     if (!rule.where.test(occurrence.file)) continue;
     if (rule.line && !rule.line.test(occurrence.text)) continue;
+    // A comment is only prose when it names a version that is *not* the pin.
+    // A Dockerfile comment restating the pin has to move with it or it starts
+    // lying about the line beneath it; a comment naming the release that
+    // deleted a package must never move or the explanation becomes false.
+    // That is the whole difference, and it is decidable.
+    if (rule.notCurrentPin && options.pin && occurrence.text.includes(options.pin)) continue;
     return { kind: rule.kind, why: rule.why };
   }
   return null;
 }
 
 /** @param {{ version?: string }} [options] */
+/**
+ * Every kernel version still written down anywhere, not only the current one.
+ *
+ * The first version of this swept the pin alone, and an upgrade made it blind
+ * to exactly what it was built to protect: after repinning to alpha.5 the
+ * inventory reported 0 provenance, because the thirteen provenance sites still
+ * say alpha.3 and the sweep no longer looked for it. The next upgrade would
+ * have walked past all of them.
+ *
+ * A version counts as this dependency's when it is written on a line that also
+ * names the kernel — mechanical, and narrow enough to leave the tree's other
+ * prereleases (`1.0.0-rc.18` and friends) alone.
+ * @returns {Promise<string[]>}
+ */
+export async function kernelVersionsPresent(currentPin) {
+  const versions = new Set([currentPin]);
+  let stdout = "";
+  try {
+    ({ stdout } = await run("git", ["grep", "-hInE", "[0-9]+\\.[0-9]+\\.[0-9]+-(rc|alpha|beta)\\.[0-9]+"], { cwd: workspaceRoot, maxBuffer: 32 * 1024 * 1024 }));
+  } catch (error) {
+    if (Number(/** @type {any} */ (error)?.code) !== 1) throw error;
+  }
+  for (const row of stdout.split("\n")) {
+    if (!/dsh|deepseek/i.test(row)) continue;
+    for (const match of row.matchAll(/\b\d+\.\d+\.\d+-(?:rc|alpha|beta)\.\d+\b/g)) versions.add(match[0]);
+  }
+  return [...versions].sort();
+}
+
 export async function checkPinInventory(options = {}) {
   const pinsText = await readFile(path.join(repoRoot, "deps-version.json"), "utf8");
-  const version = options.version ?? JSON.parse(pinsText)?.dsh?.version;
-  if (!version) throw new Error("deps-version.json carries no dsh.version; there is nothing to inventory");
+  const pin = JSON.parse(pinsText)?.dsh?.version;
+  if (!pin) throw new Error("deps-version.json carries no dsh.version; there is nothing to inventory");
+  const version = options.version ?? pin;
+  const versions = options.version ? [options.version] : await kernelVersionsPresent(pin);
 
-  const occurrences = await findOccurrences(version);
+  /** @type {{ file: string, line: number, text: string }[]} */
+  const collected = [];
+  const seen = new Set();
+  for (const candidate of versions) {
+    for (const occurrence of await findOccurrences(candidate)) {
+      const key = `${occurrence.file}:${occurrence.line}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      collected.push(occurrence);
+    }
+  }
+  const occurrences = collected.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file.localeCompare(b.file)));
   // An empty sweep is the failure this file exists to make impossible: the pin
   // is in deps-version.json at minimum, so a near-zero count means the search
   // broke rather than that the tree is clean.
@@ -149,19 +219,19 @@ export async function checkPinInventory(options = {}) {
     throw new Error(`only ${occurrences.length} occurrence(s) of ${version} found; the search is broken, not the tree`);
   }
 
-  const classified = occurrences.map((occurrence) => ({ ...occurrence, verdict: classify(occurrence) }));
+  const classified = occurrences.map((occurrence) => ({ ...occurrence, verdict: classify(occurrence, { pin }) }));
   /** @type {Record<string, number>} */
-  const counts = { pin: 0, provenance: 0, history: 0 };
+  const counts = { pin: 0, provenance: 0, history: 0, prose: 0 };
   for (const entry of classified) if (entry.verdict) counts[entry.verdict.kind] += 1;
 
-  return { version, occurrences: classified, unclassified: classified.filter((entry) => entry.verdict === null), counts };
+  return { version, versions, occurrences: classified, unclassified: classified.filter((entry) => entry.verdict === null), counts };
 }
 
 /** @param {Awaited<ReturnType<typeof checkPinInventory>>} report @returns {string} */
 export function formatReport(report) {
   const lines = [
-    `pin inventory: ${report.occurrences.length} occurrences of ${report.version}`,
-    `  ${report.counts.pin} pin (move together on an upgrade), ${report.counts.provenance} provenance (never rewritten), ${report.counts.history} history`,
+    `pin inventory: ${report.occurrences.length} occurrences of ${(report.versions ?? [report.version]).join(", ")}`,
+    `  ${report.counts.pin} pin (move together on an upgrade), ${report.counts.provenance} provenance (never rewritten), ${report.counts.history} history, ${report.counts.prose} prose`,
   ];
   if (report.unclassified.length) {
     lines.push("", `${report.unclassified.length} occurrence(s) no rule claims:`);

@@ -9,7 +9,7 @@
 // escalation and nothing said why.
 //
 // The frames below are not invented. They were recorded from a running
-// 0.1.2-alpha.3 kernel driven into a sandbox escalation, and the reply shape
+// 0.1.2-alpha.5 kernel driven into a sandbox escalation, and the reply shape
 // was probed against the same binary including its refusals — an earlier
 // fixture in `packages/contracts/dsh` guessed the event name
 // (`tools/pre-execute`) and would have had us build against a frame the kernel
@@ -21,7 +21,7 @@ import { decodeHostInteraction } from "../src/dshRuntimeAdapter.mjs";
 import { RuntimeEventPump } from "../src/dshEventPump.mjs";
 import { RunEventHub } from "../src/runEventStream.mjs";
 
-/** Recorded live: DSH 0.1.2-alpha.3, prompt driven into a sandbox escalation. */
+/** Recorded live: DSH 0.1.2-alpha.5, prompt driven into a sandbox escalation. */
 const RECORDED_APPROVAL_FRAME = Object.freeze({
   type: "waterfall",
   event: "approval/request",
@@ -311,7 +311,7 @@ test("a profile that asks for approval is deployed alongside something that can 
   const { SEAMS } = await import("@evimed/harness-port");
 
   const input = {
-    dshVersion: "0.1.2-alpha.3",
+    dshVersion: "0.1.2-alpha.5",
     workspaceDir: "/workspace",
     model: { provider: "deepseek", id: "deepseek-v4-flash", baseURL: "http://gateway/v1" },
     flags: { hosted: false, askUser: true, review: true, capsule: true, requiredEnforcement: "partial" },

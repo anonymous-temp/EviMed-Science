@@ -73,8 +73,8 @@ test("every setting the runtime depends on still holds in the composition the im
   // rows read out of them is fixed too, and a parser that thinned out silently
   // is the way a checker starts reporting nothing wrong. Re-recording the image
   // moves BASELINE_PROVENANCE and this number in the same edit.
-  assert.equal(report.counts.baselineRows, 148, "the image's recorded composition, all of it");
-  assert.equal(report.counts.presetRows, 24, "the preset's rows, counting the eight our groups mount");
+  assert.equal(report.counts.baselineRows, 147, "the image's recorded composition, all of it");
+  assert.equal(report.counts.presetRows, 23, "the preset's rows, counting the eight our groups mount");
   assert.ok(report.invariants.length >= 20, `only ${report.invariants.length} invariants were derived`);
 
   // Every invariant the review named, present by address rather than by count.
@@ -113,6 +113,14 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "hmr.disabled=true",
       "plugin-package-inventory-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",
+      // Pinned when 0.1.2-alpha.4 flipped `fetch` on by default for custom
+      // profiles: an inherited value that changed once can change again, and
+      // the two older defences (the tool is absent, the provider is disabled)
+      // are the ones a single edit can undo. `searchTimeoutMs` comes with it
+      // because a patch row replaces a `config` value whole rather than
+      // merging keys — dropping it would silently reset the timeout.
+      "tool-web.config.fetch=false",
+      "tool-web.config.searchTimeoutMs=60000",
       "web-fetch-http.disabled=true",
     ],
     "every host-scope override the bundle patch makes should become an invariant",
@@ -261,15 +269,20 @@ test("a row that upstream renamed takes its invariant with it, loudly", async ()
 });
 
 test("a baseline recorded by a different kernel is never quietly compared", async () => {
+  // A version the pin is not, whatever the pin becomes. Written as a literal
+  // this fixture went stale the moment the tree moved onto it: the mutation
+  // replaced the version with itself, changed nothing, and `mutatedCopy` said
+  // so rather than letting the assertion below pass on an unmutated file.
+  const nextRelease = `${BASELINE_PROVENANCE.dshVersion}-not-the-recorded-one`;
   const pins = await mutatedCopy("deps-version.json", await readFile(source("pins"), "utf8"), (text) =>
-    text.replace(`"version": "${BASELINE_PROVENANCE.dshVersion}"`, '"version": "0.1.2-alpha.5"'),
+    text.replace(`"version": "${BASELINE_PROVENANCE.dshVersion}"`, `"version": "${nextRelease}"`),
   );
 
   const report = await checkKernelDefaults({ overrideFiles: { pins } });
   assert.equal(report.ok, false);
   const [problem] = problemsOfKind(report, "baseline-version-mismatch");
   assert.ok(problem, "moving the pin without re-recording the baseline must fail");
-  assert.equal(problem.required, "0.1.2-alpha.5");
+  assert.equal(problem.required, nextRelease);
   assert.equal(problem.found, BASELINE_PROVENANCE.dshVersion);
   assert.match(problem.detail, /certifies these invariants against a kernel we do not ship/);
 });

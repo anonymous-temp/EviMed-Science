@@ -23,7 +23,7 @@ const input = {
   capsuleGatewayUrl: "https://open-science-web:8787/internal/capsule/v1",
   workloadTokenFile: "/runtime/secrets/workload-token",
   bundleVersion: "0.1.0",
-  dshVersion: "0.1.2-alpha.3",
+  dshVersion: "0.1.2-alpha.5",
   limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 },
   flags: { hosted: true, askUser: false, review: false, capsule: true, requiredEnforcement: "full" },
 };
@@ -66,7 +66,15 @@ test("telemetry, the default preset and the approval policy are pinned by the de
   // produced a row that read as configured and a preset the kernel could not
   // see. The image installs the preset into the kernel's root instead, and this
   // asserts we have stopped pretending otherwise.
-  assert.doesNotMatch(patch, /^\s+roots:/m, "a root the kernel discards is worse than no root: it reads as configured");
+  // The reverse of what this asserted until 0.1.2-alpha.5. At alpha.3 the
+  // kernel overwrote this row's `roots` on every boot, so naming one was worse
+  // than naming none — it read as configured and was discarded, and the image
+  // worked around it by copying the preset into the kernel's own directory.
+  // alpha.5 documents the opposite: the shipped root is prepended before every
+  // configured root rather than replacing the list. The root is named again,
+  // and `trust: system` is what stops a user's copy under `.agent-presets`
+  // from shadowing it.
+  assert.match(patch, /^\s+roots:\n\s+- path: '[^']+'\n\s+trust: system$/m, "the preset root has to be named for the session to find it");
   assert.match(patch, /- id: approval\n  config:\n    policy: 'never'/, "an unattended run auto-refuses anything asking to leave the sandbox");
 });
 

@@ -98,8 +98,8 @@ export const SOURCES = {
  * ship.
  */
 export const BASELINE_PROVENANCE = {
-  dshVersion: "0.1.2-alpha.3",
-  sha256: "6510a0bfd604c7817814549919ead62c4eafbcf465f79e7fdd35d958272fda5c",
+  dshVersion: "0.1.2-alpha.5",
+  sha256: "929c5cfd776c907a18aefd18d64cd637f20f88ff86f04db56a744e77c00539cf",
   recordedBy: "deploy/runtime-dsh/Dockerfile - `dsh --profile evimed-runtime --dump-config` on the seeded profile",
 };
 
@@ -112,7 +112,7 @@ export const BASELINE_PROVENANCE = {
  */
 export const EXTRACTION_FLOORS = {
   baselineRows: 100, // today: 148
-  presetRows: 16, // today: 24, counting group children
+  presetRows: 16, // today: 23, counting group children (24 before alpha.4 deleted the report row)
   derivedFromPatch: 4, // today: 4 host-scope overrides
   // Not a floor. A floor is what let a defeated parse pass: nine named tools
   // with a floor of six meant three could vanish and the run stayed green.
@@ -238,14 +238,13 @@ export const DECLARED_INVARIANTS = [
     why:
       "Required with no default: the plugin refuses to mount without it. This row is in agent scope, so that refusal arrives when a session is created, not when the host composition boots.",
   },
-  {
-    scope: "agent",
-    row: "tool-subagent-report",
-    key: "config.reportDelivery",
-    assert: "equals",
-    value: "quiet",
-    why: "Report delivery is a deployment policy, not a per-call choice: a model that can pick `next-step` can interrupt its own synthesis at will.",
-  },
+  // `tool-subagent-report.config.reportDelivery: quiet` was here until
+  // 0.1.2-alpha.4 removed the package. The property it defended — that a model
+  // cannot choose to interrupt its own synthesis — now holds by construction:
+  // `send_message` takes no configuration and returns acceptance rather than a
+  // reply. Removed rather than rewritten to point at the new row, because there
+  // is no knob there to assert, and an invariant that matches nothing passes
+  // forever.
 ];
 
 // ---------------------------------------------------------------------------
