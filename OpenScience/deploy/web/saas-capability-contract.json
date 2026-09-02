@@ -47,7 +47,7 @@
     {
       "id": "agent-runtime",
       "status": "adapted",
-      "evidence": ["apps/server/src/runtimeManager.mjs", "deploy/runtime-opencode/Dockerfile"]
+      "evidence": ["apps/server/src/runtimeManager.mjs", "deploy/runtime-dsh/Dockerfile"]
     },
     {
       "id": "model-gateway",

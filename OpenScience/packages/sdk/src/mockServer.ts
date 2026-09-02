@@ -1,16 +1,18 @@
-// A minimal OpenCode-protocol server for tests and local dev. Node-only.
-// Implements the endpoints the app uses (POST /session, POST /session/:id/prompt_async,
-// GET /event SSE) and streams an OpenCode-shaped agent turn.
+// A minimal stand-in for the kernel `RuntimeClient` talks to, for tests and
+// local dev. Node-only. Implements the endpoints the app uses (POST /session,
+// POST /session/:id/prompt_async, GET /event SSE) and streams one agent turn.
+// The frames are the retiring kernel's, because that is the wire the client
+// under test speaks; this file has to move whenever that wire does.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
-export interface MockOpenCode {
+export interface MockRuntimeServer {
   port: number;
   /** Every request seen, as "METHOD /path" — lets tests assert call order. */
   requests: string[];
   close: () => Promise<void>;
 }
 
-export function startMockOpenCode(port = 0): Promise<MockOpenCode> {
+export function startMockRuntimeServer(port = 0): Promise<MockRuntimeServer> {
   const clients = new Set<ServerResponse>();
   const requests: string[] = [];
 

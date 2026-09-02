@@ -2,13 +2,17 @@ import type { RuntimeStatus, ToolCallStatus } from "@ai4s/shared";
 
 export type { RuntimeStatus, ToolCallStatus };
 
-/** Pinned OpenCode release this client targets. */
-export const OPENCODE_VERSION = "1.17.13";
+// No upstream version is written in this file. Every version we track lives
+// once, in `deps-version.json`, because the copy that is not read is the copy
+// that goes stale: the constant that used to sit here still named 1.17.13
+// after the kernel it pinned had been removed, and nothing imported it, so
+// nothing noticed. If the client ever needs to know a kernel version again,
+// read it from `deps-version.json` rather than restating it.
 
-/** OpenCode server defaults (`opencode serve`). */
-export const DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096";
+/** Default address of a kernel served on loopback. */
+export const DEFAULT_RUNTIME_URL = "http://127.0.0.1:4096";
 
-// ---- Normalized events (OpenCode SSE → app) ----
+// ---- Normalized events (kernel SSE → app) ----
 // OpenCode emits idempotent "updated" events (full current value), not deltas, so
 // text/tool events carry a stable id and the app upserts by that id.
 
@@ -96,7 +100,7 @@ export interface RuntimeErrorEvent {
   message: string;
 }
 
-export type OpenCodeEvent =
+export type RuntimeEvent =
   | TextUpdatedEvent
   | ToolUpdatedEvent
   | SessionIdleEvent
@@ -177,7 +181,7 @@ export interface HistoryPart {
   };
 }
 
-export interface OpenCodeClientOptions {
+export interface RuntimeClientOptions {
   /** Base URL of a running `opencode serve`, e.g. http://127.0.0.1:4096 */
   baseUrl?: string;
   /** Optional OPENCODE_SERVER_PASSWORD (basic auth). */
@@ -253,17 +257,17 @@ export interface McpServer {
 
 // ---- Raw OpenCode wire shapes (subset we consume) ----
 
-export interface OpenCodeRawEvent {
+export interface RuntimeRawEvent {
   type: string;
   properties?: Record<string, unknown>;
 }
 
-export interface OpenCodeTextPart {
+export interface RuntimeTextPart {
   id: string;
   type: "text";
   text: string;
 }
-export interface OpenCodeToolPart {
+export interface RuntimeToolPart {
   id: string;
   type: "tool";
   callID: string;
@@ -278,4 +282,4 @@ export interface OpenCodeToolPart {
     time?: { start?: number; end?: number };
   };
 }
-export type OpenCodePart = OpenCodeTextPart | OpenCodeToolPart | { type: string };
+export type RuntimePart = RuntimeTextPart | RuntimeToolPart | { type: string };

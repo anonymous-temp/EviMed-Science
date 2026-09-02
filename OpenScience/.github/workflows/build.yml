@@ -52,7 +52,6 @@ jobs:
       - name: Fetch bundled runtime dependencies
         shell: bash
         run: |
-          bash scripts/dev/fetch-opencode.sh x86_64-unknown-linux-gnu
           bash scripts/dev/fetch-skills.sh
           bash scripts/dev/fetch-uv.sh x86_64-unknown-linux-gnu
 
@@ -110,10 +109,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fetch bundled OpenCode sidecar
-        shell: bash
-        run: bash scripts/dev/fetch-opencode.sh ${{ matrix.target }}
-
       - name: Fetch bundled ai4s-skills pack
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
@@ -128,9 +123,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          # Linux: deb+rpm only. AppImage is off because linuxdeploy runs ldd
-          # on every bundled ELF and ldd exits 1 on the Bun-built opencode
-          # sidecar, aborting the whole bundle (tauri-apps/tauri#8929).
+          # Linux: deb+rpm only. AppImage stays off. linuxdeploy runs ldd on
+          # every bundled ELF and aborts the whole bundle when ldd exits 1
+          # (tauri-apps/tauri#8929); the binary that used to trip it is gone,
+          # but `uv` is still bundled and no AppImage has been built since, so
+          # turning it back on is a claim no run here has tested.
           args: --target ${{ matrix.target }} ${{ startsWith(matrix.platform, 'ubuntu') && '--bundles deb,rpm' || '' }}
           # On a v* tag push, attach installers to a draft GitHub Release.
           # Empty tagName (workflow_dispatch) skips release creation.

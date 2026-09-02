@@ -46,8 +46,9 @@ const inputPaths = [
   // reached the host, passed an md5-verified sync, and never ran, because the
   // image predated them and nothing compared the two.
   //
-  // `runtime/skills/evimed` below is the superseded path and stays only while
-  // the OpenCode kernel is still selectable.
+  // `runtime/skills/evimed` below is bound because the image COPYs
+  // `runtime/skills/evimed/open-domain-answer` out of it; the rest of that tree
+  // rides along, which costs a digest and no more.
   "packages/socket",
   "packages/domain",
   "packages/harness-port",
@@ -70,8 +71,6 @@ const inputPaths = [
   "deploy/web/Dockerfile",
   "deploy/memos/Dockerfile",
   "deploy/specialist-adapter",
-  "deploy/runtime-opencode/Dockerfile",
-  "deploy/runtime-opencode/open-science-opencode-serve.sh",
   "scripts/ops/archive-crypto.mjs",
   "scripts/ops/backup-data.sh",
   "scripts/ops/backup-retention.mjs",

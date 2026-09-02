@@ -5,10 +5,10 @@ import type {
   McpConfig,
   McpServer,
   OAuthAuthorization,
-  OpenCodeClientOptions,
-  OpenCodeEvent,
-  OpenCodePart,
-  OpenCodeRawEvent,
+  RuntimeClientOptions,
+  RuntimeEvent,
+  RuntimePart,
+  RuntimeRawEvent,
   PermissionReply,
   ProviderAuthMethod,
   ProviderCatalogEntry,
@@ -20,10 +20,10 @@ import type {
   SkillInfo,
   ToolCallStatus,
 } from "./types";
-import { DEFAULT_OPENCODE_URL } from "./types";
+import { DEFAULT_RUNTIME_URL } from "./types";
 import type { AgentRuntime } from "./runtime";
 
-type EventListener = (event: OpenCodeEvent) => void;
+type EventListener = (event: RuntimeEvent) => void;
 type StatusListener = (status: RuntimeStatus) => void;
 
 function mapToolStatus(status: string): ToolCallStatus {
@@ -52,11 +52,19 @@ function parseModel(model?: string | null): { providerID: string; modelID: strin
 }
 
 /**
- * The single boundary between the app and the OpenCode agent runtime.
- * Talks to a running `opencode serve` over its HTTP + SSE API. The UI must go
- * through this class, never the transport directly (see AGENTS.md guardrails).
+ * The single boundary between the app and a kernel it talks to directly over
+ * HTTP + SSE. The UI must go through this class, never the transport itself
+ * (see AGENTS.md guardrails).
+ *
+ * The class name is kernel-neutral but the wire it speaks is not: every route
+ * and event shape below is the retiring kernel's, and the comments that name
+ * it are describing that wire, not the product. It survives for the desktop
+ * shell and the retiring session view, both of which still address a kernel
+ * directly; the hosted product does not — it reads the control plane's own
+ * `RunEvent` stream, which is why a kernel change is no longer a frontend
+ * change. Nothing new should be built on this class.
  */
-export class OpenCodeClient implements AgentRuntime {
+export class RuntimeClient implements AgentRuntime {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly authHeader: string | null;
@@ -84,8 +92,8 @@ export class OpenCodeClient implements AgentRuntime {
    *  app shows nothing until the whole passage is finished. */
   private readonly textStreams = new Map<string, { sessionId: string; text: string }>();
 
-  constructor(opts: OpenCodeClientOptions = {}) {
-    this.baseUrl = (opts.baseUrl ?? DEFAULT_OPENCODE_URL).replace(/\/$/, "");
+  constructor(opts: RuntimeClientOptions = {}) {
+    this.baseUrl = (opts.baseUrl ?? DEFAULT_RUNTIME_URL).replace(/\/$/, "");
     // Bind to globalThis — an unbound `fetch` reference throws "Illegal invocation" in browsers.
     this.fetchImpl = (opts.fetchImpl ?? globalThis.fetch).bind(globalThis);
     this.useEventSource = opts.useEventSource ?? !opts.fetchImpl;
@@ -133,7 +141,7 @@ export class OpenCodeClient implements AgentRuntime {
         };
         es.onmessage = (ev) => {
           try {
-            this.normalize(JSON.parse(ev.data) as OpenCodeRawEvent);
+            this.normalize(JSON.parse(ev.data) as RuntimeRawEvent);
           } catch {
             /* ignore malformed frame */
           }
@@ -143,7 +151,7 @@ export class OpenCodeClient implements AgentRuntime {
             this.setStatus("error");
             es.close();
             this.es = null;
-            reject(new Error("Could not open OpenCode event stream"));
+            reject(new Error("Could not open the runtime event stream"));
           } else {
             // EventSource auto-reconnects; reflect the transient state.
             this.setStatus("connecting");
@@ -162,7 +170,7 @@ export class OpenCodeClient implements AgentRuntime {
         .then(async (res) => {
           if (!res.ok || !res.body) {
             this.setStatus("error");
-            reject(new Error(`OpenCode /event returned ${res.status}`));
+            reject(new Error(`Runtime /event returned ${res.status}`));
             return;
           }
           this.setStatus("ready");
@@ -698,7 +706,7 @@ export class OpenCodeClient implements AgentRuntime {
       .filter((l) => l.startsWith("data:"))
       .map((l) => l.slice(5).trim());
     if (dataLines.length === 0) return;
-    let raw: OpenCodeRawEvent;
+    let raw: RuntimeRawEvent;
     try {
       raw = JSON.parse(dataLines.join("\n"));
     } catch {
@@ -707,7 +715,7 @@ export class OpenCodeClient implements AgentRuntime {
     this.normalize(raw);
   }
 
-  private normalize(raw: OpenCodeRawEvent): void {
+  private normalize(raw: RuntimeRawEvent): void {
     const props = raw.properties ?? {};
     switch (raw.type) {
       case "message.updated": {
@@ -718,7 +726,7 @@ export class OpenCodeClient implements AgentRuntime {
       }
       case "message.part.updated": {
         const part = props.part as
-          | (OpenCodePart & { sessionID?: string; messageID?: string })
+          | (RuntimePart & { sessionID?: string; messageID?: string })
           | undefined;
         if (!part) return;
         // The user's own message is echoed here; the app already shows it locally.
@@ -883,7 +891,7 @@ export class OpenCodeClient implements AgentRuntime {
     }
   }
 
-  private emit(event: OpenCodeEvent): void {
+  private emit(event: RuntimeEvent): void {
     this.eventListeners.forEach((l) => l(event));
   }
   private setStatus(status: RuntimeStatus): void {
