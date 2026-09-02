@@ -1626,7 +1626,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
  * @param {any} project
  * @param {any} plan
  * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow }} [options]
- * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null }>}
+ * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null, browserSessionSecret?: string | null }>}
  */
 export async function syncRuntimeDshProfile(
   config,
@@ -3093,7 +3093,7 @@ export class RuntimeManager {
    * session start, where it becomes a first-class logged message.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, runId?: string | null }} input
+   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, { text, system = null, runId = null }) {
