@@ -221,6 +221,15 @@ function cleanupStaleKernelContainers(config) {
   return inventory.size;
 }
 
+/** How long a shutdown waits for requests that are still in flight before it
+ *  cuts their connections.
+ *
+ *  `close` has already force-removed every tracked runtime and kernel
+ *  container by the time it drains, so a request still running is answering
+ *  about something that no longer exists. Matches `waitForChildExit`'s
+ *  allowance: both are the same judgement about how long a stop may take. */
+const CONTROLLER_DRAIN_GRACE_MS = 2_000;
+
 function waitForChildExit(child, timeoutMs = 2_000) {
   if (!child || child.exitCode != null || child.signalCode != null) return Promise.resolve();
   return new Promise((resolve) => {
@@ -761,7 +770,29 @@ export function createRuntimeController(overrides = {}) {
       kernelChildren.clear();
       kernelOwners.clear();
       if (server.listening) {
-        await new Promise((resolve) => server.close(() => resolve()));
+        // `server.close` resolves only once every open connection has ended,
+        // and a connection that has never sent a request will not end on its
+        // own: with no request in progress there is nothing for `headersTimeout`
+        // or `requestTimeout` to expire, and `closeIdleConnections` does not
+        // count such a socket as idle. One client holding a connection open
+        // therefore blocked shutdown forever — which is how a failing test in
+        // runtimeController.test.mjs stopped the whole file from exiting, and
+        // how a controller told to stop could keep owning its socket instead.
+        //
+        // So the drain is bounded: idle keep-alive connections go at once, and
+        // whatever is left is cut after a grace.
+        const drained = new Promise((resolve) => server.close(() => resolve()));
+        server.closeIdleConnections();
+        // Deliberately ref'd: this timer is the thing that guarantees the
+        // drain ends. Unreferenced, a process whose only other handles were
+        // unreferenced would exit with `close` still pending, which is the
+        // same silence in a different shape.
+        const cut = setTimeout(() => server.closeAllConnections(), CONTROLLER_DRAIN_GRACE_MS);
+        try {
+          await drained;
+        } finally {
+          clearTimeout(cut);
+        }
       }
       if (ownedSocket) {
         const current = await fs.lstat(socketPath).catch((error) => {

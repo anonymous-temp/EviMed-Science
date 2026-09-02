@@ -850,9 +850,10 @@ async function readRequiredFile(project, relative) {
   // because that is where the OpenCode composition wrote them. The DSH
   // composition writes each package into `deliverables/<deliverableId>/`: one
   // run can deliver several, the path guard fences each one, and §9.5 makes
-  // that directory the only input its validator accepts. So the same declared
-  // name has two homes depending on which kernel produced it, and a gate that
-  // knows only the first reports every DSH package as missing.
+  // that directory the only input its validator accepts. So one declared
+  // name has two possible homes, and the gate that knew only the root
+  // reported every DSH package as missing. The root lookup stays first
+  // because the declared name is bare and nothing forbids writing it there.
   //
   // Resolved rather than configured: the deliverable id belongs to the run, not
   // to the deployment, and the receipt that names it is not always present —

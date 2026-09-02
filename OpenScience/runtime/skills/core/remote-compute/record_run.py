@@ -96,7 +96,7 @@ def read_env(path):
 
     env: dict[str, object] = {
         "platform": platform or "unknown",
-        # Which app version recorded this; injected into the sidecar's env.
+        # Which app version recorded this; injected into the run's environment.
         "app": os.environ.get("OPENSCIENCE_APP_VERSION", "unknown"),
     }
     if python:

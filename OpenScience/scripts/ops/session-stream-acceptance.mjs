@@ -171,7 +171,8 @@ async function main() {
   });
 
   // One shape whatever kernel is running — this route is what replaced the
-  // browser POSTing straight through to OpenCode.
+  // browser POSTing straight through to the kernel, a pass-through that no
+  // longer exists.
   const session = await jsonFetch(`${base}/api/runtime/sessions`, {
     method: "POST", headers: { "Content-Type": "application/json", ...scoped }, body: "{}",
   });

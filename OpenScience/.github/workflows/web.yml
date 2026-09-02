@@ -84,7 +84,7 @@ jobs:
         run: >-
           CI=true pnpm --filter @ai4s/server exec node --test
           test/deepseekCompatibility.test.mjs
-          test/deepseekOpenCodeReleaseGate.test.mjs
+          test/deepseekKernelReleaseGate.test.mjs
 
       - name: Test mock hosted API contract
         run: CI=true pnpm --filter @ai4s/server test:contract

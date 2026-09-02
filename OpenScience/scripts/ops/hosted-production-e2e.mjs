@@ -151,8 +151,21 @@ async function waitForMemoryRecord(base, headers, initialIds, marker) {
 function assertReady(ready) {
   const checks = ready?.data?.checks;
   if (!ready?.data?.ok || !checks) throw failure("hosted_e2e_not_ready", "The hosted deployment is not ready.");
-  if (checks.runtime?.mode !== "opencode" || checks.runtime?.sandboxMode !== "docker") {
-    throw failure("hosted_e2e_runtime_not_real", "Hosted E2E requires the Docker OpenCode runtime.");
+  // `mode` is the runtime's shape and `kernel` names which kernel the image
+  // actually carries; readiness reports both on every branch. This pinned the
+  // retired kernel's mode name, a value `/api/ready` can no longer produce, so
+  // the gate would have refused every deployment of the current kernel at its
+  // first request — in the same hour the kernel is switched and it is most
+  // needed. Both halves stay: "sandboxed Docker runtime" and "the DSH kernel"
+  // are separate claims, and a deployment can satisfy one without the other.
+  if (checks.runtime?.mode !== "kernel" || checks.runtime?.sandboxMode !== "docker") {
+    throw failure("hosted_e2e_runtime_not_real", "Hosted E2E requires the Docker kernel runtime.");
+  }
+  if (checks.runtime?.kernel !== "dsh") {
+    throw failure(
+      "hosted_e2e_runtime_kernel_unexpected",
+      `Hosted E2E requires the DSH kernel; the deployment reports ${checks.runtime?.kernel ?? "no kernel"}.`,
+    );
   }
   if (checks.kernel?.enabled !== true || checks.kernel?.sandboxMode !== "docker") {
     throw failure("hosted_e2e_kernel_not_real", "Hosted E2E requires the Docker notebook kernel.");
@@ -217,16 +230,17 @@ async function main() {
 
     const runtime = await command(base, "start_runtime", {}, scoped);
     runtimeStarted = true;
-    // The control plane's own surface, not a kernel's. This used to assert the
-    // pass-through base `/api/opencode/:projectId`, a route retired when the
-    // browser stopped speaking a kernel's protocol — so this gate would have
-    // failed against a DSH deployment on its first request, in the same hour
-    // the kernel default is flipped and it is most needed.
+    // The control plane's own surface, not a kernel's. This used to assert a
+    // per-kernel pass-through base `/api/<kernel>/:projectId`, a route retired
+    // when the browser stopped speaking a kernel's protocol — so this gate
+    // would have failed on its first request against the deployment it is
+    // meant to certify. `dsh` is the whole kernel vocabulary now, so it is the
+    // whole guard.
     const runtimeUrl = runtime.body?.data;
     if (typeof runtimeUrl !== "string" || !runtimeUrl.endsWith("/api/runtime")) {
       throw failure("hosted_e2e_runtime_url_invalid", "The hosted runtime URL is invalid.");
     }
-    if (/opencode|dsh/.test(runtimeUrl)) {
+    if (/dsh/.test(runtimeUrl)) {
       throw failure("hosted_e2e_runtime_url_invalid", "start_runtime handed back a kernel-shaped URL.");
     }
     const agents = await jsonFetch(`${base}/api/agents`, { headers: scoped });
@@ -299,9 +313,9 @@ async function main() {
     // Independent confirmation that the specialist actually ran, read from the
     // transcript rather than from the ledger that already claims it.
     //
-    // The old check read `info.agent` off OpenCode's own message record. The
-    // control plane's transcript has no per-message agent — it is deliberately
-    // kernel-neutral — so the equivalent evidence is the specialist's own tool
+    // The old check read `info.agent` off the retired kernel's own message
+    // record. The control plane's transcript has no per-message agent — it is
+    // deliberately kernel-neutral — so the equivalent evidence is its own tool
     // appearing in the run: a package that merely says it routed to the drug
     // safety agent, without ever calling it, fails here.
     const calledTools = messages
@@ -422,7 +436,14 @@ async function main() {
     if (!r.body?.data?.ok || !r.body.data.stdout.includes("2")) {
       throw failure("hosted_e2e_r_kernel_failed", "The production R kernel failed.");
     }
-    process.stdout.write(`hosted production E2E ok: release=${ready.body.data.checks.release.releaseId} project=${projectId}\n`);
+    // The kernel identity is printed, not just asserted: "which kernel did the
+    // release gate actually certify" is the question this run is the only
+    // record of.
+    const runtimeCheck = ready.body.data.checks.runtime;
+    process.stdout.write(
+      `hosted production E2E ok: release=${ready.body.data.checks.release.releaseId}`
+      + ` kernel=${runtimeCheck.kernel}@${runtimeCheck.kernelVersion ?? "unknown"} project=${projectId}\n`,
+    );
   } finally {
     if (runtimeStarted && scoped) {
       await command(base, "stop_runtime", {}, scoped).catch(() => {});

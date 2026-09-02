@@ -38,7 +38,7 @@ expensive mistake available here:
 | The vendor errored, timed out, or was busy | A **measurement failure**. Retry it. | "did not mention the brand" |
 | The vendor was not logged in | It was **never asked**. | "did not mention the brand" |
 
-`geo_visibility_probe` marks all three for you: `inDenominator` is true only for
+`mcp__evimed__geo_visibility_probe` marks all three for you: `inDenominator` is true only for
 the first. Take it at its word. If it returns `measurement: "failed"`, you did not
 measure — say so, or retry, but do not compute a rate over it.
 
@@ -111,7 +111,7 @@ medical context is the defect.
 
 - Every claim in a block traces to a citation in `citation-ledger.csv`.
 - A claim that goes beyond the label is off-label. It does not go in the pack.
-  Not softened, not hedged — out. Check with `drug_label_search` when unsure.
+  Not softened, not hedged — out. Check with `mcp__evimed__drug_label_search` when unsure.
 - Claims about a competitor need the same evidence as claims about the product.
   "Not mentioned by the engines" is a measurement about the engines, not a fact
   about the competitor.

@@ -4,11 +4,11 @@ import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } fro
 import net from "node:net";
 import path from "node:path";
 import test from "node:test";
-import { RuntimeManager, requestRuntime } from "../src/runtimeManager.mjs";
+import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, requestRuntime } from "../src/runtimeManager.mjs";
 import { RuntimeControllerClient } from "../src/runtimeControllerClient.mjs";
 import { createRuntimeController } from "../src/runtimeControllerServer.mjs";
 import { createWebApiApp } from "../src/server.mjs";
-import { runtimeReleaseConfig } from "./releaseFixture.mjs";
+import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 /**
  * Removes a test's temp tree, tolerating a child that is still exiting.
@@ -31,7 +31,7 @@ async function shortTempDir(prefix) {
 }
 
 async function supportsRuntimeSocket(project) {
-  const socketPath = path.join(project.runtimeDir, "container-runtime", "control", "opencode.sock");
+  const socketPath = path.join(project.runtimeDir, "container-runtime", "control", RUNTIME_SOCKET_FILE_NAME);
   await mkdir(path.dirname(socketPath), { recursive: true });
   await rm(socketPath, { force: true });
   const server = net.createServer();
@@ -108,20 +108,25 @@ if (args[0] === "image" && args[1] === "inspect") {
   // moment the reader asks for one more, and then every assertion downstream
   // measures the misalignment instead of the thing under test.
   //
-  // This image publishes both labels: it stands for an image built after the
-  // neutral label landed, so the controller's preferred reading is the one
-  // exercised here while server.test.mjs covers the rollback fallback.
+  // The labels the runtime Dockerfile publishes, and nothing kernel-specific:
+  // there is one kernel, and both readers ask for io.open-science.runtime.version.
+  // A stub still answering under the retired vendor label reports empty for the
+  // label the reader asks for, which fails runtime_image_metadata_missing and
+  // never reaches the provenance comparison this test is about.
+  //
+  // Values come from the release fixture rather than being typed here: the
+  // controller compares the image against the manifest, so a literal makes the
+  // two drift and the test then measures the drift instead of the comparison.
   // (No backticks in this comment: it lives inside a template literal, and the
   // first version of it terminated the string that generates this file.)
-  const labels = {
-    "io.open-science.runtime.version": "1.17.13",
-    "io.open-science.runtime.kernel": "opencode",
-    "io.open-science.opencode.version": "1.17.13",
-    "io.open-science.uv.version": "0.11.26",
-  };
+  const labels = ${JSON.stringify({
+    "io.open-science.runtime.version": releaseManifestFixture.runtime.dshVersion,
+    "io.open-science.runtime.kernel": "dsh",
+    "io.open-science.uv.version": releaseManifestFixture.runtime.uvVersion,
+  })};
   const format = args[args.indexOf("--format") + 1] ?? "";
   process.stdout.write(format.split("|").map((token) => {
-    if (token === "{{.Id}}") return "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    if (token === "{{.Id}}") return ${JSON.stringify(releaseManifestFixture.runtime.imageId)};
     const label = token.match(/"([^"]+)"/)?.[1];
     return label && Object.hasOwn(labels, label) ? labels[label] : "";
   }).join("|") + "\\n");
@@ -209,7 +214,7 @@ const fields = Object.fromEntries(mount.split(",").map((part) => {
 const runtimeRoot = fields.type === "volume"
   ? path.join(volumeRoot, fields["volume-subpath"])
   : fields.src;
-const socketPath = path.join(runtimeRoot, "opencode.sock");
+const socketPath = path.join(runtimeRoot, ${JSON.stringify(RUNTIME_SOCKET_FILE_NAME)});
 fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 fs.rmSync(socketPath, { force: true });
 writeState(name, { pid: process.pid, state: "running", runtime: true, containerName: name, userId: owner });
@@ -224,9 +229,13 @@ if (process.env.FAKE_RUNTIME_DIES) {
   return;
 }
 const server = http.createServer((req, res) => {
-  if (req.url.startsWith("/config")) {
+  // The readiness probe is one real wire call now. DSH serves no /config at
+  // all, and a probe that accepted a 404 hid both that and the race where the
+  // kernel binds its port before mounting /api.
+  if (req.url.startsWith("/api/session/list")) {
+    req.resume();
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ready: true }));
+    res.end(JSON.stringify({ type: "server-response", result: { ok: true, value: { items: [] } } }));
     return;
   }
   res.writeHead(404, { "content-type": "application/json" });
@@ -335,9 +344,16 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
   process.env.FAKE_VOLUME_ROOT = dataDir;
   const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
+  // Declared outside the try so the finally can reach it. A manager closed only
+  // on the success path leaves its runtimes, its timers and its connection to
+  // the controller alive when an assertion fails, and the controller's own
+  // shutdown then has to drain them — cleanup that runs only when nothing went
+  // wrong is cleanup for the case that did not need it.
+  /** @type {any} */
+  let manager = null;
   try {
     await controller.listen();
-    const manager = new RuntimeManager({
+    manager = new RuntimeManager({
       ...controllerConfig({ dataDir, socketPath, dockerBin }),
       runtimeControllerMode: "socket",
       runtimeControllerTimeoutMs: 2_000,
@@ -354,20 +370,93 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
     const runtime = await manager.start(project);
     assert.equal(runtime.sandboxMode, "docker");
     assert.equal(runtime.pid, null);
-    const response = await requestRuntime(runtime, "/config");
+    // The round trip that proves the isolated control socket carries the wire
+    // rather than merely existing: the same call the readiness probe makes,
+    // with its body handed back intact.
+    const response = await requestRuntime(runtime, "/api/session/list", {
+      method: "POST",
+      headers: {
+        ...(runtime.cookie ? { cookie: runtime.cookie } : {}),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "client-request",
+        rpcId: "rpc_controller_probe",
+        method: "session/list",
+        payload: { args: { _request: {} } },
+      }),
+    });
     assert.equal(response.status, 200);
-    assert.deepEqual(await new Response(response.body).json(), { ready: true });
+    assert.deepEqual(await new Response(response.body).json(), {
+      type: "server-response",
+      result: { ok: true, value: { items: [] } },
+    });
     await manager.stop(project);
     const status = await manager.runtimeController.runtimeStatus(project);
     assert.equal(status.running, false);
     assert.equal(status.state, "missing");
-    await manager.closeAll();
   } finally {
+    await manager?.closeAll().catch(() => {});
     await controller.close().catch(() => {});
     if (previousState == null) delete process.env.FAKE_DOCKER_STATE;
     else process.env.FAKE_DOCKER_STATE = previousState;
     if (previousVolume == null) delete process.env.FAKE_VOLUME_ROOT;
     else process.env.FAKE_VOLUME_ROOT = previousVolume;
+    await removeTree(tmp);
+  }
+});
+
+test("runtime controller shutdown ends even while a client holds a connection open", async () => {
+  // `server.close` resolves only once every open connection has ended, and a
+  // connection that has never sent a request does not end on its own: with no
+  // request in progress there is nothing for the HTTP timeouts to expire, and
+  // `closeIdleConnections` does not count such a socket as idle. So one client
+  // sitting on a connection made `close()` wait forever — a controller told to
+  // stop that goes on owning its socket, and, when the controller is in-process
+  // as it is here, a whole test file that stops exiting rather than reporting
+  // its failures.
+  //
+  // Raced rather than awaited on purpose: a regression here is a hang, and a
+  // regression test that hangs reports nothing. The socket is destroyed in the
+  // finally, which releases a `close()` still pending, so the failure is a
+  // failure and not a second hang.
+  const tmp = await shortTempDir("osrd-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  await mkdir(dataDir, { recursive: true });
+  const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
+  /** @type {import("node:net").Socket | null} */
+  let held = null;
+  try {
+    await controller.listen();
+    held = net.connect({ path: socketPath });
+    await new Promise((resolve, reject) => {
+      held?.once("connect", resolve);
+      held?.once("error", reject);
+    });
+    const cut = new Promise((resolve) => {
+      const timer = setTimeout(() => resolve("still shutting down"), 15_000);
+      timer.unref?.();
+    });
+    assert.equal(
+      await Promise.race([controller.close().then(() => "closed"), cut]),
+      "closed",
+      "a client holding a connection open must not be able to keep the controller from stopping",
+    );
+    // And the connection was cut, not merely left behind: an unclosed socket is
+    // the handle that kept the process alive in the first place.
+    await new Promise((resolve) => {
+      if (held?.destroyed || held?.readableEnded) resolve(undefined);
+      else held?.once("close", resolve);
+    });
+  } finally {
+    held?.destroy();
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
     await removeTree(tmp);
   }
 });
@@ -534,6 +623,8 @@ test("runtime controller independently enforces global and per-user runtime limi
     maxRunningRuntimesPerUser: 1,
   };
   const controller = createRuntimeController(config);
+  /** @type {any} */
+  let mismatchedManager = null;
   try {
     await controller.listen();
     const client = new RuntimeControllerClient({
@@ -556,7 +647,7 @@ test("runtime controller independently enforces global and per-user runtime limi
     await client.cleanupRuntime(aliceOne);
     await client.cleanupRuntime(bobOne);
 
-    const mismatchedManager = new RuntimeManager({
+    mismatchedManager = new RuntimeManager({
       ...config,
       runtimeControllerMode: "socket",
       allowDirectDockerControl: false,
@@ -566,8 +657,8 @@ test("runtime controller independently enforces global and per-user runtime limi
       mismatchedManager.controllerHealth(),
       (error) => error?.status === 503 && error?.code === "runtime_controller_limit_mismatch",
     );
-    await mismatchedManager.closeAll();
   } finally {
+    await mismatchedManager?.closeAll().catch(() => {});
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;
@@ -628,9 +719,11 @@ test("runtime controller executes and cancels a bounded Docker kernel", async ()
   process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
   process.env.FAKE_VOLUME_ROOT = dataDir;
   const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
+  /** @type {any} */
+  let manager = null;
   try {
     await controller.listen();
-    const manager = new RuntimeManager({
+    manager = new RuntimeManager({
       ...controllerConfig({ dataDir, socketPath, dockerBin }),
       runtimeControllerMode: "socket",
       runtimeControllerTimeoutMs: 2_000,
@@ -649,6 +742,7 @@ test("runtime controller executes and cancels a bounded Docker kernel", async ()
     setTimeout(() => abort.abort(), 50);
     await assert.rejects(pending, (error) => error?.name === "AbortError");
   } finally {
+    await manager?.closeAll().catch(() => {});
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;

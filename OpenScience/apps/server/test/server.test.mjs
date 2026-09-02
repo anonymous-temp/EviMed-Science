@@ -1294,14 +1294,13 @@ test("readiness requires a validated release manifest in production", async () =
   );
 });
 
-test("readiness accepts a DSH release the way it accepts an opencode one", async () => {
+test("production readiness accepts a release manifest that matches the deployed kernel", async () => {
   // Two readiness comparisons read the manifest's runtime row, and each had to
   // learn the kernel switch separately. `readinessRelease` had not: it compared
-  // `config.opencodeVersion` against `manifest.runtime.opencodeVersion`, which
-  // a DSH manifest does not carry, so the expected side was `undefined` while
-  // the actual side held the rollback kernel's version — `release_manifest_
-  // mismatch` on every DSH deployment, unconditionally, and invisible in dev
-  // because the whole block is behind `config.production`.
+  // a kernel version field the manifest no longer carries, so the expected side
+  // was `undefined` while the actual side held a real version — `release_
+  // manifest_mismatch` on every deployment, unconditionally, and invisible in
+  // dev because the whole block is behind `config.production`.
   await withApp(
     async ({ base }) => {
       const res = await fetch(`${base}/api/ready`);
@@ -5540,7 +5539,11 @@ test("runtime_status marks interrupted starting runtime state as stale", async (
         projectId: "default",
         event: "starting",
         running: false,
-        kind: "opencode",
+        // The kernel this build writes into runtime state. The app under test
+        // runs in mock mode, so reading `dsh` back out still proves the value
+        // came off disk rather than from a server constant, and the fixture no
+        // longer describes a deployment this build could not have produced.
+        kind: "dsh",
         startedAt: null,
         pid: null,
         exitedAt: null,
@@ -5562,7 +5565,7 @@ test("runtime_status marks interrupted starting runtime state as stale", async (
     assert.equal(out.json.data.running, false);
     assert.equal(out.json.data.stale, true);
     assert.equal(out.json.data.lastEvent, "starting");
-    assert.equal(out.json.data.kind, "opencode");
+    assert.equal(out.json.data.kind, "dsh");
     assert.equal(out.json.data.sandboxMode, "docker");
     assert.equal(JSON.stringify(out.json.data).includes("os-web-runtime-starting-"), false);
   } finally {
@@ -5655,7 +5658,10 @@ test("restart_runtime replaces a project runtime through the command API", async
     assert.equal(stopped.runtimeSandboxMode, "mock");
     assert.equal(stopped.runtimeRunning, false);
     assert.equal(stopped.runtimeStale, false);
-    assert.equal(JSON.stringify(runtimeRows).includes("/api/opencode"), false);
+    // The retired pass-through path this used to name can no longer be built,
+    // so the assertion is stated over the kernel that exists: an audit row is
+    // the control plane's own record and must not name a kernel at all.
+    assert.equal(/opencode|dsh/i.test(JSON.stringify(runtimeRows)), false, "an audit row must not name a kernel");
     assert.equal(JSON.stringify(runtimeRows).includes("dsh.sock"), false, "a control socket path must not reach an audit row");
   });
 });

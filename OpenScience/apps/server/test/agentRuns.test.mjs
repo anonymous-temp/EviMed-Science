@@ -35,12 +35,12 @@ async function withApp(fn, overrides = {}) {
   }
 }
 
-test("real OpenCode dispatch fails explicitly when the managed DeepSeek provider is disabled", async () => {
+test("real kernel dispatch fails explicitly when the managed DeepSeek provider is disabled", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-agent-runs-provider-disabled-"));
   const app = createWebApiApp({
     dataDir,
     port: 0,
-    runtimeMode: "opencode",
+    runtimeMode: "kernel",
     deepseekProviderEnabled: false,
     devAuth: true,
   });

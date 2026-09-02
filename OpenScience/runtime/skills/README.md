@@ -4,8 +4,7 @@ Scientific skills, layered:
 
 ```text
 skills/
-  core/      # self-authored skills specific to this app (traceability-review;
-             # other dirs are roadmap placeholders until they get a SKILL.md)
+  core/      # self-authored general-purpose skills; all twelve ship a SKILL.md
   curated-scientific/ # reviewed skills with an exhaustive delivery inventory
   office/    # first-party MIT baseline Office artifact exporters
   community/ # ecosystem skills, vendored at pinned commits (sources.json)

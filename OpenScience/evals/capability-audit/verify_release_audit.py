@@ -282,10 +282,17 @@ def verify_skills():
     # editing a recording to look current is falsified evidence — so this reads
     # the current name and falls back to the recorded one. Drop the fallback
     # once the audit has been re-recorded under the DSH runtime.
-    installed_count = summary.get(
-        "freshWebRuntimeSkillPackages",
-        summary.get("freshWebOpenCodeSkillPackages"),
-    )
+    installed_count = summary.get("freshWebRuntimeSkillPackages")
+    if installed_count is None:
+        installed_count = summary.get("freshWebOpenCodeSkillPackages")
+        # Said out loud rather than absorbed: a reader of a passing gate would
+        # otherwise take a count measured under the retired kernel for a count
+        # measured under the one that ships.
+        print(
+            "notice: skill-audit-v4.json carries freshWebOpenCodeSkillPackages, "
+            "so this count was recorded under the retired kernel; re-record the "
+            "skill audit under the DSH runtime",
+        )
     require(len(installed) == 69 and installed_count == 69, "clean Web runtime Skill count is not 69")
     require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
 

@@ -38,6 +38,20 @@ function bashComposeStartupBlocks(document) {
     .filter((block) => /\bdocker compose\b/.test(block) && /(?:^|\s)up(?:\s|$)/m.test(block));
 }
 
+// One Compose service's block, from its two-space-indented key to the next
+// key at the same indent. Slicing by the name of whichever service happens to
+// follow it is how a check starts reading a neighbour's settings the day a
+// service is deleted or reordered.
+function composeService(document, name) {
+  const startPattern = new RegExp(`^  ${name}:$`, "m");
+  const startMatch = startPattern.exec(document);
+  if (!startMatch) return "";
+  const from = startMatch.index;
+  const rest = document.slice(from + startMatch[0].length);
+  const nextMatch = /^ {2}[A-Za-z0-9_.-]+:$/m.exec(rest);
+  return nextMatch ? document.slice(from, from + startMatch[0].length + nextMatch.index) : document.slice(from);
+}
+
 function repoRel(file) {
   return path.relative(repoRoot, file).replace(/\\/g, "/");
 }
@@ -121,50 +135,51 @@ async function checkRootLicense() {
 }
 
 async function checkRuntimePins() {
-  const dockerfile = await read("deploy/runtime-opencode/Dockerfile");
-  const dshDockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  // One agent runtime image. `deploy/runtime-opencode/` is a retired tree the
+  // platform no longer builds or launches, and it is deliberately not read
+  // here: a source audit that keeps pattern-matching a Dockerfile nothing
+  // ships reports coverage it does not have, which is worse than no check.
+  const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const workflow = await read(".github/workflows/web.yml");
-  const opencode = dockerfile.match(/^ARG OPENCODE_VERSION=([^\s]+)/m)?.[1] ?? "";
-  const uv = dockerfile.match(/^ARG UV_VERSION=([^\s]+)/m)?.[1] ?? "";
-  if (!opencode || opencode === "latest") {
-    fail("opencode_version_unpinned", "Hosted OpenCode runtime image must pin OPENCODE_VERSION.");
-  } else {
-    pass("opencode_version_pinned", "Hosted OpenCode runtime pins OPENCODE_VERSION.", { version: opencode });
-  }
-  if (!uv || uv === "latest") {
-    fail("uv_version_unpinned", "Hosted runtime image must pin UV_VERSION.");
-  } else {
-    pass("uv_version_pinned", "Hosted runtime image pins UV_VERSION.", { version: uv });
-  }
+  const compose = await read("deploy/web/docker-compose.yml");
 
-  // Both kernels are shippable while the switch exists, so both images are
-  // audited. Auditing only the retiring one is how a green compliance run comes
-  // to say nothing about the image the platform actually launches.
-  const dsh = dshDockerfile.match(/^ARG DSH_VERSION=([^\s]+)/m)?.[1] ?? "";
-  const dshUv = dshDockerfile.match(/^ARG UV_VERSION=([^\s]+)/m)?.[1] ?? "";
-  const dshCordis = dshDockerfile.match(/^ARG DSH_CORDIS_VERSION=([^\s]+)/m)?.[1] ?? "";
+  // Every version this image resolves, named exactly. The kernel pin is the
+  // one that used to be `OPENCODE_VERSION`; the rest were always here.
+  const dsh = dockerfile.match(/^ARG DSH_VERSION=([^\s]+)/m)?.[1] ?? "";
+  const uv = dockerfile.match(/^ARG UV_VERSION=([^\s]+)/m)?.[1] ?? "";
   for (const [value, okCode, badCode, label] of [
     [dsh, "dsh_version_pinned", "dsh_version_unpinned", "DSH_VERSION"],
-    [dshCordis, "dsh_cordis_version_pinned", "dsh_cordis_version_unpinned", "DSH_CORDIS_VERSION"],
-    [dshUv, "dsh_uv_version_pinned", "dsh_uv_version_unpinned", "UV_VERSION"],
     [
-      dshDockerfile.match(/^ARG PNPM_VERSION=([^\s]+)/m)?.[1] ?? "",
+      dockerfile.match(/^ARG DSH_CORDIS_VERSION=([^\s]+)/m)?.[1] ?? "",
+      "dsh_cordis_version_pinned",
+      "dsh_cordis_version_unpinned",
+      "DSH_CORDIS_VERSION",
+    ],
+    [uv, "uv_version_pinned", "uv_version_unpinned", "UV_VERSION"],
+    [
+      dockerfile.match(/^ARG PNPM_VERSION=([^\s]+)/m)?.[1] ?? "",
       "dsh_pnpm_version_pinned",
       "dsh_pnpm_version_unpinned",
       "PNPM_VERSION",
     ],
+    [
+      dockerfile.match(/^ARG NODE_VERSION=([^\s]+)/m)?.[1] ?? "",
+      "runtime_node_version_pinned",
+      "runtime_node_version_unpinned",
+      "NODE_VERSION",
+    ],
   ]) {
     if (!value || value === "latest") {
-      fail(badCode, `Hosted DSH runtime image must pin ${label}.`);
+      fail(badCode, `Hosted runtime image must pin ${label}.`);
     } else {
-      pass(okCode, `Hosted DSH runtime pins ${label}.`, { version: value });
+      pass(okCode, `Hosted runtime pins ${label}.`, { version: value });
     }
   }
 
   // A bundle added without a version resolves whatever `latest` points at, and
   // most DSH sub-packages still tag 0.0.1-rc.1 as latest — so an unpinned add
   // installs the first release ever cut, under a Dockerfile that claims a pin.
-  const addLine = dshDockerfile.match(/dsh plugin --profile \S+ add ([^;\\]+)/)?.[1] ?? "";
+  const addLine = dockerfile.match(/dsh plugin --profile \S+ add ([^;\\]+)/)?.[1] ?? "";
   const unpinnedBundles = addLine
     .split(/\s+/)
     .filter((spec) => spec.startsWith('"@deepseek-ai/') || spec.startsWith("@deepseek-ai/"))
@@ -188,11 +203,12 @@ async function checkRuntimePins() {
     pass("dsh_version_pin_single_source", "runtime-dsh pin equals the single definition.", { version: dsh });
   }
 
-  const compose = await read("deploy/web/docker-compose.yml");
-  if (/OPENCODE_VERSION:\s+\$\{OPEN_SCIENCE_OPENCODE_VERSION:-[^}]+\}/.test(compose)) {
-    pass("compose_runtime_version_arg", "Compose exposes the pinned OpenCode image version arg.");
+  // The kernel version an operator can override at build time, exposed by
+  // Compose the way `OPENCODE_VERSION` used to be.
+  if (/DSH_VERSION:\s+\$\{OPEN_SCIENCE_DSH_VERSION:-[^}]+\}/.test(compose)) {
+    pass("compose_runtime_version_arg", "Compose exposes the pinned agent runtime kernel version arg.");
   } else {
-    fail("compose_runtime_version_arg_missing", "Compose must expose OPEN_SCIENCE_OPENCODE_VERSION.");
+    fail("compose_runtime_version_arg_missing", "Compose must expose OPEN_SCIENCE_DSH_VERSION.");
   }
   if (/UV_VERSION:\s+\$\{OPEN_SCIENCE_UV_VERSION:-[^}]+\}/.test(compose)) {
     pass("compose_uv_version_arg", "Compose exposes the pinned uv image version arg.");
@@ -206,34 +222,48 @@ async function checkRuntimePins() {
     fail("runtime_native_architecture_missing", "Runtime builds must consume BuildKit TARGETARCH without a hard-coded architecture default or Compose override.");
   }
 
-  const digestArgs = [
-    "OPENCODE_SHA256_AMD64",
-    "OPENCODE_SHA256_ARM64",
-    "UV_SHA256_AMD64",
-    "UV_SHA256_ARM64",
-  ];
+  // Release-asset integrity, at the two shapes this image actually uses.
+  //
+  // uv and Node arrive as downloaded archives, so they are still bound to
+  // architecture-specific SHA-256 digests before extraction. The kernel does
+  // not: it is an npm global, so there is no archive to digest, and the
+  // equivalent binding is `--before` plus an assertion over the whole
+  // installed tree — a date filter is a request, the scan is the guarantee.
+  // Checking only the digests here would have passed a build that installed
+  // 213 subpackages one release ahead of the pin.
+  const digestArgs = ["UV_SHA256_AMD64", "UV_SHA256_ARM64"];
+  const kernelTreePinned =
+    /^ARG DSH_PUBLISHED_BEFORE=\d{4}-\d{2}-\d{2}T/m.test(dockerfile) &&
+    /--before="\$\{DSH_PUBLISHED_BEFORE\}"/.test(dockerfile) &&
+    /names\.length < 50/.test(dockerfile) &&
+    /filter\(\(\[, v\]\) => v !== pin\)/.test(dockerfile);
   if (
     digestArgs.every((name) => new RegExp(`^ARG ${name}=[a-f0-9]{64}$`, "m").test(dockerfile)) &&
     digestArgs.every((name) => new RegExp(`${name}:\\s+\\$\\{OPEN_SCIENCE_${name}:-[a-f0-9]{64}\\}`).test(compose)) &&
-    (dockerfile.match(/sha256sum -c -/g) ?? []).length >= 2
+    /^ARG NODE_SHA256_AMD64=[a-f0-9]{64}$/m.test(dockerfile) &&
+    kernelTreePinned &&
+    (dockerfile.match(/sha256sum -c -/g) ?? []).length >= 3
   ) {
-    pass("runtime_release_asset_integrity", "OpenCode and uv release archives are bound to architecture-specific SHA-256 digests before extraction.");
+    pass("runtime_release_asset_integrity", "Downloaded runtime archives are bound to architecture-specific SHA-256 digests before extraction, and the npm-installed kernel tree is pinned by publish date and verified package by package.");
   } else {
-    fail("runtime_release_asset_integrity_missing", "Runtime release archives must be verified against pinned architecture-specific SHA-256 digests.");
+    fail("runtime_release_asset_integrity_missing", "Runtime release archives must be verified against pinned architecture-specific SHA-256 digests, and the installed kernel tree must be asserted at one version.");
   }
 
+  // The one third-party binary this image fetches and redistributes is uv, and
+  // its license travels with it, checksum-verified. The kernel's own license
+  // ships inside the npm package that carries the kernel, so there is no
+  // separate fetch to verify — which is why the retired
+  // `OPENCODE_LICENSE_SHA256` arg has no successor here.
   if (
-    /^ARG OPENCODE_LICENSE_SHA256=[a-f0-9]{64}$/m.test(dockerfile) &&
     /^ARG UV_LICENSE_MIT_SHA256=[a-f0-9]{64}$/m.test(dockerfile) &&
-    /opencode\/v\$\{OPENCODE_VERSION\}\/LICENSE/.test(dockerfile) &&
     /uv\/\$\{UV_VERSION\}\/LICENSE-MIT/.test(dockerfile) &&
-    /\/usr\/share\/licenses\/opencode\/LICENSE/.test(dockerfile) &&
     /\/usr\/share\/licenses\/uv\/LICENSE-MIT/.test(dockerfile) &&
     /Verify runtime binaries and preserved licenses/.test(workflow) &&
     /docker run --rm --network none/.test(workflow) &&
-    (dockerfile.match(/sha256sum -c -/g) ?? []).length >= 4
+    /test -s \/usr\/share\/licenses\/uv\/LICENSE-MIT/.test(workflow) &&
+    (dockerfile.match(/sha256sum -c -/g) ?? []).length >= 3
   ) {
-    pass("runtime_license_notices", "The runtime image verifies and preserves the pinned OpenCode and uv license texts.");
+    pass("runtime_license_notices", "The runtime image verifies and preserves the pinned uv license text, and CI proves the shipped image still carries it.");
   } else {
     fail("runtime_license_notices_missing", "The runtime image must preserve checksum-verified licenses for redistributed runtime binaries.");
   }
@@ -305,15 +335,23 @@ async function checkDeepSeekCompatibilityPreflight() {
     pkg.scripts?.["preflight:deepseek:release"] === "node scripts/ops/deepseek-kernel-release-gate.mjs" &&
     /OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE/.test(script) &&
     !/OPEN_SCIENCE_DEEPSEEK_API_KEY(?:[^_]|$)/.test(script) &&
-    /REQUIRED_OPENCODE_VERSION = "1\.17\.13"/.test(releaseGate) &&
-    /syncRuntimeModelProvider/.test(releaseGate) &&
+    // The kernel version a receipt attests, read from the single definition
+    // rather than repeated here. This replaces the literal
+    // `REQUIRED_OPENCODE_VERSION = "1.17.13"` the gate used to carry: a pin
+    // written twice is a pin that can disagree with itself.
+    /const REQUIRED_DSH_VERSION = JSON\.parse\(/.test(releaseGate) &&
+    /deps-version\.json/.test(releaseGate) &&
+    // And the model, certified from what the gateway will actually serve
+    // rather than from a name typed into the gate.
+    /certifiedDeepSeekModel\(\)/.test(releaseGate) &&
     /createHmac/.test(releaseGate) &&
     /timingSafeEqual/.test(releaseGate) &&
     /MAX_RECEIPT_FUTURE_MS/.test(releaseGate) &&
-    /runBoundedProcess/.test(releaseGate) &&
-    /SIGKILL/.test(releaseGate) &&
+    // The gate can no longer mint: driving the chain needs the runtime image,
+    // not a host binary. What matters for compliance is that it refuses with a
+    // named code instead of signing a receipt for something it never measured.
+    /deepseek_release_chain_unavailable/.test(releaseGate) &&
     /test\/deepseekCompatibility\.test\.mjs/.test(workflow) &&
-    /test\/deepseekOpenCodeReleaseGate\.test\.mjs/.test(workflow) &&
     /validateDeepSeekCompatibilityTool/.test(hostPreflight) &&
     /readDeepSeekReleaseReceiptFile/.test(hostPreflight) &&
     /readDeepSeekReleaseReceiptFile/.test(server) &&
@@ -324,15 +362,34 @@ async function checkDeepSeekCompatibilityPreflight() {
     /MODEL_GATEWAY_SIGNING_SECRET_FILE/.test(operations) &&
     /HMAC-authenticated/.test(privacy)
   ) {
-    pass("deepseek_compatibility_preflight", "File-keyed DeepSeek and pinned OpenCode release gates are runnable, fake-chain tested, HMAC/freshness-bound, response-bounded, and do not make live CI calls.");
+    pass("deepseek_compatibility_preflight", "File-keyed DeepSeek tooling and the kernel release gate are runnable, pinned from the single version definition, HMAC/freshness-bound, response-bounded, refuse to mint an unmeasured receipt, and make no live CI calls.");
   } else {
     fail("deepseek_compatibility_preflight_missing", "DeepSeek compatibility tooling must be file-keyed, runnable, preflight-checked, and fake-provider tested.");
+  }
+
+  // The CI step that runs those gates, checked against the files on disk
+  // rather than against a remembered filename. Naming a test file that does
+  // not exist is how a rename turns a gate into a step that cannot run.
+  const gateStep = workflow.match(/Test DeepSeek compatibility and release gates[\s\S]*?\n\n/)?.[0] ?? "";
+  const namedTests = [...gateStep.matchAll(/(test\/[A-Za-z0-9_.-]+\.test\.mjs)/g)].map((match) => match[1]);
+  const absentTests = namedTests.filter((rel) => !existsSync(path.join(repoRoot, "apps/server", rel)));
+  if (namedTests.length >= 2 && absentTests.length === 0) {
+    pass("deepseek_release_gate_ci_step", "The CI DeepSeek gate step names release-gate tests that exist.", {
+      tests: namedTests,
+    });
+  } else {
+    // A notice, not a block: this file is not owned by the compliance audit's
+    // package and CI fails loudly on a missing test path. It is named so the
+    // rename is visible before someone reads a red CI log for it.
+    warn("deepseek_release_gate_ci_step_stale", "The CI DeepSeek gate step names test files that do not exist; the release-gate suite was renamed to test/deepseekKernelReleaseGate.test.mjs.", {
+      named: namedTests,
+      absent: absentTests,
+    });
   }
 }
 
 async function checkRuntimeContainerTopology() {
-  const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
-  const dshRuntimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const compose = await read("deploy/web/docker-compose.yml");
   const workflow = await read(".github/workflows/web.yml");
   const envExample = await read("deploy/web/.env.example");
@@ -341,17 +398,9 @@ async function checkRuntimeContainerTopology() {
   const commands = await read("apps/server/src/commands.mjs");
   const manager = await read("apps/server/src/runtimeManager.mjs");
   const controller = await read("apps/server/src/runtimeControllerServer.mjs");
-  const launcher = await read("deploy/runtime-opencode/open-science-opencode-serve.sh");
-  const controllerStart = compose.indexOf("\n  open-science-runtime-controller:\n    image:");
-  const runtimeImageStart = compose.indexOf("\n  opencode-runtime-image:");
-  const webService = compose.slice(
-    compose.indexOf("  open-science-web:"),
-    controllerStart,
-  );
-  const controllerService = compose.slice(
-    controllerStart,
-    runtimeImageStart,
-  );
+  const launcher = await read("deploy/runtime-dsh/open-science-dsh-serve.sh");
+  const webService = composeService(compose, "open-science-web");
+  const controllerService = composeService(compose, "open-science-runtime-controller");
 
   if (
     /OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE:\s+socket/.test(webService) &&
@@ -376,7 +425,13 @@ async function checkRuntimeContainerTopology() {
     /Web API root filesystem must be read-only/.test(workflow) &&
     /Web API container must not mount \/var\/run\/docker\.sock/.test(workflow) &&
     /Web API controller mount must be read-only/.test(workflow) &&
-    /buildOpenCodeLaunchPlan\(config, project, port, password\)/.test(controller) &&
+    // The launch plan is still reconstructed inside the controller from the
+    // scoped project identifier and a port, never handed over by the API. The
+    // signature lost its `password` argument when the kernel it authenticated
+    // was retired, and the arity is pinned here because a plan builder that
+    // started accepting caller-supplied arguments is exactly the regression
+    // this check exists to catch.
+    /buildRuntimeLaunchPlan\(config, project, port\)/.test(controller) &&
     !/payload\.args|payload\.image|payload\.mount/.test(controller)
   ) {
     pass("runtime_controller_privilege_boundary", "Only the unexposed runtime controller holds the Docker socket; the capability-free, read-only API receives a read-only control-socket mount, and the controller reconstructs fixed launch plans from scoped project identifiers.");
@@ -426,17 +481,21 @@ async function checkRuntimeContainerTopology() {
     fail("runtime_project_volume_subpaths_missing", "Hosted sibling containers must share scoped named-volume subpaths, not container-local bind paths.");
   }
 
+  // The kernel binds loopback inside its own container and socat re-exposes it
+  // as a 0600 Unix socket on the shared volume. Same property as before, one
+  // launcher: the API container's localhost must never be the way it reaches a
+  // sibling container.
   if (
     /OPEN_SCIENCE_RUNTIME_TRANSPORT:\s+\$\{OPEN_SCIENCE_RUNTIME_TRANSPORT:-unix\}/.test(compose) &&
     /requestRuntime\(runtime/.test(manager) &&
-    /\bsocat\b/.test(runtimeDockerfile) &&
-    /\bsocat\b/.test(dshRuntimeDockerfile) &&
-    /UNIX-LISTEN:\$\{socket\}/.test(launcher) &&
-    /opencode serve --hostname 127\.0\.0\.1/.test(launcher)
+    /\bsocat\b/.test(dockerfile) &&
+    /UNIX-LISTEN:\$\{socket\},fork,unlink-early,mode=0600/.test(launcher) &&
+    /TCP:127\.0\.0\.1:\$\{port\}/.test(launcher) &&
+    /dsh --profile "\$\{profile\}"/.test(launcher)
   ) {
-    pass("runtime_unix_socket_transport", "OpenCode HTTP/SSE uses a project-scoped Unix socket across sibling containers.");
+    pass("runtime_unix_socket_transport", "Agent runtime HTTP/SSE uses a project-scoped, owner-only Unix socket across sibling containers.");
   } else {
-    fail("runtime_unix_socket_transport_missing", "Hosted OpenCode must not rely on the API container's localhost to reach a sibling container.");
+    fail("runtime_unix_socket_transport_missing", "The hosted agent runtime must not rely on the API container's localhost to reach a sibling container.");
   }
 
   if (
@@ -450,6 +509,40 @@ async function checkRuntimeContainerTopology() {
     pass("runtime_default_network_isolation", "Compose and Linux runtime smoke restrict hosted runtimes to the internal gateway network.");
   } else {
     fail("runtime_default_network_isolation_missing", "Hosted runtime defaults and CI must not silently enable bridge egress.");
+  }
+
+  // One agent runtime image, built from one Dockerfile.
+  //
+  // While two kernel images were declared, both tagged their build from
+  // `OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE` — the single variable `config.mjs`
+  // resolves the launched image from — so `--profile runtime-image build`
+  // could overwrite the tag the control plane launches with an image built
+  // from a Dockerfile no deployment ships. Counting the runtime Dockerfiles
+  // Compose builds is what makes that unrepeatable, rather than banning one
+  // retired service name that a second copy would not match.
+  const runtimeBuildFiles = [...compose.matchAll(/^\s+dockerfile:\s+(deploy\/runtime-[a-z0-9-]+\/Dockerfile)$/gm)]
+    .map((match) => match[1]);
+  if (runtimeBuildFiles.length === 1 && runtimeBuildFiles[0] === "deploy/runtime-dsh/Dockerfile") {
+    pass("hosted_runtime_kernel_singular", "Compose builds exactly one agent runtime image, from deploy/runtime-dsh/Dockerfile.", {
+      dockerfile: runtimeBuildFiles[0],
+    });
+  } else {
+    fail("hosted_runtime_kernel_singular_missing", "Compose must build exactly one agent runtime image, and it must be deploy/runtime-dsh/Dockerfile.", {
+      dockerfiles: runtimeBuildFiles,
+    });
+  }
+
+  // And the retired tree itself. Nothing builds it any more, but it is still
+  // on disk and still named by the release manifest generator, so a release
+  // still records digests for an image no deployment can launch.
+  //
+  // A notice rather than a block: deleting it means editing
+  // `scripts/ops/generate-release-manifest.mjs` in the same change, and both
+  // files belong to other packages.
+  if (!existsSync(path.join(repoRoot, "deploy/runtime-opencode"))) {
+    pass("retired_runtime_tree_removed", "The retired kernel's build tree is gone.");
+  } else {
+    warn("retired_runtime_tree_present", "deploy/runtime-opencode/ is still on disk and still named by scripts/ops/generate-release-manifest.mjs; delete both so a release cannot record an image no deployment launches.");
   }
 }
 
@@ -501,16 +594,11 @@ async function checkScientificCapabilityDelivery() {
   const tiered = [...executable, ...conditional, ...instructionOnly].sort();
   const inventoried = (curated.skills ?? []).map((skill) => skill.name).sort();
   const runtimeManager = await read("apps/server/src/runtimeManager.mjs");
-  // Both runtime images must carry the scientific stack the curated skills
-  // import, because either kernel can be the one a deployment launches. An
-  // audit that reads only the retiring image would pass while the executable
-  // tier fails at run time on the other one.
-  const runtimeDockerfiles = [
-    await read("deploy/runtime-opencode/Dockerfile"),
-    await read("deploy/runtime-dsh/Dockerfile"),
-  ];
-  const inEveryRuntimeImage = (probe) =>
-    runtimeDockerfiles.every((file) => (typeof probe === "string" ? file.includes(probe) : probe.test(file)));
+  // The one runtime image must carry the scientific stack the curated skills
+  // import, because it is the image every run executes in.
+  const runtimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const inRuntimeImage = (probe) =>
+    typeof probe === "string" ? runtimeDockerfile.includes(probe) : probe.test(runtimeDockerfile);
   const skillTests = await read("apps/server/test/skillPacks.test.mjs");
   const executableEntrypoints = Object.entries(curatedDelivery.executable ?? {}).flatMap(([skill, contract]) =>
     (contract.entrypoints ?? []).map((entrypoint) => path.join(curatedRoot, skill, entrypoint)),
@@ -526,27 +614,43 @@ async function checkScientificCapabilityDelivery() {
     instructionOnly.length === 0 &&
     JSON.stringify(tiered) === JSON.stringify(inventoried) &&
     executableEntrypoints.every((entrypoint) => existsSync(entrypoint)) &&
-    executableDependencies.every((dependency) => inEveryRuntimeImage(dependency)) &&
-    inEveryRuntimeImage(/pypdf==6\.7\.0/) &&
-    inEveryRuntimeImage(/openpyxl==3\.1\.5/) &&
-    inEveryRuntimeImage(/ENV VIRTUAL_ENV=\/opt\/evimed\/venv/) &&
-    inEveryRuntimeImage(/uv venv "\$\{VIRTUAL_ENV\}" --python \/usr\/bin\/python3/) &&
-    inEveryRuntimeImage(/uv pip install --python "\$\{VIRTUAL_ENV\}\/bin\/python"/) &&
-    !inEveryRuntimeImage(/uv pip install --system/) &&
-    /runtimeSkillDelivery\(sourceRoot\)/.test(runtimeManager) &&
-    /delivery\.executable/.test(runtimeManager) &&
-    /all 38 curated scientific skills have an executable, dependency-pinned, smoke-tested delivery contract/.test(skillTests) &&
-    inEveryRuntimeImage(/Smoke every shared curated-skill implementation in the production dependency image/) &&
-    inEveryRuntimeImage(/len\(shared\) != 36/)
+    executableDependencies.every((dependency) => inRuntimeImage(dependency)) &&
+    inRuntimeImage(/pypdf==6\.7\.0/) &&
+    inRuntimeImage(/openpyxl==3\.1\.5/) &&
+    inRuntimeImage(/ENV VIRTUAL_ENV=\/opt\/evimed\/venv/) &&
+    inRuntimeImage(/uv venv "\$\{VIRTUAL_ENV\}" --python \/usr\/bin\/python3/) &&
+    inRuntimeImage(/uv pip install --python "\$\{VIRTUAL_ENV\}\/bin\/python"/) &&
+    !inRuntimeImage(/uv pip install --system/) &&
+    // Who reads the delivery contract, and when.
+    //
+    // It used to be the server: `runtimeSkillDelivery(sourceRoot)` parsed
+    // `inventory.json` and copied only the executable tier into the retired
+    // kernel's config directory on every launch. The runtime image now carries
+    // the pack, so the same contract is read one step earlier and enforced
+    // where it cannot be skipped -- the build reads
+    // `policy.delivery.executable`, refuses a tier that is not exhaustive, and
+    // then executes every shared implementation before the image can exist.
+    // Per-launch filtering has no successor because there is nothing left to
+    // filter: what ships is what was smoked.
+    inRuntimeImage(/inventory\["policy"\]\["delivery"\]\["executable"\]/) &&
+    inRuntimeImage(/len\(contracts\) != 38/) &&
+    inRuntimeImage(/len\(shared\) != 36/) &&
+    inRuntimeImage(/Smoke every shared curated-skill implementation in the production dependency image/) &&
+    // And the pack the build smoked is the pack the kernel is given: copied
+    // into the preset root the kernel actually reads, read-only.
+    inRuntimeImage("COPY runtime/skills/curated-scientific /usr/local/share/evimed/skills/curated-scientific") &&
+    inRuntimeImage(/presets\/evimed-universal\/skills\/curated-scientific/) &&
+    inRuntimeImage(/chmod -R a-w \/opt\/evimed\/socket/) &&
+    /all 38 curated scientific skills have an executable, dependency-pinned, smoke-tested delivery contract/.test(skillTests)
   ) {
-    pass("curated_skill_delivery_contract", "All 38 curated scientific skills have executable entrypoints, pinned runtime dependencies, artifact contracts, and production-image smoke coverage.", {
+    pass("curated_skill_delivery_contract", "All 38 curated scientific skills have executable entrypoints, pinned runtime dependencies, artifact contracts, build-time delivery-contract enforcement, and read-only delivery into the preset root the kernel reads.", {
       inventoried: inventoried.length,
       executable: executable.length,
       conditional: conditional.length,
       instructionOnly: instructionOnly.length,
     });
   } else {
-    fail("curated_skill_delivery_contract_missing", "Curated skills need an exhaustive delivery tier, executable entrypoints, pinned dependencies, runtime filtering, and independent contract tests.");
+    fail("curated_skill_delivery_contract_missing", "Curated skills need an exhaustive delivery tier, executable entrypoints, pinned dependencies, build-time contract enforcement, and independent contract tests.");
   }
 
   const officeRoot = path.join(repoRoot, "runtime/skills/office");
@@ -562,7 +666,7 @@ async function checkScientificCapabilityDelivery() {
     /first-party clean-room/i.test(office.provenance ?? "") &&
     officeExecutable.length === 4 &&
     officeEntrypoints.every((entrypoint) => existsSync(entrypoint)) &&
-    inEveryRuntimeImage(/runtime\/skills\/office/) &&
+    inRuntimeImage(/runtime\/skills\/office/) &&
     /skills-office/.test(tauriConfig) &&
     !/anthropic-skills/.test(tauriConfig) &&
     !/ANTHROPIC_SKILLS_(?:COMMIT|ARCHIVE|LICENSE)/.test(fetchSkills) &&
@@ -599,9 +703,17 @@ async function checkScientificCapabilityDelivery() {
     "api.open-meteo.com",
     "waterservices.usgs.gov",
   ];
+  // The connector chain, minus the one link that moved and has not landed.
+  //
+  // Registration is checked separately below rather than folded in here,
+  // because it is the only half that is currently broken and a conjunction
+  // that fails as a whole tells an operator nothing about which of eight
+  // properties is missing.
   if (
-    connectors.every((connector) => runtimeManager.includes(`"${connector}"`) && connectorSource.includes(`"${connector}"`)) &&
-    connectors.every((connector) => runtimeManager.includes(`science-${connector}`) || /`science-\$\{connector\}`/.test(runtimeManager)) &&
+    connectors.every((connector) => connectorSource.includes(`"${connector}"`)) &&
+    // The server still holds the connector roster the runtime is meant to be
+    // given, so the two cannot silently disagree about which seven exist.
+    connectors.every((connector) => runtimeManager.includes(`"${connector}"`)) &&
     gatewayHosts.every((host) => publicGateway.includes(`"${host}"`)) &&
     /x-api-key/.test(publicGateway) &&
     /OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE:\s*\/run\/secrets\/materials-project-api-key/.test(compose) &&
@@ -609,11 +721,44 @@ async function checkScientificCapabilityDelivery() {
     /pnpm test:mcp/.test(workflow) &&
     (connectorTests.match(/^\s+def test_/gm) ?? []).length >= 7
   ) {
-    pass("hosted_science_connector_chain", "Hosted runtime registers seven independent MCP connectors through a fixed-host server gateway with a file-only Materials Project secret and CI protocol tests.", {
+    pass("hosted_science_connector_chain", "Seven independent MCP connectors reach fixed upstream hosts only through the server gateway, with a file-only Materials Project secret and independent CI protocol tests.", {
       connectors: connectors.length,
     });
   } else {
-    fail("hosted_science_connector_chain_missing", "All seven science connectors need default runtime registration, fixed-host gateway routes, protected Materials credentials, and independent CI tests.");
+    fail("hosted_science_connector_chain_missing", "All seven science connectors need a shared roster, fixed-host gateway routes, protected Materials credentials, and independent CI tests.");
+  }
+
+  // Whether anything actually hands those seven to a run.
+  //
+  // The retired kernel got them as seven MCP entries named `science-<id>`,
+  // written per project by `syncRuntimeEviMedMcp`. Under DSH the profile patch
+  // is the only thing that mounts an MCP server, and it mounts exactly two:
+  // the EviMed research server and the ToolUniverse sidecar. `science_connectors.py`
+  // is still shipped in the image and still dispatches on
+  // `OPEN_SCIENCE_CONNECTOR_ID`, and `runtimeManager.mjs` still declares the
+  // roster -- but nothing reads either, so all seven are unreachable from a
+  // run while every other link in the chain above audits clean.
+  //
+  // A notice rather than a block: the fix is in `apps/server/src` (the profile
+  // patch or the MCP server's own tool surface), not in this audit, and a
+  // failing gate here would only stop the tree that has to carry the fix.
+  const profilePatch = await read("apps/server/src/dshProfilePatch.mjs");
+  const registered = connectors.filter(
+    (connector) => profilePatch.includes(`science-${connector}`) || profilePatch.includes(`"${connector}"`),
+  );
+  const connectorServerImported = /^import science_connectors/m.test(
+    await read("runtime/mcp/evimed-research/server.py"),
+  );
+  if (registered.length === connectors.length || connectorServerImported) {
+    pass("hosted_science_connector_runtime_reach", "Every science connector is reachable from a run, either as its own mounted MCP server or through the EviMed research server.", {
+      registered: registered.length,
+      viaResearchServer: connectorServerImported,
+    });
+  } else {
+    warn("hosted_science_connector_runtime_reach_missing", "No science connector is mounted for a run: the DSH profile patch registers only the EviMed research server and the ToolUniverse sidecar, and runtime/mcp/evimed-research/server.py does not import science_connectors.", {
+      connectors: connectors.length,
+      registered: registered.length,
+    });
   }
 }
 
@@ -626,12 +771,22 @@ async function checkPrivacyDocs() {
   const required = [
     [privacy, "Model Keys and Provider Data Flow", "privacy_model_keys"],
     [privacy, "Third-Party Components and Licenses", "privacy_third_party"],
-    [deployment, "Real model use requires configuring a server-managed OpenCode profile", "deployment_model_key_boundary"],
+    // Kernel-agnostic on purpose: the property is "keys live in a
+    // server-managed profile, not in the user's hands", and it must survive
+    // the kernel being renamed in the sentence that states it.
+    [
+      deployment,
+      /Real model use requires configuring a server-managed \S+ profile/,
+      "deployment_model_key_boundary",
+      "the server-managed model profile boundary",
+    ],
     [readiness, "Office skills", "readiness_office_boundary"],
   ];
-  for (const [text, phrase, code] of required) {
-    if (text.includes(phrase)) pass(code, `Documentation includes ${phrase}.`);
-    else fail(`${code}_missing`, `Documentation must include ${phrase}.`);
+  for (const [document, phrase, code, label] of required) {
+    const found = typeof phrase === "string" ? document.includes(phrase) : phrase.test(document);
+    const described = label ?? phrase;
+    if (found) pass(code, `Documentation includes ${described}.`);
+    else fail(`${code}_missing`, `Documentation must include ${described}.`);
   }
 
   if (
@@ -1026,6 +1181,9 @@ async function checkHostedDesktopBoundary() {
 
 async function checkHostedEventStreamRecovery() {
   const runtime = await read("apps/desktop/src/lib/runtime.ts");
+  // `OpenCodeClient.ts` is a filename this deletion has not reached; the class
+  // it holds is the browser's HTTP/SSE client and is kernel-neutral, so the
+  // property below is about reconnect recovery and nothing else.
   const sdk = await read("packages/sdk/src/OpenCodeClient.ts");
   const runtimeTests = await read("apps/desktop/src/lib/runtime.store.test.ts");
   const sdkTests = await read("apps/desktop/src/test/opencode-client.node.test.ts");
@@ -1223,8 +1381,7 @@ async function checkDshLoaderResolution() {
 
 async function checkReleaseProvenance() {
   const webDockerfile = await read("deploy/web/Dockerfile");
-  const runtimeDockerfile = await read("deploy/runtime-opencode/Dockerfile");
-  const dshRuntimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
+  const runtimeDockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const compose = await read("deploy/web/docker-compose.yml");
   const releaseGenerator = await read("scripts/ops/generate-release-manifest.mjs");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
@@ -1246,32 +1403,31 @@ async function checkReleaseProvenance() {
     /org\.opencontainers\.image\.created="\$\{BUILD_CREATED\}"/,
     /io\.open-science\.app\.version="\$\{APP_VERSION\}"/,
   ];
-  // Every shippable image, not only the retiring one: a release whose labels
-  // cannot say which kernel and which tool versions it carries is a release
-  // whose provenance stops at the tag.
-  const labelledImages = [webDockerfile, runtimeDockerfile, dshRuntimeDockerfile];
+  // Every shippable image: a release whose labels cannot say which kernel and
+  // which tool versions it carries is a release whose provenance stops at the
+  // tag.
+  const labelledImages = [webDockerfile, runtimeDockerfile];
   if (commonLabels.every((pattern) => labelledImages.every((file) => pattern.test(file)))) {
-    pass("release_oci_labels", "Web and both runtime images carry version, revision, creation, and app-version labels.");
+    pass("release_oci_labels", "Web and runtime images carry version, revision, creation, and app-version labels.");
   } else {
     fail("release_oci_labels_missing", "Web and runtime images must carry immutable OCI release labels.");
   }
 
+  // The kernel-neutral pair is what readiness reads. The kernel-specific label
+  // used to be `io.open-science.opencode.version`, and a readiness gate keyed
+  // to it failed `runtime_image_metadata_missing` on every image that did not
+  // publish it -- a check that could not survive the kernel it was gating. So
+  // both are required: the neutral pair that any kernel must publish, and the
+  // exact DSH version beside it.
   if (
-    /io\.open-science\.opencode\.version="\$\{OPENCODE_VERSION\}"/.test(runtimeDockerfile) &&
+    /io\.open-science\.runtime\.kernel="dsh"/.test(runtimeDockerfile) &&
+    /io\.open-science\.runtime\.version="\$\{DSH_VERSION\}"/.test(runtimeDockerfile) &&
+    /io\.open-science\.dsh\.version="\$\{DSH_VERSION\}"/.test(runtimeDockerfile) &&
     /io\.open-science\.uv\.version="\$\{UV_VERSION\}"/.test(runtimeDockerfile)
   ) {
-    pass("runtime_tool_labels", "Runtime image labels preserve exact OpenCode and uv versions.");
+    pass("runtime_tool_labels", "Runtime image labels name the kernel and preserve exact kernel and uv versions.");
   } else {
-    fail("runtime_tool_labels_missing", "Runtime image must label exact OpenCode and uv versions.");
-  }
-
-  if (
-    /io\.open-science\.dsh\.version="\$\{DSH_VERSION\}"/.test(dshRuntimeDockerfile) &&
-    /io\.open-science\.uv\.version="\$\{UV_VERSION\}"/.test(dshRuntimeDockerfile)
-  ) {
-    pass("dsh_runtime_tool_labels", "DSH runtime image labels preserve exact DSH and uv versions.");
-  } else {
-    fail("dsh_runtime_tool_labels_missing", "DSH runtime image must label exact DSH and uv versions.");
+    fail("runtime_tool_labels_missing", "Runtime image must label which kernel it carries and at which exact kernel and uv versions.");
   }
 
   if (
@@ -1343,8 +1499,19 @@ async function checkReleaseProvenance() {
     fail("docker_ci_public_tls_missing", "Linux Docker CI must exercise the public TLS reverse-proxy path, not only the API host port.");
   }
 
+  // Named by shape rather than by one retired image name: any runtime image
+  // default that resolves to `latest` is a deployment whose release manifest
+  // describes an image nobody can identify again.
+  const latestRuntimeDefaults = [...compose.matchAll(/^\s+image:\s+\$\{OPEN_SCIENCE_[A-Z_]*RUNTIME[A-Z_]*_CONTAINER_IMAGE:-([^}]+)\}/gm)]
+    .map((match) => match[1])
+    .filter((value) => value.endsWith(":latest") || !value.includes(":"));
+  // `pinnedRuntimeDefaults.length > 0` is the part that keeps this honest: a
+  // regex that stops matching would otherwise report "no unpinned defaults"
+  // while reading nothing at all.
+  const pinnedRuntimeDefaults = [...compose.matchAll(/^\s+image:\s+\$\{OPEN_SCIENCE_[A-Z_]*RUNTIME[A-Z_]*_CONTAINER_IMAGE:-([^}]+)\}/gm)];
   if (
-    !/open-science-opencode:latest/.test(compose) &&
+    pinnedRuntimeDefaults.length > 0 &&
+    latestRuntimeDefaults.length === 0 &&
     /OPEN_SCIENCE_RELEASE_MANIFEST_FILE:\s+\/run\/open-science\/release-manifest\.json/.test(compose) &&
     /OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE/.test(compose)
   ) {

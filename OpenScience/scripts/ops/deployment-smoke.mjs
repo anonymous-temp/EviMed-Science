@@ -187,9 +187,10 @@ async function smokeRuntime(baseUrl, headers) {
   const runtimeUrl = runtime.json?.data;
   // The value is the control plane's own surface. A deployment that hands a
   // caller anything naming a kernel has a browser-reachable kernel, which is
-  // the thing this migration removed.
+  // the thing this migration removed. `dsh` is the whole kernel vocabulary now,
+  // so it is the whole guard.
   assert(typeof runtimeUrl === "string" && runtimeUrl.endsWith("/api/runtime"), "start_runtime returned an invalid URL.");
-  assert(!/opencode|dsh/.test(runtimeUrl), "start_runtime handed back a kernel-shaped URL.");
+  assert(!/dsh/.test(runtimeUrl), "start_runtime handed back a kernel-shaped URL.");
 
   const session = await jsonFetch(`${runtimeUrl}/sessions`, {
     method: "POST",

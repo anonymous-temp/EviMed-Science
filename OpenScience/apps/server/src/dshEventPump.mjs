@@ -113,10 +113,12 @@ export class RuntimeEventPump {
    * @param {{ url: string, socketPath?: string|null, password?: string|null }} runtime
    */
   attach(project, runtime) {
-    // The downlink and `decodeMuxFrame` are DSH's wire shapes; the OpenCode
-    // kernel this build can still select publishes no such stream, and
-    // dialing it would just be a permanent, silently-retrying connection
-    // failure for no reader.
+    // The downlink and `decodeMuxFrame` are DSH's wire shapes. A runtime that
+    // publishes no such stream must not be dialled: the loop below retries
+    // forever and silently, so the failure would never surface and no reader
+    // would ever be served. The hosted server passes true — DSH is the only
+    // kernel — and this stays a parameter so the refusal is testable without
+    // standing up a runtime that lacks the stream.
     if (!this.isDshKernel) return;
     const key = this.#key(project);
     if (this.projects.has(key)) return;
