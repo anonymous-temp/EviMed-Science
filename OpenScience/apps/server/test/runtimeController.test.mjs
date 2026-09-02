@@ -279,7 +279,7 @@ function controllerConfig({ dataDir, socketPath, dockerBin, enableKernel = true 
     buildCreatedAt: runtimeReleaseConfig.releaseManifest.source.createdAt,
     webContainerImage: runtimeReleaseConfig.releaseManifest.web.image,
     dataDir,
-    runtimeMode: "opencode",
+    runtimeMode: "kernel",
     runtimeSandboxMode: "docker",
     runtimeControllerMode: "direct",
     runtimeControllerSocket: socketPath,
