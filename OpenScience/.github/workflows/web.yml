@@ -58,6 +58,8 @@ jobs:
           pnpm check:capabilities
           pnpm check:skill-vocabulary
           pnpm check:skill-digests
+          pnpm check:composition-references
+          pnpm check:kernel-defaults
 
       # The gates `ci:web` runs and this workflow did not. CI is the only thing
       # standing on PRs and main, and it ran no ESLint at all: a lint failure, a
