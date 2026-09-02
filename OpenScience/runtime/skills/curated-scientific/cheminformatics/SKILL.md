@@ -5,7 +5,7 @@ description: Normalize and analyze chemical structures and compound tables. Use 
 
 # Cheminformatics
 
-Retrieve public identifiers through `biomedical_source_search` when appropriate. Preserve the submitted structure and source identifiers before normalization. Record salt/solvent handling, charge, isotope, tautomer, stereochemistry, aromaticity, and sanitization decisions; never collapse stereoisomers silently.
+Retrieve public identifiers through `mcp__evimed__biomedical_source_search` when appropriate. Preserve the submitted structure and source identifiers before normalization. Record salt/solvent handling, charge, isotope, tautomer, stereochemistry, aromaticity, and sanitization decisions; never collapse stereoisomers silently.
 
 Check RDKit or other required dependencies before execution and never install them implicitly. Report invalid structures and calculation failures rather than coercing them. Fix random seeds and record descriptor/fingerprint definitions and software versions.
 

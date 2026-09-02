@@ -5,7 +5,8 @@
 # plane: DSH's web host deliberately refuses `--host 0.0.0.0` and exits with a
 # usage error, so it listens on loopback and socat exposes a 0600 socket that
 # only the control plane's mount can reach. Exit-code semantics are unchanged
-# from the OpenCode script this replaces, because the supervisor reads them.
+# from the deleted OpenCode script this replaced, because the supervisor still
+# reads them.
 set -euo pipefail
 
 port="${OPEN_SCIENCE_RUNTIME_PORT:-4096}"

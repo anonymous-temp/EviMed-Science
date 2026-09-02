@@ -137,24 +137,48 @@ def _meta_python(root):
 
 
 def _model_environment():
-    raw = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
-    if not raw or not os.path.isabs(raw) or "\0" in raw:
-        raise MetaAgentError("meta_model_config_unavailable", "The managed model configuration is unavailable.", True)
-    config = _read_json_no_follow(raw)
-    provider = config.get("provider", {}).get("deepseek", {})
-    options = provider.get("options", {}) if isinstance(provider, dict) else {}
-    models = provider.get("models", {}) if isinstance(provider, dict) else {}
-    base_url = options.get("baseURL") if isinstance(options, dict) else None
-    api_key = options.get("apiKey") if isinstance(options, dict) else None
-    model = "deepseek-v4-pro" if isinstance(models, dict) and "deepseek-v4-pro" in models else None
+    # Gateway URL, model and token, from two environment variables plus the
+    # bare one-line token file the runtime writes.
+    #
+    # This read all three out of the retired kernel's `opencode.json`, and that
+    # was the only path it had. Nothing writes that file any more, so every
+    # managed MetaAgent run reached `meta_model_config_unavailable` on a
+    # runtime that had booted cleanly and did hold a valid token — the message
+    # named the configuration, never the fact that no configuration was coming.
+    from public_sources import (  # noqa: PLC0415 — one reader, one implementation
+        GATEWAY_TOKEN_FILE_ENV_NAMES,
+        _gateway_token_file,
+        _read_bare_token,
+    )
+
+    token_file = _gateway_token_file()
+    if not token_file:
+        raise MetaAgentError(
+            "meta_model_config_unavailable",
+            "The managed model gateway token file is not configured (%s)." % " or ".join(GATEWAY_TOKEN_FILE_ENV_NAMES),
+            True,
+        )
+    base_url = os.environ.get("EVIMED_MODEL_GATEWAY_URL", "").strip()
+    model = os.environ.get("EVIMED_MODEL_GATEWAY_MODEL", "").strip()
+    if model != "deepseek-v4-pro":
+        raise MetaAgentError("meta_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+    try:
+        api_key = _read_bare_token(token_file)
+    except Exception as error:  # noqa: BLE001 — the reader's own error type is not this module's vocabulary
+        raise MetaAgentError("meta_model_config_unavailable", "The managed model gateway token is unavailable.", True) from error
+    # The refusals stay where they were: a token that reads cleanly still has to
+    # arrive with a usable gateway URL before MetaAgent is launched.
     if (
         not isinstance(base_url, str)
         or not base_url.startswith(("http://", "https://"))
         or not isinstance(api_key, str)
         or not api_key
-        or not model
     ):
-        raise MetaAgentError("meta_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+        raise MetaAgentError(
+            "meta_model_config_unavailable",
+            "The managed model gateway URL or token is unusable for this runtime.",
+            True,
+        )
     return {
         "LLM_BASE_URL": base_url.rstrip("/"),
         "LLM_API_KEY": api_key,

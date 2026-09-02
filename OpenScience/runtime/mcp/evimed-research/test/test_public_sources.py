@@ -312,15 +312,16 @@ class PublicSourceConnectorTests(unittest.TestCase):
         )
         self.assertEqual(literature.call_args.args[0]["requiredTitleConcepts"], ["观察药"])
 
-    def test_a_bare_token_file_is_preferred_over_the_other_kernel_s_config(self):
-        """The DSH kernel writes no `opencode.json`.
+    def test_the_gateway_token_is_read_from_the_bare_token_file(self):
+        """The runtime writes the gateway token on its own, one line.
 
-        Reading the gateway token out of the OpenCode kernel's config file was
-        the only path this had, so a DSH runtime booted cleanly and then failed
-        every source fetch with `public_source_gateway_unconfigured` — a message
-        that says the token is unavailable without saying nobody was ever going
-        to write it there. Both files are present here so the test proves the
-        bare token WINS, not merely that it works when it is the only option.
+        This used to parse it out of a kernel configuration file instead, and
+        that kernel writes no such file, so a runtime booted cleanly and then
+        failed every source fetch with `public_source_gateway_unconfigured` — a
+        message that says the token is unavailable without saying nobody was
+        ever going to write it there. A configuration file is left in the
+        temporary directory here so the test also proves it is not consulted:
+        the token that reaches the gateway is the one from the bare file.
         """
         class Headers:
             @staticmethod
@@ -341,15 +342,14 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 return b'{"observed": true}'
 
         with tempfile.TemporaryDirectory() as temporary:
-            config = pathlib.Path(temporary) / "opencode.json"
-            config.write_text(json.dumps({
-                "provider": {"deepseek": {"options": {"apiKey": "the-other-kernels-token"}}}
+            stale = pathlib.Path(temporary) / "opencode.json"
+            stale.write_text(json.dumps({
+                "provider": {"deepseek": {"options": {"apiKey": "the-retired-kernels-token"}}}
             }), encoding="utf-8")
             token_file = pathlib.Path(temporary) / "model-gateway.token"
             token_file.write_text("dsh-workload-token\n", encoding="utf-8")
             with mock.patch.dict(os.environ, {
                 "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
-                "EVIMED_MODEL_CONFIG_FILE": str(config),
                 "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token_file),
             }):
                 with mock.patch.object(sources._OPENER, "open", return_value=Response()) as opener:
@@ -360,23 +360,53 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 "Bearer dsh-workload-token",
             )
 
-    def test_an_unreadable_bare_token_file_refuses_rather_than_falling_back(self):
-        """Falling back to the other kernel's config on a bad token file would
-        make a rotation failure look like a working runtime using a stale
-        credential."""
+    def test_a_configuration_file_is_not_mined_for_something_token_shaped(self):
+        """The retired kernel carried the token under
+        `provider.deepseek.options.apiKey`. Left in the token file's place it
+        must be refused, not parsed — a gateway call authenticated from a
+        parsed configuration file would be authenticated with a credential no
+        component rotates any more."""
         with tempfile.TemporaryDirectory() as temporary:
-            config = pathlib.Path(temporary) / "opencode.json"
-            config.write_text(json.dumps({
-                "provider": {"deepseek": {"options": {"apiKey": "the-other-kernels-token"}}}
+            stale = pathlib.Path(temporary) / "opencode.json"
+            stale.write_text(json.dumps({
+                "provider": {"deepseek": {"options": {"apiKey": "the-retired-kernels-token"}}}
             }), encoding="utf-8")
             with mock.patch.dict(os.environ, {
                 "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
-                "EVIMED_MODEL_CONFIG_FILE": str(config),
-                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(pathlib.Path(temporary) / "absent.token"),
-            }):
+                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(stale),
+            }, clear=True):
                 with self.assertRaises(sources.PublicSourceError) as raised:
                     sources._gateway_settings()
             self.assertEqual(raised.exception.code, "public_source_gateway_unconfigured")
+
+    def test_an_unreadable_bare_token_file_refuses_rather_than_falling_back(self):
+        """There is one token file and no second place to look. The other
+        accepted variable names the same kind of file, and it holds a perfectly
+        readable token here: taking it would turn a rotation failure into a
+        working runtime quietly using a credential the operator did not name.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            other = pathlib.Path(temporary) / "other-model-gateway.token"
+            other.write_text("a-token-nobody-asked-for\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {
+                "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
+                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(pathlib.Path(temporary) / "absent.token"),
+                "EVIMED_MODEL_CONFIG_FILE": str(other),
+            }, clear=True):
+                with self.assertRaises(sources.PublicSourceError) as raised:
+                    sources._gateway_settings()
+            self.assertEqual(raised.exception.code, "public_source_gateway_unconfigured")
+
+    def test_an_unnamed_token_file_says_which_variable_is_unset(self):
+        """`public_source_gateway_unconfigured` on its own reads the same
+        whether the token is missing or nobody was ever going to supply one."""
+        with mock.patch.dict(os.environ, {
+            "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
+        }, clear=True):
+            with self.assertRaises(sources.PublicSourceError) as raised:
+                sources._gateway_settings()
+        self.assertEqual(raised.exception.code, "public_source_gateway_unconfigured")
+        self.assertIn("EVIMED_MODEL_GATEWAY_TOKEN_FILE", str(raised.exception))
 
     def test_managed_gateway_reuses_the_active_runtime_token_without_direct_egress(self):
         class Headers:
@@ -398,14 +428,17 @@ class PublicSourceConnectorTests(unittest.TestCase):
                 return b'{"observed": true}'
 
         with tempfile.TemporaryDirectory() as temporary:
-            config = pathlib.Path(temporary) / "opencode.json"
-            config.write_text(json.dumps({
-                "provider": {"deepseek": {"options": {"apiKey": "runtime-token"}}}
-            }), encoding="utf-8")
+            # Under `EVIMED_MODEL_CONFIG_FILE`, the older of the two accepted
+            # variable names: it names a bare token file too, so the harnesses
+            # that still export it reach the same reader.
+            token_file = pathlib.Path(temporary) / "model-gateway.token"
+            token_file.write_text("runtime-token\n", encoding="utf-8")
             old_gateway = os.environ.get("EVIMED_PUBLIC_SOURCE_GATEWAY_URL")
             old_config = os.environ.get("EVIMED_MODEL_CONFIG_FILE")
+            old_token_file = os.environ.get("EVIMED_MODEL_GATEWAY_TOKEN_FILE")
+            os.environ.pop("EVIMED_MODEL_GATEWAY_TOKEN_FILE", None)
             os.environ["EVIMED_PUBLIC_SOURCE_GATEWAY_URL"] = "http://internal.test/internal/sources/v1/fetch"
-            os.environ["EVIMED_MODEL_CONFIG_FILE"] = str(config)
+            os.environ["EVIMED_MODEL_CONFIG_FILE"] = str(token_file)
             try:
                 with mock.patch.object(sources._OPENER, "open", return_value=Response()) as opener:
                     value = sources._get_json("https://api.crossref.org/works?query=observed")
@@ -426,6 +459,10 @@ class PublicSourceConnectorTests(unittest.TestCase):
                     os.environ.pop("EVIMED_MODEL_CONFIG_FILE", None)
                 else:
                     os.environ["EVIMED_MODEL_CONFIG_FILE"] = old_config
+                if old_token_file is None:
+                    os.environ.pop("EVIMED_MODEL_GATEWAY_TOKEN_FILE", None)
+                else:
+                    os.environ["EVIMED_MODEL_GATEWAY_TOKEN_FILE"] = old_token_file
 
     def test_trusted_adapter_uses_owner_only_file_backed_evimed_credential(self):
         class Headers:
@@ -806,13 +843,11 @@ class PublicSourceConnectorTests(unittest.TestCase):
 
     def test_keyless_public_never_bypasses_the_managed_gateway(self):
         with tempfile.TemporaryDirectory() as temporary:
-            config = pathlib.Path(temporary) / "opencode.json"
-            config.write_text(json.dumps({
-                "provider": {"deepseek": {"options": {"apiKey": "runtime-token"}}}
-            }), encoding="utf-8")
+            token_file = pathlib.Path(temporary) / "model-gateway.token"
+            token_file.write_text("runtime-token\n", encoding="utf-8")
             environment = {
                 "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://internal.test/internal/sources/v1/fetch",
-                "EVIMED_MODEL_CONFIG_FILE": str(config),
+                "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token_file),
             }
             with mock.patch.dict(os.environ, environment, clear=True):
                 with mock.patch.object(sources, "_get_json_value", return_value={"data": []}) as request:

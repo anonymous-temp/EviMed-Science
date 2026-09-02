@@ -24,10 +24,11 @@ must be checked against the original evidence.
 ## Architecture
 
 The primary production surface is the hosted SaaS product: the React/TypeScript
-frontend connects through the EviMed server to isolated OpenCode runtimes, the
-DeepSeek model gateway, append-only run records, artifact provenance, Jupyter
-kernels, curated scientific skills, and EviMed data/tool adapters. Tauri packages
-the same frontend as an optional desktop shell; it is not the core release target.
+frontend connects through the EviMed server to isolated DeepSeek Harness (DSH)
+runtimes, the DeepSeek model gateway, append-only run records, artifact
+provenance, Jupyter kernels, curated scientific skills, and EviMed data/tool
+adapters. Tauri packages the same frontend as an optional desktop shell; it is
+not the core release target.
 
 Specialist adapters are registered through `EVIMED_*_URL` environment variables.
 The meta-analysis service is included in the hosted Compose stack. Other specialist
@@ -41,11 +42,14 @@ Tauri.
 
 ```bash
 pnpm install
-bash scripts/dev/fetch-opencode.sh
 bash scripts/dev/fetch-uv.sh
 bash scripts/dev/fetch-skills.sh
 pnpm dev:evimed
 ```
+
+The agent runtime is not fetched as a binary here: DSH is installed into a
+version-pinned profile inside the runtime image (`deploy/runtime-dsh/`), from
+the single pin in `deps-version.json`.
 
 The local setup script stores provider credentials outside the repository. Never
 commit API keys, deployment `.env` files, user workspaces, run logs, or generated
@@ -73,6 +77,6 @@ needed, remain optional draft artifacts and require separate signing/notarizatio
 ## License and upstream attribution
 
 This repository retains the upstream MIT license and third-party notices in
-[LICENSE](./LICENSE). EviMed is built on the Open Science workbench and the OpenCode
-runtime; those upstream names are retained only where technically or legally
-required for attribution and compatibility.
+[LICENSE](./LICENSE). EviMed is built on the Open Science workbench and the
+DeepSeek Harness (DSH) agent runtime; those upstream names are retained only
+where technically or legally required for attribution and compatibility.

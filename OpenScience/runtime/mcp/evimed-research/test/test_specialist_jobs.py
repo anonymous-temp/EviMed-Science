@@ -9,6 +9,7 @@ from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 MODULE_FILE = ROOT / "specialist_jobs.py"
 
 
@@ -28,23 +29,31 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.workspace = pathlib.Path(self.temp.name) / "workspace"
         self.workspace.mkdir()
-        self.model_config = pathlib.Path(self.temp.name) / "opencode.json"
-        self.model_config.write_text(json.dumps({
-            "provider": {
-                "deepseek": {
-                    "options": {"baseURL": "https://api.deepseek.com", "apiKey": "test-key"},
-                    "models": {"deepseek-v4-pro": {}},
-                }
-            }
-        }), encoding="utf-8")
+        # What the runtime actually writes: the gateway token alone, one line,
+        # mode 0600. The URL and the model name are environment, not file
+        # contents, so nothing here has to parse a kernel's configuration.
+        self.model_gateway_token = pathlib.Path(self.temp.name) / "model-gateway.token"
+        self.model_gateway_token.write_text("test-key\n", encoding="utf-8")
+        self.model_gateway_token.chmod(0o600)
         self.old_env = os.environ.copy()
         os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(self.workspace)
-        os.environ["EVIMED_MODEL_CONFIG_FILE"] = str(self.model_config)
+        os.environ["EVIMED_MODEL_GATEWAY_TOKEN_FILE"] = str(self.model_gateway_token)
+        os.environ["EVIMED_MODEL_GATEWAY_URL"] = "https://api.deepseek.com"
+        os.environ["EVIMED_MODEL_GATEWAY_MODEL"] = "deepseek-v4-pro"
 
     def tearDown(self):
         os.environ.clear()
         os.environ.update(self.old_env)
         self.temp.cleanup()
+
+    @staticmethod
+    def jobs_gateway_token_env_names():
+        """Every name the token file can arrive under, read from the one module
+        that defines them, so a rename cannot leave this test unsetting a
+        variable nobody reads."""
+        import public_sources
+
+        return public_sources.GATEWAY_TOKEN_FILE_ENV_NAMES
 
     def install_fake_specialist(self, tool_name):
         spec = self.jobs.SPECS[tool_name]
@@ -64,6 +73,34 @@ class SpecialistJobContractTests(unittest.TestCase):
                 self.assertEqual(result["status"], "success")
                 self.assertTrue(result["data"]["available"])
                 self.assertEqual(result["data"]["model"], "deepseek-v4-pro")
+
+    def test_a_missing_gateway_token_file_names_the_variable_that_is_unset(self):
+        """This used to fall back to parsing a kernel configuration file that
+        nothing writes any more, so an unconfigured runtime reported only that
+        "the managed model configuration is unavailable" — true, and silent
+        about the fact that no configuration was ever going to appear."""
+        self.install_fake_specialist("peer_review")
+        for name in self.jobs_gateway_token_env_names():
+            os.environ.pop(name, None)
+        result = self.jobs.call("peer_review", {"action": "capabilities"})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "specialist_model_config_unavailable")
+        self.assertIn("EVIMED_MODEL_GATEWAY_TOKEN_FILE", result["error"]["message"])
+
+    def test_a_configuration_file_is_not_mined_for_something_token_shaped(self):
+        """The retired kernel's `opencode.json` carried the token under
+        `provider.deepseek.options.apiKey`. Left in the token file's place it
+        must be refused, not parsed."""
+        self.install_fake_specialist("peer_review")
+        stale = pathlib.Path(self.temp.name) / "opencode.json"
+        stale.write_text(json.dumps({
+            "provider": {"deepseek": {"options": {"apiKey": "the-retired-kernels-token"}}}
+        }), encoding="utf-8")
+        os.environ["EVIMED_MODEL_GATEWAY_TOKEN_FILE"] = str(stale)
+        result = self.jobs.call("peer_review", {"action": "capabilities"})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "specialist_model_config_unavailable")
+        self.assertNotIn("the-retired-kernels-token", json.dumps(result))
 
     def test_unconfigured_specialist_fails_honestly(self):
         result = self.jobs.call("peer_review", {"action": "capabilities"})

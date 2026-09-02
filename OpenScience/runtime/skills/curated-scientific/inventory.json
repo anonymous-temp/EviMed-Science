@@ -721,7 +721,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/database-lookup",
-      "digest": "sha256:bd2493dd5453b128285354e250bc5abe50d40a8d5c142e44e21482a5bb9bcae9",
+      "digest": "sha256:a46305592ee5fa1fc6abfd844ebdddf863a78038bd37e5e8366d46bb3da99e3f",
       "fills": "Audited multi-database retrieval through EviMed source tools"
     },
     {
@@ -729,7 +729,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/networkx+primekg",
-      "digest": "sha256:34fd87c819c1d8223018c14d2d7ab89da7fae891b9e92681074b3254d4d793bd",
+      "digest": "sha256:e73849c968235728898d154fea2fa43b749a84a717fcbbd6bea345adeacd147b",
       "fills": "Provenance-preserving biomedical graph construction and analysis"
     },
     {
@@ -737,7 +737,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/biopython",
-      "digest": "sha256:44cdb65d325e6bebfa7d917caf424569fe90e2a5e33f33a526641c6dd200653d",
+      "digest": "sha256:4529e8872fa33e7af4a0f3d7042dde7cbb52b9ba69d47b7195453584b30e3dad",
       "fills": "Bounded local sequence analysis and traceable record retrieval"
     },
     {
@@ -761,7 +761,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/rdkit+medchem",
-      "digest": "sha256:079984f659f1df95f17bd20f36eea3257c9e5896107b1205328edc851cffaf7c",
+      "digest": "sha256:29f18a90f8478067541a23893a9d56042dfd46084ee5198d0848e8965f3989d1",
       "fills": "Structure normalization, descriptors, similarity, and chemical QC"
     },
     {
@@ -873,7 +873,7 @@
       "security": "REHABILITATED_SAFE",
       "reviewed": true,
       "derivedFrom": "scientific-agent-skills/citation-management+paper-lookup+pyzotero",
-      "digest": "sha256:b67a9bd8e01d216f5deb1f8456223fe050384f44094d0ef65ea1fd37c88119eb",
+      "digest": "sha256:6830ae198a02a796beac933b629171e0f76753e8ded1e47cadf21607b807740b",
       "fills": "Exact-record resolution and claim-to-source fidelity auditing"
     },
     {

@@ -22,8 +22,9 @@ MCP (Model Context Protocol) server configurations.
 Hosted runtimes register all seven science connectors as independent local MCP
 processes. Their HTTP requests traverse the authenticated server-side public
 source gateway and its fixed official-host allowlist, so runtime containers keep
-their default internal-only network. Materials Project credentials are mounted
-only into the Web gateway and are never written to OpenCode config.
+their default internal-only network. Materials Project credentials stay in the
+Web gateway (`apps/server/src/publicSourceGateway.mjs`) and are never written
+into a runtime's own configuration, where the run itself could read them.
 
 Desktop users may still install alternative upstream connector packages from
 Settings. MCP servers remain pluggable and operator-configurable.

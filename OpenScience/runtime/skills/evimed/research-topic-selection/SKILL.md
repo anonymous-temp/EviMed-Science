@@ -177,7 +177,7 @@ Run the preflight and fix what it reports, then run it again until it returns
 `ok`:
 
 ```bash
-python3 "$XDG_CONFIG_HOME/opencode/skills/research-topic-selection/scripts/preflight.py" --workspace .
+python3 "scripts/preflight.py" --workspace .
 ```
 
 It checks the one thing a reader cannot: how much of the field was read before

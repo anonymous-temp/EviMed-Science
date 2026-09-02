@@ -31,7 +31,8 @@ def _classified(item):
             validation["productionRoute"] = "server_allowlisted_gateway"
             validation["deploymentRequirement"] = (
                 "Production uses the authenticated EviMed server gateway with an official-host allowlist; "
-                "the OpenCode runtime itself keeps arbitrary network egress disabled."
+                "the DSH agent runtime itself keeps arbitrary network egress disabled unless an internal "
+                "runtime network is explicitly configured."
             )
         value["validation"] = validation
     return value

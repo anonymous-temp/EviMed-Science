@@ -10,6 +10,7 @@ from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 MODULE_FILE = ROOT / "meta_agent.py"
 
 
@@ -81,25 +82,20 @@ class ManagedMetaAgentTests(unittest.TestCase):
         (self.meta_root / "new_meta").mkdir(parents=True)
         (self.meta_root / "new_meta" / "__init__.py").write_text("", encoding="utf-8")
         (self.meta_root / "new_meta" / "main.py").write_text(FAKE_MAIN, encoding="utf-8")
-        self.model_config = self.root / "opencode.json"
+        # What the runtime actually writes: the gateway token alone, one line,
+        # mode 0600. The URL and the model name are environment, not file
+        # contents, so nothing here has to parse a kernel's configuration.
+        self.model_gateway_token = self.root / "model-gateway.token"
         self.test_api_key = "test-only-secret-that-must-not-be-persisted"
-        self.model_config.write_text(json.dumps({
-            "provider": {
-                "deepseek": {
-                    "options": {
-                        "baseURL": "https://api.deepseek.example",
-                        "apiKey": self.test_api_key,
-                    },
-                    "models": {"deepseek-v4-pro": {}},
-                },
-            },
-        }), encoding="utf-8")
-        self.model_config.chmod(0o600)
+        self.model_gateway_token.write_text("%s\n" % self.test_api_key, encoding="utf-8")
+        self.model_gateway_token.chmod(0o600)
         os.environ.update({
             "OPEN_SCIENCE_WORKSPACE_DIR": str(self.workspace),
             "EVIMED_META_AGENT_ROOT": str(self.meta_root),
             "EVIMED_META_AGENT_PYTHON": sys.executable,
-            "EVIMED_MODEL_CONFIG_FILE": str(self.model_config),
+            "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(self.model_gateway_token),
+            "EVIMED_MODEL_GATEWAY_URL": "https://api.deepseek.example",
+            "EVIMED_MODEL_GATEWAY_MODEL": "deepseek-v4-pro",
         })
 
     def tearDown(self):
@@ -121,6 +117,34 @@ class ManagedMetaAgentTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "meta_agent_unconfigured")
         self.assertNotIn("data", result)
+
+    def test_a_missing_gateway_token_file_names_the_variable_that_is_unset(self):
+        """MetaAgent read all three model facts out of the retired kernel's
+        `opencode.json`, and that was its only path — under the kernel that
+        writes no such file every managed run failed with
+        `meta_model_config_unavailable` while a valid token sat on disk."""
+        import public_sources
+
+        for name in public_sources.GATEWAY_TOKEN_FILE_ENV_NAMES:
+            os.environ.pop(name, None)
+        result = self.meta_agent.call({"action": "capabilities"})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "meta_model_config_unavailable")
+        self.assertIn("EVIMED_MODEL_GATEWAY_TOKEN_FILE", result["error"]["message"])
+
+    def test_a_configuration_file_is_not_mined_for_something_token_shaped(self):
+        """The retired kernel carried the token under
+        `provider.deepseek.options.apiKey`. Left in the token file's place it
+        must be refused, not parsed."""
+        stale = self.root / "opencode.json"
+        stale.write_text(json.dumps({
+            "provider": {"deepseek": {"options": {"apiKey": "the-retired-kernels-token"}}}
+        }), encoding="utf-8")
+        os.environ["EVIMED_MODEL_GATEWAY_TOKEN_FILE"] = str(stale)
+        result = self.meta_agent.call({"action": "capabilities"})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "meta_model_config_unavailable")
+        self.assertNotIn("the-retired-kernels-token", json.dumps(result))
 
     def test_meta_python_preserves_virtual_environment_entry_point(self):
         virtual_python = self.meta_root / ".venv" / "bin" / "python"

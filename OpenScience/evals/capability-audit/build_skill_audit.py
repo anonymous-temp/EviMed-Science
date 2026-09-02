@@ -224,13 +224,24 @@ def execution_certified_packages() -> set[str]:
     return certified
 
 
-def observed_local_runtime_counts() -> list[dict]:
+def observed_runtime_skill_root_counts() -> list[dict]:
+    """How many packages a runtime is actually handed, per delivery unit.
+
+    Delivery used to be per project: the control plane copied a skill tree into
+    `<project>/runtime/xdg-config/<kernel>/skills`, so this globbed those copies
+    and reported one row per project. Nothing is copied per project any more
+    (`skillsCopied` is a constant zero in the control plane) — the runtime image
+    carries these roots read-only, shared by every project. One row per baked
+    root is the same observation at the unit delivery now happens in, and unlike
+    the enabled-package counts beside it this counts every package present in
+    the root, so a package delivered but not enabled is still visible here.
+    """
     rows = []
-    for root in sorted((REPO / ".openscience-web-data" / "users").glob(
-        "*/projects/*/runtime/xdg-config/opencode/skills"
-    )):
+    for root in (*WEB_GLOBAL_PACKAGE_ROOTS, WEB_AGENT_PACKAGE_ROOT):
+        if not root.is_dir():
+            continue
         rows.append({
-            "runtime": root.relative_to(REPO).as_posix(),
+            "root": root.relative_to(REPO).as_posix(),
             "skillPackages": len(list(root.glob("*/SKILL.md"))),
         })
     return rows
@@ -322,13 +333,13 @@ def main() -> None:
     summary = {
         "schemaVersion": 4,
         "incomingSkillsReviewed": len(rows),
-        "freshWebOpenCodeSkillPackages": len(web_packages),
+        "freshWebRuntimeSkillPackages": len(web_packages),
         "freshWebGlobalSkillPackages": sum(
             len(enabled_root_packages(root)) for root in WEB_GLOBAL_PACKAGE_ROOTS
         ),
         "freshWebSpecialistSkillPackages": len(enabled_root_packages(WEB_AGENT_PACKAGE_ROOT)),
         "freshWebInstalledPackageIds": sorted(web_packages),
-        "observedLocalRuntimeSkillPackageCounts": observed_local_runtime_counts(),
+        "observedRuntimeSkillRootPackageCounts": observed_runtime_skill_root_counts(),
         "desktopRepositorySkillPackages": len(list(RUNTIME_ROOT.rglob("SKILL.md"))),
         "webExecutionCertifiedSkillPackages": len(certified_packages),
         "webExecutionCertifiedPackageIds": sorted(certified_packages),

@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { stringify } from "yaml";
-import { generatedRuntimeAgent } from "../src/runtimeManager.mjs";
+import {
+  DELEGATION_BASE_TOOLS,
+  MAX_DELEGATION_DEPTH,
+  MCP_TOOL_NAMES,
+  SOCKET_TOOL_NAME_LIST,
+  delegationToolFilter,
+  validateCapabilityManifest,
+} from "@evimed/domain";
 import {
   EVIMED_AGENT_COMPLETION_CHECKS,
   EVIMED_AGENT_DATA_SOURCES,
@@ -190,11 +197,12 @@ test("official specialist packages preserve domain-specific evidence and release
   );
   assert.match(skills["adr-analysis"], /do not\s+convert any disproportionality metric into incidence/i);
   assert.match(skills["adr-analysis"], /statistical signal proves causality/i);
-  // This is the OpenCode-exclusive tree (officialPackageRoot). It shows the
-  // model bare tool names because the MCP server publishes bare names and
-  // OpenCode adds no prefix of its own — unlike DSH, which prefixes every MCP
-  // tool with mcp__<server>__. capabilities/ (the DSH tree) is the one that
-  // carries the prefixed spelling.
+  // Two skill trees, two spellings, and they must not be swept together.
+  // `officialPackageRoot` is the server-side contract tree: nothing ships it to
+  // a runtime, so it names tools the way the MCP server publishes them, bare.
+  // `capability-skills/` is the tree delegation injects into a child, and the
+  // kernel prefixes every MCP tool there with mcp__<server>__. A rewrite that
+  // put the prefixed spelling here would name tools this tree never refers to.
   assert.match(skills["adr-analysis"], /drug_safety_analysis/i);
   assert.doesNotMatch(skills["adr-analysis"], /mcp__evimed__/);
   assert.match(skills["adr-analysis"], /suspect_binding/i);
@@ -388,33 +396,153 @@ test("rejects symlinked roots, package directories, and package files", async (t
   });
 });
 
-test("a specialist that writes outputs is told to deliver the report, not the file list", () => {
-  const prompt = generatedRuntimeAgent({
-    title: "Clinical Evidence Synthesis",
-    description: "synthesize clinical evidence",
-    skill: "clinical-evidence-synthesis",
-    runtimeAgent: "evimed-clinical-evidence-synthesis",
-    companionSkills: [],
-    requiredTools: ["literature_search"],
-    optionalTools: [],
-    outputs: [{ path: "clinical-evidence-report.md", required: true }],
-  });
-  assert.match(prompt, /Open with the conclusion/);
-  assert.match(prompt, /A list of file names is not an answer\./);
-  assert.match(prompt, /Never paste a tool log, a JSON artifact, a hash, or an internal marker/);
+// `generatedRuntimeAgent` rendered these facts as one agent markdown file per
+// package for the retired kernel: a `mode: primary` frontmatter, the required
+// skills in load order, the declared tool allow-list, the declared output paths
+// with their required flags, and the rule that the work is what gets delivered
+// rather than the list of files it produced.
+//
+// That file format is gone with the kernel. The facts are not: they are the
+// capability manifests the runtime image carries, generated from
+// `capabilities/<id>/capability.yaml` by
+// `scripts/build/generate-capability-manifests.mjs` and read by the delegation
+// tool, and the two tests below check the same properties there.
+const dshCapabilityDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../deploy/runtime-dsh/capabilities",
+);
+
+async function dshCapabilities() {
+  const files = (await readdir(dshCapabilityDir)).filter((name) => name.endsWith(".json")).sort();
+  // A directory read that silently returned nothing would make every loop below
+  // vacuously true, which is the failure mode this whole file exists to prevent.
+  assert.ok(files.length >= 10, `only ${files.length} capability manifests found; the catalogue read nothing`);
+  return Promise.all(files.map(async (name) => ({
+    id: name.replace(/\.json$/, ""),
+    manifest: JSON.parse(await readFile(path.join(dshCapabilityDir, name), "utf8")),
+  })));
+}
+
+test("a capability that writes files declares its skills, its tools and every output path", async () => {
+  const catalogue = await dshCapabilities();
+  const knownTools = new Set([...MCP_TOOL_NAMES, ...SOCKET_TOOL_NAME_LIST, ...DELEGATION_BASE_TOOLS]);
+  for (const { id, manifest } of catalogue) {
+    // The shipped manifest still passes the gate that generated it. A catalogue
+    // entry that no longer validates is one the build would refuse to produce
+    // today, and the runtime reads these files without revalidating them.
+    const revalidated = validateCapabilityManifest(manifest);
+    assert.deepEqual(revalidated.issues, [], `${id} no longer passes the generator's own validation`);
+    assert.equal(manifest.id, id);
+
+    // Required-skill load order. The generated agent said "load and follow every
+    // required skill below, in order"; delegation pre-injects the same bodies in
+    // the same order, which is what makes `skillsLoaded` true by construction.
+    assert.ok(manifest.skills.length > 0, `${id} declares no skills`);
+    assert.equal(manifest.skills[0], id, `${id} must load its own skill first`);
+    assert.equal(new Set(manifest.skills).size, manifest.skills.length, `${id} repeats a skill`);
+
+    // The declared tool allow-list, spelled the way the model actually sees it.
+    for (const tool of manifest.tools) {
+      assert.ok(knownTools.has(tool), `${id} declares "${tool}", which no server publishes`);
+    }
+
+    // Declared output paths, each with an explicit required flag, each relative
+    // to the deliverable directory.
+    assert.ok(manifest.produces.length > 0, `${id} produces nothing`);
+    for (const contract of manifest.produces) {
+      assert.ok(contract.outputs.length > 0, `${id}/${contract.contractKind} declares no outputs`);
+      for (const output of contract.outputs) {
+        assert.equal(typeof output.required, "boolean", `${id} leaves "${output.path}" without a required flag`);
+        assert.ok(!path.isAbsolute(output.path) && !output.path.includes(".."), `${id} declares an escaping output path`);
+      }
+      assert.ok(
+        contract.outputs.some((output) => output.required),
+        `${id}/${contract.contractKind} has no required output, so nothing decides whether it was delivered`,
+      );
+      // Writing the files is not delivering the work. The generated agent said so
+      // in prose to the model; the contract says it to the gate, and the gate is
+      // what returns the verdict the run repairs against.
+      assert.ok(
+        contract.checks.includes("requiredOutputsExist"),
+        `${id}/${contract.contractKind} declares outputs nothing checks`,
+      );
+    }
+
+    // The delegated child's persona and the orchestrator's reason to delegate at
+    // all: the two fields that replaced the generated file's frontmatter.
+    assert.ok(manifest.persona.length > 0, `${id} has no persona for its delegated child`);
+    assert.ok(manifest.whenToUse.length > 0, `${id} gives the orchestrator no reason to delegate to it`);
+  }
+
+  const clinicalEvidence = catalogue.find((entry) => entry.id === "clinical-evidence-synthesis").manifest;
+  assert.deepEqual(clinicalEvidence.skills, [
+    "clinical-evidence-synthesis",
+    "deep-research",
+    "biomedical-database-search",
+    "citation-integrity",
+    "manuscript-humanize",
+  ]);
+  assert.deepEqual(
+    clinicalEvidence.produces[0].outputs.filter((output) => output.required).map((output) => output.path),
+    [
+      "clinical-evidence-report.md",
+      "clinical-evidence-matrix.json",
+      "clinical-evidence-search.json",
+      "citation-ledger.csv",
+      "references.bib",
+      "citation-audit.md",
+      "clinical-evidence-run.json",
+      "question-coverage.json",
+    ],
+  );
+
+  // The required/optional distinction is live, not a field nobody sets: at least
+  // one shipped capability declares an output it may skip.
+  assert.ok(
+    catalogue.some(({ manifest }) => manifest.produces.some((contract) => contract.outputs.some((output) => !output.required))),
+    "no capability declares an optional output; the required flag has stopped meaning anything",
+  );
 });
 
-test("an answer-only package keeps its reply contract unchanged", () => {
-  const prompt = generatedRuntimeAgent({
-    title: "Open-Domain Answer",
-    description: "answer open-domain questions",
-    skill: "open-domain-answer",
-    runtimeAgent: "evimed-open-domain-answer",
-    companionSkills: [],
-    requiredTools: ["literature_search"],
-    optionalTools: [],
-    outputs: [],
-  });
-  assert.match(prompt, /delivers its answer directly in the assistant reply/);
-  assert.doesNotMatch(prompt, /A list of file names is not an answer\./);
+test("a delegated capability is the last step in its chain", async () => {
+  // "Do not delegate any part of this work further; you are the last step in the
+  // chain" used to be a sentence in the generated subagent file, which a model
+  // could read and ignore. It is now the child's tool allow-list plus a depth
+  // ceiling: the delegate tool is simply not in the set the child is given.
+  assert.equal(MAX_DELEGATION_DEPTH, 1);
+  assert.equal(DELEGATION_BASE_TOOLS.includes("evimed_delegate"), false);
+  for (const { id, manifest } of await dshCapabilities()) {
+    const filter = delegationToolFilter(manifest);
+    assert.equal(filter.includes("evimed_delegate"), false, `${id}'s child could delegate again`);
+    assert.ok(filter.includes("evimed_submit_deliverable"), `${id}'s child cannot submit what it wrote`);
+    assert.ok(filter.includes("write"), `${id}'s child cannot write, so it cannot deliver`);
+    assert.ok(filter.includes("read"), `${id}'s child cannot read back a large tool result`);
+    for (const tool of manifest.tools) assert.ok(filter.includes(tool), `${id} declares "${tool}" but its child is not given it`);
+  }
+});
+
+test("an answer-only package keeps its reply contract: the reply is the deliverable", async () => {
+  // The other half of what `generatedRuntimeAgent` encoded. A package with no
+  // file outputs was told "this package delivers its answer directly in the
+  // assistant reply" and was pointedly not given the file-list contract.
+  //
+  // Under one composition that is no longer a package at all: an answerable
+  // question is answered by the orchestrator itself, with no plan, no
+  // deliverable and no delegation, so `open-domain-answer` has no capability
+  // manifest. Delegation always produces files; the direct answer never does.
+  const catalogue = await dshCapabilities();
+  assert.equal(
+    catalogue.some((entry) => entry.id === "open-domain-answer"),
+    false,
+    "answering directly must not be reachable as a file-producing delegation",
+  );
+
+  // And the answer-mode contract itself still exists where the server enforces
+  // it: zero declared outputs, and a floor of skill loading plus citation
+  // hygiene rather than `requiredOutputsExist`.
+  const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot] });
+  const answer = registry.get("open-domain-answer");
+  assert.deepEqual(answer.outputs, []);
+  assert.equal(answer.completionChecks.includes("requiredOutputsExist"), false);
+  assert.deepEqual(answer.completionChecks, ["skillsLoaded", "citationsResolvable", "citationIntegrity"]);
 });

@@ -24,13 +24,13 @@ Use this skill when a question requires more than a short factual answer or a si
 
 Select only relevant tools from the agent's declared contract:
 
-- `data_source_catalog`
-- `biomedical_source_search`
-- `literature_search`
-- `guideline_search`
-- `official_page_fetch`
-- `open_access_full_text`
-- `evidence_deduplicate`
+- `mcp__evimed__data_source_catalog`
+- `mcp__evimed__biomedical_source_search`
+- `mcp__evimed__literature_search`
+- `mcp__evimed__guideline_search`
+- `mcp__evimed__official_page_fetch`
+- `mcp__evimed__open_access_full_text`
+- `mcp__evimed__evidence_deduplicate`
 
 Search results are discovery records. They do not establish study design, recommendations, effects, or causality unless the returned record exposes the exact supporting content.
 

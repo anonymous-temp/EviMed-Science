@@ -40,11 +40,14 @@ if (args[0] === "image" && args[1] === "inspect") {
   // the moment the reader asks for a fourth, and every assertion downstream
   // then measures the misalignment rather than the thing under test.
   //
-  // This image publishes ONLY the kernel-specific label — it stands for an
-  // image built before the neutral label existed, so the readiness gate's
-  // rollback fallback is exercised on a real code path rather than asserted.
+  // The runtime image publishes the kernel-neutral version label and the uv
+  // label, and nothing kernel-specific: there is one kernel, and the readiness
+  // gate reads io.open-science.runtime.version. A stub still carrying the
+  // retired vendor label answers empty for the label the gate asks for, which
+  // fails runtime_image_metadata_missing and never reaches provenance.
+  // (No backticks in this comment: it lives inside a template literal.)
   const labels = ${JSON.stringify({
-    "io.open-science.opencode.version": releaseManifestFixture.runtime.opencodeVersion,
+    "io.open-science.runtime.version": releaseManifestFixture.runtime.dshVersion,
     "io.open-science.uv.version": releaseManifestFixture.runtime.uvVersion,
   })};
   const format = args[args.indexOf("--format") + 1] ?? "";
@@ -156,9 +159,9 @@ async function withAuthApp(fn, overrides = {}) {
     dataDir,
     port: 0,
     runtimeMode: "mock",
-    // Named because /api/me reports it and this test asserts it; the value was
-    // previously the default and the assertion was never reached.
-    runtimeKernel: "dsh",
+    // No kernel override: there is one kernel, and /api/me reports it from the
+    // server constant rather than from configuration. Naming it here would be
+    // a setting nothing reads, so the assertion would prove nothing.
     devAuth: false,
     bootstrapUser: "alice",
     bootstrapPassword: "correct horse battery staple",
@@ -185,10 +188,8 @@ async function withStaticApp(fn) {
     staticDir,
     port: 0,
     runtimeMode: "mock",
-    // The kernel is named because readiness reports it, and this assertion was
-    // unreachable while the gateway check refused any runtime shape it did not
-    // recognise — it never ran, so it never disagreed with the default.
-    runtimeKernel: "dsh",
+    // No kernel override, for the same reason as `withAuthApp`: readiness
+    // reports the kernel from the server constant, not from configuration.
     devAuth: true,
     operatorMetricsToken: "",
   });
@@ -1379,7 +1380,7 @@ test("readiness rejects deployment settings that disagree with the release manif
       runtimeMode: "mock",
       allowMockRuntime: true,
       ...productionReadinessReady,
-      runtimeContainerImage: "open-science-opencode:mismatch",
+      runtimeContainerImage: "evimed-runtime-dsh:mismatch",
     },
   );
 });
@@ -1426,7 +1427,7 @@ test("readiness rejects invalid production resource limits", async () => {
     },
     {
       overrides: {
-        runtimeMode: "opencode",
+        runtimeMode: "kernel",
         runtimeSandboxMode: "docker",
         runtimeNetworkMode: "none",
         runtimeRequireImageLocal: false,
@@ -1437,7 +1438,7 @@ test("readiness rejects invalid production resource limits", async () => {
     },
     {
       overrides: {
-        runtimeMode: "opencode",
+        runtimeMode: "kernel",
         runtimeSandboxMode: "docker",
         runtimeNetworkMode: "none",
         runtimeRequireImageLocal: false,
@@ -1957,7 +1958,7 @@ test("production readiness rejects direct Docker control without the isolated co
       bootstrapUser: "alice",
       bootstrapPassword: "correct horse battery staple",
       publicUrl: "https://science.example.com",
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       runtimeControllerMode: "direct",
       allowDirectDockerControl: false,
@@ -2012,12 +2013,12 @@ test("readiness rejects Docker image metadata that disagrees with the release ma
     [
       "#!/bin/sh",
       'if [ "$1" = "info" ]; then exit 0; fi',
-      // Id | runtime.version | opencode.version | uv.version — this image
-      // publishes the neutral label and not the kernel-specific one, which is
-      // what a DSH image looks like. Before the gate read the neutral label,
-      // this shape failed `runtime_image_metadata_missing` instead of ever
-      // reaching the provenance comparison below.
-      `if [ "$1" = "image" ]; then echo 'sha256:${"f".repeat(64)}|1.17.13||0.11.26'; exit 0; fi`,
+      // Id | runtime.version | uv.version — the three placeholders the gate
+      // asks for, in order. Only the id disagrees with the manifest, so the
+      // reported field is unambiguous; a stub that answered a field count the
+      // gate no longer asks for would blank the last column instead and fail
+      // `runtime_image_metadata_missing` without ever reaching provenance.
+      `if [ "$1" = "image" ]; then echo 'sha256:${"f".repeat(64)}|${releaseManifestFixture.runtime.dshVersion}|${releaseManifestFixture.runtime.uvVersion}'; exit 0; fi`,
       "exit 1",
       "",
     ].join("\n"),
@@ -2055,23 +2056,31 @@ test("readiness rejects Docker image metadata that disagrees with the release ma
   }
 });
 
-test("readiness rejects unsandboxed OpenCode runtime without opt-in", async () => {
-  await withApp(
-    async ({ base }) => {
-      const res = await fetch(`${base}/api/ready`);
-      assert.equal(res.status, 503);
-      const body = (await res.json()).data;
-      assert.equal(body.ok, false);
-      assert.equal(body.checks.runtime.ok, false);
-      assert.equal(body.checks.runtime.code, "runtime_sandbox_required");
-    },
-    {
-      runtimeMode: "opencode",
-      opencodeBin: "/bin/echo",
-      runtimeSandboxMode: "host",
-      allowUnsandboxedRuntime: false,
-    },
-  );
+test("readiness rejects an unsandboxed kernel runtime, opt-in or not", async () => {
+  // The property is the sandbox invariant, and it is stricter than the opt-in
+  // that used to gate it. The kernel's EviMed composition lives in the runtime
+  // image, so a host-mode deployment would serve a runtime that boots, answers
+  // its own health probe and can satisfy nothing. Readiness refuses it whatever
+  // `allowUnsandboxedRuntime` says, so both values are exercised: a build that
+  // let the opt-in through again would fail here rather than ship.
+  for (const allowUnsandboxedRuntime of [false, true]) {
+    await withApp(
+      async ({ base }) => {
+        const res = await fetch(`${base}/api/ready`);
+        assert.equal(res.status, 503, `allowUnsandboxedRuntime=${allowUnsandboxedRuntime}`);
+        const body = (await res.json()).data;
+        assert.equal(body.ok, false);
+        assert.equal(body.checks.runtime.ok, false);
+        assert.equal(body.checks.runtime.code, "runtime_sandbox_invalid");
+      },
+      {
+        runtimeMode: "kernel",
+        dshBin: "/bin/echo",
+        runtimeSandboxMode: "host",
+        allowUnsandboxedRuntime,
+      },
+    );
+  }
 });
 
 test("readiness rejects invalid Docker data volumes and incompatible transports", async () => {
@@ -2082,7 +2091,7 @@ test("readiness rejects invalid Docker data volumes and incompatible transports"
       assert.equal((await res.json()).data.checks.runtime.code, "runtime_data_volume_invalid");
     },
     {
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       runtimeContainerBin: "/bin/true",
       runtimeDataVolume: "invalid/volume",
@@ -2091,27 +2100,32 @@ test("readiness rejects invalid Docker data volumes and incompatible transports"
     },
   );
 
-  await withApp(
-    async ({ base }) => {
-      const res = await fetch(`${base}/api/ready`);
-      assert.equal(res.status, 503);
-      assert.equal((await res.json()).data.checks.runtime.code, "runtime_transport_volume_mismatch");
-    },
-    {
-      // The kernel is pinned because the suite runs under
-      // OPEN_SCIENCE_RUNTIME_KERNEL=dsh, and the DSH kernel now refuses a TCP
-      // transport at config load — earlier than readiness, on purpose. The
-      // mismatch under test here is volume-vs-transport, which is an OpenCode
-      // combination; the DSH rule has its own test.
-      runtimeKernel: "opencode",
-      runtimeMode: "opencode",
-      runtimeSandboxMode: "docker",
-      runtimeContainerBin: "/bin/true",
-      runtimeDataVolume: "open-science-data",
-      runtimeTransport: "tcp",
-      runtimeRequireImageLocal: false,
-    },
-  );
+  // The same property one layer earlier. A data volume is only servable over
+  // the unix transport, and readiness used to report that as
+  // `runtime_transport_volume_mismatch`. `loadConfig` now accepts no transport
+  // but `unix`, so the deployment is refused before a server exists to ask —
+  // the readiness branch is unreachable, not gone. Asserted at the layer that
+  // owns it so a build that quietly re-accepted TCP still fails here.
+  const transportDataDir = await mkdtemp(path.join(tmpdir(), "os-web-transport-"));
+  try {
+    assert.throws(
+      () =>
+        createWebApiApp({
+          dataDir: transportDataDir,
+          port: 0,
+          devAuth: true,
+          runtimeMode: "kernel",
+          runtimeSandboxMode: "docker",
+          runtimeContainerBin: "/bin/true",
+          runtimeDataVolume: "open-science-data",
+          runtimeTransport: "tcp",
+          runtimeRequireImageLocal: false,
+        }),
+      /OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix"/,
+    );
+  } finally {
+    await rm(transportDataDir, { recursive: true, force: true });
+  }
 });
 
 test("readiness rejects production docker runtime network egress unless explicitly allowed", async () => {
@@ -2130,7 +2144,7 @@ test("readiness rejects production docker runtime network egress unless explicit
       bootstrapUser: "alice",
       bootstrapPassword: "correct horse battery staple",
       publicUrl: "https://science.example.com",
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       allowDirectDockerControl: true,
       runtimeNetworkMode: "bridge",
@@ -2155,7 +2169,7 @@ test("readiness rejects production docker runtime network egress without policy 
       bootstrapUser: "alice",
       bootstrapPassword: "correct horse battery staple",
       publicUrl: "https://science.example.com",
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       allowDirectDockerControl: true,
       runtimeNetworkMode: "bridge",
@@ -2193,7 +2207,7 @@ test("readiness allows production docker runtime network egress with opt-in and 
       bootstrapUser: "alice",
       bootstrapPassword: "correct horse battery staple",
       publicUrl: "https://science.example.com",
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       allowDirectDockerControl: true,
       runtimeNetworkMode: "bridge",
@@ -2207,7 +2221,7 @@ test("readiness allows production docker runtime network egress with opt-in and 
   );
 });
 
-test("readiness rejects docker OpenCode runtime when the required image is unavailable", async () => {
+test("readiness rejects a docker kernel runtime when the required image is unavailable", async () => {
   await withApp(
     async ({ app, base }) => {
       const docker = path.join(app.config.dataDir, "docker-fake");
@@ -2232,9 +2246,9 @@ test("readiness rejects docker OpenCode runtime when the required image is unava
       assert.equal(body.checks.runtime.code, "runtime_image_unavailable");
     },
     {
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
-      runtimeContainerImage: "missing-opencode:latest",
+      runtimeContainerImage: "missing-runtime-dsh:latest",
       runtimeRequireImageLocal: true,
     },
   );
@@ -2265,9 +2279,9 @@ test("readiness can skip docker image locality checks for lazy-pull deployments"
       assert.equal(body.checks.runtime.imageCheck, "skipped");
     },
     {
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
-      runtimeContainerImage: "remote-opencode:latest",
+      runtimeContainerImage: "remote-runtime-dsh:latest",
       runtimeRequireImageLocal: false,
     },
   );
@@ -2409,19 +2423,26 @@ test("login attempts use a stricter auth rate limit", async () => {
   );
 });
 
-test("unsandboxed real OpenCode runtime requires explicit opt-in", async () => {
-  await withApp(
-    async ({ base }) => {
-      const out = await command(base, "start_runtime");
-      assert.equal(out.res.status, 403);
-      assert.equal(out.json.code, "runtime_sandbox_required");
-    },
-    {
-      runtimeMode: "opencode",
-      opencodeBin: "/bin/echo",
-      allowUnsandboxedRuntime: false,
-    },
-  );
+test("starting a real kernel runtime unsandboxed is refused, opt-in or not", async () => {
+  // Readiness is advisory for an operator; this is the enforcing edge. A run
+  // asked for through the command API must not get a host-launched kernel even
+  // when readiness was never consulted, and the opt-in that used to buy one no
+  // longer buys anything — both values are exercised for that reason.
+  for (const allowUnsandboxedRuntime of [false, true]) {
+    await withApp(
+      async ({ base }) => {
+        const out = await command(base, "start_runtime");
+        assert.equal(out.res.status, 400, `allowUnsandboxedRuntime=${allowUnsandboxedRuntime}`);
+        assert.equal(out.json.code, "invalid_runtime_sandbox");
+      },
+      {
+        runtimeMode: "kernel",
+        dshBin: "/bin/echo",
+        runtimeSandboxMode: "host",
+        allowUnsandboxedRuntime,
+      },
+    );
+  }
 });
 
 test("production command API rejects mock runtime startup unless explicitly allowed", async () => {
@@ -2450,7 +2471,7 @@ test("production command API rejects runtime egress without policy acknowledgeme
     },
     {
       production: true,
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       allowDirectDockerControl: true,
       runtimeNetworkMode: "bridge",
@@ -2470,7 +2491,7 @@ test("production command API rejects direct Docker control even when readiness i
     },
     {
       production: true,
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       runtimeControllerMode: "direct",
       allowDirectDockerControl: false,
@@ -4692,7 +4713,7 @@ test("kernel_execute runs through the Docker sandbox when configured", async () 
             arg.startsWith("type=volume,src=open-science-data,dst=/workspace,volume-subpath=users/")
           ),
         );
-        assert.ok(log.args.includes("open-science-opencode:test"));
+        assert.ok(log.args.includes("evimed-runtime-dsh:test"));
         assert.deepEqual(log.args.slice(-2), ["python", "-"]);
         assert.equal(log.args.includes("print('inside docker kernel')"), false);
       },
@@ -4700,7 +4721,7 @@ test("kernel_execute runs through the Docker sandbox when configured", async () 
         enableKernel: true,
         kernelSandboxMode: "docker",
         runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "open-science-opencode:test",
+        runtimeContainerImage: "evimed-runtime-dsh:test",
         runtimeDataVolume: "open-science-data",
         runtimeRequireImageLocal: true,
         runtimeCpuLimit: "0.5",
@@ -4734,7 +4755,7 @@ test("kernel_execute selects the production R runtime inside the Docker sandbox"
         enableKernel: true,
         kernelSandboxMode: "docker",
         runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "open-science-opencode:test",
+        runtimeContainerImage: "evimed-runtime-dsh:test",
         runtimeDataVolume: "open-science-data",
         runtimeRequireImageLocal: true,
       },
@@ -4761,7 +4782,7 @@ test("kernel_execute checks project quota after Docker sandbox writes", async ()
         enableKernel: true,
         kernelSandboxMode: "docker",
         runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "open-science-opencode:test",
+        runtimeContainerImage: "evimed-runtime-dsh:test",
         maxProjectBytes: 8,
       },
     );
@@ -5468,7 +5489,7 @@ test("server startup cleans stale docker runtime state before accepting traffic"
         projectId: "default",
         event: "started",
         running: true,
-        kind: "opencode",
+        kind: "dsh",
         startedAt: "2026-07-09T00:00:00.000Z",
         pid: null,
         exitedAt: null,
@@ -5482,10 +5503,10 @@ test("server startup cleans stale docker runtime state before accepting traffic"
     app = createWebApiApp({
       dataDir,
       port: 0,
-      runtimeMode: "opencode",
+      runtimeMode: "kernel",
       runtimeSandboxMode: "docker",
       runtimeContainerBin: docker,
-      runtimeContainerImage: "open-science-opencode:test",
+      runtimeContainerImage: "evimed-runtime-dsh:test",
       devAuth: true,
     });
     await app.listen(0, "127.0.0.1");
@@ -5572,10 +5593,10 @@ test("docker runtime startup reports container cleanup failures", async () => {
         assert.match(row.error, /permission denied/);
       },
       {
-        runtimeMode: "opencode",
+        runtimeMode: "kernel",
         runtimeSandboxMode: "docker",
         runtimeContainerBin: dockerBin,
-        runtimeContainerImage: "open-science-opencode:test",
+        runtimeContainerImage: "evimed-runtime-dsh:test",
       },
     );
   } finally {
