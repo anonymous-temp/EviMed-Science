@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "manuscript-support",
+  "note": "Four briefs. This is the writing capability, so every failure here is one that reads well — a section is judged by a reviewer holding the sources, and the ways it goes wrong (a citation that resolves to nothing, an estimate that reads as a measurement, a number corrected in one place, a reviewer reply left standing in the discussion) all survive a proofread. Each brief names a real study or a real journal-shaped ask, because a toy string cannot fail the way a manuscript fails.",
+  "briefs": [
+    {
+      "id": "ms-001-strobe-methods-retrospective-cohort",
+      "title": "回顾性队列的资料与方法：从数据字典到可复现的一节",
+      "why": "The ordinary case, and the one that establishes what a clean section looks like so the other three have something to fail against. A methods section is the only one a reader is entitled to reproduce from the text alone, and the failure is quiet: a definition the run knows from the data dictionary and never writes down, or a result that drifts forward out of 结果 into 资料与方法 because it justifies a choice.",
+      "inputs": {
+        "section": "methods",
+        "sources": "本院数据仓库导出的队列定义、数据字典与统计分析计划（二甲双胍用于合并 CKD 3 期的 2 型糖尿病患者，2019-01 至 2024-12，n=4,812），以及已确定的协变量清单",
+        "reportingGuideline": "STROBE（队列研究，22 条）",
+        "targetJournal": "《中华糖尿病杂志》",
+        "wordBudget": "900–1200 字"
+      },
+      "mustDo": [
+        "写清设计、时间窗、来源人群、纳入与排除、暴露与结局的操作性定义、随访起止与删失规则。",
+        "统计方法写到可复算：模型、协变量、缺失值处理、敏感性分析各自的用途。",
+        "在 delivery-summary.md 里点名 STROBE，并说明本节负责其中哪几条。",
+        "数据字典里没有定义的变量，写成缺口并说明需要什么才能补上。"
+      ],
+      "mustNotDo": [
+        "把任何一个结果数字写进资料与方法（样本量与随访时长以外）。",
+        "用「采用标准方法进行统计分析」这类无法复现的句子代替方法。",
+        "为了让某个选择显得合理而先说出它的结论。",
+        "把检索、工具调用或文件路径写进正文。"
+      ],
+      "gradedOn": "Whether a statistician holding only this section and the data could rebuild the analysis, and whether every STROBE item the section owns is answered rather than named."
+    },
+    {
+      "id": "ms-002-discussion-against-a-prior-evidence-package",
+      "title": "用上一轮的证据包写讨论：来源是定的，论证不是",
+      "why": "The data-flow this capability exists for: an evidence run finished, and its package — matrix, ledger, quotes — is the source set. The temptation is to reach for one more citation to make a paragraph land, and a source that was never in the package has no quote, no ledger row and no way for the reviewer to find it. The second temptation is the opposite: to restate 结果 paragraph by paragraph and call it a discussion.",
+      "inputs": {
+        "section": "discussion",
+        "sources": "上一轮 clinical-evidence-synthesis 交付的证据包（clinical-evidence-matrix.json + citation-ledger.csv + references.bib），主题为 SGLT2 抑制剂在慢性肾脏病中的肾脏结局，含 DAPA-CKD 与 EMPA-KIDNEY 的提取结果",
+        "manuscriptContext": "本研究为单中心真实世界队列，结果一节已定稿：主要结局的调整 HR 0.83（95% CI 0.71–0.97）",
+        "existingDraft": "无",
+        "targetJournal": "《中华肾脏病杂志》"
+      },
+      "mustDo": [
+        "把本研究的发现放在 DAPA-CKD 与 EMPA-KIDNEY 之下讨论一致与不一致之处，并给出可能的机制或人群差异解释。",
+        "每一条跨来源的结论标为 synthesized，至少两条来源、各带原文引用，并给出置信度。",
+        "证据包里没有覆盖的问题写成缺口：需要什么设计、什么人群、什么终点才能回答。",
+        "每个 [n] 都能在 citation-ledger.csv 里找到对应行。"
+      ],
+      "mustNotDo": [
+        "引用证据包之外的任何一条文献。",
+        "把结果一节逐段重述一遍。",
+        "把「未检索到支持性研究」写成「无效」或「不推荐」。",
+        "在讨论里出现结果一节没有的新数字。"
+      ],
+      "gradedOn": "Whether every citation in the section resolves to a row the prior run preserved, and whether the discussion argues rather than repeats."
+    },
+    {
+      "id": "ms-003-effect-estimate-corrected-late",
+      "title": "统计师改了主效应值：一次清点，不是一次替换",
+      "why": "The failure this capability is most able to cause, and the one a reviewer catches and an author never does. The primary estimate changes after the draft exists, and it does not appear once — it is in 摘要, in 结果, in a table cell, in a 讨论 sentence comparing it with the trials, in a figure caption, and it has dependents: an NNT derived from it, a 「风险下降约两成」 in the abstract, an ordering across subgroups. Replacing the number where you remember seeing it leaves the rest standing and internally contradictory.",
+      "inputs": {
+        "section": "discussion",
+        "sources": "同 ms-002 的证据包，加上统计师的更正说明",
+        "existingDraft": "已定稿的讨论一节，其中主要结局写作调整 HR 0.78（95% CI 0.66–0.92），并据此写了 NNT 与「风险下降约两成」",
+        "manuscriptContext": "更正后的主要结局为调整 HR 0.83（95% CI 0.71–0.97）；亚组顺序因此改变",
+        "reportingGuideline": "STROBE"
+      },
+      "mustDo": [
+        "在改动前先把 0.78 出现过的每一处和每一条从它推出来的结论列出来。",
+        "重新推导 NNT，而不是按比例调整它；把它标为 derived，写清 derivedFrom、method、assumptions、sensitivity。",
+        "NNT 在正文中出现的每一处都带〔推导〕。",
+        "更新 section-claims.json 与 citation-ledger.csv，使其与正文一致。",
+        "在 revision-notes.md 里记下这次清点：改了哪个数、从多少到多少、波及了哪几处。"
+      ],
+      "mustNotDo": [
+        "只替换掉记得的那几处。",
+        "把 NNT 或「风险下降约两成」按旧值等比例改写而不重新推导。",
+        "把推导结果当成测量值陈述（无〔推导〕标记）。",
+        "把亚组排序沿用旧值下的顺序。"
+      ],
+      "gradedOn": "Whether the old estimate survives anywhere in the deliverable, whether every dependent claim was re-derived rather than adjusted, and whether the sweep is recorded where the next person can read it."
+    },
+    {
+      "id": "ms-004-revision-with-the-reply-in-the-wrong-file",
+      "title": "返修稿：回复审稿人，但不在正文里回复",
+      "why": "Channel separation, in the situation that creates it. A revision produces three kinds of prose at once — the changed section, the reply to each comment, and the record of what changed — and under deadline all three end up in the same file. 「根据审稿人意见，我们已补充……」 in a discussion is the commonest backstage sentence in the literature, and it is invisible to the author because it is true.",
+      "inputs": {
+        "section": "discussion",
+        "sources": "同 ms-002 的证据包",
+        "existingDraft": "一审后的讨论一节",
+        "manuscriptContext": "审稿意见三条：(1) 未讨论适应证混杂；(2) 与 EMPA-KIDNEY 人群差异未说明；(3) 结论强于证据",
+        "targetJournal": "《中国药学杂志》返修"
+      },
+      "mustDo": [
+        "把三条意见都在讨论里实质回应：适应证混杂写进讨论与局限性，人群差异写清方向，结论下调到证据支持的强度。",
+        "逐条回复写进 revision-notes.md，附上改动位置。",
+        "在 revision-notes.md 里说明每一处改动为什么这么改。",
+        "用 edit 就地修改，保留未被意见触及的段落。"
+      ],
+      "mustNotDo": [
+        "在正文里出现「根据审稿人意见」「本次修改」「本节旨在回应」之类关于这份稿子本身的句子。",
+        "把 revision-notes.md 的整段内容原样留在正文里。",
+        "整篇重写：未被意见触及的段落应当逐字不变。",
+        "在弱化结论的同时把限制条件也一并删掉。"
+      ],
+      "gradedOn": "Whether the discussion reads as a discussion rather than as a reply, whether all three comments are answered in substance, and whether the untouched paragraphs are byte-identical to the draft."
+    }
+  ]
+}

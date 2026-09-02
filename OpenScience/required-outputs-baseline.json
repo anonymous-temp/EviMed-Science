@@ -3,7 +3,9 @@
   "rule": "required: false first, then promote. Same weight as a seventh blocking point.",
   "recordedAt": "2026-08-30",
   "history": {
-    "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15"
+    "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15",
+    "appraisal-table": "5 required on 2026-09-02, the contract's opening count",
+    "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution"
   },
   "contracts": {
     "adr-analysis-report": {
@@ -386,6 +388,63 @@
           "path": "revision-notes.md",
           "required": false,
           "addedOn": "2026-08-31"
+        }
+      ]
+    },
+    "appraisal-table": {
+      "capability": "evidence-appraisal",
+      "requiredCount": 5,
+      "outputs": [
+        {
+          "path": "appraisal-table.json",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "appraisal-table.md",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "appraisal-table.csv",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-09-02"
+        }
+      ]
+    },
+    "manuscript-section": {
+      "capability": "manuscript-support",
+      "requiredCount": 4,
+      "outputs": [
+        {
+          "path": "manuscript-section.md",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "section-claims.json",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true,
+          "addedOn": "2026-09-02"
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true,
+          "addedOn": "2026-09-02"
         }
       ]
     }

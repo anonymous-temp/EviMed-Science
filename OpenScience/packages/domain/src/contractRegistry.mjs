@@ -14,6 +14,8 @@
 import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, evaluateClinicalSafetyRules, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { matchedClinicalTriggers } from './safetyRules.mjs'
+import { appraisalTableFindings } from './appraisalContract.mjs'
+import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 
 /**
@@ -305,6 +307,29 @@ function validateClinicalEvidenceReport(input) {
 }
 
 /**
+ * Merges a capability's own findings into the shared verdict.
+ *
+ * `ok` and `errorCode` are recomputed from the merged issues rather than
+ * carried over, so a contributor that ever did raise a `required` issue would
+ * change the verdict rather than be silently outvoted by a stale `ok`.
+ *
+ * @param {GateVerdict} base
+ * @param {{ issues: GateIssue[], metrics?: Record<string, any> }} found
+ * @returns {GateVerdict}
+ */
+function withFindings(base, found) {
+  const issues = [...base.issues, ...found.issues]
+  const required = issues.filter((item) => item.severity === 'required')
+  return {
+    ...base,
+    ok: required.length === 0,
+    issues,
+    metrics: { ...base.metrics, ...(found.metrics ?? {}) },
+    errorCode: required.length ? (base.errorCode ?? 'deliverable_rejected') : null,
+  }
+}
+
+/**
  * The default validator: declared files exist, prose is clean, citations
  * resolve. It is what every report-shaped kind gets until it earns rules of its
  * own — deliberately shallow, so a kind is never blocked by a rule nobody wrote.
@@ -384,8 +409,19 @@ const VALIDATORS = Object.freeze({
   'research-topic-report': (input) => validateReportShaped(input, proseFilesOf(input)),
   'dataset-scoping-package': (input) => validateReportShaped(input, proseFilesOf(input)),
   'research-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
-  'appraisal-table': (input) => validateReportShaped(input, proseFilesOf(input)),
-  'manuscript-section': (input) => validateReportShaped(input, proseFilesOf(input)),
+  // Both compose rather than replace: the shared required-output pass and prose
+  // hygiene stay in one place, and each capability adds only what it owns. The
+  // findings they contribute are advisory by construction, so blocking for
+  // these kinds stays exactly where it was — on the manifest's required outputs.
+  'appraisal-table': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), appraisalTableFindings(input)),
+  // The pre-edit snapshot is excluded from the prose scan by name. Graded as
+  // report prose it could block a package for leakage in a scratch file the
+  // delivered section never contained; `manuscriptSectionFindings` reports its
+  // presence instead, which is the problem actually worth telling the run about.
+  'manuscript-section': (input) => withFindings(
+    validateReportShaped(input, proseFilesOf(input).filter((path) => path !== MANUSCRIPT_SCRATCH_FILE)),
+    manuscriptSectionFindings(input),
+  ),
   'grant-proposal-package': validateGrantProposalPackage,
   'geo-content-pack': validateGeoContentPack,
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "evidence-appraisal",
+  "note": "Four briefs, each a request somebody actually brings: a stack of papers and the question 'how good are these?'. They are chosen because appraisal fails differently from synthesis — a synthesis fails by not finding something, and the gap is visible; an appraisal fails by producing a complete, well-formatted table whose judgements are wrong, and nothing about the deliverable looks unfinished. The studies arrive the way a researcher sends them, as a list of names with no identifiers, because resolving them is part of the work.",
+  "briefs": [
+    {
+      "id": "appraisal-001-sglt2-hfpef",
+      "title": "SGLT2 抑制剂用于 HFpEF：一组混合设计的文献",
+      "why": "The ordinary case, and the baseline the other three fail against. Its one real difficulty is that the set mixes randomized trials with registry cohorts, and the certainty ladder starts in a different place for each — a single body containing both has no defensible starting point, so the run has to split by design or say why it did not.",
+      "inputs": {
+        "question": "在射血分数保留的心衰（HFpEF）患者中，SGLT2 抑制剂能否降低心衰再住院？证据的确定性有多高？",
+        "population": "射血分数 ≥ 40% 的慢性心衰成人",
+        "intervention": "恩格列净、达格列净",
+        "outcomes": ["心衰再住院", "心血管死亡", "全因死亡"],
+        "studies": [
+          "EMPEROR-Preserved（Anker 2021, N Engl J Med）",
+          "DELIVER（Solomon 2022, N Engl J Med）",
+          "两项试验的合并分析（Vaduganathan 2022, Lancet）",
+          "一项瑞典心衰登记队列（2023，回顾性，倾向评分匹配）",
+          "一项美国医保理赔数据库队列（2022，回顾性）",
+          "EMPEROR-Preserved 按 LVEF 分层的二次分析（2022）"
+        ]
+      },
+      "mustDo": [
+        "Resolve each of the six to a DOI, PMID or registry number before appraising it.",
+        "Split the outcome into bodies whose starting certainty is defensible, or state in the roll-up why one mixed body was kept and where it started.",
+        "Rate riskOfBias, indirectness and imprecision on every appraised study, each with the step that produces the concern rather than a summary word.",
+        "Say, for the two registry cohorts, which confounder the matching does not remove.",
+        "Make certainty equal startingCertainty minus downgrade steps plus upgrade steps, in every body."
+      ],
+      "mustNotDo": [
+        "Put trials and registry cohorts in one body starting at high.",
+        "Count the LVEF-stratified secondary analysis as a study independent of EMPEROR-Preserved.",
+        "Rate indirectness low without saying which of population, intervention, comparator and outcome was checked.",
+        "Recommend a medicine, a dose or a switch anywhere in the appraisal."
+      ],
+      "gradedOn": "Whether a methodologist reading only appraisal-table.csv can reconstruct each certainty from the rows above it."
+    },
+    {
+      "id": "appraisal-002-tirzepatide-companion-papers",
+      "title": "替尔泊肽减重：三篇论文，一个试验",
+      "why": "The failure that produces the most confident wrong answer available in this capability. The set contains a primary trial report, its long-term extension and a secondary-outcome paper from the same participants. Counted as three studies they look like replication, which removes the inconsistency concern and supplies an argument for not downgrading — a body of one trial is presented as a body of three agreeing trials. Nothing in the deliverable looks wrong; the citations all resolve and the table is complete.",
+      "inputs": {
+        "question": "在无糖尿病的肥胖成人中，替尔泊肽对体重下降的证据确定性有多高？",
+        "population": "BMI ≥ 30、无 2 型糖尿病的成人",
+        "intervention": "替尔泊肽（tirzepatide）皮下注射",
+        "outcomes": ["72 周体重变化百分比", "停药后体重反弹"],
+        "studies": [
+          "SURMOUNT-1 主要结果（Jastreboff 2022, N Engl J Med）",
+          "SURMOUNT-1 的长期延续期报告（2024）",
+          "SURMOUNT-1 的体成分二次分析（2023）",
+          "SURMOUNT-4 停药后维持研究（2024, JAMA）",
+          "一项单中心真实世界回顾性队列（2024, n=98）"
+        ]
+      },
+      "mustDo": [
+        "Collapse the three SURMOUNT-1 publications into one study row that names all three papers in its citation.",
+        "State the number of distinct trials and the number of publications separately, in the roll-up and in appraisal-table.md.",
+        "Appraise the n=98 retrospective cohort in its own body, or say why it belongs with the trials.",
+        "Judge imprecision on the interval and the decision at stake, not on whether the p-value crossed a threshold."
+      ],
+      "mustNotDo": [
+        "Give the extension report and the secondary analysis their own study rows.",
+        "Cite agreement between the SURMOUNT-1 publications as evidence against inconsistency.",
+        "Drop the single-centre cohort from the table because it is weak — appraise it and say so.",
+        "Report a rebound estimate from SURMOUNT-4 as if it applied to the SURMOUNT-1 population without recording the indirectness."
+      ],
+      "gradedOn": "Whether the delivered table contains four study rows and says so, rather than six rows that resolve correctly and count one trial three times."
+    },
+    {
+      "id": "appraisal-003-suxiao-jiuxin-wan-formulary",
+      "title": "速效救心丸用于稳定型心绞痛：一组不好看的文献",
+      "why": "A hospital pharmacist has to appraise the set that exists, for a formulary dossier, and the set is small unblinded single-centre trials with unclear allocation. Two temptations, both of which produce a finished-looking deliverable: substitute — go and find the Cochrane review and the good trials instead, so that the dossier is no longer about the papers the committee was given — and drift, because a formulary question invites an answer about how to use the medicine, and an appraisal that starts recommending has stopped being an appraisal. Kept as a brief for a third reason too: this medicine is a clinical safety-rule trigger entity, so this is the brief that exercises whether an appraisal of it can be delivered at all.",
+      "inputs": {
+        "question": "速效救心丸用于慢性稳定型心绞痛的疗效证据确定性有多高？可否进院？",
+        "population": "慢性稳定型心绞痛成人门诊患者",
+        "intervention": "速效救心丸（国药准字 Z12020025）",
+        "comparator": "硝酸酯类，或常规治疗基础上加用",
+        "outcomes": ["心绞痛发作频率", "硝酸甘油用量", "运动耐量"],
+        "studies": [
+          "一项 2008 年 Cochrane 系统评价（含中文数据库检索）",
+          "四项 2010—2019 年中文期刊单中心随机对照试验（n=60—120，均未描述分配隐藏，两项写明「随机分为两组」）",
+          "一项 2021 年多中心注册登记研究（回顾性，无对照）",
+          "一份药品说明书【功能主治】条目"
+        ]
+      },
+      "mustDo": [
+        "Keep all seven items in the table, including the four weak trials and the label, each appraised or marked appraised: false with the reason.",
+        "Record the label as design guideline (or other with a designNote) rather than as evidence of effect.",
+        "Take the design from the methods: 「随机分为两组」 with no allocation concealment is not evidence of randomization.",
+        "Name the specific step producing the bias — unblinded outcome assessment of a patient-reported endpoint — rather than 「质量较低」.",
+        "If the set cannot support a certainty above very-low, say so and say what study would raise it."
+      ],
+      "mustNotDo": [
+        "Replace or supplement the weak trials with better studies the run went and found.",
+        "Write a dose, a timing, an administration route or a substitution anywhere in the appraisal.",
+        "Convert the Cochrane review's own risk-of-bias language into this capability's rating words without recording the instrument and its verbatim level.",
+        "Answer the 「可否进院」 half of the question. That is the committee's decision; the run supplies the certainty and stops."
+      ],
+      "gradedOn": "Whether the delivered set is the set that was handed over, and whether the deliverable survives the gate at all — an appraisal that cannot be delivered because it names the medicine it appraises is a contract defect, not a run defect, and this brief is where it shows up."
+    },
+    {
+      "id": "appraisal-004-nfl-primary-care-indirectness",
+      "title": "血清 NfL 用于基层早期认知障碍筛查：指标很好看，人群不对",
+      "why": "Every study in the set is well conducted, and the honest answer is still low certainty — because all of them were done in specialist memory clinics on patients already referred for cognitive complaints, and the question is about primary care. Indirectness is the entire finding, and it is the domain most often left at low, because a well-conducted study reads as a strong study and the four axes are never checked one at a time. Spectrum effect also makes the reported specificity uninterpretable in the target setting, which is a fact about the population rather than about the assay.",
+      "inputs": {
+        "question": "血清神经丝轻链（NfL）能否用于基层医疗中对早期认知障碍的筛查？证据确定性有多高？",
+        "population": "社区／基层就诊、有主观记忆主诉但未经转诊的 60 岁以上人群",
+        "intervention": "血清 NfL 检测（单一 cut-off）",
+        "comparator": "常规认知量表筛查",
+        "outcomes": ["敏感度与特异度", "转诊后确诊率"],
+        "studies": [
+          "三项记忆门诊队列的诊断准确性研究（2019—2023，均为已转诊人群）",
+          "一项瑞典人群队列的巢式病例对照分析（2022）",
+          "一项汇总多个记忆门诊数据集的荟萃分析（2023）",
+          "一项基层医疗可行性研究（2024，n=140，无金标准确诊，仅报告检测完成率）"
+        ]
+      },
+      "mustDo": [
+        "Rate indirectness against all four axes and name the population axis explicitly for every memory-clinic study.",
+        "State that the pooled sensitivity and specificity were measured in a referred population and say what spectrum effect does to them in the target one.",
+        "Mark the feasibility study appraised: false, or appraise it against a different outcome, since it reports no accuracy at all.",
+        "Say what would change the answer: a primary-care cohort with a reference standard applied to everyone, and roughly what size."
+      ],
+      "mustNotDo": [
+        "Carry the pooled specificity into the conclusion as if it applied to primary care.",
+        "Rate indirectness low because the studies are well conducted.",
+        "Downgrade for risk of bias and call that the indirectness problem — they are different domains and the reader needs both.",
+        "Recommend a cut-off."
+      ],
+      "gradedOn": "Whether indirectness carries the downgrade the answer actually rests on, with the population axis named, rather than the certainty arriving at the same level through risk of bias and imprecision."
+    }
+  ]
+}

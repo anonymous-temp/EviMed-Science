@@ -1,0 +1,99 @@
+{
+  "id": "manuscript-support",
+  "version": "1.0.0",
+  "title": "Manuscript Support",
+  "description": "Draft or revise one section of a research manuscript — introduction, methods, results, discussion — against a fixed source set, with every claim in the section bound to the claim ledger, every citation resolvable in the citation ledger, and every note about the writing itself in the revision-notes channel rather than in the section.",
+  "whenToUse": "需要写或改稿件的某一节（引言／资料与方法／结果／讨论／局限性），且证据来源已经定了时，委派给我——我只负责这一节，不重做证据检索，也不把改稿说明写进正文。",
+  "persona": "你是稿件写作分析师。你一次只写一节，写的是作者本人的声音，不是模板的声音。\n你手上的来源是固定的：作者给的，或上一轮跑出来的。写不到的地方就是缺口，\n你把缺口写成缺口——写清楚需要什么样的研究才能填上——而不是用推测把它填平。\n正文里不出现任何关于这份稿子是怎么写出来的话：改了什么、为什么这么改、\n哪条审稿意见怎么回，全部写进 revision-notes.md，那是它们的去处。\n推导出来的结果永远带着〔推导〕出现，读者不能把它当成测量值。\n改一个数字是一次清点，不是一次替换：这个数出现在哪几处、哪些结论是从它推出来的，\n你要逐处核完才算改完。",
+  "skills": [
+    "manuscript-support",
+    "citation-integrity",
+    "manuscript-humanize",
+    "biomedical-database-search"
+  ],
+  "tools": [
+    "mcp__evimed__literature_search",
+    "mcp__evimed__biomedical_source_search",
+    "mcp__evimed__open_access_full_text",
+    "mcp__evimed__official_page_fetch",
+    "mcp__evimed__guideline_search",
+    "mcp__evimed__clinical_trial_search",
+    "mcp__evimed__evidence_deduplicate",
+    "mcp__evimed__term_normalize"
+  ],
+  "produces": [
+    {
+      "contractKind": "manuscript-section",
+      "outputs": [
+        {
+          "path": "manuscript-section.md",
+          "required": true
+        },
+        {
+          "path": "section-claims.json",
+          "required": true
+        },
+        {
+          "path": "citation-ledger.csv",
+          "required": true
+        },
+        {
+          "path": "revision-notes.md",
+          "required": false
+        },
+        {
+          "path": "delivery-summary.md",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "citationsResolvable",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "section",
+      "sources"
+    ],
+    "optional": [
+      "existingDraft",
+      "manuscriptContext",
+      "reportingGuideline",
+      "targetJournal",
+      "wordBudget",
+      "outputLanguage"
+    ]
+  },
+  "safetyClass": "clinical",
+  "autopilot": {
+    "taskTypes": [
+      "writing-pipeline"
+    ],
+    "costClass": "medium",
+    "unattendedInputs": [
+      "section",
+      "sources"
+    ]
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    15,
+    60
+  ],
+  "category": "Manuscript Writing",
+  "dataSources": [
+    "uploaded-files",
+    "literature",
+    "reporting-guidelines"
+  ],
+  "starterPrompts": [
+    "这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。"
+  ]
+}

@@ -1,0 +1,99 @@
+# Capability manifest — the only definition of this capability.
+#
+# `appraisal-table` was a contract kind with no capability behind it and no
+# rules of its own: anything claiming that kind fell through to the shallow
+# default every report-shaped kind gets. This manifest is the other half — a
+# capability that starts from studies the researcher already named, rather than
+# from a question somebody has to go and search.
+#
+# It is not a smaller clinical-evidence-synthesis. That capability is judged on
+# whether it found the literature; this one is handed the literature and judged
+# on what it says about it, so its outputs are a table and a certainty
+# judgement rather than a report and a search log.
+id: evidence-appraisal
+version: 1.0.0
+title: Evidence Appraisal
+category: Clinical Evidence
+description: Critically appraise a body of studies the researcher already holds — design, risk of bias,
+  indirectness and imprecision per study — and roll them up into one certainty judgement per outcome
+  whose every downgrade and upgrade names the domain it came from.
+whenToUse: 手里已经有一组文献、要逐篇评质量并给出整体证据确定性时，委派给我——我不替你找文献，我评你给的这些。
+persona: |
+  你是证据质量评价员。文献是别人挑好交给你的，你的工作是逐篇讲清楚四件事：
+  这是什么设计、偏倚风险在哪一步产生、离要回答的那个问题有多远、估计有多精确；
+  然后把它们汇总成一句对整体证据的确定性判断。
+  每一次降级和升级都写明来自哪个领域、理由是什么——等级本身不是结论，理由才是，
+  而且等级必须和你自己写下的那几步对得上。
+  你不把别人量表的评级翻译成自己的词：用了 RoB 2 就原样记 RoB 2 的等级。
+  交给你的文献即使评下来很差，也留在表里说清楚差在哪，绝不悄悄换成更好看的几篇。
+  你评价证据的确定性，不给用药建议。
+safetyClass: clinical
+skills:
+- evidence-appraisal
+- citation-integrity
+- biomedical-database-search
+- manuscript-humanize
+tools:
+# Appraisal needs the paper itself, the registry record it was pre-specified in,
+# and enough search to notice that two of the studies handed over are the same
+# trial reported twice. It has no source-selection step, so it carries no
+# guideline or catalogue tools.
+- mcp__evimed__open_access_full_text
+- mcp__evimed__official_page_fetch
+- mcp__evimed__literature_search
+- mcp__evimed__biomedical_source_search
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__evidence_deduplicate
+- mcp__evimed__term_normalize
+- mcp__evimed__drug_label_search
+produces:
+- contractKind: appraisal-table
+  outputs:
+  # The structured table first: it is the only artifact whose numbers can be
+  # recomputed, and the other two are renderings of it.
+  - path: appraisal-table.json
+    required: true
+  - path: appraisal-table.md
+    required: true
+  - path: appraisal-table.csv
+    required: true
+  - path: citation-ledger.csv
+    required: true
+  - path: delivery-summary.md
+    required: true
+  - path: revision-notes.md
+    required: false
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+  - skillsLoaded
+inputs:
+  required:
+  # The studies are an input here, which is what separates this capability from
+  # synthesis. Without a question there is nothing for indirectness to be
+  # measured against, so both are required.
+  - studies
+  - question
+  optional:
+  - population
+  - intervention
+  - comparator
+  - outcomes
+  - appraisalInstrument
+  - outputLanguage
+autopilot:
+  # Deliberately empty. Every other field of an unattended episode can be
+  # inferred from an agenda; the study list cannot, and an appraisal that picks
+  # its own studies is a synthesis wearing this capability's name.
+  taskTypes: []
+  costClass: medium
+  unattendedInputs: []
+estimatedMinutes:
+- 20
+- 75
+dataSources:
+- literature
+- clinical-trials
+- drug-labels
+starterPrompts:
+- 这 9 篇是我准备写进综述的文献，帮我逐篇评一下质量，再给个整体证据确定性。
