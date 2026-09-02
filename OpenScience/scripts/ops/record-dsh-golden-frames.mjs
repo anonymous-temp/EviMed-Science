@@ -21,15 +21,88 @@
  *     --url http://127.0.0.1:45011 --cwd /work --out /tmp/golden-frames.json \
  *     --prompt "…"
  *
- * The prompt matters. A single-agent turn leaves `subagent/descriptor`
- * unrecorded, and that type is what the run tree in the UI is built from — the
- * previous recording left exactly that hole. The default prompt delegates.
+ * The default prompt delegates, and against a live 0.1.2-alpha.5 kernel that
+ * was not enough: the child ran and `subagent/descriptor` still never reached
+ * the parent session stream. The child was announced on the host `$events` stream instead
+ * (`api-session/added` carrying `parentSessionId` and `origin: "subagent"`).
+ * Whatever the answer is, it is not "use a prompt that delegates" — see the
+ * debt register in packages/contracts/dsh/contract.test.mjs.
+ *
+ * NOT YET A DROP-IN REPLACEMENT for the committed fixture. The contract tests
+ * also read `mux` (the first raw server frame on each logical stream),
+ * `streamIds`, and `errors`, and this records none of them: `mux.open()` yields
+ * decoded values, so capturing the raw frames means reaching one level below
+ * it. Until that lands, this produces evidence, not a fixture — and installing
+ * a fixture missing four sections would mean editing the tests that read them,
+ * which is the shape of weakening a check to make it pass.
  */
+import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
+import http from "node:http";
 import { writeFile } from "node:fs/promises";
 import process from "node:process";
 
-import { DshMux, callRuntimeUnary } from "../../apps/server/src/dshMux.mjs";
+import { DshMux } from "../../apps/server/src/dshMux.mjs";
+
+/**
+ * One unary call, in the envelope the control plane sends.
+ *
+ * Not imported from `dshEventPump`, which owns the production version: that
+ * module reaches `runtimeManager` for unix-socket transport and shared
+ * timeouts, and pulling four thousand lines of runtime lifecycle into a
+ * recorder that dials a TCP port would make this script un-runnable inside the
+ * image it records. The envelope is duplicated; the streams — the part the
+ * fixture actually certifies — still arrive through the real `DshMux`.
+ * @param {{ url: string, cookie?: string|null, authority?: string|null }} runtime
+ * @param {string} method @param {Record<string, any>} payload
+ * @returns {Promise<{ ok: boolean, value?: any, error?: any, status: number }>}
+ */
+async function callRuntimeUnary(runtime, method, payload) {
+  const target = new URL(`${runtime.url}/api/${method}`);
+  const body = Buffer.from(JSON.stringify({
+    type: "client-request", rpcId: `rec-${method}`, method, payload: { args: payload ?? {} },
+  }), "utf8");
+  // `node:http`, not `fetch`. `Host` is a forbidden header name in undici, so
+  // fetch drops it silently and the request arrives claiming the socket's own
+  // address — which does not match `--trusted-host`, and the browser-session
+  // cookie is keyed by the authority it was minted for, so the kernel answers
+  // 401 and nothing says why. The production client uses `node:http` for the
+  // same reason; this is not a place to differ from it.
+  return await new Promise((resolve, reject) => {
+    const request = http.request({
+      protocol: target.protocol,
+      hostname: target.hostname,
+      port: target.port,
+      path: target.pathname + target.search,
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(body.byteLength),
+        ...(runtime.cookie ? { cookie: runtime.cookie } : {}),
+        ...(runtime.authority ? { host: runtime.authority } : {}),
+      },
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        const status = response.statusCode ?? 0;
+        if (status < 200 || status >= 300) {
+          resolve({ ok: false, status, error: { code: `http_${status}`, message: text.slice(0, 400) } });
+          return;
+        }
+        try {
+          const result = JSON.parse(text)?.result ?? {};
+          resolve({ ok: Boolean(result.ok), status, value: result.value, error: result.error });
+        } catch (error) {
+          reject(new Error(`${method} answered ${status} with a body that is not JSON: ${text.slice(0, 200)}`));
+        }
+      });
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+}
 
 /** @param {string[]} argv @returns {Record<string,string>} */
 function parseArgs(argv) {
@@ -78,8 +151,16 @@ async function main() {
   const controller = new AbortController();
   const { signal } = controller;
 
-  const version = await callRuntimeUnary(runtime, "host/describe", {}, { signal });
-  if (!version.ok) throw new Error(`host/describe failed: ${JSON.stringify(version.error)}`);
+  // `session/list`, because it is in the seam manifest's `wire.unary` and
+  // `host/describe` is not — that name was invented here and the kernel
+  // answered 404, which is the right answer to a route nobody publishes. The
+  // reachability probe has to use a method the manifest actually lists, or it
+  // proves the wrong thing when it fails.
+  // `_request`, not `request`: the listing endpoints take an underscore-prefixed
+  // empty descriptor, which is what `DshRuntimeAdapter` passes and what the
+  // gateway names when it is missing.
+  const reachable = await callRuntimeUnary(runtime, "session/list", { _request: {} });
+  if (!reachable.ok) throw new Error(`session/list failed: ${JSON.stringify(reachable.error)}`);
 
   const mux = new DshMux(runtime);
   await mux.connect({ signal });
@@ -95,8 +176,8 @@ async function main() {
   /** @type {any[]} */ const unary = [];
   /** @param {string} method @param {Record<string,any>} payload */
   const call = async (method, payload) => {
-    const result = await callRuntimeUnary(runtime, method, payload, { signal });
-    unary.push({ kind: "unary", method, status: result.ok ? 200 : 500, request: { args: payload }, response: result });
+    const result = await callRuntimeUnary(runtime, method, payload);
+    unary.push({ kind: "unary", method, status: result.status, request: { args: payload }, response: result });
     if (!result.ok) throw new Error(`${method} failed: ${JSON.stringify(result.error)}`);
     return result.value;
   };
@@ -117,7 +198,15 @@ async function main() {
   while (!ended() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 1000));
   const settled = ended();
 
-  const history = await call("session/page", { request: { address: { kind: "session", sessionId }, maxMessages: 200 } });
+  // `throughSeq` is required by the descriptor, not optional as a first reading
+  // of `DshRuntimeAdapter` suggests — without it the gateway refuses the whole
+  // `request` field at the boundary. The highest sequence the session stream
+  // actually delivered is the honest value: asking for a page beyond what was
+  // observed would record a history this run never saw.
+  const throughSeq = session.reduce((high, item) => Math.max(high, Number(item?.seq ?? item?.event?.seq ?? 0) || 0), 0);
+  const history = await call("session/page", {
+    request: { address: { kind: "session", sessionId }, throughSeq, maxMessages: 200 },
+  });
 
   controller.abort();
   mux.close();

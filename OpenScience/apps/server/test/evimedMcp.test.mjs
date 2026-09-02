@@ -954,3 +954,25 @@ test("the server's science-connector roster is the same seven the runtime dispat
     );
   }
 });
+
+test("the kernel wire is spoken over node:http, because fetch cannot send Host", async () => {
+  // `Host` is a forbidden header name in undici, so `fetch` drops it without
+  // saying so. The kernel is started with `--trusted-host`, and the
+  // browser-session cookie is keyed by the authority it was minted for — so a
+  // request sent through `fetch` arrives claiming the socket's own address,
+  // matches no trusted host, carries a cookie named for somewhere else, and is
+  // answered `401 unauthorized` with nothing naming the cause. A recorder built
+  // on `fetch` spent two runs on that 401.
+  //
+  // The production client has always used `node:http`. This keeps it there: the
+  // day someone modernises one of these modules to `fetch`, the failure is a
+  // red test rather than an authentication mystery in a container.
+  for (const file of ["dshMux.mjs", "dshEventPump.mjs", "dshRuntimeAdapter.mjs"]) {
+    const source = await readFile(path.join(repoRoot, "apps/server/src", file), "utf8");
+    assert.doesNotMatch(
+      source,
+      /(^|[^.\w])fetch\s*\(/m,
+      `${file} speaks to the kernel and must not use fetch: it silently drops the Host header the trusted-host check and the cookie both depend on`,
+    );
+  }
+});

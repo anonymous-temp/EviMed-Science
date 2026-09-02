@@ -1,0 +1,282 @@
+{
+  "$comment": "Evidence from the 2026-09-02 alpha.5 recording. NOT a fixture: the recorder does not yet capture the mux/streamIds/errors sections the contract tests read, so golden-frames.json is unchanged. Kept because it is what disproved the debt register entry.",
+  "$recorded": {
+    "procedure": "Recorded by scripts/ops/record-dsh-golden-frames.mjs against http://127.0.0.1:45011: host/describe, /api/remote.mux, subscribed $events + workspace/follow + session/follow, session/create, one session/prompt, and let a real turn run to completion. Prompt: \"Use evimed_delegate to hand one short task to a subagent, then summarise its answer in one sentence. The task: reply with the single word OK.\".",
+    "turnSettled": true,
+    "eventTypesSeen": [
+      "agent/inbox/spliced",
+      "assistant/chunk",
+      "assistant/message",
+      "request/context",
+      "request/header",
+      "session/title",
+      "session/title-llm-request",
+      "snapshot",
+      "step/end",
+      "step/start",
+      "tool/call",
+      "tool/result",
+      "turn/end",
+      "turn/start",
+      "user/message"
+    ]
+  },
+  "dsh": "0.1.2-alpha.5",
+  "events": [
+    {
+      "type": "ready",
+      "clientId": "cb5753bb-39f2-46c4-874f-dc1e7cdc4efc",
+      "host": {
+        "home": "/runtime/home"
+      }
+    },
+    {
+      "type": "emit",
+      "event": "api-session/added",
+      "args": [
+        {
+          "sessionId": "session-49dc9c40-540c-4b90-accf-21f647defccd",
+          "updatedAt": 1788367688772,
+          "running": false,
+          "blank": true,
+          "cwd": "/tmp/recwork",
+          "projections": {
+            "asOfSeq": 2,
+            "values": {
+              "title": null,
+              "goal": null,
+              "tokenUsage": {
+                "uncachedInputTokens": 0,
+                "outputTokens": 0,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextPressure": {},
+              "contextBreakdown": {
+                "systemTokens": 0,
+                "toolsTokens": 0,
+                "messageTokens": 0
+              },
+              "sessionStats": {
+                "turns": 0,
+                "steps": 0,
+                "llmMs": 0,
+                "toolMs": 0,
+                "ttftMs": 0,
+                "ttftSteps": 0,
+                "decodeMs": 0,
+                "decodeTokens": 0
+              },
+              "turnOutline": [],
+              "agentPreset": "evimed-universal",
+              "subagentTiming": {
+                "settledMs": 0
+              },
+              "subagent": null,
+              "permissions": {
+                "options": [
+                  {
+                    "value": "read-only",
+                    "name": "read-only"
+                  },
+                  {
+                    "value": "workspace-write",
+                    "name": "workspace-write"
+                  },
+                  {
+                    "value": "danger-full-access",
+                    "name": "danger-full-access"
+                  },
+                  {
+                    "value": "evimed-hosted",
+                    "name": "evimed-hosted",
+                    "description": "Confined to the workspace, and refuses anything that asks to leave it."
+                  }
+                ],
+                "currentValue": "evimed-hosted"
+              },
+              "modelSelection": {
+                "lastUsed": null,
+                "next": null
+              },
+              "sessionListMetadata": {
+                "blank": true,
+                "lastPromptAt": null
+              },
+              "imageLimits": {
+                "maxImageBytes": 20971520,
+                "maxImagesPerMessage": 20,
+                "maxMessageImageBytes": 209715200,
+                "maxImagePixels": 64000000,
+                "maxImageDimension": 8192,
+                "mediaTypes": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/webp",
+                  "image/gif"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/status",
+      "args": [
+        "session-49dc9c40-540c-4b90-accf-21f647defccd",
+        true
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/activity",
+      "args": [
+        "session-49dc9c40-540c-4b90-accf-21f647defccd",
+        1788367689073
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/added",
+      "args": [
+        {
+          "sessionId": "0222d4cb-2848-4e7a-8335-4674312f9e89",
+          "updatedAt": 1788367696040,
+          "running": false,
+          "blank": true,
+          "parentSessionId": "session-49dc9c40-540c-4b90-accf-21f647defccd",
+          "origin": "subagent",
+          "cwd": "/tmp/recwork",
+          "projections": {
+            "asOfSeq": 2,
+            "values": {
+              "title": null,
+              "goal": null,
+              "tokenUsage": {
+                "uncachedInputTokens": 0,
+                "outputTokens": 0,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0
+              },
+              "contextPressure": {},
+              "contextBreakdown": {
+                "systemTokens": 0,
+                "toolsTokens": 0,
+                "messageTokens": 0
+              },
+              "sessionStats": {
+                "turns": 0,
+                "steps": 0,
+                "llmMs": 0,
+                "toolMs": 0,
+                "ttftMs": 0,
+                "ttftSteps": 0,
+                "decodeMs": 0,
+                "decodeTokens": 0
+              },
+              "turnOutline": [],
+              "agentPreset": "evimed-universal",
+              "subagentTiming": {
+                "settledMs": 0
+              },
+              "subagent": null,
+              "permissions": {
+                "options": [
+                  {
+                    "value": "read-only",
+                    "name": "read-only"
+                  },
+                  {
+                    "value": "workspace-write",
+                    "name": "workspace-write"
+                  },
+                  {
+                    "value": "danger-full-access",
+                    "name": "danger-full-access"
+                  },
+                  {
+                    "value": "evimed-hosted",
+                    "name": "evimed-hosted",
+                    "description": "Confined to the workspace, and refuses anything that asks to leave it."
+                  }
+                ],
+                "currentValue": "evimed-hosted"
+              },
+              "modelSelection": {
+                "lastUsed": null,
+                "next": null
+              },
+              "sessionListMetadata": {
+                "blank": true,
+                "lastPromptAt": null
+              },
+              "imageLimits": {
+                "maxImageBytes": 20971520,
+                "maxImagesPerMessage": 20,
+                "maxMessageImageBytes": 209715200,
+                "maxImagePixels": 64000000,
+                "maxImageDimension": 8192,
+                "mediaTypes": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/webp",
+                  "image/gif"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/status",
+      "args": [
+        "0222d4cb-2848-4e7a-8335-4674312f9e89",
+        true
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/activity",
+      "args": [
+        "0222d4cb-2848-4e7a-8335-4674312f9e89",
+        1788367696110
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/status",
+      "args": [
+        "0222d4cb-2848-4e7a-8335-4674312f9e89",
+        false
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/removed",
+      "args": [
+        "0222d4cb-2848-4e7a-8335-4674312f9e89"
+      ]
+    },
+    {
+      "type": "emit",
+      "event": "api-session/status",
+      "args": [
+        "session-49dc9c40-540c-4b90-accf-21f647defccd",
+        false
+      ]
+    }
+  ],
+  "toolCalls": [
+    "subagent"
+  ],
+  "counts": {
+    "session": 960,
+    "events": 10,
+    "history": 42,
+    "unary": 3
+  }
+}
