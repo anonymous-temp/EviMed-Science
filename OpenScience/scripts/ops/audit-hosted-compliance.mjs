@@ -135,9 +135,9 @@ async function checkRootLicense() {
 }
 
 async function checkRuntimePins() {
-  // One agent runtime image. `deploy/runtime-opencode/` is a retired tree the
-  // platform no longer builds or launches, and it is deliberately not read
-  // here: a source audit that keeps pattern-matching a Dockerfile nothing
+  // One agent runtime image, and this audit reads only that one. The retired
+  // kernel's tree was kept out of here before it was deleted, for the reason
+  // that outlives it: a source audit that pattern-matches a Dockerfile nothing
   // ships reports coverage it does not have, which is worse than no check.
   const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const workflow = await read(".github/workflows/web.yml");
@@ -240,7 +240,15 @@ async function checkRuntimePins() {
   if (
     digestArgs.every((name) => new RegExp(`^ARG ${name}=[a-f0-9]{64}$`, "m").test(dockerfile)) &&
     digestArgs.every((name) => new RegExp(`${name}:\\s+\\$\\{OPEN_SCIENCE_${name}:-[a-f0-9]{64}\\}`).test(compose)) &&
+    // Both Node architectures. This line named only amd64 while the check
+    // itself claimed digests were "architecture-specific", and the arm64 pin
+    // was empty with its verification behind `if [ -n "$NODE_SHA256" ]` -- so
+    // an arm64 image installed an unverified Node and this audit passed.
     /^ARG NODE_SHA256_AMD64=[a-f0-9]{64}$/m.test(dockerfile) &&
+    /^ARG NODE_SHA256_ARM64=[a-f0-9]{64}$/m.test(dockerfile) &&
+    // A pin only binds if a missing one stops the build. Counting the
+    // `sha256sum` lines proves three checks are written, never that they run.
+    !/if \[ -n "\$\{(NODE|UV)_SHA256\}" \]; then/.test(dockerfile) &&
     kernelTreePinned &&
     (dockerfile.match(/sha256sum -c -/g) ?? []).length >= 3
   ) {
@@ -532,17 +540,15 @@ async function checkRuntimeContainerTopology() {
     });
   }
 
-  // And the retired tree itself. Nothing builds it any more, but it is still
-  // on disk and still named by the release manifest generator, so a release
-  // still records digests for an image no deployment can launch.
-  //
-  // A notice rather than a block: deleting it means editing
-  // `scripts/ops/generate-release-manifest.mjs` in the same change, and both
-  // files belong to other packages.
+  // And the retired tree itself, deleted on 2026-09-02 once nothing ran it, no
+  // config named it, and no manifest recorded it. The check outlives the tree
+  // because restoring the directory is all it would take to have releases
+  // recording digests for an image no deployment can launch again, and the
+  // reappearance would otherwise be silent.
   if (!existsSync(path.join(repoRoot, "deploy/runtime-opencode"))) {
     pass("retired_runtime_tree_removed", "The retired kernel's build tree is gone.");
   } else {
-    warn("retired_runtime_tree_present", "deploy/runtime-opencode/ is still on disk and still named by scripts/ops/generate-release-manifest.mjs; delete both so a release cannot record an image no deployment launches.");
+    warn("retired_runtime_tree_present", "deploy/runtime-opencode/ is back on disk; the platform builds and launches one runtime image, from deploy/runtime-dsh/, and a second build tree can only produce an image no deployment starts.");
   }
 }
 
@@ -1181,12 +1187,13 @@ async function checkHostedDesktopBoundary() {
 
 async function checkHostedEventStreamRecovery() {
   const runtime = await read("apps/desktop/src/lib/runtime.ts");
-  // `OpenCodeClient.ts` is a filename this deletion has not reached; the class
-  // it holds is the browser's HTTP/SSE client and is kernel-neutral, so the
-  // property below is about reconnect recovery and nothing else.
-  const sdk = await read("packages/sdk/src/OpenCodeClient.ts");
+  // The class these two files hold is the browser's HTTP/SSE client, and it was
+  // always kernel-neutral — only its name carried the retired kernel, and the
+  // rename to `RuntimeClient` caught up with that. The property below is about
+  // reconnect recovery and nothing else.
+  const sdk = await read("packages/sdk/src/RuntimeClient.ts");
   const runtimeTests = await read("apps/desktop/src/lib/runtime.store.test.ts");
-  const sdkTests = await read("apps/desktop/src/test/opencode-client.node.test.ts");
+  const sdkTests = await read("apps/desktop/src/test/runtime-client.node.test.ts");
 
   if (
     /EventSource auto-reconnects; reflect the transient state[\s\S]*?this\.setStatus\("connecting"\)/.test(sdk) &&
