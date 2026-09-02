@@ -292,10 +292,6 @@
     toolName: subagent_fork
     backgroundMode: one-shot
   disabled: true
-# == @deepseek-ai/dsh-base
-- id: tool-subagent-report
-  name: '@deepseek-ai/dsh-tool-subagent-report'
-# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: workflow-worker-thread
   name: '@deepseek-ai/dsh-workflow-worker-thread'
   config:
@@ -364,13 +360,14 @@
 - id: web-fetch-http
   name: '@deepseek-ai/dsh-web-fetch-http'
   disabled: true
-# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
+# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app, @evimed/dsh-socket
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
     fetch: false
     searchTimeoutMs: 60000
   disabled: true
+# == @deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app
 - id: tools
   name: '@deepseek-ai/dsh-tools'
   config:

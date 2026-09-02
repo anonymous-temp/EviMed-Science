@@ -190,14 +190,25 @@
         provider: spawn
         toolName: subagent
         backgroundMode: continuable
+    # `send_message`, `interrupt_agent`, `list_agents`. Since 0.1.2-alpha.4 this
+    # row is also what a child uses to reach its parent: the one-way `report`
+    # tool was removed upstream and @deepseek-ai/dsh-tool-subagent-report has no
+    # build after alpha.3, so the row that mounted it is gone rather than
+    # replaced.
+    #
+    # What that costs and what it does not. The old row carried
+    # `reportDelivery: quiet` because delivery had to be a deployment policy —
+    # a model able to pick `next-step` can interrupt its own synthesis at will.
+    # The new tool takes no configuration at all, so that property now holds by
+    # construction rather than by our setting it. What changed underneath is
+    # the shape: `send_message` returns acceptance and never a reply, and a
+    # message to a live parent arrives at its nearest step boundary through
+    # Steer (an idle parent starts a turn). So there are no quiet reports any
+    # more, because there are no reports — there are addressed messages, and a
+    # child can now wake its parent. That was already true of settlement
+    # notifications; it is newly true of anything a child chooses to say.
     - id: tool-subagent-control
       name: '@deepseek-ai/dsh-tool-subagent-control'
-    # Report delivery is a deployment policy, not a per-call choice: a model
-    # that can pick `next-step` can interrupt its own synthesis at will.
-    - id: tool-subagent-report
-      name: '@deepseek-ai/dsh-tool-subagent-report'
-      config:
-        reportDelivery: quiet
     - id: workflow-worker-thread
       name: '@deepseek-ai/dsh-workflow-worker-thread'
       config:

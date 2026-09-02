@@ -1,5 +1,5 @@
 {
-  "dsh": "0.1.2-alpha.3",
+  "dsh": "0.1.2-alpha.5",
   "cordis": "4.0.2",
   "services": {
     "required": [
@@ -91,7 +91,6 @@
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
     "@deepseek-ai/dsh-tool-subagent": "config-row",
     "@deepseek-ai/dsh-tool-subagent-control": "config-row",
-    "@deepseek-ai/dsh-tool-subagent-report": "config-row",
     "@deepseek-ai/dsh-workflow-worker-thread": "config-row",
     "@deepseek-ai/dsh-tool-workflow": "config-row",
     "@deepseek-ai/dsh-tool-bash": "config-row",

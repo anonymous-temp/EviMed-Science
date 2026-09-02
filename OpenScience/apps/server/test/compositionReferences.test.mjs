@@ -49,7 +49,7 @@ function findVerified(verified, specifier, file) {
  * `@deepseek-ai/dsh-tool-subagent-report@0.1.2-alpha.4`: 404 on the version
  * document, 200 on the packument, with the version absent from its list.
  */
-function registryStub({ missing = [], published = ["0.1.2-alpha.3"] } = {}) {
+function registryStub({ missing = [], published = ["0.1.2-alpha.5"] } = {}) {
   const gone = new Set(missing);
   return async (url) => {
     const rest = String(url).replace("https://registry.npmjs.org/", "");
@@ -86,11 +86,15 @@ test("every reference the real composition makes resolves at the pin", async () 
 
   // The live instance this whole mechanism exists for: the preset still mounts
   // the package alpha.4 deleted, and today it is still published at alpha.3.
-  const subagentReport = findVerified(report.verified, "@deepseek-ai/dsh-tool-subagent-report", SOURCE_FILES.preset);
-  assert.ok(subagentReport, "the preset row for @deepseek-ai/dsh-tool-subagent-report was never checked");
+  // The canary was `dsh-tool-subagent-report` until alpha.4 deleted it and the
+  // row went with it. `dsh-tool-subagent-control` is what took over the job
+  // (it publishes send_message), so it is both present and the row worth
+  // proving is reached.
+  const subagentReport = findVerified(report.verified, "@deepseek-ai/dsh-tool-subagent-control", SOURCE_FILES.preset);
+  assert.ok(subagentReport, "the preset row for @deepseek-ai/dsh-tool-subagent-control was never checked");
   assert.equal(subagentReport.tier, "registry");
   const presetText = await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8");
-  assert.match(presetText.split("\n")[subagentReport.reference.line - 1], /dsh-tool-subagent-report/);
+  assert.match(presetText.split("\n")[subagentReport.reference.line - 1], /dsh-tool-subagent-control/);
 
   // One reference from each tier, so a tier that quietly stopped answering
   // cannot hide behind the other three.
@@ -109,32 +113,50 @@ test("every reference the real composition makes resolves at the pin", async () 
   assert.equal(report.verified.length, report.checked);
 });
 
-test("moving the pin to the release that deleted the package is caught before the image is built", async () => {
-  // The alpha.4 instance, live, against the real preset and the real registry:
-  // no fixture stands in for the fact that upstream stopped publishing this.
-  const report = await verifyCompositionReferences({ pin: "0.1.2-alpha.4" });
+test("a row mounting a package upstream deleted is named, and only that row", async (t) => {
+  // This began as the live alpha.4 instance: the preset mounted
+  // `@deepseek-ai/dsh-tool-subagent-report`, upstream stopped publishing it at
+  // alpha.4, and the guard named both of its sites. The migration removed the
+  // row, so the instance is gone from the tree — but the registry fact is
+  // permanent (that package has no build after alpha.3), which makes it the
+  // one canary that cannot rot. The row goes back for the length of this test.
+  const presetPath = path.join(repoRoot, SOURCE_FILES.preset);
+  const preset = await readFile(presetPath, "utf8");
+  t.after(async () => { await writeFile(presetPath, preset, "utf8"); });
+  const anchor = "    - id: tool-subagent-control\n";
+  assert.ok(preset.includes(anchor), "the row this test inserts beside has moved");
+  await writeFile(
+    presetPath,
+    preset.replace(anchor, "    - id: tool-subagent-report\n      name: '@deepseek-ai/dsh-tool-subagent-report'\n" + anchor),
+    "utf8",
+  );
+
+  const report = await verifyCompositionReferences({});
   assert.equal(report.ok, false);
 
-  const named = findProblem(report.problems, {
-    file: SOURCE_FILES.preset,
-    specifier: "@deepseek-ai/dsh-tool-subagent-report",
-  });
-  assert.ok(named, `alpha.4 dry run did not name the deleted package:\n${formatReport(report)}`);
-  assert.equal(named.kind, "unresolved-package");
-  assert.match(named.detail, /no 0\.1\.2-alpha\.4/);
+  // Two problems, not one, and both are right: the package is unpublished at
+  // the pin *and* the row mounts something the seam manifest does not list.
+  // The manifest omission is the cheaper signal — it needs no registry — so a
+  // guard that reported only the first would still be useful offline.
+  const raised = report.problems.filter((problem) => problem.specifier === "@deepseek-ai/dsh-tool-subagent-report");
+  assert.deepEqual(
+    [...new Set(raised.map((problem) => problem.kind))].sort(),
+    ["manifest-omission", "unresolved-package"],
+    `the reinstated row was not named twice over:\n${formatReport(report)}`,
+  );
+  const named = raised.find((problem) => problem.kind === "unresolved-package");
+  assert.ok(named);
   assert.match(named.detail, /newest published 0\.1\.2-alpha\.3/);
-  const presetText = await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8");
-  assert.match(presetText.split("\n")[named.line - 1], /name:\s*'@deepseek-ai\/dsh-tool-subagent-report'/);
 
   // A checker that failed everything would also have named this one. The rest
-  // of alpha.4 is published, so the rest of the run has to be green.
+  // of the composition is published at the pin, so the rest has to be green.
   for (const specifier of ["@deepseek-ai/dsh-tool-bash", "@deepseek-ai/dsh-tool-subagent", "@deepseek-ai/dsh-persona"]) {
-    assert.equal(findVerified(report.verified, specifier, SOURCE_FILES.preset)?.detail, "0.1.2-alpha.4 published", specifier);
+    assert.ok(findVerified(report.verified, specifier, SOURCE_FILES.preset), specifier);
   }
   assert.deepEqual(
     [...new Set(report.problems.map((problem) => problem.specifier))],
     ["@deepseek-ai/dsh-tool-subagent-report"],
-    "alpha.4 broke more than the one package this test knows about",
+    "the reinstated row must be the only thing reported",
   );
 });
 
@@ -225,10 +247,10 @@ test("a preset row whose name went missing is named by id and line", async (t) =
   const fixture = await writeFixture(t, { preset: stripped });
   const report = await verifyCompositionReferences({ overrideFiles: fixture, fetchImpl: registryStub() });
   assert.equal(report.ok, false);
-  const orphan = report.problems.find((problem) => problem.specifier === "tool-subagent-report");
+  const orphan = report.problems.find((problem) => problem.specifier === "tool-subagent-control");
   assert.ok(orphan, `a preset row with an id and no name was not reported:\n${formatReport(report)}`);
   assert.equal(orphan.kind, "extraction-drift");
-  assert.equal(stripped.split("\n")[orphan.line - 1].trim(), "- id: tool-subagent-report");
+  assert.equal(stripped.split("\n")[orphan.line - 1].trim(), "- id: tool-subagent-control");
 });
 
 test("a package mounted by the composition but missing from the seam manifest is reported", async (t) => {
@@ -246,14 +268,14 @@ test("a package mounted by the composition but missing from the seam manifest is
 test("a registry answering 200 with something else does not certify a package", async () => {
   // A mirror serving an HTML index, or a proxy rewriting scoped names, both
   // answer 200. The status code is not the evidence; the body is.
-  const wrongBody = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-alpha.3", {
+  const wrongBody = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-alpha.5", {
     registry: "https://registry.npmjs.org",
-    fetchImpl: async () => new Response(JSON.stringify({ name: "@deepseek-ai/dsh-tool-fs", version: "0.1.2-alpha.3" }), { status: 200 }),
+    fetchImpl: async () => new Response(JSON.stringify({ name: "@deepseek-ai/dsh-tool-fs", version: "0.1.2-alpha.5" }), { status: 200 }),
   });
   assert.equal(wrongBody.status, "unverified");
   assert.match(wrongBody.detail, /answered 200 .* with @deepseek-ai\/dsh-tool-fs/);
 
-  const unreachable = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-alpha.3", {
+  const unreachable = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-alpha.5", {
     registry: "https://registry.npmjs.org",
     fetchImpl: async () => {
       throw new Error("ECONNREFUSED");
@@ -262,7 +284,7 @@ test("a registry answering 200 with something else does not certify a package", 
   assert.equal(unreachable.status, "unverified");
   assert.match(unreachable.detail, /unreachable: ECONNREFUSED/);
 
-  const serverError = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-alpha.3", {
+  const serverError = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-alpha.5", {
     registry: "https://registry.npmjs.org",
     fetchImpl: async () => new Response("", { status: 503 }),
   });
@@ -313,7 +335,7 @@ test("the patch's override rows are collected as host-row references, not lost",
   });
   const patchReferences = collected.references.filter((reference) => reference.file === SOURCE_FILES.patch);
   const hostRows = patchReferences.filter((reference) => reference.kind === "host-row-id").map((reference) => reference.specifier);
-  assert.deepEqual(hostRows.sort(), ["hmr", "plugin-package-inventory-deepseek", "session-telemetry-otel", "web-fetch-http"]);
+  assert.deepEqual(hostRows.sort(), ["hmr", "plugin-package-inventory-deepseek", "session-telemetry-otel", "tool-web", "web-fetch-http"]);
   assert.ok(collected.hostRowIds.size > 40, `the dumped host composition read as only ${collected.hostRowIds.size} rows`);
 });
 

@@ -188,7 +188,7 @@ function dshFixtureConfig(overrides = {}) {
     evimedWorkloadSigningSecret: "evimed-workload-signing-secret-with-32-bytes",
     evimedWorkloadTokenTtlSeconds: 300,
     socketBundleVersion: "0.1.0",
-    dshVersion: "0.1.2-alpha.3",
+    dshVersion: "0.1.2-alpha.5",
     deliveryAttemptLimit: 3,
     maxParallelChildren: 30,
     runMaxSteps: 0,
