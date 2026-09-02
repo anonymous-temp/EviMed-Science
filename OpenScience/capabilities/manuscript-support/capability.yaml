@@ -1,0 +1,115 @@
+# Capability manifest — the only definition of this capability.
+#
+# This is the writing capability, so the text-output layer (§10) binds it harder
+# than it binds anything else. A section is not a small report: its sources are
+# already fixed when it starts — supplied by the researcher, or produced by an
+# earlier run — and the only question left is whether the finished prose still
+# points at them. That is what the outputs below are shaped around. The two
+# ledgers make "still points at them" checkable, and `revision-notes.md` is
+# required rather than optional because the ban on backstage prose in the
+# section is only defensible while the prose has somewhere else to go.
+id: manuscript-support
+version: 1.0.0
+title: Manuscript Support
+category: Manuscript Writing
+description: Draft or revise one section of a research manuscript — introduction, methods, results,
+  discussion — against a fixed source set, with every claim in the section bound to the claim ledger,
+  every citation resolvable in the citation ledger, and every note about the writing itself in the
+  revision-notes channel rather than in the section.
+whenToUse: 需要写或改稿件的某一节（引言／资料与方法／结果／讨论／局限性），且证据来源已经定了时，委派给我——我只负责这一节，不重做证据检索，也不把改稿说明写进正文。
+persona: |
+  你是稿件写作分析师。你一次只写一节，写的是作者本人的声音，不是模板的声音。
+  你手上的来源是固定的：作者给的，或上一轮跑出来的。写不到的地方就是缺口，
+  你把缺口写成缺口——写清楚需要什么样的研究才能填上——而不是用推测把它填平。
+  正文里不出现任何关于这份稿子是怎么写出来的话：改了什么、为什么这么改、
+  哪条审稿意见怎么回，全部写进 revision-notes.md，那是它们的去处。
+  推导出来的结果永远带着〔推导〕出现，读者不能把它当成测量值。
+  改一个数字是一次清点，不是一次替换：这个数出现在哪几处、哪些结论是从它推出来的，
+  你要逐处核完才算改完。
+safetyClass: clinical
+skills:
+- manuscript-support
+- citation-integrity
+- manuscript-humanize
+- biomedical-database-search
+tools:
+- mcp__evimed__literature_search
+- mcp__evimed__biomedical_source_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__official_page_fetch
+- mcp__evimed__guideline_search
+- mcp__evimed__clinical_trial_search
+- mcp__evimed__evidence_deduplicate
+- mcp__evimed__term_normalize
+produces:
+- contractKind: manuscript-section
+  outputs:
+  # One section per deliverable. A run that writes four at once cannot say
+  # which one it was asked for, and the reviewer cannot tell which one was
+  # actually worked on.
+  - path: manuscript-section.md
+    required: true
+  # The claim ledger. Same shape as the clinical evidence matrix on purpose —
+  # `claims[].claimId` / `claimType` / `supportQuote` — so `verify_preserved.py`
+  # can be pointed straight at it after the humanize pass, instead of this
+  # capability inventing a second claim vocabulary nothing else reads.
+  - path: section-claims.json
+    required: true
+  # Columns claimId, referenceNumber, supportQuote (any order, extras allowed),
+  # matching the ledger every other capability writes.
+  - path: citation-ledger.csv
+    required: true
+  # The designated backstage channel, and the reason this capability may forbid
+  # revision notes, reviewer replies and process narration in the section at
+  # all. A ban with nowhere to put the banned thing is a ban runs work around.
+  #
+  # `required: false` on purpose, and not because the file is optional in
+  # spirit. A new required output is a new way for a finished package to be
+  # rejected, which this repository counts as the same decision as a new
+  # blocking point — and the budget is six, spent. `required-outputs-baseline.json`
+  # states the ratchet: required false first, promote later, in a change that
+  # argues from an observed distribution. Every other capability that writes
+  # revision notes (geo-content, grant-proposal) lists it the same way.
+  - path: revision-notes.md
+    required: false
+  - path: delivery-summary.md
+    required: true
+  checks:
+  - requiredOutputsExist
+  - citationsResolvable
+  - skillsLoaded
+inputs:
+  required:
+  # Which section. Not inferred from the request: "写一下讨论" and "把方法学补完"
+  # ask for different documents, and guessing wrong wastes the whole run.
+  - section
+  - sources
+  optional:
+  # Present for a revision, absent for a first draft. Its presence is what makes
+  # revision-notes.md a diff rather than a set of drafting decisions.
+  - existingDraft
+  - manuscriptContext
+  - reportingGuideline
+  - targetJournal
+  - wordBudget
+  - outputLanguage
+autopilot:
+  # The scheduled shape is "the evidence run finished overnight; draft the
+  # discussion against it" — a writing pipeline whose inputs both exist before
+  # anyone is awake. It is not eligible with the section unnamed: an unattended
+  # run that picks the section itself delivers a document nobody asked for.
+  taskTypes:
+  - writing-pipeline
+  costClass: medium
+  unattendedInputs:
+  - section
+  - sources
+estimatedMinutes:
+- 15
+- 60
+dataSources:
+- uploaded-files
+- literature
+- reporting-guidelines
+starterPrompts:
+- 这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。
