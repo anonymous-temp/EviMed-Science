@@ -15,7 +15,8 @@ import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from "../src/manus
 import { citationIntegrityIssues } from "../src/clinicalEvidence.mjs";
 import { runGate } from "../index.mjs";
 
-const gateInput = (contractKind, files) => ({ contractKind, files: new Map(Object.entries(files)), declaredOutputs: [] });
+/** @param {string} contractKind @param {Record<string, string>} files @returns {import('../src/contractRegistry.mjs').GateInput} */
+const gateInput = (contractKind, files) => ({ contractKind, files: new Map(Object.entries(files)), expectedOutputs: [] });
 
 /* ------------------------------------------------- the blocking budget */
 
@@ -23,21 +24,24 @@ test("neither contributor can raise a blocking issue", () => {
   // Blocking for these kinds stays where it already was: the manifest's
   // required outputs. A contributor that could return a `required` issue would
   // be a seventh blocking point arriving without anybody deciding on one.
-  const cases = [
-    ["appraisal-table", appraisalTableFindings, { "appraisal-table.json": "{ not json", "citation-ledger.csv": "" }],
-    ["manuscript-section", manuscriptSectionFindings, { "manuscript-section.md": "无引用的一段话。", "section-claims.json": "{ not json", "citation-ledger.csv": "" }],
-  ];
-  let examined = 0;
-  for (const [kind, contribute, files] of cases) {
-    const { issues } = contribute(gateInput(kind, files));
-    examined += 1;
+  /** @param {string} kind @param {{issues: {severity?: string, code: string}[]}} found */
+  const assertAdvisoryOnly = (kind, found) => {
     // Malformed input on purpose: a contributor that returns nothing here is
     // not proving it cannot block, it is proving it did not look.
-    assert.ok(issues.length > 0, `${kind} found nothing in a deliberately malformed package; the probe, not the contract, is wrong`);
-    const blocking = issues.filter((entry) => entry.severity !== "advisory");
+    assert.ok(found.issues.length > 0, `${kind} found nothing in a deliberately malformed package; the probe, not the contract, is wrong`);
+    const blocking = found.issues.filter((entry) => entry.severity !== "advisory");
     assert.deepEqual(blocking, [], `${kind} raised a non-advisory issue: ${blocking.map((entry) => entry.code).join(", ")}`);
-  }
-  assert.equal(examined, 2, "both contracts must be examined");
+  };
+
+  assertAdvisoryOnly("appraisal-table", appraisalTableFindings(gateInput("appraisal-table", {
+    "appraisal-table.json": "{ not json",
+    "citation-ledger.csv": "",
+  })));
+  assertAdvisoryOnly("manuscript-section", manuscriptSectionFindings(gateInput("manuscript-section", {
+    "manuscript-section.md": "无引用的一段话。",
+    "section-claims.json": "{ not json",
+    "citation-ledger.csv": "",
+  })));
 });
 
 /* ------------------------------------------ the citation grammar V3 found */
@@ -111,6 +115,7 @@ test("the snapshot is not graded as report prose", () => {
 test("a certainty that does not follow from its own downgrades is reported", () => {
   // The one check that finds a table where every field is filled in and the
   // answer is still wrong.
+  /** @param {string} certainty */
   const table = (certainty) => JSON.stringify({
     question: "在 HFpEF 患者中，SGLT2 抑制剂能否降低心衰再住院？",
     studies: [
@@ -131,6 +136,7 @@ test("a certainty that does not follow from its own downgrades is reported", () 
         certainty, whatWouldChange: "一项更大样本的试验" },
     ],
   });
+  /** @param {string} certainty */
   const files = (certainty) => ({
     "appraisal-table.json": table(certainty),
     "appraisal-table.csv": "studyId\nS1\n",

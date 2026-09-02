@@ -50,8 +50,9 @@ test("every @deepseek-ai/dsh package in the lockfile is the pinned release", asy
   /** @type {Map<string, Set<string>>} package name -> versions seen */
   const seen = new Map();
   for (const [, name, version] of lock.matchAll(DSH_AT_VERSION)) {
-    if (!seen.has(name)) seen.set(name, new Set());
-    seen.get(name).add(version);
+    const versions = seen.get(name) ?? new Set();
+    versions.add(version);
+    seen.set(name, versions);
   }
 
   assert.ok(
