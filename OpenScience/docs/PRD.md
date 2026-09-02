@@ -1,10 +1,20 @@
 # AI4S Workbench Desktop — Product Requirements
 
-> **Status (v0.1, 2026-07-02).** The runtime is **OpenCode**, bundled as an isolated
-> sidecar (one-click, auto-started, does not touch a user's own OpenCode). Built: the
-> three-column workbench UI, real multi-session chat with history, a real Skills/Agents
-> view, BYOK key config, and a macOS installer. Literature search, provenance/reviewer,
-> code-execution backends, and Science Packs below are the target scope, not all shipped.
+> **Read this as the v0.1 desktop product definition, not as how the system works
+> today.** It was written on 2026-07-02 for the local-first desktop workbench, when the
+> runtime was a bundled OpenCode sidecar. Two things have since changed underneath it.
+> The release target moved from a desktop app to the hosted multi-tenant SaaS, and the
+> agent kernel became **DeepSeek Harness**; OpenCode was deleted on 2026-09-01, with no
+> rollback lever. Wherever a section below says "the bundled OpenCode runtime", the
+> current system runs a per-project DSH container that only the control plane may reach.
+> `AGENTS.md` and `docs/WEB_DEPLOYMENT.md` are authoritative on how it actually works;
+> what is still worth reading here is the product intent — who it is for, what an
+> artifact owes its reader, and which capabilities were promised.
+>
+> **Original status (v0.1, 2026-07-02).** Built: the three-column workbench UI, real
+> multi-session chat with history, a real Skills/Agents view, BYOK key config, and a
+> macOS installer. Literature search, provenance/reviewer, code-execution backends, and
+> Science Packs below were the target scope, not all shipped.
 
 ## 1. Positioning
 
@@ -106,9 +116,12 @@ Every important artifact must be traceable:
 ### 4.4 Human-in-the-loop
 
 High-risk actions — file writes, command execution, dependency installs, network
-access, file deletion, remote compute — require user approval. The bundled OpenCode runtime provides
+access, file deletion, remote compute — require user approval. The agent runtime provides
 dangerous-command approval, container isolation, MCP credential filtering, and
-cross-session isolation.
+cross-session isolation. In the hosted deployment the approval policy is `never`, and
+`never` means auto-refuse rather than auto-approve: inside the sandbox nothing needs
+approval, so the only things that ask are attempts to step outside it, and refusing
+those is exactly right for an unattended run.
 
 ## 5. MVP scope
 
@@ -122,7 +135,7 @@ After downloading and first opening, the user enters onboarding:
 2. Enter an API key.
 3. Choose a workspace directory.
 4. Detect the local runtime environment.
-5. Use the bundled OpenCode runtime (auto-started; no separate install).
+5. Use the bundled agent runtime (auto-started; no separate install).
 6. Create the first research project.
 
 First launch must clearly tell the user: data is stored locally by default; the agent
@@ -176,14 +189,16 @@ search logs; record data-source limits.
 
 #### 5.1.6 Skills library
 
-The Skills page lists the **real** skills and agents the OpenCode runtime has loaded
-(built-in + project `.opencode/skill/` + user config) — no hardcoded catalog. Skill
-sources, layered:
+The Skills page lists the **real** skills and agents the runtime has loaded — no
+hardcoded catalog. Skill sources, layered:
 
-1. **OpenCode built-in** skills/agents (shipped with the runtime).
-2. **Self-authored AI4S skills** — planned: `literature-review`, `reproducible-analysis`,
-   `citation-reviewer`, `figure-provenance`, `paper-to-report` (Markdown skills under
-   `runtime/skills/core`, loaded from the workspace `.opencode/skill/`).
+1. **Runtime built-in** skills/agents (shipped with the kernel).
+2. **Self-authored AI4S skills** — `deep-research`, `domain-check`,
+   `manuscript-humanize`, `publication-figures`, `stats-integrity`,
+   `traceability-review`, `humanizer`/`humanizer-zh`, `large-file`, and the
+   compute skills `hpc-slurm`, `modal-run`, `remote-compute` (Markdown skills
+   under `runtime/skills/core`). In the hosted deployment these are baked into the runtime
+   image rather than copied per project.
 3. **Third-party scientific skills** — e.g. K-Dense `scientific-agent-skills` (curated
    install, a later feature).
 
@@ -203,9 +218,10 @@ v1 languages: Python, Shell (R later).
 | Modal | Cloud execution (later) |
 | Jupyter Kernel | Notebook-style persistent kernel (later) |
 
-OpenCode runs tools locally inside the bundled runtime by default; Docker sandbox and
-SSH / Modal remote execution are optional advanced backends, so the desktop starts local
-and expands later.
+The desktop shell runs tools locally inside the bundled runtime by default; Docker
+sandbox and SSH / Modal remote execution are optional advanced backends, so the desktop
+starts local and expands later. The hosted deployment has no local mode: every run is a
+Docker sandbox.
 
 #### 5.1.8 Artifact panel
 
@@ -375,6 +391,6 @@ complete example results; clear license; separate note for third-party skill lic
 ## 11. One-liner
 
 **AI4S Workbench Desktop is an open-source research agent workbench with macOS and
-Windows installers that uses OpenCode, MCP, scientific skills, and a reproducible
+Windows installers that uses an agent kernel, MCP, scientific skills, and a reproducible
 artifact system to weave literature, code, figures, reports, and review into one
 local-first scientific workflow.**

@@ -185,8 +185,8 @@ Before enabling real hosted model use, add server-side key management with:
 
 - `OPEN_SCIENCE_RUNTIME_MODE=mock` is appropriate only for UI/API verification.
 - Real hosted agent use requires `OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker`
-  with either the repository's `deploy/runtime-opencode/Dockerfile` image or an
-  equivalent operator-supplied OpenCode runtime image.
+  with either the repository's `deploy/runtime-dsh/Dockerfile` image or an
+  equivalent operator-supplied agent runtime image.
 - The Docker runtime path uses per-project containers, project workspace mounts,
   `no-new-privileges`, dropped Linux capabilities, pids limits, CPU and memory
   limits, and rejects host/shared-container networking unless explicitly
@@ -272,12 +272,20 @@ host absolute paths, or research data. Treat private registry names and source
 revision metadata according to the deployment's operator-metadata policy. This
 is not a substitute for legal review of upstream licenses.
 
-- OpenCode runtime: `scripts/dev/fetch-opencode.sh` pins the sidecar version for
-  desktop builds, and `deploy/runtime-opencode/Dockerfile` pins the hosted
-  runtime image default. The hosted image verifies each Linux architecture
-  archive against its pinned SHA-256 digest, verifies the matching MIT license
-  text, and installs it under `/usr/share/licenses/opencode/LICENSE`. Update the
-  version, both architecture digests, and license digest as one reviewed change.
+- Agent runtime: `deploy/runtime-dsh/Dockerfile` pins the hosted runtime image
+  default, from the single version definition in `deps-version.json`. The kernel
+  arrives as a pinned npm package that carries its own license text, so there is
+  no separate archive or license fetch to verify for it; the pin is enforced by
+  a publish-date filter plus an assertion that every installed package in the
+  tree is at the pinned version. The image downloads and redistributes two
+  third-party binaries: the Node runtime and uv. Both are verified against
+  pinned per-architecture SHA-256 digests before extraction, and a missing pin
+  fails the build rather than skipping the check — arm64's Node digest was blank
+  behind a presence guard until 2026-09-02, which meant an unverified runtime
+  and a build log that looked identical to a verified one. uv's MIT license text
+  is verified against its own pinned digest and installed under
+  `/usr/share/licenses/uv/LICENSE-MIT`. Update each version, every architecture
+  digest, and the license digest as one reviewed change.
 - Runtime socket relay: the hosted runtime image installs Debian `socat` and
   uses it only to relay OpenCode loopback HTTP/SSE over a project-scoped Unix
   socket. Preserve the corresponding package license and source notices in the
