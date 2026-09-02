@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   listWebAgentRuns: vi.fn(),
   dispatchWebAgentRun: vi.fn(),
   fetchWebMe: vi.fn(),
-  startRuntime: vi.fn(async () => "http://web.test/api/opencode/default"),
+  startRuntime: vi.fn(async () => "http://web.test/api/runtime/default"),
   setWorkspace: vi.fn(async (path: string) => path),
   projectId: "default",
 }));
@@ -52,7 +52,7 @@ vi.mock("./kernel", () => ({
 }));
 
 vi.mock("@ai4s/sdk", () => {
-  class OpenCodeClient {
+  class RuntimeClient {
     constructor(opts: Record<string, unknown>) {
       mocks.clientOpts.push(opts);
     }
@@ -102,7 +102,7 @@ vi.mock("@ai4s/sdk", () => {
       mocks.statusCb("offline");
     }
   }
-  return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
+  return { RuntimeClient, DEFAULT_RUNTIME_URL: "http://127.0.0.1:4096" };
 });
 
 import { useRuntimeStore } from "./runtime";
@@ -192,7 +192,7 @@ beforeEach(() => {
   mocks.fetchWebMe.mockReset();
   mocks.fetchWebMe.mockImplementation(async () => ({ project: { id: mocks.projectId, name: mocks.projectId } }));
   mocks.startRuntime.mockReset();
-  mocks.startRuntime.mockImplementation(async () => `http://web.test/api/opencode/${mocks.projectId}`);
+  mocks.startRuntime.mockImplementation(async () => `http://web.test/api/runtime/${mocks.projectId}`);
   mocks.setWorkspace.mockClear();
   useRuntimeStore.setState({
     status: "offline",
@@ -276,9 +276,9 @@ describe("hosted web runtime bootstrap", () => {
     await useRuntimeStore.getState().bootstrap();
 
     expect(useRuntimeStore.getState().status).toBe("ready");
-    expect(useRuntimeStore.getState().serverUrl).toBe("http://web.test/api/opencode/default");
+    expect(useRuntimeStore.getState().serverUrl).toBe("http://web.test/api/runtime/default");
     expect(mocks.clientOpts[mocks.clientOpts.length - 1]).toMatchObject({
-      baseUrl: "http://web.test/api/opencode/default",
+      baseUrl: "http://web.test/api/runtime/default",
     });
     expect(useRuntimeStore.getState().workspace).toBe("/workspace/default");
     expect(mocks.clientOpts[mocks.clientOpts.length - 1].directory).toBeUndefined();
@@ -604,7 +604,7 @@ describe("hosted web runtime bootstrap", () => {
     expect(useRuntimeStore.getState().currentId).toBeNull();
     expect(useRuntimeStore.getState().threads).toEqual({});
     expect(mocks.clientOpts[mocks.clientOpts.length - 1]).toMatchObject({
-      baseUrl: "http://web.test/api/opencode/default",
+      baseUrl: "http://web.test/api/runtime/default",
     });
   });
 });

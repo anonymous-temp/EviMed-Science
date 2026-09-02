@@ -1,12 +1,22 @@
 # AI4S Workbench Desktop — Technical Design
 
-> **Implementation status (v0.1, 2026-07-02).** Built and verified: Tauri 2 shell + React
-> UI; **OpenCode** bundled as an isolated sidecar (auto-started, app-private config/data,
-> dedicated port); `OpenCodeClient` over HTTP + SSE; real multi-session chat with history;
-> Skills page backed by OpenCode's real skills/agents; macOS `.dmg`; cross-platform CI.
-> Planned (not yet built): self-authored scientific skills, MCP connectors, provenance/
-> reviewer engine, literature search, Jupyter runtime, remote compute. This document is the
-> target design; sections mixing built vs planned are noted inline.
+> **This is the v0.1 desktop design, superseded on two axes. Do not implement from it
+> without checking `AGENTS.md` first.** It was written on 2026-07-02, when the product was
+> a local-first desktop app and the agent runtime was a bundled OpenCode sidecar. Since
+> then the release target moved to the hosted multi-tenant SaaS (desktop packaging is
+> optional), and the agent kernel became **DeepSeek Harness (DSH)** — OpenCode was deleted
+> on 2026-09-01, with no rollback lever and no second code path kept alive. §5 below has
+> been rewritten for the current kernel; the rest of the document still describes the
+> desktop shell as it was designed, and every sentence that says "the bundled OpenCode
+> sidecar" should be read in that past tense. `AGENTS.md`, `docs/WEB_DEPLOYMENT.md` and
+> `docs/REQUEST_PATH.md` are authoritative on the system as it runs today.
+>
+> **Original implementation status (v0.1, 2026-07-02).** Built and verified: Tauri 2 shell
+> + React UI; OpenCode bundled as an isolated sidecar (auto-started, app-private
+> config/data, dedicated port); a client wrapper over HTTP + SSE; real multi-session chat
+> with history; Skills page backed by the runtime's real skills/agents; macOS `.dmg`;
+> cross-platform CI. Planned at the time: self-authored scientific skills, MCP connectors,
+> provenance/reviewer engine, literature search, Jupyter runtime, remote compute.
 
 ## 1. Technical goals
 
@@ -22,12 +32,12 @@ AI4S Workbench Desktop
 ├── Desktop Shell: Tauri 2
 ├── Frontend: React + TypeScript + Vite
 ├── UI System: Tailwind CSS + Radix UI / shadcn-style components
-├── Local Service: Rust commands + bundled OpenCode sidecar
-├── Agent Runtime: OpenCode (bundled single-binary sidecar)
-├── Agent Protocol: OpenCode HTTP + SSE API (opencode serve)
-├── Skills Layer: OpenCode skills/agents + optional third-party scientific skills
+├── Local Service: Rust commands + control-plane-managed agent runtime
+├── Agent Runtime: DeepSeek Harness (one container per project)
+├── Agent Protocol: slashed methods over one /api/remote.mux WebSocket
+├── Skills Layer: kernel skills/agents + optional third-party scientific skills
 ├── MCP Layer: filesystem / paper-search / BioMCP / Zotero / GitHub / custom
-├── Execution Layer: OpenCode agents/tools + optional Jupyter Kernel Gateway
+├── Execution Layer: kernel agents/tools + optional Jupyter Kernel Gateway
 ├── Storage: Local workspace + SQLite + JSONL provenance
 └── Packaging: Tauri DMG / APP / NSIS / MSI
 ```
@@ -79,64 +89,128 @@ capabilities only, not heavy computation.
 
 ## 5. Agent runtime
 
-### 5.1 Choice: OpenCode (bundled)
+### 5.1 Choice: DeepSeek Harness
 
-The agent runtime is **OpenCode** (`anomalyco/opencode`, MIT), pinned to a stable
-release (`OPENCODE_VERSION`, currently 1.17.13). It is distributed as a **single
-binary**, which makes it ideal to bundle as a desktop sidecar — no Python/Node runtime
-to package. It supports MCP, skills, and agents, is model-agnostic (BYOK), and serves as
-an open-source coding/agent runtime in the spirit of Claude Code.
+The agent kernel is **DeepSeek Harness (DSH)**, `@deepseek-ai/dsh`, and it is the only
+one. The pin lives in exactly one place — `deps-version.json` — and tests assert that
+every derived copy equals it: the runtime image's Dockerfile ARG, the seam manifest, the
+peer dependency, and the release manifest. Four files each carrying their own copy of a
+version meant "bump the pin" was four edits and one of them was always missed.
 
-OpenCode exposes an HTTP + SSE server (`opencode serve`) that a GUI can drive directly —
-sessions, prompts, streaming assistant/tool output, skills, and agents.
+DSH makes no compatibility promises before its first tagged release, so the discipline is
+explicit: exact pin, fail-closed startup self-check, contract tests with golden frames
+recorded from the live wire, a nightly compatibility matrix, and security fixes evaluated
+the day they land. The npm install is additionally pinned in time, because
+`@deepseek-ai/dsh` declares its 61 subpackages as a caret range — naming an exact version
+pins one package and floats the rest.
 
-### 5.2 Desktop ↔ OpenCode communication
+The predecessor was OpenCode, a single MIT binary bundled as a desktop sidecar. That
+choice was made for the desktop shell, where "no Python/Node runtime to package" was the
+deciding constraint. It stopped being the deciding constraint when the release target
+became a hosted service that builds its own runtime image anyway.
 
-The app talks to OpenCode over its HTTP + SSE API, wrapped by `packages/sdk`
-(`OpenCodeClient`). Key endpoints:
+### 5.2 Control plane ↔ kernel communication
 
-| Endpoint | Use |
-| --- | --- |
-| `POST /session` · `GET /session` | Create / list sessions (conversation history) |
-| `GET /session/:id/message` | Load a session's history |
-| `POST /session/:id/prompt_async` | Send a prompt |
-| `GET /event` (SSE) | Stream `message.part.updated` (text/tool), `session.idle`, `session.error` |
-| `GET /api/skill` · `GET /agent` | Real loaded skills / agents |
+**The browser never reaches a kernel.** It calls `apps/server`, which holds the one
+connection to the DSH kernel running in that project's container. That connection is a
+single WebSocket at `/api/remote.mux` carrying every logical stream, each independently
+cancellable:
+
+| Frame | Direction | Use |
+| --- | --- | --- |
+| `{"type":"open","streamId","endpoint","payload":{"args":{...}}}` | out | Start a logical stream |
+| `{"type":"cancel","streamId"}` | out | Cancel one stream without touching the others |
+| `{"type":"item","streamId","value"}` | in | One endpoint-owned value |
+| `{"type":"error","streamId","error":{"code","message","details"}}` | in | Stream failed |
+| `{"type":"end","streamId"}` | in | Stream finished |
+
+Endpoints are slashed method names: `session/create`, `session/prompt`, `session/cancel`,
+`session/page`, `session/fork`, `session/list`, `subagents/list`, `skills/list`,
+`agentPresets/list`. The kernel's forwarded host events arrive on the `$events` stream of
+the same socket. Everything else the kernel exposes — credentials, settings, workspace
+mutation, model catalogs, goals, message feedback — is on the seam manifest's `denied`
+list, so a method the product does not use cannot be reached even by accident.
+
+Two consequences the earlier single-stream downlink did not have. A session's events
+arrive on the stream that was opened for that session, so the session id is no longer *in*
+the frame — `dshMux.mjs` is what remembers the pairing. And the host sends WebSocket Ping
+control frames every two seconds and terminates a socket that did not answer the previous
+one, so the pong path is load-bearing rather than politeness.
+
+The kernel authenticates the socket with a browser-session cookie the control plane mints
+itself, and it derives that cookie's *name* from the `Host` header it receives — so a
+cookie minted for a different authority is not a weaker credential, it is a different
+cookie the kernel never looks for, and the request arrives unauthenticated.
 
 Flow:
 
 ```text
-App launch → Rust starts the bundled `opencode serve` (dedicated free port)
+Control plane starts the project's runtime container (image, mounts, network policy)
 ↓
-OpenCodeClient opens GET /event (SSE) and creates/loads sessions
+dshMux opens one WebSocket to /api/remote.mux with the minted session cookie
 ↓
-Prompt → POST /session/:id/prompt_async
+session/create → session/prompt
 ↓
-SSE streams message.part.updated / session.idle → folded into thread blocks by part/call id
+$events streams turn/step/tool/assistant events → decoded into @evimed/domain RunEvent
 ↓
-Frontend renders streaming messages, tool cards, and per-session history
+apps/server serves its own GET /api/runs/:id/events to the browser
 ```
 
-### 5.3 Bundling & isolation (no interference)
+The frontend sees only `RunEvent`. That is the whole point: the retired pass-through route
+made the frontend know a kernel's protocol, so every kernel change was a frontend change.
+`/api/opencode/:projectId/*` still exists as a URL and answers `410
+runtime_passthrough_retired`, keeping the retired kernel's name deliberately — a URL is
+what an already-deployed client types, and renaming it would turn each of those requests
+into an anonymous 404 instead of the one chance to name the replacement.
 
-OpenCode is bundled as a Tauri **sidecar** (`externalBin`, one binary per target triple,
-git-ignored and fetched by `scripts/dev/fetch-opencode.sh`). The Rust side
-(`src-tauri/src/runtime.rs`) starts it so it never collides with a user's own OpenCode:
+### 5.3 The anti-corruption layer
 
-- runs the **bundled** binary (not the user's `PATH`);
-- on a **dedicated free port** (not the default 4096);
-- with an **app-private** config/data dir via `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under
-  `~/Library/Application Support/com.ai4s.workbench/runtime/` (macOS) — so the user's
-  sessions/config are never touched;
-- but it **shares the user's login**: the user's `auth.json` (OpenCode credentials / free
-  access) is copied read-only into the sandbox at startup, so the bundled runtime can
-  reply out of the box without a separate login. We only read the user's auth file; we
-  never modify it or their sessions.
-- killed on app exit.
+`@deepseek-ai/*` may be imported in **`packages/harness-port` and nowhere else**,
+including in a JSDoc `import()` type. The port owns its own types and converts shapes, so
+a rename upstream is one file. `packages/harness-port/seam-manifest.json` lists every
+contact point and is the single source that the port's exports, the startup probe, the
+lint allow-list, the contract tests and the method allow-list all derive from.
 
-The user's model provider key (entered in Settings) is written into that app-private
-`opencode.json` by the `configure_opencode` Rust command, and the sidecar is restarted
-to pick it up. Keys never enter the user's global OpenCode config, logs, or git.
+`packages/socket` (`@evimed/dsh-socket`) is the composition layer: the `evimed-universal`
+preset and its plugins are what turn a bare kernel into the EviMed runtime. A bare kernel
+started from a binary has no tool chain at all — the preset, the capability manifests and
+the research MCP are baked into the runtime image at `/opt/evimed`, and the generated
+profile patch names those paths.
+
+### 5.4 Isolation
+
+In the hosted deployment the kernel runs one container per project, started by an
+unexposed Runtime Controller that owns the Docker socket; the API container never receives
+it. The kernel listens on container loopback and `socat` exposes it through a 0600 unix
+socket at `runtime/container-runtime/control/dsh.sock` inside that project's runtime
+subpath, so no runtime TCP port is published and a sibling runtime cannot be addressed
+through the API container's `127.0.0.1`. The socket file carries the kernel's name for a
+reason: two kernels speak different protocols, and a stale socket that still accepts
+connections is a runtime that looks alive and answers nothing the caller understands.
+
+**The runtime never holds a real provider key.** The kernel's `baseURL` points at our
+model gateway and its `apiKeyEnv` names a reference resolved per request from a 0600
+credentials file the control plane rewrites in place, so a token rotation is a file write
+rather than a restart.
+
+### 5.5 The desktop shell's own sidecar (historical, still in the tree)
+
+The desktop shell predates the hosted service and still starts its own sidecar from
+`src-tauri/src/runtime.rs` and `src-tauri/src/opencode_config.rs`. That path is described
+here because it is still in the repository, not because it is the product: it retires
+together with the desktop shell and `packages/sdk`, and nothing in the hosted deployment
+goes through it.
+
+How it was designed, and why the shape is worth keeping if the shell is ever repointed at
+DSH: the sidecar ran the **bundled** binary rather than the user's `PATH`, on a
+**dedicated free port** rather than the default, with an **app-private** config/data dir
+via `XDG_CONFIG_HOME`/`XDG_DATA_HOME` under the bundle identifier's application-support
+directory, and was killed on app exit — so a user's own installation, sessions and config
+were never touched. It did share the user's login: their `auth.json` was copied read-only
+into the sandbox at startup so the workbench could answer out of the box without a
+separate login. We only ever read that file; we never modified it or the user's sessions.
+The provider key entered in Settings went into the app-private config by a Rust command,
+never into the user's global config, logs, or git.
 
 ## 6. Skills & MCP
 
@@ -166,8 +240,8 @@ skills/
 `K-Dense-AI/scientific-agent-skills` (large set; compatible with Cursor, Claude Code,
 Codex, OpenCode) can be added later. Do **not** enable all ~148 skills by default: use
 curated install, enable by domain, and show license, dependencies, and risk. (Curated
-third-party install is a later feature; today the Skills page lists the real skills
-OpenCode has loaded — built-in + project `.opencode/skill/` + user config.)
+third-party install is a later feature; the Skills page lists the real skills the runtime
+has loaded, never a hardcoded catalog.)
 
 ### 6.4 MCP servers
 
@@ -180,14 +254,13 @@ BioMCP and Zotero follow.
 
 ```text
 Execution Layer
-├── OpenCode tools (local, in the bundled runtime)
+├── Kernel tools (in the project runtime)
 ├── Docker sandbox            (optional, advanced)
 ├── SSH / Modal remote        (optional, advanced — later)
 └── Jupyter Kernel Gateway    (later)
 ```
 
-OpenCode executes its tools locally within the bundled runtime, gated by its permission
-system. Heavier/remote execution (Docker sandbox, SSH, Modal) is optional and belongs in
+The kernel executes its tools within the runtime, gated by its permission system. Heavier/remote execution (Docker sandbox, SSH, Modal) is optional and belongs in
 an advanced "Remote Compute" area, never the default path.
 
 **v1 default:** local execution + manual approval for high-risk actions. Do not
@@ -214,15 +287,15 @@ lightweight installer + a first-launch Runtime Manager + on-demand scientific en
 
 ### 8.2 Responsibilities
 
-Detect OpenCode; detect Python / uv / Node / Git; create the workspace; create isolated
+Detect the kernel; detect Python / uv / Node / Git; create the workspace; create isolated
 environments; install base Python packages; manage scientific tool dependencies; start
-the OpenCode server; start an optional Jupyter Gateway; monitor runtime health.
+the kernel; start an optional Jupyter Gateway; monitor runtime health.
 
 ### 8.3 Runtime directory
 
 ```text
 ~/.ai4s-workbench/
-  config/  runtime/{opencode,python,node}/  profiles/ai4s-workbench/
+  config/  runtime/{kernel,python,node}/  profiles/ai4s-workbench/
   workspaces/  logs/  cache/  secrets/
 ```
 
@@ -317,8 +390,10 @@ it cannot auto-upload files; it cannot silently install dependencies.
 | Connect remote server | Require approval |
 | Access files outside workspace | Require approval |
 
-OpenCode has a per-tool permission system (allow / ask / deny per agent). The desktop
-maps high-risk actions to "ask" and must never blanket-allow them.
+The kernel has a per-tool permission system (allow / ask / deny per agent). The desktop
+maps high-risk actions to "ask" and must never blanket-allow them. A hosted deployment
+uses `never`, which means auto-refuse: inside the sandbox nothing needs approval, so the
+only things that ask are attempts to step outside it.
 
 ### 11.3 API keys
 
@@ -369,14 +444,14 @@ uploads to a GitHub Release.
 
 ```text
 User opens app → Tauri starts → Frontend loads → Runtime Manager checks dependencies
-→ Start OpenCode sidecar → Connect to Gateway → Load projects → Ready
+→ Start the agent runtime → Connect to Gateway → Load projects → Ready
 ```
 
 ### 13.2 Agent task
 
 ```text
-User submits task → Frontend sends prompt to OpenCode → OpenCode plans
-→ Frontend renders plan approval card → User approves → OpenCode executes tools
+User submits task → Frontend posts a prompt to apps/server → the kernel plans
+→ Frontend renders plan approval card → User approves → the kernel executes tools
 → Tool events stream back → Runtime writes artifacts → Provenance service records events
 → Reviewer runs checks → Frontend updates artifact/review panels
 ```
@@ -393,7 +468,7 @@ task workers.
 
 ### 14.2 Runtime
 
-Persistent OpenCode server; reused project sessions; incremental file index; artifact
+Persistent kernel per project; reused project sessions; incremental file index; artifact
 hash cache; per-project reused Python env; literature metadata cache; cached PDF parse
 results; figure preview thumbnails.
 
@@ -405,14 +480,14 @@ Runtime ready: < 10s
 First agent response: < 5s after runtime ready
 ```
 
-Strategy: UI first, runtime after; show runtime-loading state on Home; a failed OpenCode
+Strategy: UI first, runtime after; show runtime-loading state on Home; a failed runtime
 connection must not block the UI; first-time dependency install happens in onboarding.
 
 ## 15. Error handling
 
 ### 15.1 Runtime errors
 
-OpenCode not started; Gateway start failure; port in use; missing API key; model
+Runtime not started; Gateway start failure; port in use; missing API key; model
 connection failure; workspace permission denied; broken Python env; Docker unavailable;
 MCP server start failure. Each must provide: a human-readable explanation, collapsible
 technical details, a one-click fix button, and a copy-logs button.
@@ -430,15 +505,23 @@ Monorepo:
 ```text
 ai4s-workbench/
   apps/desktop/{src,src-tauri}/
-  packages/{ui,shared,sdk}/
-  runtime/{manager,opencode-profile,mcp,skills}/
+  apps/server/                     # the hosted web boundary and control plane
+  packages/{domain,harness-port,socket,contracts,shared,sdk,ui}/
+  capabilities/  capability-skills/
+  runtime/{mcp,kernel,harness,skills}/
+  deploy/{web,runtime-dsh,specialist-adapter,memos,tooluniverse}/
+  deps-version.json                # the one place an upstream pin is written
   docs/{PRD.md,TECHNICAL_DESIGN.md}
   examples/bci-trends/
-  scripts/{release,dev}/     # dev/fetch-opencode.sh fetches the pinned sidecar
+  scripts/{build,dev,ops,release}/
 ```
 
-- `apps/desktop` — Tauri + React desktop app; `src-tauri/src/runtime.rs` supervises the
-  bundled OpenCode sidecar (`OpenCodeClient` lives in `packages/sdk`).
+- `apps/server` — the hosted web boundary; owns the only connection to a kernel.
+- `apps/desktop` — Tauri + React desktop app; `packages/sdk` is its client wrapper and
+  retires together with the desktop shell.
+- `packages/harness-port` — the anti-corruption layer; the only importer of
+  `@deepseek-ai/*`.
+- `packages/socket` — the `evimed-universal` plugin composition.
 - `runtime/skills` — self-authored scientific skills.
 - `examples` — the complete demo project.
 
@@ -451,8 +534,8 @@ ai4s-workbench/
 3. Build a static onboarding page.
 4. Build a static project workspace page.
 5. Build tool-call card / artifact card / approval dialog.
-6. Bundle + auto-start OpenCode; connect via `OpenCodeClient` (HTTP + SSE).
-7. Ship the OpenCode config/skills bundle.
+6. Bundle + auto-start the agent runtime; connect through the SDK client wrapper.
+7. Ship the runtime config/skills bundle.
 8. Write the 3 core skills.
 9. Build static artifacts for the BCI demo.
 10. Draft the GitHub Actions build.
@@ -465,11 +548,15 @@ streaming, history, skills); show plan / tool / artifact / review; export `repor
 
 ## 18. Technical risks
 
-### 18.1 OpenCode desktop integration
+### 18.1 Kernel integration
 
-Risk: OpenCode API changes across versions. Mitigation: wrap `OpenCodeClient`; never call
-OpenCode directly from the UI; **pin the OpenCode version** (`OPENCODE_VERSION`); bundle
-the pinned binary so the app is not affected by the user's own OpenCode.
+Risk: the kernel's API changes across versions — and DSH makes no compatibility promise
+before its first tagged release, so this is not hypothetical. Mitigation: **one importer**
+(`packages/harness-port`, enforced by lint), a seam manifest that every derived artifact
+reads from, **one pin** in `deps-version.json` with tests asserting each derived copy
+equals it, contract tests against golden frames recorded from the live wire, a fail-closed
+startup self-check, and a nightly compatibility matrix. A hand-authored wire fixture is
+worse than none: one certified the wrong shape and defeated an audit.
 
 ### 18.2 Windows environment complexity
 
@@ -480,8 +567,7 @@ Python early; provide a portable fallback; code-sign for formal releases.
 ### 18.3 Installer size
 
 Risk: bundling a large runtime and scientific packages makes the installer huge.
-Mitigation: OpenCode is a single ~44 MB-installer sidecar (cheap to bundle); keep the app
-body light; install heavy scientific dependencies on demand as optional Science Packs;
+Mitigation: for the desktop shell, keep the app body light; install heavy scientific dependencies on demand as optional Science Packs;
 defer Docker / Jupyter.
 
 ### 18.4 Agent safety
@@ -496,9 +582,9 @@ command dialogs; optional Docker sandbox; full provenance recording.
 Tauri 2
 React + TypeScript + Vite
 Tailwind + Radix UI
-OpenCode as agent runtime (bundled single-binary sidecar, pinned OPENCODE_VERSION)
-OpenCode HTTP + SSE API via OpenCodeClient (packages/sdk)
-OpenCode skills/agents + optional third-party scientific skills
+DeepSeek Harness as agent kernel (one container per project, pinned in deps-version.json)
+Slashed methods over one /api/remote.mux WebSocket, behind packages/harness-port
+Kernel skills/agents + optional third-party scientific skills
 Local workspace + SQLite + JSONL provenance
 DMG / NSIS / MSI installers via GitHub Actions
 GitHub Releases (self-contained; sidecar fetched at build time)
@@ -506,6 +592,6 @@ GitHub Releases (self-contained; sidecar fetched at build time)
 
 One line:
 
-**Use Tauri for a high-performance modern desktop shell, a bundled+isolated OpenCode as
+**Use Tauri for a high-performance modern desktop shell, an isolated agent kernel as
 the Claude Code alternative layer, scientific skills and MCP as the research capability
 layer, and provenance/reviewer as the real moat of an open-source Claude Science alternative.**

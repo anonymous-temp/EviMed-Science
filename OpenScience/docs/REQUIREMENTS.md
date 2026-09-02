@@ -29,6 +29,18 @@
 > - ✅ **Done** — shipped and verified (see `PROGRESS.md`).
 > - 🟡 **Partial** — core shipped; named gaps remain.
 > - ⬜ **Planned** — not yet built; scoped here.
+>
+> **Every Status entry below is a dated record of what was true when it was
+> written, not a claim about today.** The agent kernel has since been replaced:
+> OpenCode was deleted on 2026-09-01 and DeepSeek Harness is the only kernel. So
+> the fixes recorded against the OpenCode 1.17.13 binary — its embedded
+> `{"*":"allow"}` permission default, `OPENCODE_SERVER_PASSWORD` Basic auth, the
+> `--cors "*"` finding, `opencode.json` file modes — describe a runtime that no
+> longer exists. They are kept because a requirement is only worth reading with
+> the evidence and the verification that closed it, and because the same class of
+> defect is what the current kernel's safety defaults are written against. For how
+> the hosted service actually enforces these today, read `AGENTS.md` ("Safety
+> defaults") and `docs/WEB_DEPLOYMENT.md`.
 
 ## 0. Positioning takeaway
 

@@ -650,8 +650,8 @@ For a controlled pilot, use this posture:
   `OPEN_SCIENCE_PREFLIGHT_ALERT_DELIVERY=true` so online preflight requires the
   configured operator endpoint to accept a synthetic resolved notification.
 - `OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker` with the reviewed
-  `deploy/runtime-opencode/Dockerfile` image, or an equivalent operator-supplied
-  OpenCode image, for real hosted agent use. `OPEN_SCIENCE_RUNTIME_MODE=mock`
+  `deploy/runtime-dsh/Dockerfile` image, or an equivalent operator-supplied
+  agent runtime image, for real hosted agent use. `OPEN_SCIENCE_RUNTIME_MODE=mock`
   now also requires
   `OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true` in production and should only be used
   for smoke tests.

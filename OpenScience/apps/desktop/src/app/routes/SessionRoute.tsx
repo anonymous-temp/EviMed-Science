@@ -6,11 +6,11 @@ import { RunStreamSessionPage } from "./RunStreamSessionPage";
 /**
  * Picks the session view the deployment serves.
  *
- * The choice belongs to the server, not to a build flag: the agent kernel is a
- * deployment decision with a one-line rollback, and the two views read
- * different sources — so a rollback that needed a new bundle would not be a
- * rollback. `/api/me` answers it, and until it has, the retiring view is what
- * renders, because that is the one that has been in production.
+ * The choice belongs to the server, not to a build flag: the two views read
+ * different sources, and only the deployment knows which one it serves.
+ * `/api/me` answers it, and until it has, the retiring view is what renders —
+ * which is also the answer for the desktop shell, where there is no `/api/me`
+ * and no other view.
  *
  * The switch lives here rather than inside `LiveSessionPage` for a mundane but
  * decisive reason: the profile arrives after the first render, and a branch

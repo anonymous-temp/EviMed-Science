@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { OpenCodeClient, type OpenCodeEvent } from "@ai4s/sdk";
-import { startMockOpenCode, type MockOpenCode } from "@ai4s/sdk/mock-server";
+import { RuntimeClient, type RuntimeEvent } from "@ai4s/sdk";
+import { startMockRuntimeServer, type MockRuntimeServer } from "@ai4s/sdk/mock-server";
 
-let server: MockOpenCode;
+let server: MockRuntimeServer;
 
 beforeAll(async () => {
-  server = await startMockOpenCode(0);
+  server = await startMockRuntimeServer(0);
 });
 afterAll(async () => {
   await server.close();
@@ -29,12 +29,12 @@ async function capturePromptBody(text: string, agent?: string, model?: string | 
       headers: { "Content-Type": "application/json" },
     });
   };
-  const client = new OpenCodeClient({ fetchImpl: capturePrompt });
+  const client = new RuntimeClient({ fetchImpl: capturePrompt });
   await client.sendPrompt("ses_specialty", text, agent, model);
   return promptBody;
 }
 
-describe("OpenCodeClient ↔ OpenCode server", () => {
+describe("RuntimeClient ↔ a kernel over HTTP + SSE", () => {
   it("pins an agent and model on a prompt turn", async () => {
     const promptBody = await capturePromptBody(
       "analyze",
@@ -70,8 +70,8 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   });
 
   it("connects, creates a session, sends a prompt, and streams normalized events", async () => {
-    const events: OpenCodeEvent[] = [];
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const events: RuntimeEvent[] = [];
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     client.onEvent((e) => events.push(e));
 
     await client.connect();
@@ -90,7 +90,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     // Text streams live: each message.part.delta yields the accumulated text,
     // it does not sit silent until the full part arrives at text-end.
     const p1 = events
-      .filter((e): e is Extract<OpenCodeEvent, { type: "text.updated" }> =>
+      .filter((e): e is Extract<RuntimeEvent, { type: "text.updated" }> =>
         e.type === "text.updated" && e.partId === "p1",
       )
       .map((e) => e.text);
@@ -98,7 +98,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     expect(p1[p1.length - 1]).toBe("Planning the analysis. ");
 
     const toolDone = events.find(
-      (e): e is Extract<OpenCodeEvent, { type: "tool.updated" }> =>
+      (e): e is Extract<RuntimeEvent, { type: "tool.updated" }> =>
         e.type === "tool.updated" && e.status === "success",
     );
     expect(toolDone?.title).toContain("literature-search");
@@ -108,21 +108,21 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   });
 
   it("lists slash commands (config commands + skills, one merged list)", async () => {
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     const commands = await client.listCommands();
     expect(commands.map((c) => c.name)).toEqual(["init", "analyze-data"]);
     expect(commands[1].source).toBe("skill");
   });
 
   it("runs a shell command: bash tool part + session.idle stream back", async () => {
-    const events: OpenCodeEvent[] = [];
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const events: RuntimeEvent[] = [];
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     client.onEvent((e) => events.push(e));
     await client.connect();
     await client.runShell("ses_mock", "pwd");
     await waitFor(() => events.some((e) => e.type === "session.idle"));
     const bash = events.find(
-      (e): e is Extract<OpenCodeEvent, { type: "tool.updated" }> =>
+      (e): e is Extract<RuntimeEvent, { type: "tool.updated" }> =>
         e.type === "tool.updated" && e.tool === "bash",
     );
     expect(bash?.status).toBe("success");
@@ -131,8 +131,8 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   });
 
   it("runs a slash command: a normal agent turn streams back", async () => {
-    const events: OpenCodeEvent[] = [];
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const events: RuntimeEvent[] = [];
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     client.onEvent((e) => events.push(e));
     await client.connect();
     await client.runCommand("ses_mock", "init", "focus on tests");
@@ -142,7 +142,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   });
 
   it("maps time.completed onto history messages and aborts a session", async () => {
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     await client.connect();
     const sessionId = await client.createSession();
     await client.sendPrompt(sessionId, "run a literature review");
@@ -155,7 +155,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   });
 
   it("reports an error status when the server is unreachable", async () => {
-    const client = new OpenCodeClient({ baseUrl: "http://127.0.0.1:1" });
+    const client = new RuntimeClient({ baseUrl: "http://127.0.0.1:1" });
     await expect(client.connect()).rejects.toBeTruthy();
     expect(client.getStatus()).toBe("error");
   });
@@ -164,7 +164,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     // The server caches its provider list per instance; PUT/DELETE /auth alone
     // leaves it stale (the new provider never appears in the UI). Verified on
     // opencode 1.17.13: POST /instance/dispose makes the change visible.
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
 
     server.requests.length = 0;
     await client.setProviderApiKey("mock", "sk-123");
@@ -185,7 +185,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   it("disposes the workspace instance too when scoped to a directory", async () => {
     // Sessions run on the per-directory instance — if only the default one
     // were disposed, chats would keep a stale provider list until restart.
-    const client = new OpenCodeClient({
+    const client = new RuntimeClient({
       baseUrl: `http://127.0.0.1:${server.port}`,
       directory: "/ws/dir",
     });
@@ -201,7 +201,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   it("cancels a pending browser-login wait via the AbortSignal", async () => {
     // "auto" OAuth callbacks wait for the browser redirect — cancelling in
     // the UI must abort the request, not leak it on the sidecar.
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     server.requests.length = 0;
     const abort = new AbortController();
     const pending = client.oauthCallback("slow", 0, undefined, abort.signal);
@@ -213,7 +213,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
   });
 
   it("surfaces the server's diagnostic message when saving a key fails", async () => {
-    const client = new OpenCodeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
+    const client = new RuntimeClient({ baseUrl: `http://127.0.0.1:${server.port}` });
     await expect(client.setProviderApiKey("bad", "nope")).rejects.toThrow(/invalid key format/);
   });
 
@@ -225,7 +225,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
       seen.push((init?.headers as Record<string, string> | undefined)?.["Authorization"]);
       return fetch(input, init);
     };
-    const client = new OpenCodeClient({
+    const client = new RuntimeClient({
       baseUrl: `http://127.0.0.1:${server.port}`,
       password: "pw-secret",
       fetchImpl: capturing,
@@ -253,7 +253,7 @@ describe("OpenCodeClient ↔ OpenCode server", () => {
     }
     (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
     try {
-      const client = new OpenCodeClient({
+      const client = new RuntimeClient({
         baseUrl: `http://127.0.0.1:${server.port}`,
         password: "pw-secret",
         directory: "/ws/dir",

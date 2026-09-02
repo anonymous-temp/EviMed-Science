@@ -22,10 +22,14 @@ For a stricter readiness assessment of the current Web adaptation, see
 - `apps/server` exposes `POST /api/commands/:command` with an allowlist,
   consistent JSON errors, development auth, per-user/project workspace roots,
   file upload/preview/download, project storage quotas, provenance, audit logs,
-  scoped log read APIs, and an OpenCode HTTP/SSE proxy. Malformed
-  percent-encoded route parameters return stable `400 invalid_encoding` JSON
-  errors instead of internal decode failures, including command, file, task, and
-  `/api/opencode/:projectId/*` proxy route parameters.
+  scoped log read APIs, and the runtime session surface (`POST /api/runtime/sessions`,
+  `GET /api/runtime/sessions/:id/transcript`, `GET /api/runs/:id/events`). The
+  browser never speaks a kernel's protocol: the old `/api/opencode/:projectId/*`
+  pass-through is retired and answers `410 runtime_passthrough_retired`, keeping
+  the retired kernel's name on purpose so an already-deployed client gets told
+  what replaced it instead of an anonymous 404. Malformed percent-encoded route
+  parameters return stable `400 invalid_encoding` JSON errors instead of internal
+  decode failures, including command, file, task, and runtime route parameters.
 - Every API response includes `X-Open-Science-Request-Id`; error responses also
   include that id in the JSON body. Failed `/api/*` requests are written to
   `.openscience/errors.jsonl` with sanitized method, route pattern, status,
@@ -49,7 +53,7 @@ For a stricter readiness assessment of the current Web adaptation, see
   sandboxed preview CSP that disables scripts, outbound connections, forms,
   object embeds, and base-URI changes. Downloads are forced through attachment
   responses with sanitized filenames.
-- OpenCode proxy requests write sanitized runtime log metadata: HTTP method,
+- Runtime proxy requests write sanitized runtime log metadata: HTTP method,
   route pattern, status, duration, request/response byte counts, streaming flag,
   and policy error code. These records intentionally omit browser credentials,
   query secrets, workspace paths, request bodies, and response bodies.
@@ -60,8 +64,8 @@ For a stricter readiness assessment of the current Web adaptation, see
   does not require inspecting the runtime sandbox. Runtime responses are also
   sanitized before reaching the browser: runtime cookies, auth challenges, hop-by-hop headers, content
   encoding/length metadata, and redirect targets that bypass the proxy are not
-  forwarded. Runtime-local redirects are rewritten through
-  `/api/opencode/:projectId`.
+  forwarded. Runtime-local redirects are rewritten through the server's own
+  runtime route rather than being handed to the browser.
 - Project metadata includes the active workspace folder, so hosted
   `set_workspace` and `new_dated_workspace` choices persist across server
   restarts while remaining scoped under the project workspace root.
@@ -71,9 +75,9 @@ For a stricter readiness assessment of the current Web adaptation, see
   a polluted data volume cannot redirect work outside its user-owned tree.
 - Browser-facing workspace commands return scoped display paths such as
   `/workspace/<project>/<folder>`, not host filesystem paths. The Web runtime
-  client does not send a `directory` parameter; the server-side OpenCode proxy
-  injects the selected project's real workspace directory after authenticating
-  and authorizing the request. In Docker runtime mode the injected directory is
+  client does not send a `directory` parameter; the server injects the selected
+  project's real workspace directory after authenticating and authorizing the
+  request. In Docker runtime mode the injected directory is
   the container-visible `/workspace` mount backed by only that project's named-
   volume subpath; host and mock runtimes receive the server workspace path.
 - After an established hosted SSE connection drops, the browser `EventSource`
@@ -182,8 +186,8 @@ For a stricter readiness assessment of the current Web adaptation, see
   task status endpoints. Task state and task-event files reject symbolic links.
   This gives the hosted API a stable task surface before the database queue is
   introduced.
-- The server can run a real OpenCode runtime behind the `/api/opencode/:projectId`
-  proxy. In production-like auth mode, unsandboxed host runtime startup is
+- The server runs a real DSH runtime container per project and holds the only
+  connection to it. In production-like auth mode, unsandboxed host runtime startup is
   refused unless `OPEN_SCIENCE_ALLOW_UNSANDBOXED_RUNTIME=true`; use
   `OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker` for the server-managed container
   launch plan. Production Compose does not mount the Docker socket into the Web
@@ -209,8 +213,7 @@ For a stricter readiness assessment of the current Web adaptation, see
   runtime state. Per-launch cleanup failures return `runtime_cleanup_failed`
   before any new container is launched. Explicitly opted-in host runtimes also
   attempt conservative cleanup
-  of a stale same-project OpenCode `serve` PID recorded in runtime state before
-  startup, but Docker remains the recommended hosted sandbox. Without a real
+  of a stale same-project kernel PID recorded in runtime state before startup, but Docker remains the recommended hosted sandbox. Without a real
   runtime, `OPEN_SCIENCE_RUNTIME_MODE=mock` provides a test/runtime placeholder
   while model configuration is deferred; production readiness and
   `start_runtime` reject it unless `OPEN_SCIENCE_ALLOW_MOCK_RUNTIME=true` is
@@ -228,17 +231,13 @@ For a stricter readiness assessment of the current Web adaptation, see
   `OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS` and
   `OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT`; exceeding either
   limit returns `runtime_proxy_limit_exceeded` before additional runtime work is
-  started. The `/api/opencode/:projectId/*` proxy also has a server-side
-  route/method allowlist for the Web client's session, message, event, catalog,
-  question, permission, cancel, and session-delete calls. Runtime config/auth,
-  provider OAuth, MCP mutation, unsupported methods, and unknown upstream paths
-  return `runtime_proxy_forbidden` before request-body parsing or runtime
-  startup. Allowed mutation calls then validate their JSON-object payload shape
-  before runtime startup; malformed prompt, slash-command, shell, question, or
-  permission payloads return `invalid_runtime_proxy_payload` without contacting
-  OpenCode. Stale abort/session-delete controls are idempotent and do not wake a
-  stopped runtime; stale question and permission mutations return
-  `runtime_not_running` instead of starting a new agent. Started runtimes are
+  started. The kernel wire itself is allow-listed rather than open: the server
+  may call only the unary methods and stream endpoints named in
+  `packages/harness-port/seam-manifest.json`, and everything else the kernel
+  exposes — credentials, settings, workspace mutation, model catalogs, agent
+  presets, goals, message feedback — is on that manifest's `denied` list, so a
+  method the product does not use cannot be reached even by accident. Stale
+  abort and cancel controls are idempotent and do not wake a stopped runtime. Started runtimes are
   also stopped after
   `OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS` with no active proxied request or SSE
   stream; the default is 30 minutes, and values less than or equal to zero
@@ -255,10 +254,13 @@ For a stricter readiness assessment of the current Web adaptation, see
   `new_dated_workspace` also stops the selected project's attached or starting
   runtime, so the next runtime start or proxied request is launched against the
   newly selected folder instead of continuing with the previous mount.
-  Before starting OpenCode, the server synchronizes manifest-backed skills from
-  `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` into the project runtime's
-  `XDG_CONFIG_HOME/opencode/skills` directory; the default source is the
-  first-party `runtime/skills/core` pack copied into the Web service image.
+  Skills are no longer synchronized per project. The runtime image bakes its
+  skill roots in at build time (`/opt/evimed` for the core and capability packs,
+  `/usr/local/share/evimed` for the curated-scientific pack), and the generated
+  profile patch names those paths. `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` now only
+  feeds the release manifest's skill-pack digests, which is what a deployment is
+  checked against. Copying a tree per project is what made a run reference a
+  directory the image does not have.
   In hosted Web mode, the Skills page is a read-only runtime catalog: it lists
   server-reported agents and skills, but hides custom skill installation and
   local scientific-environment detection. The Web command API also returns an
@@ -278,8 +280,8 @@ For a stricter readiness assessment of the current Web adaptation, see
   origins are wildcard, invalid, local-development, non-HTTPS, or not exact
   origins.
   Production CSP restricts browser connections to the hosted origin so the
-  frontend cannot reach browser-local services or a bare OpenCode runtime
-  instead of the `/api/opencode/:projectId` proxy. Development mode keeps
+  frontend cannot reach browser-local services or a bare kernel instead of the
+  server's own runtime routes. Development mode keeps
   localhost/WebSocket connect allowances for local debugging.
   Malformed cookie values are ignored during session lookup so authentication
   failures remain stable JSON responses instead of internal decode errors.
@@ -299,8 +301,8 @@ For a stricter readiness assessment of the current Web adaptation, see
   accidentally left in development mode, local mode has at least one configured
   user, OIDC has valid HTTPS issuer/client/callback settings and separate
   non-placeholder client/flow secrets, production resource limits are valid and bounded, production
-  backup/restore ownership is explicitly configured, and the selected OpenCode
-  runtime sandbox is viable. The
+  backup/restore ownership is explicitly configured, and the selected runtime
+  sandbox is viable. The
   Compose service uses `/api/ready` for its healthcheck. Static frontend assets
   are served without following symbolic links, and readiness fails if the
   configured static `index.html` is a symbolic link. The hosted Settings page
@@ -318,8 +320,8 @@ For a stricter readiness assessment of the current Web adaptation, see
   reconnect the browser client to the proxied runtime URL; stop detaches the
   browser client after the server runtime stops. The hosted live-session page
   uses the same server runtime bootstrap path when the runtime is stopped, so
-  browser users are not directed to run or connect to a bare `opencode serve`
-  process. Log read APIs under
+  browser users are never directed to run or connect to a kernel process
+  themselves. Log read APIs under
   `/api/logs/*` read only the
   latest `OPEN_SCIENCE_MAX_LOG_READ_BYTES` bytes across the current log and
   its `.1` rotation before applying the requested row limit; both files reject
@@ -506,7 +508,11 @@ OPEN_SCIENCE_ENABLE_KERNEL=false
 OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker
 OPEN_SCIENCE_KERNEL_PYTHON_BIN=python3
 OPEN_SCIENCE_ALLOW_UNSANDBOXED_KERNEL=false
-OPEN_SCIENCE_OPENCODE_VERSION=1.17.13
+OPEN_SCIENCE_DSH_VERSION=0.1.2-alpha.3
+OPEN_SCIENCE_DSH_CORDIS_VERSION=4.0.2
+OPEN_SCIENCE_SOCKET_VERSION=0.1.0
+OPEN_SCIENCE_NODE_VERSION=22.22.0
+OPEN_SCIENCE_PNPM_VERSION=11.7.0
 OPEN_SCIENCE_UV_VERSION=0.11.26
 OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS=30000
 OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS=120000
@@ -520,7 +526,7 @@ OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET=/run/open-science-controller/controller.s
 OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS=10000
 OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS=500
 OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL=false
-OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-opencode:opencode-1.17.13-uv-0.11.26
+OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26
 OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true
 OPEN_SCIENCE_RUNTIME_TRANSPORT=unix
 OPEN_SCIENCE_RUNTIME_NETWORK_MODE=none
@@ -679,7 +685,7 @@ The smoke tool fetches the CSRF token from `/api/me`, never prints the cookie,
 and rejects values that are not an exact Open Science session cookie. Remove
 the temporary cookie file immediately after the run.
 
-For real OpenCode runtimes, readiness fails unless host mode is explicitly
+For real DSH runtimes, readiness fails unless host mode is explicitly
 allowed or Docker mode has a reachable, release-matched Runtime Controller and
 a configured runtime image. In production Docker runtime mode, any
 `OPEN_SCIENCE_RUNTIME_NETWORK_MODE`
@@ -692,9 +698,12 @@ acknowledgement is a deployment gate, not a substitute for firewall/proxy
 controls or network telemetry. Production Docker readiness also
 verifies the configured runtime image with `docker image inspect`. For
 production, the inspected image ID and the image's
-`io.open-science.opencode.version` / `io.open-science.uv.version` labels must
+`io.open-science.runtime.version` / `io.open-science.uv.version` labels must
 match the mounted deployment release manifest; only checking that a tag exists
-is not sufficient. Set
+is not sufficient. Those two labels are deliberately kernel-neutral: the gate
+used to read `io.open-science.opencode.version`, which a DSH image does not
+publish, so readiness failed `runtime_image_metadata_missing` on every DSH
+deployment — a check that could not survive the kernel it was gating. Set
 `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=false` only if the deployment
 deliberately relies on Docker lazy-pulling the image at runtime. Production
 readiness rejects `OPEN_SCIENCE_RUNTIME_MODE=mock` unless
@@ -706,7 +715,7 @@ is supported only with `OPEN_SCIENCE_KERNEL_SANDBOX_MODE=docker`: the server
 runs Python in the reviewed runtime image, mounts only the selected project
 workspace at `/workspace`, applies the same CPU, memory, PID, read-only root,
 tmpfs, capability-drop, no-new-privileges, and optional container-user controls
-as the OpenCode runtime, and forces `--network none`. Readiness checks Docker
+as the agent runtime, and forces `--network none`. Readiness checks Docker
 availability and, when `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=true`, the
 configured runtime image; kernel `docker run` also uses `--pull never` in that
 mode. The hosted frontend exposes Python-only notebook creation, cell execution,
@@ -744,7 +753,7 @@ export OPEN_SCIENCE_RELEASE_ID="2026.07.10-release.1"
 export OPEN_SCIENCE_SOURCE_REVISION="$(git rev-parse HEAD)"
 export OPEN_SCIENCE_BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 export OPEN_SCIENCE_WEB_CONTAINER_IMAGE="open-science-web:0.1.3"
-export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-opencode:opencode-1.17.13-uv-0.11.26"
+export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26"
 pnpm release:manifest
 pnpm verify:release-manifest
 
@@ -760,7 +769,7 @@ maintaining two independent copies. `pnpm release:manifest` refuses placeholder
 release IDs, non-SHA source revisions, invalid timestamps, unversioned or
 `latest` image references, missing image IDs, symbolic-link skill/input files,
 and undeclared manifest fields. It records the actual Web and runtime Docker
-image IDs, exact OpenCode/uv and monitoring versions, the core skill-pack
+image IDs, exact DSH/uv and monitoring versions, the core skill-pack
 digest/file count, and SHA-256 digests of the package lock, package/build
 configuration, complete hosted frontend/server/SDK/shared source trees,
 Dockerfiles, runtime socket launcher, Compose/Caddy configuration, and
@@ -792,10 +801,12 @@ Do not add a wildcard or host-address API mapping. Host preflight validates
 `OPEN_SCIENCE_API_PORT` as a TCP port; change it only to avoid a host-local port
 collision.
 
-For a real containerized OpenCode runtime, build or supply an image named by
+For a real containerized DSH runtime, build or supply an image named by
 `OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE`. The Compose file defaults to
-`OPEN_SCIENCE_RUNTIME_MODE=opencode` and
-`OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker`. Only the unexposed
+`OPEN_SCIENCE_RUNTIME_MODE=kernel` and
+`OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker`. `OPEN_SCIENCE_RUNTIME_MODE` takes
+only `kernel` or `mock` now; a deployment still passing `opencode` is refused at
+startup by name rather than starting with the value ignored. Only the unexposed
 `open-science-runtime-controller` service mounts the host Docker socket. The Web
 API mounts a read-only view of a separate control volume and calls the controller over
 `/run/open-science-controller/controller.sock`; the controller mounts `/data`
@@ -823,10 +834,12 @@ For an existing Compose installation, set `OPEN_SCIENCE_DATA_VOLUME` to its
 current volume name or migrate the stopped data volume before first startup;
 silently accepting the new default would select an empty volume.
 
-`OPEN_SCIENCE_RUNTIME_TRANSPORT=unix` starts OpenCode on container loopback and
-uses `socat` to expose HTTP/SSE through
-`runtime/container-runtime/control/opencode.sock` inside that project's runtime
-subpath. The API connects to that socket through its own data-volume mount, so a
+`OPEN_SCIENCE_RUNTIME_TRANSPORT=unix` starts the kernel on container loopback
+and uses `socat` to expose it through
+`runtime/container-runtime/control/dsh.sock` inside that project's runtime
+subpath. The socket file carries the kernel's name on purpose: two kernels speak
+different protocols, and a stale socket that still accepts connections is a
+runtime that looks alive and answers nothing the caller understands. The API connects to that socket through its own data-volume mount, so a
 sibling runtime is not addressed through the API container's `127.0.0.1` and no
 runtime TCP port is published. Production readiness rejects an invalid named
 volume or a volume-backed runtime configured with the TCP transport.
@@ -838,21 +851,27 @@ and caller-supplied headers, bounds time and response bytes, and reuses the
 active runtime gateway token. Keep
 `OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS=false`; adding a source to the
 catalog or mapping it to a Skill does not connect it through this gateway.
-The repository includes a runtime image definition that downloads the pinned
-OpenCode and `uv` binaries for `linux/amd64` or `linux/arm64`. BuildKit supplies
-the target architecture, so a native ARM64 build cannot silently fall back to
-AMD64 artifacts. Asset downloads use bounded connection/low-speed timeouts,
-retry transient failures, and resume partial release archives. The image verifies each
-archive against an architecture-specific SHA-256 build argument before
-extraction, verifies the matching OpenCode and selected uv MIT license texts,
-and preserves those texts under `/usr/share/licenses`. When changing either
-version, update every matching archive and license digest in the same reviewed
-release change; a mismatched asset fails the image build:
+The repository includes a runtime image definition (`deploy/runtime-dsh/`) that
+downloads the pinned Node and `uv` binaries for `linux/amd64` or `linux/arm64`,
+installs the pinned DSH kernel from npm, and copies this repository's
+`packages/socket` bundle in as the kernel's plugin composition. BuildKit supplies the target architecture, so a native ARM64 build cannot
+silently fall back to AMD64 artifacts. Asset downloads use bounded
+connection/low-speed timeouts, retry transient failures, and resume partial
+release archives. The image verifies each archive against an
+architecture-specific SHA-256 build argument before extraction, verifies the
+selected uv MIT license text, and preserves those texts under
+`/usr/share/licenses`. The npm install is additionally pinned in time by
+`DSH_PUBLISHED_BEFORE`: `@deepseek-ai/dsh` declares its 61 subpackages as a caret
+range, so naming an exact version pins one package and floats the rest — asking
+the registry for the tree as it stood at that instant is the only way to install
+what the pin was tested against. When changing any version, update every matching
+archive and license digest in the same reviewed release change; a mismatched
+asset fails the image build:
 
 ```bash
 docker compose -f deploy/web/docker-compose.yml \
   --profile runtime-image \
-  build opencode-runtime-image
+  build dsh-runtime-image
 ```
 
 Pre-pull or build the image before marking the service healthy, or set
@@ -879,7 +898,7 @@ pnpm smoke:deployment
 
 To include runtime startup, proxied SSE, and runtime stop verification, set
 `OPEN_SCIENCE_SMOKE_RUNTIME=true`. In production this should only be run after
-the OpenCode runtime image has been built or pulled on the Docker host and the
+the DSH runtime image has been built or pulled on the Docker host and the
 runtime is using the intended transport and network policy. The default smoke
 does not send a model prompt and therefore runs with `--network none`.
 
@@ -924,9 +943,9 @@ Linux CI profiles use `OPEN_SCIENCE_RUNTIME_NETWORK_MODE=none`; HTTP/SSE remains
 reachable over the Unix socket. Do not use the bridge escape hatch for untrusted
 workloads until outbound destinations are restricted or independently logged.
 The writable container paths
-are the selected project workspace, `/runtime` for OpenCode/XDG state, and the
+are the selected project workspace, `/runtime` for kernel state, and the
 configured tmpfs. `OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS` bounds the
-initial upstream connection. Non-streaming OpenCode proxy responses are buffered
+initial upstream connection. Non-streaming runtime responses are buffered
 only up to `OPEN_SCIENCE_MAX_JSON_BYTES` and must complete within
 `OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS`; SSE event streams remain
 long-lived and are controlled by browser disconnects plus the runtime idle
@@ -934,19 +953,22 @@ timer. Browser-direct shell proxying to `/session/:id/shell` is
 disabled unless `OPEN_SCIENCE_ALLOW_DIRECT_SHELL=true`; host-mode runtimes also
 require `OPEN_SCIENCE_ALLOW_HOST_SHELL=true`, so direct shell cannot be enabled
 by a browser-side UI change alone. `OPEN_SCIENCE_RUNTIME_CONTAINER_USER` can
-run the OpenCode container as a non-root UID/GID after the mounted data volume
+run the runtime container as a non-root UID/GID after the mounted data volume
 permissions have been verified for that identity.
-The Web service image copies only the first-party core skills by default.
-Set `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` to a comma-separated allowlist of reviewed
-skill-pack directories, or to an empty value to disable managed skill
-deployment. Do not add external skill packs to that list until their hosted-use
-license and notices have been reviewed.
+The runtime image bakes its skill roots in at build time, so there is no
+per-project copy step to disable. `OPEN_SCIENCE_RUNTIME_SKILL_DIRS` is a
+comma-separated allowlist of reviewed skill-pack directories, and it now feeds
+only the release manifest's skill-pack digests — the record a deployment is
+verified against. **Emptying it does not disable a deployment path; it blanks
+those digests**, which is why the earlier instruction to clear it has been
+removed rather than reworded. Do not add external skill packs to that list until
+their hosted-use license and notices have been reviewed.
 
-Host-mode OpenCode runtime is for trusted development or explicitly accepted
+Host-mode runtime is for trusted development or explicitly accepted
 single-host deployments only. When host mode is enabled, startup reads
 `.openscience/runtime-state.json` and attempts to terminate a stale same-project
-OpenCode `serve` PID only if the process command line still matches the
-configured OpenCode command. This is a cleanup aid, not a replacement for a
+kernel PID only if the process command line still matches the configured kernel
+command. This is a cleanup aid, not a replacement for a
 container or worker sandbox.
 
 ## Data Backup and Restore
@@ -1162,7 +1184,7 @@ base64 envelope.
   Workspaces and runtime roots stay under the authenticated user's data root.
   File APIs scope `root=base` to the current project's workspace root, not to
   every project owned by that user. Non-default projects must be created with
-  `POST /api/projects` before commands, file APIs, or the OpenCode proxy can
+  `POST /api/projects` before commands, file APIs, or the runtime routes can
   use them. `OPEN_SCIENCE_DATA_DIR`, user roots, per-user project containers,
   project roots, project metadata files, project JSONL logs, task/runtime state
   files, active workspace directories, and hosted file APIs do not follow
@@ -1170,7 +1192,7 @@ base64 envelope.
   discovery.
 - Container runtime launch is implemented as a Docker sandbox plan with a
   repository runtime-image Dockerfile, but it still requires building or pulling
-  the OpenCode image on a Docker-capable deployment host. Server
+  the runtime image on a Docker-capable deployment host. Server
   kernels are disabled by default with `OPEN_SCIENCE_ENABLE_KERNEL=false`.
   Host Python kernels are blocked by `/api/ready` and `kernel_execute` in
   production. If kernels are enabled for a controlled deployment, use
@@ -1180,7 +1202,7 @@ base64 envelope.
   `OPEN_SCIENCE_KERNEL_TIMEOUT_MS`. Keep the Controller kernel concurrency
   limits within reviewed host capacity; Controller startup removes labelled
   kernel orphans and fails closed if removal does not succeed.
-- Real model use requires configuring a server-managed OpenCode profile and key
+- Real model use requires configuring a server-managed kernel profile and key
   storage. The hosted Settings UI hides provider key, OAuth, custom endpoint,
   and provider-removal controls until encrypted server-side key management is
   implemented. In hosted mode it also treats MCP/Jupyter tooling as
@@ -1206,7 +1228,7 @@ base64 envelope.
   include locally detected restrictive license files.
 - Treat runtime proxy logs as operational metadata only: they include sanitized
   route patterns, status/duration fields, and request/response byte counts, not
-  auth headers, cookies, `auth_token` query values, OpenCode `directory` paths,
+  auth headers, cookies, `auth_token` query values, workspace `directory` paths,
   prompts, request bodies, or response bodies. Runtime response headers are not
   treated as trusted browser headers; cookies, auth challenges, hop-by-hop
   headers, and direct runtime redirects are stripped or rewritten by the proxy.
@@ -1243,7 +1265,7 @@ base64 envelope.
 - Non-streaming runtime proxy responses are also capped by
   `OPEN_SCIENCE_MAX_JSON_BYTES` and
   `OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS`, so a stalled or oversized
-  upstream OpenCode JSON response returns a structured proxy error instead of
+  upstream kernel JSON response returns a structured proxy error instead of
   holding an API worker connection indefinitely. SSE responses are excluded from
   this request timeout and remain controlled by connection close, proxy
   connection limits, and the runtime idle timer.
@@ -1402,7 +1424,7 @@ frontend tests, hosted frontend build, and a Tauri backend compile check on
 pull requests, pushes to `main`/`master`, and manual dispatch. Its dependent
 `docker-hosted` job also builds both release-labelled images on Linux, generates
 and verifies the deployment manifest from actual image IDs, starts the API and
-monitoring Compose profiles, exercises the real hosted OpenCode connection
+monitoring Compose profiles, exercises the real hosted DSH connection
 boundary and project-scoped Docker Python kernel with deployment smoke, verifies
 runtime and kernel cleanup, and tears down the stack. This complements but does
 not replace target-host TLS, storage, network, backup, and external

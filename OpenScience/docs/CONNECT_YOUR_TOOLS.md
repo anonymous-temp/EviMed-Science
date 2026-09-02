@@ -40,7 +40,7 @@ bridge. In Settings → **MCP servers**, use the add form:
 - **remote** — a URL the app connects to over HTTP. Example:
   `https://mcp.your-lab.internal/sse`.
 
-The entry is written to the bundled OpenCode's config and applies immediately;
+The entry is written to the runtime's own config and applies immediately;
 its live status (connected / failed) shows in the same list.
 
 ### Minimal local MCP server (Python)
@@ -65,10 +65,19 @@ Add it as a **local** server with the command that launches it. Restart-free.
 ## Bring your own skill
 
 A skill is a folder with a `SKILL.md` (instructions the agent follows) plus any
-scripts/templates it needs. Install one from the **Skills** page (paste a URL or
-Markdown; the agent saves it under the workspace's `.opencode/skills/`). The
-app also bundles first-party skills (e.g. `traceability-review`) and the
-`ai4s-skills` pack.
+scripts/templates it needs. On the desktop you can install one from the **Skills**
+page (paste a URL or Markdown) and the agent saves it into the profile's skills
+directory. The hosted service does not accept browser-installed skills: its Skills
+page is a read-only catalog of what the runtime image already carries, because a
+skill body is executable instruction and a multi-tenant runtime must not take one
+from a browser. Either way the app bundles first-party skills (e.g.
+`traceability-review`) and the `ai4s-skills` pack.
+
+A skill body must carry paths **relative to the skill root** — the Agent Skills
+standard — and never a deployment path. The absolute roots are a deployment fact
+that differs per family and is declared once by the runtime; 45 shipped skills once
+pointed at a config directory the image no longer had, and a wrong path in a
+Markdown body fails at the moment a model tries to use it and nowhere else.
 
 ## Safety
 

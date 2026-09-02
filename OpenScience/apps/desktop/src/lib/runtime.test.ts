@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OpenCodeEvent, HistoryMessage } from "@ai4s/sdk";
+import type { RuntimeEvent, HistoryMessage } from "@ai4s/sdk";
 import type { ArtifactBlock } from "@ai4s/shared";
 import {
   datedWorkspaceName,
@@ -15,7 +15,7 @@ import {
 
 const empty: FoldState = { blocks: [], index: {} };
 const S = "ses_1";
-const foldAll = (events: OpenCodeEvent[], from: FoldState = empty): FoldState =>
+const foldAll = (events: RuntimeEvent[], from: FoldState = empty): FoldState =>
   events.reduce((s, e) => foldEvent(s, e), from);
 
 describe("tidyToolTitle", () => {

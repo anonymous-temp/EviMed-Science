@@ -72,7 +72,7 @@ const agents = [
 const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
   hasWebApi: true,
-  kernel: "dsh" as "dsh" | "opencode",
+  sessionView: "run-stream" as "run-stream" | "legacy",
 }));
 
 vi.mock("@/lib/apiClient", () => ({
@@ -80,10 +80,7 @@ vi.mock("@/lib/apiClient", () => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
-  webRuntimeProfile: () => ({
-    kernel: mocks.kernel,
-    sessionView: mocks.kernel === "dsh" ? "run-stream" : "legacy",
-  }),
+  webRuntimeProfile: () => ({ sessionView: mocks.sessionView }),
 }));
 
 function LocationProbe() {
@@ -96,7 +93,7 @@ describe("AgentsPage", () => {
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     mocks.hasWebApi = true;
-    mocks.kernel = "dsh";
+    mocks.sessionView = "run-stream";
     useUiStore.setState({ composerDraft: null });
   });
 
@@ -191,8 +188,8 @@ describe("AgentsPage", () => {
     expect(draft).toBe(capabilityBrief("药品安全性分析", "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"));
   });
 
-  it("keeps the retiring view's session binding, because the kernel rollback is one line", async () => {
-    mocks.kernel = "opencode";
+  it("keeps the retiring view's session binding, because the desktop shell still renders it", async () => {
+    mocks.sessionView = "legacy";
     render(
       <MemoryRouter initialEntries={["/agents"]}>
         <Routes>

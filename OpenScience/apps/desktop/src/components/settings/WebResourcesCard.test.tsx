@@ -37,8 +37,8 @@ vi.mock("@/lib/toast", () => ({
 describe("WebResourcesCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.startWebRuntime.mockResolvedValue("/api/opencode/paper1");
-    mocks.restartWebRuntime.mockResolvedValue("/api/opencode/paper1");
+    mocks.startWebRuntime.mockResolvedValue("https://science.example/api/runtime");
+    mocks.restartWebRuntime.mockResolvedValue("https://science.example/api/runtime");
     mocks.stopWebRuntime.mockResolvedValue(undefined);
     mocks.connectRetry.mockResolvedValue(undefined);
   });
@@ -71,7 +71,7 @@ describe("WebResourcesCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "启动托管运行时" }));
 
     await waitFor(() => expect(mocks.startWebRuntime).toHaveBeenCalledTimes(1));
-    expect(mocks.setServerUrl).toHaveBeenCalledWith("/api/opencode/paper1");
+    expect(mocks.setServerUrl).toHaveBeenCalledWith("https://science.example/api/runtime");
     expect(mocks.connectRetry).toHaveBeenCalledTimes(1);
     expect(mocks.toastSuccess).toHaveBeenCalledWith("托管运行时已启动。");
     await waitFor(() => expect(mocks.fetchWebMetrics).toHaveBeenCalledTimes(2));
@@ -89,7 +89,7 @@ describe("WebResourcesCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "重启托管运行时" }));
 
     await waitFor(() => expect(mocks.restartWebRuntime).toHaveBeenCalledTimes(1));
-    expect(mocks.setServerUrl).toHaveBeenCalledWith("/api/opencode/paper1");
+    expect(mocks.setServerUrl).toHaveBeenCalledWith("https://science.example/api/runtime");
     expect(mocks.connectRetry).toHaveBeenCalledTimes(1);
     expect(mocks.toastSuccess).toHaveBeenCalledWith("托管运行时已重启。");
 

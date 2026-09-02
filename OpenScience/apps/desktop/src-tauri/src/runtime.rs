@@ -1,13 +1,14 @@
-// Manages the bundled OpenCode sidecar so it never interferes with any OpenCode
-// the user already has: it runs the *bundled* binary, on a *dedicated free port*,
-// with an *app-private* XDG config/data dir, and is killed on app exit.
+// The desktop shell's runtime module. It used to supervise a bundled agent
+// kernel — private XDG dirs, a dedicated free port, killed on app exit — and
+// the workspace, config and approval-mode plumbing below is all still that
+// kernel's. The kernel itself is gone (see `spawn_sidecar`), so every path
+// that would start one now ends in one named error instead.
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::collections::BTreeSet;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::process::CommandChild;
-use tauri_plugin_shell::ShellExt;
 
 use crate::opencode_config::merge_config;
 
@@ -149,6 +150,13 @@ pub fn import_opencode_login(app: AppHandle, state: State<'_, RuntimeState>) -> 
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::copy(&src, &dst).map_err(|e| format!("copy failed: {e}"))?;
+    // Harden here, because the kernel start that used to do it is gone. This
+    // file is a live provider credential copied out of the user's own store,
+    // and it was protected only by the 0700 the (now removed) spawn put on the
+    // runtime root — so a copy made today would land under a default umask and
+    // stay there. Lock the root and the file itself.
+    tighten_private(&runtime_root(&app)?);
+    tighten_private(&dst);
 
     // Restart the running sidecar so /config/providers reflects the login.
     if state.url.lock().unwrap().is_some() {
@@ -381,66 +389,31 @@ pub(crate) fn free_port() -> u16 {
         .unwrap_or(43917)
 }
 
-fn spawn_sidecar(app: &AppHandle, port: u16) -> Result<CommandChild, String> {
-    let root = runtime_root(app)?;
-    let cfg = root.join("xdg-config");
-    let data = root.join("xdg-data");
-    let cache = root.join("xdg-cache");
-    let state = root.join("xdg-state");
-    // Run OpenCode inside the user-facing workspace, NOT the app's cwd (which is `/`
-    // when launched from Finder) — otherwise it scans the whole filesystem root.
-    let workspace = workspace_dir(app)?;
-    for d in [&cfg, &data, &cache, &state] {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-    }
-    // Ship the bundled scientific skills into the app-private OpenCode profile.
-    deploy_bundled_skills(app);
-    // Safety default (AGENTS.md non-negotiable): on first run, seed the
-    // "approve" permission mode so dangerous shell commands prompt for
-    // approval. A mode the user chose (approve or full) is never overridden.
-    let cfg_file = effective_config_file(app)?;
-    let existing = std::fs::read_to_string(&cfg_file).unwrap_or_default();
-    if let Some(seeded) = crate::opencode_config::seed_default_permission(&existing) {
-        if let Some(dir) = cfg_file.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-        }
-        std::fs::write(&cfg_file, seeded).map_err(|e| e.to_string())?;
-    }
-    // Secrets live under the runtime root (provider/connector keys in
-    // opencode.jsonc, OpenCode's auth.json) — owner-only on every start, so
-    // existing installs are repaired and whatever the sidecar later rewrites
-    // inside stays unreachable to other users regardless of its umask.
-    tighten_private(&root);
-    tighten_private(&cfg_file);
-    let home = std::env::var("HOME").unwrap_or_default();
-    let port_str = port.to_string();
+/// What every local-kernel path now ends in.
+///
+/// The frontend matches on the code, not on the sentence, so the code is the
+/// contract (`userFacingRuntimeError` in `apps/desktop/src/lib/runtime.ts`
+/// translates it); the English after it is what a developer sees in a log.
+/// It names where the product still works instead of naming the missing file,
+/// because "sidecar not found" tells a person nothing they can act on.
+const LOCAL_AGENT_KERNEL_REMOVED: &str = "local_agent_kernel_removed: this desktop build bundles no agent kernel; \
+use the hosted deployment, or run the local evimed-web profile (pnpm dev:evimed) and point this shell at it";
 
-    let cmd = app
-        .shell()
-        .sidecar("opencode")
-        .map_err(|e| format!("sidecar not found: {e}"))?
-        .args(["serve", "--hostname", "127.0.0.1", "--port", port_str.as_str()])
-        // Require auth on every request (P0-7): without a password the server
-        // trusts ANY localhost-origin page (verified in the 1.17.13 source —
-        // its CORS allowlist admits http://localhost:*/127.0.0.1:* wholesale,
-        // and `--cors "*"` was only ever an exact-match literal, not a
-        // wildcard). The webview authenticates via the SDK; nothing else may.
-        .env("OPENCODE_SERVER_PASSWORD", server_password())
-        // App-private dirs: OpenCode never touches the user's ~/.config/opencode.
-        .env("XDG_CONFIG_HOME", cfg.to_string_lossy().to_string())
-        .env("XDG_DATA_HOME", data.to_string_lossy().to_string())
-        .env("XDG_CACHE_HOME", cache.to_string_lossy().to_string())
-        .env("XDG_STATE_HOME", state.to_string_lossy().to_string())
-        .env("HOME", home)
-        .current_dir(workspace);
-    // GUI-launched apps get a minimal PATH; give the agent the user's real tools.
-    #[cfg(unix)]
-    let cmd = cmd.env("PATH", enriched_path());
-
-    let (mut rx, child) = cmd.spawn().map_err(|e| format!("failed to spawn opencode: {e}"))?;
-    // Drain events so the child's stdout/stderr buffer never blocks it.
-    tauri::async_runtime::spawn(async move { while rx.recv().await.is_some() {} });
-    Ok(child)
+/// Refuse to start a local kernel, loudly.
+///
+/// This is the single choke point — `start_runtime` and `restart_sidecar` both
+/// come through here — which is why the refusal lives here rather than in each
+/// caller. It must be an error and never a silent `Ok`: a local-kernel start
+/// that quietly does nothing is indistinguishable from one that worked until
+/// the first prompt hangs, and that is the failure this migration produced
+/// three times.
+///
+/// The profile preparation that used to run first (bundled-skill deployment,
+/// permission-mode seeding) now has no caller. It is left in place rather than
+/// unpicked here because it is the desktop kernel's whole config surface and
+/// should be removed with it, in one change that a Rust toolchain can check.
+fn spawn_sidecar(_app: &AppHandle, _port: u16) -> Result<CommandChild, String> {
+    Err(LOCAL_AGENT_KERNEL_REMOVED.to_string())
 }
 
 /// Kill and respawn the sidecar on its stable port, returning the base URL.
@@ -460,9 +433,11 @@ fn restart_sidecar(app: &AppHandle, state: &RuntimeState) -> Result<String, Stri
     Ok(url)
 }
 
-/// Start the bundled OpenCode (idempotent). Returns its base URL. `async`:
-/// skill-pack deployment + process spawn at startup must not block the UI
-/// thread while the first window paints.
+/// Start the local kernel (idempotent) and return its base URL — which now
+/// always fails with `LOCAL_AGENT_KERNEL_REMOVED`, because this build has no
+/// kernel to start. Kept as a command so the frontend gets that error to show
+/// instead of an unhandled missing-command rejection, and kept `async` because
+/// its replacement will spawn a process again.
 #[tauri::command(async)]
 pub fn start_runtime(app: AppHandle, state: State<'_, RuntimeState>) -> Result<String, String> {
     if let Some(url) = state.url.lock().unwrap().clone() {

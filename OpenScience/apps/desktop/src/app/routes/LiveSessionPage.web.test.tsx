@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   status: "offline" as "offline" | "ready",
   draftResearchAgent: null as null | Record<string, unknown>,
   specialtySelectionPending: false,
+  serverUrl: "http://127.0.0.1:4096",
 }));
 
 vi.mock("@/lib/apiClient", () => ({
@@ -35,7 +36,13 @@ vi.mock("@/lib/runtime", () => ({
     switching: false,
     sending: false,
     runningSessions: {},
-    serverUrl: "/api/opencode/default",
+    // A loopback address, deliberately. The only element that can render a
+    // server URL is the local-runtime block, so a fixture serving a relative
+    // path made the "no loopback address on a hosted page" assertion below
+    // unfailable: the string it looks for could not appear even if the hosted
+    // branch rendered that block. Mutation-checked — flipping the hosted
+    // condition now turns that assertion red.
+    serverUrl: mocks.serverUrl,
     sessions: [],
     researchAgents: mocks.draftResearchAgent ? [mocks.draftResearchAgent] : [],
     researchSessionBindings: {},
@@ -149,7 +156,7 @@ describe("LiveSessionPage hosted web mode", () => {
     expect(mocks.openSession).toHaveBeenCalledWith("ses_existing");
   });
 
-  it("starts the server-managed runtime instead of exposing local opencode serve", async () => {
+  it("starts the server-managed runtime instead of pointing the reader at a local one", async () => {
     render(
       <MemoryRouter initialEntries={["/live"]}>
         <Routes>
@@ -159,7 +166,11 @@ describe("LiveSessionPage hosted web mode", () => {
     );
 
     expect(mocks.startDraft).toHaveBeenCalled();
-    expect(screen.queryByText(/opencode serve/)).not.toBeInTheDocument();
+    // A hosted page must never hand the reader a runtime to start themselves.
+    // This used to be spelled as the absence of the retired kernel's `serve`
+    // command; a loopback address is the part that actually made it local, and
+    // it survives the kernel that is gone.
+    expect(screen.queryByText(/127\.0\.0\.1|localhost/)).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "启动科研服务" })).toHaveLength(2);
 
     await userEvent.click(screen.getAllByRole("button", { name: "启动科研服务" })[1]);
