@@ -54,6 +54,7 @@ import {
   hasCommandBackend,
   hasWebApi,
   loginWeb,
+  webRuntimeProfile,
   WEB_SESSION_ENDED_EVENT,
   type WebAuthMethods,
 } from "@/lib/apiClient";
@@ -67,12 +68,30 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 /**
  * Settings. ONE configuration surface: everything talks to the bundled
  * OpenCode's own config/auth API — no separate "model key" concept.
+ *
+ * Except under the DSH kernel, where three of those cards describe something
+ * that no longer exists (§18.3, F1 「设置清理」). The runtime URL, the provider
+ * catalogue and the MCP server list are all the retiring kernel's own config
+ * API; a DSH deployment has a server-managed runtime, a gateway-pinned model
+ * and a bundle-mounted tool set, so those cards would let a person configure
+ * nothing and read as though they still could. Account, projects, resources
+ * and readiness stay — they are the control plane's, not the kernel's.
+ *
+ * Hidden, not deleted, and keyed on the kernel the server reports rather than
+ * on a build flag: `OPEN_SCIENCE_RUNTIME_KERNEL=opencode` is a one-line
+ * rollback, and a rollback that needs a new bundle is not a rollback.
  */
 export function SettingsPage() {
   const { status, serverUrl, setServerUrl, connect, disconnect, clearHostedSession, defaultModel, loadCatalog } =
     useRuntimeStore();
   const connected = status === "ready";
   const hostedWeb = hasWebApi && !isTauri;
+  // Defaults to the retiring kernel, for the same reason `SessionRoute` does:
+  // before `/api/me` answers, the safe assumption is what has been in
+  // production, not what is still being accepted.
+  const [kernel, setKernel] = useState(() => webRuntimeProfile().kernel);
+  /** The runtime, its models and its tools are the server's under DSH. */
+  const managedRuntime = hostedWeb && kernel === "dsh";
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
@@ -172,7 +191,10 @@ export function SettingsPage() {
   useEffect(() => {
     if (!hasWebApi) return;
     void fetchWebMe()
-      .then((me) => setWebAccount(me ? me.user.name || me.user.id : null))
+      .then((me) => {
+        setWebAccount(me ? me.user.name || me.user.id : null);
+        setKernel(webRuntimeProfile().kernel);
+      })
       .catch(() => setWebAccount(null));
     void fetchWebAuthMethods()
       .then(setWebAuthMethods)
@@ -515,6 +537,19 @@ export function SettingsPage() {
           </>
         )}
 
+        {/* The retiring kernel's own three configuration surfaces. Under DSH
+          * there is nothing here a person could set: the runtime is started by
+          * the control plane, the model is pinned at the gateway, and the tool
+          * set is mounted by the bundle. */}
+        {managedRuntime ? (
+          <Card title="智能体运行时" hint="由控制面启动并管理">
+            <p className="text-ui text-muted">
+              本部署的运行时、模型与工具集都由服务端配置：运行时随项目启动，模型经网关固定，工具由能力包挂载。
+              这里没有需要你设置的项；运行状态见上方的「就绪」卡片。
+            </p>
+          </Card>
+        ) : (
+          <>
         {/* ---- Agent runtime ---- */}
         <Card
           title="智能体运行时"
@@ -1050,6 +1085,8 @@ export function SettingsPage() {
             </div>
           )}
         </Card>
+          </>
+        )}
 
         {/* ---- Workspace ---- */}
         <Card

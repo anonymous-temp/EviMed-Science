@@ -65,7 +65,48 @@ export type RunStreamFrame =
   | { type: "run/state"; seq: number; time: string; state: string; errorCode: string | null; verification: string | null; attempts: number }
   | { type: "run/event"; seq: number; time: string; event: RunEvent }
   | { type: "subagent/update"; seq: number; time: string; childSessionId: string; label: string; capability: string; status: string; report?: string }
-  | { type: "deliverable/update"; seq: number; time: string; id: string; contractKind: string; status: string; receipt?: unknown; issues?: RunIssue[] }
+  | {
+    type: "deliverable/update";
+    seq: number;
+    time: string;
+    id: string;
+    contractKind: string;
+    /** Which capability was asked for it, and which child was given the job. */
+    capability?: string;
+    title?: string;
+    childSessionId?: string | null;
+    status: string;
+    receipt?: DeliveryReceiptEntry;
+    issues?: RunIssue[];
+  }
+  // Declared by the control plane's stream since it was written, and — unlike
+  // the seven above — still without a publisher: on the DSH 0.1.2 wire these
+  // arrive as `waterfall` frames on the kernel's `$events` stream, and the
+  // control plane's own `watchHost` surfaces them to its caller while
+  // `dshEventPump` passes no `onEvent` at all, so nothing forwards one yet.
+  // The listener and the panel exist here first on purpose: hosted runs go out
+  // under `approval: never`, which auto-REFUSES, and a local profile runs
+  // `approval: ask` — so the moment the forwarder lands, a kernel that asks
+  // has somewhere to ask, instead of a run failing closed with the page blank.
+  | {
+    type: "approval/requested";
+    seq: number;
+    time: string;
+    requestId: string;
+    /** What wants to happen. `tool` is the closed vocabulary; `summary` is prose the control plane already localized. */
+    tool: string;
+    summary: string;
+    detail?: string;
+  }
+  | {
+    type: "question/requested";
+    seq: number;
+    time: string;
+    requestId: string;
+    question: string;
+    /** Offered answers, when the asker gave a closed set. Free text otherwise. */
+    options?: { id: string; label: string }[];
+  }
   // A snapshot, not a delta. The control plane only ever holds the aggregate:
   // the run's own projection (`.evimed-run/state.json`) counts evidence into
   // `{ total, byStatus }` and never carries per-record rows, so there was no
@@ -76,6 +117,24 @@ export type RunStreamFrame =
   | { type: "evidence/update"; seq: number; time: string; total: number; byStatus: Record<string, number> }
   | { type: "budget/update"; seq: number; time: string; steps: number; tokens: number; children: number; limits: Record<string, number> }
   | { type: "stream/gap"; seq: number; time: string; since: number; resumedAt: number };
+
+/**
+ * The budget's own limit keys.
+ *
+ * Written down because the wire uses one spelling and the page was reading
+ * another: the run's projection (`packages/socket/src/runMirror.mjs`
+ * `projectRunState`) emits `limits: { maxSteps, maxTokens, maxChildren }`, and
+ * the footer asked for `limits.steps`. `undefined` is falsy, so the "/ limit"
+ * half of every budget line silently never rendered — a budget shown without
+ * its ceiling reads as a run with no ceiling.
+ *
+ * @param limits the projection's own limits map @param key which ceiling
+ * @returns the limit, or null when the run declared none
+ */
+export function budgetLimit(limits: Record<string, number>, key: "steps" | "tokens" | "children"): number | null {
+  const value = limits[`max${key[0].toUpperCase()}${key.slice(1)}`];
+  return typeof value === "number" && value > 0 ? value : null;
+}
 
 export interface RunIssue {
   code: string;
@@ -93,12 +152,47 @@ export interface SubagentNode {
   report?: string;
 }
 
+/** One deliverable's entry in `delivery-receipt.json`, as the control plane forwards it. */
+export interface DeliveryReceiptEntry {
+  deliverableId: string;
+  contractKind: string;
+  capability: string;
+  attempt: number;
+  acceptedAt: string;
+  files: { path: string; sha256: string; bytes: number }[];
+  notices: string[];
+}
+
 export interface DeliverableNode {
   id: string;
   contractKind: string;
+  capability: string;
+  title: string;
+  /** The subagent the item was delegated to, when it was delegated at all. */
+  childSessionId: string | null;
   status: string;
   issues: RunIssue[];
-  receipt?: unknown;
+  receipt?: DeliveryReceiptEntry;
+}
+
+/**
+ * A request the run is blocked on until somebody answers it.
+ *
+ * Kept in the view rather than in a component: a reconnecting tab has to be
+ * able to see a request that arrived while it was away, and an answered one
+ * has to stop being shown in every tab, not just the one that answered.
+ */
+export interface RunInteraction {
+  requestId: string;
+  kind: "approval" | "question";
+  /** What is being asked, in one line. */
+  prompt: string;
+  detail?: string;
+  /** For an approval: the tool that wants to act. Empty for a question. */
+  tool: string;
+  options: { id: string; label: string }[];
+  /** Locally recorded once this browser answered, so the card stops asking. */
+  answered: boolean;
 }
 
 /** Everything the browser knows about one run. */
@@ -113,6 +207,8 @@ export interface RunView {
   blocks: ThreadBlock[];
   subagents: SubagentNode[];
   deliverables: DeliverableNode[];
+  /** Open requests from the kernel, newest last. Answered ones stay, marked. */
+  interactions: RunInteraction[];
   evidence: { total: number; byStatus: Record<string, number> };
   budget: { steps: number; tokens: number; children: number; limits: Record<string, number> };
   /**
@@ -137,6 +233,7 @@ export function emptyRunView(runId: string): RunView {
     blocks: [],
     subagents: [],
     deliverables: [],
+    interactions: [],
     evidence: { total: 0, byStatus: {} },
     budget: { steps: 0, tokens: 0, children: 0, limits: {} },
     unknownEvents: {},
@@ -178,16 +275,45 @@ export function applyRunFrame(view: RunView, frame: RunStreamFrame): RunView {
       return { ...next, subagents };
     }
     case "deliverable/update": {
-      const deliverables = next.deliverables.filter((node) => node.id !== frame.id);
-      deliverables.push({
+      // Replaced in place rather than appended: the control plane sends the
+      // deliverable's whole current record every time it changes, so a
+      // `rejected` followed by an `accepted` is one row that moved, not two.
+      // Order is kept — a plan reads as a plan, not as a recency list.
+      const index = next.deliverables.findIndex((node) => node.id === frame.id);
+      const node: DeliverableNode = {
         id: frame.id,
         contractKind: frame.contractKind,
+        capability: frame.capability ?? "",
+        title: frame.title || frame.id,
+        childSessionId: frame.childSessionId ?? null,
         status: frame.status,
         issues: frame.issues ?? [],
         ...(frame.receipt === undefined ? {} : { receipt: frame.receipt }),
-      });
+      };
+      const deliverables = [...next.deliverables];
+      if (index >= 0) deliverables[index] = node;
+      else deliverables.push(node);
       return { ...next, deliverables };
     }
+    case "approval/requested":
+      return { ...next, interactions: upsertInteraction(next.interactions, {
+        requestId: frame.requestId,
+        kind: "approval",
+        prompt: frame.summary,
+        ...(frame.detail ? { detail: frame.detail } : {}),
+        tool: frame.tool,
+        options: [],
+        answered: false,
+      }) };
+    case "question/requested":
+      return { ...next, interactions: upsertInteraction(next.interactions, {
+        requestId: frame.requestId,
+        kind: "question",
+        prompt: frame.question,
+        tool: "",
+        options: frame.options ?? [],
+        answered: false,
+      }) };
     case "evidence/update":
       return { ...next, evidence: { total: frame.total, byStatus: { ...frame.byStatus } } };
     case "budget/update":
@@ -201,6 +327,40 @@ export function applyRunFrame(view: RunView, frame: RunStreamFrame): RunView {
       return { ...next, unknownEvents: bump(next.unknownEvents, `frame:${unknown.type ?? "unnamed"}`) };
     }
   }
+}
+
+/**
+ * Adds a request, or refreshes one already on screen.
+ *
+ * A redelivered request must not become a second card: the stream replays on
+ * reconnect, and two cards asking the same thing is how a person answers the
+ * wrong one. An answer already given locally survives the replay.
+ *
+ * @param open @param request @returns the requests to show
+ */
+function upsertInteraction(open: RunInteraction[], request: RunInteraction): RunInteraction[] {
+  const index = open.findIndex((item) => item.requestId === request.requestId);
+  if (index < 0) return [...open, request];
+  const next = [...open];
+  next[index] = { ...request, answered: open[index].answered };
+  return next;
+}
+
+/**
+ * Records that this browser answered a request.
+ *
+ * Local, and deliberately so: the answer travels to the kernel over a route of
+ * its own, and this only stops the card asking again. Until the control plane
+ * forwards a resolution frame, a second tab keeps showing the question — which
+ * is the honest state, not a bug: nothing has told it the request was settled.
+ *
+ * @param view @param requestId @returns the view with that request marked answered
+ */
+export function markInteractionAnswered(view: RunView, requestId: string): RunView {
+  return {
+    ...view,
+    interactions: view.interactions.map((item) => (item.requestId === requestId ? { ...item, answered: true } : item)),
+  };
 }
 
 /** @param counts @param key @returns a new count map with `key` incremented */
@@ -358,6 +518,8 @@ export const RUN_STREAM_FRAME_TYPES = [
   "deliverable/update",
   "evidence/update",
   "budget/update",
+  "approval/requested",
+  "question/requested",
   "stream/gap",
 ] as const;
 

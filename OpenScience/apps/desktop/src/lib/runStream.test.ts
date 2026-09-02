@@ -5,6 +5,7 @@ import {
   applyRunEvent,
   applyRunFrame,
   emptyRunView,
+  markInteractionAnswered,
   openRunStream,
   type RunEvent,
   type RunStreamFrame,
@@ -33,6 +34,8 @@ describe("the browser's own run vocabulary", () => {
       "deliverable/update",
       "evidence/update",
       "budget/update",
+      "approval/requested",
+      "question/requested",
       "stream/gap",
     ]);
     expect(source).toBeDefined();
@@ -118,10 +121,86 @@ describe("the browser's own run vocabulary", () => {
       { type: "budget/update", ...at(5), steps: 12, tokens: 4000, children: 3, limits: { maxSteps: 100 } },
       { type: "subagent/update", ...at(6), childSessionId: "c1", label: "证据综述", capability: "clinical-evidence-synthesis", status: "completed" },
     ]);
-    expect(view.deliverables).toEqual([{ id: "d1", contractKind: "clinical-evidence-report", status: "accepted", issues: [] }]);
+    expect(view.deliverables).toEqual([{
+      id: "d1",
+      contractKind: "clinical-evidence-report",
+      capability: "",
+      title: "d1",
+      childSessionId: null,
+      status: "accepted",
+      issues: [],
+    }]);
     expect(view.evidence).toEqual({ total: 2, byStatus: { ready: 1, queued: 1 } });
     expect(view.budget.steps).toBe(12);
     expect(view.subagents).toHaveLength(1);
+  });
+
+  it("keeps a deliverable in plan order when its verdict changes, rather than moving it to the end", () => {
+    // The control plane sends the deliverable's whole current record on every
+    // change, so a plan whose second item is graded first must still read as a
+    // plan. Appending on update reordered it into a recency list, which is the
+    // one thing a plan must not be.
+    const view = fold(emptyRunView("run_1"), [
+      { type: "deliverable/update", ...at(1), id: "d1", contractKind: "research-brief", status: "planned" },
+      { type: "deliverable/update", ...at(2), id: "d2", contractKind: "clinical-evidence-report", status: "planned" },
+      { type: "deliverable/update", ...at(3), id: "d3", contractKind: "meta-analysis-report", status: "planned" },
+      // The one in the MIDDLE is graded first. An update that removes and
+      // re-appends leaves the order unchanged whenever the item happens to be
+      // last, so the assertion below only means something on this shape.
+      { type: "deliverable/update", ...at(4), id: "d2", contractKind: "clinical-evidence-report", status: "accepted" },
+    ]);
+    expect(view.deliverables.map((item) => item.id)).toEqual(["d1", "d2", "d3"]);
+    expect(view.deliverables[1].status).toBe("accepted");
+  });
+
+  it("carries the receipt and the child that produced a deliverable, so a run tree can be drawn", () => {
+    const view = fold(emptyRunView("run_1"), [
+      {
+        type: "deliverable/update",
+        ...at(1),
+        id: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        title: "二甲双胍证据综述",
+        childSessionId: "child-1",
+        status: "accepted",
+        receipt: {
+          deliverableId: "d1",
+          contractKind: "clinical-evidence-report",
+          capability: "clinical-evidence-synthesis",
+          attempt: 2,
+          acceptedAt: "2026-08-31T10:00:00Z",
+          files: [{ path: "clinical-evidence-report.md", sha256: "a".repeat(64), bytes: 4096 }],
+          notices: ["背景章节占比偏高"],
+        },
+      },
+    ]);
+    expect(view.deliverables[0].childSessionId).toBe("child-1");
+    expect(view.deliverables[0].receipt?.attempt).toBe(2);
+    expect(view.deliverables[0].receipt?.files[0].path).toBe("clinical-evidence-report.md");
+  });
+
+  it("hears the kernel ask, and does not turn one replayed request into two cards", () => {
+    // The whole point of the listener: an approval or a question the browser
+    // never registered for is not mishandled, it never arrives, and the page
+    // shows nothing while the run sits blocked.
+    const view = fold(emptyRunView("run_1"), [
+      { type: "approval/requested", ...at(1), requestId: "r1", tool: "bash", summary: "运行需要访问工作区之外的路径", detail: "cat /etc/hosts" },
+      { type: "question/requested", ...at(2), requestId: "q1", question: "要包含 2019 年前的文献吗？", options: [{ id: "yes", label: "要" }, { id: "no", label: "不要" }] },
+      // Replayed after a reconnect: the same request, not a second one.
+      { type: "approval/requested", ...at(3), requestId: "r1", tool: "bash", summary: "运行需要访问工作区之外的路径" },
+    ]);
+    expect(view.interactions.map((item) => item.requestId)).toEqual(["r1", "q1"]);
+    expect(view.interactions[0].kind).toBe("approval");
+    expect(view.interactions[0].tool).toBe("bash");
+    expect(view.interactions[1].options).toHaveLength(2);
+
+    const answered = markInteractionAnswered(view, "r1");
+    expect(answered.interactions[0].answered).toBe(true);
+    expect(answered.interactions[1].answered).toBe(false);
+    // A replay after answering must not un-answer it.
+    const replayed = applyRunFrame(answered, { type: "approval/requested", ...at(4), requestId: "r1", tool: "bash", summary: "运行需要访问工作区之外的路径" });
+    expect(replayed.interactions[0].answered).toBe(true);
   });
 
   it("surfaces a replay gap so a client that fell too far behind re-reads instead of guessing", () => {

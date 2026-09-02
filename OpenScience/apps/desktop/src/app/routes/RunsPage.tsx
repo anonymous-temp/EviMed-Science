@@ -52,6 +52,28 @@ const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
   canceled: "已取消",
 };
 
+/**
+ * The nine-phase projection (§7.1.1), for the row that is already open.
+ *
+ * Not a second status: `status` is the ledger's own four-value field and stays
+ * what the badge, the filters and every gate script read. The phase is a
+ * strictly richer read of the same record — it separates a run still waiting
+ * for its container from one that is working, and a clean delivery from one
+ * that needs a person to look at it — and it was already on the wire and used
+ * for exactly one filter chip while the row itself never mentioned it.
+ */
+const WEB_RUN_PHASE_LABEL: Record<string, string> = {
+  reserved: "已排队，尚未派发",
+  dispatched: "已派发，尚无进展",
+  running: "进行中",
+  delivering: "交付核对中",
+  repairing: "按门禁意见修复中",
+  accepted: "已交付并通过核验",
+  degraded: "已交付，待人工复核",
+  failed: "未完成",
+  canceled: "已取消",
+};
+
 /** What went wrong, in the reader's language. The raw code was rendered as-is,
  *  so a run reported "specialist_citation_invalid" to someone reading a Chinese
  *  interface. The code is kept as a tooltip for support, not as the message. */
@@ -861,6 +883,11 @@ function WebRunRow({
             )}
             <Chip title="会话">{run.sessionId}</Chip>
             {run.question && <Chip title="运行 ID">{run.id}</Chip>}
+            {run.phase && WEB_RUN_PHASE_LABEL[run.phase] && (
+              <Chip title={`运行阶段（由账本记录派生，不单独存储）：${run.phase}`}>
+                {WEB_RUN_PHASE_LABEL[run.phase]}
+              </Chip>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">

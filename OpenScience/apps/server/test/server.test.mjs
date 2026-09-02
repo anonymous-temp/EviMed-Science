@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -280,13 +280,6 @@ async function waitForRuntimeStatus(base, select) {
   throw new Error("runtime status did not match");
 }
 
-async function waitForChildExit(child) {
-  for (let i = 0; i < 50; i++) {
-    if (child.exitCode !== null || child.signalCode !== null) return true;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-  return false;
-}
 
 // The browser-to-kernel pass-through is gone, and with it fifteen tests that
 // hardened it: credential stripping, redirect sanitization, response-body caps,
