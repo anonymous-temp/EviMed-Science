@@ -11,7 +11,7 @@
  * to write a `catch` that means "read the issues".
  */
 
-import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, evaluateClinicalSafetyRules, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
+import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, clinicalSafetyRuleHits, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { matchedClinicalTriggers } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
@@ -48,6 +48,10 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @property {number} [line]
  * @property {string} [path]
  * @property {string} [check] The id of the check that raised it, for the ledger.
+ * @property {string} [rule] Which rule inside that check, where the check holds
+ *   several (clinical-safety-rules holds four). Absent where the raising code
+ *   declared none, for the same reason `check` is: a filled-in default reads as
+ *   coverage while measuring nothing.
  */
 
 /**
@@ -100,11 +104,11 @@ function json(input, path) {
  * absent where the raising code has not declared one — a hole that stays
  * visible instead of being filled with a default that would look like coverage.
  * @param {string} code @param {string} message
- * @param {{severity?: 'required'|'advisory'|'optional', line?: number, path?: string, check?: string | null}} [extra]
+ * @param {{severity?: 'required'|'advisory'|'optional', line?: number, path?: string, check?: string | null, rule?: string}} [extra]
  * @returns {GateIssue}
  */
 function issue(code, message, extra = {}) {
-  return { code, message, severity: extra.severity ?? 'required', ...(extra.line ? { line: extra.line } : {}), ...(extra.path ? { path: extra.path } : {}), ...(extra.check ? { check: extra.check } : {}) }
+  return { code, message, severity: extra.severity ?? 'required', ...(extra.line ? { line: extra.line } : {}), ...(extra.path ? { path: extra.path } : {}), ...(extra.check ? { check: extra.check } : {}), ...(extra.rule ? { rule: extra.rule } : {}) }
 }
 
 /**
@@ -274,10 +278,14 @@ function validateClinicalEvidenceReport(input) {
     // matching our own prose is regex over language to find out something the
     // code already knew, and that is the mistake this gate keeps paying for.
     ...(result.issueChecks ?? (result.issues ?? []).map((message) => ({ check: null, text: message })))
-      .map((/** @type {{ check: string | null, text: string }} */ finding) => issue(
+      .map((/** @type {{ check: string | null, text: string, rule?: string, line?: number }} */ finding) => issue(
         blocking.has(finding.text) ? (errorCode ?? 'clinical_evidence_issue') : 'clinical_evidence_notice',
         String(finding.text),
-        { severity: blocking.has(finding.text) ? 'required' : 'advisory', check: finding.check },
+        // `rule` and `line` are forwarded, not derived: recovering either by
+        // matching our own prose is regex over language to learn something the
+        // raising code already knew, which is the mistake this gate keeps
+        // paying for. Absent where the raising code did not declare them.
+        { severity: blocking.has(finding.text) ? 'required' : 'advisory', check: finding.check, rule: finding.rule, line: finding.line },
       )),
     ...(result.coverageDegradedNotice
       ? [issue('clinical_evidence_notice', String(result.coverageDegradedNotice), { severity: 'advisory', check: 'coverage-degraded' })]
@@ -802,8 +810,8 @@ function validateGeoContentPack(input) {
     .flatMap((/** @type {any} */ block) => (isRecord(block) ? [block.conclusion, block.basis, block.conditions] : []))
     .map((/** @type {any} */ value) => String(value ?? ''))
   const packProse = [...proseFilesOf(input).map((path) => text(input, path)), ...blockProse].join('\n')
-  for (const message of evaluateClinicalSafetyRules({ reportText: packProse, practical: packProse })) {
-    issues.push(issue('clinical_safety_rule', message, { check: checkIdOf(evaluateClinicalSafetyRules) }))
+  for (const hit of clinicalSafetyRuleHits({ reportText: packProse, practical: packProse })) {
+    issues.push(issue('clinical_safety_rule', hit.message, { check: checkIdOf(clinicalSafetyRuleHits), rule: hit.ruleId, line: hit.line ?? undefined }))
   }
 
   const measurement = geoMeasurementNotices(input)
