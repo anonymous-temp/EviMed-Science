@@ -34,8 +34,8 @@ import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
+  RUNTIME_KERNEL_NAME,
   RuntimeManager,
-  runtimeKernelName,
   runtimeNetworkRequiresEgressOptIn,
   runtimeNetworkUsesHostOrContainer,
   validateEviMedAdapterConfig,
@@ -45,7 +45,7 @@ import { readinessSaasProfile } from "./saasProfile.mjs";
 import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
-import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
+import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
   HttpError,
   apiBaseFromRequest,
@@ -376,10 +376,10 @@ export function createWebApiApp(overrides = {}) {
   });
   // One fan-out per live run. The browser subscribes here, never to a kernel.
   const runEvents = new RunEventHub();
-  // The kernel's own live stream, decoded onto the same fan-out. DSH-only
-  // (§ dshEventPump module doc): the OpenCode kernel this build can still
-  // select publishes no such downlink.
-  const runtimeEventPump = new RuntimeEventPump({ runEvents, isDshKernel: runtimeKernelName(config) === "dsh" });
+  // The kernel's own live stream, decoded onto the same fan-out. The flag is
+  // what the pump was given when a second kernel without a downlink could be
+  // selected; there is one kernel now and it always publishes one.
+  const runtimeEventPump = new RuntimeEventPump({ runEvents, isDshKernel: true });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
@@ -755,14 +755,13 @@ export function createWebApiApp(overrides = {}) {
             projects: await store.listProjects(user),
             csrfToken: session.csrfToken,
             // Which session view this deployment serves. The browser must not
-            // infer it from a build flag: the kernel is a deployment decision
-            // and the two views read different sources — the retiring one polls
-            // a kernel-shaped store, the new one consumes the control plane's
-            // own `RunEvent` stream — so flipping the kernel has to flip the
-            // view without shipping a new bundle.
+            // infer it from a build flag: the view reads the control plane's
+            // own `RunEvent` stream, and it is the server that knows what it
+            // serves. The field stayed after the second view was retired
+            // because a browser bundle older than this server still asks.
             runtime: {
-              kernel: runtimeKernelName(config),
-              sessionView: runtimeKernelName(config) === "dsh" ? "run-stream" : "legacy",
+              kernel: RUNTIME_KERNEL_NAME,
+              sessionView: "run-stream",
             },
           },
         });
@@ -976,7 +975,7 @@ export function createWebApiApp(overrides = {}) {
         }
         const text = assertString(body.text, "text", { max: config.maxJsonBytes });
         if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
-        if (config.runtimeMode === "opencode" && !config.deepseekProviderEnabled) {
+        if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
           throw new HttpError(
             503,
             "model_provider_not_configured",
@@ -1480,7 +1479,7 @@ export function createWebApiApp(overrides = {}) {
     startupRuntimeCleanup = (async () => {
       try {
         const projects = await store.listStoredProjects();
-        const summary = await runtimeManager.cleanupOrphanedRuntimes(projects, { includeHost: false });
+        const summary = await runtimeManager.cleanupOrphanedRuntimes(projects);
         // After the sweep, not before: these monitors read the world the sweep
         // is done rearranging. Each one either resumes a live run or walks the
         // durable bridge for a dead one; without this, a restart left every
@@ -2382,13 +2381,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       { value: runtimeStats.limits.maxPerUser ?? 0, labels: { scope: "user" } },
     ],
   );
-  addMetric(lines, "open_science_runtime_proxy_active", "Active OpenCode runtime proxy requests and streams.", "gauge", {
+  addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {
     value: runtimeStats.proxy?.active ?? 0,
   });
   addMetric(
     lines,
     "open_science_runtime_proxy_limit",
-    "Configured OpenCode runtime proxy connection limits. Zero means disabled.",
+    "Configured runtime proxy connection limits. Zero means disabled.",
     "gauge",
     [
       { value: runtimeStats.proxy?.limits?.maxGlobal ?? 0, labels: { scope: "global" } },
@@ -2804,10 +2803,8 @@ function readinessScienceConnectors(config) {
 function readinessModelGateway(config) {
   if (!config.deepseekProviderEnabled) return { enabled: false, skipped: true };
   // `runtimeMode` names the runtime's *shape* — a managed kernel container vs
-  // the mock — and not which kernel runs inside it; the literal "opencode" is
-  // the name that shape has carried since before there was a second kernel.
-  // The gateway's requirement is that a real runtime exists to hold a workload
-  // token, which is true of either kernel.
+  // the mock. The gateway's requirement is that a real runtime exists to hold a
+  // workload token.
   if (config.runtimeMode === "mock") throw readinessFailure("model_gateway_runtime_mode_invalid");
   if (config.deepseekApiKeyError) throw readinessFailure(config.deepseekApiKeyError);
   if (config.modelGatewaySigningSecretError) throw readinessFailure(config.modelGatewaySigningSecretError);
@@ -2905,14 +2902,11 @@ function readinessRelease(config) {
     return { required: false, tracked: false };
   }
 
-  // The kernel row follows whichever kernel the manifest names. Comparing
-  // `config.opencodeVersion` against `manifest.runtime.opencodeVersion`
-  // unconditionally meant that under DSH the expected side was `undefined`
-  // while the actual side held the rollback kernel's version — so production
-  // readiness failed `release_manifest_mismatch` on every DSH deployment, for
-  // the same reason and in the same shape as the image-label check beside it.
-  // `releaseManifest.mjs` had already learned this; this second, parallel
-  // comparison had not, which is what having two of them costs.
+  // One kernel, one manifest shape. This comparison and the one in
+  // `releaseManifest.mjs` are parallel readings of the same rows: when the
+  // manifest could name either of two kernels, only one of them had learned it,
+  // and the other compared against `undefined` and failed
+  // `release_manifest_mismatch` on every deployment of the newer kernel.
   const mismatches = [
     ["releaseId", config.releaseId, manifest.app.releaseId],
     ["appVersion", config.appVersion, manifest.app.version],
@@ -2920,12 +2914,8 @@ function readinessRelease(config) {
     ["buildCreatedAt", config.buildCreatedAt, manifest.source.createdAt],
     ["webContainerImage", config.webContainerImage, manifest.web.image],
     ["runtimeContainerImage", config.runtimeContainerImage, manifest.runtime.image],
-    ...(Object.hasOwn(manifest.runtime, "dshVersion")
-      ? [
-        ["dshVersion", config.dshVersion, manifest.runtime.dshVersion],
-        ["socketBundleVersion", config.socketBundleVersion, manifest.runtime.socketVersion],
-      ]
-      : [["opencodeVersion", config.opencodeVersion, manifest.runtime.opencodeVersion]]),
+    ["dshVersion", config.dshVersion, manifest.runtime.dshVersion],
+    ["socketBundleVersion", config.socketBundleVersion, manifest.runtime.socketVersion],
     ["uvVersion", config.uvVersion, manifest.runtime.uvVersion],
   ];
   const mismatch = mismatches.find(([, actual, expected]) => actual !== expected);
@@ -3044,7 +3034,7 @@ function readinessResources(config) {
     throw readinessFailure("resource_limit_inconsistent", { field: "maxRunningRuntimesPerUser", maximum: "maxRunningRuntimes" });
   }
 
-  const usesDockerRuntime = config.runtimeMode === "opencode" && config.runtimeSandboxMode === "docker";
+  const usesDockerRuntime = config.runtimeMode === "kernel" && config.runtimeSandboxMode === "docker";
   const usesDockerKernel = config.enableKernel && config.kernelSandboxMode === "docker";
   if (usesDockerRuntime || usesDockerKernel) {
     assertPositiveIntegerLimit(config, "runtimePidsLimit");
@@ -3208,18 +3198,16 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
     } catch (error) {
       throw readinessFailure(error?.code ?? unavailableCode);
     }
-    ({ imageId, uvVersion } = image);
-    kernelVersion = image.kernelVersion || image.opencodeVersion;
+    ({ imageId, kernelVersion, uvVersion } = image);
   } else {
-    // Two readings on purpose — see `inspectRuntimeImage` in the controller.
-    // The gate read only `io.open-science.opencode.version`, which a DSH image
-    // does not publish, so production readiness failed
-    // `runtime_image_metadata_missing` on every DSH deployment: a check that
-    // could not survive the kernel it was gating.
+    // The kernel-neutral label, which is the only one the runtime image
+    // publishes. This used to read a kernel-specific one as well
+    // (`io.open-science.opencode.version`), which the DSH image does not carry,
+    // so production readiness failed `runtime_image_metadata_missing` on every
+    // DSH deployment: a check that could not survive the kernel it was gating.
     const format = [
       "{{.Id}}",
       '{{index .Config.Labels "io.open-science.runtime.version"}}',
-      '{{index .Config.Labels "io.open-science.opencode.version"}}',
       '{{index .Config.Labels "io.open-science.uv.version"}}',
     ].join("|");
     const image = spawnSync(
@@ -3228,9 +3216,9 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
       { encoding: "utf8", timeout: 5_000 },
     );
     if (image.status !== 0) throw readinessFailure(unavailableCode);
-    const [id, neutralVersion, opencodeVersion, uv] = image.stdout.trim().split("|");
+    const [id, neutralVersion, uv] = image.stdout.trim().split("|");
     imageId = id;
-    kernelVersion = neutralVersion || opencodeVersion;
+    kernelVersion = neutralVersion;
     uvVersion = uv;
   }
   if (!config.production) return { imageLocal: true, imageVerified: false };
@@ -3240,14 +3228,9 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
   }
   const recorded = config.releaseManifest?.runtime;
   if (!recorded) throw readinessFailure("release_manifest_missing");
-  // Compared against whichever kernel the manifest names, for the same reason
-  // the manifest schema requires one kernel's fields rather than making both
-  // optional: a manifest naming one kernel while the image ships the other is
-  // exactly the mismatch this is here to catch.
-  const recordedKernelVersion = Object.hasOwn(recorded, "dshVersion") ? recorded.dshVersion : recorded.opencodeVersion;
   const mismatch = [
     ["imageId", imageId, recorded.imageId],
-    ["kernelVersion", kernelVersion, recordedKernelVersion],
+    ["kernelVersion", kernelVersion, recorded.dshVersion],
     ["uvVersion", uvVersion, recorded.uvVersion],
   ].find(([, actual, expected]) => actual !== expected);
   if (mismatch) throw readinessFailure("runtime_image_provenance_mismatch", { field: mismatch[0] });
@@ -3255,29 +3238,22 @@ async function inspectRuntimeImage(config, unavailableCode, runtimeManager) {
 }
 
 async function readinessRuntime(config, runtimeManager) {
-  // Which agent kernel this deployment is actually on, reported on every branch.
-  // It matters more than it looks: the shipped default is the rollback kernel
-  // while the DSH session view is landing, so "which one am I running" is a
-  // question an operator has to be able to answer without reading env files —
-  // and a deployment that meant to move and did not looks identical otherwise.
-  const kernel = {
-    kernel: runtimeKernelName(config),
-    kernelVersion: runtimeKernelName(config) === "dsh" ? config.dshVersion : config.opencodeVersion,
-  };
+  // Which kernel this deployment is on and at which version, reported on every
+  // branch. There is one kernel now, but "what am I actually running" is still
+  // a question an operator must be able to answer without reading env files.
+  const kernel = { kernel: RUNTIME_KERNEL_NAME, kernelVersion: config.dshVersion };
   if (config.runtimeMode === "mock") {
     if (config.production && !config.allowMockRuntime) throw readinessFailure("runtime_mock_forbidden");
     return { mode: "mock", sandboxMode: "mock", explicit: Boolean(config.allowMockRuntime), ...kernel };
   }
-  if (config.runtimeMode !== "opencode") {
+  if (config.runtimeMode !== "kernel") {
     throw readinessFailure("runtime_mode_invalid");
   }
   if (config.runtimeSandboxMode === "docker") {
     if (!config.runtimeContainerBin) throw readinessFailure("runtime_container_bin_missing");
     if (!config.runtimeContainerImage) throw readinessFailure("runtime_container_image_missing");
     const transport = String(config.runtimeTransport ?? "").trim().toLowerCase();
-    if (transport !== "unix" && transport !== "tcp") {
-      throw readinessFailure("runtime_transport_invalid");
-    }
+    if (transport !== "unix") throw readinessFailure("runtime_transport_invalid");
     try {
       runtimeManager.assertDockerControlBoundary();
     } catch (error) {
@@ -3326,7 +3302,7 @@ async function readinessRuntime(config, runtimeManager) {
     if (config.runtimeRequireImageLocal) {
       const image = await inspectRuntimeImage(config, "runtime_image_unavailable", runtimeManager);
       return {
-        mode: "opencode",
+        mode: "kernel",
         sandboxMode: "docker",
         controlPlane,
         transport,
@@ -3337,7 +3313,7 @@ async function readinessRuntime(config, runtimeManager) {
       };
     }
     return {
-      mode: "opencode",
+      mode: "kernel",
       sandboxMode: "docker",
       controlPlane,
       transport,
@@ -3348,17 +3324,10 @@ async function readinessRuntime(config, runtimeManager) {
       ...network,
     };
   }
-  if (config.runtimeSandboxMode === "host") {
-    if (config.production || !config.allowUnsandboxedRuntime) throw readinessFailure("runtime_sandbox_required");
-    // The binary to look for follows the configured kernel. Checking the
-    // retiring kernel's binary either way would report a DSH deployment ready
-    // because a leftover `opencode` was on the path, or not ready because it
-    // was not — and neither answer would be about the kernel it will run.
-    const bin = kernel.kernel === "dsh" ? config.dshBin : config.opencodeBin;
-    if (!bin) throw readinessFailure(kernel.kernel === "dsh" ? "dsh_bin_missing" : "opencode_bin_missing");
-    await fsp.access(bin, fs.constants.X_OK);
-    return { mode: "opencode", sandboxMode: "host", ...kernel };
-  }
+  // No host mode: the kernel's EviMed composition lives in the runtime image,
+  // so a host binary would serve a runtime that can satisfy nothing (see
+  // `buildRuntimeLaunchPlan`). Readiness says so rather than passing a
+  // deployment that would refuse at the first run.
   throw readinessFailure("runtime_sandbox_invalid");
 }
 

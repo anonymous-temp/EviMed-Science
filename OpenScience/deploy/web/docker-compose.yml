@@ -184,9 +184,8 @@ services:
       OPEN_SCIENCE_OIDC_ALLOWED_EMAIL_DOMAINS: ${OPEN_SCIENCE_OIDC_ALLOWED_EMAIL_DOMAINS:-}
       OPEN_SCIENCE_OIDC_TIMEOUT_MS: ${OPEN_SCIENCE_OIDC_TIMEOUT_MS:-10000}
       OPEN_SCIENCE_OIDC_FLOW_TTL_MS: ${OPEN_SCIENCE_OIDC_FLOW_TTL_MS:-600000}
-      OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-opencode}
+      OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_ALLOW_MOCK_RUNTIME: ${OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:-false}
-      OPEN_SCIENCE_OPENCODE_BIN: ${OPEN_SCIENCE_OPENCODE_BIN:-}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
       OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE: socket
@@ -194,8 +193,7 @@ services:
       OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS:-500}
       OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL: "false"
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-opencode:opencode-1.17.13-uv-0.11.26}
-      OPEN_SCIENCE_OPENCODE_VERSION: ${OPEN_SCIENCE_OPENCODE_VERSION:-1.17.13}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -842,11 +840,10 @@ services:
       OPEN_SCIENCE_RELEASE_MANIFEST_FILE: /run/open-science/release-manifest.json
       OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE: direct
       OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET: /run/open-science-controller/controller.sock
-      OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-opencode}
+      OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-opencode:opencode-1.17.13-uv-0.11.26}
-      OPEN_SCIENCE_OPENCODE_VERSION: ${OPEN_SCIENCE_OPENCODE_VERSION:-1.17.13}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -929,11 +926,9 @@ services:
     profiles: ["runtime-image"]
     command: ["opencode", "--version"]
 
-  # The DSH runtime image. Both kernels are built under the same profile on
-  # purpose: the kernel is a per-deployment choice with a one-line rollback, and
-  # a rollback to an image nobody built is not a rollback. The control plane
-  # launches project containers itself, so neither of these services runs — they
-  # exist so `--profile runtime-image build` produces both.
+  # The runtime image. The control plane launches project containers itself, so
+  # this service never runs — it exists so `--profile runtime-image build`
+  # produces the image.
   dsh-runtime-image:
     image: ${OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26}
     build:

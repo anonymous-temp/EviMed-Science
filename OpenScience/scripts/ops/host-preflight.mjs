@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   readDeepSeekReleaseReceiptFile,
   readModelGatewaySigningSecretFile,
-} from "./deepseek-opencode-release-gate.mjs";
+} from "./deepseek-kernel-release-gate.mjs";
 
 const scriptFile = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptFile), "../..");
@@ -96,7 +96,7 @@ function readRegularFileNoFollow(file, { privateFile = false, maxBytes = MAX_ENV
 function validateDeepSeekCompatibilityTool() {
   const scripts = [
     path.join(repoRoot, "scripts/ops/deepseek-compatibility-preflight.mjs"),
-    path.join(repoRoot, "scripts/ops/deepseek-opencode-release-gate.mjs"),
+    path.join(repoRoot, "scripts/ops/deepseek-kernel-release-gate.mjs"),
   ];
   const pkgFile = path.join(repoRoot, "package.json");
   for (const script of scripts) {
@@ -122,7 +122,7 @@ function validateDeepSeekCompatibilityTool() {
   if (pkg.scripts?.["preflight:deepseek"] !== "node scripts/ops/deepseek-compatibility-preflight.mjs") {
     throw failure("preflight_deepseek_tool_invalid", "DeepSeek compatibility package command is unavailable.");
   }
-  if (pkg.scripts?.["preflight:deepseek:release"] !== "node scripts/ops/deepseek-opencode-release-gate.mjs") {
+  if (pkg.scripts?.["preflight:deepseek:release"] !== "node scripts/ops/deepseek-kernel-release-gate.mjs") {
     throw failure("preflight_deepseek_tool_invalid", "DeepSeek OpenCode release-gate package command is unavailable.");
   }
 }

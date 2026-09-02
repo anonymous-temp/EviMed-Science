@@ -102,31 +102,22 @@ export function validateReleaseManifest(input) {
 
   for (const [name, image] of [["web", manifest.web], ["runtime", manifest.runtime]]) {
     const record = assertRecord(image, `release_manifest_${name}_invalid`);
-    // The runtime image records which kernel it carries and which socket bundle
-    // was installed into it. Both are release-traceability facts: a receipt
-    // written by a different bundle than the image declares is a receipt graded
-    // by rules nobody shipped, and the delivery gate refuses it on that basis.
-    //
-    // The two kernels coexist for exactly as long as the rollback switch does,
-    // so the schema accepts a manifest naming either — and requires the fields
-    // belonging to whichever it names, rather than making both optional.
+    // The runtime image records which kernel version it carries and which
+    // socket bundle was installed into it. Both are release-traceability facts:
+    // a receipt written by a different bundle than the image declares is a
+    // receipt graded by rules nobody shipped, and the delivery gate refuses it
+    // on that basis.
     const kernelFields = name === "runtime"
-      ? (Object.hasOwn(record, "dshVersion")
-        ? ["image", "imageId", "dshVersion", "cordisVersion", "socketVersion", "domainVersion", "uvVersion"]
-        : ["image", "imageId", "opencodeVersion", "uvVersion"])
+      ? ["image", "imageId", "dshVersion", "cordisVersion", "socketVersion", "domainVersion", "uvVersion"]
       : ["image", "imageId"];
     assertKeys(record, kernelFields, `release_manifest_${name}_fields_invalid`);
     assertImageReference(record.image, `release_manifest_${name}_image_invalid`);
     assertText(record.imageId, imageIdPattern, `release_manifest_${name}_image_id_invalid`);
     if (name === "runtime") {
-      if (Object.hasOwn(record, "dshVersion")) {
-        assertText(record.dshVersion, prereleaseVersionPattern, "release_manifest_dsh_version_invalid");
-        assertText(record.cordisVersion, prereleaseVersionPattern, "release_manifest_cordis_version_invalid");
-        assertText(record.socketVersion, versionPattern, "release_manifest_socket_version_invalid");
-        assertText(record.domainVersion, versionPattern, "release_manifest_domain_version_invalid");
-      } else {
-        assertText(record.opencodeVersion, versionPattern, "release_manifest_opencode_version_invalid");
-      }
+      assertText(record.dshVersion, prereleaseVersionPattern, "release_manifest_dsh_version_invalid");
+      assertText(record.cordisVersion, prereleaseVersionPattern, "release_manifest_cordis_version_invalid");
+      assertText(record.socketVersion, versionPattern, "release_manifest_socket_version_invalid");
+      assertText(record.domainVersion, versionPattern, "release_manifest_domain_version_invalid");
       assertText(record.uvVersion, versionPattern, "release_manifest_uv_version_invalid");
     }
   }
@@ -186,15 +177,10 @@ export function runtimeReleasePolicyError(config) {
   if (!runtime) return { code: "release_manifest_missing" };
   const mismatch = [
     ["runtimeContainerImage", config.runtimeContainerImage, runtime.image],
-    // The kernel's own version is compared under whichever name the manifest
-    // uses. A manifest naming one kernel while the deployment runs the other is
-    // the mismatch this check exists for, and it must be loud.
-    ...(Object.hasOwn(runtime, "dshVersion")
-      ? [
-        ["dshVersion", config.dshVersion, runtime.dshVersion],
-        ["socketBundleVersion", config.socketBundleVersion, runtime.socketVersion],
-      ]
-      : [["opencodeVersion", config.opencodeVersion, runtime.opencodeVersion]]),
+    // A manifest whose kernel or socket bundle is not the one the deployment
+    // configures is the mismatch this check exists for, and it must be loud.
+    ["dshVersion", config.dshVersion, runtime.dshVersion],
+    ["socketBundleVersion", config.socketBundleVersion, runtime.socketVersion],
     ["uvVersion", config.uvVersion, runtime.uvVersion],
   ].find(([, actual, expected]) => actual !== expected);
   if (mismatch) return { code: "release_manifest_mismatch", field: mismatch[0] };
