@@ -161,6 +161,36 @@ function decodeRouteComponent(value, label) {
   }
 }
 
+/**
+ * Turns a browser's answer into the outcome the kernel accepts.
+ *
+ * The kernel's own vocabulary is not exposed to the client, deliberately. Its
+ * gateway validates outcomes with exact-key equality and its approval service
+ * normalizes anything outside a four-word vocabulary to `unavailable` — so a
+ * pass-through would let a caller mint a shape that is either refused at the
+ * boundary or silently downgraded into a refusal, and in both cases the person
+ * who clicked "allow" would be told it worked. Two decisions go over the wire;
+ * this is where they become the kernel's words.
+ *
+ * `question` answers carry the person's text, which the kernel takes verbatim.
+ *
+ * @param {Record<string, any>} body
+ * @returns {{ kind: 'result', value: unknown }}
+ */
+function interactionOutcome(body) {
+  const decision = String(body?.decision ?? "");
+  if (decision === "allow") return { kind: "result", value: "allowed-once" };
+  if (decision === "deny") return { kind: "result", value: "rejected" };
+  if (decision === "answer") {
+    const answer = body?.answer;
+    if (typeof answer !== "string" || !answer.trim()) {
+      throw new HttpError(400, "interaction_answer_missing", "An answer decision needs the text to send back.");
+    }
+    return { kind: "result", value: answer };
+  }
+  throw new HttpError(400, "interaction_decision_invalid", 'Decision must be one of "allow", "deny" or "answer".');
+}
+
 function decodeTail(pathname, prefix, label = "path") {
   const tail = pathname.slice(prefix.length).replace(/^\/+/, "");
   return decodeRouteComponent(tail, label);
@@ -194,6 +224,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
   if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/* (retired)";
+  if (pathname.startsWith("/api/runs/") && pathname.includes("/interactions/")) return "/api/runs/:id/interactions/:eventId";
   if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events")) return "/api/runs/:id/events";
   if (pathname === "/api/runtime/sessions") return "/api/runtime/sessions";
   if (pathname.startsWith("/api/runtime/sessions/") && pathname.endsWith("/transcript")) return "/api/runtime/sessions/:id/transcript";
@@ -1359,6 +1390,29 @@ export function createWebApiApp(overrides = {}) {
           "session id",
         );
         sendJson(res, 200, { data: await runtimeManager.sessionTranscript(ctx.project, sessionId, { wake: false }) });
+        return;
+      }
+
+      if (pathname.startsWith("/api/runs/") && pathname.includes("/interactions/") && req.method === "POST") {
+        const ctx = await context(req, res);
+        const tail = pathname.slice("/api/runs/".length);
+        const split = tail.indexOf("/interactions/");
+        const runId = decodeRouteComponent(tail.slice(0, split), "run id");
+        const eventId = decodeRouteComponent(tail.slice(split + "/interactions/".length), "interaction id");
+        // The run is proved from the caller's own project before the pump is
+        // asked anything: the event id is the kernel's, so without this a
+        // caller could answer a question raised in a project they cannot see.
+        const runs = await agentRuns.list(ctx.project);
+        if (!runs.some((candidate) => candidate.id === runId)) {
+          throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+        }
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "interaction answer");
+        await runtimeEventPump.answerInteraction(ctx.project, {
+          runId,
+          eventId,
+          outcome: interactionOutcome(body),
+        });
+        sendJson(res, 202, { data: { eventId, accepted: true } });
         return;
       }
 

@@ -240,7 +240,32 @@
       "snapshot",
       "event"
     ],
-    "auth": "browser-session-cookie"
+    "auth": "browser-session-cookie",
+    "hostInteractionEvents": {
+      "approval": "approval/request",
+      "question": "user-questions/request"
+    },
+    "hostInteractionOutcomeKinds": [
+      "result",
+      "next",
+      "rejected"
+    ],
+    "approvalOutcomes": [
+      "allowed-once",
+      "rejected",
+      "cancelled",
+      "unavailable"
+    ],
+    "gatewayEndpoints": {
+      "hostInteractionResult": "$events/result"
+    },
+    "gatewayEndpointArgs": {
+      "$events/result": [
+        "clientId",
+        "eventId",
+        "outcome"
+      ]
+    }
   },
   "notes": {
     "sessionStatusAbsent": "There is no session status method. Running state arrives as an `api-session/status` emit on the Gateway-internal `$events` stream.",

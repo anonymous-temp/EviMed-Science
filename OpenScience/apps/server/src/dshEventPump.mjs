@@ -27,8 +27,17 @@
  * @module dshEventPump
  */
 
-import { DshRuntimeAdapter } from "./dshRuntimeAdapter.mjs";
+import { DshRuntimeAdapter, decodeHostInteraction } from "./dshRuntimeAdapter.mjs";
+import { Buffer } from "node:buffer";
+import { randomBytes } from "node:crypto";
+
 import { DshMux } from "./dshMux.mjs";
+import { readRuntimeResponseBody, requestRuntime } from "./runtimeManager.mjs";
+import { HttpError } from "./security.mjs";
+
+/** A `$events/result` acknowledgement is a fixed, tiny envelope; anything
+ *  larger is not a reply this path should be reading into memory. */
+const MAX_UNARY_REPLY_BYTES = 64 * 1024;
 
 /** How long to wait before retrying a dropped or refused mux connection. */
 export const RUNTIME_DOWNLINK_RECONNECT_MS = 2_000;
@@ -70,12 +79,58 @@ export async function openRuntimeMux(runtime, { signal }) {
 }
 
 /**
+ * One unary kernel call over the same runtime the mux is dialled on.
+ *
+ * Deliberately not routed through `RuntimeManager.callKernel`: that method
+ * belongs to the request/response side, which owns a runtime's lifecycle and
+ * will wake a stopped container to serve a call. This path must not — it exists
+ * to answer a question a *running* kernel asked, and waking a runtime to reply
+ * to a question it can no longer be holding is worse than failing.
+ *
+ * @param {{ url: string, socketPath?: string|null, cookie?: string|null, authority?: string|null }} runtime
+ * @param {string} method
+ * @param {Record<string, any>} payload
+ * @param {{ signal?: AbortSignal }} [options]
+ * @returns {Promise<{ ok: boolean, value?: any, error?: any }>}
+ */
+export async function callRuntimeUnary(runtime, method, payload, options = {}) {
+  const target = new URL(`${runtime.url}/api/${method}`);
+  const body = Buffer.from(JSON.stringify({
+    type: "client-request",
+    rpcId: `pump-${randomBytes(6).toString("hex")}`,
+    method,
+    payload: { args: payload ?? {} },
+  }), "utf8");
+  const response = await requestRuntime(runtime, target, {
+    method: "POST",
+    headers: { ...(runtime.cookie ? { cookie: runtime.cookie } : {}), "content-type": "application/json" },
+    body,
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  if (response.status < 200 || response.status >= 300) {
+    await response.body?.cancel?.().catch(() => {});
+    return { ok: false, error: { code: "gateway/internal", message: `Kernel answered HTTP ${response.status} for ${method}.` } };
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse((await readRuntimeResponseBody(response.body, MAX_UNARY_REPLY_BYTES)).toString("utf8"));
+  } catch {
+    // A body that is not JSON is not an outcome. Reported as a named failure
+    // rather than parsed into `undefined`, which the adapter would map onto a
+    // protocol mismatch and blame the wire for a proxy's error page.
+    return { ok: false, error: { code: "gateway/internal", message: "Kernel reply was not JSON." } };
+  }
+  return parsed?.result ?? { ok: false, error: { code: "gateway/internal", message: "Kernel reply carried no result." } };
+}
+
+/**
  * @typedef {object} PumpProjectState
  * @property {AbortController} controller
  * @property {Map<string, string>} rootSessions - kernel sessionId -> run id, for a run's own top-level session
  * @property {Map<string, { runId: string, label: string, capability: string }>} childSessions - kernel sessionId -> owning run, for a subagent's session
  * @property {Map<string, AbortController>} follows - kernel sessionId -> the follow stream open for it
  * @property {(() => void) | null} resync - wakes the follow reconciler when the session maps change
+ * @property {Map<string, { runId: string, kind: 'approval'|'question', adapter: DshRuntimeAdapter }>} pending - kernel eventId -> the question awaiting a person
  */
 
 /**
@@ -89,12 +144,17 @@ export async function openRuntimeMux(runtime, { signal }) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, reconnectDelayMs?: number }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number }} options
    */
-  constructor({ runEvents, isDshKernel, openMux = openRuntimeMux, reconnectDelayMs = RUNTIME_DOWNLINK_RECONNECT_MS }) {
+  constructor({ runEvents, isDshKernel, openMux = openRuntimeMux, callUnary = callRuntimeUnary, reconnectDelayMs = RUNTIME_DOWNLINK_RECONNECT_MS }) {
     this.runEvents = runEvents;
     this.isDshKernel = isDshKernel;
     this.openMux = openMux;
+    // Injected for the same reason `openMux` is: the reply to a kernel
+    // question is a call, so "did not answer" is only observable in a test if
+    // the call is. A decline that is dropped rather than sent looks exactly
+    // like a question that was handled.
+    this.callUnary = callUnary;
     this.reconnectDelayMs = reconnectDelayMs;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
@@ -124,7 +184,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null };
+    const state = { controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map() };
     this.projects.set(key, state);
     this.#run(project, runtime, state, controller.signal).catch(() => {
       // isolated: evimed_runtime_event_pump_fatal_total — the loop below
@@ -195,10 +255,14 @@ export class RuntimeEventPump {
       let mux = null;
       try {
         mux = await this.openMux(runtime, { signal });
+        // The mux carries streams; a unary call is an ordinary HTTP POST to
+        // the same runtime. This transport used to refuse `call` outright,
+        // which was true while the pump only listened. It answers now — the
+        // kernel asks questions on the host stream and waits for the reply on
+        // this path — so refusing would have made every approval unanswerable
+        // for a reason no message would have named.
         const transport = {
-          async call() {
-            throw new Error("dshEventPump's transport does not support unary calls.");
-          },
+          call: (method, payload, options) => this.callUnary(runtime, method, payload, options),
           stream: (endpoint, args, options) => /** @type {DshMux} */ (mux).open(endpoint, args, options),
         };
         const adapter = new DshRuntimeAdapter(transport);
@@ -211,7 +275,12 @@ export class RuntimeEventPump {
           // rebuilds the whole set rather than leaving half of it attached to
           // a connection that is gone.
           await Promise.race([
-            adapter.watchHost({ signal: generation.signal }).catch(() => {}),
+            adapter
+              .watchHost({
+                signal: generation.signal,
+                onEvent: (frame) => this.#handleHostFrame(state, adapter, frame),
+              })
+              .catch(() => {}),
             this.#followSessions(state, adapter, generation.signal),
           ]);
         } finally {
@@ -219,6 +288,14 @@ export class RuntimeEventPump {
           generation.abort();
           for (const controller of state.follows.values()) controller.abort();
           state.follows.clear();
+          // Every pending question belonged to the connection that just ended,
+          // and the kernel drops its side with it. Keeping them would let a
+          // later answer address an event id the kernel has forgotten, and the
+          // browser would be told its click worked.
+          for (const [eventId, entry] of state.pending) {
+            this.runEvents.publish(entry.runId, `${entry.kind}/requested`, { eventId, status: "withdrawn", reason: "runtime_disconnected" });
+          }
+          state.pending.clear();
         }
         if (signal.aborted) return;
       } catch {
@@ -289,6 +366,101 @@ export class RuntimeEventPump {
       }, { once: true });
       reconcile();
     });
+  }
+
+  /**
+   * Handles one frame from the host stream.
+   *
+   * Only the two waterfall events reach a person; everything else on this
+   * stream is an `emit` the adapter has already folded into running state.
+   *
+   * The rule that shapes this method: **a question we do not surface must be
+   * declined, never dropped.** The kernel holds the tool call open until every
+   * client it delivered to answers, so a frame this control plane cannot route
+   * — an unknown event, a session belonging to no live run, a run that ended
+   * while the model was still asking — stalls the run for as long as it is
+   * ignored. Declining hands the decision back to the kernel's own default,
+   * which fails closed to `unavailable` and lets the run continue and report
+   * why. That is the difference between a refused action and a hung one.
+   *
+   * @param {PumpProjectState} state
+   * @param {DshRuntimeAdapter} adapter
+   * @param {Record<string, any>} frame
+   */
+  #handleHostFrame(state, adapter, frame) {
+    const decoded = decodeHostInteraction(frame);
+    if (!decoded) {
+      if (frame?.type === "waterfall" && frame?.eventId) this.#decline(adapter, String(frame.eventId));
+      return;
+    }
+    if (decoded.kind === "withdrawn") {
+      const entry = state.pending.get(decoded.eventId);
+      if (!entry) return;
+      state.pending.delete(decoded.eventId);
+      // The kernel gave up on its own — timed out, cancelled, or the agent's
+      // context was released. The browser has a prompt on screen for a
+      // decision that can no longer be delivered, so it is told, rather than
+      // left with a button that will fail when pressed.
+      this.runEvents.publish(entry.runId, `${entry.kind}/requested`, { eventId: decoded.eventId, status: "withdrawn", reason: "kernel_cancelled" });
+      return;
+    }
+    const runId = state.rootSessions.get(decoded.sessionId) ?? state.childSessions.get(decoded.sessionId)?.runId;
+    if (!runId) {
+      // isolated: evimed_runtime_interaction_unrouted_total
+      this.#decline(adapter, decoded.eventId);
+      return;
+    }
+    state.pending.set(decoded.eventId, { runId, kind: decoded.kind, adapter });
+    this.runEvents.publish(runId, `${decoded.kind}/requested`, {
+      eventId: decoded.eventId,
+      status: "pending",
+      sessionId: decoded.sessionId,
+      request: decoded.request,
+    });
+  }
+
+  /**
+   * Hands one question back to the kernel unanswered.
+   * @param {DshRuntimeAdapter} adapter
+   * @param {string} eventId
+   */
+  #decline(adapter, eventId) {
+    adapter.answerHostEvent({ eventId, outcome: { kind: "next" } }).catch(() => {
+      // isolated: evimed_runtime_interaction_decline_failures_total — the
+      // reply races the connection that carried the question, and a decline
+      // that arrives after the mux dropped is refused by a gateway that has
+      // already forgotten the event. Nothing is owed to the caller here.
+    });
+  }
+
+  /**
+   * Delivers a person's answer to the kernel question it belongs to.
+   *
+   * Routed through the pump rather than straight to an adapter because the
+   * pump is what holds the pairing: which connection delivered this event,
+   * which run it belongs to, and whether it is still open. A route that
+   * called the adapter directly would answer on whatever connection happened
+   * to be current, which after a reconnect is a different one.
+   *
+   * @param {{ userId: string, id: string }} project
+   * @param {{ runId: string, eventId: string, outcome: { kind: 'result', value?: unknown } | { kind: 'next' } | { kind: 'rejected', error: unknown } }} input
+   * @returns {Promise<void>}
+   */
+  async answerInteraction(project, { runId, eventId, outcome }) {
+    const state = this.projects.get(this.#key(project));
+    const entry = state?.pending.get(String(eventId));
+    if (!state || !entry) {
+      throw new HttpError(404, "interaction_not_pending", "That question is no longer waiting for an answer.");
+    }
+    if (entry.runId !== String(runId)) {
+      // The event id is the kernel's, not ours, so a caller could name a real
+      // pending question that belongs to someone else's run. Checked here
+      // because the route can only prove the run, not the question.
+      throw new HttpError(404, "interaction_not_pending", "That question does not belong to this run.");
+    }
+    await entry.adapter.answerHostEvent({ eventId: String(eventId), outcome });
+    state.pending.delete(String(eventId));
+    this.runEvents.publish(entry.runId, `${entry.kind}/requested`, { eventId: String(eventId), status: "answered" });
   }
 
   /**

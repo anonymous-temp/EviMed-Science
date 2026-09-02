@@ -2,17 +2,16 @@ import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { constants as fsConstants, existsSync, lstatSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { workspaceLayout } from "@evimed/domain";
 import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
-import { deepSeekModelDisplayName, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { browserSessionCookie, generateBrowserSessionSecret } from "./dshBrowserAuth.mjs";
 import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
@@ -20,7 +19,6 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import {
   isAllowedWireMethod,
-  legacyMessagesToTranscript,
   mapWireError,
   normalizeTranscript,
   transcriptToLedgerMessages,
@@ -56,10 +54,6 @@ function sleep(ms) {
 }
 
 const RUNTIME_READINESS_PROBE_TIMEOUT_MS = 500;
-const bundledEviMedMcpDir = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../../runtime/mcp/evimed-research",
-);
 
 class RemoteRuntimeProcess extends EventEmitter {
   constructor(client, project, pollMs) {
@@ -925,20 +919,8 @@ function dockerSecurityArgs(config) {
 // runtime. One failure is a busy workspace; three in a row is a workspace the
 // server genuinely cannot read.
 const quotaCheckFailureTolerance = 3;
-const scienceConnectors = Object.freeze([
-  "paper-search",
-  "biomcp",
-  "materials-project",
-  "fred",
-  "spaceweather",
-  "open-meteo",
-  "usgs-water",
-]);
-const evimedMcpMarkerFile = ".evimed-mcp.json";
 const evimedWorkloadAudience = "evimed-adapter";
 const modelGatewayAudience = "evimed-model-gateway";
-const modelGatewayProviderName = "deepseek";
-const modelGatewayMarkerFile = ".evimed-model-provider.json";
 const evimedWorkloadTokenFileName = "evimed-workload.token";
 const evimedAdapterEnvironment = Object.freeze({
   biomedicalSourceSearch: "EVIMED_BIOMEDICAL_SOURCE_SEARCH_URL",
