@@ -78,6 +78,18 @@ class ToolContractTests(unittest.TestCase):
             "mendelian_randomization",
             "bibliometric_analysis",
             "research_topic_selection",
+            # The seven first-party science connectors, mounted from
+            # `science_connectors.py`. They were tested and reachable by
+            # nothing before: the module ran as a standalone stdio bridge
+            # that no deployment starts, so not one of them appeared in
+            # `tools/list`, and therefore not one was callable.
+            "search_papers",
+            "search_biomedical_records",
+            "search_materials",
+            "get_fred_series",
+            "get_space_weather_alerts",
+            "get_weather",
+            "get_usgs_water_data",
             "peer_review",
             "drug_safety_analysis",
         }

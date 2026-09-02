@@ -89,3 +89,52 @@ class ScienceConnectorDispatchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MountingTests(unittest.TestCase):
+    """The connectors are reachable, which is the whole of what was missing.
+
+    The module was written, tested and mounted nowhere: it ran as a standalone
+    stdio bridge that no deployment starts, so `tools/list` never carried one
+    of its tools and the model could not call any of them. Every test above
+    passed throughout. These assert the other half — that the research server
+    publishes them and routes a call to the right connector — because a unit
+    test of an unmounted module is exactly the shape of green that hid this.
+    """
+
+    def setUp(self):
+        self.server = importlib.import_module("server")
+
+    def test_every_connector_is_published_under_its_own_tool_name(self):
+        published = {tool["name"]: tool for tool in self.server.TOOL_DEFINITIONS}
+        for connector, entry in science_connectors.CONNECTORS.items():
+            with self.subTest(connector=connector):
+                self.assertIn(entry["tool"], published)
+                # The schema shown is the schema enforced: a tool that
+                # advertises a field it then refuses is worse than one that
+                # never offered it.
+                self.assertIs(published[entry["tool"]]["inputSchema"], entry["schema"])
+
+    def test_a_call_reaches_the_connector_the_tool_name_names(self):
+        # The stub returns what the connector really returns — the URL it
+        # requested, and rows. A shape the real function never produces would
+        # pass here and fail in production, which is the fixture mistake this
+        # repository has already paid for once.
+        with mock.patch.object(
+            science_connectors,
+            "direct_query",
+            return_value={
+                "source": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GDP",
+                "data": ["DATE,GDP", "2026-01-01,100"],
+            },
+        ) as routed:
+            result = self.server.call_tool("get_fred_series", {"series_id": "GDP"})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(routed.call_args[0][0], "fred")
+
+    def test_bad_input_is_refused_before_anything_is_asked_of_the_network(self):
+        with mock.patch.object(science_connectors.public_sources, "_get_json_value") as fetched:
+            result = self.server.call_tool("get_weather", {"latitude": 999, "longitude": 0})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "invalid_input")
+        fetched.assert_not_called()
