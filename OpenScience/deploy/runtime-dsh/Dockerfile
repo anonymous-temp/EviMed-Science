@@ -26,11 +26,17 @@ ARG NODE_VERSION=22.22.0
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
 # a slow or broken route to nodejs.org passes its own mirror. Trust does not
 # move with the URL: the sha256 pins below verify whatever host served it.
+#
+# Both architectures carry a pin, and an empty one now fails the build. It used
+# to be skipped: the arm64 pin was blank and the verification sat behind
+# `if [ -n "$NODE_SHA256" ]`, so an arm64 image fetched Node over the network
+# and untarred it into /usr/local unverified -- and did so silently, because a
+# skipped check and a passed one look identical in a build log.
 ARG NODE_DIST_BASE=https://nodejs.org/dist
 ARG PNPM_VERSION=11.7.0
 ARG UV_VERSION=0.11.26
 ARG NODE_SHA256_AMD64=9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37
-ARG NODE_SHA256_ARM64=
+ARG NODE_SHA256_ARM64=1bf1eb9ee63ffc4e5d324c0b9b62cf4a289f44332dfef9607cea1a0d9596ba6f
 ARG UV_SHA256_AMD64=6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0
 ARG UV_SHA256_ARM64=befa1a59c91e96eb601b0fd9a97c03dd666f17baba644b2b4db9c59a767e387e
 ARG UV_LICENSE_MIT_SHA256=860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c
@@ -95,7 +101,8 @@ RUN set -eux; \
   tmp="$(mktemp -d)"; \
   curl_args=(--http1.1 --fail --show-error --location --retry 5 --retry-all-errors --retry-delay 2 --connect-timeout 20 --max-time 600 --speed-limit 1024 --speed-time 60 --continue-at -); \
   curl "${curl_args[@]}" "${NODE_DIST_BASE}/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -o "${tmp}/node.tar.xz"; \
-  if [ -n "${NODE_SHA256}" ]; then printf '%s  %s\n' "${NODE_SHA256}" "${tmp}/node.tar.xz" | sha256sum -c -; fi; \
+  if [ -z "${NODE_SHA256}" ]; then echo "No Node sha256 pinned for TARGETARCH=${TARGETARCH}; refusing to install an unverified runtime." >&2; exit 1; fi; \
+  printf '%s  %s\n' "${NODE_SHA256}" "${tmp}/node.tar.xz" | sha256sum -c -; \
   tar -xJf "${tmp}/node.tar.xz" -C /usr/local --strip-components=1 \
     --exclude=CHANGELOG.md --exclude=README.md; \
   curl "${curl_args[@]}" "${GITHUB_DOWNLOAD_PREFIX}https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_TRIPLE}.tar.gz" -o "${tmp}/uv.tar.gz"; \

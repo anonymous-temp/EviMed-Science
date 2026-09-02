@@ -575,37 +575,75 @@ test("web compose includes a buildable runtime image profile with every download
   assert.equal(/OPEN_SCIENCE_OPENCODE_\w+/.test(compose), false, "compose still passes the retired kernel's build arguments");
 });
 
-test("OpenCode runtime Dockerfile pins and verifies tools, architectures, and licenses", async () => {
-  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-opencode/Dockerfile"), "utf8");
+// One image ships, so there is one Dockerfile with tools to pin, and this test
+// reads it. It read the retired kernel's copy until that tree was deleted on
+// 2026-09-02; almost none of what it checks was ever about OpenCode — the
+// scientific stack, the architecture handling, the retry budget and the
+// redistributed licenses are properties of whichever image a deployment
+// launches, and they would have been silently lost had the assertions gone out
+// with the file that happened to hold them.
+//
+// Two of them were genuinely about the retired kernel and have no successor:
+// the OpenCode archive digests and the separately fetched OpenCode license.
+// The kernel is an npm global now, so there is no archive to digest and its
+// license ships inside the package. What binds it instead is the publish-date
+// filter and the whole-tree version assertion, checked below in their place.
+test("the runtime image pins and verifies tools, architectures, and licenses", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
   assert.match(dockerfile, /^ARG TARGETARCH$/m);
   assert.doesNotMatch(dockerfile, /^ARG TARGETARCH=/m);
-  assert.match(dockerfile, /ARG OPENCODE_VERSION=1\.17\.13/);
+  assert.match(dockerfile, /ARG DSH_VERSION=0\.1\.2-alpha\.3/);
   assert.match(dockerfile, /ARG UV_VERSION=0\.11\.26/);
+  // Both architectures of both downloads. `NODE_SHA256_ARM64` used to be absent
+  // from this list and empty in the Dockerfile, where the verification sat
+  // behind `if [ -n "$NODE_SHA256" ]` -- so an arm64 build fetched Node over
+  // the network and untarred it into /usr/local with nothing checked, while a
+  // test named for pinning architectures passed. An empty pin now fails the
+  // build, and this list is what stops one from being emptied again.
   for (const name of [
-    "OPENCODE_SHA256_AMD64",
-    "OPENCODE_SHA256_ARM64",
+    "NODE_SHA256_AMD64",
+    "NODE_SHA256_ARM64",
     "UV_SHA256_AMD64",
     "UV_SHA256_ARM64",
-    "OPENCODE_LICENSE_SHA256",
     "UV_LICENSE_MIT_SHA256",
   ]) {
     assert.match(dockerfile, new RegExp(`^ARG ${name}=[a-f0-9]{64}$`, "m"));
   }
-  assert.match(dockerfile, /LABEL io\.open-science\.opencode\.version="\$\{OPENCODE_VERSION\}"/);
+  // The guard itself, not just the pins: a pin can only be trusted if a missing
+  // one stops the build rather than skipping the check.
+  assert.match(dockerfile, /if \[ -z "\$\{NODE_SHA256\}" \]; then .*refusing to install an unverified runtime.*exit 1; fi/);
+  // The kernel's substitute for an archive digest. `npm install
+  // @deepseek-ai/dsh@0.1.2-alpha.3` on its own resolved a root at alpha.3 with
+  // 213 subpackages at alpha.4 and reported success, so the date filter states
+  // the request and the scan over every installed package is the guarantee.
+  assert.match(dockerfile, /^ARG DSH_PUBLISHED_BEFORE=\d{4}-\d{2}-\d{2}T/m);
+  assert.match(dockerfile, /--before="\$\{DSH_PUBLISHED_BEFORE\}"/);
+  assert.match(dockerfile, /names\.length < 50/);
+  assert.match(dockerfile, /filter\(\(\[, v\]\) => v !== pin\)/);
+  assert.match(dockerfile, /LABEL io\.open-science\.dsh\.version="\$\{DSH_VERSION\}"/);
   assert.match(dockerfile, /LABEL io\.open-science\.uv\.version="\$\{UV_VERSION\}"/);
   assert.match(dockerfile, /LABEL org\.opencontainers\.image\.revision="\$\{SOURCE_REVISION\}"/);
-  assert.match(dockerfile, /amd64\).*OPENCODE_ARCH="x64";.*UV_TRIPLE="x86_64-unknown-linux-gnu"/s);
-  assert.match(dockerfile, /arm64\).*OPENCODE_ARCH="arm64";.*UV_TRIPLE="aarch64-unknown-linux-gnu"/s);
-  assert.match(dockerfile, /opencode-linux-\$\{OPENCODE_ARCH\}\.tar\.gz/);
+  assert.match(dockerfile, /amd64\).*NODE_ARCH="x64";.*UV_TRIPLE="x86_64-unknown-linux-gnu"/s);
+  assert.match(dockerfile, /arm64\).*NODE_ARCH="arm64";.*UV_TRIPLE="aarch64-unknown-linux-gnu"/s);
+  assert.match(dockerfile, /node-v\$\{NODE_VERSION\}-linux-\$\{NODE_ARCH\}\.tar\.xz/);
   assert.match(dockerfile, /uv-\$\{UV_TRIPLE\}\.tar\.gz/);
   assert.match(dockerfile, /--http1\.1 --fail --show-error --location --retry 5 --retry-all-errors/);
   assert.match(dockerfile, /--connect-timeout 20 --max-time 600/);
   assert.match(dockerfile, /--speed-limit 1024 --speed-time 60 --continue-at -/);
-  assert.equal((dockerfile.match(/curl "\$\{curl_args\[@\]\}"/g) ?? []).length, 4);
-  assert.equal((dockerfile.match(/sha256sum -c -/g) ?? []).length, 4);
-  assert.match(dockerfile, /opencode\/v\$\{OPENCODE_VERSION\}\/LICENSE/);
+  // Three fetches now rather than four — Node, uv, and uv's license — because
+  // the kernel is no longer downloaded.
+  assert.equal((dockerfile.match(/curl "\$\{curl_args\[@\]\}"/g) ?? []).length, 3);
+  // Counting `sha256sum -c -` occurrences says three checks are written, not
+  // that three run: one of them sat inside a conditional that was false on
+  // arm64 and this count was three throughout. The assertion above -- that a
+  // missing pin exits non-zero -- is what makes the count mean "verified".
+  assert.equal((dockerfile.match(/sha256sum -c -/g) ?? []).length, 3);
+  assert.doesNotMatch(
+    dockerfile,
+    /if \[ -n "\$\{(NODE|UV)_SHA256\}" \]; then/,
+    "a checksum guarded by its own presence is a checksum that can be skipped by leaving the pin empty",
+  );
   assert.match(dockerfile, /uv\/\$\{UV_VERSION\}\/LICENSE-MIT/);
-  assert.match(dockerfile, /\/usr\/share\/licenses\/opencode\/LICENSE/);
   assert.match(dockerfile, /\/usr\/share\/licenses\/uv\/LICENSE-MIT/);
   assert.match(dockerfile, /python-is-python3/);
   assert.match(dockerfile, /ripgrep/);
@@ -632,15 +670,20 @@ test("OpenCode runtime Dockerfile pins and verifies tools, architectures, and li
   assert.match(dockerfile, /importlib\.import_module\(package\)/);
   assert.match(dockerfile, /RUN Rscript -e 'stopifnot\(getRversion\(\) >= "4\.0\.0"/);
   assert.match(dockerfile, /\bsocat\b/);
-  assert.match(dockerfile, /COPY deploy\/runtime-opencode\/open-science-opencode-serve\.sh/);
-  assert.match(dockerfile, /CMD \["opencode", "--version"\]/);
+  assert.match(dockerfile, /COPY deploy\/runtime-dsh\/open-science-dsh-serve\.sh/);
+  assert.match(dockerfile, /CMD \["dsh", "--version"\]/);
 
   const launcher = await readFile(
-    path.join(repoRoot, "deploy/runtime-opencode/open-science-opencode-serve.sh"),
+    path.join(repoRoot, "deploy/runtime-dsh/open-science-dsh-serve.sh"),
     "utf8",
   );
-  assert.match(launcher, /opencode serve --hostname 127\.0\.0\.1/);
-  assert.match(launcher, /UNIX-LISTEN:\$\{socket\}/);
+  // The kernel is reachable only on loopback, and only through a 0600 unix
+  // socket the control plane mounts. OpenCode was told to bind loopback with
+  // `--hostname`; DSH's web host refuses a bind-all host outright, so the
+  // loopback half of the property is asserted where it is still written down —
+  // the address socat bridges the socket to.
+  assert.match(launcher, /UNIX-LISTEN:\$\{socket\},fork,unlink-early,mode=0600/);
+  assert.match(launcher, /"TCP:127\.0\.0\.1:\$\{port\}"/);
 });
 
 test("drug-safety specialist writes its response cache to a writable mount", async () => {
@@ -909,8 +952,14 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
   assert.match(workflow, /OPEN_SCIENCE_E2E_BASE_URL: \$\{\{ secrets\.OPEN_SCIENCE_E2E_BASE_URL \}\}/);
   assert.match(workflow, /run: pnpm test:web:e2e/);
   assert.doesNotMatch(workflow, /Test Hosted Web E2E/);
+  // The runtime proof used to be a single negative -- "not the retired kernel"
+  // -- which a deployment running no kernel at all would also satisfy. The
+  // script now names what it requires instead, as two separate claims: a
+  // sandboxed Docker runtime, and that the runtime is DSH. Both are listed
+  // because a deployment can satisfy one without the other.
   for (const proof of [
-    'checks.runtime?.mode !== "opencode"',
+    'checks.runtime?.mode !== "kernel"',
+    'checks.runtime?.kernel !== "dsh"',
     'checks.stateStore?.mode !== "postgres"',
     'checks.memory?.connected !== true',
     'checks.modelGateway?.model !== "deepseek-v4-pro"',
