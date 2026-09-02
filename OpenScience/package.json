@@ -29,6 +29,7 @@
     "configure:monitoring": "node scripts/ops/configure-monitoring.mjs",
     "check:monitoring": "node scripts/ops/configure-monitoring.mjs --check",
     "check:kernel-defaults": "node scripts/ops/check-kernel-defaults.mjs",
+    "check:pin-inventory": "node scripts/ops/check-pin-inventory.mjs",
     "check:evidence-connectors": "node scripts/ops/check-evidence-connectors.mjs",
     "probe:monitoring": "node scripts/ops/configure-monitoring.mjs --probe",
     "configure:backup": "node scripts/ops/configure-backup.mjs",
