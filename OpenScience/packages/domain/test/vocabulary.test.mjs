@@ -7,7 +7,9 @@ import {
   CONTRACT_KINDS,
   CONTRACT_VALIDATOR_KINDS,
   DOMAIN_VERSION,
+  DELEGATION_BASE_TOOLS,
   GATE_CHECK_IDS,
+  KERNEL_GLOBAL_TOOL_NAMES,
   MAX_DELEGATION_DEPTH,
   MCP_TOOL_BASE_NAMES,
   MCP_TOOL_NAMES,
@@ -199,6 +201,17 @@ test("a capability manifest names its contract, its skills and its tools", () =>
   assert.deepEqual(resolveContractKind(valid), { ok: true, contractKind: "clinical-evidence-report" });
   assert.ok(delegationToolFilter(valid).includes("evimed_submit_deliverable"));
   assert.ok(delegationToolFilter(valid).includes("write"), "a child that cannot write cannot deliver");
+  // Every base tool must be one the kernel has actually registered. This is
+  // not style: `toolFilter.allow` is resolved by the kernel's
+  // `tools.restrict()`, which throws on an unknown name instead of ignoring
+  // it, so one wrong entry here does not narrow a child's tools — it makes
+  // every delegation raise. `report` sat in this list and did exactly that,
+  // and nothing caught it because our test doubles never modelled `restrict()`.
+  for (const name of DELEGATION_BASE_TOOLS) {
+    const known = KERNEL_GLOBAL_TOOL_NAMES.has(name) || SOCKET_TOOL_NAME_LIST.includes(name) || MCP_TOOL_NAMES.includes(name);
+    assert.ok(known, `delegation base tool ${name} is registered by nobody; tools.restrict() would throw on it`);
+  }
+  assert.ok(!DELEGATION_BASE_TOOLS.includes("report"), "`report` is a child-own tool the kernel cannot restrict on");
   const legacy = validateCapabilityManifest({ ...manifest, tools: ["evimed_literature_search"] });
   assert.ok(legacy.issues.some((issue) => /legacy spelling/.test(issue.message)));
 });
