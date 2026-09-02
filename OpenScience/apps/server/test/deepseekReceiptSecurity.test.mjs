@@ -8,7 +8,7 @@ import {
   deepSeekReleaseReceiptFreshness,
   signDeepSeekReleaseReceipt,
   validateDeepSeekReleaseReceipt,
-} from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
+} from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 
 const signingSecret = "receipt-signing-secret-with-at-least-32-private-bytes";
 const now = Date.parse("2026-07-17T01:00:00.000Z");

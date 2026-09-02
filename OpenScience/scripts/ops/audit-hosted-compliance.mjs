@@ -292,7 +292,7 @@ async function checkHostedPackaging() {
 async function checkDeepSeekCompatibilityPreflight() {
   const pkg = JSON.parse(await read("package.json"));
   const script = await read("scripts/ops/deepseek-compatibility-preflight.mjs");
-  const releaseGate = await read("scripts/ops/deepseek-opencode-release-gate.mjs");
+  const releaseGate = await read("scripts/ops/deepseek-kernel-release-gate.mjs");
   const workflow = await read(".github/workflows/web.yml");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
   const server = await read("apps/server/src/server.mjs");
@@ -302,7 +302,7 @@ async function checkDeepSeekCompatibilityPreflight() {
   const privacy = await read("docs/WEB_PRIVACY_AND_COMPLIANCE.md");
   if (
     pkg.scripts?.["preflight:deepseek"] === "node scripts/ops/deepseek-compatibility-preflight.mjs" &&
-    pkg.scripts?.["preflight:deepseek:release"] === "node scripts/ops/deepseek-opencode-release-gate.mjs" &&
+    pkg.scripts?.["preflight:deepseek:release"] === "node scripts/ops/deepseek-kernel-release-gate.mjs" &&
     /OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE/.test(script) &&
     !/OPEN_SCIENCE_DEEPSEEK_API_KEY(?:[^_]|$)/.test(script) &&
     /REQUIRED_OPENCODE_VERSION = "1\.17\.13"/.test(releaseGate) &&

@@ -44,7 +44,7 @@
     "smoke:deployment": "node scripts/ops/deployment-smoke.mjs",
     "preflight:host": "node scripts/ops/host-preflight.mjs",
     "preflight:deepseek": "node scripts/ops/deepseek-compatibility-preflight.mjs",
-    "preflight:deepseek:release": "node scripts/ops/deepseek-opencode-release-gate.mjs",
+    "preflight:deepseek:release": "node scripts/ops/deepseek-kernel-release-gate.mjs",
     "backup:object": "node scripts/ops/object-backup.mjs upload",
     "restore:object": "node scripts/ops/object-backup.mjs download",
     "probe:object": "node scripts/ops/object-backup.mjs probe",

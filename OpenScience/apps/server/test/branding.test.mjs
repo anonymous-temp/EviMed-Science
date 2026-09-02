@@ -22,7 +22,7 @@ test("all visible application branding uses EviMed", async () => {
   const html = await readFile(path.join(repoRoot, "apps/desktop/index.html"), "utf8");
   const tauri = JSON.parse(await readFile(path.join(repoRoot, "apps/desktop/src-tauri/tauri.conf.json"), "utf8"));
   const mark = await readFile(path.join(repoRoot, "apps/desktop/src/assets/evimed-mark.svg"), "utf8");
-  const mockRuntime = await readFile(path.join(repoRoot, "apps/server/src/mockRuntime.mjs"), "utf8");
+  const mockRuntime = await readFile(path.join(repoRoot, "apps/server/src/mockDshRuntime.mjs"), "utf8");
 
   assert.doesNotMatch(frontend, /Open Science/i);
   assert.doesNotMatch(frontend, /logo\.webp/);
@@ -33,7 +33,7 @@ test("all visible application branding uses EviMed", async () => {
   assert.equal(tauri.identifier, "com.evimed.science");
   assert.equal(tauri.app.windows[0].title, "EviMed");
   assert.match(mark, /aria-label="EviMed"/);
-  assert.doesNotMatch(mockRuntime, /OPEN_SCIENCE_OPENCODE_BIN/);
+  assert.doesNotMatch(mockRuntime, /OPENCODE|OpenCode/);
   assert.match(mockRuntime, /EviMed 测试运行时/);
 });
 

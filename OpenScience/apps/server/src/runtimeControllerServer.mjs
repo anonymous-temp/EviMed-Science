@@ -14,7 +14,7 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
-  buildOpenCodeLaunchPlan,
+  buildRuntimeLaunchPlan,
   cleanupDockerContainer,
   runtimeContainerName,
 } from "./runtimeManager.mjs";
@@ -111,14 +111,13 @@ function dockerInfo(config) {
 }
 
 function inspectRuntimeImage(config) {
-  // Both readings, deliberately. The neutral label is what every image
-  // publishes now; the kernel-specific one is what images built before this
-  // change carry, and a rollback to one of those must not be reported as an
-  // image with no metadata. Whichever answers first is the kernel's version.
+  // The kernel-neutral label, which is what every runtime image publishes. A
+  // kernel-specific label was read beside it while two kernels could be built;
+  // an image carrying only that one is now reported as an image with no
+  // metadata, which is what it is to this control plane.
   const format = [
     "{{.Id}}",
     '{{index .Config.Labels "io.open-science.runtime.version"}}',
-    '{{index .Config.Labels "io.open-science.opencode.version"}}',
     '{{index .Config.Labels "io.open-science.runtime.kernel"}}',
     '{{index .Config.Labels "io.open-science.uv.version"}}',
   ].join("|");
@@ -130,16 +129,11 @@ function inspectRuntimeImage(config) {
   if (result.status !== 0) {
     throw controllerFailure(503, "runtime_image_unavailable", "Runtime image is unavailable to the runtime controller.");
   }
-  const [imageId, neutralVersion, opencodeVersion, kernel, uvVersion] = result.stdout.trim().split("|");
-  const kernelVersion = neutralVersion || opencodeVersion;
+  const [imageId, kernelVersion, kernel, uvVersion] = result.stdout.trim().split("|");
   if (!imageId || !kernelVersion || !uvVersion) {
     throw controllerFailure(503, "runtime_image_metadata_missing", "Runtime image metadata is incomplete.");
   }
-  // `opencodeVersion` is still returned under its old name so a controller and
-  // a control plane on different sides of this change still understand each
-  // other; `RUNTIME_CONTROLLER_PROTOCOL_VERSION` gates the shape, not the
-  // meaning of a field that now answers for either kernel.
-  return { imageId, kernel: kernel || "", kernelVersion, opencodeVersion: kernelVersion, uvVersion };
+  return { imageId, kernel: kernel || "", kernelVersion, uvVersion };
 }
 
 function runtimeCapacityLimits(config) {
@@ -466,11 +460,18 @@ export function createRuntimeController(overrides = {}) {
     if (!Number.isSafeInteger(port) || port < 1024 || port > 65535) {
       throw controllerFailure(400, "runtime_controller_port_invalid", "Runtime controller port is invalid.");
     }
+    // Still required and still validated, and no longer used to launch
+    // anything: the retired kernel's HTTP server authenticated with it, this
+    // one authenticates with a browser-session cookie the control plane mints.
+    // It stays in the protocol until a `RUNTIME_CONTROLLER_PROTOCOL_VERSION`
+    // bump can remove it from both sides at once — a controller and a control
+    // plane disagreeing about a required field is a runtime that will not start
+    // and cannot say why.
     const password = typeof payload.password === "string" ? payload.password : "";
     if (!/^pw_[A-Za-z0-9_-]{16,}$/.test(password)) {
       throw controllerFailure(400, "runtime_controller_password_invalid", "Runtime controller credential is invalid.");
     }
-    const plan = buildOpenCodeLaunchPlan(config, project, port, password);
+    const plan = buildRuntimeLaunchPlan(config, project, port);
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;

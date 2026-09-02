@@ -13,7 +13,7 @@ import {
   signDeepSeekReleaseReceipt,
   runDeepSeekOpenCodeReleaseGate,
   validateDeepSeekReleaseReceipt,
-} from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
+} from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const testReceiptSigningSecret = "release-gate-test-signing-secret-with-at-least-32-bytes";

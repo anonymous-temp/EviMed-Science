@@ -54,7 +54,7 @@ export function readinessSaasProfile(config, checks) {
       checkMatches(
         checks.runtime,
         (check) =>
-          check.mode === "opencode" &&
+          check.mode === "kernel" &&
           check.sandboxMode === "docker" &&
           check.controlPlane === "controller_socket",
       ),

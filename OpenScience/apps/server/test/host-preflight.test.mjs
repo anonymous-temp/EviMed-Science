@@ -12,7 +12,7 @@ import {
   validateDockerSocketStat,
   validateSandboxPrerequisites,
 } from "../../../scripts/ops/host-preflight.mjs";
-import { signDeepSeekReleaseReceipt } from "../../../scripts/ops/deepseek-opencode-release-gate.mjs";
+import { signDeepSeekReleaseReceipt } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 

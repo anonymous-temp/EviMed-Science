@@ -1577,7 +1577,7 @@ test("the release receipt renews without anyone watching, and health tracks the 
   // Minting goes through the one command an operator already runs by hand. A
   // second way to produce receipts would be a second thing to keep signing
   // correctly.
-  assert.match(scheduler, /deepseek-opencode-release-gate\.mjs/, "the scheduler must mint through the existing gate");
+  assert.match(scheduler, /deepseek-kernel-release-gate\.mjs/, "the scheduler must mint through the existing gate");
   assert.ok(!/signDeepSeekReleaseReceipt|RECEIPT_MAC_DOMAIN/.test(scheduler), "the scheduler must not sign receipts itself");
 
   // Renewal has to beat the deadline with room to retry. Half of 24h.

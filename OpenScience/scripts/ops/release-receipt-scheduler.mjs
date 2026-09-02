@@ -16,7 +16,7 @@
  * scheduling idiom would be a second thing to learn and a second thing to get
  * wrong.
  *
- * Minting is `deepseek-opencode-release-gate.mjs` — one command, already the
+ * Minting is `deepseek-kernel-release-gate.mjs` — one command, already the
  * one an operator runs by hand — so this adds a cadence, not a second way to
  * produce receipts.
  *
@@ -31,7 +31,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const gateScript = path.join(scriptDir, "deepseek-opencode-release-gate.mjs");
+const gateScript = path.join(scriptDir, "deepseek-kernel-release-gate.mjs");
 const outputLimit = 64 * 1024;
 let activeChild = null;
 let stopping = false;

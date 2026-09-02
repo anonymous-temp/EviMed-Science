@@ -135,18 +135,6 @@ function releaseManifestConfig(overrides) {
   return readReleaseManifestFile(file);
 }
 
-function bundledOpenCodeBinary(rootDir) {
-  const target = process.platform === "darwin"
-    ? process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin"
-    : process.platform === "linux"
-      ? process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"
-      : process.platform === "win32"
-        ? "x86_64-pc-windows-msvc.exe"
-        : "";
-  if (!target) return "";
-  return path.join(rootDir, "apps/desktop/src-tauri/binaries", `opencode-${target}`);
-}
-
 export function loadConfig(overrides = {}) {
   const rootDir = overrides.rootDir ?? process.cwd();
   const port = Number(overrides.port ?? process.env.OPEN_SCIENCE_PORT ?? 8787);
@@ -154,54 +142,32 @@ export function loadConfig(overrides = {}) {
     overrides.dataDir ??
     process.env.OPEN_SCIENCE_DATA_DIR ??
     path.join(rootDir, ".openscience-web-data");
-  const opencodeBin =
-    overrides.opencodeBin ??
-    process.env.OPEN_SCIENCE_OPENCODE_BIN ??
-    bundledOpenCodeBinary(rootDir);
-  const runtimeMode =
-    overrides.runtimeMode ??
-    process.env.OPEN_SCIENCE_RUNTIME_MODE ??
-    "opencode";
-  // Which agent kernel runs inside a project container.
-  //
-  // `dsh` is the target and the whole point of the rewrite. The shipped default
-  // is nevertheless `opencode`, and that is a deliberate posture rather than a
-  // leftover: the control plane speaks DSH end to end and its suite proves it,
-  // but the browser's session view still renders from the old store, so a
-  // hosted deployment defaulting to `dsh` today would serve a session page that
-  // cannot show its own run. The default flips in the same change that lands the
-  // DSH session view and passes its acceptance walkthrough (§16 #15).
-  //
-  // Two consequences worth stating, because both are easy to get wrong:
-  // a deployment left on `opencode` after that point stops receiving the
-  // delivery gate's newer rules — those live on the run side now — and the test
-  // suite must therefore pin `dsh` explicitly rather than inherit this default,
-  // or flipping it would silently move every test onto the retiring kernel.
-  // DSH is the kernel. OpenCode remains reachable by setting this explicitly,
-  // and that is the rollback lever for the change window — a configuration
-  // value, revertible in a minute, which is the only reason the appendix-B
-  // trees are still in the repository. They are frozen: nobody maintains them,
-  // nothing new lands in them, and they come out in their own change once the
-  // quiet period after the flip has passed. A frozen rollback lever is not a
-  // second stack; two stacks both alive and both growing is what that rule was
-  // written against.
-  const runtimeKernel = String(
-    overrides.runtimeKernel ?? process.env.OPEN_SCIENCE_RUNTIME_KERNEL ?? "dsh",
+  // The runtime's *shape*: a real agent kernel in a container, or the in-process
+  // fake the tests and local demos run against. The value used to be spelled
+  // "opencode" because the only real kernel was OpenCode; the name outlived the
+  // kernel, and a deployment still setting it is configuring something that
+  // does not exist, so it is refused by name rather than quietly accepted.
+  const runtimeMode = String(
+    overrides.runtimeMode ?? process.env.OPEN_SCIENCE_RUNTIME_MODE ?? "kernel",
   ).trim().toLowerCase();
-  if (!["dsh", "opencode"].includes(runtimeKernel)) {
-    throw new Error(`OPEN_SCIENCE_RUNTIME_KERNEL must be "dsh" or "opencode", got "${runtimeKernel}".`);
+  if (runtimeMode === "opencode") {
+    throw new Error(
+      'OPEN_SCIENCE_RUNTIME_MODE no longer accepts "opencode": DSH is the only kernel. Use "kernel".',
+    );
   }
-  // Renamed variables fail loudly for one release rather than aliasing quietly:
-  // a deployment still exporting the old name is a deployment configuring
-  // something that no longer exists, and a silent alias hides that until the
-  // alias is removed.
-  for (const [oldName, newName] of [
-    ["OPEN_SCIENCE_OPENCODE_BIN", "OPEN_SCIENCE_DSH_BIN"],
-    ["OPEN_SCIENCE_OPENCODE_VERSION", "OPEN_SCIENCE_DSH_VERSION"],
+  if (!["kernel", "mock"].includes(runtimeMode)) {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_MODE must be "kernel" or "mock", got "${runtimeMode}".`);
+  }
+  // Removed variables fail loudly for one release rather than being aliased or
+  // ignored: a deployment still exporting one is a deployment configuring
+  // something that no longer exists, and silence hides that until someone
+  // wonders why the setting never took effect.
+  for (const [oldName, remedy] of [
+    ["OPEN_SCIENCE_RUNTIME_KERNEL", "DSH is the only kernel; remove this variable"],
+    ["OPEN_SCIENCE_OPENCODE_BIN", "set OPEN_SCIENCE_DSH_BIN instead"],
+    ["OPEN_SCIENCE_OPENCODE_VERSION", "set OPEN_SCIENCE_DSH_VERSION instead"],
   ]) {
-    if (runtimeKernel === "dsh" && process.env[oldName] && !process.env[newName]) {
-      throw new Error(`${oldName} is not read under the DSH kernel. Set ${newName} instead.`);
-    }
+    if (process.env[oldName]) throw new Error(`${oldName} is not read any more: ${remedy}.`);
   }
   const dshBin = overrides.dshBin ?? process.env.OPEN_SCIENCE_DSH_BIN ?? "dsh";
   const legacyDevAuth = overrides.devAuth ?? boolEnv("OPEN_SCIENCE_DEV_AUTH", true);
@@ -228,9 +194,9 @@ export function loadConfig(overrides = {}) {
           path.join(rootDir, "runtime/skills/curated-scientific"),
           path.join(rootDir, "runtime/skills/office"),
         ]);
-  // Deliberately NOT the list of everything the release binds. This one answers
-  // "which directories does the OpenCode path copy into each project", and the
-  // DSH image bakes its roots in instead — adding `capability-skills` here made
+  // Deliberately NOT the list of everything the release binds. The image bakes
+  // its skill roots in rather than copying them per project — adding
+  // `capability-skills` here made
   // the host runtime try to deliver a tree it must not, which surfaced as a 409
   // where a timeout was expected. What a release must digest is the generator's
   // list in `scripts/ops/generate-release-manifest.mjs`, which is a superset, so
@@ -438,22 +404,19 @@ export function loadConfig(overrides = {}) {
   const release = releaseManifestConfig(overrides);
   const runtimeDataVolume =
     overrides.runtimeDataVolume ?? process.env.OPEN_SCIENCE_RUNTIME_DATA_VOLUME ?? "";
-  // The DSH kernel has no TCP transport, and this is where that fact belongs.
+  // The kernel has no TCP transport, and this is where that fact belongs.
   // Its web host refuses to bind anything but loopback, so a published port
   // maps to an interface nothing is listening on; and the container entrypoint
   // that seeds the profile, disables telemetry and injects the deployment's
   // settings is the same script that runs the socat bridge, so the TCP path
   // skipped all of it. A non-production DSH deployment used to take the TCP
   // default silently and produce a container that died during boot saying it
-  // had no profile.
+  // had no profile. Kept as a refusal rather than a silent coercion: a
+  // deployment that asked for TCP is a deployment expecting a published port.
   const runtimeTransport =
-    overrides.runtimeTransport ??
-    process.env.OPEN_SCIENCE_RUNTIME_TRANSPORT ??
-    (production || runtimeKernel === "dsh" ? "unix" : "tcp");
-  if (runtimeKernel === "dsh" && runtimeTransport !== "unix") {
-    throw new Error(
-      `OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix" when OPEN_SCIENCE_RUNTIME_KERNEL is "dsh", got "${runtimeTransport}".`,
-    );
+    overrides.runtimeTransport ?? process.env.OPEN_SCIENCE_RUNTIME_TRANSPORT ?? "unix";
+  if (runtimeTransport !== "unix") {
+    throw new Error(`OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix", got "${runtimeTransport}".`);
   }
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
@@ -617,12 +580,12 @@ export function loadConfig(overrides = {}) {
     // questions: that one asks "is this call hung", this one asks "has the
     // kernel finished starting". Under DSH those differ by an order of
     // magnitude — composing the profile's plugin tree takes about a minute on
-    // this hardware, and a 30s deadline killed runtimes that were merely still
-    // composing and reported them as failures.
+    // this hardware, and the 30s deadline this used to carry killed runtimes
+    // that were merely still composing and reported them as failures.
     runtimeReadyTimeoutMs: Number(
       overrides.runtimeReadyTimeoutMs
         ?? process.env.OPEN_SCIENCE_RUNTIME_READY_TIMEOUT_MS
-        ?? (runtimeKernel === "dsh" ? 180_000 : 30_000),
+        ?? 180_000,
     ),
     runtimeProxyConnectTimeoutMs: Number(
       overrides.runtimeProxyConnectTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS ?? 30_000,
@@ -654,10 +617,8 @@ export function loadConfig(overrides = {}) {
       overrides.maxRunningRuntimesPerUser ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER ?? 4,
     ),
     runtimeMode,
-    runtimeKernel,
     dshBin,
     allowMockRuntime: overrides.allowMockRuntime ?? boolEnv("OPEN_SCIENCE_ALLOW_MOCK_RUNTIME", !production),
-    opencodeBin,
     runtimeSandboxMode: overrides.runtimeSandboxMode ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_MODE ?? "host",
     runtimeContainerBin: overrides.runtimeContainerBin ?? process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_BIN ?? "docker",
     runtimeControllerMode: String(
@@ -681,12 +642,7 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeContainerImage ??
       process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE ??
       release.manifest?.runtime.image ??
-      "open-science-opencode:opencode-1.17.13-uv-0.11.26",
-    opencodeVersion:
-      overrides.opencodeVersion ??
-      process.env.OPEN_SCIENCE_OPENCODE_VERSION ??
-      release.manifest?.runtime.opencodeVersion ??
-      "1.17.13",
+      `open-science-runtime:dsh-${depsVersions.dsh?.version ?? ""}-uv-0.11.26`,
     uvVersion:
       overrides.uvVersion ?? process.env.OPEN_SCIENCE_UV_VERSION ?? release.manifest?.runtime.uvVersion ?? "0.11.26",
     // Every version below is derived from deps-version.json, which is the one
