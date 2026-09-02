@@ -150,13 +150,21 @@ def direct_query(connector, arguments):
         else:
             raise ValueError("science_connector_query_invalid")
         url = "https://api.materialsproject.org/materials/summary/?" + urlencode(params)
-        return {"source": url, "data": public_sources._get_json_value(url)}
+        # Materials Project authenticates every request. Without the profile
+        # this returned a bare HTTP 401, which reads as "the service is down"
+        # — the live probe found it that way. Naming the credential makes an
+        # unprovisioned deployment say so instead.
+        return {"source": url, "data": public_sources._get_json_value(url, credential_profile="materials-project")}
     if connector == "fred":
         series = str(arguments["series_id"]).upper()
         if not series.replace("_", "").isalnum() or len(series) > 64:
             raise ValueError("science_connector_series_invalid")
         url = "https://fred.stlouisfed.org/graph/fredgraph.csv?" + urlencode({"id": series})
-        lines = public_sources._get_text(url, ("text/csv", "text/plain")).splitlines()
+        # FRED serves `application/csv`, which the default accepted list did
+        # not include, so every call failed as an invalid response. Found by
+        # the live probe; no unit test could have, since the content type is
+        # the server's.
+        lines = public_sources._get_text(url, ("application/csv", "text/csv", "text/plain")).splitlines()
         return {"source": url, "data": lines[: limit + 1]}
     if connector == "spaceweather":
         url = "https://services.swpc.noaa.gov/products/alerts.json"
