@@ -14,9 +14,12 @@ export const releaseManifestFixture = Object.freeze({
     imageId: `sha256:${"b".repeat(64)}`,
   },
   runtime: {
-    image: "open-science-opencode:opencode-1.17.13-uv-0.11.26",
+    image: "evimed-runtime-dsh:dsh-0.1.2-alpha.3-uv-0.11.26",
     imageId: `sha256:${"a".repeat(64)}`,
-    opencodeVersion: "1.17.13",
+    dshVersion: "0.1.2-alpha.3",
+    cordisVersion: "4.0.2",
+    socketVersion: "0.1.0",
+    domainVersion: "0.1.0",
     uvVersion: "0.11.26",
   },
   proxy: {
@@ -89,32 +92,7 @@ export const runtimeReleaseConfig = Object.freeze({
   uvVersion: releaseManifestFixture.runtime.uvVersion,
 });
 
-/**
- * The same release, published as the DSH kernel ships it. Two readiness
- * comparisons read a manifest's runtime row, and only one of them had learned
- * that a DSH manifest carries `dshVersion` instead of `opencodeVersion`; the
- * other compared against `undefined` and failed `release_manifest_mismatch` on
- * every DSH deployment. A fixture that only ever names one kernel cannot catch
- * that, which is why this one exists.
- */
-export const dshReleaseManifestFixture = Object.freeze({
-  ...releaseManifestFixture,
-  runtime: Object.freeze({
-    image: "evimed-runtime-dsh:dsh-0.1.2-alpha.3-uv-0.11.26",
-    imageId: `sha256:${"a".repeat(64)}`,
-    dshVersion: "0.1.2-alpha.3",
-    cordisVersion: "4.0.2",
-    socketVersion: "0.1.0",
-    domainVersion: "0.1.0",
-    uvVersion: "0.11.26",
-  }),
-});
-
-export const dshProductionReleaseConfig = Object.freeze({
-  releaseManifest: dshReleaseManifestFixture,
-  materialsProjectApiKey: "test-materials-project-key",
-  runtimeContainerImage: dshReleaseManifestFixture.runtime.image,
-  dshVersion: dshReleaseManifestFixture.runtime.dshVersion,
-  socketBundleVersion: dshReleaseManifestFixture.runtime.socketVersion,
-  uvVersion: dshReleaseManifestFixture.runtime.uvVersion,
-});
+// Kept as aliases: both names are imported across the suite, and one kernel
+// means they now describe the same release rather than two.
+export const dshReleaseManifestFixture = releaseManifestFixture;
+export const dshProductionReleaseConfig = runtimeReleaseConfig;
