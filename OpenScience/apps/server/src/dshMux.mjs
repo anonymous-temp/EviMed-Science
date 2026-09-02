@@ -365,7 +365,7 @@ export class DshMux {
         while (pending.length > 0) yield pending.shift();
         if (error) throw error;
         if (done || signal.aborted) return;
-        await new Promise((resolve) => { wake = resolve; });
+        await new Promise((resolve) => { wake = () => resolve(undefined); });
       }
     } finally {
       this.frames.off(streamId, onFrame);

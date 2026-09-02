@@ -372,7 +372,11 @@ function environmentRows(environment, workloadTokenFile) {
  * fixed at exec time and a short-lived token that cannot be refreshed without a
  * restart is a token that will expire mid-run.
  *
- * @param {{ token: string }} input
+ * The browser-session secret rides in the same file for the same reason: the
+ * kernel reads its cookie key from here, so writing it anywhere else would mean
+ * two credential stores with two lifetimes.
+ *
+ * @param {{ token: string, browserSessionSecret?: string|null }} input
  * @returns {string}
  */
 export function renderCredentialsFile({ token, browserSessionSecret = null }) {
