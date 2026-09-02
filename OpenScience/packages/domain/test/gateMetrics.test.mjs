@@ -52,10 +52,10 @@ test("every contract kind has a decided position on the verification metrics", (
   const examined = [];
   for (const kind of CONTRACT_KINDS) {
     examined.push(kind);
-    const metrics = runGate({ contractKind: kind, files: new Map(), declaredOutputs: [] }).metrics ?? {};
+    const metrics = runGate({ contractKind: kind, files: new Map(), expectedOutputs: [] }).metrics ?? {};
     const carries = VERIFICATION_METRICS.every((name) => name in metrics);
     if (OWN_METRICS.has(kind)) {
-      for (const name of OWN_METRICS.get(kind)) {
+      for (const name of OWN_METRICS.get(kind) ?? []) {
         assert.ok(name in metrics, `${kind} is listed as measuring its own thing but does not report ${name}`);
       }
       continue;
@@ -85,21 +85,21 @@ test("every contract kind has a decided position on the verification metrics", (
 });
 
 test("a report-shaped kind reports the metrics as numbers, not as a promise", () => {
-  const verdict = runGate({ contractKind: "research-brief", files: new Map(), declaredOutputs: [] });
+  const verdict = runGate({ contractKind: "research-brief", files: new Map(), expectedOutputs: [] });
   assert.equal(typeof verdict.metrics.citationCoverage, "number");
   assert.equal(typeof verdict.metrics.disputedShare, "number");
   assert.equal(typeof verdict.metrics.unresolved, "number");
   assert.equal(typeof verdict.metrics.confidenceMix, "object");
   // The mix names every level it counts even at zero, so a reader can tell
   // "no synthesized claims" from "this level was never counted".
-  assert.deepEqual(Object.keys(verdict.metrics.confidenceMix).sort(), ["high", "low", "moderate", "unlabelled"]);
+  assert.deepEqual(Object.keys(/** @type {Record<string, number>} */ (verdict.metrics.confidenceMix)).sort(), ["high", "low", "moderate", "unlabelled"]);
 });
 
 test("the metrics never block: they are advisory whatever they say", () => {
   // The budget is six blocking points system-wide, and none of them is a
   // metric. A verdict's ok-ness comes from its issues, never from a number.
   for (const kind of ["research-brief", "appraisal-table", "manuscript-section"]) {
-    const verdict = runGate({ contractKind: kind, files: new Map(), declaredOutputs: [] });
+    const verdict = runGate({ contractKind: kind, files: new Map(), expectedOutputs: [] });
     const blocking = verdict.issues.filter((issue) => issue.severity === "required");
     const fromMetrics = blocking.filter((issue) => VERIFICATION_METRICS.some((name) => String(issue.message).includes(name)));
     assert.deepEqual(fromMetrics, [], `${kind} turned a verification metric into a blocking issue`);
