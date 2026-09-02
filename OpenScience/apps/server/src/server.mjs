@@ -2967,6 +2967,13 @@ function readinessRelease(config) {
   // manifest could name either of two kernels, only one of them had learned it,
   // and the other compared against `undefined` and failed
   // `release_manifest_mismatch` on every deployment of the newer kernel.
+  //
+  // A manifest from before the kernel change needs no guard here: its runtime
+  // row has no `dshVersion`, and `releaseManifest.mjs` requires that key by
+  // name, so it is refused at parse as `release_manifest_runtime_fields_invalid`
+  // and never reaches this comparison. The rollback work added a check for it
+  // here; it could not fire, and an unreachable guard reads as protection the
+  // deployment does not get from it.
   const mismatches = [
     ["releaseId", config.releaseId, manifest.app.releaseId],
     ["appVersion", config.appVersion, manifest.app.version],

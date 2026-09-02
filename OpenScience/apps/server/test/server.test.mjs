@@ -1326,6 +1326,53 @@ test("production readiness accepts a release manifest that matches the deployed 
   );
 });
 
+test("a manifest from before the kernel change is refused at parse, by name", async () => {
+  // Both directions of this used to be tested, because the rollback lever could
+  // move the kernel under a manifest that described the other one. The lever is
+  // gone and there is one kernel, so only one disagreement is still reachable —
+  // and it is the one that matters on an upgrade: a release deployed against a
+  // manifest generated before the kernel changed.
+  //
+  // That manifest carries `opencodeVersion` and no `dshVersion`. The rollback
+  // work added a readiness check for exactly this, which turned out to be
+  // unreachable: `releaseManifest.mjs` requires the runtime row's kernel keys
+  // by name, so the manifest is refused at parse and never reaches the
+  // field-by-field comparison. The property survives — the failure names the
+  // manifest's shape rather than blaming a version number — and it is checked
+  // where it actually happens.
+  await withApp(
+    async ({ base }) => {
+      const res = await fetch(`${base}/api/ready`);
+      assert.equal(res.status, 503);
+      const check = (await res.json()).data.checks.release;
+      assert.equal(check.ok, false);
+      assert.equal(check.code, "release_manifest_runtime_fields_invalid");
+    },
+    {
+      production: true,
+      devAuth: false,
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      runtimeMode: "mock",
+      allowMockRuntime: true,
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      operatorMetricsToken: "metrics-token-for-production-readiness-tests",
+      trustProxy: true,
+      ...dshProductionReleaseConfig,
+      releaseManifest: {
+        ...dshProductionReleaseConfig.releaseManifest,
+        runtime: (() => {
+          const { dshVersion: _dshVersion, ...withoutDsh } = dshProductionReleaseConfig.releaseManifest.runtime;
+          return { ...withoutDsh, opencodeVersion: "1.17.13" };
+        })(),
+      },
+    },
+  );
+});
+
 test("a DSH release whose kernel version drifts is still caught", async () => {
   // The negative control. Making the check kernel-aware must not make it
   // toothless: a manifest naming one DSH build while the deployment runs
