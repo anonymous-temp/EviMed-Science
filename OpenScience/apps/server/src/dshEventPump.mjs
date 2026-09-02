@@ -132,6 +132,25 @@ export class RuntimeEventPump {
     });
   }
 
+  /**
+   * Stops watching every project.
+   *
+   * Needed because this pump now holds a real socket per attached project. It
+   * did not before: `watchSessions` was decoded and unit-tested, but no
+   * production code ever opened a downlink, so there was nothing to leak and
+   * nothing to close. The first thing that changed when this pump got a
+   * transport was that a test process stopped exiting — every assertion
+   * passed and the runner then sat on an open mux until it was killed, which
+   * reads as "the suite hangs" and says nothing about a socket.
+   */
+  closeAll() {
+    for (const project of [...this.projects.keys()]) {
+      const state = this.projects.get(project);
+      state?.controller.abort();
+      this.projects.delete(project);
+    }
+  }
+
   /** Stops watching a project's runtime and forgets its session map. @param {{ userId: string, id: string }} project */
   detach(project) {
     const key = this.#key(project);

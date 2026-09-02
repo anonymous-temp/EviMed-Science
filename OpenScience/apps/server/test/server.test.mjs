@@ -5590,66 +5590,17 @@ test("docker runtime startup reports container cleanup failures", async () => {
   }
 });
 
-test("host OpenCode startup cleans a stale same-project process from runtime state", async () => {
-  const dataDir = await mkdtemp(path.join(tmpdir(), "os-web-runtime-host-orphan-"));
-  const bin = path.join(dataDir, "opencode-stub");
-  await writeFile(
-    bin,
-    "#!/bin/sh\ntrap 'exit 0' TERM INT\nwhile true; do sleep 1; done\n",
-    { mode: 0o755 },
-  );
-  const orphan = spawn(bin, ["serve"], { stdio: "ignore" });
-  const metaDir = path.join(dataDir, "users", "dev", "projects", "default", ".openscience");
-  await mkdir(metaDir, { recursive: true });
-  await writeFile(
-    path.join(metaDir, "runtime-state.json"),
-    `${JSON.stringify(
-      {
-        version: 1,
-        updatedAt: new Date().toISOString(),
-        userId: "dev",
-        projectId: "default",
-        event: "started",
-        running: true,
-        kind: "opencode",
-        startedAt: new Date().toISOString(),
-        pid: orphan.pid,
-        exitedAt: null,
-        sandboxMode: "host",
-        networkMode: "bridge",
-        containerName: null,
-        error: null,
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-
-  const app = await startAppWithDataDir(dataDir, {
-    runtimeMode: "opencode",
-    runtimeSandboxMode: "host",
-    opencodeBin: bin,
-    allowUnsandboxedRuntime: true,
-    runtimeProxyConnectTimeoutMs: 50,
-  });
-  try {
-    const out = await command(app.base, "start_runtime");
-    assert.equal(out.res.status, 504);
-    assert.equal(out.json.code, "runtime_start_timeout");
-    assert.equal(await waitForChildExit(orphan), true);
-
-    const rows = await waitForRuntimeLogs(app.base, (logs) =>
-      logs.filter((row) => row.event === "cleaned_orphan" && row.sandboxMode === "host"),
-    );
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].pid, orphan.pid);
-  } finally {
-    if (orphan.exitCode === null && orphan.signalCode === null) orphan.kill("SIGKILL");
-    await app.app.close();
-    await rm(dataDir, { recursive: true, force: true });
-  }
-});
+// `host OpenCode startup cleans a stale same-project process from runtime
+// state` was removed here with the kernel it tested. It drove the host
+// sandbox through `runtimeMode: "opencode"` and an `opencodeBin`, neither of
+// which this build has any more.
+//
+// It is recorded rather than silently dropped because it also explains why
+// the suite stopped terminating: the test spawns a shell that loops forever,
+// and once its first assertion failed against the retired kernel the process
+// it had spawned outlived the run. Every assertion in the file passed and the
+// runner then sat on that child until it was killed, which reads as "the
+// tests hang" and says nothing about a process.
 
 test("restart_runtime replaces a project runtime through the command API", async () => {
   await withApp(async ({ base }) => {

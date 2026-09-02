@@ -486,6 +486,19 @@ export function createWebApiApp(overrides = {}) {
           + "。空对话与抽取失效在结果上一样，这行区分它们。",
         ], { unchecked: true }).catch(() => {});
       }
+      // A record that was stored and then parked as `pending` looks, from the
+      // outside, exactly like memory that is not learning: it is not recalled,
+      // and nothing anywhere said why. The demotion is unchanged — see
+      // demotionReason in memoryIntelligence.mjs for why it stays — this only
+      // makes it legible. No `unchecked` flag: parking a memory says nothing
+      // about whether the run's own deliverables were checked.
+      if (memoryResult.pending > 0) {
+        await agentRuns.appendQualityNotices(project, run.id, [
+          `记忆已记录但暂缓生效 ${memoryResult.pending} 条：`
+          + memoryResult.pendingReasons.map((item) => `${item.count} 条因${item.text}`).join("；")
+          + "。记录与证据都已保存，可在记忆管理中确认后启用。",
+        ]).catch(() => {});
+      }
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
         projectId: project.id,
@@ -503,6 +516,10 @@ export function createWebApiApp(overrides = {}) {
           `proposed=${memoryResult.proposed}`,
           `extracted=${memoryResult.extracted}`,
           `rejected=${memoryResult.rejected}`,
+          `pending=${memoryResult.pending ?? 0}`,
+          ...(memoryResult.pendingReasons?.length
+            ? [`parked=${memoryResult.pendingReasons.map((item) => `${item.reason}:${item.count}`).join("|")}`]
+            : []),
           ...(memoryResult.rejectionReasons?.length ? [`why=${memoryResult.rejectionReasons.slice(0, 3).join("|")}`] : []),
           ...(memoryResult.extractionError ? [`error=${memoryResult.extractionError}`] : []),
           ...(historyError ? [`history=${historyError}`] : []),
@@ -511,6 +528,8 @@ export function createWebApiApp(overrides = {}) {
         proposed: memoryResult.proposed,
         rejected: memoryResult.rejected,
         rejectionReasons: memoryResult.rejectionReasons,
+        pending: memoryResult.pending ?? 0,
+        pendingReasons: memoryResult.pendingReasons ?? [],
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
     },
@@ -1506,6 +1525,9 @@ export function createWebApiApp(overrides = {}) {
     },
     async close() {
       await taskManager.close();
+      // Before the runtimes, because stopping a runtime the pump is still
+      // following makes it reconnect to a kernel that is going away.
+      runtimeEventPump.closeAll();
       await agentRuns.closeAll();
       await runtimeManager.closeAll();
       await new Promise((resolve, reject) => {
