@@ -5,8 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { digestDirectory, readReleaseManifestFile, validateReleaseManifest } from "../src/releaseManifest.mjs";
-import { releaseManifestFixture } from "./releaseFixture.mjs";
+import {
+  digestDirectory,
+  readReleaseManifestFile,
+  runtimeReleasePolicyError,
+  validateReleaseManifest,
+} from "../src/releaseManifest.mjs";
+import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(repoRoot, "scripts/ops/generate-release-manifest.mjs");
@@ -17,7 +22,7 @@ const releaseEnv = {
   OPEN_SCIENCE_BUILD_CREATED: "2026-07-10T03:00:00.000Z",
   OPEN_SCIENCE_WEB_CONTAINER_IMAGE: "registry.example.com/open-science-web:0.1.3",
   OPEN_SCIENCE_WEB_IMAGE_ID: `sha256:${"1".repeat(64)}`,
-  OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: "registry.example.com/open-science-runtime:1.17.13-0.11.26",
+  OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: "registry.example.com/open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26",
   OPEN_SCIENCE_RUNTIME_IMAGE_ID: `sha256:${"2".repeat(64)}`,
   OPEN_SCIENCE_CADDY_VERSION: "2.11.4-alpine",
   OPEN_SCIENCE_CADDY_IMAGE_ID: `sha256:${"3".repeat(64)}`,
@@ -246,9 +251,32 @@ test("release manifest check detects source digest drift", async () => {
   }
 });
 
+// The shared fixture is what every other suite builds a production config from,
+// and it named the retired kernel's version field: the spread set
+// `opencodeVersion: undefined` and left `dshVersion` and `socketBundleVersion`
+// missing, so a config built from it alone failed `release_manifest_mismatch`
+// on a row the test using it was never about, and each consumer re-added the
+// two rows by hand.
+test("the shared release fixture carries every provenance row the release gate compares", () => {
+  const config = { ...runtimeReleaseConfig, production: true };
+  assert.equal(runtimeReleasePolicyError(config), null);
+  assert.equal("opencodeVersion" in runtimeReleaseConfig, false, "the fixture must not name the retired kernel");
+
+  // Negative control: the gate is running, so the pass above is a pass and not
+  // a comparison that never happened.
+  assert.deepEqual(
+    runtimeReleasePolicyError({ ...config, dshVersion: "9.9.9-alpha.1" }),
+    { code: "release_manifest_mismatch", field: "dshVersion" },
+  );
+  assert.deepEqual(
+    runtimeReleasePolicyError({ ...config, socketBundleVersion: "9.9.9" }),
+    { code: "release_manifest_mismatch", field: "socketBundleVersion" },
+  );
+});
+
 test("release manifest validation rejects unpinned images and undeclared fields", () => {
   const latest = structuredClone(releaseManifestFixture);
-  latest.runtime.image = "open-science-opencode:latest";
+  latest.runtime.image = "open-science-runtime:latest";
   assert.throws(
     () => validateReleaseManifest(latest),
     (err) => err?.code === "release_manifest_image_unpinned",

@@ -84,11 +84,18 @@ export const productionReleaseConfig = Object.freeze({
   materialsProjectApiKey: "test-materials-project-key",
 });
 
+// Every provenance row `runtimeReleasePolicyError` compares, so a production
+// config built from this fixture alone passes the release gate instead of
+// failing on a field the test was not about. It used to name the retired
+// kernel's version field, which the manifest no longer carries: the spread
+// therefore set `opencodeVersion: undefined` and left `dshVersion` and
+// `socketBundleVersion` missing, so every consumer had to re-add them.
 export const runtimeReleaseConfig = Object.freeze({
   releaseManifest: releaseManifestFixture,
   materialsProjectApiKey: "test-materials-project-key",
   runtimeContainerImage: releaseManifestFixture.runtime.image,
-  opencodeVersion: releaseManifestFixture.runtime.opencodeVersion,
+  dshVersion: releaseManifestFixture.runtime.dshVersion,
+  socketBundleVersion: releaseManifestFixture.runtime.socketVersion,
   uvVersion: releaseManifestFixture.runtime.uvVersion,
 });
 

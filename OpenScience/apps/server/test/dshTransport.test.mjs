@@ -12,17 +12,25 @@ import { loadConfig } from "../src/config.mjs";
  *  fails. */
 test("the DSH kernel refuses a TCP transport rather than launching a container that cannot work", () => {
   assert.throws(
-    () => loadConfig({ runtimeKernel: "dsh", runtimeTransport: "tcp" }),
+    () => loadConfig({ runtimeTransport: "tcp" }),
     /OPEN_SCIENCE_RUNTIME_TRANSPORT must be "unix"/,
   );
 });
 
-test("the DSH kernel defaults to the unix transport outside production, where the old default was TCP", () => {
-  const dsh = loadConfig({ runtimeKernel: "dsh", production: false });
-  assert.equal(dsh.runtimeTransport, "unix");
-  // The OpenCode default is unchanged: this is a DSH fact, not a new global.
-  const opencode = loadConfig({ runtimeKernel: "opencode", production: false });
-  assert.equal(opencode.runtimeTransport, "tcp");
+/** The transport default used to be read off a second variable: the kernel
+ *  selector. One kernel took TCP, the other unix, so "what transport am I on"
+ *  could not be answered from the transport setting alone. There is one kernel
+ *  now, so the default is unconditional — and that is what this pins, on both
+ *  sides of the production switch, together with the setting it feeds. */
+test("the runtime transport defaults to unix, and nothing else moves that default", () => {
+  for (const production of [false, true]) {
+    const config = loadConfig({ production });
+    assert.equal(config.runtimeTransport, "unix", `transport default with production=${production}`);
+    // The transport is what chooses the container's network mode. The retired
+    // TCP default is what used to make this "bridge" — a published port needs
+    // a network to publish on — and a unix runtime needs no network at all.
+    assert.equal(config.runtimeNetworkMode, "none", `network mode with production=${production}`);
+  }
 });
 
 test("a control socket path the kernel cannot connect to is refused at plan time", async () => {
@@ -32,10 +40,9 @@ test("a control socket path the kernel cannot connect to is refused at plan time
   // became ready" and, once that message carried the container's output, as a
   // container whose log said `dsh web: http://127.0.0.1:<port>` while nothing
   // could reach it.
-  const { buildOpenCodeLaunchPlan } = await import("../src/runtimeManager.mjs");
+  const { buildRuntimeLaunchPlan } = await import("../src/runtimeManager.mjs");
   const deep = `/srv/${"d".repeat(40)}/${"e".repeat(40)}`;
   const config = loadConfig({
-    runtimeKernel: "dsh",
     runtimeSandboxMode: "docker",
     runtimeTransport: "unix",
     dataDir: deep,
@@ -51,7 +58,7 @@ test("a control socket path the kernel cannot connect to is refused at plan time
     dataDir: deep,
   };
   assert.throws(
-    () => buildOpenCodeLaunchPlan(config, project, 4096, "pw_0123456789abcdef0123"),
+    () => buildRuntimeLaunchPlan(config, project, 4096, "pw_0123456789abcdef0123"),
     /runtime_socket_path_too_long|108/,
   );
 });
@@ -70,7 +77,6 @@ test("the DSH profile sync hands the gateway token back, not only to the credent
 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "dsh-sync-"));
   const config = loadConfig({
-    runtimeKernel: "dsh",
     runtimeSandboxMode: "docker",
     runtimeTransport: "unix",
     dataDir: root,

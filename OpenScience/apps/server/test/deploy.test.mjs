@@ -30,40 +30,55 @@ function splitDockerWords(line) {
     .filter(Boolean);
 }
 
-test("every runtime image publishes the label the readiness gate reads, whichever kernel it ships", async () => {
+test("the runtime image publishes the label the readiness gate reads, and both readers ask for it", async () => {
   // The readiness gate asked docker for `io.open-science.opencode.version`.
   // The DSH image publishes `io.open-science.dsh.version` and never that one,
   // so `!opencodeVersion` was true and production readiness failed
   // `runtime_image_metadata_missing` on every DSH deployment — a provenance
   // check that could not survive the kernel it was gating, and silent in dev
   // because `config.production` returns before the check runs.
+  //
+  // One kernel ships now, so there is one image and one label to agree on; the
+  // fix that survived the flip is the kernel-neutral label, which the readers
+  // ask for by name and the image publishes by name.
   const dsh = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
-  const opencode = await readFile(path.join(repoRoot, "deploy/runtime-opencode/Dockerfile"), "utf8");
 
-  for (const [name, dockerfile, kernel] of [["dsh", dsh, "dsh"], ["opencode", opencode, "opencode"]]) {
-    assert.match(dockerfile, /LABEL io\.open-science\.runtime\.version="\$\{\w+\}"/, `${name} image publishes no neutral version label`);
-    assert.match(dockerfile, new RegExp(`LABEL io\\.open-science\\.runtime\\.kernel="${kernel}"`), `${name} image does not name its kernel`);
-  }
+  assert.match(dsh, /LABEL io\.open-science\.runtime\.version="\$\{\w+\}"/, "the runtime image publishes no neutral version label");
+  assert.match(dsh, /LABEL io\.open-science\.runtime\.kernel="dsh"/, "the runtime image does not name its kernel");
 
-  // The negative control, and the production failure itself: the DSH image
+  // The negative control, and the production failure itself: the image
   // genuinely does not carry the label the old reader asked for. Without this
-  // the test above would pass just as well against the broken reader.
+  // the assertions above would pass just as well against the broken reader.
   // Matched as a LABEL instruction, not as a mention: the first version of this
   // assertion was a substring check, and it matched the comment three lines
   // above explaining the defect. A check that counts mentions is the same
   // mistake as a scan that counts tool calls the model never makes.
   assert.ok(
     !/^LABEL io\.open-science\.opencode\.version=/m.test(dsh),
-    "the DSH image must not be made to answer under the other kernel's name",
+    "the runtime image must not be made to answer under the retired kernel's name",
   );
-  assert.match(opencode, /^LABEL io\.open-science\.opencode\.version=/m, "the opencode image still publishes its own label for rollback");
 
-  // Both readers ask for the neutral label first and still accept the old one,
-  // so an image built before this change is not reported as having no metadata.
+  // Both readers ask docker for the neutral label, and neither still asks for
+  // the retired kernel's. The fallback existed so an image built before the
+  // neutral label was added still reported metadata; the only image a
+  // deployment may now launch is the one built from the Dockerfile above, and
+  // an image that answers only under the retired name is one this control
+  // plane cannot start. A reader still accepting it would report provenance
+  // for an image that cannot run, which is worse than reporting none.
+  //
+  // Asked as the docker format template rather than as a substring, for the
+  // same reason as the LABEL check above: both files explain this history in
+  // prose, and a mention is not a read.
   for (const file of ["apps/server/src/server.mjs", "apps/server/src/runtimeControllerServer.mjs"]) {
     const source = await readFile(path.join(repoRoot, file), "utf8");
-    assert.ok(source.includes('io.open-science.runtime.version'), `${file} does not read the neutral label`);
-    assert.ok(source.includes('io.open-science.opencode.version'), `${file} dropped the transition fallback`);
+    assert.ok(
+      source.includes('{{index .Config.Labels "io.open-science.runtime.version"}}'),
+      `${file} does not read the neutral label`,
+    );
+    assert.ok(
+      !source.includes('{{index .Config.Labels "io.open-science.opencode.version"}}'),
+      `${file} still reads the retired kernel's label`,
+    );
   }
 });
 
@@ -305,7 +320,11 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const metaStart = compose.indexOf("\n  evimed-meta-agent:\n    image:");
   const controllerStart = compose.indexOf("\n  open-science-runtime-controller:\n    image:");
-  const runtimeImageStart = compose.indexOf("\n  opencode-runtime-image:");
+  const runtimeImageStart = compose.indexOf("\n  dsh-runtime-image:");
+  // Every slice below is bounded by these three offsets: a marker that stopped
+  // matching would return -1 and hand the assertions a slice of the whole file
+  // (or of nothing), which passes for the wrong reason.
+  assert.ok(metaStart > 0 && controllerStart > metaStart && runtimeImageStart > controllerStart, "the compose service order this test slices by has changed");
   const webService = compose.slice(
     compose.indexOf("  open-science-web:"),
     metaStart,
@@ -362,7 +381,9 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(compose, /OPEN_SCIENCE_BACKUP_DIR:\s+\$\{OPEN_SCIENCE_BACKUP_DIR:-\/backups\}/);
   assert.match(compose, /OPEN_SCIENCE_BACKUP_RETENTION_DAYS:\s+\$\{OPEN_SCIENCE_BACKUP_RETENTION_DAYS:-0\}/);
   assert.match(compose, /OPEN_SCIENCE_RESTORE_DRILL_ACK:\s+\$\{OPEN_SCIENCE_RESTORE_DRILL_ACK:-false\}/);
-  assert.match(compose, /OPEN_SCIENCE_RUNTIME_MODE:\s+\$\{OPEN_SCIENCE_RUNTIME_MODE:-opencode\}/);
+  // DSH is the only kernel: `config.mjs` throws on "opencode" by name, so a
+  // compose default of anything but "kernel" is a stack that cannot boot.
+  assert.match(compose, /OPEN_SCIENCE_RUNTIME_MODE:\s+\$\{OPEN_SCIENCE_RUNTIME_MODE:-kernel\}/);
   assert.match(compose, /OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:\s+\$\{OPEN_SCIENCE_ALLOW_MOCK_RUNTIME:-false\}/);
   assert.match(compose, /OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:\s+\$\{OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker\}/);
   assert.match(webService, /OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE:\s+socket/);
@@ -523,27 +544,35 @@ test("web Caddy proxy caps browser upload body size", async () => {
   assert.match(caddyfile, /respond @internal 404/);
 });
 
-test("web compose includes a buildable OpenCode runtime image profile", async () => {
+test("web compose includes a buildable runtime image profile with every download digest-pinned", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  assert.match(compose, /opencode-runtime-image:/);
+  assert.match(compose, /dsh-runtime-image:/);
   assert.match(
     compose,
-    /image:\s+\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-opencode:opencode-1\.17\.13-uv-0\.11\.26\}/,
+    /image:\s+\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0\.1\.2-alpha\.3-uv-0\.11\.26\}/,
   );
-  assert.match(compose, /dockerfile:\s+deploy\/runtime-opencode\/Dockerfile/);
+  assert.match(compose, /dockerfile:\s+deploy\/runtime-dsh\/Dockerfile/);
   assert.match(compose, /profiles:\s+\["runtime-image"\]/);
-  assert.match(compose, /OPENCODE_VERSION:\s+\$\{OPEN_SCIENCE_OPENCODE_VERSION:-1\.17\.13\}/);
+  // The kernel arrives as an npm global at a pinned version rather than as a
+  // fetched archive, so what is version-pinned and what is digest-pinned are
+  // different lists now. Both still have to be pinned.
+  assert.match(compose, /DSH_VERSION:\s+\$\{OPEN_SCIENCE_DSH_VERSION:-0\.1\.2-alpha\.3\}/);
+  assert.match(compose, /DSH_CORDIS_VERSION:\s+\$\{OPEN_SCIENCE_DSH_CORDIS_VERSION:-4\.0\.2\}/);
+  assert.match(compose, /SOCKET_VERSION:\s+\$\{OPEN_SCIENCE_SOCKET_VERSION:-0\.1\.0\}/);
   assert.match(compose, /UV_VERSION:\s+\$\{OPEN_SCIENCE_UV_VERSION:-0\.11\.26\}/);
   for (const name of [
-    "OPENCODE_SHA256_AMD64",
-    "OPENCODE_SHA256_ARM64",
     "UV_SHA256_AMD64",
     "UV_SHA256_ARM64",
-    "OPENCODE_LICENSE_SHA256",
     "UV_LICENSE_MIT_SHA256",
   ]) {
     assert.match(compose, new RegExp(`${name}:\\s+\\$\\{OPEN_SCIENCE_${name}:-[a-f0-9]{64}\\}`));
   }
+  // The retired kernel is not a build this stack can still produce. Left
+  // behind, its service claimed OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE — the one
+  // name the control plane launches — so `--profile runtime-image build`
+  // tagged the wrong image with it.
+  assert.equal(compose.includes("deploy/runtime-opencode/"), false, "compose still builds the retired kernel's image");
+  assert.equal(/OPEN_SCIENCE_OPENCODE_\w+/.test(compose), false, "compose still passes the retired kernel's build arguments");
 });
 
 test("OpenCode runtime Dockerfile pins and verifies tools, architectures, and licenses", async () => {
@@ -677,20 +706,45 @@ test("web deployment env example documents required hosted settings", async () =
   assert.match(env, /OPEN_SCIENCE_RESTORE_DRILL_ACK=false/);
   assert.match(env, /OPEN_SCIENCE_OBJECT_BACKUP_URI=/);
   assert.match(env, /OPEN_SCIENCE_OBJECT_BACKUP_SSE=AES256/);
-  assert.match(env, /OPEN_SCIENCE_OPENCODE_VERSION=1\.17\.13/);
+  // The kernel pin, read back from the one place versions are written, so the
+  // example a deployment copies cannot document a kernel the release manifest
+  // does not record. The kernel is an npm global at a pinned version rather
+  // than a fetched archive, so it is version-pinned here and digest-pinned
+  // nowhere; uv is still fetched, so its archives and licence text still are.
+  const pins = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
+  assert.match(env, new RegExp(`^OPEN_SCIENCE_DSH_VERSION=${pins.dsh.version.replace(/\./g, "\\.")}$`, "m"));
+  assert.match(env, new RegExp(`^OPEN_SCIENCE_DSH_CORDIS_VERSION=${pins.dsh.cordis.replace(/\./g, "\\.")}$`, "m"));
+  assert.match(env, /^OPEN_SCIENCE_SOCKET_VERSION=0\.1\.0$/m);
   assert.match(env, /OPEN_SCIENCE_UV_VERSION=0\.11\.26/);
-  assert.match(env, /OPEN_SCIENCE_OPENCODE_SHA256_AMD64=[a-f0-9]{64}/);
-  assert.match(env, /OPEN_SCIENCE_OPENCODE_SHA256_ARM64=[a-f0-9]{64}/);
   assert.match(env, /OPEN_SCIENCE_UV_SHA256_AMD64=[a-f0-9]{64}/);
   assert.match(env, /OPEN_SCIENCE_UV_SHA256_ARM64=[a-f0-9]{64}/);
-  assert.match(env, /OPEN_SCIENCE_OPENCODE_LICENSE_SHA256=[a-f0-9]{64}/);
   assert.match(env, /OPEN_SCIENCE_UV_LICENSE_MIT_SHA256=[a-f0-9]{64}/);
-  assert.match(env, /OPEN_SCIENCE_RUNTIME_MODE=opencode/);
+  assert.match(env, /^OPEN_SCIENCE_RUNTIME_MODE=kernel$/m);
+  // An example that still sets a variable `config.mjs` refuses by name is an
+  // example that produces a stack which throws on boot. Read out of config.mjs
+  // rather than listed here, so retiring the next variable cannot leave this
+  // check behind.
+  const configSource = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const refusalStart = configSource.indexOf("for (const [oldName, remedy] of [");
+  const refusalEnd = configSource.indexOf("if (process.env[oldName])", refusalStart);
+  assert.ok(refusalStart > 0 && refusalEnd > refusalStart, "config.mjs no longer refuses retired variables in the shape this test reads");
+  const refused = [...configSource.slice(refusalStart, refusalEnd).matchAll(/\["(OPEN_SCIENCE_[A-Z0-9_]+)",/g)]
+    .map((match) => match[1]);
+  assert.ok(refused.length >= 3, `expected config.mjs to still refuse retired variables by name, found ${JSON.stringify(refused)}`);
+  for (const name of refused) {
+    assert.equal(new RegExp(`^${name}=`, "m").test(env), false, `${name} is refused at startup but still set in .env.example`);
+  }
   assert.match(env, /OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS=30000/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS=500/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_PROXY_CONNECT_TIMEOUT_MS=90000/);
-  assert.match(env, /OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-opencode:opencode-1\.17\.13-uv-0\.11\.26/);
+  // The same image name and tag the compose default builds: a deployment that
+  // copies this file and runs `--profile runtime-image build` must end up
+  // launching the image it just built.
+  const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26");
+  assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME=open-science-runtime-internal/);
@@ -904,7 +958,15 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   // CI can check is that the launcher resolves at the pinned version and that
   // the profile the image pre-composed survived the build — an image whose
   // profile failed to compose starts fine and then answers nothing.
-  assert.match(workflow, /OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE/);
+  // One image name, and it is the one the server reads: `config.mjs` resolves
+  // `runtimeContainerImage` from OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE and
+  // nothing else. A second name meant CI proved one image and started another.
+  assert.match(workflow, /docker run --rm --network none\s+"\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE\}"/);
+  assert.equal(
+    workflow.includes("OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE"),
+    false,
+    "a second runtime image name is a build CI verifies and never launches",
+  );
   assert.match(workflow, /dump-config\.baseline\.json/);
   assert.match(workflow, /dsh --version/);
   assert.match(workflow, /--profile backup --profile monitoring --profile tls up -d/);
@@ -984,25 +1046,30 @@ test("backup retention bounds the archive count, not only their age", async () =
   assert.ok(left.length > 0, "retention must not empty the directory");
 });
 
-// Both kernels have to be buildable, not just the one currently in production.
-// The kernel is a per-deployment choice with a one-line rollback, and a
-// rollback to an image nobody builds is not a rollback — the DSH image existed
-// for a while with nothing in the deploy stack referencing it.
-test("the deploy stack builds an image for each kernel", async () => {
+// The agent runtime image has to be buildable by the deploy stack, and it has
+// to be built under the one image name the control plane launches. The DSH
+// image existed for a while with nothing in the deploy stack referencing it;
+// then it was referenced under a second variable while the retired kernel's
+// service held OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE, which is the only name
+// `config.mjs` resolves `runtimeContainerImage` from. CI therefore built the
+// retired kernel under the launched name, verified the DSH image under the
+// other name, and started neither of the two it had proven.
+test("the runtime-image profile builds exactly one image, under the name the server launches", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  assert.match(compose, /\n {2}opencode-runtime-image:/);
-  assert.match(compose, /\n {2}dsh-runtime-image:/);
-  assert.match(compose, /dockerfile: deploy\/runtime-dsh\/Dockerfile/);
-  assert.match(compose, /DSH_VERSION: \$\{OPEN_SCIENCE_DSH_VERSION/);
-
-  // Both under the same profile, so one command produces both and neither can
-  // quietly stop being built.
   const services = compose.split(/\n {2}(?=[a-z])/);
-  for (const name of ["opencode-runtime-image", "dsh-runtime-image"]) {
-    const block = services.find((item) => item.startsWith(`${name}:`));
-    assert.ok(block, `${name} is missing`);
-    assert.match(block, /profiles: \["runtime-image"\]/, `${name} is not built by the runtime-image profile`);
-  }
+  const inProfile = services
+    .filter((block) => /^[a-z][\w.-]*:/.test(block) && /\n {4}profiles: \["runtime-image"\]/.test(block))
+    .map((block) => block.slice(0, block.indexOf(":")));
+  assert.deepEqual(inProfile, ["dsh-runtime-image"], "one kernel ships, so one service may answer to --profile runtime-image");
+
+  const block = services.find((item) => item.startsWith("dsh-runtime-image:"));
+  assert.match(
+    block,
+    /image: \$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-/,
+    "the built image must carry the name config.mjs resolves runtimeContainerImage from",
+  );
+  assert.match(block, /dockerfile: deploy\/runtime-dsh\/Dockerfile/);
+  assert.match(block, /DSH_VERSION: \$\{OPEN_SCIENCE_DSH_VERSION/);
 
   // And the pinned version comes from the one place versions are written.
   const pins = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
@@ -1386,18 +1453,27 @@ test("a capability's two skill copies never drift apart by more than their known
   // document: the authored copy's fuller revision-notes sentence went into the
   // shipped copy, which the OpenCode tree does not have. Deliberate and
   // one-directional, like the entry above — that tree is deleted at the flip.
+  //
+  // Lowered on 2026-09-02 by the kernel flip itself, in the other direction:
+  // four script invocations in the OpenCode copies still resolved through
+  // `$XDG_CONFIG_HOME/opencode/skills/...`, a profile path that no longer
+  // exists, and were rewritten to the workspace-relative form the DSH copies
+  // already used. clinical-evidence-synthesis 31→30 (verify_preserved.py),
+  // dataset-research-scoping 28→26 (profile_dataset.py, preflight.py) and
+  // research-topic-selection 28→27 (preflight.py) — one line each, matching
+  // the lines changed. Convergence, so the bound gets tighter, not looser.
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 31,
+    "clinical-evidence-synthesis": 30,
     "comprehensive-drug-evaluation": 18,
-    "dataset-research-scoping": 28,
+    "dataset-research-scoping": 26,
     "drug-selection": 18,
     "mendelian-randomization": 18,
     "meta-analysis": 18,
     "off-label-analysis": 18,
     "peer-review": 18,
-    "research-topic-selection": 28,
+    "research-topic-selection": 27,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

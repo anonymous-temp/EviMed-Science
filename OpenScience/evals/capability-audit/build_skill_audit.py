@@ -358,8 +358,9 @@ def main() -> None:
         "sourcePackagesPublished": 0,
         "note": (
             "A clean Web runtime currently receives %d global executable-tier Skills plus %d EviMed specialist packages. "
-            "Existing local runtimes may still show 62 packages created before the executable-tier delivery inventory was added; "
-            "that observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not "
+            "`observedRuntimeSkillRootPackageCounts` counts every package present in each read-only root the runtime image "
+            "bakes in, including any the delivery inventory does not enable, so it can exceed these two numbers; that "
+            "observation is not the clean-deployment contract. Mapping one of 149 reviewed source capabilities does not "
             "install or publish that source package. Execution certification applies only to packages with retained task artifacts "
             "and matching dependency evidence."
         ) % (

@@ -901,36 +901,16 @@ services:
       - /tmp:rw,nosuid,nodev,size=32m
     restart: unless-stopped
 
-  opencode-runtime-image:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-opencode:opencode-1.17.13-uv-0.11.26}
-    build:
-      context: ../..
-      dockerfile: deploy/runtime-opencode/Dockerfile
-      args:
-        OPENCODE_VERSION: ${OPEN_SCIENCE_OPENCODE_VERSION:-1.17.13}
-        UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
-        OPENCODE_SHA256_AMD64: ${OPEN_SCIENCE_OPENCODE_SHA256_AMD64:-157afa289d1a8d9372de0ce19ac726119b937a1f6b201808d46f06e4e59bb348}
-        OPENCODE_SHA256_ARM64: ${OPEN_SCIENCE_OPENCODE_SHA256_ARM64:-bbaccdd374aaab66cd97c7f8ad1c080aa393610fa5f80ee8dfc007f9500afaf9}
-        UV_SHA256_AMD64: ${OPEN_SCIENCE_UV_SHA256_AMD64:-6426a73c3837e6e2483ee344cbc00f36394d179afcba6183cb77437e67db4af0}
-        UV_SHA256_ARM64: ${OPEN_SCIENCE_UV_SHA256_ARM64:-befa1a59c91e96eb601b0fd9a97c03dd666f17baba644b2b4db9c59a767e387e}
-        OPENCODE_LICENSE_SHA256: ${OPEN_SCIENCE_OPENCODE_LICENSE_SHA256:-625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b}
-        UV_LICENSE_MIT_SHA256: ${OPEN_SCIENCE_UV_LICENSE_MIT_SHA256:-860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a5982ec58176c}
-        APP_VERSION: ${OPEN_SCIENCE_APP_VERSION:-0.1.3}
-        RELEASE_ID: ${OPEN_SCIENCE_RELEASE_ID:?set OPEN_SCIENCE_RELEASE_ID}
-        SOURCE_REVISION: ${OPEN_SCIENCE_SOURCE_REVISION:?set OPEN_SCIENCE_SOURCE_REVISION}
-        BUILD_CREATED: ${OPEN_SCIENCE_BUILD_CREATED:?set OPEN_SCIENCE_BUILD_CREATED}
-        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
-        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
-        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
-        GITHUB_DOWNLOAD_PREFIX: ${OPEN_SCIENCE_GITHUB_DOWNLOAD_PREFIX:-}
-    profiles: ["runtime-image"]
-    command: ["opencode", "--version"]
-
-  # The runtime image. The control plane launches project containers itself, so
-  # this service never runs — it exists so `--profile runtime-image build`
-  # produces the image.
+  # The agent runtime image. The control plane launches project containers
+  # itself, so this service never runs — it exists so
+  # `--profile runtime-image build` produces the image.
+  #
+  # Tagged with the one variable the server reads: `config.mjs` resolves
+  # `runtimeContainerImage` from OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE and
+  # nothing else. While two kernels shipped this service built under a second
+  # name, so the profile produced the image the control plane never launched.
   dsh-runtime-image:
-    image: ${OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.3-uv-0.11.26}
     build:
       context: ../..
       dockerfile: deploy/runtime-dsh/Dockerfile

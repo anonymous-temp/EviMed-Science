@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -28,35 +28,97 @@ test("hosted compliance audit passes the default Web redistribution boundary", (
   const report = parseAudit(result.stdout);
   assert.equal(report.ok, true);
   assert.equal(report.failed, 0);
-  assert.ok(report.findings.some((finding) => finding.code === "web_image_curated_scientific_skills"));
-  assert.ok(report.findings.some((finding) => finding.code === "curated_skill_delivery_contract"));
-  assert.ok(report.findings.some((finding) => finding.code === "first_party_office_artifact_chain"));
-  assert.ok(report.findings.some((finding) => finding.code === "readiness_office_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "hosted_science_connector_chain"));
+  const passed = new Set(
+    report.findings.filter((finding) => finding.status === "pass").map((finding) => finding.code),
+  );
+  // Every boundary this audit is the gate for, asserted as a PASS rather than
+  // as "a finding with this code exists" — a failing check reports
+  // `<code>_missing`, so the old form would also have been satisfied by a
+  // check that was present and red.
+  for (const code of [
+    "web_image_curated_scientific_skills",
+    "curated_skill_delivery_contract",
+    "first_party_office_artifact_chain",
+    "readiness_office_boundary",
+    "hosted_science_connector_chain",
+    "hosted_example_parity",
+    "release_manifest_mount",
+    "runtime_release_asset_integrity",
+    "runtime_native_architecture",
+    "runtime_license_notices",
+    "tls_proxy_release_identity",
+    "deployment_host_preflight",
+    "docker_ci_public_tls",
+    "security_incident_response",
+    "operator_integration_preflight",
+    "workspace_descriptor_io_boundary",
+    "hosted_notebook_kernel",
+    "hosted_desktop_boundary",
+    "hosted_event_stream_recovery",
+    "task_resource_control",
+    "production_local_auth_secret_boundary",
+    "hosted_metadata_boundary",
+    "tls_proxy_origin_boundary",
+    "trusted_proxy_client_boundary",
+    // One agent runtime kernel. These are the checks that used to name
+    // OpenCode and now name what the platform actually ships: the pinned DSH
+    // image and its single Compose build, the launch plan the controller
+    // reconstructs, the Unix-socket transport its launcher exposes, the
+    // release gate that refuses to mint an unmeasured receipt, and the labels
+    // that say which kernel the image carries.
+    "dsh_version_pinned",
+    "dsh_version_pin_single_source",
+    "uv_version_pinned",
+    "compose_runtime_version_arg",
+    "hosted_runtime_kernel_singular",
+    "runtime_controller_privilege_boundary",
+    "runtime_unix_socket_transport",
+    "deepseek_compatibility_preflight",
+    "deepseek_release_gate_ci_step",
+    "runtime_tool_labels",
+  ]) {
+    assert.ok(passed.has(code), `${code} must pass, got ${JSON.stringify(report.findings.find((finding) => finding.code.startsWith(code)) ?? null)}`);
+  }
   assert.equal(
     report.findings.filter((finding) => finding.code === "runtime_skill_dir_reviewed").length,
     4,
   );
-  assert.ok(report.findings.some((finding) => finding.code === "hosted_example_parity"));
-  assert.ok(report.findings.some((finding) => finding.code === "runtime_skill_dir_reviewed"));
-  assert.ok(report.findings.some((finding) => finding.code === "release_manifest_mount"));
-  assert.ok(report.findings.some((finding) => finding.code === "runtime_release_asset_integrity"));
-  assert.ok(report.findings.some((finding) => finding.code === "runtime_native_architecture"));
-  assert.ok(report.findings.some((finding) => finding.code === "tls_proxy_release_identity"));
-  assert.ok(report.findings.some((finding) => finding.code === "deployment_host_preflight"));
-  assert.ok(report.findings.some((finding) => finding.code === "docker_ci_public_tls"));
-  assert.ok(report.findings.some((finding) => finding.code === "security_incident_response"));
-  assert.ok(report.findings.some((finding) => finding.code === "operator_integration_preflight"));
-  assert.ok(report.findings.some((finding) => finding.code === "workspace_descriptor_io_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "hosted_notebook_kernel"));
-  assert.ok(report.findings.some((finding) => finding.code === "hosted_desktop_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "hosted_event_stream_recovery"));
-  assert.ok(report.findings.some((finding) => finding.code === "task_resource_control"));
-  assert.ok(report.findings.some((finding) => finding.code === "production_local_auth_secret_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "hosted_metadata_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "tls_proxy_origin_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "trusted_proxy_client_boundary"));
-  assert.ok(report.findings.some((finding) => finding.code === "runtime_license_notices"));
+  // A floor on the whole gate. Re-pointing a check at a new subject is
+  // ordinary work; quietly dropping twenty of them and staying green is what
+  // this catches.
+  assert.ok(report.checks >= 75, `hosted compliance audit shrank to ${report.checks} checks`);
+});
+
+test("every file the audit pattern-matches is a file that exists", async () => {
+  // The failure this exists for: `buildOpenCodeLaunchPlan(config, project, port, password)`
+  // survived in the audit for as long as it took someone to read it, matching
+  // nothing, while the check around it kept reporting a privilege boundary it
+  // was no longer measuring. A pattern against a deleted file is the loudest
+  // version of that — `read()` throws — but a pattern against a file that is
+  // still there and no longer contains the subject is the quiet version, and
+  // the cheapest guard against both is to prove the subjects are real files.
+  const source = await readFile(auditScript, "utf8");
+  const targets = [...source.matchAll(/await read\("([^"]+)"\)/g)].map((match) => match[1]);
+  assert.ok(targets.length >= 60, `expected the audit to read the deployment surface, found ${targets.length} paths`);
+  const missing = [];
+  for (const target of new Set(targets)) {
+    try {
+      await stat(path.join(repoRoot, target));
+    } catch {
+      missing.push(target);
+    }
+  }
+  assert.deepEqual(missing, [], "the audit reads files that are not in the repository");
+
+  // Negative control: the check must be able to see an absent path.
+  await assert.rejects(() => stat(path.join(repoRoot, "deploy/runtime-not-a-real-kernel/Dockerfile")));
+
+  // And no check may still be pointed at the retired kernel's build tree.
+  assert.deepEqual(
+    targets.filter((target) => target.startsWith("deploy/runtime-opencode/")),
+    [],
+    "the hosted compliance audit must not read the retired kernel's build tree",
+  );
 });
 
 test("hosted compliance audit is part of the Web CI script", async () => {

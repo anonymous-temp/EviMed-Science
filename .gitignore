@@ -44,5 +44,13 @@ dist/
 build/
 coverage/
 
+# `build/` above is meant for build *output*. It also matched
+# `OpenScience/scripts/build/`, which is source: three generators that produce
+# artifacts this repository does commit — the DSH capability catalogue, the
+# curated-skill digest ledger, the skill tool vocabulary. `package.json`
+# declares four scripts pointing at them and a test imports one, so a fresh
+# clone had the outputs, the commands and the test, and none of the code.
+!OpenScience/scripts/build/
+
 # Per-machine agent tool settings
 **/.claude/settings.local.json

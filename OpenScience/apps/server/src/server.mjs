@@ -1325,6 +1325,12 @@ export function createWebApiApp(overrides = {}) {
       // the host's settings and credentials methods, which are pinned to
       // loopback precisely because they are not for remote callers. A request
       // to it now says what replaced it rather than 404ing into silence.
+      //
+      // The path keeps the retired kernel's name on purpose. A URL is what an
+      // already-deployed client types; renaming it would turn each of those
+      // requests into an anonymous 404 and lose the one chance to name the
+      // replacement. The vendor word survives here as a wire identifier, not
+      // as a live dependency.
       if (pathname.startsWith("/api/opencode/")) {
         throw new HttpError(
           410,
