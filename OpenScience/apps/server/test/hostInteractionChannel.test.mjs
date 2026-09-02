@@ -292,3 +292,45 @@ test("a pending question cannot be answered from a different run", async () => {
   );
   pump.detach(project);
 });
+
+/* ------------------------------------------ the profile and the answerer */
+
+test("a profile that asks for approval is deployed alongside something that can answer", async () => {
+  // The defect this whole file exists for was not in either half. The local
+  // profile correctly rendered `approval: ask`, the browser correctly rendered
+  // a prompt, and the two were never connected — so a local run stopped at its
+  // first sandbox escalation and nothing anywhere said why. Each half had a
+  // test; the pairing had none, which is how it stayed broken.
+  //
+  // Asserted at the seam rather than end to end: what makes the pairing real is
+  // that the run-event vocabulary the profile's questions arrive as is the same
+  // vocabulary the pump publishes, and that the reply endpoint is callable.
+  const { renderProfilePatch } = await import("../src/dshProfilePatch.mjs");
+  const { RUN_STREAM_EVENT_TYPES } = await import("../src/runEventStream.mjs");
+  const { ALLOWED_WIRE_METHODS } = await import("../src/dshRuntimeAdapter.mjs");
+  const { SEAMS } = await import("@evimed/harness-port");
+
+  const input = {
+    dshVersion: "0.1.2-alpha.3",
+    workspaceDir: "/workspace",
+    model: { provider: "deepseek", id: "deepseek-v4-flash", baseURL: "http://gateway/v1" },
+    flags: { hosted: false, askUser: true, review: true, capsule: true, requiredEnforcement: "partial" },
+  };
+  // Rendered, not guarded. An earlier draft wrapped this in a try/catch that
+  // skipped the assertion when the renderer's input shape changed — which is
+  // the same defect in miniature: the test would have gone on passing while
+  // the thing it checks stopped being checked.
+  const patch = renderProfilePatch(input);
+  assert.match(patch, /- id: approval\n {2}config:\n {4}policy: 'ask'/, "the local profile is the one that asks");
+
+  for (const kind of Object.keys(SEAMS.wire.hostInteractionEvents)) {
+    assert.ok(
+      RUN_STREAM_EVENT_TYPES.includes(`${kind}/requested`),
+      `the kernel can raise a ${kind} request, but no run-stream event type carries it to a reader`,
+    );
+  }
+  assert.ok(
+    ALLOWED_WIRE_METHODS.has(SEAMS.wire.gatewayEndpoints.hostInteractionResult),
+    "the control plane may be asked but may not answer: the reply endpoint is not on the allow-list",
+  );
+});
