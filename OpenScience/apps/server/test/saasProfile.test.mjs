@@ -16,9 +16,13 @@ function passingChecks() {
     release: { ok: true, required: true, tracked: true },
     resources: { ok: true, production: true },
     backup: { ok: true, mode: "external", restoreDrill: true },
+    // Exactly what `readinessRuntime` returns for a hosted docker deployment:
+    // one kernel, named and versioned on every branch.
     runtime: {
       ok: true,
-      mode: "opencode",
+      mode: "kernel",
+      kernel: "dsh",
+      kernelVersion: "0.1.2-alpha.3",
       sandboxMode: "docker",
       controlPlane: "controller_socket",
     },
@@ -90,6 +94,32 @@ test("individual SaaS profile fails closed with stable missing boundary ids", ()
       return true;
     },
   );
+});
+
+// The fixture above claimed `mode: "opencode"` for a release in which
+// `readinessRuntime` only ever returns "kernel" or "mock", so the boundary it
+// was proving green had in fact gone red. Pin the negative side too: a runtime
+// that is not the sandboxed DSH kernel must not satisfy `sandboxed-runtime`.
+test("only the sandboxed kernel runtime satisfies the hosted execution boundary", () => {
+  for (const runtime of [
+    { ok: true, mode: "opencode", sandboxMode: "docker", controlPlane: "controller_socket" },
+    { ok: true, mode: "mock", sandboxMode: "mock" },
+    { ok: true, mode: "kernel", sandboxMode: "host", controlPlane: "controller_socket" },
+    { ok: true, mode: "kernel", sandboxMode: "docker", controlPlane: "direct_override" },
+    { ok: false, mode: "kernel", sandboxMode: "docker", controlPlane: "controller_socket" },
+  ]) {
+    const checks = passingChecks();
+    checks.runtime = runtime;
+    let error = null;
+    try {
+      readinessSaasProfile(productionConfig(), checks);
+    } catch (thrown) {
+      error = thrown;
+    }
+    assert.ok(error, `${JSON.stringify(runtime)} must not pass as a sandboxed runtime`);
+    assert.equal(error.code, "saas_profile_requirements_missing");
+    assert.deepEqual(error.details.missing, ["sandboxed-runtime"]);
+  }
 });
 
 test("unknown SaaS profiles are rejected instead of silently downgrading", () => {

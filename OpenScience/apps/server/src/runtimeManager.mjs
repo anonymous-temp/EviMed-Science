@@ -1659,7 +1659,12 @@ export async function syncRuntimeDshProfile(
     projectId: String(project.id),
     nowSeconds,
   });
-  const workloadTokenRuntimePathForDsh = dshWorkloadTokenRuntimePath(plan);
+  // No signing secret means no workload token, and therefore no row naming one.
+  // Decided here rather than downstream because `environmentRows` merges the
+  // row unconditionally: a path handed in without a token behind it produces a
+  // profile that tells the MCP to read a file nobody wrote.
+  const signingSecret = String(config.evimedWorkloadSigningSecret ?? "");
+  const workloadTokenRuntimePathForDsh = signingSecret ? dshWorkloadTokenRuntimePath(plan) : null;
   const profileInput = dshProfileInput(config, project, plan, model, workloadTokenRuntimePathForDsh);
   const patch = renderProfilePatch(profileInput);
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, "control-plane-patch.yml"), patch, { encoding: "utf8", mode: 0o600 });
@@ -1692,14 +1697,24 @@ export async function syncRuntimeDshProfile(
     { encoding: "utf8", mode: 0o600 },
   );
 
-  const workloadTokenFile = dshWorkloadTokenHostPath(plan);
-  await refreshEviMedWorkloadToken(config, project, workloadTokenFile, { nowSeconds, writeToken: writeFile });
+  // Guarded, because a deployment without the workload signing secret is a
+  // configuration this runtime supports: `dshProfileInput` omits
+  // `EVIMED_WORKLOAD_TOKEN_FILE` when the secret is absent, and
+  // `scheduleEviMedWorkloadRefresh` returns on the same condition. Minting
+  // unconditionally here made the third site disagree with the other two —
+  // `refreshEviMedWorkloadToken` throws on a short secret, so a runtime that
+  // was meant to start with no token row could not start at all. The retired
+  // kernel's sync guarded this call; the rewrite dropped the guard.
+  const workloadTokenFile = signingSecret ? dshWorkloadTokenHostPath(plan) : null;
+  if (workloadTokenFile) {
+    await refreshEviMedWorkloadToken(config, project, workloadTokenFile, { nowSeconds, writeToken: writeFile });
+  }
 
   return {
     configured: true,
     browserSessionSecret,
     workloadTokenFile,
-    workloadTokenRefreshMs: evimedWorkloadRefreshIntervalMs(config),
+    workloadTokenRefreshMs: workloadTokenFile ? evimedWorkloadRefreshIntervalMs(config) : null,
     // Handed back, not just written to the credentials file. The gateway
     // authenticates on an *active* jti, and only the caller can register one —
     // returning `token: null` here meant `activateModelGatewayRuntime` returned
