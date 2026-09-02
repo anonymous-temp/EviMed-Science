@@ -2,7 +2,7 @@ import type {
   AgentInfo,
   CommandInfo,
   HistoryMessage,
-  OpenCodeEvent,
+  RuntimeEvent,
   PermissionAskedEvent,
   PermissionReply,
   QuestionAskedEvent,
@@ -22,7 +22,7 @@ export interface AgentRuntime {
   close(): void;
   getStatus(): RuntimeStatus;
   onStatus(listener: (status: RuntimeStatus) => void): () => void;
-  onEvent(listener: (event: OpenCodeEvent) => void): () => void;
+  onEvent(listener: (event: RuntimeEvent) => void): () => void;
 
   createSession(): Promise<string>;
   listSessions(): Promise<SessionMeta[]>;

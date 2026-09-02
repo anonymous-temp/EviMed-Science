@@ -1,14 +1,13 @@
-export { OpenCodeClient } from "./OpenCodeClient";
+export { RuntimeClient } from "./RuntimeClient";
 export type { AgentRuntime } from "./runtime";
 export {
-  OPENCODE_VERSION,
-  DEFAULT_OPENCODE_URL,
-  type OpenCodeEvent,
+  DEFAULT_RUNTIME_URL,
+  type RuntimeEvent,
   type TextUpdatedEvent,
   type ToolUpdatedEvent,
   type SessionIdleEvent,
   type RuntimeErrorEvent,
-  type OpenCodeClientOptions,
+  type RuntimeClientOptions,
   type RuntimeStatus,
   type ToolCallStatus,
   type SessionMeta,

@@ -151,8 +151,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "deploy/web/Dockerfile",
         "deploy/memos/Dockerfile",
         "deploy/specialist-adapter",
-        "deploy/runtime-opencode/Dockerfile",
-        "deploy/runtime-opencode/open-science-opencode-serve.sh",
         "scripts/ops/archive-crypto.mjs",
         "scripts/ops/backup-data.sh",
         "scripts/ops/backup-retention.mjs",

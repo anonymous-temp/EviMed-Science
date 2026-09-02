@@ -56,8 +56,12 @@ local workspace + SQLite + JSONL provenance.
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
 - `runtime/` — `mcp` (the `evimed` research server, 26 tools), `kernel` (the
-  Python/R notebook bridge), `skills` (the general skill libraries the preset
-  ships: `core`, `curated-scientific`, `office`).
+  Python/R notebook bridge), `harness` (design notes and knowledge from the
+  kernel migration), `skills` (the general skill libraries the image ships:
+  `core`, `community`, `curated-scientific`, `office`; `evimed` and `external`
+  predate `capabilities/` — the image takes only `open-domain-answer` out of
+  `evimed`, and the rest of that tree survives as one of the four places a
+  capability's `preflight.py` is copied to).
 - `docs/` — product and technical specs. `docs/REQUEST_PATH.md` traces one request
   end to end (HTTP boundary → routing → run ledger → runtime → MCP → external
   gateways → delivery gate → artifact retrieval) with each segment's timeout
@@ -72,7 +76,20 @@ local workspace + SQLite + JSONL provenance.
   decodes the kernel's events into `@evimed/domain`'s `RunEvent` and forwards its
   own stream (`GET /api/runs/:id/events`). The pass-through route that used to
   proxy a kernel straight into the page is retired: it made the frontend know a
-  kernel's protocol, so every kernel change was a frontend change.
+  kernel's protocol, so every kernel change was a frontend change. `/api/opencode/`
+  keeps the retired kernel's name and answers 410 by name, because a URL is what
+  an already-deployed client types and a rename would turn each of those requests
+  into an anonymous 404.
+- **One socket carries the whole kernel wire.** `apps/server` opens a single
+  WebSocket per runtime at `/api/remote.mux`, multiplexing independently
+  cancellable logical streams; methods are slashed names (`session/create`,
+  `session/prompt`, `session/page`, `session/cancel`, …) and the kernel's forwarded
+  host events arrive on the `$events` stream. The kernel authenticates it with a
+  browser-session cookie the control plane mints itself, and it derives that
+  cookie's name from the `Host` header, so a cookie minted for another authority
+  is not a weaker credential — it is one the kernel never looks for. `dshMux.mjs`
+  is where that lives; the frame vocabulary there was transcribed from a running
+  0.1.2-alpha.3 binary, not inferred.
 - **`@deepseek-ai/*` may be imported in `packages/harness-port` and nowhere else** —
   including in a JSDoc `import()` type. The port owns its own types and converts
   shapes, so a rename upstream is one file. `seam-manifest.json` lists every
