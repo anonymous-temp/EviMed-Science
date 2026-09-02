@@ -106,8 +106,11 @@ def _timeout():
 
 
 def _read_bare_token(path):
-    """One token, one line, mode 0600. Same refusals as the config-file path:
-    absolute, no symlink at the tail, bounded size, no whitespace inside."""
+    """One token, one line, mode 0600: absolute path, no symlink at the tail,
+    bounded size, no whitespace inside. Whitespace is what makes this refuse a
+    JSON document, so a stale configuration file left under either name in
+    `GATEWAY_TOKEN_FILE_ENV_NAMES` is refused outright rather than mined for
+    something that looks like a token."""
     if not os.path.isabs(path) or "\0" in path:
         raise PublicSourceError("public_source_gateway_unconfigured", "The managed public-source gateway token is unavailable.")
     descriptor = None
@@ -130,6 +133,26 @@ def _read_bare_token(path):
             os.close(descriptor)
 
 
+# Two environment names for one file, both naming a bare one-line token: the
+# runtime launcher exports `EVIMED_MODEL_GATEWAY_TOKEN_FILE`, while the eval
+# harnesses and `check-evidence-connectors` still export the older
+# `EVIMED_MODEL_CONFIG_FILE`, which under the retired kernel named that
+# kernel's JSON configuration. The name is now the only thing that survives:
+# whichever one is set must point at a token, never at a configuration file.
+GATEWAY_TOKEN_FILE_ENV_NAMES = ("EVIMED_MODEL_GATEWAY_TOKEN_FILE", "EVIMED_MODEL_CONFIG_FILE")
+
+
+def _gateway_token_file():
+    """The configured gateway-token file path, or an empty string if the
+    runtime named none. One reader, so `specialist_jobs` and `meta_agent`
+    cannot drift into looking somewhere else."""
+    for name in GATEWAY_TOKEN_FILE_ENV_NAMES:
+        configured = os.environ.get(name, "").strip()
+        if configured:
+            return configured
+    return ""
+
+
 def _gateway_settings():
     gateway_url = os.environ.get("EVIMED_PUBLIC_SOURCE_GATEWAY_URL", "").strip()
     if not gateway_url:
@@ -137,42 +160,22 @@ def _gateway_settings():
     parsed = urllib.parse.urlsplit(gateway_url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
         raise PublicSourceError("public_source_gateway_invalid", "The managed public-source gateway URL is invalid.")
-    # The gateway token, from whichever file the kernel in front of us writes.
+    # The gateway token, from the bare one-line file the kernel writes for us.
     #
-    # A bare token file is preferred and is what the DSH kernel writes: the
-    # older path reads `provider.deepseek.options.apiKey` out of the OpenCode
-    # kernel's `opencode.json`, a file that does not exist under DSH — so a
-    # DSH runtime booted cleanly and then failed every source fetch with
-    # `public_source_gateway_unconfigured`, which says the token is
-    # unavailable without saying that nobody was ever going to write it there.
-    token_file = os.environ.get("EVIMED_MODEL_GATEWAY_TOKEN_FILE", "").strip()
-    if token_file:
-        return gateway_url, _read_bare_token(token_file)
-    config_file = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
-    if not config_file or not os.path.isabs(config_file) or "\0" in config_file:
-        raise PublicSourceError("public_source_gateway_unconfigured", "The managed public-source gateway token is unavailable.")
-    descriptor = None
-    try:
-        descriptor = os.open(config_file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        metadata = os.fstat(descriptor)
-        if metadata.st_size <= 0 or metadata.st_size > MAX_GATEWAY_CONFIG_BYTES:
-            raise ValueError("invalid model configuration size")
-        config = json.loads(os.read(descriptor, MAX_GATEWAY_CONFIG_BYTES + 1).decode("utf-8"))
-        provider = config.get("provider", {}).get("deepseek", {})
-        token = provider.get("options", {}).get("apiKey", "") if isinstance(provider, dict) else ""
-        if not isinstance(token, str) or not token or len(token) > 8 * 1024 or any(character.isspace() for character in token):
-            raise ValueError("invalid runtime gateway token")
-        return gateway_url, token
-    except PublicSourceError:
-        raise
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+    # This used to parse `provider.deepseek.options.apiKey` out of a kernel
+    # configuration file (`opencode.json`) when no bare token file was named.
+    # That kernel is gone and writes no such file, so the branch could only
+    # ever fail — and it failed as `public_source_gateway_unconfigured`, which
+    # says the token is unavailable without saying that nobody was ever going
+    # to write it there. Nothing here parses a kernel's configuration now.
+    token_file = _gateway_token_file()
+    if not token_file:
         raise PublicSourceError(
             "public_source_gateway_unconfigured",
-            "The managed public-source gateway token is unavailable.",
-        ) from error
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
+            "The managed public-source gateway token file is not configured "
+            "(%s)." % " or ".join(GATEWAY_TOKEN_FILE_ENV_NAMES),
+        )
+    return gateway_url, _read_bare_token(token_file)
 
 
 def _direct_credential(credential_profile):

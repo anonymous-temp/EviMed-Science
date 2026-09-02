@@ -5,8 +5,8 @@ description: Search audited biomedical literature, terminology, regulatory, geno
 
 # Biomedical database search
 
-1. Call `data_source_catalog` to select the smallest relevant source set. Respect `blocked_*`, `ready_credentials`, and license fields; never scrape a blocked website as a substitute.
-2. Call `biomedical_source_search` once per selected active source. Use specific identifiers and organism qualifiers when known.
+1. Call `mcp__evimed__data_source_catalog` to select the smallest relevant source set. Respect `blocked_*`, `ready_credentials`, and license fields; never scrape a blocked website as a substitute.
+2. Call `mcp__evimed__biomedical_source_search` once per selected active source. Use specific identifiers and organism qualifiers when known.
 3. Keep every source ID, URL, retrieval time, query, and database name. Deduplicate only after preserving the original identifiers.
 4. Treat returned titles and selected fields as metadata. Do not infer study design, effect, causality, approval, or clinical utility without reviewing the primary record.
 5. Stop after one retry for a retryable source error. Record the gap rather than replacing it with model memory.

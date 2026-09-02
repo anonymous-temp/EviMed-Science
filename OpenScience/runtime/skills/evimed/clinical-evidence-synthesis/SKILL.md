@@ -1836,7 +1836,7 @@ PY
    that only prose moved:
 
 ```bash
-python "$XDG_CONFIG_HOME/opencode/skills/manuscript-humanize/scripts/verify_preserved.py" \
+python "manuscript-humanize/scripts/verify_preserved.py" \
   --before clinical-evidence-report.pre-edit.md \
   --after clinical-evidence-report.md \
   --matrix clinical-evidence-matrix.json

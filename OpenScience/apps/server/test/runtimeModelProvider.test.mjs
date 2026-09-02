@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,49 +7,96 @@ import { loadConfig } from "../src/config.mjs";
 import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import {
   RuntimeManager,
-  buildOpenCodeLaunchPlan,
+  buildRuntimeLaunchPlan,
   issueModelGatewayRuntimeToken,
+  modelGatewayTokenFileName,
   runtimeNetworkRequiresEgressOptIn,
+  runtimeNetworkUsesHostOrContainer,
   syncRuntimeDshProfile,
-  syncRuntimeModelProvider,
   verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
+import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 const secret = "model-gateway-signing-secret-with-at-least-32-bytes";
+
+/**
+ * The two provenance rows `runtimeReleasePolicyError` compares that the shared
+ * fixture does not carry: it still exports the retired kernel's version field,
+ * which is now `undefined`, so a production launch built from it alone fails on
+ * `dshVersion` before it reaches whatever the test is about. Restated here
+ * rather than worked around, so a production plan in this file is a plan the
+ * release policy actually accepts.
+ */
+const dshReleaseConfig = Object.freeze({
+  ...runtimeReleaseConfig,
+  dshVersion: releaseManifestFixture.runtime.dshVersion,
+  socketBundleVersion: releaseManifestFixture.runtime.socketVersion,
+});
 
 test("only the explicitly configured internal runtime network bypasses public-egress opt-in", () => {
   assert.equal(runtimeNetworkRequiresEgressOptIn("open-science-runtime-internal", "open-science-runtime-internal"), false);
   assert.equal(runtimeNetworkRequiresEgressOptIn("bridge", "open-science-runtime-internal"), true);
   assert.equal(runtimeNetworkRequiresEgressOptIn("another-named-network", "open-science-runtime-internal"), true);
-});
+  assert.equal(runtimeNetworkUsesHostOrContainer("host"), true);
+  assert.equal(runtimeNetworkUsesHostOrContainer("container:other-runtime"), true);
+  assert.equal(runtimeNetworkUsesHostOrContainer("open-science-runtime-internal"), false);
 
-async function fixture() {
-  const rootDir = await mkdtemp(path.join(tmpdir(), "runtime-model-provider-"));
+  // And the same rule where it actually decides whether a container starts.
+  // The predicate above is only advice until the launch plan refuses on it;
+  // this is the seam the invariant lives at now that there is one kernel and
+  // the plan is the only place a container is described.
+  const rootDir = "/data/users/alice/projects/paper1";
   const project = {
-    id: "paper-1",
+    id: "paper1",
     userId: "alice",
     rootDir,
-    workspaceDir: path.join(rootDir, "workspace"),
-    runtimeDir: path.join(rootDir, "runtime"),
+    workspaceDir: `${rootDir}/workspace`,
+    runtimeDir: `${rootDir}/runtime`,
   };
-  const plan = {
-    sandboxMode: "host",
-    xdgConfigDir: path.join(project.runtimeDir, "xdg-config"),
-    proxyWorkspaceDir: project.workspaceDir,
+  const base = {
+    ...dshReleaseConfig,
+    production: true,
+    dataDir: "/data",
+    runtimeSandboxMode: "docker",
+    runtimeTransport: "unix",
+    runtimeContainerBin: "docker",
+    runtimeCpuLimit: "1",
+    runtimeMemoryLimit: "1g",
+    runtimePidsLimit: 64,
+    allowRuntimeHostNetwork: false,
+    allowRuntimeNetworkEgress: false,
+    runtimeNetworkEgressPolicyAck: false,
+    runtimeInternalNetworkName: "open-science-runtime-internal",
   };
-  await mkdir(plan.xdgConfigDir, { recursive: true });
-  return { rootDir, project, plan };
-}
 
-function config(overrides = {}) {
-  return {
-    deepseekProviderEnabled: true,
-    deepseekModel: "deepseek-v4-pro",
-    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
-    modelGatewaySigningSecret: secret,
-    ...overrides,
-  };
-}
+  const internal = buildRuntimeLaunchPlan(
+    { ...base, runtimeNetworkMode: "open-science-runtime-internal" },
+    project,
+    4096,
+  );
+  assert.ok(
+    internal.args.includes("open-science-runtime-internal"),
+    "the network the deployment declares internal needs no egress opt-in",
+  );
+
+  for (const mode of ["bridge", "another-named-network"]) {
+    assert.throws(
+      () => buildRuntimeLaunchPlan({ ...base, runtimeNetworkMode: mode }, project, 4096),
+      (error) => error?.code === "runtime_network_egress_forbidden",
+      `${mode} must not inherit the internal network's exemption`,
+    );
+  }
+  // Even the declared internal name does not buy host or shared-container
+  // networking: that is a different refusal, and it fires first.
+  assert.throws(
+    () => buildRuntimeLaunchPlan({ ...base, runtimeNetworkMode: "host" }, project, 4096),
+    (error) => error?.code === "runtime_network_forbidden",
+  );
+  assert.throws(
+    () => buildRuntimeLaunchPlan({ ...base, runtimeNetworkMode: "container:other-runtime" }, project, 4096),
+    (error) => error?.code === "runtime_network_forbidden",
+  );
+});
 
 test("model gateway runtime token is audience and project bound", () => {
   const token = issueModelGatewayRuntimeToken({
@@ -73,67 +120,13 @@ test("model gateway runtime token is audience and project bound", () => {
   );
 });
 
-test("runtime bootstrap safely merges a managed DeepSeek provider without persisting the real key", async (t) => {
-  const { rootDir, project, plan } = await fixture();
-  t.after(() => rm(rootDir, { recursive: true, force: true }));
-  const opencodeRoot = path.join(plan.xdgConfigDir, "opencode");
-  await mkdir(opencodeRoot, { recursive: true });
-  await writeFile(path.join(opencodeRoot, "opencode.json"), JSON.stringify({ mcp: { retained: { type: "remote" } } }));
-
-  const result = await syncRuntimeModelProvider(config({ deepseekApiKey: "must-never-be-written" }), project, plan, {
-    nowSeconds: 2_000,
-    jti: "runtime-token-2",
-  });
-  const saved = JSON.parse(await readFile(path.join(opencodeRoot, "opencode.json"), "utf8"));
-
-  assert.equal(saved.model, "deepseek/deepseek-v4-pro");
-  assert.equal(saved.provider.deepseek.npm, "@ai-sdk/openai-compatible");
-  assert.equal(saved.provider.deepseek.options.baseURL, "http://127.0.0.1:8787/internal/model/v1");
-  assert.equal(saved.provider.deepseek.options.apiKey, result.token);
-  assert.deepEqual(saved.provider.deepseek.models, {
-    "deepseek-v4-pro": { name: "DeepSeek V4 Pro" },
-  });
-  assert.deepEqual(saved.mcp, { retained: { type: "remote" } });
-  assert.deepEqual(saved.permission, {
-    bash: "allow",
-    edit: "allow",
-    write: "allow",
-    webfetch: "allow",
-  });
-  assert.doesNotMatch(JSON.stringify(saved), /must-never-be-written/);
-});
-
-test("docker-isolated runtimes cannot invoke the dead direct web fetch path", async (t) => {
-  const { rootDir, project, plan } = await fixture();
-  t.after(() => rm(rootDir, { recursive: true, force: true }));
-  const isolatedPlan = { ...plan, sandboxMode: "docker" };
-  await syncRuntimeModelProvider(config(), project, isolatedPlan, {
-    nowSeconds: 2_000,
-    jti: "runtime-token-isolated",
-  });
-  const saved = JSON.parse(await readFile(path.join(plan.xdgConfigDir, "opencode", "opencode.json"), "utf8"));
-  assert.equal(saved.permission.webfetch, "deny");
-});
-
-test("runtime bootstrap rejects a foreign reserved provider and rotates only marker-owned tokens", async (t) => {
-  const { rootDir, project, plan } = await fixture();
-  t.after(() => rm(rootDir, { recursive: true, force: true }));
-  const opencodeRoot = path.join(plan.xdgConfigDir, "opencode");
-  await mkdir(opencodeRoot, { recursive: true });
-  await writeFile(path.join(opencodeRoot, "opencode.json"), JSON.stringify({ provider: { deepseek: { name: "foreign" } } }));
-  await assert.rejects(
-    () => syncRuntimeModelProvider(config(), project, plan),
-    (error) => error?.code === "runtime_model_provider_collision",
-  );
-
-  await writeFile(path.join(opencodeRoot, "opencode.json"), "{}", "utf8");
-  const first = await syncRuntimeModelProvider(config(), project, plan, { nowSeconds: 2_000, jti: "runtime-old" });
-  const second = await syncRuntimeModelProvider(config(), project, plan, { nowSeconds: 2_010, jti: "runtime-new" });
-  assert.notEqual(first.token, second.token);
-});
-
 test("RuntimeManager accepts only the current active runtime token and rejects it after stop", async (t) => {
-  const manager = new RuntimeManager(config());
+  const manager = new RuntimeManager({
+    deepseekProviderEnabled: true,
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+    modelGatewaySigningSecret: secret,
+  });
   const rootDir = await mkdtemp(path.join(tmpdir(), "active-model-runtime-"));
   t.after(() => rm(rootDir, { recursive: true, force: true }));
   const project = {
@@ -211,9 +204,125 @@ function dshFixtureConfig(overrides = {}) {
 async function dshFixture() {
   const rootDir = await mkdtemp(path.join(tmpdir(), "runtime-dsh-profile-"));
   const project = { id: "paper-1", userId: "alice", rootDir, workspaceDir: path.join(rootDir, "workspace") };
-  const plan = { sandboxMode: "host", dshHomeDir: path.join(rootDir, "runtime", "dsh-home"), proxyWorkspaceDir: project.workspaceDir };
+  // `docker` is the only sandbox mode a launch plan can produce — the host
+  // branch was refused by name when the retired kernel went — so the fixture
+  // describes the one shape that reaches this function in production.
+  const plan = { sandboxMode: "docker", dshHomeDir: path.join(rootDir, "runtime", "dsh-home"), proxyWorkspaceDir: project.workspaceDir };
   return { rootDir, project, plan };
 }
+
+test("the runtime bootstrap writes the gateway address and the model, and never the provider key", async (t) => {
+  // The retired kernel took these as `provider.deepseek.options.{baseURL,apiKey}`
+  // merged into its own `opencode.json`. There is no such file under this
+  // kernel: the same three facts — which gateway, which model, and a reference
+  // rather than a key — are rows of a generated patch plus a credentials file,
+  // and the property that matters is unchanged. The real provider key must
+  // never reach any file the container can read.
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+
+  const result = await syncRuntimeDshProfile(
+    dshFixtureConfig({ deepseekApiKey: "must-never-be-written" }),
+    project,
+    plan,
+    { nowSeconds: 2_000, jti: "runtime-token-2" },
+  );
+
+  const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  assert.match(patch, /baseURL: 'http:\/\/127\.0\.0\.1:8787\/internal\/model\/v1'/);
+  assert.match(patch, /id: 'deepseek-v4-pro'/);
+  assert.match(patch, /model: 'deepseek-v4-pro'/);
+  // A reference name, never a key: the gateway exchanges the workload token for
+  // the real credential server-side.
+  assert.match(patch, /apiKeyEnv: 'EVIMED_WORKLOAD_TOKEN'/);
+
+  const credentials = await readFile(path.join(plan.dshHomeDir, ".credentials.yaml"), "utf8");
+  assert.ok(
+    credentials.includes(`EVIMED_WORKLOAD_TOKEN: '${result.token}'`),
+    "the kernel resolves the reference from this file, so the token has to be the one the caller registers",
+  );
+
+  // The research MCP is a separate process and reads the same gateway token
+  // from a bare file rather than from the kernel's credentials store.
+  const tokenFile = await readFile(path.join(plan.dshHomeDir, modelGatewayTokenFileName), "utf8");
+  assert.equal(tokenFile.trim(), result.token);
+
+  for (const [name, text] of [["patch", patch], ["credentials", credentials], ["token file", tokenFile]]) {
+    assert.equal(text.includes("must-never-be-written"), false, `the provider key reached the ${name}`);
+  }
+});
+
+test("a hosted runtime runs confined and unattended, and a local one still asks", async (t) => {
+  // The retired kernel spelled this as a `permission` map of tool verbs
+  // (`bash`/`edit`/`write` allowed). DSH decides it with a named preset pairing
+  // a sandbox with an approval policy, and the pair a hosted run needs —
+  // confined *and* unattended — is one the kernel does not ship, so the patch
+  // has to define it. A patch that named no preset would leave an unattended
+  // runtime on the stock policy, which asks and then waits forever.
+  const hosted = await dshFixture();
+  t.after(() => rm(hosted.rootDir, { recursive: true, force: true }));
+  await syncRuntimeDshProfile(dshFixtureConfig(), hosted.project, hosted.plan);
+  const hostedPatch = await readFile(path.join(hosted.plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  assert.match(hostedPatch, /defaultPreset: 'evimed-hosted'/);
+  assert.match(hostedPatch, /policy: 'never'/);
+  assert.match(hostedPatch, /evimed-hosted:\n\s*sandbox: workspace-write\n\s*approval: never/);
+
+  const local = await dshFixture();
+  t.after(() => rm(local.rootDir, { recursive: true, force: true }));
+  await syncRuntimeDshProfile(dshFixtureConfig({ production: false }), local.project, local.plan);
+  const localPatch = await readFile(path.join(local.plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  assert.match(localPatch, /defaultPreset: 'workspace-write'/);
+  assert.match(localPatch, /policy: 'ask'/);
+  assert.equal(localPatch.includes("evimed-hosted"), false, "the unattended preset is a hosted decision, not a default");
+});
+
+test("runtimes cannot invoke the direct web fetch path, and the generated patch never re-enables it", async (t) => {
+  // The retired kernel was denied `webfetch` per project. DSH's equivalent is
+  // composition-level: the fetch provider that arrived as a new default in
+  // 0.1.2 is disabled in the bundle, and the preset mounts no `tool-web` for
+  // the model to reach it with. Every source this platform retrieves goes
+  // through the control plane's own gateway, which resolves DOIs, refuses
+  // private and link-local addresses before it fetches, and records what it
+  // fetched; a second, unrecorded egress path defeats all three silently.
+  const bundlePatch = await readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8");
+  assert.match(bundlePatch, /- id: web-fetch-http\n\s*disabled: true/);
+
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  await syncRuntimeDshProfile(dshFixtureConfig(), project, plan);
+  const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  assert.equal(
+    patch.includes("web-fetch-http"),
+    false,
+    "the per-start patch must not address the row the bundle disables: the last writer wins",
+  );
+});
+
+test("the runtime bootstrap refuses a target it does not own, and rotates the token on every start", async (t) => {
+  // The retired kernel merged into a config file it shared with whatever was
+  // already there, so it had to refuse a `deepseek` provider entry it had not
+  // written. This kernel generates the file whole, which moves the same
+  // question to the write itself: a target that is a symlink is someone else's
+  // file, and following it would write the kernel's credentials outside the
+  // project.
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const outside = path.join(rootDir, "not-ours.yml");
+  await writeFile(outside, "# not ours\n", "utf8");
+  await mkdir(plan.dshHomeDir, { recursive: true });
+  await symlink(outside, path.join(plan.dshHomeDir, "control-plane-patch.yml"));
+
+  await assert.rejects(
+    () => syncRuntimeDshProfile(dshFixtureConfig(), project, plan),
+    (error) => error?.code === "path_forbidden",
+  );
+  assert.equal(await readFile(outside, "utf8"), "# not ours\n", "the foreign file must be left exactly as it was");
+
+  await rm(path.join(plan.dshHomeDir, "control-plane-patch.yml"), { force: true });
+  const first = await syncRuntimeDshProfile(dshFixtureConfig(), project, plan, { nowSeconds: 2_000, jti: "runtime-old" });
+  const second = await syncRuntimeDshProfile(dshFixtureConfig(), project, plan, { nowSeconds: 2_010, jti: "runtime-new" });
+  assert.notEqual(first.token, second.token, "each start gets its own gateway token, or a stopped runtime keeps a working one");
+});
 
 test("the screening plugin's batch size reaches the container from the control plane", async (t) => {
   // It was hard-coded at 50 in the bundle with no row addressing it, so a
@@ -264,10 +373,11 @@ test("syncRuntimeDshProfile writes a patch and a credentials file the running ke
   assert.match(patch, /baseURL: 'http:\/\/127\.0\.0\.1:8787\/internal\/model\/v1'/);
   assert.match(patch, /id: 'deepseek-v4-pro'/);
   assert.match(patch, /apiKeyEnv: 'EVIMED_WORKLOAD_TOKEN'/);
-  // In host sandbox mode there is no container indirection, so the runtime
-  // path the MCP subprocess is told and the host path the control plane wrote
-  // to are the same path (unlike the docker case, covered separately below).
-  assert.match(patch, new RegExp(`EVIMED_WORKLOAD_TOKEN_FILE: '${path.join(plan.dshHomeDir, "evimed-workload.token").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
+  // The MCP subprocess is told the path it will see from inside the container,
+  // which is not the host path the control plane wrote to. Asserting either
+  // spelling alone would pass while the two pointed at different files.
+  assert.match(patch, /EVIMED_WORKLOAD_TOKEN_FILE: '\/runtime\/dsh-home\/evimed-workload\.token'/);
+  assert.notEqual(result.workloadTokenFile, "/runtime/dsh-home/evimed-workload.token");
   // The literal provider key never appears — only the reference name does.
   assert.equal(patch.includes("must-never-be-written"), false);
 
@@ -290,7 +400,6 @@ test("syncRuntimeDshProfile writes a patch and a credentials file the running ke
 
 test("syncRuntimeDshProfile places --patch's target under $DSH_HOME, matching what the entrypoint passes", async (t) => {
   const { rootDir, project, plan } = await dshFixture();
-  plan.sandboxMode = "docker";
   t.after(() => rm(rootDir, { recursive: true, force: true }));
   const result = await syncRuntimeDshProfile(dshFixtureConfig(), project, plan);
   // `result.workloadTokenFile` is the *host* path — `scheduleEviMedWorkloadRefresh`
@@ -331,14 +440,13 @@ test("the two runtime capability settings reach the container, and the default d
   // measured something else, so reverting the wiring to literals left it green
   // — the same "execution without assertion" this audit found in the
   // profile-sync tests, reproduced while fixing it.
-  const argvFor = (overrides) => buildOpenCodeLaunchPlan(
+  const argvFor = (overrides) => buildRuntimeLaunchPlan(
     {
       ...dshFixtureConfig(overrides),
       // The release-provenance gate is a separate concern and has its own
       // tests; this one is about whether two settings reach the container.
       production: false,
       dataDir: rootDir,
-      runtimeKernel: "dsh",
       runtimeSandboxMode: "docker",
       runtimeTransport: "unix",
       runtimeContainerBin: "docker",
@@ -351,7 +459,6 @@ test("the two runtime capability settings reach the container, and the default d
     },
     { ...project, runtimeDir: path.join(rootDir, "runtime") },
     4096,
-    "pw-test",
   ).args;
 
   const on = argvFor({ runtimeAskUserEnabled: true, runtimeReviewEnabled: true });

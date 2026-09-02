@@ -123,7 +123,7 @@ function validateDeepSeekCompatibilityTool() {
     throw failure("preflight_deepseek_tool_invalid", "DeepSeek compatibility package command is unavailable.");
   }
   if (pkg.scripts?.["preflight:deepseek:release"] !== "node scripts/ops/deepseek-kernel-release-gate.mjs") {
-    throw failure("preflight_deepseek_tool_invalid", "DeepSeek OpenCode release-gate package command is unavailable.");
+    throw failure("preflight_deepseek_tool_invalid", "DeepSeek kernel release-gate package command is unavailable.");
   }
 }
 
@@ -529,7 +529,7 @@ export function validateDeploymentConfig(values, envFile) {
   }
 
   for (const [name, expected] of [
-    ["OPEN_SCIENCE_RUNTIME_MODE", "opencode"],
+    ["OPEN_SCIENCE_RUNTIME_MODE", "kernel"],
     ["OPEN_SCIENCE_RUNTIME_SANDBOX_MODE", "docker"],
     ["OPEN_SCIENCE_RUNTIME_TRANSPORT", "unix"],
   ]) {
@@ -836,7 +836,7 @@ export async function runHostPreflight({
     throw failure(
       "preflight_runtime_image_unpinned",
       `No container references ${config.runtimeImage}, so a host-wide image prune will remove it and the next job will fail with runtime_image_unavailable. `
-        + "Create the pin: docker compose --profile runtime-image up --no-build --no-start opencode-runtime-image",
+        + "Create the pin: docker compose --profile runtime-image up --no-build --no-start dsh-runtime-image",
     );
   }
   onCheck("runtime-image-pinned", `referenced by ${runtimeImagePin.split("\n")[0]}`);

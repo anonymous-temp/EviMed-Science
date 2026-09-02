@@ -19,8 +19,9 @@ Agent 统一在同一套运行时、工件、溯源、Notebook、工具和数据
 ## 技术架构
 
 核心生产形态是托管 SaaS：React/TypeScript 前端统一通过 EviMed Server 访问隔离的
-OpenCode 运行时、DeepSeek 模型网关、追加式运行记录、工件溯源、Jupyter 内核、精选
-科学 Skills 和 EviMed 数据/工具适配器。Tauri 仅用于可选桌面壳，不是主发布目标。
+DeepSeek Harness（DSH）运行时、DeepSeek 模型网关、追加式运行记录、工件溯源、
+Jupyter 内核、精选科学 Skills 和 EviMed 数据/工具适配器。Tauri 仅用于可选桌面壳，
+不是主发布目标。
 
 专项服务通过 `EVIMED_*_URL` 环境变量接入。Meta 分析服务已经纳入托管版 Compose；
 其他专项服务需要在生产环境完成独立部署和地址配置后，才能作为正式可用能力对外承诺。
@@ -32,11 +33,13 @@ OpenCode 运行时、DeepSeek 模型网关、追加式运行记录、工件溯�
 
 ```bash
 pnpm install
-bash scripts/dev/fetch-opencode.sh
 bash scripts/dev/fetch-uv.sh
 bash scripts/dev/fetch-skills.sh
 pnpm dev:evimed
 ```
+
+运行时内核不在这里以二进制形式拉取：DSH 在运行时镜像内安装成一个版本钉死的
+profile（`deploy/runtime-dsh/`），版本只有 `deps-version.json` 一处定义。
 
 本地配置脚本会把模型密钥保存到仓库外部。禁止提交 API Key、部署 `.env`、用户工作区、
 运行日志和生成的发布清单。
@@ -63,5 +66,5 @@ pnpm check:tauri
 ## 许可证与上游致谢
 
 本项目保留 [LICENSE](./LICENSE) 中的上游 MIT 许可证和第三方声明。EviMed 基于 Open
-Science 工作台与 OpenCode 运行时建设；相关上游名称仅在技术兼容或许可证致谢所需的
-位置保留。
+Science 工作台与 DeepSeek Harness（DSH）智能体运行时建设；相关上游名称仅在技术兼容
+或许可证致谢所需的位置保留。

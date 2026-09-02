@@ -212,43 +212,50 @@ def _python(spec, root):
 
 
 def _model_environment():
-    # The DSH kernel writes no `opencode.json`, so the three facts this needs —
-    # gateway URL, model, token — arrive as environment plus a bare token file.
-    # Preferred when present; the config-file path below stays for the OpenCode
-    # kernel, which is the only thing that writes one.
-    token_file = os.environ.get("EVIMED_MODEL_GATEWAY_TOKEN_FILE", "").strip()
-    if token_file:
-        from public_sources import _read_bare_token  # noqa: PLC0415 — one reader, one implementation
+    # The three facts a specialist run needs — gateway URL, model, token —
+    # arrive as two environment variables plus a bare token file.
+    #
+    # The retired kernel wrote one `opencode.json` carrying all three, and this
+    # function fell back to parsing it whenever no token file was named. That
+    # kernel writes nothing now, so the fallback was a fallback to nothing: an
+    # unconfigured runtime took it, found no file, and reported "the managed
+    # model configuration is unavailable" — true, and silent about the fact
+    # that no such configuration was ever going to appear. An absent token file
+    # now says so by name.
+    from public_sources import (  # noqa: PLC0415 — one reader, one implementation
+        GATEWAY_TOKEN_FILE_ENV_NAMES,
+        _gateway_token_file,
+        _read_bare_token,
+    )
 
-        base_url = os.environ.get("EVIMED_MODEL_GATEWAY_URL", "").strip()
-        model = os.environ.get("EVIMED_MODEL_GATEWAY_MODEL", "").strip()
-        if model != "deepseek-v4-pro":
-            raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
-        try:
-            api_key = _read_bare_token(token_file)
-        except Exception as error:  # noqa: BLE001 — the reader's own error type is not this module's vocabulary
-            raise SpecialistJobError("specialist_model_config_unavailable", "The managed model configuration is unavailable.", True) from error
-    else:
-        raw = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
-        if not raw or not os.path.isabs(raw) or "\0" in raw:
-            raise SpecialistJobError("specialist_model_config_unavailable", "The managed model configuration is unavailable.", True)
-        config = _read_json(raw)
-        provider = config.get("provider", {}).get("deepseek", {})
-        options = provider.get("options", {}) if isinstance(provider, dict) else {}
-        models = provider.get("models", {}) if isinstance(provider, dict) else {}
-        base_url = options.get("baseURL") if isinstance(options, dict) else None
-        api_key = options.get("apiKey") if isinstance(options, dict) else None
-        if not isinstance(models, dict) or "deepseek-v4-pro" not in models:
-            raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
-    # One set of refusals and one return whatever the source was: the two paths
-    # differ in where the three facts come from, not in what counts as valid.
+    token_file = _gateway_token_file()
+    if not token_file:
+        raise SpecialistJobError(
+            "specialist_model_config_unavailable",
+            "The managed model gateway token file is not configured (%s)." % " or ".join(GATEWAY_TOKEN_FILE_ENV_NAMES),
+            True,
+        )
+    base_url = os.environ.get("EVIMED_MODEL_GATEWAY_URL", "").strip()
+    model = os.environ.get("EVIMED_MODEL_GATEWAY_MODEL", "").strip()
+    if model != "deepseek-v4-pro":
+        raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+    try:
+        api_key = _read_bare_token(token_file)
+    except Exception as error:  # noqa: BLE001 — the reader's own error type is not this module's vocabulary
+        raise SpecialistJobError("specialist_model_config_unavailable", "The managed model gateway token is unavailable.", True) from error
+    # The refusals stay where they were: a token that reads cleanly still has to
+    # arrive with a usable gateway URL before any specialist is launched.
     if (
         not isinstance(base_url, str)
         or not base_url.startswith(("http://", "https://"))
         or not isinstance(api_key, str)
         or not api_key
     ):
-        raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+        raise SpecialistJobError(
+            "specialist_model_config_unavailable",
+            "The managed model gateway URL or token is unusable for this runtime.",
+            True,
+        )
     return {
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": base_url.rstrip("/"),

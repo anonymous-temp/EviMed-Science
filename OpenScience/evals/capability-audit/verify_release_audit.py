@@ -276,7 +276,17 @@ def verify_skills():
     installed = sorted(global_installed + specialist_installed)
     require(len(global_installed) == 58 and summary.get("freshWebGlobalSkillPackages") == 58, "clean Web global Skill count is not 58")
     require(len(specialist_installed) == 11 and summary.get("freshWebSpecialistSkillPackages") == 11, "clean Web specialist Skill count is not 11")
-    require(len(installed) == 69 and summary.get("freshWebOpenCodeSkillPackages") == 69, "clean Web OpenCode Skill count is not 69")
+    # `freshWebOpenCodeSkillPackages` is the same count under the name the
+    # generator wrote while the retired kernel was the one being counted. The
+    # recorded results in `results/` were measured then and are not rewritten —
+    # editing a recording to look current is falsified evidence — so this reads
+    # the current name and falls back to the recorded one. Drop the fallback
+    # once the audit has been re-recorded under the DSH runtime.
+    installed_count = summary.get(
+        "freshWebRuntimeSkillPackages",
+        summary.get("freshWebOpenCodeSkillPackages"),
+    )
+    require(len(installed) == 69 and installed_count == 69, "clean Web runtime Skill count is not 69")
     require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
 
     execution = read("skill-execution-v1.json")

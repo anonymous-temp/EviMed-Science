@@ -323,13 +323,17 @@ export async function runDeepSeekKernelReleaseGate(options = {}) {
 async function main() {
   try {
     const mode = process.argv.includes("--fake") ? "fake" : "production";
-    const receipt = await runDeepSeekKernelReleaseGate({
+    // `Promise<never>` is the truth today: the gate refuses, so this reporting is
+    // unreachable. It stays because it is the shape a minting gate has to return
+    // to, and the cast here is what lets the signature keep saying "cannot
+    // succeed" instead of being widened to hide that.
+    const receipt = /** @type {Record<string, any>} */ (await runDeepSeekKernelReleaseGate({
       mode,
       keyFile: process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE,
       modelGatewaySigningSecretFile: process.env.OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE,
       receiptPath: process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE,
       receiptId: process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID,
-    });
+    }));
     process.stdout.write(`${JSON.stringify({ ok: true, receiptId: receipt.id, mode: receipt.mode })}\n`);
   } catch (error) {
     const code = error instanceof ReleaseGateError || typeof error?.code === "string"

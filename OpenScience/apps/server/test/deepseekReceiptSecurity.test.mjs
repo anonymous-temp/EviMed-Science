@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +13,12 @@ import {
 
 const signingSecret = "receipt-signing-secret-with-at-least-32-private-bytes";
 const now = Date.parse("2026-07-17T01:00:00.000Z");
+// A receipt names the kernel it certified, and the validator compares that name
+// against the pin every deployment reads. Taking it from the same file keeps the
+// two sides from drifting apart while both still look right.
+const requiredDshVersion = JSON.parse(
+  fs.readFileSync(new URL("../../../deps-version.json", import.meta.url), "utf8"),
+).dsh.version;
 
 function unsignedReceipt(overrides = {}) {
   return {
@@ -20,7 +27,7 @@ function unsignedReceipt(overrides = {}) {
     mode: "production",
     productionEligible: true,
     createdAt: new Date(now).toISOString(),
-    opencodeVersion: "1.17.13",
+    dshVersion: requiredDshVersion,
     model: "deepseek-v4-pro",
     sourceRevision: "source-1",
     configRevision: "config-1",
@@ -151,7 +158,7 @@ test("production server readiness verifies the signed and fresh release receipt"
     port: 0,
     production: true,
     devAuth: true,
-    runtimeMode: "opencode",
+    runtimeMode: "kernel",
     runtimeSandboxMode: "docker",
     runtimeNetworkMode: "open-science-runtime-internal",
     runtimeInternalNetworkName: "open-science-runtime-internal",

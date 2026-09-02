@@ -7,7 +7,7 @@ description: Construct and analyze provenance-preserving biomedical knowledge gr
 
 Define node and edge schemas before ingestion. Give every entity a namespace-qualified identifier and every evidence edge a source, retrieval time, relation type, direction, and confidence basis. Preserve contradictory edges instead of overwriting them.
 
-Use `data_source_catalog` and `biomedical_source_search` for supported public records. Check graph-library dependencies before execution and never install them implicitly. Record source dataset versions and licenses; do not redistribute restricted graph data.
+Use `mcp__evimed__data_source_catalog` and `mcp__evimed__biomedical_source_search` for supported public records. Check graph-library dependencies before execution and never install them implicitly. Record source dataset versions and licenses; do not redistribute restricted graph data.
 
 Distinguish database assertions, computed associations, and model hypotheses. Network proximity, centrality, or path existence does not establish mechanism, causality, efficacy, or safety.
 

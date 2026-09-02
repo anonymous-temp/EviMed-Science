@@ -44,7 +44,7 @@ def evimed_action(item: dict) -> str:
     if state == "ready_credentials":
         return "Run two live production-gateway queries, retain provenance, verify result parsing, and only then promote to connected_public."
     if state == "adapter_credentials_required":
-        return "Implement and contract-test the source-specific protocol without exposing credentials to OpenCode."
+        return "Implement and contract-test the source-specific protocol without exposing credentials to the agent runtime."
     if state == "ready_private_adapter":
         return "Implement the tenant-scoped private adapter and end-to-end artifact test after the endpoint contract is supplied."
     if state in {"blocked_license", "blocked_approval"}:

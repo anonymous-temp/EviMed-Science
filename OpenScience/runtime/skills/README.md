@@ -8,13 +8,26 @@ skills/
              # other dirs are roadmap placeholders until they get a SKILL.md)
   curated-scientific/ # reviewed skills with an exhaustive delivery inventory
   office/    # first-party MIT baseline Office artifact exporters
+  community/ # ecosystem skills, vendored at pinned commits (sources.json)
+  evimed/    # our own agent packages (agent.yaml + SKILL.md). The eleven
+             # specialists reach a run as capability bodies under
+             # `capability-skills/`; only `open-domain-answer` ships from here
   external/  # third-party skill packs, fetched by script — git-ignored
-  user/      # user-installed / custom skills (live in the runtime workspace)
 ```
 
-Core skills are bundled as the `skills-core/` app resource and deployed next to
-the external pack on every sidecar start; directories without a `SKILL.md` are
-skipped.
+There is no `user/` tree, and the omission is the point: the runtime workspace is
+where users upload files, so a skill root inside it would make an uploaded
+`SKILL.md` an instruction. Skill roots are deployment-owned and read-only, and
+the preset turns the kernel's own default root discovery off to keep it that way
+(`packages/socket/presets/evimed-universal/agent.cordis.yml`).
+
+Where a tree lands in the runtime image is declared once, in
+`RUNTIME_SKILL_ROOTS` (`packages/domain/src/skillRoots.mjs`) — that declaration
+is both what a run is told and what a test holds against the Dockerfile's `COPY`
+targets. Skill bodies therefore reference their own scripts *relatively* and
+name no deployment path at all — the previous convention, where each body
+spelled out an absolute root, is how 45 bodies came to name a directory that no
+longer existed. Directories without a `SKILL.md` are skipped.
 
 ## Default pack: ai4s-skills (bundled into the installer)
 
@@ -28,12 +41,11 @@ How they ship, end to end:
 1. `scripts/dev/fetch-skills.sh` (run locally and in CI) downloads the pack at a
    pinned commit into `external/ai4s-skills/`.
 2. `tauri.conf.json` bundles that directory as an app resource (`resources/skills/`).
-3. On every sidecar start, `runtime.rs::deploy_bundled_skills` syncs the pack into
-   the app-private profile's global skills dir (`<xdg-config>/opencode/skills/`),
-   which OpenCode scans regardless of project detection. Bundled skill directories
-   are replaced on app upgrade; the workspace's own `.opencode/skills/` stays
-   reserved for user-installed skills. Skill listing must be workspace-scoped
-   (`GET /api/skill?directory=…`) — the SDK does this via its `directory` option.
+3. On every runtime start, `runtime.rs::deploy_bundled_skills` syncs the pack
+   into the app-private profile's skills directory, which the runtime loads as a
+   root regardless of which project is open. Bundled skill directories are
+   replaced on app upgrade, and only bundled ones: everything else the directory
+   holds is left alone.
 
 To bump the pack version, update `AI4S_SKILLS_COMMIT` in `fetch-skills.sh`.
 

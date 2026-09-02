@@ -25,10 +25,15 @@ try {
   // A first audit has no prior evidence to merge.
 }
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "evimed-connector-gateway-"));
-const modelConfig = path.join(temporary, "opencode.json");
-await fs.writeFile(modelConfig, JSON.stringify({
-  provider: { deepseek: { options: { apiKey: auditToken } } },
-}), { mode: 0o600 });
+// A bare one-line token, which is the only thing `public_sources._read_bare_token`
+// accepts: it rejects anything containing whitespace precisely so a JSON document
+// cannot be mined for something token-shaped. This wrote the retired kernel's
+// `opencode.json` (a `provider.deepseek.options.apiKey` document) and handed that
+// to the reader, so every probe in this audit would have failed the gateway as
+// `public_source_gateway_unconfigured` — a message about a missing token, from an
+// audit that had written one.
+const gatewayTokenFile = path.join(temporary, "gateway-token");
+await fs.writeFile(gatewayTokenFile, auditToken, { mode: 0o600 });
 
 const handler = createPublicSourceGatewayHandler({
   publicSourceGatewayTimeoutMs: 60_000,
@@ -78,7 +83,7 @@ function runPython(gatewayUrl) {
       env: {
         ...process.env,
         EVIMED_PUBLIC_SOURCE_GATEWAY_URL: gatewayUrl,
-        EVIMED_MODEL_CONFIG_FILE: modelConfig,
+        EVIMED_MODEL_GATEWAY_TOKEN_FILE: gatewayTokenFile,
       },
       stdio: "inherit",
     });

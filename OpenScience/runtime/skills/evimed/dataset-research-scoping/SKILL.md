@@ -114,7 +114,7 @@ this package does exactly this. Copy it into the workspace as `data-profile.py`
 and run it there, so the deliverable regenerates from a deliverable:
 
 ```bash
-cp "$XDG_CONFIG_HOME/opencode/skills/dataset-research-scoping/scripts/profile_dataset.py" data-profile.py
+cp "scripts/profile_dataset.py" data-profile.py
 python3 data-profile.py <dataset files...> --json data-profile.json --markdown data-profile.md
 ```
 
@@ -785,7 +785,7 @@ Run the preflight and fix everything it reports, then run it again until it
 returns `ok`:
 
 ```bash
-python3 "$XDG_CONFIG_HOME/opencode/skills/dataset-research-scoping/scripts/preflight.py" --workspace .
+python3 "scripts/preflight.py" --workspace .
 ```
 
 It blocks on what a reader cannot check for themselves: an identifier copied out

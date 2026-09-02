@@ -1,45 +1,50 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.mjs";
+import { MCP_CLIENT_PLUGIN, WORKLOAD_TOKEN_REF } from "../src/dshProfilePatch.mjs";
 import {
+  RUNTIME_KERNEL_NAME,
   RuntimeManager,
   evimedWorkloadRefreshIntervalMs,
   issueEviMedWorkloadToken,
+  modelGatewayTokenFileName,
   refreshEviMedWorkloadToken,
-  syncRuntimeEviMedMcp,
+  syncRuntimeDshProfile,
   validateEviMedAdapterConfig,
   verifyEviMedWorkloadToken,
+  verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
-import { MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+import { MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
 
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const signingSecret = "test-only-evimed-workload-signing-secret-with-32-bytes";
+const modelGatewaySecret = "test-only-model-gateway-signing-secret-with-32-bytes";
+
+/** Where the runtime image keeps the research MCP. The retired kernel had the
+ *  control plane copy the Python tree into each project's config directory and
+ *  then name the copy; this one bakes it into the image read-only, shared by
+ *  every project, so there is no per-project copy to make, own or roll back. */
+const imageMcpServerPath = "/opt/evimed/mcp/evimed-research/server.py";
 
 
 async function fixture(root) {
-  const sourceDir = path.join(root, "source", "evimed-research");
   const projectRoot = path.join(root, "project");
   const workspaceDir = path.join(projectRoot, "workspace");
   const runtimeDir = path.join(projectRoot, "runtime");
   const metaDir = path.join(projectRoot, ".openscience");
-  const xdgConfigDir = path.join(runtimeDir, "xdg-config");
+  const dshHomeDir = path.join(runtimeDir, "dsh-home");
   await Promise.all([
-    mkdir(sourceDir, { recursive: true }),
     mkdir(workspaceDir, { recursive: true }),
     mkdir(runtimeDir, { recursive: true }),
     mkdir(metaDir, { recursive: true }),
   ]);
-  await writeFile(path.join(sourceDir, "server.py"), "print('protocol')\n", { mode: 0o755 });
-  await writeFile(path.join(sourceDir, "science_connectors.py"), "# connector fixture\n", { mode: 0o755 });
-  await writeFile(path.join(sourceDir, "public_sources.py"), "# source fixture\n", { mode: 0o644 });
   return {
-    sourceDir,
     project: {
       id: "project-1",
       userId: "user-1",
@@ -49,8 +54,54 @@ async function fixture(root) {
       runtimeDir,
       metaDir,
     },
-    xdgConfigDir,
+    dshHomeDir,
+    plan: { sandboxMode: "host", dshHomeDir, proxyWorkspaceDir: workspaceDir },
   };
+}
+
+/** The settings every DSH profile needs before it can render at all: which
+ *  gateway, which certified model, and the two signing keys. Everything a test
+ *  is actually about is passed on top of this. */
+function dshConfig(overrides = {}) {
+  return {
+    deepseekProviderEnabled: true,
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+    modelGatewaySigningSecret: modelGatewaySecret,
+    evimedWorkloadSigningSecret: signingSecret,
+    evimedWorkloadTokenTtlSeconds: 300,
+    socketBundleVersion: "0.1.0",
+    dshVersion: "0.1.2-alpha.3",
+    runtimeSandboxEnforcement: "full",
+    evimedAdapterUrls: {},
+    ...overrides,
+  };
+}
+
+async function readPatch(plan) {
+  return readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+}
+
+/**
+ * The MCP subprocess's environment, read back out of the generated patch.
+ *
+ * The retired kernel took it as a JSON object in a config file the control
+ * plane owned; this one takes it as `env:` rows of one generated YAML file. The
+ * rows are the same facts, so reading them back is what lets the assertions
+ * below stay about the environment rather than about YAML.
+ */
+function mcpEnvironment(patch) {
+  const lines = patch.split("\n");
+  const start = lines.findIndex((line) => line === "        env:");
+  assert.notEqual(start, -1, "the generated patch carries no MCP environment block");
+  const environment = {};
+  for (const line of lines.slice(start + 1)) {
+    const match = /^ {10}([A-Za-z0-9_]+): '(.*)'$/.exec(line);
+    if (!match) break;
+    environment[match[1]] = match[2].replace(/''/g, "'");
+  }
+  assert.ok(Object.keys(environment).length > 0, "the MCP environment block parsed to nothing");
+  return environment;
 }
 
 
@@ -162,23 +213,24 @@ test("EviMed workload tokens bind audience, project, expiry, and signature", () 
 });
 
 
-// A project starts its runtime once and keeps it, so a config the platform
-// wrote and then refuses to recognise stays invisible until something forces a
-// second start — a container recreate, a host reboot. It did: the web-search
-// work added EVIMED_WEB_SEARCH_GATEWAY_URL to what gets written without adding
-// it to the set the ownership check allows, and every project that had started
-// a runtime could never start one again, reporting only that bootstrap failed.
+// A project starts its runtime once and keeps it, so a channel the platform
+// configured and then failed to pass through stays invisible until something
+// forces a second start — a container recreate, a host reboot. It did: the
+// web-search work added EVIMED_WEB_SEARCH_GATEWAY_URL to what gets written
+// without adding it to the set the ownership check allowed, and every project
+// that had started a runtime could never start one again.
 //
-// Writing twice is the whole test. Whatever the writer emits, the checker must
-// accept, and no list of variable names can guarantee that by inspection.
-test("a runtime config the platform wrote survives its own ownership check", async () => {
+// The kernel that had a config file to own is gone; the patch is regenerated
+// from scratch on every start, so there is no ownership check left to fail.
+// What survives is the half of the property that was always the point: every
+// optional channel the deployment switched on has to reach the MCP subprocess,
+// and starting a second time has to produce the same runtime as the first.
+test("every optional evidence channel the platform configures reaches the runtime, twice", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-rewrite-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const config = {
-      evimedMcpSourceDir: sourceDir,
+    const { project, plan } = await fixture(tmp);
+    const config = dshConfig({
       evimedAdapterUrls: { literatureSearch: "https://evidence.internal/literature" },
-      evimedWorkloadSigningSecret: signingSecret,
       publicSourceGatewayInternalUrl: "https://gateway.internal/internal/sources/v1/fetch",
       // The variable is only written when the deployment actually has a
       // metasearch backend, which is why the defect needed a configured one to
@@ -186,92 +238,84 @@ test("a runtime config the platform wrote survives its own ownership check", asy
       webSearchUrl: "http://open-science-web-search:8080/search",
       webSearchGatewayInternalUrl: "https://gateway.internal/internal/search/v1/query",
       // Every optional channel has to be switched on here or this test does not
-      // cover it: it only proves the writer and the checker agree about the
-      // variables the fixture actually causes to be written. The GEO probe is
-      // the second variable to take this route.
+      // cover it: it only proves the writer passes through the variables the
+      // fixture actually causes to be written. The GEO probe is the second
+      // variable to take this route.
       geoProbeUrl: "http://geo-probe.internal:9999",
       geoProbeGatewayInternalUrl: "https://gateway.internal/internal/geo-probe/v1",
-      unpaywallEmail: "evimed@example.test",
-    };
-    const plan = { sandboxMode: "docker", xdgConfigDir, proxyWorkspaceDir: "/workspace" };
-    await syncRuntimeEviMedMcp(config, project, plan);
-
-    const opencodeDir = path.join(xdgConfigDir, "opencode");
-    const written = JSON.parse(await readFile(path.join(opencodeDir, "opencode.json"), "utf8"));
+      publicSourceCredentials: { unpaywall: "evimed@example.test" },
+    });
+    await syncRuntimeDshProfile(config, project, plan, { nowSeconds: 1_000, jti: "mgw-first" });
+    const first = await readPatch(plan);
+    const environment = mcpEnvironment(first);
     assert.equal(
-      written.mcp["evimed-research"].environment.EVIMED_WEB_SEARCH_GATEWAY_URL,
+      environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL,
+      "https://gateway.internal/internal/sources/v1/fetch",
+      "the writer emits the source gateway address",
+    );
+    assert.equal(
+      environment.EVIMED_WEB_SEARCH_GATEWAY_URL,
       "https://gateway.internal/internal/search/v1/query",
       "the writer emits the search gateway address",
     );
     assert.equal(
-      written.mcp["evimed-research"].environment.EVIMED_GEO_PROBE_GATEWAY_URL,
+      environment.EVIMED_GEO_PROBE_GATEWAY_URL,
       "https://gateway.internal/internal/geo-probe/v1",
       "the writer emits the probe gateway address",
     );
+    assert.equal(environment.EVIMED_UNPAYWALL_EMAIL, "evimed@example.test");
+    assert.equal(environment.EVIMED_LITERATURE_SEARCH_URL, "https://evidence.internal/literature");
 
-    // The second start is where it broke.
-    await syncRuntimeEviMedMcp(config, project, plan);
-    const again = JSON.parse(await readFile(path.join(opencodeDir, "opencode.json"), "utf8"));
-    assert.deepEqual(again.mcp["evimed-research"].environment, written.mcp["evimed-research"].environment);
+    // The second start is where it broke. Nothing in the patch may depend on
+    // whether one has been written before.
+    await syncRuntimeDshProfile(config, project, plan, { nowSeconds: 2_000, jti: "mgw-second" });
+    assert.equal(await readPatch(plan), first);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 });
 
-test("syncRuntimeEviMedMcp atomically copies the server and safely merges docker config", async () => {
+test("the generated patch mounts the research MCP and hands it a token, never a key", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const opencodeDir = path.join(xdgConfigDir, "opencode");
-    await mkdir(opencodeDir, { recursive: true });
-    await writeFile(path.join(opencodeDir, "opencode.json"), JSON.stringify({
-      mcp: { existing: { type: "remote", url: "https://example.test/mcp" } },
-      model: "existing/model",
-    }));
-
-    const result = await syncRuntimeEviMedMcp(
-      {
-        evimedMcpSourceDir: sourceDir,
+    const { project, plan } = await fixture(tmp);
+    const result = await syncRuntimeDshProfile(
+      dshConfig({
         evimedAdapterUrls: { literatureSearch: "https://evidence.internal/literature" },
-        evimedWorkloadSigningSecret: signingSecret,
-      },
+        deepseekApiKey: "must-never-be-written",
+      }),
       project,
-      { sandboxMode: "docker", xdgConfigDir, proxyWorkspaceDir: "/workspace" },
+      plan,
     );
 
-    assert.deepEqual(result, {
-      copied: 1,
-      configured: 8,
-      workloadTokenFile: path.join(opencodeDir, "evimed-workload.token"),
-      workloadTokenRefreshMs: 150_000,
+    assert.equal(result.configured, true);
+    assert.equal(result.workloadTokenFile, path.join(plan.dshHomeDir, "evimed-workload.token"));
+    assert.equal(result.workloadTokenRefreshMs, 150_000);
+
+    const patch = await readPatch(plan);
+    // One MCP row, naming the plugin that speaks MCP, the server name the model
+    // sees its tools under, and the interpreter and script the image carries.
+    assert.match(patch, /^ {4}- id: mcp-evimed$/m);
+    assert.match(patch, new RegExp(`^ {6}name: '${MCP_CLIENT_PLUGIN.replace(/[/@-]/g, "\\$&")}'$`, "m"));
+    assert.match(patch, new RegExp(`^ {8}serverName: '${MCP_SERVER_NAME}'$`, "m"));
+    assert.match(patch, /^ {8}command: python3$/m);
+    assert.match(patch, new RegExp(`^ {10}- '${imageMcpServerPath.replace(/\//g, "\\/")}'$`, "m"));
+    // A runtime without the research tools cannot do the work it would accept.
+    assert.match(patch, /^ {8}failOnStartupError: true$/m);
+
+    assert.deepEqual(mcpEnvironment(patch), {
+      EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
+      EVIMED_MODEL_GATEWAY_TOKEN_FILE: `/runtime/dsh-home/${modelGatewayTokenFileName}`,
+      EVIMED_MODEL_GATEWAY_URL: "http://127.0.0.1:8787/internal/model/v1",
+      EVIMED_LITERATURE_SEARCH_URL: "https://evidence.internal/literature",
+      EVIMED_WORKLOAD_TOKEN_FILE: path.join(plan.dshHomeDir, "evimed-workload.token"),
+      OPEN_SCIENCE_PROJECT_ID: "project-1",
+      OPEN_SCIENCE_TENANT_ID: "user-1",
+      OPEN_SCIENCE_USER_ID: "user-1",
+      OPEN_SCIENCE_WORKSPACE_DIR: project.workspaceDir,
     });
-    assert.equal(
-      await readFile(path.join(opencodeDir, "mcp", "evimed-research", "server.py"), "utf8"),
-      "print('protocol')\n",
-    );
-    const config = JSON.parse(await readFile(path.join(opencodeDir, "opencode.json"), "utf8"));
-    assert.equal(config.model, "existing/model");
-    assert.equal(config.mcp.existing.url, "https://example.test/mcp");
-    const managed = config.mcp["evimed-research"];
-    const scienceConnectorNames = Object.keys(config.mcp).filter((name) => name.startsWith("science-")).sort();
-    assert.deepEqual(scienceConnectorNames, [
-      "science-biomcp",
-      "science-fred",
-      "science-materials-project",
-      "science-open-meteo",
-      "science-paper-search",
-      "science-spaceweather",
-      "science-usgs-water",
-    ]);
-    assert.deepEqual(config.mcp["science-paper-search"], {
-      type: "local",
-      command: ["python3", "/runtime/xdg-config/opencode/mcp/evimed-research/science_connectors.py"],
-      enabled: true,
-      environment: {
-        OPEN_SCIENCE_CONNECTOR_ID: "paper-search",
-      },
-    });
-    const workloadTokenFile = path.join(opencodeDir, "evimed-workload.token");
+
+    const workloadTokenFile = result.workloadTokenFile;
     const workloadToken = (await readFile(workloadTokenFile, "utf8")).trim();
     assert.equal((await stat(workloadTokenFile)).mode & 0o777, 0o600);
     assert.equal(
@@ -283,60 +327,74 @@ test("syncRuntimeEviMedMcp atomically copies the server and safely merges docker
       }).projectId,
       "project-1",
     );
-    assert.deepEqual({
-      ...managed,
-      environment: managed.environment,
-    }, {
-      type: "local",
-      command: [
-        "python3",
-        "/runtime/xdg-config/opencode/mcp/evimed-research/server.py",
-      ],
-      enabled: true,
-      environment: {
-        OPEN_SCIENCE_TENANT_ID: "user-1",
-        OPEN_SCIENCE_USER_ID: "user-1",
-        OPEN_SCIENCE_PROJECT_ID: "project-1",
-        OPEN_SCIENCE_WORKSPACE_DIR: "/workspace",
-        EVIMED_WORKLOAD_TOKEN_FILE: "/runtime/xdg-config/opencode/evimed-workload.token",
-        EVIMED_LITERATURE_SEARCH_URL: "https://evidence.internal/literature",
-      },
-    });
-    assert.doesNotMatch(JSON.stringify(config), /API_KEY|Authorization|Bearer/);
-    assert.equal(JSON.stringify(config).includes(signingSecret), false);
-    assert.equal(JSON.stringify(config).includes(workloadToken), false);
+
+    // The patch is a generated file that ships to a container. It names a
+    // credential reference; it carries no credential.
+    assert.match(patch, new RegExp(`^ {4}apiKeyEnv: '${WORKLOAD_TOKEN_REF}'$`, "m"));
+    assert.doesNotMatch(patch, /apiKey:|Authorization|Bearer/);
+    assert.equal(patch.includes(signingSecret), false);
+    assert.equal(patch.includes(modelGatewaySecret), false);
+    assert.equal(patch.includes(workloadToken), false);
+    assert.equal(patch.includes("must-never-be-written"), false);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 });
 
 
-test("host runtimes bind the managed local MetaAgent and model config without exposing a key", async () => {
+test("host runtimes bind the local MetaAgent, and the MCP reads the gateway from a token file", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-meta-host-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
+    const { project, plan } = await fixture(tmp);
     const metaAgentRoot = path.join(tmp, "meta");
     await mkdir(path.join(metaAgentRoot, "new_meta"), { recursive: true });
     await writeFile(path.join(metaAgentRoot, "new_meta", "main.py"), "# test fixture\n");
-    await syncRuntimeEviMedMcp(
-      {
-        evimedMcpSourceDir: sourceDir,
-        evimedAdapterUrls: {},
-        metaAgentRoot,
-        metaAgentPython: "/usr/bin/python3",
-      },
+    await syncRuntimeDshProfile(
+      dshConfig({ metaAgentRoot, metaAgentPython: "/usr/bin/python3" }),
       project,
-      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
+      plan,
+      { nowSeconds: 5_000, jti: "mgw-meta" },
     );
-    const config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
-    const environment = config.mcp["evimed-research"].environment;
+    const environment = mcpEnvironment(await readPatch(plan));
     assert.equal(environment.EVIMED_META_AGENT_ROOT, metaAgentRoot);
     assert.equal(environment.EVIMED_META_AGENT_PYTHON, "/usr/bin/python3");
-    assert.equal(
-      environment.EVIMED_MODEL_CONFIG_FILE,
-      path.join(xdgConfigDir, "opencode", "opencode.json"),
-    );
+
+    // The retired kernel let the MCP read `provider.deepseek.options.apiKey`
+    // out of the kernel's own config file. There is no such file now, so the
+    // gateway travels as three named facts and the credential as a file of its
+    // own — the MCP never parses a kernel's configuration to learn who it is
+    // talking to, and never sees a provider key either.
+    assert.equal(environment.EVIMED_MODEL_CONFIG_FILE, undefined);
+    assert.equal(environment.EVIMED_MODEL_GATEWAY_URL, "http://127.0.0.1:8787/internal/model/v1");
+    assert.equal(environment.EVIMED_MODEL_GATEWAY_MODEL, "deepseek-v4-pro");
+    assert.equal(environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE, `/runtime/dsh-home/${modelGatewayTokenFileName}`);
     assert.equal(JSON.stringify(environment).includes("apiKey"), false);
+
+    // And the token in that file is bound to this audience and this project:
+    // a token minted for another project must not open this one's gateway.
+    const tokenFile = path.join(plan.dshHomeDir, modelGatewayTokenFileName);
+    assert.equal((await stat(tokenFile)).mode & 0o777, 0o600);
+    const gatewayToken = (await readFile(tokenFile, "utf8")).trim();
+    const payload = verifyModelGatewayRuntimeToken(gatewayToken, {
+      secret: modelGatewaySecret,
+      userId: "user-1",
+      projectId: "project-1",
+      nowSeconds: 5_001,
+    });
+    assert.equal(payload.aud, "evimed-model-gateway");
+    assert.equal(payload.projectId, "project-1");
+    for (const wrong of [{ projectId: "project-2" }, { userId: "user-2" }]) {
+      assert.throws(
+        () => verifyModelGatewayRuntimeToken(gatewayToken, {
+          secret: modelGatewaySecret,
+          userId: "user-1",
+          projectId: "project-1",
+          nowSeconds: 5_001,
+          ...wrong,
+        }),
+        (error) => error?.code === "model_gateway_token_invalid",
+      );
+    }
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -346,42 +404,31 @@ test("host runtimes bind the managed local MetaAgent and model config without ex
 test("host runtimes bind a bounded pharmacy reference while docker requires its HTTP adapter", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-pharmacy-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
+    const { project, plan } = await fixture(tmp);
     const pharmacyReferenceDb = path.join(tmp, "pharmacy-reference.sqlite");
     await writeFile(pharmacyReferenceDb, "bounded test database fixture");
-    await syncRuntimeEviMedMcp(
-      { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {}, pharmacyReferenceDb },
-      project,
-      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
+    await syncRuntimeDshProfile(dshConfig({ pharmacyReferenceDb }), project, plan);
+    assert.equal(
+      mcpEnvironment(await readPatch(plan)).EVIMED_PHARMACY_REFERENCE_DB,
+      pharmacyReferenceDb,
     );
-    let config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
-    assert.equal(config.mcp["evimed-research"].environment.EVIMED_PHARMACY_REFERENCE_DB, pharmacyReferenceDb);
 
-    const dockerXdgConfigDir = path.join(project.runtimeDir, "docker-xdg-config");
+    const dockerPlan = { ...plan, sandboxMode: "docker", proxyWorkspaceDir: "/workspace" };
     await assert.rejects(
-      () => syncRuntimeEviMedMcp(
-        { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {}, pharmacyReferenceDb },
-        project,
-        { sandboxMode: "docker", xdgConfigDir: dockerXdgConfigDir, proxyWorkspaceDir: "/workspace" },
-      ),
+      () => syncRuntimeDshProfile(dshConfig({ pharmacyReferenceDb }), project, dockerPlan),
       (error) => error?.code === "runtime_pharmacy_reference_adapter_required",
     );
-    await syncRuntimeEviMedMcp(
-      {
-        evimedMcpSourceDir: sourceDir,
-        evimedAdapterUrls: { pharmacyReferenceSearch: "https://pharmacy.internal/reference" },
-        evimedWorkloadSigningSecret: signingSecret,
+    await syncRuntimeDshProfile(
+      dshConfig({
         pharmacyReferenceDb,
-      },
+        evimedAdapterUrls: { pharmacyReferenceSearch: "https://pharmacy.internal/reference" },
+      }),
       project,
-      { sandboxMode: "docker", xdgConfigDir: dockerXdgConfigDir, proxyWorkspaceDir: "/workspace" },
+      dockerPlan,
     );
-    config = JSON.parse(await readFile(path.join(dockerXdgConfigDir, "opencode", "opencode.json"), "utf8"));
-    assert.equal(
-      config.mcp["evimed-research"].environment.EVIMED_PHARMACY_REFERENCE_SEARCH_URL,
-      "https://pharmacy.internal/reference",
-    );
-    assert.equal(config.mcp["evimed-research"].environment.EVIMED_PHARMACY_REFERENCE_DB, undefined);
+    const environment = mcpEnvironment(await readPatch(dockerPlan));
+    assert.equal(environment.EVIMED_PHARMACY_REFERENCE_SEARCH_URL, "https://pharmacy.internal/reference");
+    assert.equal(environment.EVIMED_PHARMACY_REFERENCE_DB, undefined);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -391,52 +438,42 @@ test("host runtimes bind a bounded pharmacy reference while docker requires its 
 test("docker runtimes require the MetaAgent HTTP adapter instead of a host source path", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-meta-docker-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
+    const { project, plan } = await fixture(tmp);
+    const dockerPlan = { ...plan, sandboxMode: "docker", proxyWorkspaceDir: "/workspace" };
     const metaAgentRoot = path.join(tmp, "meta");
     await assert.rejects(
-      () => syncRuntimeEviMedMcp(
-        { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {}, metaAgentRoot },
-        project,
-        { sandboxMode: "docker", xdgConfigDir, proxyWorkspaceDir: "/workspace" },
-      ),
+      () => syncRuntimeDshProfile(dshConfig({ metaAgentRoot }), project, dockerPlan),
       (error) => error?.code === "runtime_meta_agent_adapter_required",
     );
 
-    await syncRuntimeEviMedMcp(
-      {
-        evimedMcpSourceDir: sourceDir,
-        evimedAdapterUrls: { metaAnalysis: "https://meta.internal/api/v1/evimed/meta-analysis" },
+    await syncRuntimeDshProfile(
+      dshConfig({
         metaAgentRoot,
-        evimedWorkloadSigningSecret: signingSecret,
-      },
+        evimedAdapterUrls: { metaAnalysis: "https://meta.internal/api/v1/evimed/meta-analysis" },
+      }),
       project,
-      { sandboxMode: "docker", xdgConfigDir, proxyWorkspaceDir: "/workspace" },
+      dockerPlan,
     );
-    const config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
-    const environment = config.mcp["evimed-research"].environment;
+    const environment = mcpEnvironment(await readPatch(dockerPlan));
     assert.equal(environment.EVIMED_META_ANALYSIS_URL, "https://meta.internal/api/v1/evimed/meta-analysis");
     assert.equal(environment.EVIMED_META_AGENT_ROOT, undefined);
-    assert.equal(environment.EVIMED_MODEL_CONFIG_FILE, undefined);
+    // Inside a container the token file is a container path, not the host one
+    // the control plane rewrites.
+    assert.equal(environment.EVIMED_WORKLOAD_TOKEN_FILE, "/runtime/dsh-home/evimed-workload.token");
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 });
 
 
-test("workload token file converges across signing-key rotation without config ownership failure", async () => {
+test("workload token file converges across signing-key rotation", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-key-rotation-"));
   const rotatedSecret = "rotated-test-only-evimed-workload-secret-with-32-bytes";
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const plan = { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir };
-    const base = {
-      evimedMcpSourceDir: sourceDir,
-      evimedAdapterUrls: { literatureSearch: "https://evidence.internal/literature" },
-    };
-    await syncRuntimeEviMedMcp(
-      { ...base, evimedWorkloadSigningSecret: signingSecret }, project, plan,
-    );
-    const tokenFile = path.join(xdgConfigDir, "opencode", "evimed-workload.token");
+    const { project, plan } = await fixture(tmp);
+    const base = { evimedAdapterUrls: { literatureSearch: "https://evidence.internal/literature" } };
+    await syncRuntimeDshProfile(dshConfig(base), project, plan);
+    const tokenFile = path.join(plan.dshHomeDir, "evimed-workload.token");
     const first = (await readFile(tokenFile, "utf8")).trim();
     verifyEviMedWorkloadToken(first, {
       secret: signingSecret,
@@ -444,8 +481,8 @@ test("workload token file converges across signing-key rotation without config o
       projectId: project.id,
     });
 
-    await syncRuntimeEviMedMcp(
-      { ...base, evimedWorkloadSigningSecret: rotatedSecret }, project, plan,
+    await syncRuntimeDshProfile(
+      dshConfig({ ...base, evimedWorkloadSigningSecret: rotatedSecret }), project, plan,
     );
     const second = (await readFile(tokenFile, "utf8")).trim();
     assert.notEqual(second, first);
@@ -468,62 +505,59 @@ test("workload token file converges across signing-key rotation without config o
 });
 
 
-test("MCP bootstrap upgrades a marker-owned config when workload signing is enabled later", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-token-upgrade-"));
-  try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const plan = { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir };
-    await syncRuntimeEviMedMcp(
-      { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} },
-      project,
-      plan,
-    );
-    const configFile = path.join(xdgConfigDir, "opencode", "opencode.json");
-    const before = JSON.parse(await readFile(configFile, "utf8"));
-    assert.equal(before.mcp["evimed-research"].environment.EVIMED_WORKLOAD_TOKEN_FILE, undefined);
+test("the MCP is told where its token is exactly when workload signing is configured", async (t) => {
+  await t.test("signing configured: the row appears and the file is minted 0600", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-token-upgrade-"));
+    try {
+      const { project, plan } = await fixture(tmp);
+      await syncRuntimeDshProfile(dshConfig(), project, plan);
+      const tokenFile = path.join(plan.dshHomeDir, "evimed-workload.token");
+      assert.equal(mcpEnvironment(await readPatch(plan)).EVIMED_WORKLOAD_TOKEN_FILE, tokenFile);
+      assert.equal((await stat(tokenFile)).mode & 0o777, 0o600);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
 
-    await syncRuntimeEviMedMcp(
-      {
-        evimedMcpSourceDir: sourceDir,
-        evimedAdapterUrls: {},
-        evimedWorkloadSigningSecret: signingSecret,
-      },
-      project,
-      plan,
-    );
-    const after = JSON.parse(await readFile(configFile, "utf8"));
-    assert.equal(
-      after.mcp["evimed-research"].environment.EVIMED_WORKLOAD_TOKEN_FILE,
-      path.join(xdgConfigDir, "opencode", "evimed-workload.token"),
-    );
-    assert.equal((await stat(path.join(xdgConfigDir, "opencode", "evimed-workload.token"))).mode & 0o777, 0o600);
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
+  // The other half, and it does not hold today.
+  //
+  // `evimedMcpEnvironment` still emits EVIMED_WORKLOAD_TOKEN_FILE only when a
+  // signing secret is configured — so the environment side still describes a
+  // deployment that has none. `syncRuntimeDshProfile` then calls
+  // `refreshEviMedWorkloadToken` unconditionally, which refuses to mint a token
+  // without a secret, so the whole runtime bootstrap throws
+  // `runtime_mcp_workload_secret_invalid` before anything starts. A deployment
+  // without .evimed-local/secrets/evimed-workload.signing therefore cannot start
+  // a runtime at all, and the failure names a token nobody asked for.
+  //
+  // The retired kernel made both halves conditional together; the fix belongs in
+  // `syncRuntimeDshProfile` (apps/server/src/runtimeManager.mjs), which this
+  // package does not own. Kept as a failing assertion rather than dropped,
+  // because dropping it is how the regression becomes permanent.
+  await t.test("no signing secret: the runtime still starts, with no token row", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-token-unsigned-"));
+    try {
+      const { project, plan } = await fixture(tmp);
+      await syncRuntimeDshProfile(dshConfig({ evimedWorkloadSigningSecret: "" }), project, plan);
+      assert.equal(mcpEnvironment(await readPatch(plan)).EVIMED_WORKLOAD_TOKEN_FILE, undefined);
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
 });
 
 
 test("MCP bootstrap is idempotent when the managed public-source gateway is enabled", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-gateway-restart-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const settings = {
-      evimedMcpSourceDir: sourceDir,
-      evimedAdapterUrls: {},
-      publicSourceGatewayInternalUrl: "http://127.0.0.1:8799",
-    };
-    const plan = {
-      sandboxMode: "host",
-      xdgConfigDir,
-      proxyWorkspaceDir: project.workspaceDir,
-    };
+    const { project, plan } = await fixture(tmp);
+    const settings = dshConfig({ publicSourceGatewayInternalUrl: "http://127.0.0.1:8799" });
 
-    await syncRuntimeEviMedMcp(settings, project, plan);
-    await syncRuntimeEviMedMcp(settings, project, plan);
+    await syncRuntimeDshProfile(settings, project, plan);
+    await syncRuntimeDshProfile(settings, project, plan);
 
-    const config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
     assert.equal(
-      config.mcp["evimed-research"].environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL,
+      mcpEnvironment(await readPatch(plan)).EVIMED_PUBLIC_SOURCE_GATEWAY_URL,
       "http://127.0.0.1:8799",
     );
   } finally {
@@ -535,8 +569,8 @@ test("MCP bootstrap is idempotent when the managed public-source gateway is enab
 test("workload token refresh atomically writes a valid token at half-TTL", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-refresh-"));
   try {
-    const { project, xdgConfigDir } = await fixture(tmp);
-    const tokenFile = path.join(xdgConfigDir, "opencode", "evimed-workload.token");
+    const { project, plan } = await fixture(tmp);
+    const tokenFile = path.join(plan.dshHomeDir, "evimed-workload.token");
     assert.equal(evimedWorkloadRefreshIntervalMs({ evimedWorkloadTokenTtlSeconds: 120 }), 60_000);
     const refreshed = await refreshEviMedWorkloadToken(
       {
@@ -566,8 +600,8 @@ test("workload token refresh atomically writes a valid token at half-TTL", async
 test("RuntimeManager clears workload refresh timers and fails closed on refresh write errors", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-refresh-manager-"));
   try {
-    const { project, xdgConfigDir } = await fixture(tmp);
-    const tokenFile = path.join(xdgConfigDir, "opencode", "evimed-workload.token");
+    const { project, plan } = await fixture(tmp);
+    const tokenFile = path.join(plan.dshHomeDir, "evimed-workload.token");
     const timers = [];
     const cleared = [];
     const manager = new RuntimeManager({
@@ -587,8 +621,8 @@ test("RuntimeManager clears workload refresh timers and fails closed on refresh 
     });
     let closed = 0;
     const runtime = {
-      kind: "opencode",
-      sandboxMode: "host",
+      kind: RUNTIME_KERNEL_NAME,
+      sandboxMode: "docker",
       networkMode: null,
       startedAt: new Date().toISOString(),
       pid: 123,
@@ -635,16 +669,16 @@ test("RuntimeManager clears workload refresh timers and fails closed on refresh 
 test("production adapter bootstrap requires a workload signing secret", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-token-required-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
+    const { project, plan } = await fixture(tmp);
     await assert.rejects(
-      () => syncRuntimeEviMedMcp(
-        {
+      () => syncRuntimeDshProfile(
+        dshConfig({
           production: true,
-          evimedMcpSourceDir: sourceDir,
+          evimedWorkloadSigningSecret: "",
           evimedAdapterUrls: { literatureSearch: "https://evidence.internal/literature" },
-        },
+        }),
         project,
-        { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
+        plan,
       ),
       (error) => error?.code === "runtime_mcp_workload_secret_missing",
     );
@@ -654,61 +688,18 @@ test("production adapter bootstrap requires a workload signing secret", async ()
 });
 
 
-test("MCP bootstrap rejects a foreign reserved config entry before copying source", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-collision-"));
-  try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const opencodeDir = path.join(xdgConfigDir, "opencode");
-    const configFile = path.join(opencodeDir, "opencode.json");
-    await mkdir(opencodeDir, { recursive: true });
-    const foreign = JSON.stringify({
-      mcp: { "evimed-research": { type: "remote", url: "https://foreign.test/mcp" } },
-    });
-    await writeFile(configFile, foreign);
-    await assert.rejects(
-      () => syncRuntimeEviMedMcp(
-        { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} },
-        project,
-        { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
-      ),
-      (error) => error?.code === "runtime_mcp_config_collision",
-    );
-    assert.equal(await readFile(configFile, "utf8"), foreign);
-    await assert.rejects(
-      () => access(path.join(opencodeDir, "mcp", "evimed-research", "server.py")),
-      /ENOENT/,
-    );
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-});
-
-
-test("MCP bootstrap rebinds its managed entry when the active project workspace changes", async () => {
+test("MCP bootstrap rebinds the workspace the MCP sees when the active workspace changes", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-rebind-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const settings = { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} };
-    await syncRuntimeEviMedMcp(
-      settings,
-      project,
-      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
-    );
+    const { project, plan } = await fixture(tmp);
+    await syncRuntimeDshProfile(dshConfig(), project, plan);
 
     const datedWorkspace = path.join(project.baseDir, "2026-07-17-1011");
     await mkdir(datedWorkspace);
     project.workspaceDir = datedWorkspace;
-    await syncRuntimeEviMedMcp(
-      settings,
-      project,
-      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: datedWorkspace },
-    );
+    await syncRuntimeDshProfile(dshConfig(), project, { ...plan, proxyWorkspaceDir: datedWorkspace });
 
-    const config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
-    assert.equal(
-      config.mcp["evimed-research"].environment.OPEN_SCIENCE_WORKSPACE_DIR,
-      datedWorkspace,
-    );
+    assert.equal(mcpEnvironment(await readPatch(plan)).OPEN_SCIENCE_WORKSPACE_DIR, datedWorkspace);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -724,15 +715,10 @@ test("MCP bootstrap safely rebases its managed paths after a whitespace-only wor
     const oldSpecialistRoot = path.join(oldContainer, "项目代码", "科研选题");
     await mkdir(path.join(oldSpecialistRoot, "services"), { recursive: true });
     await writeFile(path.join(oldSpecialistRoot, "services", "task_service.py"), "# fixture\n");
-    const settings = {
-      evimedMcpSourceDir: initial.sourceDir,
-      evimedAdapterUrls: {},
-      specialistAgents: { researchTopicSelection: { root: oldSpecialistRoot, python: "" } },
-    };
-    await syncRuntimeEviMedMcp(
-      settings,
+    await syncRuntimeDshProfile(
+      dshConfig({ specialistAgents: { researchTopicSelection: { root: oldSpecialistRoot, python: "" } } }),
       initial.project,
-      { sandboxMode: "host", xdgConfigDir: initial.xdgConfigDir, proxyWorkspaceDir: initial.project.workspaceDir },
+      initial.plan,
     );
 
     await rename(oldContainer, newContainer);
@@ -740,167 +726,63 @@ test("MCP bootstrap safely rebases its managed paths after a whitespace-only wor
     const project = Object.fromEntries(
       Object.entries(initial.project).map(([key, value]) => [key, typeof value === "string" && path.isAbsolute(value) ? rebase(value) : value]),
     );
-    const sourceDir = rebase(initial.sourceDir);
-    const xdgConfigDir = rebase(initial.xdgConfigDir);
     const specialistRoot = rebase(oldSpecialistRoot);
-    await syncRuntimeEviMedMcp(
-      {
-        ...settings,
-        evimedMcpSourceDir: sourceDir,
-        specialistAgents: { researchTopicSelection: { root: specialistRoot, python: "" } },
-      },
+    const plan = { ...initial.plan, dshHomeDir: rebase(initial.plan.dshHomeDir), proxyWorkspaceDir: project.workspaceDir };
+    await syncRuntimeDshProfile(
+      dshConfig({ specialistAgents: { researchTopicSelection: { root: specialistRoot, python: "" } } }),
       project,
-      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
+      plan,
     );
 
-    const config = JSON.parse(await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"));
-    const managed = config.mcp["evimed-research"];
-    assert.equal(managed.command[1], path.join(xdgConfigDir, "opencode", "mcp", "evimed-research", "server.py"));
-    assert.equal(managed.environment.OPEN_SCIENCE_WORKSPACE_DIR, project.workspaceDir);
-    assert.equal(managed.environment.EVIMED_RESEARCH_TOPIC_AGENT_ROOT, specialistRoot);
-    assert.equal(managed.environment.EVIMED_MODEL_CONFIG_FILE, path.join(xdgConfigDir, "opencode", "opencode.json"));
+    const patch = await readPatch(plan);
+    const environment = mcpEnvironment(patch);
+    // The server script is the image's own path, so a rename on the host cannot
+    // reach it — that is the whole reason it stopped being a per-project copy.
+    assert.match(patch, new RegExp(`^ {10}- '${imageMcpServerPath.replace(/\//g, "\\/")}'$`, "m"));
+    assert.equal(environment.OPEN_SCIENCE_WORKSPACE_DIR, project.workspaceDir);
+    assert.equal(environment.EVIMED_RESEARCH_TOPIC_AGENT_ROOT, specialistRoot);
+    assert.equal(environment.EVIMED_WORKLOAD_TOKEN_FILE, path.join(plan.dshHomeDir, "evimed-workload.token"));
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 });
 
 
-test("MCP bootstrap rejects a managed-looking entry bound outside the project workspace", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-outside-"));
+test("MCP bootstrap refuses a DSH home reached through a symbolic link", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-symlink-"));
   try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const settings = { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} };
-    const plan = { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir };
-    await syncRuntimeEviMedMcp(settings, project, plan);
-    const configFile = path.join(xdgConfigDir, "opencode", "opencode.json");
-    const config = JSON.parse(await readFile(configFile, "utf8"));
-    config.mcp["evimed-research"].environment.OPEN_SCIENCE_WORKSPACE_DIR = path.join(tmp, "foreign-workspace");
-    await writeFile(configFile, JSON.stringify(config));
-
+    const { project, plan } = await fixture(tmp);
+    const outside = path.join(tmp, "outside-dsh-home");
+    await mkdir(outside, { recursive: true });
+    await symlink(outside, plan.dshHomeDir, "dir");
     await assert.rejects(
-      () => syncRuntimeEviMedMcp(settings, project, plan),
-      (error) => error?.code === "runtime_mcp_config_collision",
+      () => syncRuntimeDshProfile(dshConfig(), project, plan),
+      (error) => error?.code === "path_forbidden",
     );
+    // Nothing was written through the link.
+    await assert.rejects(readFile(path.join(outside, "control-plane-patch.yml")), { code: "ENOENT" });
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 });
 
 
-test("MCP bootstrap rolls source back when config validation or atomic write fails", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-rollback-"));
-  try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    const plan = { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir };
-    const settings = { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} };
-    await syncRuntimeEviMedMcp(settings, project, plan);
-    const targetServer = path.join(
-      xdgConfigDir, "opencode", "mcp", "evimed-research", "server.py",
-    );
-    const configFile = path.join(xdgConfigDir, "opencode", "opencode.json");
-    const originalConfig = await readFile(configFile, "utf8");
-    await writeFile(path.join(sourceDir, "server.py"), "print('replacement')\n");
-
-    await assert.rejects(
-      () => syncRuntimeEviMedMcp(settings, project, plan, {
-        writeConfig: async () => { throw new Error("injected config write failure"); },
-      }),
-      /injected config write failure/,
-    );
-    assert.equal(await readFile(targetServer, "utf8"), "print('protocol')\n");
-    assert.equal(await readFile(configFile, "utf8"), originalConfig);
-
-    await writeFile(configFile, "{invalid-json");
-    await assert.rejects(
-      () => syncRuntimeEviMedMcp(settings, project, plan),
-      (error) => error?.code === "runtime_opencode_config_invalid",
-    );
-    assert.equal(await readFile(targetServer, "utf8"), "print('protocol')\n");
-    assert.equal(await readFile(configFile, "utf8"), "{invalid-json");
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-});
-
-
-test("syncRuntimeEviMedMcp uses the copied host path and rejects source symlinks", async () => {
-  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-"));
-  try {
-    const { sourceDir, project, xdgConfigDir } = await fixture(tmp);
-    await syncRuntimeEviMedMcp(
-      { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} },
-      project,
-      { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
-    );
-    const config = JSON.parse(
-      await readFile(path.join(xdgConfigDir, "opencode", "opencode.json"), "utf8"),
-    );
-    assert.deepEqual(config.mcp["evimed-research"].command, [
-      "python3",
-      path.join(xdgConfigDir, "opencode", "mcp", "evimed-research", "server.py"),
-    ]);
-
-    const outside = path.join(tmp, "outside.py");
-    await writeFile(outside, "print('outside')\n");
-    await rm(path.join(sourceDir, "server.py"));
-    await symlink(outside, path.join(sourceDir, "server.py"));
-    await assert.rejects(
-      () => syncRuntimeEviMedMcp(
-        { evimedMcpSourceDir: sourceDir, evimedAdapterUrls: {} },
-        project,
-        { sandboxMode: "host", xdgConfigDir, proxyWorkspaceDir: project.workspaceDir },
-      ),
-      (error) => error?.code === "runtime_mcp_symlink",
-    );
-    assert.equal(await readFile(outside, "utf8"), "print('outside')\n");
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-});
-
-
-test("runtime startup fails closed before spawn when EviMed MCP bootstrap fails", async () => {
+test("runtime bootstrap fails closed with the specific cause and writes nothing", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-mcp-start-"));
   try {
-    const { sourceDir, project } = await fixture(tmp);
-    const marker = path.join(tmp, "spawned");
-    const opencodeBin = path.join(tmp, "opencode-stub.mjs");
-    await writeFile(
-      opencodeBin,
-      `#!/usr/bin/env node\nimport fs from "node:fs";fs.writeFileSync(${JSON.stringify(marker)}, "spawned");\n`,
-      { mode: 0o755 },
+    const { project, plan } = await fixture(tmp);
+    // The caller gets the cause, not the stage. Every bootstrap failure used to
+    // arrive as runtime_bootstrap_failed, with the real code readable only in a
+    // ledger inside a Docker volume.
+    await assert.rejects(
+      () => syncRuntimeDshProfile(dshConfig({ deepseekModel: "deepseek-v3-legacy" }), project, plan),
+      (error) => error?.code === "runtime_model_gateway_model_invalid",
     );
-    const outside = path.join(tmp, "outside.py");
-    await writeFile(outside, "print('outside')\n");
-    await rm(path.join(sourceDir, "server.py"));
-    await symlink(outside, path.join(sourceDir, "server.py"));
-
-    const manager = new RuntimeManager({
-      production: false,
-      runtimeMode: "opencode",
-      runtimeSandboxMode: "host",
-      allowUnsandboxedRuntime: true,
-      opencodeBin,
-      runtimeSkillDirs: [],
-      evimedMcpSourceDir: sourceDir,
-      evimedAdapterUrls: {},
-      runtimeProxyConnectTimeoutMs: 100,
-      maxLogFileBytes: 1024 * 1024,
-    });
-    try {
-      // The caller gets the cause, not the stage. Every bootstrap failure used
-      // to arrive as runtime_bootstrap_failed, with the real code readable only
-      // in a ledger inside a Docker volume.
-      await assert.rejects(
-        () => manager.startOpenCode(project),
-        (error) => error?.code === "runtime_mcp_symlink",
-      );
-      await assert.rejects(() => access(marker), /ENOENT/);
-      const state = JSON.parse(await readFile(path.join(project.metaDir, "runtime-state.json"), "utf8"));
-      assert.equal(state.error, "runtime_bootstrap_failed");
-    } finally {
-      await manager.closeAll();
-    }
+    await assert.rejects(readPatch(plan), { code: "ENOENT" });
+    await assert.rejects(
+      readFile(path.join(plan.dshHomeDir, modelGatewayTokenFileName)),
+      { code: "ENOENT" },
+    );
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -917,6 +799,21 @@ test("production web image includes specialty agents and the Python EviMed MCP s
     dockerfile,
     /COPY --from=build \/app\/runtime\/mcp\/evimed-research \.\/runtime\/mcp\/evimed-research/,
   );
+});
+
+
+test("the runtime image carries the research MCP the generated patch names", async () => {
+  // The patch names an absolute path inside the container. If the image stopped
+  // copying that tree the row would still render, the container would still
+  // boot, and every research tool would be missing — with `failOnStartupError`
+  // turning that into a runtime that refuses work rather than one that does it
+  // badly, which is why the copy is worth pinning to the path.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  assert.match(
+    dockerfile,
+    /COPY runtime\/mcp\/evimed-research \/opt\/evimed\/mcp\/evimed-research/,
+  );
+  assert.equal(path.posix.dirname(imageMcpServerPath), "/opt/evimed/mcp/evimed-research");
 });
 
 

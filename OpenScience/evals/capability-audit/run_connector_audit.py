@@ -195,10 +195,28 @@ def main():
     workspace.mkdir(parents=True, exist_ok=True)
     os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(workspace)
     gateway_url = os.environ.get("EVIMED_PUBLIC_SOURCE_GATEWAY_URL", "").strip()
-    model_config = os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip()
-    gateway_used = bool(gateway_url and model_config)
+    # The same two names `public_sources.GATEWAY_TOKEN_FILE_ENV_NAMES` reads, in
+    # the same order, so this cannot report a configured gateway that the code
+    # under audit would then refuse. Both name a file holding a bare one-line
+    # token; the older name dates from when it pointed at the retired kernel's
+    # JSON configuration, and a file in that shape is now rejected outright.
+    token_file = next(
+        (
+            value
+            for value in (
+                os.environ.get("EVIMED_MODEL_GATEWAY_TOKEN_FILE", "").strip(),
+                os.environ.get("EVIMED_MODEL_CONFIG_FILE", "").strip(),
+            )
+            if value
+        ),
+        "",
+    )
+    gateway_used = bool(gateway_url and token_file)
     if args.require_production_gateway and not gateway_used:
-        raise SystemExit("production gateway audit requires EVIMED_PUBLIC_SOURCE_GATEWAY_URL and EVIMED_MODEL_CONFIG_FILE")
+        raise SystemExit(
+            "production gateway audit requires EVIMED_PUBLIC_SOURCE_GATEWAY_URL and "
+            "EVIMED_MODEL_GATEWAY_TOKEN_FILE (or EVIMED_MODEL_CONFIG_FILE)"
+        )
     server = load_server()
     registry = tuple(server.public_sources.BIOMEDICAL_SOURCE_IDS)
     registry_source = MCP_ROOT / "public_sources.py"

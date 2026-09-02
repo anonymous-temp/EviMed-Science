@@ -4,7 +4,11 @@ Repo tooling.
 
 - `release/` — packaging and release scripts (Tauri build matrix, signing/notarization
   helpers, GitHub Release upload, `latest.json` generation).
-- `dev/` — local development helpers (bootstrap, run the app, seed the demo workspace).
+- `dev/` — local development helpers (bootstrap, run the app, seed the demo workspace,
+  fetch the pinned uv and skill packs, vendor community skills at their pinned commits).
+- `build/` — generators whose output is committed so a check can tell "someone
+  edited the source and forgot to regenerate" from "nothing changed": capability
+  manifests, the curated-skill digest re-pins, and the skill-vocabulary rewrite.
 - `ops/` — hosted Web operations helpers for single-node deployments, including
   `OPEN_SCIENCE_DATA_DIR` backup, restore, local retention pruning, and
   disposable restore drills with optional encrypted archives. Encrypted archive
@@ -18,6 +22,6 @@ Repo tooling.
   synthetic resolved notification to the configured receiver. The OIDC helper writes and
   validates separate owner-only provider-client and AES-GCM flow secrets for
   the OIDC Compose overlay without printing their values. The release-manifest helper
-  records and verifies immutable Web/runtime image IDs, OpenCode/uv versions,
-  core skill-pack content, monitoring versions, and release input digests before
-  production Compose startup.
+  records and verifies immutable Web/runtime image IDs, the runtime kernel
+  (DSH), socket-bundle and uv versions, core skill-pack content, monitoring
+  versions, and release input digests before production Compose startup.

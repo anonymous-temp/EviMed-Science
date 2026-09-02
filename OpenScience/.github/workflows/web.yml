@@ -132,8 +132,13 @@ jobs:
           echo "OPEN_SCIENCE_SOURCE_REVISION=${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_BUILD_CREATED=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-opencode:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE=open-science-runtime:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          # One agent runtime image, under the one variable the server reads
+          # (`config.mjs` resolves `runtimeContainerImage` from it and nothing
+          # else). There were two names while two kernels shipped, and this one
+          # carried the OpenCode image — so the control plane was handed a kernel
+          # image that no longer exists while the DSH image sat under the other
+          # name, verified by a later step and then never launched.
+          echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DSH_VERSION=$(node -p "require('./OpenScience/deps-version.json').dsh.version")" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_CADDY_VERSION=2.11.4-alpine" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=ci-metrics-token-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789abcdef" >> "$GITHUB_ENV"
@@ -203,7 +208,7 @@ jobs:
             echo "OPEN_SCIENCE_BACKUP_MAX_FAILURES=3"
             echo "OPEN_SCIENCE_BACKUP_RESTORE_DRILL_EVERY=1"
             echo "OPEN_SCIENCE_RESTORE_DRILL_ACK=true"
-            echo "OPEN_SCIENCE_RUNTIME_MODE=opencode"
+            echo "OPEN_SCIENCE_RUNTIME_MODE=kernel"
             echo "OPEN_SCIENCE_RUNTIME_SANDBOX_MODE=docker"
             echo "OPEN_SCIENCE_RUNTIME_TRANSPORT=unix"
             echo "OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal"
@@ -249,7 +254,7 @@ jobs:
       - name: Verify runtime binaries and preserved licenses
         run: >-
           docker run --rm --network none
-          "${OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE}"
+          "${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}"
           sh -ec 'test -x /usr/local/bin/uv &&
           test -x /usr/local/bin/open-science-dsh-serve &&
           test -s /usr/share/licenses/uv/LICENSE-MIT &&
@@ -414,7 +419,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test real deployed OpenCode, DeepSeek, specialist, Memos, RAG, and kernels
+      - name: Test real deployed agent runtime, DeepSeek, specialist, Memos, RAG, and kernels
         env:
           OPEN_SCIENCE_E2E_BASE_URL: ${{ secrets.OPEN_SCIENCE_E2E_BASE_URL }}
           OPEN_SCIENCE_E2E_USERNAME: ${{ secrets.OPEN_SCIENCE_E2E_USERNAME }}

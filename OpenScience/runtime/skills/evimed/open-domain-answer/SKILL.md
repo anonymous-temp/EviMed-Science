@@ -29,11 +29,11 @@ Match the depth to the question — do not escalate simple questions, and do not
 
 Retrieve, read, refine — do not stop at one query:
 
-1. Translate the question into 1–3 focused queries (normalize drug names with `drug_term_normalize` when the term is colloquial, brand, or cross-language).
-2. Search with `biomedical_source_search` (and `literature_search` / `guideline_search` when configured). Prefer sources that returned abstracts over metadata-only records.
-3. Read what you retrieved. When a key source's abstract is insufficient and it is open access, pull the full text with `open_access_full_text` and read the relevant sections.
+1. Translate the question into 1–3 focused queries (normalize drug names with `mcp__evimed__drug_term_normalize` when the term is colloquial, brand, or cross-language).
+2. Search with `mcp__evimed__biomedical_source_search` (and `mcp__evimed__literature_search` / `mcp__evimed__guideline_search` when configured). Prefer sources that returned abstracts over metadata-only records.
+3. Read what you retrieved. When a key source's abstract is insufficient and it is open access, pull the full text with `mcp__evimed__open_access_full_text` and read the relevant sections.
 4. Refine: if results miss the point, rewrite the query (synonyms, population, outcome, study design) and search again. Stop when two consecutive refined queries add no new relevant source, or after three iterations.
-5. Deduplicate with `evidence_deduplicate` before synthesizing when the result set is large.
+5. Deduplicate with `mcp__evimed__evidence_deduplicate` before synthesizing when the result set is large.
 
 ## Evidence honesty (non-negotiable)
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -15,6 +16,11 @@ import {
 import { signDeepSeekReleaseReceipt } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+// The kernel pin every deployment artefact derives from. A deployment whose
+// runtime image or release receipt names another version is a deployment this
+// host does not ship, so the fixtures read the pin instead of repeating it.
+const requiredDshVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, "deps-version.json"), "utf8")).dsh.version;
+const runtimeImageTag = `dsh-${requiredDshVersion}-uv-0.11.26`;
 
 function deploymentValues(overrides = {}) {
   return {
@@ -27,8 +33,7 @@ function deploymentValues(overrides = {}) {
     OPEN_SCIENCE_SOURCE_REVISION: "a".repeat(40),
     OPEN_SCIENCE_BUILD_CREATED: "2026-07-13T10:00:00Z",
     OPEN_SCIENCE_WEB_CONTAINER_IMAGE: "registry.example.com/open-science-web:0.1.3",
-    OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:
-      "registry.example.com/open-science-opencode:opencode-1.17.13-uv-0.11.26",
+    OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: `registry.example.com/open-science-runtime:${runtimeImageTag}`,
     OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE: "./release-manifest.json",
     OPEN_SCIENCE_DATA_VOLUME: "open-science-data",
     OPEN_SCIENCE_DOCKER_SOCKET_GID: "998",
@@ -41,7 +46,7 @@ function deploymentValues(overrides = {}) {
     OPEN_SCIENCE_BACKUP_MODE: "external",
     OPEN_SCIENCE_BACKUP_EXTERNAL_ACK: "true",
     OPEN_SCIENCE_RESTORE_DRILL_ACK: "true",
-    OPEN_SCIENCE_RUNTIME_MODE: "opencode",
+    OPEN_SCIENCE_RUNTIME_MODE: "kernel",
     OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: "docker",
     OPEN_SCIENCE_RUNTIME_TRANSPORT: "unix",
     OPEN_SCIENCE_RUNTIME_NETWORK_MODE: "none",
@@ -97,7 +102,7 @@ test("host preflight accepts only a matching non-fake DeepSeek release receipt w
     mode: "production",
     productionEligible: true,
     createdAt: new Date().toISOString(),
-    opencodeVersion: "1.17.13",
+    dshVersion: requiredDshVersion,
     model: "deepseek-v4-pro",
     sourceRevision: values.OPEN_SCIENCE_SOURCE_REVISION,
     configRevision,
@@ -143,7 +148,7 @@ test("host preflight requires an exact HTTPS Caddy domain and immutable release 
   assert.equal(valid.apiPort, 8787);
   assert.equal(valid.trustProxy, true);
   assert.equal(valid.dockerSocketGid, 998);
-  assert.equal(valid.runtimeImage.includes("opencode-1.17.13"), true);
+  assert.equal(valid.runtimeImage.includes(runtimeImageTag), true);
   assert.equal(valid.bootstrapPasswordFile, fixture.bootstrapPasswordFile);
 
   assert.throws(
@@ -201,6 +206,17 @@ test("host preflight requires an exact HTTPS Caddy domain and immutable release 
         fixture.envFile,
       ),
     { code: "preflight_docker_socket_gid" },
+  );
+  // DSH is the only kernel. The server config refuses the retired name outright,
+  // so a deployment file that still asks for it must be refused before the stack
+  // starts rather than at the first container launch.
+  assert.throws(
+    () =>
+      validateDeploymentConfig(
+        deploymentValues({ OPEN_SCIENCE_RUNTIME_MODE: "opencode" }),
+        fixture.envFile,
+      ),
+    { code: "preflight_runtime_boundary" },
   );
 });
 
@@ -312,7 +328,7 @@ test("host preflight verifies Docker, images, Compose, release identity, and pub
     if (command === "docker" && args[0] === "image") return imageInfo;
     // A container in any state referencing the runtime image; without one, a
     // host-wide prune takes it between jobs.
-    if (command === "docker" && args[0] === "ps") return "web-opencode-runtime-image-1\n";
+    if (command === "docker" && args[0] === "ps") return "web-dsh-runtime-image-1\n";
     return "";
   };
   const headers = {

@@ -25,9 +25,9 @@ def main() -> None:
             "kind": "installed_package",
             "name": package,
             "currentState": "installed_clean_not_task_certified",
-            "reason": "The package is installed and available to OpenCode, but no retained end-to-end task artifact currently certifies it.",
+            "reason": "The package is installed and available to the agent runtime, but no retained end-to-end task artifact currently certifies it.",
             "operatorAction": "None for installation; authorize a bounded model-backed acceptance task if release certification is required.",
-            "evimedAction": "Execute the Skill through the production OpenCode harness, retain its declared artifacts and provenance, and add result-quality checks.",
+            "evimedAction": "Execute the Skill through the production agent runtime, retain its declared artifacts and provenance, and add result-quality checks.",
         })
     for item in document["items"]:
         if item["releaseStatus"] == "capability_mapped":
