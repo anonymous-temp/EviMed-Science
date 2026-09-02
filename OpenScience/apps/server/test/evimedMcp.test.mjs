@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.mjs";
+import { SCIENCE_CONNECTORS } from "../src/runtimeManager.mjs";
 import { MCP_CLIENT_PLUGIN, WORKLOAD_TOKEN_REF } from "../src/dshProfilePatch.mjs";
 import {
   RUNTIME_KERNEL_NAME,
@@ -915,4 +916,24 @@ test("every tool an agent package may declare is one the server publishes", asyn
   // `health` is an operator probe, so it is published but not declarable.
   assert.equal(EVIMED_AGENT_TOOL_IDS.has("health"), false);
   assert.equal(published.has("health"), true);
+});
+
+test("the server's science-connector roster is the same seven the runtime dispatches on", async () => {
+  // This roster is declared in `runtimeManager.mjs` and called by nothing in
+  // that module, so a linter reports it unused and a cleanup deletes it. That
+  // happened, and it broke `hosted_science_connector_chain` in the source
+  // audit, which reads the file as text precisely so the two declarations
+  // cannot silently disagree about which seven connectors exist.
+  //
+  // This test is the consumer that makes it not dead. It also checks the thing
+  // the audit's text match cannot: that the two lists agree, rather than that
+  // both merely contain seven strings.
+  const source = await readFile(path.join(repoRoot, "runtime/mcp/evimed-research/science_connectors.py"), "utf8");
+  assert.equal(SCIENCE_CONNECTORS.length, 7, "the roster is seven connectors");
+  for (const connector of SCIENCE_CONNECTORS) {
+    assert.ok(
+      source.includes(`"${connector}"`),
+      `the server declares connector ${connector}, which science_connectors.py does not dispatch on`,
+    );
+  }
 });

@@ -919,6 +919,31 @@ function dockerSecurityArgs(config) {
 // runtime. One failure is a busy workspace; three in a row is a workspace the
 // server genuinely cannot read.
 const quotaCheckFailureTolerance = 3;
+/**
+ * The seven science connectors, as this server declares them.
+ *
+ * Exported, and this is not tidiness: nothing in this module calls it, so
+ * ESLint reported it as an unused variable and it was deleted on that basis —
+ * which broke `hosted_science_connector_chain` in the source audit, because
+ * `scripts/ops/audit-hosted-compliance.mjs` reads this file **as text** and
+ * requires the roster to be here so that the server and
+ * `runtime/mcp/evimed-research/science_connectors.py` cannot silently disagree
+ * about which seven exist. A linter sees code references; it cannot see a
+ * cross-file audit, so "unused" was true of this module and false of the
+ * system. Exporting it gives the roster a real consumer — the test below
+ * cross-checks it against the Python source — so the next reader finds a
+ * declaration with a purpose rather than one that only survives a grep.
+ */
+export const SCIENCE_CONNECTORS = Object.freeze([
+  "paper-search",
+  "biomcp",
+  "materials-project",
+  "fred",
+  "spaceweather",
+  "open-meteo",
+  "usgs-water",
+]);
+
 const evimedWorkloadAudience = "evimed-adapter";
 const modelGatewayAudience = "evimed-model-gateway";
 const evimedWorkloadTokenFileName = "evimed-workload.token";
