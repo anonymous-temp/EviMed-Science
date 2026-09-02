@@ -93,7 +93,7 @@ export function RunStreamThread({
    * channel for one — see `RunInteractionPrompt`, which then says so rather
    * than offering a button that cannot work.
    */
-  onAnswerInteraction?: (answer: { requestId: string; decision: "allow" | "deny" | "answer"; text?: string }) => Promise<void>;
+  onAnswerInteraction?: (answer: { eventId: string; decision: "allow" | "deny" | "answer"; text?: string }) => Promise<void>;
 }) {
   const unknown = Object.entries(view.unknownEvents);
   return (
@@ -133,7 +133,7 @@ export function RunStreamThread({
         * conversation to find out what it is waiting for. */}
       {view.interactions.map((interaction) => (
         <RunInteractionPrompt
-          key={interaction.requestId}
+          key={interaction.eventId}
           interaction={interaction}
           {...(onAnswerInteraction ? { onAnswer: onAnswerInteraction } : {})}
         />

@@ -150,7 +150,7 @@ describe("what one run shows a person", () => {
         view={view({
           state: "running",
           interactions: [{
-            requestId: "r1",
+            eventId: "ev-1",
             kind: "approval",
             prompt: "运行需要访问工作区之外的路径",
             tool: "bash",
@@ -170,13 +170,13 @@ describe("what one run shows a person", () => {
   });
 
   it("lets a person answer once the deployment has a channel", async () => {
-    const answers: { requestId: string; decision: string }[] = [];
+    const answers: { eventId: string; decision: string }[] = [];
     render(
       <RunStreamThread
         view={view({
           state: "running",
           interactions: [{
-            requestId: "q1",
+            eventId: "ev-2",
             kind: "question",
             prompt: "要包含 2019 年前的文献吗？",
             tool: "",
@@ -188,11 +188,11 @@ describe("what one run shows a person", () => {
         retries={0}
         onReconnect={noop}
         onAnswerInteraction={async (answer) => {
-          answers.push({ requestId: answer.requestId, decision: answer.decision });
+          answers.push({ eventId: answer.eventId, decision: answer.decision });
         }}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "要" }));
-    expect(answers).toEqual([{ requestId: "q1", decision: "answer" }]);
+    expect(answers).toEqual([{ eventId: "ev-2", decision: "answer" }]);
   });
 });

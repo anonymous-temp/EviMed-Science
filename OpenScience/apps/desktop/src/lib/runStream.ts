@@ -81,31 +81,30 @@ export type RunStreamFrame =
   }
   // Declared by the control plane's stream since it was written, and — unlike
   // the seven above — still without a publisher: on the DSH 0.1.2 wire these
-  // arrive as `waterfall` frames on the kernel's `$events` stream, and the
-  // control plane's own `watchHost` surfaces them to its caller while
-  // `dshEventPump` passes no `onEvent` at all, so nothing forwards one yet.
-  // The listener and the panel exist here first on purpose: hosted runs go out
-  // under `approval: never`, which auto-REFUSES, and a local profile runs
-  // `approval: ask` — so the moment the forwarder lands, a kernel that asks
-  // has somewhere to ask, instead of a run failing closed with the page blank.
+  // arrive as `waterfall` frames on the kernel's `$events` stream, and
+  // `dshEventPump` forwards them. One request produces up to three frames
+  // under the same event name, told apart by `status`: `pending`, then either
+  // `answered` or `withdrawn`. Hosted runs are patched to `approval: never`,
+  // which auto-REFUSES, so in practice this is the local profile's path.
+  //
+  // The field names are the kernel's rather than ours, `eventId` above all:
+  // it is what addresses the reply route, so renaming it here would be a bug
+  // waiting at the one moment that matters. The approval payload was recorded
+  // live from 0.1.2-alpha.3 as `request: { toolName, callId, reason }`. The
+  // question payload has **not** been recorded from a live wire, so it is read
+  // defensively instead of typed from a shape nobody has seen — inventing a
+  // wire fixture is how an audit was defeated here once already.
   | {
-    type: "approval/requested";
+    type: "approval/requested" | "question/requested";
     seq: number;
     time: string;
-    requestId: string;
-    /** What wants to happen. `tool` is the closed vocabulary; `summary` is prose the control plane already localized. */
-    tool: string;
-    summary: string;
-    detail?: string;
-  }
-  | {
-    type: "question/requested";
-    seq: number;
-    time: string;
-    requestId: string;
-    question: string;
-    /** Offered answers, when the asker gave a closed set. Free text otherwise. */
-    options?: { id: string; label: string }[];
+    /** The kernel's id for the request, and the reply route's last path segment. */
+    eventId: string;
+    status: "pending" | "withdrawn" | "answered";
+    sessionId?: string;
+    request?: Record<string, unknown>;
+    /** Why the kernel took it back, on `status: "withdrawn"`. */
+    reason?: string;
   }
   // A snapshot, not a delta. The control plane only ever holds the aggregate:
   // the run's own projection (`.evimed-run/state.json`) counts evidence into
@@ -183,7 +182,8 @@ export interface DeliverableNode {
  * has to stop being shown in every tab, not just the one that answered.
  */
 export interface RunInteraction {
-  requestId: string;
+  /** The kernel's event id. Also the path segment the answer is POSTed to. */
+  eventId: string;
   kind: "approval" | "question";
   /** What is being asked, in one line. */
   prompt: string;
@@ -191,8 +191,13 @@ export interface RunInteraction {
   /** For an approval: the tool that wants to act. Empty for a question. */
   tool: string;
   options: { id: string; label: string }[];
-  /** Locally recorded once this browser answered, so the card stops asking. */
+  /** Recorded once answered — by this browser, or by another tab, since the
+   *  control plane now forwards the resolution to every listener. */
   answered: boolean;
+  /** Set when the kernel took the request back before anyone answered. The
+   *  card stays and says so: a question that silently disappears is
+   *  indistinguishable from one that was never asked. */
+  withdrawn?: string;
 }
 
 /** Everything the browser knows about one run. */
@@ -296,24 +301,8 @@ export function applyRunFrame(view: RunView, frame: RunStreamFrame): RunView {
       return { ...next, deliverables };
     }
     case "approval/requested":
-      return { ...next, interactions: upsertInteraction(next.interactions, {
-        requestId: frame.requestId,
-        kind: "approval",
-        prompt: frame.summary,
-        ...(frame.detail ? { detail: frame.detail } : {}),
-        tool: frame.tool,
-        options: [],
-        answered: false,
-      }) };
     case "question/requested":
-      return { ...next, interactions: upsertInteraction(next.interactions, {
-        requestId: frame.requestId,
-        kind: "question",
-        prompt: frame.question,
-        tool: "",
-        options: frame.options ?? [],
-        answered: false,
-      }) };
+      return { ...next, interactions: applyInteractionFrame(next.interactions, frame) };
     case "evidence/update":
       return { ...next, evidence: { total: frame.total, byStatus: { ...frame.byStatus } } };
     case "budget/update":
@@ -338,8 +327,76 @@ export function applyRunFrame(view: RunView, frame: RunStreamFrame): RunView {
  *
  * @param open @param request @returns the requests to show
  */
+/**
+ * One request's three states, all arriving under the same event name.
+ *
+ * `withdrawn` marks rather than removes, and that is the whole point of
+ * carrying it: a card that vanishes leaves a reader who looked away unable to
+ * tell a retracted question from one that was never asked — the same shape of
+ * failure this codebase keeps meeting from the other side, where a wrong read
+ * and an empty result are the same output.
+ *
+ * @param interactions @param frame @returns the list with this frame applied
+ */
+function applyInteractionFrame(
+  interactions: RunInteraction[],
+  frame: {
+    type: "approval/requested" | "question/requested";
+    eventId: string;
+    status: "pending" | "withdrawn" | "answered";
+    request?: Record<string, unknown>;
+    reason?: string;
+  },
+): RunInteraction[] {
+  if (frame.status === "withdrawn") {
+    return interactions.map((item) => (item.eventId === frame.eventId
+      ? { ...item, withdrawn: frame.reason || "withdrawn" }
+      : item));
+  }
+  if (frame.status === "answered") {
+    return interactions.map((item) => (item.eventId === frame.eventId ? { ...item, answered: true } : item));
+  }
+  const request = frame.request ?? {};
+  const kind = frame.type === "approval/requested" ? "approval" : "question";
+  const detail = text(request.callId);
+  return upsertInteraction(interactions, {
+    eventId: frame.eventId,
+    kind,
+    prompt: interactionPrompt(request, kind),
+    ...(detail ? { detail } : {}),
+    tool: text(request.toolName),
+    // A closed answer set would come from the kernel, and no live question
+    // frame has been recorded to say whether it does or what it is called.
+    // Empty means free text, which every question can be answered as.
+    options: [],
+    answered: false,
+  });
+}
+
+/**
+ * The one line the card shows.
+ *
+ * `reason` is what an approval carries and is the only field name here taken
+ * from a recorded frame. The rest are candidates for a question's text, tried
+ * in order; when none is a string the card still appears with a generic line,
+ * because an unreadable request is still a blocked run somebody has to answer.
+ * @param request @param kind @returns prose for the card
+ */
+function interactionPrompt(request: Record<string, unknown>, kind: "approval" | "question"): string {
+  for (const key of ["reason", "question", "prompt", "message", "summary"]) {
+    const value = text(request[key]);
+    if (value) return value;
+  }
+  return kind === "approval" ? "运行请求执行一项需要批准的操作。" : "运行提出了一个问题。";
+}
+
+/** @param value @returns the string, or "" for anything else */
+function text(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value : "";
+}
+
 function upsertInteraction(open: RunInteraction[], request: RunInteraction): RunInteraction[] {
-  const index = open.findIndex((item) => item.requestId === request.requestId);
+  const index = open.findIndex((item) => item.eventId === request.eventId);
   if (index < 0) return [...open, request];
   const next = [...open];
   next[index] = { ...request, answered: open[index].answered };
@@ -347,19 +404,19 @@ function upsertInteraction(open: RunInteraction[], request: RunInteraction): Run
 }
 
 /**
- * Records that this browser answered a request.
+ * Records that this browser answered a request, without waiting to be told.
  *
- * Local, and deliberately so: the answer travels to the kernel over a route of
- * its own, and this only stops the card asking again. Until the control plane
- * forwards a resolution frame, a second tab keeps showing the question — which
- * is the honest state, not a bug: nothing has told it the request was settled.
+ * The control plane does now forward a resolution frame (`status: "answered"`),
+ * so a second tab stops asking on its own — this is the local echo that keeps
+ * the button from staying live during the round trip. Both paths set the same
+ * field, and applying either twice is the same result.
  *
- * @param view @param requestId @returns the view with that request marked answered
+ * @param view @param eventId @returns the view with that request marked answered
  */
-export function markInteractionAnswered(view: RunView, requestId: string): RunView {
+export function markInteractionAnswered(view: RunView, eventId: string): RunView {
   return {
     ...view,
-    interactions: view.interactions.map((item) => (item.requestId === requestId ? { ...item, answered: true } : item)),
+    interactions: view.interactions.map((item) => (item.eventId === eventId ? { ...item, answered: true } : item)),
   };
 }
 

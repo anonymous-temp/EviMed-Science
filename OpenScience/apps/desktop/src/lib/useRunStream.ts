@@ -3,6 +3,7 @@ import { webApiBase } from "@/lib/apiClient";
 import {
   applyRunFrame,
   emptyRunView,
+  markInteractionAnswered,
   openRunStream,
   runIsSettled,
   transcriptToRunView,
@@ -57,7 +58,7 @@ export function useRunStream(
     fetchTranscript?: (runId: string) => Promise<RunTranscript | null>;
     factory?: (url: string) => EventSource;
   } = {},
-): RunStreamState & { reconnect: () => void } {
+): RunStreamState & { reconnect: () => void; markAnswered: (eventId: string) => void } {
   // Held in refs, not read from the dependency array. A caller that passes an
   // inline arrow — which is every caller that does not think about it — would
   // otherwise tear down and reopen the subscription on every single render,
@@ -137,5 +138,16 @@ export function useRunStream(
     // Only the run and an explicit reconnect may restart the subscription.
   }, [runId, generation]);
 
-  return { view, status, retries, reconnect };
+  /**
+   * Marks one request answered without waiting for the round trip.
+   *
+   * An echo, not the record: the control plane publishes `status: "answered"`
+   * to every listener, so a second tab settles on its own and this one would
+   * too, a moment later. Applying both is the same result.
+   */
+  const markAnswered = useCallback((eventId: string) => {
+    setView((current) => markInteractionAnswered(current, eventId));
+  }, []);
+
+  return { view, status, retries, reconnect, markAnswered };
 }
