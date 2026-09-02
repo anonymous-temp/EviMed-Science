@@ -22,15 +22,16 @@ async function withoutRuntimeEnvironment(run) {
   }
 }
 
-test("hosted development defaults to the bundled OpenCode runtime", async () => {
+test("the runtime mode defaults to a real kernel rather than a mock", async () => {
+  // It used to default to "opencode" and point at a bundled binary. There is
+  // one kernel now and it ships inside the runtime image, so what remains
+  // worth asserting is that the default is the real thing: a default of "mock"
+  // would make a deployment answer every question convincingly without ever
+  // running an agent.
   await withoutRuntimeEnvironment(async () => {
     const config = loadConfig({ rootDir: repoRoot });
-    assert.equal(config.runtimeMode, "opencode");
+    assert.equal(config.runtimeMode, "kernel");
     assert.equal(config.modelGatewayTimeoutMs, 300_000);
-    assert.match(
-      config.opencodeBin,
-      /apps\/desktop\/src-tauri\/binaries\/opencode-/,
-    );
   });
 });
 
@@ -46,17 +47,18 @@ test("memory extraction is given longer than one extraction actually takes", () 
   );
 });
 
-test("a missing bundled binary remains a visible OpenCode startup failure", async () => {
-  const rootDir = await mkdtemp(path.join(os.tmpdir(), "evimed-config-"));
-  try {
-    await withoutRuntimeEnvironment(async () => {
-      const config = loadConfig({ rootDir });
-      assert.equal(config.runtimeMode, "opencode");
-      assert.notEqual(config.opencodeBin, "");
-    });
-  } finally {
-    await rm(rootDir, { recursive: true, force: true });
-  }
+test("the retired kernel's runtime mode is refused by name, not ignored", async () => {
+  // The value "opencode" meant "a real kernel in a container" back when there
+  // was only one. A deployment still setting it is configuring something this
+  // build does not contain, and accepting it silently would leave that
+  // deployment believing it had chosen something.
+  await withoutRuntimeEnvironment(async () => {
+    assert.throws(
+      () => loadConfig({ rootDir: repoRoot, runtimeMode: "opencode" }),
+      /OPEN_SCIENCE_RUNTIME_MODE no longer accepts "opencode"/,
+      "the retired value must name its replacement rather than being aliased away",
+    );
+  });
 });
 
 test("the mock runtime must be selected explicitly", async () => {
@@ -177,35 +179,27 @@ test("the agent run monitor timeout is configurable", () => {
 // change as the flip would have removed every way back in the same second the
 // switch was thrown; they are frozen instead, and come out in their own change
 // after the quiet period. A frozen rollback lever is not a second stack.
-test("dsh is the shipped kernel default, and the rollback lever still works", () => {
+test("the kernel is not selectable, and the variable that used to select it is refused", () => {
+  // This file used to assert that OPEN_SCIENCE_RUNTIME_KERNEL=opencode still
+  // worked, with the note "if this stops working the appendix-B deletion has
+  // effectively happened already". It has happened: the product owner dropped
+  // the rollback requirement, and the second kernel is gone.
+  //
+  // So the assertion inverts. A deployment still exporting that variable is
+  // reaching for a lever that no longer exists, and it must be told rather than
+  // have its setting quietly do nothing -- which is what the whole suite spent
+  // this migration learning to detect.
   const saved = process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
   delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
   try {
-    assert.equal(loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel, "dsh");
+    assert.equal(loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel, undefined);
     process.env.OPEN_SCIENCE_RUNTIME_KERNEL = "opencode";
-    assert.equal(
-      loadConfig({ dataDir: "/tmp/os-config-kernel" }).runtimeKernel,
-      "opencode",
-      "if this stops working the appendix-B deletion has effectively happened already",
+    assert.throws(
+      () => loadConfig({ dataDir: "/tmp/os-config-kernel" }),
+      /OPEN_SCIENCE_RUNTIME_KERNEL/,
     );
   } finally {
     if (saved == null) delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
     else process.env.OPEN_SCIENCE_RUNTIME_KERNEL = saved;
-  }
-});
-
-// And the suite itself must not inherit that default. Every other test here is
-// written against the target kernel, so dropping the pin from `package.json`
-// would move the whole suite onto the kernel being retired — and it would still
-// pass, which is the dangerous part. Asserted against the script text rather
-// than against `process.env`, so running one file on its own still checks it.
-test("the server test scripts pin the kernel they are written for", async () => {
-  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
-  for (const name of ["test", "test:unit", "test:contract"]) {
-    assert.match(
-      manifest.scripts[name],
-      /^OPEN_SCIENCE_RUNTIME_KERNEL=dsh /,
-      `${name} must pin the kernel; the shipped default is the rollback kernel`,
-    );
   }
 });
