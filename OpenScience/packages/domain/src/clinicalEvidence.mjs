@@ -204,7 +204,7 @@ const emergencyNonTreatmentSubject = /(?:判断|鉴别|识别|区分|呼救|呼�
  * `check` is null only where nothing claimed the finding. That is a hole and it
  * is left visible as one, rather than filled with "unknown": an attribution
  * that defaults looks like coverage while measuring nothing.
- * @typedef {{ check: string | null, text: string }} AttributedIssue
+ * @typedef {{ check: string | null, text: string, rule?: string, line?: number }} AttributedIssue
  */
 
 /**
@@ -282,6 +282,23 @@ class IssueLog {
   /** @param {...any} texts @returns {number} */
   push(...texts) {
     for (const text of texts) this.found.push({ check: this.current, text: String(text) });
+    return this.found.length;
+  }
+
+  /** A finding that knows more than its check: which rule inside that check
+   *  fired, and which line it fired on. Both stay optional and neither
+   *  defaults — a finding without a rule is one finding's worth of
+   *  unattributed, not a bucket named "unknown", for the same reason `check`
+   *  is left null rather than filled in (see the typedef).
+   *  @param {{ text: string, rule?: string, line?: number | null }} finding
+   *  @returns {number} */
+  pushAttributed(finding) {
+    this.found.push({
+      check: this.current,
+      text: String(finding.text),
+      ...(finding.rule ? { rule: String(finding.rule) } : {}),
+      ...(Number.isInteger(finding.line) && Number(finding.line) > 0 ? { line: Number(finding.line) } : {}),
+    });
     return this.found.length;
   }
 
@@ -1750,27 +1767,70 @@ const clinicalSafetyRules = /** @type {any} */ (loadClinicalSafetyRules());
  * a brand's content block is legitimately about that brand.
  */
 export function evaluateClinicalSafetyRules({ reportText, practical, question }) {
+  return clinicalSafetyRuleHits({ reportText, practical, question }).map((hit) => hit.message);
+}
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(evaluateClinicalSafetyRules, "clinical-safety-rules");
+
+/**
+ * The same rules, plus which one fired and where it fired.
+ *
+ * A message is the one thing a false-positive distribution cannot be computed
+ * over. All four rules arrive under one check id, so today the ledger can say
+ * "a safety rule fired" and nothing further — while the rules are already data
+ * carrying ids of their own. This returns them, so a finding can be attributed
+ * to the rule that produced it rather than to the file that holds all four.
+ * That is the input the blocking budget asks for before a rule is widened,
+ * narrowed, or moved to the model-judge path, and it does not exist until the
+ * id survives the call.
+ *
+ * `line` indexes the text named by `where`, never "the deliverable". A rule of
+ * kind `practical_required_when_report_matches` fires on an *absence* in the
+ * practical section: the only line it can point at is where its trigger matched
+ * the report, and `where: "trigger"` says so rather than letting the number be
+ * read as the offending line.
+ * @param {{ reportText?: unknown, practical?: unknown, question?: unknown }} input
+ * @returns {{ ruleId: string, message: string, line: number | null, where: string }[]}
+ */
+export function clinicalSafetyRuleHits({ reportText, practical, question }) {
   const report = String(reportText ?? "");
   const practicalText = String(practical ?? "");
+  /** @type {{ ruleId: string, message: string, line: number | null, where: string }[]} */
   const found = [];
+  /** A rule's pattern may carry `g`, and `.test()` on a global regex advances
+   *  `lastIndex` — scanning line by line with the rule's own object would skip
+   *  lines and report the wrong one. Locate with a stateless copy.
+   *  @param {string} text @param {RegExp} pattern @param {string} where
+   *  @returns {{ line: number | null, where: string }} */
+  const locate = (text, pattern, where) => ({
+    line: firstMatchingLine(text, new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, "")))?.line ?? null,
+    where,
+  });
   for (const rule of clinicalSafetyRules) {
     if (rule.kind === "report_forbidden") {
       let text = report;
       for (const substitution of rule.substitutions) text = text.replace(substitution.find, substitution.replace);
-      if (rule.pattern.test(text)) found.push(rule.message);
+      // Located in the substituted text because that is the text that was
+      // tested. The substitutions replace in place and introduce no newlines,
+      // so the number still indexes the report as the author wrote it.
+      if (rule.pattern.test(text)) found.push({ ruleId: rule.id, message: rule.message, ...locate(text, rule.pattern, "report") });
     } else if (rule.kind === "practical_forbidden") {
-      if (rule.pattern.test(practicalText)) found.push(rule.message);
+      if (rule.pattern.test(practicalText)) found.push({ ruleId: rule.id, message: rule.message, ...locate(practicalText, rule.pattern, "practical") });
     } else if (rule.kind === "entity_requires_question_mention") {
-      if (nonEmpty(question) && !rule.pattern.test(String(question)) && rule.pattern.test(report)) found.push(rule.message);
+      if (nonEmpty(question) && !rule.pattern.test(String(question)) && rule.pattern.test(report)) {
+        found.push({ ruleId: rule.id, message: rule.message, ...locate(report, rule.pattern, "report") });
+      }
     } else if (rule.kind === "practical_required_when_report_matches") {
       // `triggerPattern` is required for this kind and checked at load.
-      if (/** @type {RegExp} */ (rule.triggerPattern).test(report) && !rule.pattern.test(practicalText)) found.push(rule.message);
+      const trigger = /** @type {RegExp} */ (rule.triggerPattern);
+      if (trigger.test(report) && !rule.pattern.test(practicalText)) {
+        found.push({ ruleId: rule.id, message: rule.message, ...locate(report, trigger, "trigger") });
+      }
     }
   }
   return found;
 }
-// Attribution: the check every finding of this function is recorded under.
-checkedBy(evaluateClinicalSafetyRules, "clinical-safety-rules");
+checkedBy(clinicalSafetyRuleHits, "clinical-safety-rules");
 
 /** @param {unknown} value @param {number} [minimum] @returns {boolean} */
 function nonEmpty(value, minimum = 1) {
@@ -4489,8 +4549,8 @@ export function validateClinicalEvidencePackage({
       `The practical section cites derived result ${derivedInPractical.join(", ")}; practical advice must rest on measured evidence. Move the reasoning to the analysis and give the action a directly supported claim.`,
     );
   }
-  for (const message of issues.from(evaluateClinicalSafetyRules, { reportText, practical, question: runReceipt?.question })) {
-    issues.push(message);
+  for (const hit of issues.from(clinicalSafetyRuleHits, { reportText, practical, question: runReceipt?.question })) {
+    issues.pushAttributed({ text: hit.message, rule: hit.ruleId, line: hit.line });
   }
   issues.region("practical-claim-anchor");
   const numberedItems = practical.split(/\n(?=\s*[0-9]+\.\s+)/).filter((item) => /^\s*[0-9]+\.\s+/.test(item));

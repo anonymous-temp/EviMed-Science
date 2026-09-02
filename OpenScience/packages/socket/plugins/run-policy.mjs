@@ -948,6 +948,15 @@ async function recordGateRun(store, entry, item, verdict, attempt) {
     // unattributed finding is counted as unattributed, never as "unknown"
     // bucketed with the rest, because that would read as coverage.
     checks: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.check ?? null),
+    // One axis finer than `checks`, and the reason it exists: a check that
+    // holds several rules (clinical-safety-rules holds four) reports every one
+    // of them under a single id, so a distribution over `checks` cannot say
+    // which rule produced a false positive — the question the blocking budget
+    // asks before any rule is widened, narrowed or moved to the judge path.
+    // Same discipline as above: null where the raising code declared no rule,
+    // never a shared "unknown" bucket that would read as coverage.
+    rules: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.rule ?? null),
+    lines: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.line ?? null),
     metrics: verdict.metrics,
     ok: verdict.ok,
     at: new Date().toISOString(),
