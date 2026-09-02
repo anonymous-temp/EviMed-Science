@@ -7,6 +7,7 @@ import {
   CONTRACT_KINDS,
   CONTRACT_VALIDATOR_KINDS,
   DOMAIN_VERSION,
+  GATE_CHECK_IDS,
   MAX_DELEGATION_DEPTH,
   MCP_TOOL_BASE_NAMES,
   MCP_TOOL_NAMES,
@@ -33,6 +34,9 @@ import {
   validateDeliveryReceipt,
   validateTaskPlan,
 } from "../index.mjs";
+// The delivery gate lives behind its own subpath; its check registry is read
+// here because attribution is a property of the module, not of the root.
+import { clinicalEvidenceCheckIds } from "../src/clinicalEvidence.mjs";
 
 test("every contract kind has a validator and every validator has a kind", () => {
   assert.deepEqual([...CONTRACT_VALIDATOR_KINDS].sort(), [...CONTRACT_KINDS].sort());
@@ -663,4 +667,59 @@ test("citing a retracted paper is reported, and not looking is not the same as f
   assert.match(unchecked[0], /未执行/);
   // 3. A package citing nothing has nothing to check, and that is silence.
   assert.deepEqual(retractionNotices({}, []), []);
+});
+
+
+// Attribution has to be a property of the code, not of the fixtures that happen
+// to reach it.
+//
+// A gate run recorded `issues: [...]` and nothing about which of the 129 rules
+// raised each one, so no rule's false-positive rate could be computed — and
+// principle #4 asks for an observed distribution before a blocking decision
+// changes. The ids are declared at the rule: `issues.region(...)` for an inline
+// one, `checkedBy(fn, ...)` at a finding function. This reads both back out of
+// the source, because a runtime test only covers the rules its fixtures happen
+// to trip.
+test("every gate check declares its own id, and no finding function is left anonymous", async () => {
+  const source = await readFile(new URL("../src/clinicalEvidence.mjs", import.meta.url), "utf8");
+  const registered = new Set(clinicalEvidenceCheckIds);
+  assert.equal(registered.size, clinicalEvidenceCheckIds.length, "a duplicate id silently merges two checks into one bucket");
+
+  const stamped = new Map([...source.matchAll(/^checkedBy\((\w+), "([a-z0-9-]+)"\);$/gm)].map((match) => [match[1], match[2]]));
+  const regions = [...source.matchAll(/issues\.region\("([a-z0-9-]+)"\)/g)].map((match) => match[1]);
+  const literals = [...source.matchAll(/check: "([a-z0-9-]+)"/g)].map((match) => match[1]);
+  // The walk has to prove it walked: a scan that stopped matching would
+  // otherwise find no unregistered id and pass forever.
+  assert.ok(stamped.size >= 12, `only ${stamped.size} finding functions carry a check id — the scan did not read the file`);
+  assert.ok(regions.length >= 40, `only ${regions.length} inline regions found — the scan did not read the file`);
+
+  for (const [fn, id] of stamped) assert.ok(registered.has(id), `${fn} declares check "${id}", which is not in clinicalEvidenceCheckIds`);
+  for (const id of regions) assert.ok(registered.has(id), `an inline rule declares check "${id}", which is not in clinicalEvidenceCheckIds`);
+  for (const id of literals) assert.ok(registered.has(id), `a finding is attributed to "${id}", which is not in clinicalEvidenceCheckIds`);
+
+  // The half that would otherwise rot in silence: a finding function whose id
+  // was dropped would attribute its findings to whatever region ran before it,
+  // which reads as coverage and measures the wrong rule. `IssueLog#from`
+  // refuses such a function at runtime; this says so before a run does.
+  const routed = [...source.matchAll(/issues\.from\(\s*(\w+)/g)].map((match) => match[1]);
+  assert.ok(routed.length >= 10, `only ${routed.length} finding functions are routed through the log — the scan did not read the file`);
+  for (const fn of routed) {
+    assert.ok(stamped.has(fn), `${fn} raises gate issues through issues.from() but declares no check; add checkedBy(${fn}, "<id>") at its definition`);
+  }
+
+  // And no id is registered that nothing raises: a bucket nobody fills reads as
+  // a rule that never fires.
+  const raised = new Set([...stamped.values(), ...regions, ...literals]);
+  for (const id of clinicalEvidenceCheckIds) assert.ok(raised.has(id), `"${id}" is registered and declared by no rule`);
+
+  // The contract registry raises three of its own, and attaches the clinical
+  // ones to the issues it hands the run. Every id it writes has to be on the
+  // one axis a distribution is computed along, or a bucket exists that nothing
+  // enumerates.
+  const registrySource = await readFile(new URL("../src/contractRegistry.mjs", import.meta.url), "utf8");
+  const attached = [...registrySource.matchAll(/check: ["']([a-z0-9-]+)["']/g)].map((match) => match[1]);
+  assert.ok(attached.length >= 3, `only ${attached.length} literal check ids in the contract registry — the scan did not read the file`);
+  const axis = new Set(GATE_CHECK_IDS);
+  for (const id of attached) assert.ok(axis.has(id), `the contract registry attaches "${id}", which is not in GATE_CHECK_IDS`);
+  for (const id of clinicalEvidenceCheckIds) assert.ok(axis.has(id), `"${id}" is a gate check and is missing from GATE_CHECK_IDS`);
 });

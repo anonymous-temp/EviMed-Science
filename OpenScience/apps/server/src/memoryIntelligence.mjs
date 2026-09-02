@@ -17,6 +17,52 @@ const candidateOrigins = new Set(["explicit", "inferred", "system"]);
 const memoryKeyPattern = /^[a-z0-9][a-z0-9._/-]{0,254}$/;
 const sensitivePattern = /(?:password|passcode|api[ _-]?key|access[ _-]?token|secret|\btoken\b|密码|口令|密钥|令牌|身份证|手机号|银行卡|病历号|患者姓名|家庭住址|我(?:患有|诊断为|正在服用))/i;
 
+/**
+ * Why a record is parked as `pending` instead of activated — or null when it is
+ * not parked at all.
+ *
+ * `pending` is not a refusal: the record is stored with its evidence, it is
+ * simply not recalled into a later prompt until a person confirms it. Nothing
+ * said so, though. `sensitivePattern` above includes 病历号 and 患者姓名, which
+ * are ordinary words in medical research text, so a researcher's own memories
+ * were parked routinely — and from the outside that is indistinguishable from
+ * an extractor that found nothing: memory "not learning", with no reason
+ * anywhere. This function is that reason, and it is the only thing added.
+ *
+ * Demotion itself stays exactly as it was, deliberately. `sensitive` marks text
+ * that may carry an identifier or a credential, and recalling such text into a
+ * later prompt without a person having seen it is the one mistake a memory
+ * store cannot take back. `inferred` is the model's own guess, which earns
+ * activation from three independent observations (see recordRun) rather than
+ * from one. Naming a rule is not softening it.
+ *
+ * The status expression below is derived from this function rather than written
+ * beside it, so "which records are demoted" and "what we say about it" cannot
+ * drift apart: they are one predicate.
+ *
+ * @param {boolean} sensitive @param {string} origin @returns {string|null}
+ */
+function demotionReason(sensitive, origin) {
+  if (sensitive && origin === "inferred") return "sensitive_and_inferred";
+  if (sensitive) return "sensitive";
+  if (origin === "inferred") return "inferred";
+  return null;
+}
+
+/** What each reason means, for the person reading the run. */
+const demotionReasonText = Object.freeze({
+  sensitive: "内容命中敏感词表（含病历号、患者姓名等医学研究中的常用词），需本人确认后才会被再次调用",
+  inferred: "由模型推断而非你明确要求记住，需累积三次独立观察或本人确认后才会转为生效",
+  sensitive_and_inferred: "既由模型推断，又命中敏感词表，需本人确认后才会被再次调用",
+});
+
+/** The audit ledger reads English, like every other revision reason here. */
+const demotionReasonAudit = Object.freeze({
+  sensitive: "parked as pending: the text matched the sensitive-vocabulary screen",
+  inferred: "parked as pending: inferred by the model, not stated by the user",
+  sensitive_and_inferred: "parked as pending: inferred by the model and matched the sensitive-vocabulary screen",
+});
+
 function boundedText(value, maximum) {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
 }
@@ -197,6 +243,7 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     return reject(`origin "system" must cite an assistant or tool source (got role "${source.role}")`);
   }
   const sensitive = Boolean(candidate.sensitive) || sensitivePattern.test(`${value}\n${summary}\n${quote}`);
+  const pendingReason = demotionReason(sensitive, origin);
   return {
     scope,
     scopeId: candidateScopeId({ scope }, project, run),
@@ -205,7 +252,11 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     value,
     summary,
     origin,
-    status: sensitive || origin === "inferred" ? "pending" : "active",
+    status: pendingReason ? "pending" : "active",
+    // Carried on the candidate, not sent as a record field: the memory service
+    // has a fixed record schema and would drop it. It travels to the audit
+    // ledger as the upsert reason, and to the user as a run notice.
+    statusReason: pendingReason,
     confidence: boundedScore(candidate.confidence, origin === "explicit" ? 1 : 0.65),
     importance: boundedScore(candidate.importance, 0.6),
     sensitive,
@@ -275,7 +326,7 @@ export class MemoryIntelligence {
     if (sources.length === 0) {
       return {
         runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0,
-        rejectionReasons: [], extractionError: null,
+        rejectionReasons: [], pending: 0, pendingReasons: [], extractionError: null,
       };
     }
 
@@ -308,10 +359,15 @@ export class MemoryIntelligence {
     }
     let extracted = 0;
     let activated = 0;
+    /** Reason -> how many records this run parked for it. */
+    const pendingReasons = new Map();
     for (const candidate of candidates.slice(0, 12)) {
       const previous = known.get(canonicalKey(candidate));
       if (previous?.status === "active" && candidate.origin === "inferred" && !candidate.sensitive) {
         candidate.status = "active";
+        // Re-confirming a memory that is already active is not a demotion, so
+        // the reason has to go with the status it explained.
+        candidate.statusReason = null;
       }
       let stored;
       try {
@@ -320,7 +376,14 @@ export class MemoryIntelligence {
           ...(previous ? { id: previous.id } : {}),
         }, candidate.evidence, {
           expectedVersion: previous?.version ?? 0,
-          reason: previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
+          // The demotion reason rides the revision reason, which is what the
+          // memory service keeps as this record's audit trail and what
+          // publicMemoryRecord hands back on `revisions[].reason`. Before this,
+          // a parked record's history said only that it had been written.
+          reason: [
+            previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
+            ...(candidate.statusReason ? [demotionReasonAudit[candidate.statusReason]] : []),
+          ].join("; "),
         });
       } catch (error) {
         if (!(error instanceof HttpError) || error.code !== "memory_conflict") throw error;
@@ -329,10 +392,17 @@ export class MemoryIntelligence {
         if (!current) throw error;
         stored = await this.memosClient.upsertRecord(project.userId, { ...candidate, id: current.id }, candidate.evidence, {
           expectedVersion: current.version,
-          reason: "conversation evidence retried after a concurrent memory update",
+          // The retry writes the same record, so it carries the same reason.
+          reason: [
+            "conversation evidence retried after a concurrent memory update",
+            ...(candidate.statusReason ? [demotionReasonAudit[candidate.statusReason]] : []),
+          ].join("; "),
         });
       }
       extracted += 1;
+      if (candidate.statusReason && stored.status === "pending") {
+        pendingReasons.set(candidate.statusReason, (pendingReasons.get(candidate.statusReason) ?? 0) + 1);
+      }
       if (
         stored.origin === "inferred"
         && stored.status === "pending"
@@ -345,6 +415,10 @@ export class MemoryIntelligence {
           reason: "three independent observations activated an inferred memory",
         });
         activated += 1;
+        // It was counted as parked a moment ago and is not parked any more.
+        const parked = pendingReasons.get(candidate.statusReason) ?? 0;
+        if (parked > 1) pendingReasons.set(candidate.statusReason, parked - 1);
+        else pendingReasons.delete(candidate.statusReason);
       }
       known.set(canonicalKey(stored), stored);
     }
@@ -352,6 +426,11 @@ export class MemoryIntelligence {
       runSummary, extracted, activated, source, proposed,
       rejected: proposed - candidates.length,
       rejectionReasons: rejections.slice(0, 12),
+      // A record that was stored and parked is neither "extracted and working"
+      // nor "rejected". It had no count of its own, which is why the demotion
+      // could be silent at all.
+      pending: [...pendingReasons.values()].reduce((total, count) => total + count, 0),
+      pendingReasons: [...pendingReasons].map(([reason, count]) => ({ reason, count, text: demotionReasonText[reason] })),
       extractionError,
     };
   }
@@ -392,7 +471,10 @@ export class MemoryIntelligence {
         ? `Conversation about: ${question.slice(0, 240)}`
         : `Run ${run.id} finished with status ${run.status}; ${run.artifacts.length} artifact(s) recorded.`,
       origin: "system",
-      status: sensitive ? "pending" : "active",
+      // The run summary can only be parked for the sensitive screen — its
+      // origin is always "system" — but it is parked silently for the same
+      // reason as everything above, so it says so in the same place.
+      status: demotionReason(sensitive, "system") ? "pending" : "active",
       confidence: 1,
       importance: run.status === "succeeded" ? 0.55 : 0.7,
       sensitive,
@@ -410,7 +492,12 @@ export class MemoryIntelligence {
       quote: question || `Run ${run.id} finished with status ${run.status}.`,
       observedAt: run.finishedAt,
       weight: 1,
-    }, { reason: "agent run reached a terminal state" });
+    }, {
+      reason: [
+        "agent run reached a terminal state",
+        ...(sensitive ? [demotionReasonAudit.sensitive] : []),
+      ].join("; "),
+    });
   }
 
   async #extractWithModel(sources, project, run, existing = []) {

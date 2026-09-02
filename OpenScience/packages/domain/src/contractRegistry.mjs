@@ -11,10 +11,32 @@
  * to write a `catch` that means "read the issues".
  */
 
-import { clinicalEvidenceAdvisoryNotes, clinicalEvidencePackageErrorCode, evaluateClinicalSafetyRules, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
+import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, evaluateClinicalSafetyRules, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { matchedClinicalTriggers } from './safetyRules.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
+
+/**
+ * Every check a gate verdict can attribute a finding to.
+ *
+ * The clinical delivery gate declares its ids at the rules themselves
+ * (`clinicalEvidenceCheckIds`); the three added here belong to this file — the
+ * capability manifest's required-output check, the JSON-parse guard that runs
+ * before any content rule, and the coverage notice. One list, because the axis a
+ * false-positive distribution is computed along should be enumerable without
+ * reading two files.
+ *
+ * Contract kinds other than the clinical package do not name their checks yet.
+ * Their findings carry no `check` and are counted as unattributed rather than
+ * bucketed under a default that would read as coverage.
+ * @type {readonly string[]}
+ */
+export const GATE_CHECK_IDS = Object.freeze([
+  ...clinicalEvidenceCheckIds,
+  'required-output',
+  'deliverable-json-parse',
+  'coverage-degraded',
+])
 
 /**
  * @typedef {object} GateIssue
@@ -23,6 +45,7 @@ import { workspaceLayout } from './workspaceLayout.mjs'
  * @property {'required'|'advisory'|'optional'} severity
  * @property {number} [line]
  * @property {string} [path]
+ * @property {string} [check] The id of the check that raised it, for the ledger.
  */
 
 /**
@@ -70,12 +93,16 @@ function json(input, path) {
 }
 
 /**
+ * `check` is the identity of the rule that raised this finding, carried so the
+ * gate ledger records which check spoke rather than only what it said. It is
+ * absent where the raising code has not declared one — a hole that stays
+ * visible instead of being filled with a default that would look like coverage.
  * @param {string} code @param {string} message
- * @param {{severity?: 'required'|'advisory'|'optional', line?: number, path?: string}} [extra]
+ * @param {{severity?: 'required'|'advisory'|'optional', line?: number, path?: string, check?: string | null}} [extra]
  * @returns {GateIssue}
  */
 function issue(code, message, extra = {}) {
-  return { code, message, severity: extra.severity ?? 'required', ...(extra.line ? { line: extra.line } : {}), ...(extra.path ? { path: extra.path } : {}) }
+  return { code, message, severity: extra.severity ?? 'required', ...(extra.line ? { line: extra.line } : {}), ...(extra.path ? { path: extra.path } : {}), ...(extra.check ? { check: extra.check } : {}) }
 }
 
 /**
@@ -89,11 +116,11 @@ function requiredOutputIssues(input) {
   for (const output of input.expectedOutputs ?? []) {
     const body = input.files.get(output.path)
     if (body == null) {
-      if (output.required) issues.push(issue('required_output_missing', `${output.path} is missing.`, { path: output.path }))
+      if (output.required) issues.push(issue('required_output_missing', `${output.path} is missing.`, { path: output.path, check: 'required-output' }))
       continue
     }
     if (output.required && !body.trim()) {
-      issues.push(issue('required_output_empty', `${output.path} is empty.`, { path: output.path }))
+      issues.push(issue('required_output_empty', `${output.path} is empty.`, { path: output.path, check: 'required-output' }))
     }
   }
   return issues
@@ -114,10 +141,10 @@ function proseHygieneIssues(input, proseFiles) {
     if (!body) continue
     const leak = runtimeLeakageLine(body)
     if (leak) {
-      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names the retrieval machinery: ${leak.text}`, { path, line: leak.line }))
+      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names the retrieval machinery: ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
     }
     for (const citationIssue of citationIntegrityIssues(body)) {
-      issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path }))
+      issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))
     }
     if (!isClinicalContractKind(input.contractKind)) {
       const triggers = matchedClinicalTriggers(body)
@@ -154,7 +181,7 @@ function validateClinicalEvidenceReport(input) {
     ["clinical-evidence-run.json", json(input, "clinical-evidence-run.json"), input.runReceipt],
   ]) {
     if (provided == null && parsed === undefined) {
-      parseIssues.push(issue("deliverable_rejected", `${file} is not valid JSON. Fix the syntax first: a value containing a double quote must escape it (\\"), and every string must close before the next key.`));
+      parseIssues.push(issue("deliverable_rejected", `${file} is not valid JSON. Fix the syntax first: a value containing a double quote must escape it (\\"), and every string must close before the next key.`, { check: "deliverable-json-parse" }));
     }
   }
   if (parseIssues.length) {
@@ -240,18 +267,23 @@ function validateClinicalEvidenceReport(input) {
     .filter((entry) => !namedByValidator(String(entry.path ?? "")));
   const issues = [
     ...manifestIssues,
-    ...(result.issues ?? []).map((message) => issue(
-      blocking.has(message) ? (errorCode ?? 'clinical_evidence_issue') : 'clinical_evidence_notice',
-      String(message),
-      { severity: blocking.has(message) ? 'required' : 'advisory' },
-    )),
+    // `issueChecks` is `issues` with the raising check attached, in the same
+    // order — read it rather than the strings, because recovering an id by
+    // matching our own prose is regex over language to find out something the
+    // code already knew, and that is the mistake this gate keeps paying for.
+    ...(result.issueChecks ?? (result.issues ?? []).map((message) => ({ check: null, text: message })))
+      .map((/** @type {{ check: string | null, text: string }} */ finding) => issue(
+        blocking.has(finding.text) ? (errorCode ?? 'clinical_evidence_issue') : 'clinical_evidence_notice',
+        String(finding.text),
+        { severity: blocking.has(finding.text) ? 'required' : 'advisory', check: finding.check },
+      )),
     ...(result.coverageDegradedNotice
-      ? [issue('clinical_evidence_notice', String(result.coverageDegradedNotice), { severity: 'advisory' })]
+      ? [issue('clinical_evidence_notice', String(result.coverageDegradedNotice), { severity: 'advisory', check: 'coverage-degraded' })]
       : []),
     // Findings that rest on a judgement no pattern can make. They reach the run
     // while it can still act, and can never withhold a package.
     ...clinicalEvidenceAdvisoryNotes(text(input, 'clinical-evidence-report.md'))
-      .map((message) => issue('clinical_evidence_notice', message, { severity: 'advisory' })),
+      .map((message) => issue('clinical_evidence_notice', message, { severity: 'advisory', check: checkIdOf(clinicalEvidenceAdvisoryNotes) })),
   ]
   const required = issues.filter((entry) => entry.severity === 'required')
   return {
@@ -735,7 +767,7 @@ function validateGeoContentPack(input) {
     .map((/** @type {any} */ value) => String(value ?? ''))
   const packProse = [...proseFilesOf(input).map((path) => text(input, path)), ...blockProse].join('\n')
   for (const message of evaluateClinicalSafetyRules({ reportText: packProse, practical: packProse })) {
-    issues.push(issue('clinical_safety_rule', message))
+    issues.push(issue('clinical_safety_rule', message, { check: checkIdOf(evaluateClinicalSafetyRules) }))
   }
 
   const measurement = geoMeasurementNotices(input)
