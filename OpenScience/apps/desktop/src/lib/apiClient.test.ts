@@ -477,15 +477,15 @@ describe("apiClient", () => {
   it("manages hosted runtime lifecycle through command requests", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(csrfMeResponse())
-      .mockResolvedValueOnce(responseJson("/api/opencode/paper1"))
+      .mockResolvedValueOnce(responseJson("https://science.example/api/runtime"))
       .mockResolvedValueOnce(responseJson(null))
-      .mockResolvedValueOnce(responseJson("/api/opencode/paper1"));
+      .mockResolvedValueOnce(responseJson("https://science.example/api/runtime"));
     const client = await loadClient("https://science.example/api");
 
     client.setWebProjectId("paper1");
-    await expect(client.startWebRuntime()).resolves.toBe("/api/opencode/paper1");
+    await expect(client.startWebRuntime()).resolves.toBe("https://science.example/api/runtime");
     await client.stopWebRuntime();
-    await expect(client.restartWebRuntime()).resolves.toBe("/api/opencode/paper1");
+    await expect(client.restartWebRuntime()).resolves.toBe("https://science.example/api/runtime");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

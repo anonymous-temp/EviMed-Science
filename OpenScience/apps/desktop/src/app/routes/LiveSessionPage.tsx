@@ -24,7 +24,8 @@ import { cn } from "@/lib/cn";
 import { researchAgentUi, researchInputLabel } from "@/lib/researchAgentUi";
 import { displaySessionTitle } from "@/lib/sessionTitle";
 
-/** Live agent session backed by the OpenCode runtime. `/live` (no id) is a blank draft;
+/** Live agent session, driven by the SDK client against whatever runtime it
+ *  is pointed at. `/live` (no id) is a blank draft;
  *  the session is created lazily on the first message, then the URL updates to /live/:id. */
 export function LiveSessionPage() {
   const { sessionId } = useParams();
@@ -83,7 +84,7 @@ export function LiveSessionPage() {
   useEffect(() => {
     if (sessionId) {
       // A direct page load can resolve the route before the hosted runtime has
-      // created its OpenCode client. Retry once the connection becomes ready;
+      // created its runtime client. Retry once the connection becomes ready;
       // otherwise openSession returns early and the thread skeleton never ends.
       if (connected) void openSession(sessionId);
     } else if (requestedAgentId) void startSpecialistDraft(requestedAgentId);

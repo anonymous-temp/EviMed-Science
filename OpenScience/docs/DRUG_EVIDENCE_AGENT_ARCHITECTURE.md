@@ -25,11 +25,14 @@ decision.
 
 ## Runtime boundary
 
-The three Agent packages live under `runtime/skills/evimed` and are loaded by
-the server Agent registry. Hosted runtime bootstrap copies the complete package
-into the project-scoped OpenCode runtime. The EviMed MCP server is copied and
-registered separately, so Agent instructions and evidence implementation stay
-independently versioned and testable.
+The three Agent packages are capability packages: `capability.yaml` plus SKILL.md
+and scripts under `capabilities/`, with the shared skill bodies in
+`capability-skills/`. The runtime image bakes both trees in at build time
+(`/opt/evimed/capabilities`, `/opt/evimed/capability-skills`) rather than copying
+a package per project — copying per project is what let a run reference a
+directory the image does not have. The EviMed MCP server is installed and
+registered separately (`/opt/evimed/mcp/evimed-research`), so Agent instructions
+and evidence implementation stay independently versioned and testable.
 
 The high-level tools retain their existing identifiers:
 

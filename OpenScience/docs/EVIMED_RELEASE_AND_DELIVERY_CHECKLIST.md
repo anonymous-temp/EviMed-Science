@@ -17,7 +17,7 @@
 | 项目 | 状态 | 说明 |
 |---|---|---|
 | 中文 EviMed 产品界面 | 已完成 | 页面标题、Logo、登录、导航和科研工作流入口已经统一 |
-| 统一开放域 Harness | 已完成 | OpenCode、Skills、MCP、文件、Notebook、Runs、Provenance 共用一套底座 |
+| 统一开放域 Harness | 已完成 | DSH 内核、Skills、MCP、文件、Notebook、Runs、Provenance 共用一套底座 |
 | 9 个专项入口 | 已完成 | 药品安全性、超说明书、综合评价、药品遴选、Meta、MR、文献计量、科研选题、论文审稿 |
 | 生产适配器配置透传 | 已完成 | 服务端注册的 15 个 `EVIMED_*_URL` 均进入 Compose 与环境模板 |
 | 专项完整性门禁 | 已完成 | 生产环境缺少任一必需专项适配器时 readiness 失败 |
@@ -60,8 +60,13 @@
    工具链中完成编译、镜像构建和容器 smoke，不能用本机较新 JDK 的失败或成功替代验收。
 5. **确定生产域名、TLS 和登录方式。** 配置正式域名；在 OIDC 与本地账号中选定一种，关闭
    开发登录；验证 Cookie、反向代理和跨域设置。
-6. **生成真实 DeepSeek 发布凭据。** 使用轮换后的 Key 完成兼容性预检和真实 OpenCode 链路，
-   保存带配置修订号、时效和签名的 release receipt。
+6. **重建 DeepSeek 发布凭据的签发链路。** 兼容性预检（`pnpm preflight:deepseek`）仍然可用，
+   但签发 release receipt 的那一半随旧内核一起删除了：它靠裸二进制驱动 OpenCode，而 DSH
+   的工具链烘焙在运行时镜像的 `/opt/evimed` 里，裸二进制根本无链路可驱动。今天
+   `pnpm preflight:deepseek:release` 与 `open-science-release-receipt` 调度器都以
+   `deepseek_release_chain_unavailable` 退出，`/api/ready` 因此没有凭据可验——这是刻意的
+   显式失败，不要用 `mode: "fake"` 凭据绕开。上线前必须按运行手册所述，用运行时镜像和
+   `session/*` 事件重建签发链路。
 7. **生成并验证发布清单。** 构建固定版本 Web/Runtime/Proxy 镜像，生成
    `release-manifest.json`，验证镜像 ID、Skills 摘要、源码 revision 和构建时间。
 8. **落实最低限度运维。** 指定告警接收人，配置加密备份、保留周期，并至少做一次恢复演练。
@@ -79,6 +84,8 @@ pnpm ci:web
 pnpm check:tauri
 
 # 在目标主机和真实生产 env 上执行
+# preflight:deepseek:release 目前必然失败（见第 6 条）；链路重建之前它是一个
+# 已知的、有名字的阻断项，不是一条可以跳过或用假凭据糊过去的步骤。
 pnpm preflight:deepseek:release
 pnpm release:manifest
 pnpm verify:release-manifest

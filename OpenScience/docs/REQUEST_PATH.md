@@ -8,7 +8,29 @@
 范围：`OpenScience/apps/server/src/`（HTTP 边界与运行时编排）、
 `OpenScience/runtime/mcp/evimed-research/`（MCP 工具，只写仓库代码能确认的部分）、
 `OpenScience/deploy/web/`（生产配置实际值）。
-OpenCode 容器内部行为不在范围内。
+内核容器内部行为不在范围内。
+
+> **2026-09-02 · 内核更换后的有效性说明。** 本文成稿于 OpenCode 作内核的时期，
+> 全部行号对应当时的 `main`。2026-09-01 OpenCode 被整体删除，DSH 成为唯一内核，
+> 因此下列部分**已经不再成立，不要照本文实现或排障**：
+>
+> - **[F] 运行时生命周期**：`startOpenCode` 这个入口不存在了；容器改为 DSH 运行时镜像，
+>   控制面经 `dshMux.mjs` 与之通信。
+> - **[G] 内核容器边界**：不再是「HTTP 端点逐条代理」。整条线是 `/api/remote.mux`
+>   一条 WebSocket 上的多路逻辑流，方法名带斜杠（`session/create`、`session/prompt`、
+>   `session/page`、`session/cancel`），事件走同一条 socket 上的 `$events` 流，
+>   由控制面自签的 browser-session cookie 鉴权。
+> - **浏览器→容器直通**：`/api/opencode/*` 已退役，返回 `410
+>   runtime_passthrough_retired`；浏览器改用 `POST /api/runtime/sessions`、
+>   `GET /api/runtime/sessions/:id/transcript`、`GET /api/runs/:id/events`。
+> - **[J] 运行侧 preflight**：那份 3,039 行的 Python 交付检查已经删除。交付规则现在
+>   只有一份实现，放在 `@evimed/domain`，运行侧经 `evimed_submit_deliverable` 抵达，
+>   服务端经 `validateClinicalEvidencePackage` 抵达，由
+>   `clinicalEvidenceSingleImplementation.test.mjs` 钉住两侧同判。
+>
+> 第 3 节的静默点清单没有随内核一起重测：其中每一条都指向仍然存在的文件，但引用的
+> 行号与部分调用形态已经改变。把它当作「这些位置历史上确实静默失败过」的清单来用，
+> 逐条核对现状之后再下结论。
 
 ---
 
@@ -40,16 +62,16 @@ OpenCode 容器内部行为不在范围内。
   │  账本 = <project>/.openscience/runs.jsonl，事件 started/dispatch/progress/finished
   ▼
 [F] 运行时生命周期         runtimeManager.mjs
-  │  start(3145) → startOpenCode(3219) → 清理孤儿(3240-3304)
+  │  start(3145) → 启动内核容器(3219) → 清理孤儿(3240-3304)
   │              → bootstrap: skills/agents/MCP/model provider(3316-3358)
   │              → spawn 或 RuntimeControllerClient.startRuntime(3388-3401)
   │              → waitUntilReady(3550-3592)
   │  特权 Docker 操作走 unix socket：runtimeControllerClient.mjs:79-165 ↔ runtimeControllerServer.mjs
   ▼
-[G] OpenCode 容器          （内部行为不在本文范围）
-  │  ├─ 服务端→容器：dispatchPrompt(3710) POST /session/{id}/prompt_async
+[G] 内核容器（DSH）        （内部行为不在本文范围）
+  │  ├─ 服务端→容器：dispatchPrompt(3710) session/prompt
   │  ├─ 服务端→容器：sessionMessages(3616) / sessionStatus(3663)  ← 监控轮询
-  │  └─ 浏览器→容器：proxy(4045) /api/opencode/*（SSE 直通）
+  │  └─ 浏览器→容器：无直通。`/api/opencode/*` 退役返回 410
   ▼
 [H] MCP 工具 evimed-research   runtime/mcp/evimed-research/server.py（stdio JSON-RPC）
   │  public_sources.py / web_search.py / official_pages.py / open_access_fulltext.py
@@ -63,9 +85,10 @@ OpenCode 容器内部行为不在范围内。
   ▼
 [J] 交付门禁               agentRuns.mjs:1756-1824 → requiredSpecialistArtifacts(1015)
   │  → specialistCompletionOutcome(1047-1418)
-  │  → clinicalEvidenceQuality.mjs:1453 validateClinicalEvidencePackage / :749 citationIntegrityIssues
+  │  → @evimed/domain clinicalEvidence.mjs:3981 validateClinicalEvidencePackage / :2274 citationIntegrityIssues
+  │    （apps/server/src/clinicalEvidenceQuality.mjs 现在只有 31 行，是转发到 domain 的薄壳）
   │  → 修复回环 agentRuns.mjs:1772-1805（clinical-evidence-synthesis，最多 2 次）
-  │  运行侧同一套检查：runtime/skills/evimed/clinical-evidence-synthesis/scripts/preflight.py（1211 行）
+  │  运行侧同一套规则：@evimed/domain（唯一实现），经 evimed_submit_deliverable 抵达
   ▼
 [K] 产物取回
      /api/files/preview|download  server.mjs:1134-1143 → sendWorkspaceFile(1595-1640)
@@ -147,7 +170,7 @@ OpenCode 容器内部行为不在范围内。
 | 错误码 | `runtime_start_timeout` 504 / `runtime_exited` / `runtime_spawn_failed` / `runtime_cleanup_failed` / bootstrap 透传具体 code | `runtimeManager.mjs:3587/3580/3583/3270/3352-3357` |
 | 谁会知道 | `runtime.jsonl` 事件 + `.openscience` 运行时状态文件 + 返回给调用方 | `runtimeManager.mjs:656-667`、`:732-760` |
 
-### [G] OpenCode 容器边界（服务端一侧）
+### [G] 内核容器边界（服务端一侧）
 
 | 调用 | 超时 | 重试 | 错误码 | 谁会知道 |
 |---|---|---|---|---|
@@ -215,7 +238,7 @@ OpenCode 容器内部行为不在范围内。
 | ~~S2~~ **已修** | `runtimeManager.mjs`（`withRuntimeDeadline`） | 容器 socket 挂起（不关不答） | ~~监控轮询永久阻塞在 `await`~~。`sessionMessages` / `sessionStatus` 现经 `withRuntimeDeadline` 传 signal，超时以具名失败码结案 |
 | ~~S3~~ **已修** | `server.mjs`（`sendWorkspaceFile` 的 `settle`） | 文件流读取中途出错 | `audit` 已写 `completed`（`:1622`）、`200` 与 `Content-Length` 已发出（`:1626`），随后 `res.destroy()`。读者拿到**被截断的报告**，账本与审计都显示成功 |
 | S4 | `agentRuns.mjs:1858-1864` | `readSessionHistory` 抛任何异常 | `catch { return false }`，而 `false` 的语义是「本轮无进展」（`:1899-1900`）。运行时 502/连接重置 → 累计 idlePolls → 最终以 `runtime_monitor_stalled` 结案（`:1901-1907`）。**一个还在干活的 run 被判定为「卡死」**，与真正卡死不可区分 |
-| S5 | `agentRuns.mjs:1739-1743` | `readSessionStatus` 抛任何异常 | `return run`，运行继续。OpenCode 对 `/session/status` 持续 500 与「会话确实 busy」在账本上完全一样 |
+| S5 | `agentRuns.mjs:1739-1743` | `readSessionStatus` 抛任何异常 | `return run`，运行继续。内核对状态查询持续报错与「会话确实 busy」在账本上完全一样 |
 | S6 | `agentRuns.mjs:1746-1751` | `runtimeWorkspaceRoot` 抛异常 | 静默回落到 `project.workspaceDir`。容器返回的绝对路径随后按错误的根做相对化，`artifactCandidates`（`:847-855`）逐条丢弃 → run 成功但 `artifacts: []`，看起来像「这次没写文件」 |
 | S7 | `agentRuns.mjs:1765-1769` | `requiredSpecialistArtifacts` 内部任何 throw | 折叠成 `specialist_contract_unavailable`，真实原因丢失；且没有 `qualityIssues`，因此**永远进不了修复回环**（`:1776-1777` 要求 issues 非空）。一个完整的包被判死，原因不可恢复 |
 | S8 | `agentRuns.mjs:1800-1802` | 修复提示发送失败 | `catch {}` 后一律记 `specialist_evidence_repair_failed`。「模型拒绝修复」与「运行时已经没了」在账本上同码 |
@@ -330,7 +353,7 @@ S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退
 ## 5. 未核实
 
 - Caddy 是否开启访问日志、以及其上游默认超时的具体数值——`Caddyfile` 未声明，未核实运行镜像的默认值。
-- OpenCode 容器内部对 `/internal/model/v1` 的 HTTP 客户端超时——属于容器内部行为，本文不推测。
+- 内核容器内部对 `/internal/model/v1` 的 HTTP 客户端超时——属于容器内部行为，本文不推测。
 - `docker-compose.yml` 是否为 `open-science-web` 覆盖 Node 的 `NODE_OPTIONS` 或其他运行时超时——未逐行核实。
 - 生产实际部署使用的 `.env` 与仓库内 `.env.example` 是否一致——`.env` 不在仓库中，本文一律以 `.env.example` 为准。
 - `errors.jsonl` / `security.jsonl` 的写入失败率——无遥测，无法核实 S11 的实际发生频率。

@@ -64,22 +64,47 @@ chmod 600 deploy/web/.env
 pnpm preflight:host --env-file deploy/web/.env
 ```
 
-When `OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED=true`, generate the production
-model receipt before host preflight and Compose startup. The command reads the
-provider key only from the owner-readable file, verifies the exact bundled
-OpenCode 1.17.13 binary, runs the live DeepSeek capability probes through the
-internal gateway, and writes a mode-0600 receipt. Never pass the key on the
-command line or in `OPEN_SCIENCE_DEEPSEEK_API_KEY`.
+When `OPEN_SCIENCE_DEEPSEEK_PROVIDER_ENABLED=true`, production readiness wants a
+signed model receipt: it attests that the model which actually answers drove the
+whole tool chain — streaming, tool-result iterations, session history, structured
+final answer — through the internal gateway, rather than that a model of that
+name exists.
 
-The receipt is HMAC-signed with a domain-separated key derived from the Model
-Gateway signing secret. Host preflight and `/api/ready` verify the signature,
-release identity, and timestamp; the default maximum receipt age is 24 hours
-and timestamps more than five minutes in the future are rejected. Generate a
-new receipt immediately before deployment instead of extending the age limit.
+**The minting half does not exist for the DSH kernel, and it refuses instead of
+pretending.** `pnpm preflight:deepseek:release` exits non-zero with
+`deepseek_release_chain_unavailable`, and the unattended
+`open-science-release-receipt` scheduler runs the same gate, so it records a
+failed attempt on every cycle and exits 1 once
+`OPEN_SCIENCE_RECEIPT_MAX_FAILURES` consecutive attempts have failed — expect
+that service to be down, and expect `/api/ready` to report a missing receipt.
+Do not treat that as a misconfiguration to
+work around: the retired implementation drove the old kernel from a bare binary
+(`opencode run` against a fake provider, then `opencode export` for the session
+history, reading that kernel's own message and part shapes throughout), and none
+of it survives the kernel it read. A DSH kernel started from a bare binary has no
+tool chain to drive at all — the `evimed-universal` preset and the research MCP
+are baked into the runtime image at `/opt/evimed`, and the generated profile
+patch names those paths. A replacement has to start the runtime image the way
+`buildRuntimeLaunchPlan` starts it and read its evidence from `session/*` events;
+until it exists, production readiness has no receipt and says so by name. That
+visible failure is the intended state. Never mint a `mode: "fake"` receipt to
+clear it — that is CI evidence only, and readiness rejects it.
+
+The verification half is unchanged and still enforced. A receipt is HMAC-signed
+with a domain-separated key derived from the Model Gateway signing secret, over
+its whole body including the `dshVersion` field that names the kernel — a field
+renamed on one side alone verifies as tampering. Host preflight and `/api/ready`
+verify the signature, release identity, and timestamp; the default maximum
+receipt age is 24 hours and timestamps more than five minutes in the future are
+rejected.
+
+Every credential the gate touches arrives by path, never by value. These are the
+variables it reads, and they are what a rebuilt minting path will read too; keep
+this block for the day it works again, and expect the command to exit non-zero
+with `deepseek_release_chain_unavailable` until then:
 
 ```bash
 umask 077
-export OPEN_SCIENCE_OPENCODE_BIN="$PWD/apps/desktop/src-tauri/binaries/opencode-$(uname -m | sed 's/arm64/aarch64/')-apple-darwin"
 export OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE="$PWD/deploy/web/secrets/deepseek-api-key.txt"
 export OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE="$PWD/deploy/web/secrets/model-gateway-signing-key.txt"
 export OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE="$PWD/deploy/web/secrets/deepseek-release-receipt.json"
@@ -89,9 +114,15 @@ export OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION="gateway-v1-deepseek-v4-pro"
 pnpm preflight:deepseek:release
 ```
 
-Copy the receipt ID, config revision, receipt host path, and source revision
-unchanged into `deploy/web/.env`. A `mode: "fake"` receipt is CI evidence only
-and cannot satisfy production host preflight or `/api/ready`.
+Never pass the provider key on the command line or in
+`OPEN_SCIENCE_DEEPSEEK_API_KEY`. `OPEN_SCIENCE_OPENCODE_BIN` was removed with the
+second kernel — exporting it now makes the API refuse to start by name rather
+than starting with it ignored.
+
+Once a minting path exists again, copy the receipt ID, config revision, receipt
+host path, and source revision unchanged into `deploy/web/.env`. A
+`mode: "fake"` receipt is CI evidence only and cannot satisfy production host
+preflight or `/api/ready`.
 
 Keep both provider and signing-secret files owner-readable only (`chmod 600`).
 The gateway rejects group/world-readable secret files, caps each request at 2
@@ -182,7 +213,7 @@ remove the identified kernels through the trusted Docker operator path. Do not
 delete the Controller socket or bypass startup cleanup while a labelled kernel
 remains.
 
-The `docker-hosted` GitHub job exercises Compose and a real OpenCode container
+The `docker-hosted` GitHub job exercises Compose and a real DSH runtime container
 boundary on a Linux runner. It also starts Caddy with a temporary local CA,
 trusts that CA in the runner, and sends online preflight plus deployment smoke
 through HTTPS instead of treating the API's host port as reverse-proxy proof.

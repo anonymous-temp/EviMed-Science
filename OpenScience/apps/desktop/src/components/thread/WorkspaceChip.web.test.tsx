@@ -39,7 +39,7 @@ vi.mock("@/lib/tauri", () => ({
   isTauri: false,
   logDebug: async () => {},
   detectTools: async () => [],
-  startRuntime: async () => `http://127.0.0.1:8787/api/opencode/${mocks.projectId}`,
+  startRuntime: async () => `http://127.0.0.1:8787/api/runtime/${mocks.projectId}`,
   workspacePath: async () => `/workspace/${mocks.projectId}`,
   runtimePassword: async () => null,
   getApprovalMode: async () => "approve",
@@ -52,7 +52,7 @@ vi.mock("@/lib/tauri", () => ({
 vi.mock("@/lib/kernel", () => ({ kernelReset: async () => {} }));
 
 vi.mock("@ai4s/sdk", () => {
-  class OpenCodeClient {
+  class RuntimeClient {
     private statusCb: (s: string) => void = () => {};
     constructor(opts: Record<string, unknown>) {
       mocks.clientOpts.push(opts);
@@ -84,7 +84,7 @@ vi.mock("@ai4s/sdk", () => {
     }
     close() {}
   }
-  return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
+  return { RuntimeClient, DEFAULT_RUNTIME_URL: "http://127.0.0.1:4096" };
 });
 
 describe("WorkspaceChip hosted web mode", () => {
@@ -129,7 +129,7 @@ describe("WorkspaceChip hosted web mode", () => {
     await waitFor(() => expect(mocks.projectId).toBe("paper1"));
     await waitFor(() =>
       expect(mocks.clientOpts[mocks.clientOpts.length - 1]).toMatchObject({
-        baseUrl: "http://127.0.0.1:8787/api/opencode/paper1",
+        baseUrl: "http://127.0.0.1:8787/api/runtime/paper1",
       }),
     );
     expect(mocks.clientOpts[mocks.clientOpts.length - 1].directory).toBeUndefined();
@@ -151,7 +151,7 @@ describe("WorkspaceChip hosted web mode", () => {
     await waitFor(() => expect(mocks.projectId).toBe("review_2026"));
     await waitFor(() =>
       expect(mocks.clientOpts[mocks.clientOpts.length - 1]).toMatchObject({
-        baseUrl: "http://127.0.0.1:8787/api/opencode/review_2026",
+        baseUrl: "http://127.0.0.1:8787/api/runtime/review_2026",
       }),
     );
     expect(mocks.clientOpts[mocks.clientOpts.length - 1].directory).toBeUndefined();

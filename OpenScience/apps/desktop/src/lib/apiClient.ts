@@ -585,27 +585,31 @@ export function getWebOidcStartUrl(returnTo = "/settings"): string {
 /**
  * Which session view this deployment serves.
  *
- * A deployment decision, not a build flag: the kernel is chosen per deployment
- * and the two views read different sources, so the server says which one and a
- * kernel rollback does not need a new bundle.
+ * A deployment decision, not a build flag: the two views read different
+ * sources, and only the server knows which one it is serving.
+ *
+ * It carries no kernel name. `/api/me` still reports one, and the browser
+ * deliberately ignores it — the frontend knowing which kernel is running is
+ * how a kernel change became a frontend change (AGENTS.md: the browser never
+ * reaches a kernel). What the page needs is which stream to read, and that is
+ * what this says.
  */
 export interface WebRuntimeProfile {
-  kernel: "dsh" | "opencode";
   sessionView: "run-stream" | "legacy";
 }
 
 /**
  * The deployment's runtime profile, remembered from the last `/api/me`.
  *
- * Defaults to the retiring view rather than the new one: before the server has
- * answered, the safe assumption is the view that has been in production, not
- * the one still being accepted.
+ * Defaults to the retiring view, and must: the desktop shell has no `/api/me`
+ * to ask, and the retiring view is the only one it renders. In a browser the
+ * default holds for the one render before the control plane answers.
  */
-let runtimeProfile: WebRuntimeProfile = { kernel: "opencode", sessionView: "legacy" };
+let runtimeProfile: WebRuntimeProfile = { sessionView: "legacy" };
 
 function rememberRuntimeProfile(profile: WebRuntimeProfile | undefined): void {
   if (profile?.sessionView === "run-stream" || profile?.sessionView === "legacy") {
-    runtimeProfile = { kernel: profile.kernel, sessionView: profile.sessionView };
+    runtimeProfile = { sessionView: profile.sessionView };
   }
 }
 

@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import {
-  OpenCodeClient,
-  DEFAULT_OPENCODE_URL,
+  RuntimeClient,
+  DEFAULT_RUNTIME_URL,
   type AgentInfo,
   type CommandInfo,
   type HistoryMessage,
-  type OpenCodeEvent,
+  type RuntimeEvent,
   type PermissionAskedEvent,
   type PermissionReply,
   type QuestionAskedEvent,
@@ -52,6 +52,9 @@ import { recordRun, runInputFromEvent } from "./runs";
 import { splitReview } from "./review";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Keeps the retired kernel's name because it is persisted state, not source:
+// renaming it would silently discard the runtime URL every existing install
+// has already saved.
 const URL_KEY = "ai4s.opencodeUrl";
 const HIDDEN_KEY = "ai4s.hiddenExamples";
 /** Local session-title overrides (inline rename) — see sessionTitles below. */
@@ -79,10 +82,18 @@ function userFacingRuntimeError(error: unknown): string {
     if (knownMessage) return `${knownMessage}（错误码：${errorCode}）`;
   }
   const message = error instanceof Error ? error.message : String(error);
+  // The desktop shell bundles no agent kernel any more: `spawn_sidecar` in
+  // src-tauri answers every local start with this code, and this is the only
+  // place the person running the app ever sees it. Matched on the code and not
+  // on the sentence, so the Rust side can reword its developer-facing text
+  // without silently dropping an English string into a Chinese UI.
+  if (/^local_agent_kernel_removed\b/.test(message)) {
+    return "此版本的桌面客户端不再内置智能体运行时。请使用托管部署，或在本机启动 evimed-web 本地配置（pnpm dev:evimed）后连接。";
+  }
   if (/Runtime did not reconnect after creating the session folder/i.test(message)) {
     return "创建任务空间后未能连接科研服务，请重试或联系管理员。";
   }
-  if (/Could not open OpenCode event stream|OpenCode \/event returned/i.test(message)) {
+  if (/Could not open the runtime event stream|Runtime \/event returned/i.test(message)) {
     return "无法连接 EviMed 科研服务。";
   }
   if (/Model not found|ProviderModelNotFoundError/i.test(message)) {
@@ -92,8 +103,8 @@ function userFacingRuntimeError(error: unknown): string {
 }
 
 function initialUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_OPENCODE_URL;
-  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_OPENCODE_URL;
+  if (typeof window === "undefined") return DEFAULT_RUNTIME_URL;
+  return window.localStorage.getItem(URL_KEY) ?? DEFAULT_RUNTIME_URL;
 }
 function initialHidden(): string[] {
   if (typeof window === "undefined") return [];
@@ -132,7 +143,7 @@ interface RuntimeState {
   sessions: SessionMeta[];
   /** Local session-title overrides from inline rename, by session id.
    *  TODO: persist server-side once the SDK grows a session rename/update
-   *  method (OpenCodeClient has none today) — until then overrides live in
+   *  method (RuntimeClient has none today) — until then overrides live in
    *  localStorage and win over the server title at display time. */
   sessionTitles: Record<string, string>;
   /** Set (or, with an empty title, clear) a session's local title override. */
@@ -148,7 +159,7 @@ interface RuntimeState {
   defaultModel: string | null;
   researchAgents: WebResearchAgent[];
   researchSessionBindings: Record<string, WebResearchSession>;
-  /** Hosted run currently accounting for each active OpenCode turn. */
+  /** Hosted run currently accounting for each active runtime turn. */
   activeAgentRuns: Record<string, string>;
   draftResearchAgent: WebResearchAgent | null;
   specialtySelectionPending: boolean;
@@ -231,7 +242,7 @@ interface RuntimeState {
   installSkill: (text: string) => Promise<string | null>;
 }
 
-let client: OpenCodeClient | null = null;
+let client: RuntimeClient | null = null;
 /** Unhook the current client's status listener BEFORE closing it — teardown
  *  emits "offline", and a reconnect attempt must not flash that at the user. */
 let clientStatusUnsub: (() => void) | null = null;
@@ -316,7 +327,7 @@ const LIVE_FOLD_MS = 250;
 const liveFoldLast = new Map<string, number>();
 const liveFoldPending = new Map<
   string,
-  { sessionId: string; timer: number; event: Extract<OpenCodeEvent, { type: "tool.updated" }> }
+  { sessionId: string; timer: number; event: Extract<RuntimeEvent, { type: "tool.updated" }> }
 >();
 
 /** Coalescing for streamed agent text: text.updated fires per token and every
@@ -327,14 +338,14 @@ const liveFoldPending = new Map<
 const textFoldLast = new Map<string, number>();
 const textFoldPending = new Map<
   string,
-  { sessionId: string; timer: number; event: Extract<OpenCodeEvent, { type: "text.updated" }> }
+  { sessionId: string; timer: number; event: Extract<RuntimeEvent, { type: "text.updated" }> }
 >();
 
 /** Apply every buffered text fold for a session NOW (timer or not), in arrival
  *  order. Called before any non-text event folds, and at turn end/interrupt,
  *  so the terminal text state is always complete. */
 function flushTextFolds(sessionId: string, set: StoreSet) {
-  const events: Extract<OpenCodeEvent, { type: "text.updated" }>[] = [];
+  const events: Extract<RuntimeEvent, { type: "text.updated" }>[] = [];
   for (const [partId, p] of textFoldPending) {
     if (p.sessionId !== sessionId) continue;
     window.clearTimeout(p.timer);
@@ -436,7 +447,7 @@ type StoreGet = () => RuntimeState;
 /** Replace transient interactive requests with the runtime's current truth.
  *  SSE frames are not replayed by every OpenCode version, so reconnecting must
  *  also remove requests that resolved while the browser was offline. */
-async function refreshInteractiveRequests(c: OpenCodeClient, set: StoreSet): Promise<void> {
+async function refreshInteractiveRequests(c: RuntimeClient, set: StoreSet): Promise<void> {
   const [questions, permissions] = await Promise.all([
     c.listQuestions(),
     c.listPermissions(),
@@ -445,7 +456,7 @@ async function refreshInteractiveRequests(c: OpenCodeClient, set: StoreSet): Pro
   set({ questions, permissions });
 }
 
-async function refreshSessionIndex(c: OpenCodeClient, set: StoreSet): Promise<void> {
+async function refreshSessionIndex(c: RuntimeClient, set: StoreSet): Promise<void> {
   const sessions = await c.listSessions();
   if (client !== c) return;
   set((s) => {
@@ -458,7 +469,7 @@ async function refreshSessionIndex(c: OpenCodeClient, set: StoreSet): Promise<vo
 /** Recover state that may have changed while an established SSE connection was
  *  down. EventSource reconnects the transport; these reads repair missed state. */
 async function recoverAfterEventReconnect(
-  c: OpenCodeClient,
+  c: RuntimeClient,
   set: StoreSet,
   get: StoreGet,
 ): Promise<void> {
@@ -743,8 +754,8 @@ async function performTurn(
   }
 }
 
-/** The live OpenCode client (Settings talks to the runtime's config API directly). */
-export function getClient(): OpenCodeClient | null {
+/** The live runtime client (Settings talks to the runtime's config API directly). */
+export function getClient(): RuntimeClient | null {
   return client;
 }
 
@@ -979,7 +990,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // The bundled sidecar requires per-run Basic auth; browser dev (no Tauri)
     // gets null and connects to a user-run passwordless server.
     const password = await runtimePassword();
-    const c = new OpenCodeClient({
+    const c = new RuntimeClient({
       baseUrl: get().serverUrl,
       directory: !hasWebApi ? (directory ?? undefined) : undefined,
       password: password ?? undefined,
@@ -1270,7 +1281,10 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       void logDebug(`bootstrap FAILED: ${msg}`);
-      set({ error: msg });
+      // The debug log keeps the raw text; the banner is what a person reads,
+      // so it gets the translated wording — a start failure that shows only a
+      // transport string is how "the app did nothing" gets reported to us.
+      set({ error: userFacingRuntimeError(err) });
       return false;
     }
     await get().connectRetry();
@@ -1412,7 +1426,7 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     // all operate where the session's files live. Sessions with no recorded
     // folder, or that already match the active folder, skip this.
     const dir = get().sessions.find((s) => s.id === id)?.directory;
-    // Hosted OpenCode always reports its container mount as `/workspace`.
+    // The hosted runtime always reports its container mount as `/workspace`.
     // That is not a user-selectable project folder; passing it back to the
     // hosted command boundary is both meaningless and correctly rejected.
     const isHostedRuntimeMount = hasWebApi && /^\/workspace\/?$/.test(dir ?? "");
@@ -1607,7 +1621,15 @@ export const useRuntimeStore = create<RuntimeState>((set, get) => ({
     set({ hiddenExamples: next });
   },
 
-  // Install a skill by asking the agent (uses OpenCode's customize-opencode skill) (#1).
+  // Install a skill by asking the agent (#1).
+  //
+  // Unreachable in this build, and left standing rather than half-rewritten:
+  // it drives the SDK client, which needs a kernel the browser can address
+  // directly — the desktop shell no longer bundles one and the hosted
+  // pass-through route is retired. The prompt below still names the retired
+  // kernel's own skill and skill path, which is exactly why it cannot be
+  // repointed by guesswork: whoever restores skill installation has to say
+  // what the replacement writes, and where.
   installSkill: async (text) => {
     if (!client) {
       set({ error: "Connect the runtime first to install skills." });
@@ -1747,7 +1769,7 @@ export function toolPresentation(
 
 export function foldEvent(
   state: FoldState,
-  event: OpenCodeEvent,
+  event: RuntimeEvent,
   opts?: { shellTurn?: boolean },
 ): FoldState {
   const blocks = [...state.blocks];

@@ -31,10 +31,11 @@ const mocks = vi.hoisted(() => {
     getWebOidcStartUrl: vi.fn(() => "/api/auth/oidc/start?returnTo=%2Fsettings"),
     loginWeb: vi.fn(),
     workspaceBase: vi.fn(),
-    // The kernel the control plane reports. `opencode` is the default because
-    // that is what these tests were written against and what a rollback
-    // restores; the F1 settings cleanup is asserted separately, under `dsh`.
-    kernel: "opencode" as "dsh" | "opencode",
+    // The session view the control plane reports. `legacy` is the default
+    // because it is what these tests were written against and what the desktop
+    // shell renders; the F1 settings cleanup is asserted separately, under
+    // `run-stream`.
+    sessionView: "legacy" as "run-stream" | "legacy",
   };
 });
 
@@ -70,7 +71,7 @@ vi.mock("@/lib/apiClient", () => ({
   hasCommandBackend: true,
   hasWebApi: true,
   loginWeb: mocks.loginWeb,
-  webRuntimeProfile: () => ({ kernel: mocks.kernel, sessionView: mocks.kernel === "dsh" ? "run-stream" : "legacy" }),
+  webRuntimeProfile: () => ({ sessionView: mocks.sessionView }),
   WEB_SESSION_ENDED_EVENT: "open-science:web-session-ended",
 }));
 
@@ -267,9 +268,9 @@ describe("SettingsPage hosted web model configuration", () => {
   });
 });
 
-describe("SettingsPage under the DSH kernel (F1 settings cleanup, §18.3)", () => {
+describe("SettingsPage under the server-managed runtime (F1 settings cleanup, §18.3)", () => {
   beforeEach(() => {
-    mocks.kernel = "dsh";
+    mocks.sessionView = "run-stream";
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u1", name: "Alice" } });
     mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "password" });
     mocks.workspaceBase.mockResolvedValue("/workspace/default");

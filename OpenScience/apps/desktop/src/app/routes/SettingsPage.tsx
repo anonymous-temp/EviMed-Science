@@ -66,32 +66,33 @@ import { inputClasses } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 /**
- * Settings. ONE configuration surface: everything talks to the bundled
- * OpenCode's own config/auth API — no separate "model key" concept.
+ * Settings. ONE configuration surface: in the retiring session view everything
+ * talks to a local kernel's own config/auth API — no separate "model key".
  *
- * Except under the DSH kernel, where three of those cards describe something
- * that no longer exists (§18.3, F1 「设置清理」). The runtime URL, the provider
- * catalogue and the MCP server list are all the retiring kernel's own config
- * API; a DSH deployment has a server-managed runtime, a gateway-pinned model
- * and a bundle-mounted tool set, so those cards would let a person configure
- * nothing and read as though they still could. Account, projects, resources
- * and readiness stay — they are the control plane's, not the kernel's.
+ * Under the managed runtime three of those cards describe something that does
+ * not exist (§18.3, F1 「设置清理」). The runtime URL, the provider catalogue
+ * and the MCP server list are all a local kernel's config API; a hosted
+ * deployment has a server-managed runtime, a gateway-pinned model and a
+ * bundle-mounted tool set, so those cards would let a person configure nothing
+ * and read as though they still could. Account, projects, resources and
+ * readiness stay — they are the control plane's, not the kernel's.
  *
- * Hidden, not deleted, and keyed on the kernel the server reports rather than
- * on a build flag: `OPEN_SCIENCE_RUNTIME_KERNEL=opencode` is a one-line
- * rollback, and a rollback that needs a new bundle is not a rollback.
+ * Hidden rather than deleted, and keyed on what the server says it serves
+ * rather than on a build flag, because the same page also renders in the
+ * desktop shell, where there is no control plane to ask and the local cards
+ * are all there is.
  */
 export function SettingsPage() {
   const { status, serverUrl, setServerUrl, connect, disconnect, clearHostedSession, defaultModel, loadCatalog } =
     useRuntimeStore();
   const connected = status === "ready";
   const hostedWeb = hasWebApi && !isTauri;
-  // Defaults to the retiring kernel, for the same reason `SessionRoute` does:
-  // before `/api/me` answers, the safe assumption is what has been in
-  // production, not what is still being accepted.
-  const [kernel, setKernel] = useState(() => webRuntimeProfile().kernel);
-  /** The runtime, its models and its tools are the server's under DSH. */
-  const managedRuntime = hostedWeb && kernel === "dsh";
+  // Defaults to the retiring view, for the same reason `SessionRoute` does:
+  // it is what the desktop shell renders, and in a browser it holds only until
+  // `/api/me` answers.
+  const [sessionView, setSessionView] = useState(() => webRuntimeProfile().sessionView);
+  /** In a hosted deployment the runtime, its models and its tools are the server's. */
+  const managedRuntime = hostedWeb && sessionView === "run-stream";
 
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [authMethods, setAuthMethods] = useState<Record<string, ProviderAuthMethod[]>>({});
@@ -193,7 +194,7 @@ export function SettingsPage() {
     void fetchWebMe()
       .then((me) => {
         setWebAccount(me ? me.user.name || me.user.id : null);
-        setKernel(webRuntimeProfile().kernel);
+        setSessionView(webRuntimeProfile().sessionView);
       })
       .catch(() => setWebAccount(null));
     void fetchWebAuthMethods()
@@ -465,7 +466,7 @@ export function SettingsPage() {
         <p className="mt-0.5 text-xs text-muted">
           {hostedWeb
             ? "托管 API 会话、项目运行时，以及由服务端管理的工作区。"
-            : "这里的所有配置都作用于内置的 OpenCode 运行时 — 单一配置，无副本。"}
+            : "这里的所有配置都作用于所连接的智能体运行时 — 单一配置，无副本。"}
         </p>
 
         {hasWebApi && (
@@ -553,7 +554,7 @@ export function SettingsPage() {
         {/* ---- Agent runtime ---- */}
         <Card
           title="智能体运行时"
-          hint={hostedWeb ? "本项目的服务端托管 OpenCode 代理" : "opencode serve，通过其 HTTP + SSE API 驱动"}
+          hint={hostedWeb ? "本项目的服务端托管运行时代理" : "本机运行时，通过其 HTTP + SSE 接口驱动"}
         >
           <div className="flex items-center gap-2">
             <input

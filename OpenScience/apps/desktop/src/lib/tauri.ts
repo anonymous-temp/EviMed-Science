@@ -20,7 +20,15 @@ export type ConfigureResult =
   | { ok: false; reason: "not-desktop" }
   | { ok: false; reason: "error"; message: string };
 
-/** Start the bundled OpenCode sidecar (desktop only). Returns its base URL. */
+/**
+ * Start this project's agent runtime and return its base URL.
+ *
+ * Hosted backends start the server-managed runtime. The desktop shell bundles
+ * no agent kernel any more, so there it always REJECTS, with the named
+ * `local_agent_kernel_removed` error — callers must surface that rather than
+ * read `null` as "nothing to do", which is how a dead runtime comes to look
+ * like an app that is merely still connecting.
+ */
 export async function startRuntime(): Promise<string | null> {
   if (!hasCommandBackend) return null;
   return invokeCommand<string>("start_runtime");

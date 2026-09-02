@@ -170,7 +170,7 @@ export function fileInspectorFromBlock(
   a: ArtifactBlock,
   { hostedRuntime = false }: { hostedRuntime?: boolean } = {},
 ): FilePreviewInspector | NotebookFileInspector {
-  // OpenCode reports paths from inside the managed runtime container. The
+  // The runtime reports paths from inside its own container. The
   // hosted command boundary deliberately accepts only workspace-relative
   // paths, so remove only that known mount prefix before preview/download.
   const path = hostedRuntime && a.path.startsWith("/workspace/")

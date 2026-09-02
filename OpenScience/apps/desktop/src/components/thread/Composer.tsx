@@ -67,7 +67,7 @@ const APPROVAL_OPTIONS: {
 
 /**
  * The "ask anything" composer. Static mock sessions pass no `onSend`; the live
- * OpenCode session passes one to submit prompts to the runtime. Attached
+ * A live session passes one to submit prompts to the runtime. Attached
  * workspace files show as removable chips above the input, not as prompt text.
  *
  * Two prefix modes (only when their handler is provided):

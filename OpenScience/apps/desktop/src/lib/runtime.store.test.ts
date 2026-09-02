@@ -42,15 +42,20 @@ const mocks = vi.hoisted(() => ({
     mocks.approvalMode = mode;
     return "http://127.0.0.1:1";
   }),
-  /** Constructor options every OpenCodeClient was created with. */
+  /** Constructor options every RuntimeClient was created with. */
   clientOpts: [] as Record<string, unknown>[],
+  /** Message the next startRuntime() rejects with; null starts normally. */
+  startRuntimeError: null as string | null,
 }));
 
 vi.mock("./tauri", () => ({
   isTauri: true,
   logDebug: async () => {},
   detectTools: async () => [],
-  startRuntime: async () => "http://127.0.0.1:1",
+  startRuntime: async () => {
+    if (mocks.startRuntimeError) throw new Error(mocks.startRuntimeError);
+    return "http://127.0.0.1:1";
+  },
   workspacePath: async () => "/ws/base",
   setWorkspace: mocks.setWorkspace,
   newDatedWorkspace: mocks.newDatedWorkspace,
@@ -60,7 +65,7 @@ vi.mock("./tauri", () => ({
 }));
 vi.mock("./kernel", () => ({ kernelReset: mocks.kernelReset }));
 vi.mock("@ai4s/sdk", () => {
-  class OpenCodeClient {
+  class RuntimeClient {
     private statusCb: (s: string) => void = () => {};
     constructor(opts: Record<string, unknown>) {
       mocks.clientOpts.push(opts);
@@ -80,7 +85,7 @@ vi.mock("@ai4s/sdk", () => {
       if (mocks.failConnects > 0) {
         mocks.failConnects--;
         this.statusCb("error");
-        throw new Error("Could not open OpenCode event stream");
+        throw new Error("Could not open the runtime event stream");
       }
       this.statusCb("ready");
     }
@@ -167,7 +172,7 @@ vi.mock("@ai4s/sdk", () => {
       this.statusCb("offline");
     }
   }
-  return { OpenCodeClient, DEFAULT_OPENCODE_URL: "http://127.0.0.1:4096" };
+  return { RuntimeClient, DEFAULT_RUNTIME_URL: "http://127.0.0.1:4096" };
 });
 
 import type { ArtifactBlock } from "@ai4s/shared";
@@ -188,6 +193,7 @@ beforeEach(async () => {
   mocks.questions = [];
   mocks.permissions = [];
   mocks.approvalMode = "approve";
+  mocks.startRuntimeError = null;
   useRuntimeStore.setState({
     currentId: null,
     workspacePinned: false,
@@ -216,7 +222,7 @@ describe("runtime authentication", () => {
 
   it("clears account-derived runtime memory after hosted logout", () => {
     useRuntimeStore.setState({
-      serverUrl: "/api/opencode/private-project",
+      serverUrl: "/api/runtime/private-project",
       sessions: [{ id: "ses_private", title: "Private session" }] as never[],
       currentId: "ses_private",
       threads: {
@@ -911,5 +917,27 @@ describe("streamed text throttling", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("the desktop shell without a local kernel", () => {
+  // This build bundles no agent kernel, so `start_runtime` always fails. The
+  // property under test is not that it fails — it is that the failure ARRIVES:
+  // the whole migration's recurring defect is a path that stops working while
+  // looking exactly like nothing happened, and bootstrap swallowing this one
+  // would leave the launch screen sitting on "connecting" forever.
+  it("reports the removed local kernel in words, and says where the product still runs", async () => {
+    mocks.startRuntimeError =
+      "local_agent_kernel_removed: this desktop build bundles no agent kernel; " +
+      "use the hosted deployment, or run the local evimed-web profile (pnpm dev:evimed) and point this shell at it";
+
+    const started = await useRuntimeStore.getState().bootstrap();
+
+    expect(started).toBe(false);
+    const error = useRuntimeStore.getState().error ?? "";
+    expect(error).toContain("不再内置智能体运行时");
+    expect(error).toContain("evimed-web");
+    // The raw code is a developer's log line, not something to show a reader.
+    expect(error).not.toContain("local_agent_kernel_removed");
   });
 });

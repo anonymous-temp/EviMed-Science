@@ -51,7 +51,7 @@ describe("WebReadinessCard", () => {
         },
         runtime: {
           ok: true,
-          mode: "opencode",
+          mode: "kernel",
           sandboxMode: "docker",
           networkMode: "bridge",
           networkEgress: "explicitly_allowed",
@@ -83,7 +83,7 @@ describe("WebReadinessCard", () => {
     expect(screen.getByText("2026.07.10-release.1 · v0.1.3 · 1234567890ab")).toBeInTheDocument();
     expect(screen.getByText("50 MiB 文件 · 1 GiB 项目 · 2 任务 · 64 代理 · 30s 配额检查")).toBeInTheDocument();
     expect(screen.getByText("local · 保留 30 天 · 已加密 · 恢复演练")).toBeInTheDocument();
-    expect(screen.getByText("opencode · docker · bridge · explicitly_allowed · acknowledged")).toBeInTheDocument();
+    expect(screen.getByText("kernel · docker · bridge · explicitly_allowed · acknowledged")).toBeInTheDocument();
     expect(screen.getByText("SaaS Profile")).toBeInTheDocument();
     expect(screen.getByText("individual-saas · individual-account · SaaS 技术边界通过")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchWebReadiness).toHaveBeenCalledTimes(1));

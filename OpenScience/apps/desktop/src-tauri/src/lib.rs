@@ -1,5 +1,7 @@
-// EviMed — Tauri 2 entry. Hosts the React frontend and supervises the
-// bundled OpenCode sidecar (isolated config/data + dedicated port; killed on exit).
+// EviMed — Tauri 2 entry. Hosts the React frontend and the local side of the
+// shell: notebook kernels, Jupyter, the preview server and the workspace. It
+// no longer supervises an agent kernel — that moved to the hosted control
+// plane, and `runtime::start_runtime` now answers with a named error.
 mod artifact_file;
 mod debug_log;
 mod examples;
