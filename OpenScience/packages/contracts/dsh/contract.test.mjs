@@ -166,10 +166,10 @@ const SESSION_EVENTS_THE_TRANSCRIPT_IS_BUILT_FROM = Object.freeze([
 const NOT_EXERCISED_BY_THE_RECORDING = Object.freeze([
   Object.freeze({
     type: "subagent/descriptor",
-    why: "the 2026-09-01 re-recording drove one short single-agent turn and never spawned a subagent, so no live frame carries this type.",
-    costs: "the run tree the UI draws is built from these descriptors (dshRuntimeAdapter maps them to subagents[] and to subagent/started), and no recorded frame proves the port still decodes the shape the kernel sends.",
-    coveredOnlyBy: "golden-frames.json `synthesized`, which declares of itself that it was not recorded, plus a unit test in apps/server/test/dshEventPump.test.mjs written against that same synthetic shape. Neither is wire certification.",
-    clearedBy: "a re-recording whose prompt delegates to a subagent; then delete this entry, or the assertion below fails on a stale exception.",
+    why: "a 2026-09-02 recording against a live 0.1.2-alpha.5 kernel DID spawn a subagent — the model called the `subagent` tool, the child ran and finished — and this type still did not appear in the parent session stream. The earlier diagnosis (a single-agent turn that never delegated) is disproved. Evidence: apps/server/test/fixtures/dsh/evidence/alpha5-subagent-run.json.",
+    costs: "the run tree the UI draws is built from these descriptors (dshRuntimeAdapter:593 fills subagents[], :810 emits subagent/started), so if alpha.5 does not emit the type at all, the tree is empty in production and nothing says why. That is now an open question about the kernel, not a gap in the recording.",
+    coveredOnlyBy: "golden-frames.json `synthesized`, which declares of itself that it was not recorded, plus a unit test in apps/server/test/dshEventPump.test.mjs written against that same synthetic shape. Neither is wire certification — and the live run suggests the synthetic shape may not be a shape the kernel emits.",
+    clearedBy: "answering what alpha.5 actually announces. The live run carried the child on the HOST events stream as `api-session/added` with `parentSessionId` and `origin: \"subagent\"`, not as a session event; `subagents/list` (dshRuntimeAdapter:330) is a second, pull-shaped path that may be the supported one now. Either the adapter reads what the kernel sends, or the recording follows the child session too — deciding which is the work, and a re-recording alone will not clear this.",
   }),
 ]);
 
