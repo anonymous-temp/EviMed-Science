@@ -180,27 +180,66 @@ describe("the browser's own run vocabulary", () => {
     expect(view.deliverables[0].receipt?.files[0].path).toBe("clinical-evidence-report.md");
   });
 
-  it("hears the kernel ask, and does not turn one replayed request into two cards", () => {
-    // The whole point of the listener: an approval or a question the browser
-    // never registered for is not mishandled, it never arrives, and the page
-    // shows nothing while the run sits blocked.
+  it("hears the kernel ask in the shape the kernel actually asks", () => {
+    // The frames are the control plane's, forwarded from the kernel: one event
+    // name per kind, three states told apart by `status`, and `eventId` as the
+    // id — which is also the path segment the answer is POSTed to, so decoding
+    // it into any other field name breaks the reply and nothing else.
     const view = fold(emptyRunView("run_1"), [
-      { type: "approval/requested", ...at(1), requestId: "r1", tool: "bash", summary: "运行需要访问工作区之外的路径", detail: "cat /etc/hosts" },
-      { type: "question/requested", ...at(2), requestId: "q1", question: "要包含 2019 年前的文献吗？", options: [{ id: "yes", label: "要" }, { id: "no", label: "不要" }] },
-      // Replayed after a reconnect: the same request, not a second one.
-      { type: "approval/requested", ...at(3), requestId: "r1", tool: "bash", summary: "运行需要访问工作区之外的路径" },
+      { type: "approval/requested", ...at(1), eventId: "ev-1", status: "pending", sessionId: "s1", request: { toolName: "bash", callId: "call_9", reason: "escalate sandbox to danger-full-access: cat /etc/hosts" } },
+      { type: "question/requested", ...at(2), eventId: "ev-2", status: "pending", sessionId: "s1", request: { question: "要包含 2019 年前的文献吗？" } },
+      // Replayed after a reconnect: the same request, not a second card.
+      { type: "approval/requested", ...at(3), eventId: "ev-1", status: "pending", sessionId: "s1", request: { toolName: "bash", callId: "call_9", reason: "escalate sandbox to danger-full-access: cat /etc/hosts" } },
     ]);
-    expect(view.interactions.map((item) => item.requestId)).toEqual(["r1", "q1"]);
+    expect(view.interactions.map((item) => item.eventId)).toEqual(["ev-1", "ev-2"]);
     expect(view.interactions[0].kind).toBe("approval");
     expect(view.interactions[0].tool).toBe("bash");
-    expect(view.interactions[1].options).toHaveLength(2);
+    expect(view.interactions[0].prompt).toContain("danger-full-access");
+    expect(view.interactions[0].detail).toBe("call_9");
+    expect(view.interactions[1].prompt).toBe("要包含 2019 年前的文献吗？");
+  });
 
-    const answered = markInteractionAnswered(view, "r1");
-    expect(answered.interactions[0].answered).toBe(true);
-    expect(answered.interactions[1].answered).toBe(false);
-    // A replay after answering must not un-answer it.
-    const replayed = applyRunFrame(answered, { type: "approval/requested", ...at(4), requestId: "r1", tool: "bash", summary: "运行需要访问工作区之外的路径" });
+  it("settles a request when the control plane says it was answered, not only when this tab answers", () => {
+    const asked = fold(emptyRunView("run_1"), [
+      { type: "approval/requested", ...at(1), eventId: "ev-1", status: "pending", request: { toolName: "bash", reason: "需要批准" } },
+    ]);
+    // Another tab answered. Before the control plane forwarded a resolution
+    // this tab kept asking forever, and a second click answered an event the
+    // kernel had already forgotten.
+    const settled = applyRunFrame(asked, { type: "approval/requested", ...at(2), eventId: "ev-1", status: "answered" });
+    expect(settled.interactions[0].answered).toBe(true);
+
+    // The local echo and the forwarded frame set the same field, so applying
+    // either after the other changes nothing.
+    expect(markInteractionAnswered(settled, "ev-1").interactions[0].answered).toBe(true);
+    const replayed = applyRunFrame(settled, { type: "approval/requested", ...at(3), eventId: "ev-1", status: "pending", request: { toolName: "bash", reason: "需要批准" } });
     expect(replayed.interactions[0].answered).toBe(true);
+  });
+
+  it("keeps a withdrawn request visible, with the reason it was taken back", () => {
+    // The kernel withdraws when its connection drops or the call is cancelled.
+    // Removing the card would leave a reader who looked away unable to tell a
+    // retracted question from one that was never asked — the same failure as
+    // an empty result standing in for an unread one.
+    const asked = fold(emptyRunView("run_1"), [
+      { type: "question/requested", ...at(1), eventId: "ev-2", status: "pending", request: { question: "要包含 2019 年前的文献吗？" } },
+    ]);
+    const gone = applyRunFrame(asked, { type: "question/requested", ...at(2), eventId: "ev-2", status: "withdrawn", reason: "runtime_disconnected" });
+    expect(gone.interactions).toHaveLength(1);
+    expect(gone.interactions[0].withdrawn).toBe("runtime_disconnected");
+    expect(gone.interactions[0].answered).toBe(false);
+  });
+
+  it("shows an unreadable request rather than dropping it", () => {
+    // No live question frame has been recorded, so the payload's field names
+    // are a guess. A guess that misses must still leave a card: the run is
+    // blocked either way, and a silent drop is the one outcome that cannot be
+    // acted on.
+    const view = fold(emptyRunView("run_1"), [
+      { type: "question/requested", ...at(1), eventId: "ev-3", status: "pending", request: { somethingNobodyHasSeen: 42 } },
+    ]);
+    expect(view.interactions).toHaveLength(1);
+    expect(view.interactions[0].prompt).toBe("运行提出了一个问题。");
   });
 
   it("surfaces a replay gap so a client that fell too far behind re-reads instead of guessing", () => {

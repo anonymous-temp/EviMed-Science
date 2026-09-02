@@ -667,6 +667,37 @@ export async function createWebProject(id: string, name = id): Promise<WebProjec
   return parseApiResponse<WebProject>(res);
 }
 
+/**
+ * Answers one question the kernel raised during a run.
+ *
+ * The id is the kernel's `eventId`, carried through the stream untouched: the
+ * control plane proves the run belongs to the caller's project before it will
+ * route an answer, and the event id alone would otherwise let a reply address
+ * a question asked in a project the caller cannot see.
+ *
+ * A `deny` and a failed send are not the same outcome. This throws on failure
+ * so the card can say the run is still waiting, rather than clearing itself on
+ * a reply that never arrived.
+ * @param runId @param eventId @param decision @param answer text, for `answer`
+ */
+export async function answerRunInteraction(
+  runId: string,
+  eventId: string,
+  decision: "allow" | "deny" | "answer",
+  answer?: string,
+): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("runs.interactions.answer");
+  const res = await fetchWithWebAuth(
+    apiUrl(`/runs/${encodeURIComponent(runId)}/interactions/${encodeURIComponent(eventId)}`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, ...(answer ? { answer } : {}) }),
+    },
+  );
+  await parseApiResponse<{ eventId: string; accepted: boolean }>(res);
+}
+
 export async function listWebResearchAgents(): Promise<WebResearchAgent[]> {
   if (!hasWebApi) throw new BackendUnavailableError("agents.list");
   const res = await fetchWithWebAuth(apiUrl("/agents"));

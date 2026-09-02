@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { Composer } from "@/components/thread/Composer";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunStreamThread } from "@/components/run/RunStreamThread";
-import { dispatchWebAgentRun, fetchWebRunTranscript, listWebAgentRuns } from "@/lib/apiClient";
+import { answerRunInteraction, dispatchWebAgentRun, fetchWebRunTranscript, listWebAgentRuns } from "@/lib/apiClient";
 import { useRunStream } from "@/lib/useRunStream";
 
 /**
@@ -41,7 +41,7 @@ export function RunStreamSessionPage() {
     async () => (runSessionId ? fetchWebRunTranscript(runSessionId) : null),
     [runSessionId],
   );
-  const { view, status, retries, reconnect } = useRunStream(runId, { fetchTranscript, initialState: runStatus });
+  const { view, status, retries, reconnect, markAnswered } = useRunStream(runId, { fetchTranscript, initialState: runStatus });
 
   // Reopening a session from the URL has to find its run again; the run id is
   // not in the URL because a session can be asked more than one thing.
@@ -88,19 +88,36 @@ export function RunStreamSessionPage() {
     [navigate, runSessionId, sending, sessionId],
   );
 
+  /**
+   * Sends one answer, then marks the card locally.
+   *
+   * The control plane also publishes `status: "answered"` to every listener,
+   * so the local mark is an echo rather than the record — it keeps the button
+   * from staying live for the length of the round trip. Errors propagate: the
+   * card has to be able to say the run is still waiting.
+   */
+  const answerInteraction = useCallback(
+    async (answer: { eventId: string; decision: "allow" | "deny" | "answer"; text?: string }) => {
+      if (!runId) return;
+      await answerRunInteraction(runId, answer.eventId, answer.decision, answer.text);
+      markAnswered(answer.eventId);
+    },
+    [markAnswered, runId],
+  );
+
   const working = status === "connecting" || status === "live";
 
   return (
     <div className="mx-auto flex h-full w-full max-w-content flex-col gap-4 p-4">
       <div className="flex-1 overflow-y-auto">
         {runId ? (
-          // No `onAnswerInteraction`: the control plane does not forward the
-          // kernel's `waterfall` frames and has no route that accepts a reply
-          // for one, so there is nothing to hand an answer to. The thread still
-          // shows the request and says the channel is missing — see
-          // `RunInteractionPrompt`. Passing a sender here is the whole change
-          // once the server half exists.
-          <RunStreamThread view={view} status={status} retries={retries} onReconnect={reconnect} />
+          <RunStreamThread
+            view={view}
+            status={status}
+            retries={retries}
+            onReconnect={reconnect}
+            onAnswerInteraction={answerInteraction}
+          />
         ) : (
           <EmptyState
             title="开始一次研究"
