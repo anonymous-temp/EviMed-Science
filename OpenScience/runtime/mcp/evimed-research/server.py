@@ -16,10 +16,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
+import science_connectors
 import drug_assessment
 import open_access_fulltext
 import official_pages
@@ -713,6 +714,17 @@ TOOL_DEFINITIONS = [
         ),
     },
 ]
+
+# The seven first-party science connectors, mounted from their own module.
+#
+# They existed, were tested, and were reachable by nothing: the module ran as a
+# standalone stdio bridge that no deployment starts, so every tool in it was
+# absent from `tools/list` and therefore from the model. Mounting them here is
+# the whole of "reachable" — the outbound path was already correct, since
+# `public_sources._open_remote` sends every URL through the server gateway when
+# one is configured, and all eight hosts are on its allowlist.
+TOOL_DEFINITIONS.extend(science_connectors.tool_definitions())
+
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
 
@@ -1487,6 +1499,50 @@ def call_tool(name, arguments):
             )
         arguments = {key: value for key, value in arguments.items() if key != "action"}
 
+    if name in science_connectors.TOOL_INDEX:
+        connector = science_connectors.TOOL_INDEX[name]
+        try:
+            payload = science_connectors.direct_query(connector, arguments)
+        except ValueError as error:
+            # The connector validated its own arguments a second time and
+            # refused. Reported as invalid input rather than as a source
+            # failure: nothing was asked of the network.
+            return failure(
+                "invalid_input",
+                "Invalid input for %s: %s" % (name, error),
+                False,
+                "Stop until the tool input matches its published JSON schema.",
+                ["Correct the named field and retry with only declared inputs."],
+            )
+        except public_sources.PublicSourceError as error:
+            return failure(
+                error.code,
+                str(error),
+                error.retryable,
+                "Stop after one retry if the public source remains unavailable.",
+                ["Retry once, then report the source as unavailable rather than substituting another."],
+            )
+        # The URL the connector actually requested becomes the result's source
+        # record, not just prose in the summary. The ToolResult contract
+        # refuses success evidence without one, and it is right to: a record
+        # whose address a reader cannot recover is not evidence, which is the
+        # standard every other source here is held to.
+        requested = str(payload.get("source") or "")
+        return _normalize_tool_result(
+            name,
+            success(
+                "%s returned a result from %s." % (name, requested or "the connector"),
+                data=payload.get("data"),
+                sources=[{
+                    "id": connector,
+                    "source": connector,
+                    "url": requested,
+                    "retrievedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                }],
+            ),
+            arguments,
+            _scope(),
+        )
     if name == "health":
         return success(
             "EviMed Research MCP is ready.",

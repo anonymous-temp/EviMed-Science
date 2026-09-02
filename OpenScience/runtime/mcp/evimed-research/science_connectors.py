@@ -51,6 +51,31 @@ CONNECTORS = {
     },
 }
 
+# The tool name a caller sees, mapped back to the connector that answers it.
+# Derived rather than written twice: the research server mounts these by
+# iterating `CONNECTORS`, so a connector added above is mountable without a
+# second edit, and a rename cannot leave the two spellings disagreeing.
+TOOL_INDEX = {entry["tool"]: connector for connector, entry in CONNECTORS.items()}
+
+
+def tool_definitions():
+    """MCP `tools/list` entries for the seven connectors.
+
+    Kept here rather than in the server's own table for the reason above: the
+    schema each connector validates its arguments against is the schema the
+    model is shown, so they cannot drift into a tool that advertises a field it
+    then refuses.
+    """
+    return [
+        {
+            "name": entry["tool"],
+            "description": entry["description"],
+            "inputSchema": entry["schema"],
+        }
+        for entry in CONNECTORS.values()
+    ]
+
+
 MAX_REQUEST_LINE_BYTES = 64 * 1024
 MAX_STRING_CHARS = 512
 

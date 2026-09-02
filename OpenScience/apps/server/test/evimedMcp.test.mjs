@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFile as execFileCallback, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { loadConfig } from "../src/config.mjs";
 import { SCIENCE_CONNECTORS } from "../src/runtimeManager.mjs";
 import { MCP_CLIENT_PLUGIN, WORKLOAD_TOKEN_REF } from "../src/dshProfilePatch.mjs";
@@ -883,13 +884,30 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
 // both sides was internally consistent: the Python suite asserted the server's
 // own names, and the manifest validator asserted the vocabulary's own names.
 //
-// Reading the server's source is the point. A test that imported a shared
-// constant would prove the two agree about a constant, not that the server
-// publishes what the vocabulary promises.
+// Asking the server is the point. A test that imported a shared constant would
+// prove the two agree about a constant, not that the server publishes what the
+// vocabulary promises.
+//
+// It used to ask by grepping `server.py` for `"name": "..."` lines. That read
+// the source text rather than the roster, and it stopped being true the moment
+// a tool arrived from somewhere other than that file's own literal — seven
+// connectors mounted from `science_connectors.py` were invisible to it while
+// being published perfectly well. Importing the module and reading
+// `TOOL_DEFINITIONS` asks for the result instead of inferring it from the
+// mechanism, and cannot be fooled by however the list is assembled.
+const execFile = promisify(execFileCallback);
+
+async function publishedToolNames() {
+  const script = "import json,sys; sys.path.insert(0, '.'); import server; print(json.dumps([t['name'] for t in server.TOOL_DEFINITIONS]))";
+  const { stdout } = await execFile("python3", ["-c", script], {
+    cwd: path.join(repoRoot, "runtime/mcp/evimed-research"),
+  });
+  return JSON.parse(stdout);
+}
+
 test("the MCP server publishes exactly the tools the vocabulary names", async () => {
-  const source = await readFile(path.join(repoRoot, "runtime/mcp/evimed-research/server.py"), "utf8");
-  const published = [...source.matchAll(/^\s*"name": "([a-z][a-z0-9_]*)",$/gm)].map((match) => match[1]);
-  assert.ok(published.length >= 20, `only ${published.length} tool names found; the extraction pattern has drifted`);
+  const published = await publishedToolNames();
+  assert.ok(published.length >= 20, `only ${published.length} tool names found; the roster did not load`);
 
   const declared = [...MCP_TOOL_BASE_NAMES];
   assert.deepEqual([...published].sort(), [...declared].sort());
@@ -908,8 +926,7 @@ test("the MCP server publishes exactly the tools the vocabulary names", async ()
 // how a manifest could name a tool nobody publishes.
 test("every tool an agent package may declare is one the server publishes", async () => {
   const { EVIMED_AGENT_TOOL_IDS } = await import("../src/agentRegistry.mjs");
-  const source = await readFile(path.join(repoRoot, "runtime/mcp/evimed-research/server.py"), "utf8");
-  const published = new Set([...source.matchAll(/^\s*"name": "([a-z][a-z0-9_]*)",$/gm)].map((match) => match[1]));
+  const published = new Set(await publishedToolNames());
   for (const tool of EVIMED_AGENT_TOOL_IDS) {
     assert.ok(published.has(tool), `agent packages may declare "${tool}", which the MCP server does not publish`);
   }

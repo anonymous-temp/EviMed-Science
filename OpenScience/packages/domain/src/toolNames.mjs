@@ -70,6 +70,14 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'research_topic_selection',
   'peer_review',
   'drug_safety_analysis',
+  // first-party science connectors (mounted from science_connectors.py)
+  'search_papers',
+  'search_biomedical_records',
+  'search_materials',
+  'get_fred_series',
+  'get_space_weather_alerts',
+  'get_weather',
+  'get_usgs_water_data',
   // local tools
   'data_source_catalog',
   'evidence_deduplicate',
