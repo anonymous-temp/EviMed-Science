@@ -885,3 +885,87 @@ test("learning the contract does not spend the budget for doing the work", async
   const looping = Array.from({ length: 6 }, () => sequence[1]);
   assert.equal(charge(looping, 3).content, 3, "beyond the allowance an unreadable submission is charged normally");
 });
+
+// The gate ledger has to record which rule spoke, not only what it said.
+//
+// `recordGateRun` stored `issues: verdict.issues` and nothing else. Every
+// finding was a message, so the only way to ask "how often does rule X fire, and
+// how often is it wrong" was to match our own prose back into an id — regex over
+// language to recover something the code already knew, which is the mistake this
+// gate keeps paying for. Principle #4 wants an observed distribution before a
+// blocking decision changes, and there was no axis to compute one along.
+test("a gate run records the check that raised each issue, not only the issue", async () => {
+  const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
+  const ctx = harness();
+  /** @type {Map<string, any>} */
+  const gateRows = new Map();
+  ctx.provide("evimedRun", {
+    runMirror: { put: async () => {}, entries: () => [] },
+    planIndex: { put: async () => {} },
+    gateRuns: { put: async (/** @type {any} */ key, /** @type {any} */ value) => gateRows.set(key, value) },
+    evidence: { put: async () => {}, entries: () => [] },
+  });
+  ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
+  ctx.provide("evimedCapabilities", [
+    {
+      id: "research-brief",
+      produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }, { path: "sources.csv", required: true }] }],
+    },
+  ]);
+  // `sources.csv` is never written, so the manifest's own required-output check
+  // is what fails. The point is the attribution, not which rule fails.
+  ctx.provide("fs", {
+    resolve: async (/** @type {string} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`,
+    readText: async (/** @type {string} */ target) => {
+      // The run id comes from the brief index, and a gate run with no run id is
+      // never recorded at all.
+      if (target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "run_gate", budget: { maxSteps: 10, maxTokens: 100, maxChildren: 2 } });
+      if (target.endsWith(workspaceLayout.briefFile)) return null;
+      return target.endsWith("brief.md") ? "# 标题\n结论。" : null;
+    },
+    writeText: async () => true,
+  });
+
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0" });
+  for (const handler of ctx.listeners.get(SEAMS.events.sessionStart) ?? []) {
+    handler({ agent: { session: { id: "s-gate", header: { cwd: "/workspace" } } }, source: "startup" });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  // The session and cwd a tool call carries live on `agent.session`, which is
+  // where the port reads them from.
+  const call = { agent: { session: { id: "s-gate", header: { cwd: "/workspace" } } }, signal: AbortSignal.timeout(2000) };
+  const planned = await ctx.tools.execute({
+    ...call,
+    callId: "p1",
+    name: "evimed_plan",
+    arguments: {
+      action: "write",
+      clarifications: ["假设成年人群。"],
+      deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "T", dependsOn: [] }],
+    },
+  });
+  assert.equal(planned.value.ok, true, JSON.stringify(planned.value));
+
+  const submitted = await ctx.tools.execute({ ...call, callId: "s1", name: "evimed_submit_deliverable", arguments: { deliverableId: "d1" } });
+  assert.equal(submitted.value.ok, false, "the fixture must be rejected, or there is nothing to attribute");
+
+  const [[, row]] = [...gateRows.entries()];
+  assert.ok(Array.isArray(row.issues) && row.issues.length, "a gate run with no issues cannot show attribution");
+  // Named before it is used. Reading `.length` off an absent column throws
+  // "Cannot read properties of undefined", which says nothing about a ledger
+  // that stopped recording who spoke — the failure has to name itself.
+  assert.ok(Array.isArray(row.checks), "the gate run recorded no attribution column at all; recordGateRun must store `checks` beside `issues`");
+  assert.equal(row.checks.length, row.issues.length, "one check per issue, in the same order");
+  assert.deepEqual(
+    row.checks,
+    row.issues.map((/** @type {any} */ issue) => issue.check ?? null),
+    "the recorded attribution must be the issues' own, not a second opinion about them",
+  );
+  assert.deepEqual(row.checks.filter((/** @type {any} */ check) => check === null), [], "an unattributed issue is recorded as null, never as a bucket");
+  assert.ok(row.checks.includes("required-output"), `expected the required-output check, got ${JSON.stringify(row.checks)}`);
+
+  // And the column the projection carries has to be declared, or the row is
+  // written into a table that drops it and nothing says so.
+  assert.ok("checks" in RUN_DOMAIN_SPEC.tables.gate_runs, "the gate_runs table must declare the attribution it stores");
+});

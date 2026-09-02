@@ -191,6 +191,196 @@ const emergencyConditionFrame = /(?:条件|前提|标准|指征|时机|情形|�
 // word to check, so it has to be told what it is not looking at.
 const emergencyNonTreatmentSubject = /(?:判断|鉴别|识别|区分|呼救|呼叫|求救|送医|就医|驾车|自驾|等待|观察|评估|筛查)/;
 
+/**
+ * One gate finding, and the identity of the check that raised it.
+ *
+ * The text is the product and is never rewritten here: the repair loop hands it
+ * back to the run verbatim, so a changed word is a changed behaviour. `check`
+ * is the half that was missing. The gate ledger recorded what the gate said and
+ * never which rule said it, so no rule's false-positive rate could be computed
+ * for any of the 129 findings this module raises — and principle #4 wants an
+ * observed distribution before a blocking decision changes.
+ *
+ * `check` is null only where nothing claimed the finding. That is a hole and it
+ * is left visible as one, rather than filled with "unknown": an attribution
+ * that defaults looks like coverage while measuring nothing.
+ * @typedef {{ check: string | null, text: string }} AttributedIssue
+ */
+
+/**
+ * Names the check that a finding function is, at the function itself.
+ *
+ * At the function boundary rather than at each `push`: a name written once per
+ * rule cannot drift from the rule, and 129 hand-written names would. The id is
+ * carried by the function object, so `IssueLog#from` reads it from the very
+ * thing that raised the findings instead of being told twice.
+ * @template {Function} F
+ * @param {F} fn
+ * @param {string} id
+ * @returns {F}
+ */
+function checkedBy(fn, id) {
+  return Object.defineProperty(fn, "checkId", { value: id });
+}
+
+/**
+ * The check a finding function declared, for a caller that raises the findings
+ * itself rather than pushing them through an `IssueLog`.
+ *
+ * It throws rather than returning undefined. A caller that got `undefined` here
+ * would attach no attribution and say nothing about it, which is the shape of
+ * failure this module keeps meeting: a measurement that quietly stops
+ * measuring.
+ * @param {Function} fn
+ * @returns {string}
+ */
+export function checkIdOf(fn) {
+  const id = /** @type {any} */ (fn).checkId;
+  if (typeof id !== "string" || !id) {
+    throw new TypeError(
+      `${fn?.name || "an anonymous finding function"} raises gate issues without naming its check; `
+      + 'declare it at the function with checkedBy(fn, "<check-id>").',
+    );
+  }
+  return id;
+}
+
+/**
+ * The gate's findings as they accumulate, each carrying its check.
+ *
+ * It stands in for the plain array the validator used to push into, so every
+ * existing `issues.push(...)` site is unchanged and no call site can disagree
+ * with its own attribution. An inline rule declares its region once; a finding
+ * function supplies its own id through `from()`, which refuses to run one that
+ * has not declared it — a finding function whose id was dropped fails loudly
+ * instead of inheriting whatever region happened to be current.
+ */
+class IssueLog {
+  constructor() {
+    /** @type {AttributedIssue[]} */
+    this.found = [];
+    /** @type {string | null} */
+    this.current = null;
+  }
+
+  /** The check that raised everything pushed until the next declaration.
+   *  @param {string} id @returns {void} */
+  region(id) {
+    this.current = id;
+  }
+
+  /** Runs a finding function under its own declared check. The findings keep
+   *  their own type: this is a pass-through, and a caller that reads
+   *  `finding.leg` must still be told when that field is gone.
+   *  @template {(...args: any[]) => any} F
+   *  @param {F} fn @param {Parameters<F>} args @returns {ReturnType<F>} */
+  from(fn, ...args) {
+    this.current = checkIdOf(fn);
+    return fn(...args);
+  }
+
+  /** @param {...any} texts @returns {number} */
+  push(...texts) {
+    for (const text of texts) this.found.push({ check: this.current, text: String(text) });
+    return this.found.length;
+  }
+
+  /** @returns {AttributedIssue[]} */
+  all() {
+    return [...this.found];
+  }
+
+  /** @returns {string[]} */
+  texts() {
+    return this.found.map((entry) => entry.text);
+  }
+}
+
+/**
+ * Every check this module can attribute a finding to.
+ *
+ * Not decoration: it is the axis a false-positive distribution is computed
+ * along, and it is what lets a test say "this id is not one of ours" instead of
+ * discovering a typo months later as a bucket nobody looked at. The ids are
+ * declared where the check is — `issues.region(...)` for an inline rule,
+ * `checkedBy(fn, ...)` at a finding function — and a test in this package reads
+ * both out of the source and refuses any that is missing from this list.
+ *
+ * Two of them are raised by the contract registry rather than here:
+ * `citation-integrity` and `advisory-notes` name functions this module exports
+ * for that caller to run.
+ * @type {readonly string[]}
+ */
+export const clinicalEvidenceCheckIds = Object.freeze([
+  "emergency-trigger-conditioned",
+  "appraisal-declaration",
+  "screening-ledger",
+  "citation-closure",
+  "attributed-stance",
+  "regulatory-article",
+  "clinical-safety-rules",
+  "citation-integrity",
+  "manuscript-register",
+  "comparative-structure",
+  "synthesized-claim",
+  "question-coverage",
+  "report-present",
+  "report-sections",
+  "practical-section",
+  "deep-research-sections",
+  "reference-list-order",
+  "visible-claim-marker",
+  "operational-failure-prose",
+  "runtime-leakage",
+  "claim-marker-format",
+  "internal-api-citation",
+  "exclusive-safety",
+  "matrix-present",
+  "matrix-schema",
+  "claim-schema",
+  "derived-claim-inputs",
+  "claim-access-level",
+  "claim-reference-number",
+  "claim-support-quote",
+  "claim-emergency-support",
+  "claim-numeric-support",
+  "claim-artifact-path",
+  "claim-quote-verbatim",
+  "claim-source-url",
+  "report-claim-unresolved",
+  "matrix-claim-uncited",
+  "derived-claim-grounding",
+  "derived-report-label",
+  "report-number-unanchored",
+  "report-number-unsupported",
+  "record-identifier-leak",
+  "practical-derived-claim",
+  "practical-claim-anchor",
+  "workspace-brief-mismatch",
+  "search-log-schema",
+  "search-log-queries",
+  "search-log-execution-match",
+  "search-database-breadth",
+  "screening-flow-coherence",
+  "source-record-access-level",
+  "run-receipt-statistics",
+  "reference-list-duplication",
+  "reference-number-unresolved",
+  "bibliography-entry-count",
+  "bibliography-source-url",
+  "citation-ledger-schema",
+  "citation-ledger-rows",
+  "citation-audit-dimensions",
+  "citation-audit-identifier",
+  "claim-inline-citation",
+  "run-receipt-shape",
+  "run-receipt-status",
+  "run-receipt-source-artifacts",
+  "deep-research-source-count",
+  "run-receipt-quality-checks",
+  "advisory-notes",
+]);
+
 /** The practical section with claim markers, emphasis and numbered citations
  *  taken out, so neither can inflate the gap between a medication word and a
  *  non-relief word. Line count is preserved: the notice names a line.
@@ -285,6 +475,8 @@ function medicationConditionedEmergencyTriggers(practical) {
   }
   return found;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(medicationConditionedEmergencyTriggers, "emergency-trigger-conditioned");
 
 // --- A named appraisal instrument is a promise, not a qualification --------
 // The closed vocabulary already exists on both sides, and it is used only as an
@@ -549,6 +741,8 @@ function declaredAppraisalIssues(reportText) {
   }
   return findings;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(declaredAppraisalIssues, "appraisal-declaration");
 
 // --- Screening numbers and the source set are rendered, never restated -----
 // clinical-evidence-search.json is checked against itself and against the run
@@ -658,6 +852,8 @@ function screeningLedgerFindings(reportText, searchLog) {
   }
   return findings;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(screeningLedgerFindings, "screening-ledger");
 
 // --- Reference-table closure: nothing floats, no number is an orphan -------
 // citationIntegrityIssues() already computes the orphan and dangling
@@ -821,6 +1017,8 @@ function citationClosureFindings(reportText, claimsById, searchLog) {
   }
   return findings;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(citationClosureFindings, "citation-closure");
 
 // --- An attributed position must be quoted, not inferred from data ---------
 // 作者指出 / 作者认为 / 该研究强调 attributes a position to a source. The
@@ -988,6 +1186,8 @@ function attributedStanceIssues(body, claimsById) {
   }
   return found;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(attributedStanceIssues, "attributed-stance");
 
 // --- An article-level regulatory citation needs the regulator's own text ----
 // 《XX法/条例/办法…》第 N 条 asserts what a normative text says at clause
@@ -1147,6 +1347,8 @@ function regulatoryArticleIssues(reportText, claims, successfulArtifacts) {
   }
   return found;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(regulatoryArticleIssues, "regulatory-article");
 
 // The manuscript register. The report is a scientific paper about a clinical
 // question; it is never a paper about the task that produced it. Two
@@ -1567,6 +1769,8 @@ export function evaluateClinicalSafetyRules({ reportText, practical, question })
   }
   return found;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(evaluateClinicalSafetyRules, "clinical-safety-rules");
 
 /** @param {unknown} value @param {number} [minimum] @returns {boolean} */
 function nonEmpty(value, minimum = 1) {
@@ -1717,16 +1921,19 @@ function quoteJoinsUnmarkedPassages(artifact, quote) {
 // The generic `must be a non-empty string.` still gives way wherever the same
 // field already has a specific finding: two messages for one empty value is a
 // different duplication, and the specific one says what to do.
-/** @param {string[]} issues @returns {string[]} */
+/** The collapse reads and returns attributed findings: a finding that is
+ *  dropped or folded into another must take its check with it, or the ledger
+ *  would end up counting a rule that raised nothing and losing one that did.
+ *  @param {AttributedIssue[]} issues @returns {AttributedIssue[]} */
 function collapseClaimFieldIssues(issues) {
   const shape = /^(claims\[\d+\])\.([A-Za-z]+) must be a non-empty string\.$/;
   const specific = new Set();
   for (const issue of issues) {
-    const found = /^(claims\[\d+\])\.([A-Za-z]+) /.exec(String(issue));
-    if (found && !shape.test(String(issue))) specific.add(`${found[1]}.${found[2]}`);
+    const found = /^(claims\[\d+\])\.([A-Za-z]+) /.exec(issue.text);
+    if (found && !shape.test(issue.text)) specific.add(`${found[1]}.${found[2]}`);
   }
   const deduped = issues.filter((issue) => {
-    const found = shape.exec(String(issue));
+    const found = shape.exec(issue.text);
     return !found || !specific.has(`${found[1]}.${found[2]}`);
   });
 
@@ -1744,12 +1951,11 @@ function collapseClaimFieldIssues(issues) {
   /** One function, used to build the group and to find its members again.
    *  @param {string} text @returns {string} */
   const keyOf = (text) => text.replace(positional, (found) => found.replace(/\d+/, ""));
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, AttributedIssue[]>} */
   const groups = new Map();
   for (const issue of deduped) {
-    const text = String(issue);
-    if (!positional.test(text)) continue;
-    groups.set(keyOf(text), [...(groups.get(keyOf(text)) ?? []), text]);
+    if (!positional.test(issue.text)) continue;
+    groups.set(keyOf(issue.text), [...(groups.get(keyOf(issue.text)) ?? []), issue]);
   }
   let collapsed = deduped;
   for (const [key, members] of groups) {
@@ -1758,7 +1964,7 @@ function collapseClaimFieldIssues(issues) {
     // a count produced 「……不是 20 个错误。, which is not a preserved artifact.」 —
     // a fragment stitched onto a full stop. The rule's own words are the half
     // that says what to do.
-    const labels = members.slice(1).map((text) => positional.exec(text)?.[0] ?? "");
+    const labels = members.slice(1).map((member) => positional.exec(member.text)?.[0] ?? "");
     const listed = labels.length > 5 ? `${labels.slice(0, 5).join("、")} 等` : labels.join("、");
     collapsed = [
       // The same key the group was built with. This kept the old
@@ -1766,8 +1972,13 @@ function collapseClaimFieldIssues(issues) {
       // lines, so a report-line group matched nothing here: the collapsed
       // sentence was appended and not one of its members removed, and the
       // package came back with MORE findings than before the collapse ran.
-      ...collapsed.filter((issue) => keyOf(String(issue)) !== key),
-      `${members[0]} 另有 ${labels.length} 处是同一条（${listed}）：这是一处决定，改一次就能全部修好。`,
+      ...collapsed.filter((issue) => keyOf(issue.text) !== key),
+      // A group is one rule's sentence about several claims, so its members
+      // share a check by construction; the first member's is the group's.
+      {
+        check: members[0].check,
+        text: `${members[0].text} 另有 ${labels.length} 处是同一条（${listed}）：这是一处决定，改一次就能全部修好。`,
+      },
     ];
   }
   return collapsed;
@@ -2128,6 +2339,8 @@ export function citationIntegrityIssues(reportText) {
   }
   return [...new Set(issues)];
 }
+// Attribution: read by the contract registry, which raises these findings for prose files.
+checkedBy(citationIntegrityIssues, "citation-integrity");
 
 // "5. 同 [1]", "12. See [3]", "7. Ibid. 3" point at another entry instead of
 // naming a source, and counting them lets a bibliography clear a reference
@@ -2478,6 +2691,8 @@ function manuscriptRegisterIssues(reportText) {
   }
   return issues;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(manuscriptRegisterIssues, "manuscript-register");
 
 /** The cells of a markdown table row, or [] when the line is not one.
  *  @param {string} line
@@ -2598,6 +2813,8 @@ function comparativeStructureIssues(reportText) {
   }
   return issues;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(comparativeStructureIssues, "comparative-structure");
 
 // A CSV record is not a line: a quoted support quote may hold commas, doubled
 // quotes, and newlines, and the ledger is written by a csv writer that quotes
@@ -2681,7 +2898,7 @@ function sourceArtifactIdentity(value) {
  *   successfulArtifacts: Set<string>,
  *   artifactText: Map<string, string>,
  *   sourceDomains: Set<string>,
- *   issues: string[],
+ *   issues: IssueLog,
  * }} context
  * @returns {void}
  */
@@ -2784,6 +3001,8 @@ function validateSynthesizedClaim(
     issues.push(`${label}.emergency-call action is not present in its direct support.`);
   }
 }
+// Attribution: the check every finding this function pushes is recorded under.
+checkedBy(validateSynthesizedClaim, "synthesized-claim");
 
 // --- The question-coverage ledger -------------------------------------------
 //
@@ -3603,6 +3822,8 @@ function questionCoverageFindings(questionCoverageText, reportText, searchLogTex
   }
   return findings;
 }
+// Attribution: the check every finding of this function is recorded under.
+checkedBy(questionCoverageFindings, "question-coverage");
 
 // --- What a semantic judge is allowed to look at ----------------------------
 //
@@ -3776,7 +3997,7 @@ export function validateClinicalEvidencePackage({
   // anything; compared to the one above so a rewritten exam paper is visible.
   workspaceBriefText = null,
 } = {}) {
-  const issues = [];
+  const issues = new IssueLog();
   const claimIds = [];
   const sourceDomains = new Set();
 
@@ -3800,6 +4021,7 @@ export function validateClinicalEvidencePackage({
       valid: false,
       issues: [absent],
       blockingIssues: [absent],
+      issueChecks: [{ check: "report-present", text: absent }],
       claimIds: [],
       sourceDomains: [],
       coverageDegradedNotice: null,
@@ -3843,6 +4065,7 @@ export function validateClinicalEvidencePackage({
   const reportReferenceCount = numberedReferenceCount(reportText);
   const reportReferenceNumbers = numberedReferenceNumbers(reportText);
 
+  issues.region("report-sections");
   if (!nonEmpty(reportText)) issues.push("clinical-evidence-report.md must contain academic analysis.");
   const title = typeof reportText === "string" ? reportText.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "" : "";
   if (!title) issues.push("The academic title must be present.");
@@ -3861,6 +4084,7 @@ export function validateClinicalEvidencePackage({
   // 结论 and 临床实践要点 stay two sections: the conclusion requirement above no
   // longer accepts a practical heading in its place, and this one does not
   // accept a conclusion heading.
+  issues.region("practical-section");
   const practicalSection = reportSection(reportText, practicalSectionHeading);
   if (!practicalHeadingLinePattern.test(reportText ?? "")) {
     issues.push(
@@ -3876,6 +4100,7 @@ export function validateClinicalEvidencePackage({
     );
   }
   if (deepResearch) {
+    issues.region("deep-research-sections");
     for (const section of [
       /(?:^|\n)##\s+.*(?:检索|方法|Methods?)/i,
       /(?:^|\n)##\s+.*(?:结果|Results?)/i,
@@ -3886,19 +4111,23 @@ export function validateClinicalEvidencePackage({
       }
     }
     // Presence is required of every report above; here only the order matters.
+    issues.region("reference-list-order");
     const practicalHeading = String(reportText ?? "").search(practicalHeadingLinePattern);
     const referencesHeading = String(reportText ?? "").search(/(?:^|\n)##\s+[^\n]*(?:参考文献|参考来源|References?)[^\n]*$/im);
     if (referencesHeading < 0 || (practicalHeading >= 0 && referencesHeading < practicalHeading)) {
       issues.push("The numbered reference list must follow the safety-first practical-answer section.");
     }
+    issues.region("visible-claim-marker");
     if (visibleClaimMarkerPattern.test(reportText ?? "")) {
       issues.push("Deep-research reports must hide internal claim IDs in HTML comments and show standard numbered citations to readers.");
     }
     visibleClaimMarkerPattern.lastIndex = 0;
   }
+  issues.region("operational-failure-prose");
   if (operationalFailurePattern.test(reportText ?? "")) {
     issues.push("The academic report contains operational failure prose that belongs only in the run receipt.");
   }
+  issues.region("runtime-leakage");
   const leakageLine = firstMatchingLine(reportText, runtimeLeakagePattern)
     ?? firstMatchingLine(withoutReportSections(reportText, "局限|Limitations?"), evidenceAccessLimitationPattern);
   if (leakageLine) {
@@ -3910,7 +4139,7 @@ export function validateClinicalEvidencePackage({
       + "A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
     );
   }
-  for (const finding of declaredAppraisalIssues(reportText)) {
+  for (const finding of issues.from(declaredAppraisalIssues, reportText)) {
     if (finding.branch === "grade-level-contradicts-downgrade") {
       issues.push(
         `GRADE 等级与降级理由不自洽——第 ${finding.line} 行「${finding.text}」同句断言了证据缺陷`
@@ -3940,18 +4169,22 @@ export function validateClinicalEvidencePackage({
       );
     }
   }
-  issues.push(...manuscriptRegisterIssues(reportText));
-  issues.push(...comparativeStructureIssues(reportText));
+  issues.push(...issues.from(manuscriptRegisterIssues, reportText));
+  issues.push(...issues.from(comparativeStructureIssues, reportText));
+  issues.region("claim-marker-format");
   if (/\[claim:CLM-[0-9]{3,6}[^\]]+\]/.test(reportText ?? "")) {
     issues.push("Each claim marker must contain exactly one claim ID.");
   }
+  issues.region("internal-api-citation");
   if (/https:\/\/www\.evimed\.com\/api-evimed\//i.test(reportText ?? "")) {
     issues.push("EviMed API endpoints cannot be used as public evidence citations.");
   }
+  issues.region("exclusive-safety");
   if (exclusiveSafetyPattern.test(reportText ?? "")) {
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
   }
 
+  issues.region("matrix-present");
   if (!claims.length) issues.push("The evidence matrix must contain the report's material claims.");
   // A matrix written to a different schema is one problem, not one per field
   // per claim.
@@ -3979,8 +4212,9 @@ export function validateClinicalEvidencePackage({
       + " This submission is charged against a separate allowance and does not spend a content repair attempt.";
     return {
       valid: false,
-      issues: [...issues, absent],
+      issues: [...issues.texts(), absent],
       blockingIssues: [absent],
+      issueChecks: [...issues.all(), { check: "matrix-schema", text: absent }],
       claimIds: [],
       sourceDomains: [],
       coverageDegradedNotice: null,
@@ -3990,6 +4224,7 @@ export function validateClinicalEvidencePackage({
   const derivedClaims = [];
   for (const [index, value] of claims.entries()) {
     const label = `claims[${index}]`;
+    issues.region("claim-schema");
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       issues.push(`${label} must be an object.`);
       continue;
@@ -4012,7 +4247,7 @@ export function validateClinicalEvidencePackage({
       claimIds.push(value.claimId);
     }
     if (claimType === "synthesized") {
-      validateSynthesizedClaim(value, {
+      issues.from(validateSynthesizedClaim, value, {
         label,
         deepResearch,
         reportReferenceNumbers,
@@ -4025,6 +4260,7 @@ export function validateClinicalEvidencePackage({
     }
     if (claimType === "derived") {
       // Grounding is checked after the loop, once every claimId is known.
+      issues.region("derived-claim-inputs");
       const inputs = value.derivedFrom;
       if (!Array.isArray(inputs) || inputs.length === 0) {
         issues.push(`${label}.derivedFrom must list the claim ids this result is reasoned from.`);
@@ -4042,13 +4278,17 @@ export function validateClinicalEvidencePackage({
       derivedClaims.push({ label, claim: value });
       continue;
     }
+    issues.region("claim-access-level");
     if (!accessLevels.has(value.accessLevel)) {
       issues.push(`${label}.accessLevel is ${JSON.stringify(value.accessLevel)}; use exactly one of ${[...accessLevels].join(", ")} to record how much of the preserved artifact you read.`);
     }
+    issues.region("claim-reference-number");
     if (deepResearch && (!Number.isInteger(value.referenceNumber) || !reportReferenceNumbers.has(value.referenceNumber))) {
       issues.push(`${label}.referenceNumber must resolve to a numbered report reference.`);
     }
+    issues.region("claim-support-quote");
     if (!validSupportingPassage(value.supportQuote)) issues.push(`${label}.supportQuote must contain a direct supporting passage.`);
+    issues.region("claim-emergency-support");
     if (emergencyCallClaimPattern.test(value.claim ?? "")
       && !emergencyCallSupportPattern.test(value.supportQuote ?? "")) {
       issues.push(`${label}.emergency-call action is not present in its direct support.`);
@@ -4057,6 +4297,7 @@ export function validateClinicalEvidencePackage({
     // does: the two extractors split ranges differently, so a quote saying
     // "98.5–99.7%" offers the atomic range under one and the endpoints under
     // the other. Narrow what is demanded, never what is accepted as support.
+    issues.region("claim-numeric-support");
     const directSupport = [value.supportQuote, value.sourceTitle, value.identifier].join(" ");
     const directSupportNumbers = new Set([
       ...numericTokens(directSupport),
@@ -4073,14 +4314,17 @@ export function validateClinicalEvidencePackage({
         issues.push(`${label}.claim numeric fact ${token} is not present in its direct support. Quote the passage that states it, or if the source does not state it, say so in the claim's uncertainty rather than dropping the figure.`);
       }
     }
+    issues.region("claim-artifact-path");
     if (!validSourceArtifactPath(value.artifactPath)) {
       issues.push(`${label}.artifactPath is ${JSON.stringify(value.artifactPath)}, which is not a preserved artifact. Preserve the source first — evimed_open_access_full_text by DOI/PMCID, or evimed_official_page_fetch by URL — and cite the .evimed-sources path it returns. If neither can preserve it, cite a source you did preserve instead.`);
     } else if (!successfulArtifacts.has(value.artifactPath)) {
       issues.push(`${label}.artifactPath is not listed as a successful source artifact for this run.`);
     } else {
+      issues.region("claim-quote-verbatim");
       const quoteProblem = supportQuoteIssue(artifactText, label, value.artifactPath, value.supportQuote);
       if (quoteProblem) issues.push(quoteProblem);
     }
+    issues.region("claim-source-url");
     const domain = sourceDomain(value.sourceUrl);
     if (!domain) issues.push(`${label}.sourceUrl must be a valid credential-free HTTPS URL.`);
     else {
@@ -4104,16 +4348,18 @@ export function validateClinicalEvidencePackage({
   //
   // Only when the matrix is absent or empty: a matrix that *has* claims and is
   // missing the cited one is a genuine per-claim finding, and still reported.
+  issues.region("report-claim-unresolved");
   for (const claimId of claims.length ? reportSet : []) {
     if (!seen.has(claimId)) issues.push(`Report claim reference ${claimId} does not resolve to the evidence matrix.`);
   }
+  issues.region("matrix-claim-uncited");
   for (const claimId of seen) {
     if (!reportSet.has(claimId)) issues.push(`Evidence matrix claim ${claimId} is not cited by the report.`);
   }
 
   const claimsById = new Map(claims.map((claim) => [claim?.claimId, claim]));
 
-  for (const finding of regulatoryArticleIssues(reportText, claims, successfulArtifacts)) {
+  for (const finding of issues.from(regulatoryArticleIssues, reportText, claims, successfulArtifacts)) {
     issues.push(
       `报告正文第 ${finding.line} 行以条款级方式引用「${finding.locator}」，`
       + "但该行引用的来源中没有一件来自发文机关自有渠道的已留存监管文本工件"
@@ -4130,6 +4376,7 @@ export function validateClinicalEvidencePackage({
   // resolve, and following the inputs must reach measured evidence: a chain of
   // derivations resting on nothing is the fabrication this whole gate exists to
   // stop, wearing the vocabulary of analysis.
+  issues.region("derived-claim-grounding");
   for (const { label, claim } of derivedClaims) {
     const inputs = Array.isArray(claim?.derivedFrom) ? claim.derivedFrom : [];
     const unresolved = inputs.filter((id) => !claimsById.has(id));
@@ -4156,6 +4403,7 @@ export function validateClinicalEvidencePackage({
   // Marked wherever it is asserted, so a reader meets the estimate as an
   // estimate. The claim marker alone is invisible in rendered prose.
   const derivedIds = new Set(derivedClaims.map(({ claim }) => claim?.claimId));
+  issues.region("derived-report-label");
   if (derivedIds.size) {
     for (const [lineIndex, rawLine] of String(reportText ?? "").split("\n").entries()) {
       const cited = reportClaimIds(rawLine).filter((id) => derivedIds.has(id));
@@ -4181,12 +4429,14 @@ export function validateClinicalEvidencePackage({
     const reportNumbers = conclusoryQuantities(line);
     if (!reportNumbers.size) continue;
     const referencedIds = reportClaimIds(rawLine);
+    issues.region("report-number-unanchored");
     if (!referencedIds.length) {
       issues.push(
         `Report line ${lineIndex + 1} numeric facts ${[...reportNumbers].join(", ")} have no evidence-matrix claim reference. Attach the numbered citation and claim marker that carry them.`,
       );
       continue;
     }
+    issues.region("report-number-unsupported");
     const supportedNumbers = new Set(referencedIds.flatMap((claimId) => {
       const claim = claimsById.get(claimId);
       // Arabic numbers in support match by value; conclusoryQuantities resolves
@@ -4202,7 +4452,7 @@ export function validateClinicalEvidencePackage({
     }
   }
 
-  for (const finding of attributedStanceIssues(reportForNumericAudit, claimsById)) {
+  for (const finding of issues.from(attributedStanceIssues, reportForNumericAudit, claimsById)) {
     issues.push(finding.anchored
       ? `报告第 ${finding.line} 行以「${finding.attribution}」把立场归属给来源，但该行引用的 ${finding.claimIds.join("、")}，`
         + "其 supportQuote 都只陈述数值，没有一条载有这个立场。"
@@ -4217,6 +4467,7 @@ export function validateClinicalEvidencePackage({
   // Pseudonyms are assigned by the analysis; record numbers come from the data
   // and must not leave it. Blocking, because a reader cannot tell P90000001
   // from a pseudonym, and the person it exposes is not the reader.
+  issues.region("record-identifier-leak");
   const leakedInReport = recordIdentifiersInReport(reportText);
   const leakedInMatrix = recordIdentifiersInReport(JSON.stringify(matrix ?? {}));
   const leaked = [...new Set([...leakedInReport, ...leakedInMatrix])].sort();
@@ -4231,15 +4482,17 @@ export function validateClinicalEvidencePackage({
   // told to actually do may not rest on the analyst's own estimate: this
   // section is read as instruction, and an estimate read as instruction is the
   // one place a derivation could hurt someone.
+  issues.region("practical-derived-claim");
   const derivedInPractical = [...new Set(reportClaimIds(practical).filter((id) => derivedIds.has(id)))];
   if (derivedInPractical.length) {
     issues.push(
       `The practical section cites derived result ${derivedInPractical.join(", ")}; practical advice must rest on measured evidence. Move the reasoning to the analysis and give the action a directly supported claim.`,
     );
   }
-  for (const message of evaluateClinicalSafetyRules({ reportText, practical, question: runReceipt?.question })) {
+  for (const message of issues.from(evaluateClinicalSafetyRules, { reportText, practical, question: runReceipt?.question })) {
     issues.push(message);
   }
+  issues.region("practical-claim-anchor");
   const numberedItems = practical.split(/\n(?=\s*[0-9]+\.\s+)/).filter((item) => /^\s*[0-9]+\.\s+/.test(item));
   if (numberedItems.some((item) => !hasClaimMarker(item))) {
     issues.push("Every numbered practical-action item must cite at least one evidence-matrix claim.");
@@ -4257,7 +4510,7 @@ export function validateClinicalEvidencePackage({
   const practicalFirstLine = practicalOffset >= 0
     ? String(reportText ?? "").slice(0, practicalOffset).split("\n").length
     : 1;
-  for (const trigger of medicationConditionedEmergencyTriggers(practical)) {
+  for (const trigger of issues.from(medicationConditionedEmergencyTriggers, practical)) {
     issues.push(
       `临床实践要点第 ${practicalFirstLine + trigger.line - 1} 行把「${trigger.span}」写成了呼叫急救的触发条件：「${trigger.sentence}」。`
       + "急救的触发条件不得以自救用药的疗效为条件（含药不缓解、服药后无效、观察 N 分钟无效均不可）——"
@@ -4280,6 +4533,7 @@ export function validateClinicalEvidencePackage({
         + "「题面有几问、台账是不是这几问」这一层本次没有检查过。"
       : "本次交付未按题面逐问核对覆盖：服务端持有的题面里没有可解析的「需要回答的问题」编号列表，"
         + "无法逐问比对。question-coverage.json 只做了自洽核对。";
+  issues.region("workspace-brief-mismatch");
   if (briefQuestions && typeof workspaceBriefText === "string" && workspaceBriefText.trim()) {
     if (briefCollapse(workspaceBriefText) !== briefCollapse(briefText)) {
       issues.push(
@@ -4289,7 +4543,8 @@ export function validateClinicalEvidencePackage({
       );
     }
   }
-  for (const finding of questionCoverageFindings(
+  for (const finding of issues.from(
+    questionCoverageFindings,
     questionCoverageText,
     reportText,
     searchLogText,
@@ -4385,12 +4640,15 @@ export function validateClinicalEvidencePackage({
     ));
     const screening = searchLog?.screening;
 
+    issues.region("search-log-schema");
     if (searchLog?.schemaVersion !== 1) {
       issues.push("clinical-evidence-search.json must use schemaVersion 1.");
     }
+    issues.region("search-log-queries");
     if (!queries.length || documentedSearches.size !== queries.length) {
       issues.push("The search log must contain completed, non-empty, non-duplicate search queries.");
     }
+    issues.region("search-log-execution-match");
     if (Array.isArray(executedSearchQueries)) {
       const executed = new Set(
         executedSearchQueries
@@ -4410,9 +4668,11 @@ export function validateClinicalEvidencePackage({
         issues.push(`The search log must exactly match successful evidence-search calls from the same run — ${detail}.`);
       }
     }
+    issues.region("search-database-breadth");
     if (searchedDatabases.size < 2) {
       issues.push("Deep research must search at least two distinct evidence databases or source classes.");
     }
+    issues.region("screening-flow-coherence");
     if (
       !screening
       || !Number.isInteger(screening.recordsIdentified)
@@ -4427,6 +4687,7 @@ export function validateClinicalEvidencePackage({
     ) {
       issues.push("The search log must preserve a coherent, internally consistent screening flow.");
     }
+    issues.region("source-record-access-level");
     if (inspectedRecords.length !== includedRecords.length) {
       // Name the record. A title-only source carried into the included set is a
       // specific reference the agent can drop or go and read, not a property of
@@ -4440,6 +4701,7 @@ export function validateClinicalEvidencePackage({
         + "was carried into the included set without one. Read it, or exclude it — a title-only record supports nothing.",
       );
     }
+    issues.region("run-receipt-statistics");
     const stats = runReceipt?.stats;
     if (
       !stats
@@ -4459,18 +4721,20 @@ export function validateClinicalEvidencePackage({
     // Padding stays a finding, but its own: the de-duplicated count used to be
     // the denominator for resolution, so listing one source twice silently made
     // the last reference "not resolve". Say what is actually true instead.
+    issues.region("reference-list-duplication");
     if (reportReferenceNumbers.size > reportReferenceCount) {
       issues.push(
         `The numbered reference list gives ${reportReferenceNumbers.size} entries for ${reportReferenceCount} distinct sources; the same source is listed under more than one number.`,
       );
     }
+    issues.region("reference-number-unresolved");
     const unresolved = [...new Set(claims
       .map((claim) => claim?.referenceNumber)
       .filter((number) => Number.isInteger(number) && !reportReferenceNumbers.has(number)))].sort((a, b) => a - b);
     if (unresolved.length) {
       issues.push(`The numbered reference list has no entry for reference ${unresolved.join(", ")}.`);
     }
-    for (const finding of screeningLedgerFindings(reportText, searchLog)) {
+    for (const finding of issues.from(screeningLedgerFindings, reportText, searchLog)) {
       if (finding.leg === "A") {
         issues.push(
           `检索流程数与纳入来源集合由 clinical-evidence-search.json 持有，正文只能渲染、不得复述。`
@@ -4496,7 +4760,7 @@ export function validateClinicalEvidencePackage({
     // blocking: that section is already the one place the gate refuses derived
     // claims and requires a marker on every action line.
     const practicalLastLine = practical ? practicalFirstLine + practical.split("\n").length - 1 : 0;
-    for (const finding of citationClosureFindings(reportText, claimsById, searchLog)) {
+    for (const finding of issues.from(citationClosureFindings, reportText, claimsById, searchLog)) {
       if (finding.clause === "A") {
         issues.push(
           `参考文献 [${finding.number}] 在正文中从未被引用：「${finding.body}」。`
@@ -4533,10 +4797,12 @@ export function validateClinicalEvidencePackage({
     }
     // references.bib: a real cross-check — it must actually contain every cited
     // source, not merely enough @entries to hit a count.
+    issues.region("bibliography-entry-count");
     const bibText = String(referencesText ?? "");
     if (bibliographyEntryCount(bibText) < reportReferenceCount) {
       issues.push("references.bib must contain a bibliography entry for every numbered report reference.");
     }
+    issues.region("bibliography-source-url");
     const citedSourceUrls = [...new Set(claims.flatMap((claim) => (
       claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
         ? claim.supportingSources.map((source) => source?.sourceUrl)
@@ -4562,6 +4828,7 @@ export function validateClinicalEvidencePackage({
     // The ledger maps cited claims to the sources that carry them. A derived
     // result cites no source of its own, so it is not a row here; its inputs
     // are, and they are what a reader traces.
+    issues.region("citation-ledger-schema");
     const citedClaims = claims.filter((claim) => (claim?.claimType ?? "direct") !== "derived");
     const ledgerRecords = parseCsvRecords(citationLedgerText);
     const ledgerHeader = (ledgerRecords[0] ?? []).map((cell) => cell.trim().toLowerCase().replace(/[_\s]/g, ""));
@@ -4584,6 +4851,7 @@ export function validateClinicalEvidencePackage({
       const ledgerMismatch = ledgerRef.size !== matrixIds.size
         || [...matrixIds].some((id) => !ledgerRef.has(id))
         || citedClaims.some((claim) => ledgerRef.get(claim?.claimId) !== String(claim?.referenceNumber));
+      issues.region("citation-ledger-rows");
       if (ledgerMismatch) {
         issues.push("citation-ledger.csv rows must match each evidence-matrix claim's id and reference number.");
       }
@@ -4591,6 +4859,7 @@ export function validateClinicalEvidencePackage({
     // citation-audit.md: keep the required-dimension check, and make it real by
     // requiring the audit to name at least one source identifier it actually
     // examined, so it cannot pass as run-independent boilerplate.
+    issues.region("citation-audit-dimensions");
     if (
       !nonEmpty(citationAuditText)
       || !/(?:unresolved|未解析)/i.test(citationAuditText)
@@ -4601,6 +4870,7 @@ export function validateClinicalEvidencePackage({
     ) {
       issues.push("citation-audit.md must document unresolved, duplicate, correction/retraction, metadata-only, and claim-mismatch checks.");
     }
+    issues.region("citation-audit-identifier");
     const auditIdentifiers = claims.flatMap((claim) => (
       claim?.claimType === "synthesized" && Array.isArray(claim?.supportingSources)
         ? claim.supportingSources.map((source) => source?.identifier)
@@ -4609,6 +4879,7 @@ export function validateClinicalEvidencePackage({
     if (nonEmpty(citationAuditText) && auditIdentifiers.length && !auditIdentifiers.some((id) => String(citationAuditText).includes(id))) {
       issues.push("citation-audit.md must reference at least one real audited source identifier from the evidence matrix.");
     }
+    issues.region("claim-inline-citation");
     for (const [index, claim] of claims.entries()) {
       // A derived result is not a source and has no reference number of its
       // own; its inputs carry the citations, and it carries the derived label.
@@ -4621,10 +4892,13 @@ export function validateClinicalEvidencePackage({
     }
   }
 
+  issues.region("run-receipt-shape");
   if (!runReceipt || typeof runReceipt !== "object" || Array.isArray(runReceipt)) {
     issues.push("clinical-evidence-run.json must be an object.");
   } else {
+    issues.region("run-receipt-status");
     if (runReceipt.status !== "succeeded") issues.push("The clinical evidence run receipt is not succeeded.");
+    issues.region("run-receipt-source-artifacts");
     if (!Array.isArray(runReceipt.successfulSourceArtifacts)) {
       issues.push("The run receipt must name the distinct successful source artifacts.");
     } else {
@@ -4635,21 +4909,28 @@ export function validateClinicalEvidencePackage({
         issues.push("The run receipt must name the distinct successful source artifacts.");
       }
     }
+    issues.region("deep-research-source-count");
     if (deepResearch && successfulArtifacts.size !== distinctSuccessfulSources.size) {
       issues.push("Deep-research source counts must use one canonical text artifact per distinct document; companion XML and Markdown files cannot be counted twice.");
     }
+    issues.region("run-receipt-quality-checks");
     const checks = runReceipt.qualityChecks;
     if (!checks || typeof checks !== "object" || Array.isArray(checks) || !Object.values(checks).length || Object.values(checks).some((value) => value !== true)) {
       issues.push("All declared run-receipt quality checks must pass.");
     }
   }
 
-  const reported = collapseClaimFieldIssues(issues);
+  const reported = collapseClaimFieldIssues(issues.all());
+  const reportedTexts = reported.map((entry) => entry.text);
 
   return Object.freeze({
     valid: reported.length === 0,
-    issues: Object.freeze(reported),
-    blockingIssues: Object.freeze(reported.filter((issue) => !degradableIssue(issue))),
+    issues: Object.freeze(reportedTexts),
+    blockingIssues: Object.freeze(reportedTexts.filter((issue) => !degradableIssue(issue))),
+    // The same findings in the same order, each naming the check that raised
+    // it. `issues` stays the strings the repair loop is fed, byte for byte;
+    // this is what makes a per-check false-positive rate computable at all.
+    issueChecks: Object.freeze(reported.map((entry) => Object.freeze({ check: entry.check, text: entry.text }))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
     // Not an issue: nothing here is the run's fault and nothing here is
@@ -4672,6 +4953,9 @@ export function validateClinicalEvidencePackage({
 export function runtimeLeakageLine(text) {
   return firstMatchingLine(text, runtimeLeakagePattern);
 }
+// Attribution: the same rule the clinical validator applies inline, so the
+// finding carries the same check id wherever it is raised.
+checkedBy(runtimeLeakageLine, "runtime-leakage");
 
 /**
  * The four Apodex verification-gate metrics (§8.1), computed mechanically from
@@ -4845,6 +5129,8 @@ export function clinicalEvidenceAdvisoryNotes(reportText) {
   notes.push(...appraisalSymmetryNotes(report));
   return notes;
 }
+// Attribution: read by the contract registry, which raises these as advisory notices.
+checkedBy(clinicalEvidenceAdvisoryNotes, "advisory-notes");
 
 /**
  * When the question compares two interventions, the first thing a reviewer

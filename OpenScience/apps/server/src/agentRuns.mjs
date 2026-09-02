@@ -23,7 +23,9 @@ import {
 // its tests have always imported them from this module, and because a second
 // definition is exactly the drift the move was made to stop.
 import {
+  PLAN_ITEM_STATES,
   SOCKET_TOOL_NAMES,
+  isContractKind,
   isMcpToolName,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
@@ -64,6 +66,9 @@ const dispatchFields = new Set([
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
 const defaultMaxRuns = 1000;
 const defaultMaxBytes = 1024 * 1024;
+// How many gate issues one deliverable frame carries. The repair loop sends the
+// whole list to the run; a reader needs the shape of the problem, not 300 lines.
+const maxDeliverableIssues = 40;
 const maxArtifacts = 64;
 const maxQualityNotices = 40;
 const maxQualityNoticeLength = 300;
@@ -1040,11 +1045,24 @@ function assistantProse(messages) {
  *   artifacts: any[],
  *   errorCode: string|null,
  *   qualityIssues?: string[],
+ *   qualityStructural?: boolean,
  *   qualityDegradable?: boolean,
  *   qualityUnverified?: boolean,
  *   qualityUnchecked?: boolean,
  *   qualityNotices?: string[],
  * }} SpecialistCompletionVerdict
+ */
+
+/**
+ * `qualityStructural` marks the rejections whose whole issue list is one fact:
+ * the deliverable did not parse, or a required file is not in the workspace.
+ * Every site that sets it returns immediately with the issues it names, so the
+ * flag is a statement about that return, not a guess about a mixed list — a
+ * verdict carrying content findings alongside can never be marked here.
+ *
+ * The repair loop charges those rounds against a separate, finite allowance
+ * (see reconcileSession). It changes no verdict and no issue text: the same
+ * package is rejected with the same words, only the round is billed elsewhere.
  */
 
 /** TypeScript infers a destructured parameter as exactly the shape its
@@ -1087,8 +1105,13 @@ async function requiredSpecialistArtifacts(
   );
   const unchecked = skippedChecks.length > 0 ? { qualityUnchecked: true } : {};
   if (advisories.length === 0) return { ...outcome, ...unchecked };
+  // An advisory riding along is a second fact, so the rejection is no longer
+  // attributable to the structural cause alone and must be charged normally.
+  // Marking the return site was the honest place to decide it; this is the one
+  // place that can add to that list afterwards, so it is the one place that has
+  // to take the mark back.
   return outcome.errorCode
-    ? { ...outcome, ...unchecked, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
+    ? { ...outcome, ...unchecked, qualityStructural: false, qualityIssues: [...(outcome.qualityIssues ?? []), ...advisories] }
     : { ...outcome, ...unchecked, qualityNotices: advisories };
 }
 
@@ -1205,6 +1228,9 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: missingOutputErrorCodes[relative] ?? "specialist_required_output_missing",
+        // One absent file, whatever else the package would have been judged on:
+        // no content rule below has run yet.
+        qualityStructural: true,
         qualityIssues: [
           `The required deliverable ${relative} is not in the workspace. Write it at exactly that name, either at the workspace root or inside this deliverable\u0027s ${workspaceLayout.deliverablesDir}/<id>/ directory, before finishing.`,
           ...(missingOutputRepairAdvice[relative] ? [missingOutputRepairAdvice[relative]] : []),
@@ -1258,6 +1284,7 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_evidence_snapshot_missing",
+        qualityStructural: true,
         qualityIssues: [
           "This package must include evidence-snapshot.json — the frozen record of every source the report cites. Write it before finishing.",
         ],
@@ -1270,6 +1297,7 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_evidence_snapshot_invalid",
+        qualityStructural: true,
         qualityIssues: ["evidence-snapshot.json must contain strict valid JSON; escape quotation marks correctly inside string values."],
       };
     }
@@ -1277,6 +1305,7 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_evidence_snapshot_invalid",
+        qualityStructural: true,
         qualityIssues: ["evidence-snapshot.json must be a JSON object or array of source records, not a bare string or number."],
       };
     }
@@ -1333,6 +1362,10 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_evidence_traceability_failed",
+        // The 2026-08-26 shape: the matrix would not parse, so every claim in
+        // it was unreadable and the package came back as a wall of content
+        // findings that were all one syntax error.
+        qualityStructural: true,
         qualityIssues: [
           "clinical-evidence-matrix.json must contain strict valid JSON; escape quotation marks correctly inside string values.",
         ],
@@ -1345,6 +1378,7 @@ async function specialistCompletionOutcome(
       return {
         artifacts,
         errorCode: "specialist_evidence_traceability_failed",
+        qualityStructural: true,
         qualityIssues: ["clinical-evidence-run.json must contain strict valid JSON."],
       };
     }
@@ -1686,6 +1720,148 @@ async function unsubmittedDeliverables(project, projection) {
 }
 
 /**
+ * The browser's `deliverable/update` frames, built from the run's own record.
+ *
+ * Hidden knowledge: why this exists at all, and where every field comes from.
+ * The stream has declared `deliverable/update` since it was written and the
+ * browser has had the listener, the fold branch and the `deliverables` array
+ * since then too — but nothing ever sent one, so the panel that shows a
+ * package's verdict and the issues it was sent back with was empty on every
+ * run in production. `streamTypesReachTheBrowser` pinned that as a promise the
+ * stream made and did not keep.
+ *
+ * Nothing here is invented at the call site. Every field is a field of the
+ * run's own plan index (`packages/socket/src/runMirror.mjs` `plan_index`,
+ * itself an index over `@evimed/domain`'s `PlanDeliverable`) or of the delivery
+ * receipt `validateDeliveryReceipt` accepts:
+ *
+ * - `id`, `contractKind`, `capability`, `title` — the plan's own copy of the
+ *   deliverable, checked against `isContractKind` so an unknown kind travels as
+ *   an empty string rather than as a label the browser cannot render;
+ * - `status` — a `PLAN_ITEM_STATES` value, and only those. A status the
+ *   vocabulary does not have is dropped to `planned`, because a run-written
+ *   file is input, not a name we chose;
+ * - `childSessionId` — which subagent the item was delegated to, so the run
+ *   tree can hang the deliverable under the child that produced it instead of
+ *   guessing from the capability name;
+ * - `issues` — the gate's own verdict on the last attempt (`GateIssue`:
+ *   `{code, message, severity, path?, line?}`), which is what the repair loop
+ *   sends back to the run and therefore what a person watching a second attempt
+ *   needs to see;
+ * - `receipt` — present only once `delivery-receipt.json` exists, and then it is
+ *   that receipt's own entry for this deliverable, digests included.
+ *
+ * @param {Record<string, any>} projection the parsed `.evimed-run/state.json`
+ * @param {import('@evimed/domain').DeliveryReceipt|null} [receipt]
+ * @returns {Record<string, any>[]} one frame payload per planned deliverable
+ */
+function deliverableFrames(projection, receipt = null) {
+  const items = Array.isArray(projection?.plan?.items) ? projection.plan.items : [];
+  const entries = new Map((receipt?.entries ?? []).map((entry) => [String(entry.deliverableId), entry]));
+  /** @type {Record<string, any>[]} */
+  const frames = [];
+  const seen = new Set();
+  for (const item of items) {
+    const id = String(item?.id ?? "").trim();
+    if (!id) continue;
+    seen.add(id);
+    const contractKind = String(item?.contractKind ?? "").trim();
+    const status = String(item?.status ?? "planned");
+    const entry = entries.get(id);
+    frames.push({
+      id,
+      contractKind: isContractKind(contractKind) ? contractKind : "",
+      capability: String(item?.capability ?? "").trim(),
+      title: String(item?.title ?? "").trim() || id,
+      status: PLAN_ITEM_STATES.includes(status) ? status : "planned",
+      childSessionId: item?.childSessionId ? String(item.childSessionId) : null,
+      issues: normalizeGateIssues(item?.lastIssues),
+      ...(entry ? { receipt: receiptEntryView(entry) } : {}),
+    });
+  }
+  // A receipt entry with no plan item behind it is not an anomaly to drop. The
+  // projection is optional — an answer-mode run writes none, and a run whose
+  // container died before the projection landed still leaves the receipt — so
+  // publishing only what the plan index knows about meant a delivered package
+  // reached the browser with an empty deliverables panel, which is the exact
+  // emptiness this whole change exists to remove. `evimed_submit_deliverable`
+  // is the only writer of a receipt entry and only writes one on acceptance, so
+  // the status is `accepted` by construction, not by assumption.
+  for (const entry of entries.values()) {
+    const id = String(entry.deliverableId ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    const contractKind = String(entry.contractKind ?? "").trim();
+    frames.push({
+      id,
+      contractKind: isContractKind(contractKind) ? contractKind : "",
+      capability: String(entry.capability ?? "").trim(),
+      title: id,
+      status: "accepted",
+      childSessionId: null,
+      issues: [],
+      receipt: receiptEntryView(entry),
+    });
+  }
+  return frames;
+}
+
+/**
+ * One receipt entry, as the browser reads it.
+ *
+ * Copied field by field rather than forwarded: the receipt is a validated
+ * durable record and the frame is a view of it, and passing the object through
+ * would put whatever else the file happened to contain on the wire.
+ *
+ * @param {import('@evimed/domain').DeliveryReceiptEntry} entry
+ * @returns {Record<string, any>}
+ */
+function receiptEntryView(entry) {
+  return {
+    deliverableId: entry.deliverableId,
+    contractKind: entry.contractKind,
+    capability: entry.capability,
+    attempt: entry.attempt,
+    acceptedAt: entry.acceptedAt,
+    files: entry.files.map((file) => ({ path: file.path, sha256: file.sha256, bytes: file.bytes })),
+    notices: [...entry.notices],
+  };
+}
+
+/** Severities a `GateIssue` may carry. Anything else is advisory, never dropped. */
+const gateIssueSeverities = new Set(["required", "advisory", "optional"]);
+
+/**
+ * The gate's issues, read defensively.
+ *
+ * They come out of a file the container wrote, so they are input. An issue
+ * whose severity is not one the browser knows is shown as advisory rather than
+ * discarded: losing the sentence is worse than mislabelling its urgency.
+ *
+ * @param {unknown} value @returns {{ code: string, message: string, severity: string, path?: string, line?: number }[]}
+ */
+function normalizeGateIssues(value) {
+  if (!Array.isArray(value)) return [];
+  /** @type {{ code: string, message: string, severity: string, path?: string, line?: number }[]} */
+  const issues = [];
+  for (const raw of value.slice(0, maxDeliverableIssues)) {
+    if (!raw || typeof raw !== "object") continue;
+    const message = String(/** @type {any} */ (raw).message ?? "").trim();
+    if (!message) continue;
+    const severity = String(/** @type {any} */ (raw).severity ?? "");
+    const line = Number(/** @type {any} */ (raw).line);
+    const issuePath = String(/** @type {any} */ (raw).path ?? "").trim();
+    issues.push({
+      code: String(/** @type {any} */ (raw).code ?? "").trim() || "unnamed_issue",
+      message,
+      severity: gateIssueSeverities.has(severity) ? severity : "advisory",
+      ...(issuePath ? { path: issuePath } : {}),
+      ...(Number.isSafeInteger(line) && line > 0 ? { line } : {}),
+    });
+  }
+  return issues;
+}
+
+/**
  * What in the run's own projection counts as the run having done something.
  *
  * The root session's message and tool-call counts are the other half of the
@@ -1733,6 +1909,8 @@ export class AgentRunStore {
     this.onRunProjection = options.onRunProjection ?? (() => {});
     /** Per-run memory, so a fixed-interval poll does not repeat itself. */
     this.projectionDigests = new Map();
+    /** runId -> deliverableId -> the frame last sent for it. Same reason. */
+    this.deliverableDigests = new Map();
     this.projectionAdmissions = new Map();
     this.projectionNoticed = new Set();
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
@@ -1752,10 +1930,24 @@ export class AgentRunStore {
     if (!Number.isSafeInteger(this.maxClinicalRepairAttempts) || this.maxClinicalRepairAttempts < 0) {
       throw new TypeError("AgentRunStore maxClinicalRepairAttempts must be a non-negative integer.");
     }
+    // Rounds charged apart from the repair budget because the whole rejection
+    // was one structural fact (see SpecialistCompletionVerdict.qualityStructural).
+    // Defaults to the repair budget itself, so the worst case a deployment can
+    // reach is twice the rounds it already allows — never an unbounded loop.
+    this.maxClinicalStructuralRepairAttempts =
+      options.maxClinicalStructuralRepairAttempts ?? this.maxClinicalRepairAttempts;
+    if (
+      !Number.isSafeInteger(this.maxClinicalStructuralRepairAttempts)
+      || this.maxClinicalStructuralRepairAttempts < 0
+    ) {
+      throw new TypeError("AgentRunStore maxClinicalStructuralRepairAttempts must be a non-negative integer.");
+    }
     this.monitors = new Map();
     this.projects = new Map();
     this.dispatchOwners = new Set();
     this.clinicalRepairAttempts = new Map();
+    /** Structural repair rounds spent per run; finite and never refilled. */
+    this.clinicalStructuralRepairAttempts = new Map();
     this.clinicalRepairBaselineCursors = new Map();
     this.clinicalRepairSenders = new Map();
     // Report size when repair first began, so a shrinking revision is measured
@@ -2187,6 +2379,10 @@ export class AgentRunStore {
       const rejected = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
         ? projection.projection.plan.items.filter((item) => item?.status !== "accepted" && Number(item?.attempts ?? 0) > 0)
         : [];
+      // Before the terminal state, not after: a settled run closes its own
+      // stream (`runIsSettled` in the browser's `useRunStream`), so a frame
+      // published after `finishInternal` reaches nobody who was watching.
+      if (projection.state === "read") this.publishDeliverables(project, run, projection.projection ?? {}, null);
       return this.finishInternal(project, run.id, {
         status: "failed",
         errorCode: unsubmitted.length
@@ -2219,6 +2415,9 @@ export class AgentRunStore {
         qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`),
       });
     }
+    const delivered = await readRunStateProjection(project, project.workspaceDir);
+    this.publishDeliverables(project, run, delivered.state === "read" ? delivered.projection ?? {} : {}, receipt);
+
     return this.finishInternal(project, run.id, {
       status: "succeeded",
       errorCode: null,
@@ -2256,6 +2455,7 @@ export class AgentRunStore {
     if (result.status !== "running") {
       this.dispatchOwners.delete(runId);
       this.clinicalRepairAttempts.delete(runId);
+      this.clinicalStructuralRepairAttempts.delete(runId);
       this.clinicalRepairBaselineCursors.delete(runId);
       this.clinicalRepairSenders.delete(runId);
       this.clinicalRepairReportSizes.delete(runId);
@@ -2263,6 +2463,7 @@ export class AgentRunStore {
       // run's digests and admissions would otherwise be held for the life of
       // the process.
       this.projectionDigests.delete(runId);
+      this.deliverableDigests.delete(runId);
       this.projectionAdmissions.delete(runId);
       this.projectionNoticed.delete(runId);
       // The gate has already run by the time a run reaches a terminal state,
@@ -2395,14 +2596,31 @@ export class AgentRunStore {
       if (completion.errorCode) {
         const repairSender = this.clinicalRepairSenders.get(run.id);
         const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
+        // A rejection whose every issue is one structural fact — the deliverable
+        // did not parse, or a required file is not there — teaches the run one
+        // thing, not N. On 2026-08-26 a single JSON syntax error came back as 24
+        // content findings and the package died with its repair budget spent on
+        // one typo. Such a round is charged against a separate allowance.
+        //
+        // How it still terminates, since a structural cause can repeat unchanged:
+        // the allowance is finite, fixed at construction and never refilled, so
+        // once it is used up every further structural rejection is charged to the
+        // ordinary repair budget exactly as before. The hard ceiling is
+        // maxClinicalStructuralRepairAttempts + maxClinicalRepairAttempts rounds.
+        // Same rule and same reason as the run-side `structuralAttemptAllowance`
+        // in packages/socket/plugins/run-policy.mjs.
+        const structuralAttempts = this.clinicalStructuralRepairAttempts.get(run.id) ?? 0;
+        const structuralRound = completion.qualityStructural === true
+          && structuralAttempts < this.maxClinicalStructuralRepairAttempts;
         const canRepair = run.effectiveAgentId === "clinical-evidence-synthesis"
           && repairableEvidencePackageErrorCodes.has(completion.errorCode)
           && Array.isArray(completion.qualityIssues)
           && completion.qualityIssues.length > 0
-          && repairAttempts < this.maxClinicalRepairAttempts
+          && (structuralRound || repairAttempts < this.maxClinicalRepairAttempts)
           && typeof repairSender === "function";
         if (canRepair) {
-          this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+          if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
+          else this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
           this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
           // Record the report's size on the way into each repair. A repair that
           // answers with a whole-file write regenerates the report from what is
@@ -2523,6 +2741,17 @@ export class AgentRunStore {
       }
     }
     const finalReceipt = await readDeliveryReceipt(project);
+    // The receipt's own entries reach the browser here, on the path that runs
+    // every time, and ahead of the terminal `run/state` that makes a watching
+    // tab close its stream.
+    const finalProjection = await readRunStateProjection(project, project.workspaceDir);
+    // Guarded on having something to say, not on the projection being readable:
+    // an answer-mode run writes no projection and a receipt alone is still a
+    // delivered package, and requiring both is how the durable path came to
+    // publish nothing for exactly the run that had delivered.
+    if (finalProjection.state === "read" || finalReceipt) {
+      this.publishDeliverables(project, run, finalProjection.state === "read" ? finalProjection.projection ?? {} : {}, finalReceipt);
+    }
     if (finalReceipt) {
       // The advisory findings the gate recorded when it accepted the package
       // travel with the verdict, on this path too.
@@ -2667,6 +2896,12 @@ export class AgentRunStore {
       if (next.budget !== sent.budget) this.onRunProjection(project, run, "budget/update", budget);
     } catch { /* isolated */ }
     this.projectionDigests.set(run.id, next);
+    // The plan's own verdicts, on the same cycle and the same channel. A
+    // deliverable is rejected and repaired *while the run is going*, which is
+    // exactly when the panel showing why is worth having — waiting for the
+    // terminal state would show a person the last verdict and none of the ones
+    // that cost the run its forty minutes.
+    this.publishDeliverables(project, run, projection, null);
 
     // The run's own admissions ride the ledger, not the stream: they outlive
     // the socket a browser is holding, and a reader who opens the run tomorrow
@@ -2681,6 +2916,32 @@ export class AgentRunStore {
     for (const line of fresh) already.add(line);
     this.projectionAdmissions.set(run.id, already);
     this.appendQualityNotices(project, run.id, fresh).catch(() => {});
+  }
+
+  /**
+   * Publishes one `deliverable/update` per planned deliverable that changed.
+   *
+   * Debounced per deliverable rather than per projection: the plan index is
+   * rewritten whenever any item moves, so digesting the whole list would resend
+   * every deliverable every time one of them was graded.
+   *
+   * @param {any} project @param {Record<string, any>} run
+   * @param {Record<string, any>} projection
+   * @param {import('@evimed/domain').DeliveryReceipt|null} receipt
+   */
+  publishDeliverables(project, run, projection, receipt) {
+    const sent = this.deliverableDigests.get(run.id) ?? new Map();
+    // isolated: evimed_run_deliverable_publish_failures_total — a listener that
+    // throws must not end the run whose verdict it was told about.
+    try {
+      for (const frame of deliverableFrames(projection, receipt)) {
+        const digest = JSON.stringify(frame);
+        if (sent.get(frame.id) === digest) continue;
+        sent.set(frame.id, digest);
+        this.onRunProjection(project, run, "deliverable/update", frame);
+      }
+    } catch { /* isolated */ }
+    this.deliverableDigests.set(run.id, sent);
   }
 
   async recordProgress(project, run) {
@@ -2940,6 +3201,7 @@ export class AgentRunStore {
     // is going away, which scheduleCoverageJudgement already swallows.
     this.coverageJudgements.clear();
     this.clinicalRepairAttempts.clear();
+    this.clinicalStructuralRepairAttempts.clear();
     this.clinicalRepairBaselineCursors.clear();
     this.clinicalRepairSenders.clear();
   }

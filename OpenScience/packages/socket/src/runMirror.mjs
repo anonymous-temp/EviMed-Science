@@ -84,6 +84,10 @@ export const RUN_DOMAIN_SPEC = Object.freeze({
       deliverableId: 'string',
       contractKind: 'string',
       issues: 'json',
+      // The check that raised each issue, in the same order. Without it a gate
+      // run records what the gate said and never which rule said it, and no
+      // per-rule false-positive rate can be computed from the ledger at all.
+      checks: 'json',
       metrics: 'json',
       ok: 'boolean',
       at: 'string',

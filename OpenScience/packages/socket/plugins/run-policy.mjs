@@ -943,6 +943,11 @@ async function recordGateRun(store, entry, item, verdict, attempt) {
     deliverableId: item.id,
     contractKind: item.contractKind,
     issues: verdict.issues,
+    // Attribution, recorded beside the issues rather than derived from them
+    // later. `null` where the raising code has not declared a check: an
+    // unattributed finding is counted as unattributed, never as "unknown"
+    // bucketed with the rest, because that would read as coverage.
+    checks: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.check ?? null),
     metrics: verdict.metrics,
     ok: verdict.ok,
     at: new Date().toISOString(),

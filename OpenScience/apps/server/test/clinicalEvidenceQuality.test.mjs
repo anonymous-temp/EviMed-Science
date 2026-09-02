@@ -9,7 +9,7 @@ import {
   numberedReferenceCount,
   validateClinicalEvidencePackage as validatePackage,
 } from "../src/clinicalEvidenceQuality.mjs";
-import { runGate, workspaceLayout } from "@evimed/domain";
+import { GATE_CHECK_IDS, runGate, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, questionCoverageLedger, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 
 /** The question-coverage ledger cites report line numbers, and almost every
@@ -3810,5 +3810,134 @@ test("one malformed claim among good ones is still reported field by field", () 
   assert.ok(
     result.issues.some((entry) => new RegExp(`claims\\[${good.length}\\]\\.claimId`).test(entry)),
     "the bad entry must still be named field by field",
+  );
+});
+
+// ---------------------------------------------------------------- attribution
+
+/** Every finding the gate returns, as `{check, text}` pairs, with the invariant
+ *  that ties them to the strings the repair loop is actually fed.
+ *  @param {any} result @returns {{check: string | null, text: string}[]} */
+function attributedFindings(result) {
+  assert.ok(Array.isArray(result.issueChecks), "the verdict carries no attribution at all");
+  assert.deepEqual(
+    result.issueChecks.map((/** @type {any} */ entry) => entry.text),
+    [...result.issues],
+    "the attributed findings must be the reported findings, in the same order — a parallel list that has drifted"
+      + " attributes each issue to the rule that raised a different one",
+  );
+  // Membership, not merely presence. `check != null` is satisfied by a default
+  // — "unknown", or whatever region happened to run last — and a default is the
+  // failure this attribution exists to avoid: it reads as full coverage while
+  // every bucket it fills is the wrong one. Only an id something enumerates can
+  // carry a false-positive rate, so the axis is what is asserted.
+  const axis = new Set(GATE_CHECK_IDS);
+  assert.deepEqual(
+    result.issueChecks.filter((/** @type {any} */ entry) => entry.check != null && !axis.has(entry.check)),
+    [],
+    "a finding is attributed to a check that is on no enumerated axis; a bucket nothing counts is not attribution",
+  );
+  return result.issueChecks;
+}
+
+test("every finding names the check that raised it", () => {
+  // The measurement this whole change exists to make possible. A gate run
+  // recorded what the gate said and never which of the 129 rules said it, so no
+  // rule's false-positive rate could be computed — and principle #4 wants an
+  // observed distribution before a blocking decision changes.
+  //
+  // Nothing here asserts a verdict. A package is broken in several unrelated
+  // ways precisely so the findings come from rules that live far apart in the
+  // file, and every one of them has to arrive owning up to itself.
+  const input = deepResearchPackage();
+  const broken = {
+    ...input,
+    reportText: String(input.reportText).replace(/^# .*$/m, ""),
+    matrix: {
+      ...input.matrix,
+      claims: input.matrix.claims.map((/** @type {any} */ claim, /** @type {number} */ index) => (
+        index === 0 ? { ...claim, claimId: "CLM-x", artifactPath: "notes.md" } : claim
+      )),
+    },
+    runReceipt: { ...input.runReceipt, status: "failed" },
+  };
+
+  const result = validateClinicalEvidencePackage(broken);
+  const findings = attributedFindings(result);
+  assert.ok(findings.length >= 6, `only ${findings.length} findings — this case must exercise several rules at once`);
+
+  const unattributed = findings.filter((entry) => !entry.check);
+  assert.deepEqual(
+    unattributed.map((entry) => entry.text),
+    [],
+    "a finding with no check is a rule that cannot be counted; it is left visible rather than bucketed as unknown",
+  );
+
+  // Pinned pairs, so a region that stops covering its own rule is a failure
+  // rather than a quiet reattribution to whichever rule ran before it.
+  /** @param {RegExp} pattern @returns {string | null | undefined} */
+  const checkFor = (pattern) => findings.find((entry) => pattern.test(entry.text))?.check;
+  assert.equal(checkFor(/^The academic title must be present\.$/), "report-sections");
+  assert.equal(checkFor(/^claims\[0\]\.claimId must match CLM-NNN\.$/), "claim-schema");
+  assert.equal(checkFor(/^claims\[0\]\.artifactPath is "notes\.md"/), "claim-artifact-path");
+  assert.equal(checkFor(/^The clinical evidence run receipt is not succeeded\.$/), "run-receipt-status");
+  assert.equal(checkFor(/does not resolve to the evidence matrix/), "report-claim-unresolved");
+  // Distinct rules, distinct ids: one region swallowing its neighbour would
+  // still pass every assertion above on its own.
+  assert.ok(new Set(findings.map((entry) => entry.check)).size >= 5, "these findings come from unrelated rules");
+});
+
+test("a package that passes reports no findings and attributes none", () => {
+  const result = validateClinicalEvidencePackage(validPackage());
+  assert.deepEqual([...result.issues], []);
+  assert.deepEqual(attributedFindings(result), []);
+});
+
+test("the two early returns name their check as well", () => {
+  // Both bypass the accumulator entirely and return a hand-built verdict, which
+  // is exactly where an attribution is forgotten.
+  const absent = validateClinicalEvidencePackage({ ...validPackage(), reportText: "" });
+  assert.deepEqual(attributedFindings(absent).map((entry) => entry.check), ["report-present"]);
+
+  const input = deepResearchPackage();
+  input.matrix = {
+    ...input.matrix,
+    claims: input.matrix.claims.map((/** @type {any} */ claim) => ({ id: claim.claimId, claim: claim.claim, evidence: claim.supportQuote })),
+  };
+  const mismatch = validateClinicalEvidencePackage(input);
+  const findings = attributedFindings(mismatch);
+  assert.equal(findings.at(-1)?.check, "matrix-schema");
+  assert.deepEqual(findings.filter((entry) => !entry.check), []);
+});
+
+test("the gate verdict carries the check through to the run's issue envelope", () => {
+  // The end the ledger reads. `runGate` wraps each finding in a `GateIssue`, and
+  // the check has to survive that wrapping — recovering it afterwards by
+  // matching our own prose would be regex over language to find out something
+  // the code already knew.
+  const verdict = runGate({
+    contractKind: "clinical-evidence-report",
+    files: new Map(),
+    expectedOutputs: [{ path: "clinical-evidence-report.md", required: true }, { path: "references.bib", required: true }],
+  });
+  assert.equal(verdict.ok, false);
+  assert.ok(verdict.issues.length >= 2, `only ${verdict.issues.length} issues — this case must reach more than one rule`);
+  assert.deepEqual(
+    verdict.issues.filter((/** @type {any} */ entry) => !entry.check).map((/** @type {any} */ entry) => entry.message),
+    [],
+    "every issue the gate hands back must name the check that raised it",
+  );
+  assert.deepEqual(
+    verdict.issues.filter((/** @type {any} */ entry) => entry.check && !GATE_CHECK_IDS.includes(entry.check)).map((/** @type {any} */ entry) => entry.check),
+    [],
+    "and must name one the axis enumerates, never a default that only looks like a name",
+  );
+  assert.ok(
+    verdict.issues.some((/** @type {any} */ entry) => entry.check === "report-present"),
+    "the validator's own finding keeps the id the validator gave it",
+  );
+  assert.ok(
+    verdict.issues.some((/** @type {any} */ entry) => entry.check === "required-output"),
+    "and the manifest's own check keeps its own",
   );
 });

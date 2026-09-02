@@ -167,9 +167,10 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// contractRegistry — 3 exports
+// contractRegistry — 5 exports
 export {
   CONTRACT_VALIDATOR_KINDS,
+  GATE_CHECK_IDS,
   layeredIssues,
   unreadableSubmission,
   runGate,

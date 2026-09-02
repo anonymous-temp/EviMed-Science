@@ -618,7 +618,11 @@ async function withAnswerModeRun(fn) {
       runtimeAgent: null,
     };
     let history = [];
+    /** Browser-facing frames, in the order they were published. */
+    const frames = [];
     const store = new AgentRunStore({ get: async () => binding }, {
+      onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
+      onRunStateChanged: (_project, run) => frames.push({ type: "run/state", data: { state: run.status } }),
       agentRegistry: {
         get: () => ({
           id: "open-domain-answer",
@@ -655,7 +659,7 @@ async function withAnswerModeRun(fn) {
       tool: "skill",
       state: { status: "completed", input: { name: "open-domain-answer" } },
     };
-    await fn({ project, binding, dispatch, appendHistory, skillLoadedPart, store });
+    await fn({ project, binding, dispatch, appendHistory, skillLoadedPart, store, frames });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -848,7 +852,7 @@ test("a run whose files drifted from its receipt does not ship, container alive 
 test("a receipt whose digests still match does not block an ordinary success", async () => {
   // Negative control: the check must bite only on drift. Without it this pair
   // would pass with the verification stubbed out entirely.
-  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store, frames }) => {
     const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
     await mkdir(deliverableDir, { recursive: true });
     const body = "# graded and unchanged\n";
@@ -878,6 +882,20 @@ test("a receipt whose digests still match does not block an ordinary success", a
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "succeeded", (run.qualityNotices ?? []).join(" | "));
     assert.equal(run.errorCode, null);
+
+    // The path that runs every time publishes the receipt too, and before the
+    // terminal state. This run writes no `.evimed-run/state.json` at all —
+    // guarding the publish on a readable projection meant the receipt reached
+    // the browser only when the container had also written one.
+    const deliverable = frames.find((frame) => frame.type === "deliverable/update");
+    assert.ok(deliverable, `no deliverable/update on the live path: ${JSON.stringify(frames)}`);
+    assert.equal(deliverable.data.id, "d1");
+    assert.equal(deliverable.data.status, "accepted");
+    assert.equal(deliverable.data.receipt?.attempt, 6);
+    assert.ok(
+      frames.indexOf(deliverable) < frames.findIndex((frame) => frame.type === "run/state" && frame.data.state === "succeeded"),
+      "a settled run closes its own stream, so a frame after the terminal state reaches nobody",
+    );
   });
 });
 
@@ -1453,6 +1471,87 @@ test("projection frames are sent when the projection changes and not on every po
   const added = frames.slice(afterFirst);
   assert.ok(added.length >= 1, "a changed projection was not published");
   assert.ok(added.every((frame) => frame.type === "evidence/update"), `the budget was unchanged and must not be resent: ${JSON.stringify(added)}`);
+  store.monitors.get(run.id)?.cancel();
+});
+
+test("a deliverable's verdict reaches the browser while the run is still repairing", async (t) => {
+  // The stream has declared `deliverable/update` since it was written, the
+  // browser has had the listener, the fold case and the `deliverables` array
+  // since then, and nothing anywhere sent one — so the panel that shows why a
+  // package was sent back was empty on every run that ever produced one.
+  //
+  // Published on the monitor's existing cycle, from the run's own plan index,
+  // and debounced per deliverable: the index is rewritten whenever any item
+  // moves, so digesting the whole list would resend every item every time one
+  // of them was graded.
+  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0 });
+  const plan = (items) => ({ plan: { revision: 1, items }, evidence: { total: 0, byStatus: {} }, budget: {} });
+  await writeProjection(plan([
+    { id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综述", status: "submitted", childSessionId: "child-1", attempts: 1, lastIssues: [] },
+    { id: "d2", contractKind: "research-brief", capability: "research-brief", title: "简报", status: "planned", childSessionId: null, attempts: 0, lastIssues: [] },
+  ]));
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  const first = frames.filter((frame) => frame.type === "deliverable/update");
+  assert.equal(first.length, 2, `both planned deliverables must be published once: ${JSON.stringify(first)}`);
+  assert.deepEqual(first[0].data, {
+    id: "d1",
+    contractKind: "clinical-evidence-report",
+    capability: "clinical-evidence-synthesis",
+    title: "证据综述",
+    status: "submitted",
+    childSessionId: "child-1",
+    issues: [],
+  });
+  assert.equal(first[1].data.childSessionId, null, "an undelegated item names no child rather than a made-up one");
+
+  // Many more polls over an unchanged plan must add nothing.
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(frames.filter((frame) => frame.type === "deliverable/update").length, 2, "an unchanged plan was republished");
+
+  // Only the item that moved goes out again, and it carries the gate's own
+  // issue list — which is exactly what the repair loop sends back to the run.
+  await writeProjection(plan([
+    {
+      id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综述",
+      status: "rejected", childSessionId: "child-1", attempts: 1,
+      lastIssues: [
+        { code: "claim_unquoted", message: "第 3 条结论没有逐字引用支撑", severity: "required", path: "clinical-evidence-report.md", line: 42 },
+        { code: "section_share", message: "背景章节占比偏高", severity: "made-up-severity" },
+      ],
+    },
+    { id: "d2", contractKind: "research-brief", capability: "research-brief", title: "简报", status: "planned", childSessionId: null, attempts: 0, lastIssues: [] },
+  ]));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const after = frames.filter((frame) => frame.type === "deliverable/update").slice(2);
+  assert.equal(after.length, 1, `only the deliverable that moved must be resent: ${JSON.stringify(after)}`);
+  assert.equal(after[0].data.status, "rejected");
+  assert.deepEqual(after[0].data.issues, [
+    { code: "claim_unquoted", message: "第 3 条结论没有逐字引用支撑", severity: "required", path: "clinical-evidence-report.md", line: 42 },
+    // A severity the browser has no label for is shown as advisory rather than
+    // dropped: losing the sentence is worse than mislabelling its urgency.
+    { code: "section_share", message: "背景章节占比偏高", severity: "advisory" },
+  ]);
+  store.monitors.get(run.id)?.cancel();
+});
+
+test("a deliverable a run wrote under an unknown contract kind is published without a label it cannot render", async (t) => {
+  // The plan index is a file the container wrote, so its contract kind is
+  // input. A kind `@evimed/domain` does not know travels as an empty string —
+  // the browser then says 契约种类未知 rather than printing an identifier at a
+  // Chinese-reading researcher.
+  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0 });
+  await writeProjection({
+    plan: { revision: 1, items: [{ id: "d1", contractKind: "not-a-contract-kind", status: "not-a-status", capability: "x", title: "" }] },
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const published = frames.filter((frame) => frame.type === "deliverable/update");
+  assert.equal(published.length, 1);
+  assert.equal(published[0].data.contractKind, "");
+  assert.equal(published[0].data.status, "planned", "a status outside PLAN_ITEM_STATES must not travel as one");
+  assert.equal(published[0].data.title, "d1", "a titleless item falls back to its id rather than rendering blank");
   store.monitors.get(run.id)?.cancel();
 });
 
@@ -2971,6 +3070,259 @@ test("a provenance rejection is repaired rather than discarded", async () => {
   }
 });
 
+// The repair budget is for repairing content. On 2026-08-26 one JSON syntax
+// error in clinical-evidence-matrix.json came back as 24 content findings — a
+// wall of symptoms with a single cause — and the package burned its rounds on
+// a typo. A rejection whose whole issue list is one structural fact (the
+// deliverable did not parse, a required file is absent) is now charged against
+// a separate finite allowance, and this pins both halves: the exemption, and
+// that a structural cause repeating unchanged still terminates.
+test("a structural rejection does not spend the content repair budget, and still terminates", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-repair-structural-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_repair_structural",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    // The dispatch-scheduled monitor reconciles on its own, and this test counts
+    // repair rounds, so a background reconcile would be a second charge nobody
+    // asked for. It is shut down below; until it is, the session reads busy and
+    // the history is empty, so its in-flight poll can do nothing.
+    let sessionStatus = "busy";
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      // One content round, one structural round: the smallest budget that can
+      // tell the two apart, and small enough that a third rejection has to end
+      // the run rather than the test waiting on an allowance.
+      maxClinicalRepairAttempts: 1,
+      maxClinicalStructuralRepairAttempts: 1,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => sessionStatus,
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_repair_structural",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) repairPrompts.push(repairText);
+      return { accepted: true };
+    });
+    const monitor = store.monitors.get(run.id);
+    monitor?.cancel();
+    // Awaited, not just cancelled: cancellation takes effect at the end of the
+    // poll already in flight, so only the settled promise proves no further
+    // reconcile can land in the middle of the rounds counted below.
+    await monitor?.promise;
+    assert.equal(repairPrompts.length, 0, "the monitor sent nothing before it was stopped");
+    sessionStatus = "idle";
+
+    // A complete package on disk whose matrix does not parse. Nothing else is
+    // wrong with it, and the run cannot be told anything else until it parses.
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), "# 报告\n\n正文。", "utf8");
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), '{"claims": [', "utf8");
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-run.json"),
+      JSON.stringify({ successfulSourceArtifacts: [] }),
+      "utf8",
+    );
+    const finishedTurn = (id) => ({
+      info: { id, role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    });
+
+    history = [finishedTurn("msg_structural_1")];
+    const first = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(first.id, run.id);
+    assert.equal(first.status, "running");
+    assert.equal(repairPrompts.length, 1, "the first structural rejection is repaired");
+    // Verdict and issue text unchanged: the round is billed elsewhere, nothing
+    // about what the run is told is softened.
+    assert.match(repairPrompts[0], /clinical-evidence-matrix\.json must contain strict valid JSON/);
+    assert.equal(
+      store.clinicalRepairAttempts.get(run.id) ?? 0,
+      0,
+      "a structural round leaves the content repair budget untouched",
+    );
+    assert.equal(store.clinicalStructuralRepairAttempts.get(run.id), 1);
+
+    // The same structural cause, unchanged. The allowance is spent, so this one
+    // is charged to the ordinary budget exactly as it was before.
+    history = [...history, finishedTurn("msg_structural_2")];
+    const second = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(second.status, "running");
+    assert.equal(repairPrompts.length, 2, "the allowance is finite, not a second budget");
+    assert.equal(store.clinicalRepairAttempts.get(run.id), 1, "the second structural round is charged normally");
+    assert.equal(store.clinicalStructuralRepairAttempts.get(run.id), 1, "the allowance does not refill");
+
+    // Both budgets are gone: the run must end, not loop.
+    history = [...history, finishedTurn("msg_structural_3")];
+    const third = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(repairPrompts.length, 2, "a structural cause that repeats unchanged terminates");
+    assert.equal(third.status, "failed");
+    assert.equal(third.errorCode, "specialist_evidence_traceability_failed");
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// The exemption is for a rejection that is *only* the structural fact. A check
+// that already had something else to say about the same package makes the
+// rejection two facts, and two facts are an ordinary repair round — otherwise
+// the allowance would quietly pay for content findings that happened to arrive
+// beside a parse error. `requiredSpecialistArtifacts` is the one place that can
+// add to an issue list after the return site marked it, so it is the one place
+// that takes the mark back; without that line this test's package would be
+// billed to the structural allowance.
+test("a structural rejection carrying an advisory as well is charged as an ordinary repair", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-repair-structural-advisory-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_repair_structural_advisory",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    let history = [];
+    let sessionStatus = "busy";
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+          ],
+          // citationsResolvable runs before the matrix is parsed and files its
+          // findings as advisories, which is how a second fact reaches a
+          // structural rejection at all.
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      maxClinicalStructuralRepairAttempts: 1,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => sessionStatus,
+    });
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_repair_structural_advisory",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) repairPrompts.push(repairText);
+      return { accepted: true };
+    });
+    const monitor = store.monitors.get(run.id);
+    monitor?.cancel();
+    await monitor?.promise;
+    sessionStatus = "idle";
+
+    // The same unparseable matrix as the structural case, plus one plain-HTTP
+    // citation: reachable, so the claim stands and the gate only advises.
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-report.md"),
+      "# 报告\n\n正文，见 http://example.org/a 。\n",
+      "utf8",
+    );
+    await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), '{"claims": [', "utf8");
+    await writeFile(
+      path.join(project.workspaceDir, "clinical-evidence-run.json"),
+      JSON.stringify({ successfulSourceArtifacts: [] }),
+      "utf8",
+    );
+    history = [{
+      info: { id: "msg_structural_advisory_1", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
+          type: "tool",
+          tool: "write",
+          state: { status: "completed", input: { filePath } },
+        })),
+        { type: "text", text: "Completed." },
+      ],
+    }];
+
+    const first = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(first.status, "running");
+    assert.equal(repairPrompts.length, 1, "it is still repaired; only the billing is in question");
+    // Both facts are in front of the run, unchanged in wording.
+    assert.match(repairPrompts[0], /clinical-evidence-matrix\.json must contain strict valid JSON/);
+    assert.match(repairPrompts[0], /served over plain HTTP/);
+    assert.equal(
+      store.clinicalRepairAttempts.get(run.id),
+      1,
+      "a rejection that is not attributable to the structural cause alone spends the content budget",
+    );
+    assert.equal(
+      store.clinicalStructuralRepairAttempts.get(run.id) ?? 0,
+      0,
+      "and leaves the structural allowance untouched",
+    );
+
+    await store.closeProject(project, "canceled");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 // The stall guard exists to end a run that died. It counted a failed read as
 // evidence of a stall, so a run working normally through a spell of 502s from
 // its runtime was closed as runtime_monitor_stalled, with nothing recording
@@ -4352,8 +4704,13 @@ test("a run whose container is already gone is judged from its receipt, not fail
 
     const binding = { sessionId: "ses_gone", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
     let alive = true;
+    // Both browser-facing hooks, on one list, so their relative order is
+    // observable rather than assumed.
+    const frames = [];
     const store = new AgentRunStore({ get: async () => binding }, {
       model: "deepseek/deepseek-v4-pro",
+      onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
+      onRunStateChanged: (_project, run) => frames.push({ type: "run/state", data: { state: run.status } }),
       // The real sequence: the container is alive when the run starts (the
       // baseline is captured from it) and gone by the time anything reconciles.
       readSessionHistory: async () => {
@@ -4374,6 +4731,25 @@ test("a run whose container is already gone is judged from its receipt, not fail
     assert.equal(finished?.status, "succeeded", "a receipt that verifies is a delivered run, whatever became of the container");
     assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.deepEqual(finished?.qualityNotices, ["one advisory"]);
+
+    // And the receipt reaches the browser, ahead of the terminal state.
+    //
+    // Order is the assertion, not a detail: a settled run closes its own stream
+    // client-side (`runIsSettled`), so a deliverable frame published after the
+    // terminal `run/state` arrives at nobody. That is the same
+    // looks-like-nothing-happened failure the panel was built to end.
+    const deliverable = frames.find((frame) => frame.type === "deliverable/update");
+    assert.ok(deliverable, `no deliverable/update was published: ${JSON.stringify(frames)}`);
+    assert.equal(deliverable.data.id, "d1");
+    assert.equal(deliverable.data.receipt?.attempt, 1);
+    assert.deepEqual(deliverable.data.receipt?.files, [
+      { path: "deliverables/d1/clinical-evidence-report.md", sha256, bytes: Buffer.byteLength(body) },
+    ]);
+    assert.deepEqual(deliverable.data.receipt?.notices, ["one advisory"]);
+    assert.ok(
+      frames.indexOf(deliverable) < frames.findIndex((frame) => frame.type === "run/state" && frame.data.state === "succeeded"),
+      "the receipt must be published before the terminal state a watching tab closes on",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

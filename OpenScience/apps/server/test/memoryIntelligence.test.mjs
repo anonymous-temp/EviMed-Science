@@ -6,6 +6,8 @@ class MemoryStoreDouble {
   constructor() {
     this.records = new Map();
     this.nextId = 1;
+    /** Every revision reason the store was given — the record's audit trail. */
+    this.reasons = [];
   }
 
   async listRecords() {
@@ -13,6 +15,7 @@ class MemoryStoreDouble {
   }
 
   async upsertRecord(_userId, input, evidence, options = {}) {
+    this.reasons.push({ key: input.key, status: input.status, reason: String(options.reason ?? "") });
     const key = [input.scope, input.scopeId ?? "", input.kind, input.key].join("\u0000");
     const existing = this.records.get(key);
     if (existing && options.expectedVersion > 0 && options.expectedVersion !== existing.version) {
@@ -256,4 +259,58 @@ test("inferred memory remains pending until three independent exact observations
   }
   const behavior = [...store.records.values()].find((record) => record.kind === "behavior");
   assert.equal(behavior.evidenceCount, 3);
+});
+
+// A record parked as `pending` is not refused: it is stored with its evidence
+// and simply not recalled until a person confirms it. Nothing said so, and
+// `sensitivePattern` includes 病历号 and 患者姓名 — ordinary words in medical
+// research text — so a researcher watched memory "not learn" with no reason
+// anywhere. The demotion is deliberate and unchanged; what changes is that it
+// now names itself, both to the run and in the record's own revision history.
+test("a memory parked by the sensitive screen says why, and one that is not is untouched", async () => {
+  const client = new MemoryStoreDouble();
+  const messages = [
+    message("u1", "请记住：这批分析统一按病历号去重，不要按姓名。"),
+    message("u2", "请记住：随访窗口统一取 12 周。"),
+  ];
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: modelFetch((sources) => [
+      {
+        scope: "project", kind: "analysis", key: "project.analysis.dedup_rule",
+        value: "按病历号去重", summary: "去重口径", origin: "explicit",
+        confidence: 1, importance: 0.8, sensitive: false,
+        sourceRef: sources.find((source) => source.sourceRef.endsWith("u1")).sourceRef,
+        evidenceQuote: "按病历号去重",
+      },
+      {
+        scope: "project", kind: "analysis", key: "project.analysis.followup_window",
+        value: "随访窗口取 12 周", summary: "随访窗口", origin: "explicit",
+        confidence: 1, importance: 0.8, sensitive: false,
+        sourceRef: sources.find((source) => source.sourceRef.endsWith("u2")).sourceRef,
+        evidenceQuote: "随访窗口统一取 12 周",
+      },
+    ]),
+  });
+
+  const result = await intelligence.recordRun(project(), run("run_pending_reason"), messages);
+  assert.equal(result.extracted, 2, "both candidates are stored; parking is not refusing");
+
+  // Unchanged: which records are demoted. One matched the screen, one did not.
+  const stored = await client.listRecords();
+  const parked = stored.find((record) => record.key === "project.analysis.dedup_rule");
+  const active = stored.find((record) => record.key === "project.analysis.followup_window");
+  assert.equal(parked.status, "pending", "the sensitive-screen demotion still happens");
+  assert.equal(active.status, "active", "a record the screen did not match is unaffected");
+
+  // Added: the reason, to the caller that reports to the user...
+  assert.equal(result.pending, 1);
+  assert.deepEqual(result.pendingReasons.map((item) => [item.reason, item.count]), [["sensitive", 1]]);
+  assert.match(result.pendingReasons[0].text, /敏感词表/);
+
+  // ...and to the record's own audit trail, which is what a person opening the
+  // memory later actually reads.
+  const parkedReason = client.reasons.find((entry) => entry.key === "project.analysis.dedup_rule");
+  assert.match(parkedReason.reason, /parked as pending: the text matched the sensitive-vocabulary screen/);
+  const activeReason = client.reasons.find((entry) => entry.key === "project.analysis.followup_window");
+  assert.doesNotMatch(activeReason.reason, /parked as pending/, "a record that was not parked says nothing about parking");
 });
