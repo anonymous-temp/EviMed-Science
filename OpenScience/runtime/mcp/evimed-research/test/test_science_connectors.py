@@ -138,3 +138,46 @@ class MountingTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"]["code"], "invalid_input")
         fetched.assert_not_called()
+
+
+class LiveWireFindingsTests(unittest.TestCase):
+    """Two defects the live probe found that no unit test could have.
+
+    Both are properties of the server on the other end, not of this code, so
+    the only way to learn them was to call the real thing: FRED serves a
+    content type the accepted list did not include, and Materials Project
+    authenticates every request. Pinned here so a refactor cannot quietly undo
+    what one live run cost.
+    """
+
+    def test_fred_accepts_the_content_type_fred_actually_serves(self):
+        # `application/csv`, not `text/csv`. Every call failed as an invalid
+        # response before this, and the summary blamed the source.
+        captured = {}
+
+        def fake_get_text(url, accepted):
+            captured["accepted"] = accepted
+            return "observation_date,GDP\n1947-01-01,243.164"
+
+        with mock.patch.object(science_connectors.public_sources, "_get_text", fake_get_text):
+            result = science_connectors.direct_query("fred", {"series_id": "GDP", "limit": 2})
+        self.assertIn("application/csv", captured["accepted"])
+        self.assertEqual(result["data"][0], "observation_date,GDP")
+
+    def test_materials_project_asks_for_its_credential_by_name(self):
+        # Unauthenticated it returns a bare 401, which reads as "the service is
+        # down" rather than "this deployment has no key". Naming the profile
+        # makes the honest error the one a reader gets, and the profile's
+        # header matches what the control-plane gateway already injects.
+        captured = {}
+
+        def fake_get_json(url, **kwargs):
+            captured.update(kwargs)
+            return {"data": []}
+
+        with mock.patch.object(science_connectors.public_sources, "_get_json_value", fake_get_json):
+            science_connectors.direct_query("materials-project", {"formula": "Fe2O3", "limit": 1})
+        self.assertEqual(captured.get("credential_profile"), "materials-project")
+        header, template = science_connectors.public_sources.CREDENTIAL_PROFILES["materials-project"][1:]
+        self.assertEqual(header, "x-api-key")
+        self.assertEqual(template % "KEY", "KEY")

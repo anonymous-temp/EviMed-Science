@@ -43,6 +43,25 @@ TASK_FIXTURES = {
     # and `ci:web` reported the whole audit as stale evidence, so a tool nobody
     # had ever probed read like evidence that was merely old.
     "web_search": {"query": "systematic review reporting guideline PRISMA 2020", "limit": 2},
+    # `op: providers` asks the probe which front-ends this deployment can reach
+    # and is the only operation with no side effect: `ask` would drive real
+    # browser sessions against five consumer products. The tool was declared,
+    # model-facing and never probed — the same hole the guard below named for
+    # `web_search`, which cost twelve days of "stale evidence" that was not
+    # stale at all.
+    "geo_visibility_probe": {"op": "providers"},
+    # The seven first-party science connectors, mounted 2026-09-02. They had
+    # been written, tested and declared by nothing; mounting them made them
+    # model-facing, and a model-facing tool nobody has ever probed is exactly
+    # what the coverage guard above exists to refuse. Each fixture asks the
+    # smallest real question its connector answers.
+    "search_papers": {"query": "aspirin cardiovascular prevention", "limit": 2},
+    "search_biomedical_records": {"query": "metformin type 2 diabetes", "database": "pubmed", "limit": 2},
+    "search_materials": {"formula": "Fe2O3", "limit": 1},
+    "get_fred_series": {"series_id": "GDP", "limit": 3},
+    "get_space_weather_alerts": {"limit": 2},
+    "get_weather": {"latitude": 39.9042, "longitude": 116.4074, "forecast_days": 1},
+    "get_usgs_water_data": {"site": "01646500", "period": "P1D"},
     "term_normalize": {"term": "心肌梗死", "domain": "disease"},
     "drug_term_normalize": {"term": "acetaminophen"},
     "evidence_deduplicate": {"items": [

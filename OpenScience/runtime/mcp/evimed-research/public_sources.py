@@ -178,10 +178,28 @@ def _gateway_settings():
     return gateway_url, _read_bare_token(token_file)
 
 
+# A profile names the file its key comes from *and* the header that key goes
+# in. The scheme is not uniform across sources: Materials Project reads
+# `X-API-KEY` and answers a bearer token with the same 401 it gives an
+# anonymous caller, so assuming one scheme would have produced a credential
+# that looks configured and never authenticates.
+CREDENTIAL_PROFILES = {
+    "evimed-evidence": ("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "authorization", "Bearer %s"),
+    "materials-project": ("EVIMED_MATERIALS_PROJECT_KEY_FILE", "x-api-key", "%s"),
+}
+
+
+def _credential_header(credential_profile, value):
+    profile = CREDENTIAL_PROFILES.get(credential_profile)
+    if not profile:
+        return {}
+    _, header, template = profile
+    return {header: template % value}
+
+
 def _direct_credential(credential_profile):
-    env_name = {
-        "evimed-evidence": "EVIMED_EVIDENCE_SEARCH_KEY_FILE",
-    }.get(credential_profile)
+    profile = CREDENTIAL_PROFILES.get(credential_profile)
+    env_name = profile[0] if profile else None
     if not env_name:
         return None
     configured = os.environ.get(env_name, "").strip()
@@ -225,7 +243,7 @@ def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=No
             headers={
                 "accept": ", ".join(accepted),
                 **({"content-type": "application/json"} if encoded_body is not None else {}),
-                **({"authorization": "Bearer %s" % direct_credential} if direct_credential else {}),
+                **(_credential_header(credential_profile, direct_credential) if direct_credential else {}),
                 "user-agent": "EviMed-Research/1.2 (research connector)",
             },
             method=method,
