@@ -1759,3 +1759,31 @@ test("the image's install cutoff admits the version the image pins", async () =>
     `--before=${cutoff} precedes the publication of ${pin} (${published}); the image cannot install the version it pins`,
   );
 });
+
+test("an ops script shipped in the web image can resolve the workspace packages it imports", async () => {
+  // `pnpm deploy` puts them under `apps/server/node_modules`, and Node resolves
+  // upwards from the importing file — so `/app/scripts/ops/x.mjs` never reaches
+  // them. Four shipped scripts import `@evimed/domain`, including the release
+  // gate, and every one of them died on `Cannot find package` the first time
+  // one ran inside the image.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  assert.match(
+    dockerfile,
+    /ln -s apps\/server\/node_modules \/app\/node_modules/,
+    "the image must let /app resolve the workspace packages the shipped ops scripts import",
+  );
+
+  // And the list this protects is derived, not remembered: any ops script that
+  // imports a workspace package needs it.
+  const opsDir = path.join(repoRoot, "scripts/ops");
+  const importers = [];
+  for (const name of await readdir(opsDir)) {
+    if (!name.endsWith(".mjs")) continue;
+    const source = await readFile(path.join(opsDir, name), "utf8");
+    if (/from "@evimed\//.test(source)) importers.push(name);
+  }
+  assert.ok(
+    importers.length > 0,
+    "no ops script imports a workspace package any more — delete the link and this test together",
+  );
+});
