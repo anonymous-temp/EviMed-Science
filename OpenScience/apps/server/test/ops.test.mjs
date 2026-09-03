@@ -649,6 +649,47 @@ test("ops backup refuses data directories containing symbolic links", async () =
   );
 });
 
+test("ops backup skips the runtime scratch, and still refuses a symlink anywhere it archives", async () => {
+  // The DSH kernel installs its profile with pnpm, which lays out
+  // `node_modules/.pnpm` as thousands of relative symlinks — 3,752 for one
+  // session — under the project, under the data directory. The refusal above
+  // then fired on every cycle from the first runtime start onward, and the
+  // backups stopped for good. The scratch is rebuilt on the next start and
+  // restores nothing, so it is excluded from the archive and from the scan.
+  //
+  // Both directions, because excluding a path is exactly how a check quietly
+  // stops covering the thing it was written for.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-ops-"));
+  const dataDir = path.join(tmp, "data");
+  const backupDir = path.join(tmp, "backups");
+  const project = path.join(dataDir, "users", "u1", "projects", "p1");
+  const scratch = path.join(project, "runtime", "container-runtime", "node_modules");
+  const outside = path.join(tmp, "outside.txt");
+  await mkdir(scratch, { recursive: true });
+  await mkdir(path.join(project, "workspace"), { recursive: true });
+  await writeFile(outside, "secret\n");
+  await writeFile(path.join(project, "workspace", "kept.txt"), "real\n");
+  await symlink(outside, path.join(scratch, "dep"));
+
+  const ok = await run(backupScript, [dataDir, backupDir]);
+  const archive = ok.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+  assert.ok(archive, "the backup must still produce an archive");
+  const listed = await runCommand("tar", ["-tzf", archive], { cwd: tmp });
+  assert.match(listed.stdout, /workspace\/kept\.txt/, "real project files must still be archived");
+  assert.doesNotMatch(listed.stdout, /container-runtime/, "the runtime scratch must not be in the archive");
+
+  // And the guard is intact for everything that IS archived.
+  await symlink(outside, path.join(project, "workspace", "leak"));
+  await assert.rejects(
+    () => run(backupScript, [dataDir, backupDir]),
+    (err) => {
+      assert.match(err.stderr, /Refusing to back up data directory containing symbolic links/);
+      return true;
+    },
+    "a symlink in a directory the archive does include must still stop the backup",
+  );
+});
+
 test("ops restore refuses archives containing symbolic links", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-ops-"));
   const src = path.join(tmp, "src");
