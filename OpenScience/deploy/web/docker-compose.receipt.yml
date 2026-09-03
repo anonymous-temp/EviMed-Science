@@ -62,7 +62,13 @@ services:
       # plan the web service builds. A value that differs here would certify a
       # runtime nobody runs.
       OPEN_SCIENCE_DATA_DIR: /data
-      OPEN_SCIENCE_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-}
+      # `OPEN_SCIENCE_RUNTIME_DATA_VOLUME` is the name the code reads;
+      # `OPEN_SCIENCE_DATA_VOLUME` is the name the .env uses for the volume
+      # itself. Passing the second one here set nothing, so this service built a
+      # launch plan with a bind-mounted control socket while the controller
+      # built one with a volume subpath — and the only symptom was a container
+      # that was created and never started.
+      OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_TRANSPORT: ${OPEN_SCIENCE_RUNTIME_TRANSPORT:-unix}

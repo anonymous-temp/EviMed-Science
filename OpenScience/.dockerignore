@@ -22,3 +22,12 @@ apps/desktop/src-tauri/binaries
 secrets
 **/secrets
 deploy/web/release-manifest.json
+
+# Probe artefacts, not build inputs. A run leaves a workspace of fetched
+# sources here — sometimes root-owned, since the probe runs in a container —
+# and the build sender reads the whole context, so one unreadable file aborts
+# the image with a permission error that names a file nothing in the image
+# wants.
+evals/capability-audit/results/tool-probe-workspace
+evals/capability-audit/tool-probe-workspace
+evals/**/results/runs
