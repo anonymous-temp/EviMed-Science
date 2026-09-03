@@ -593,7 +593,14 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
     read_only: true
-    tmpfs: ["/tmp:rw,nosuid,nodev,size=512m"]
+    # Two writable spots, both tmpfs, both discarded with the container.
+    # ToolUniverse creates `$HOME/.tooluniverse` while starting and dies on a
+    # read-only root before it answers anything — the service had never been
+    # started on this host, so the stack's first bring-up stopped on it. `/tmp`
+    # alone is not enough: the path it wants is under HOME.
+    tmpfs:
+      - "/tmp:rw,nosuid,nodev,size=512m"
+      - "/home/tooluniverse:rw,nosuid,nodev,size=64m"
     cpus: 1.5
     mem_limit: 3g
     pids_limit: 512
