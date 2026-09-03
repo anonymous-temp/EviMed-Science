@@ -11,8 +11,25 @@ if [ ! -d "$DATA_DIR" ]; then
   exit 1
 fi
 
-if [ -L "$DATA_DIR" ] || find "$DATA_DIR" -type l -print -quit | grep -q .; then
+# What is NOT data, and therefore neither archived nor scanned.
+#
+# `container-runtime` is the runtime container's scratch: its XDG directories,
+# its DSH home, the pnpm store for the profile, its temp dir. Every one of them
+# is rebuilt on the next start, and none of it restores anything. It has to be
+# named here because the DSH kernel installs its profile with pnpm, which lays
+# out `node_modules/.pnpm` as thousands of relative symlinks — 3,752 for one
+# session — inside the project, inside the data directory.
+#
+# Without this the first project to start a runtime stopped every backup from
+# then on, permanently, on the check below. That check is not the problem and is
+# not relaxed: a symlink in the archive is how a restore is talked into writing
+# outside the tree it restores into. Both the scan and the archive skip the same
+# paths, so everything that IS archived is still proven symlink-free.
+RUNTIME_SCRATCH="runtime/container-runtime"
+
+if [ -L "$DATA_DIR" ] || find "$DATA_DIR" -type d -name container-runtime -prune -o -type l -print -quit | grep -q .; then
   echo "Refusing to back up data directory containing symbolic links: $DATA_DIR" >&2
+  echo "  (the runtime scratch at */${RUNTIME_SCRATCH} is excluded from this scan and from the archive)" >&2
   exit 1
 fi
 
@@ -42,7 +59,8 @@ trap cleanup EXIT
 # --exclude removes the only reason tar had to complain, so a non-zero exit
 # again means a real failure. Warnings that remain (a file changing as it is
 # read) still fail the backup, which is the intended behaviour.
-tar --exclude=".runtime-sockets" --exclude="*.sock" -czf "$tmp" -C "$DATA_DIR" .
+tar --exclude=".runtime-sockets" --exclude="*.sock" --exclude="./users/*/projects/*/${RUNTIME_SCRATCH}" \
+  -czf "$tmp" -C "$DATA_DIR" .
 mv "$tmp" "$archive"
 
 if [ -n "${OPEN_SCIENCE_BACKUP_PASSPHRASE:-}" ] || [ -n "${OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-}" ]; then

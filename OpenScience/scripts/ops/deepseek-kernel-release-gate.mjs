@@ -582,6 +582,15 @@ async function runDshChain({ config: supplied, timeoutMs }) {
   /** @type {{ port: number, state: { requests: number, sseResponses: number }, close: () => Promise<unknown> } | null} */
   let gateway = null;
   try {
+    // Anything a previous mint left behind, before this one adds to it. The
+    // `finally` below removes this run's project, but a killed process skips
+    // it, and what is left is not small: the kernel installs its profile with
+    // pnpm, so an abandoned project holds a whole node_modules tree. Swept at
+    // the start rather than trusted to a `finally` that may not run.
+    const projectsRoot = path.join(userRoot, "projects");
+    for (const stale of await fsp.readdir(projectsRoot).catch(() => [])) {
+      await fsp.rm(path.join(projectsRoot, stale), { recursive: true, force: true }).catch(() => {});
+    }
     await Promise.all([workspaceDir, project.runtimeDir, project.metaDir]
       .map((dir) => fsp.mkdir(dir, { recursive: true, mode: 0o700 })));
 
