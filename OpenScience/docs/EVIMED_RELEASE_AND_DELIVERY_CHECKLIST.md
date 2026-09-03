@@ -82,13 +82,18 @@ pnpm lint
 pnpm ci:web
 pnpm check:tauri
 
-# 在目标主机和真实生产 env 上执行。
-# 顺序变了：签发凭据要启动运行时容器，而它拒绝启动清单没有指名的镜像，
-# 所以 release:manifest 必须先于 preflight:deepseek:release。
+# 在目标主机和真实生产 env 上执行。顺序按 2026-09-03 的实测更正了两次：
+#   ① 签发凭据要启动运行时容器，而启动计划拒绝清单没有指名的镜像
+#      —— 所以 release:manifest 必须先于 preflight:deepseek:release；
+#   ② 运行时控制器会核对调用方的 releaseId 与自己是否相同
+#      （`runtime_controller_release_mismatch`）—— 所以签发必须在
+#      **新栈起来之后**，用新控制器。这两条不是可以调换的偏好：
+#      前者由 buildRuntimeLaunchPlan 强制，后者由 controllerHealth 强制。
 pnpm release:manifest
 pnpm verify:release-manifest
-pnpm preflight:deepseek:release
-pnpm preflight:host --env-file deploy/web/.env.production
+pnpm preflight:host --env-file deploy/web/.env
+# 切换软链 + compose up（含 receipt profile）。此时 /api/ready 只会红在回执一项。
+pnpm preflight:deepseek:release   # 新控制器就位后才可能成功
 pnpm smoke:deployment
 ```
 
