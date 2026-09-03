@@ -47,6 +47,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +66,15 @@ const auditToken = "evimed-tool-audit-token";
 // a 404 that surfaced inside the agent as "the query-understanding model is
 // unavailable".
 const modelGatewayBase = MODEL_GATEWAY_PATH.replace(/\/chat\/completions$/, "");
+
+// The same fallback budget the server entrypoints set, for the same reason:
+// an upstream whose AAAA records black-hole fails with ETIMEDOUT inside the
+// 250 ms default and is recorded as a source that returned an error. NOAA's
+// SWPC probe failed exactly that way here and answered on the first retry once
+// the IPv4 attempt was allowed to finish.
+net.setDefaultAutoSelectFamilyAttemptTimeout(
+  Math.max(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1_000),
+);
 
 const config = loadConfig();
 
