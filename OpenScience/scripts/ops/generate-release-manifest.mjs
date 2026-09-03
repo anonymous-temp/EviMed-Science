@@ -232,6 +232,39 @@ async function currentVersions() {
   };
 }
 
+/**
+ * The build timestamp, refused by shape rather than by the validator's name.
+ *
+ * `validateReleaseManifest` requires an ISO string that round-trips through
+ * `Date.prototype.toISOString`, so `2026-09-03T03:05:48Z` — a perfectly valid
+ * ISO 8601 instant — fails, because the round trip adds `.000`. It failed as
+ * `release_manifest_created_at_invalid`, which reads as "that is not a
+ * timestamp" and sends the reader looking at the wrong thing. Said here, where
+ * the value comes from, and with the form it wants.
+ *
+ * Not normalized silently: the same string is baked into the image as
+ * `org.opencontainers.image.created`, so rewriting it here would make the
+ * manifest disagree with the image it describes.
+ * @returns {string}
+ */
+function buildCreatedAt() {
+  const value = process.env.OPEN_SCIENCE_BUILD_CREATED;
+  if (value == null || value === "") return new Date().toISOString();
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) {
+    throw new Error(
+      `OPEN_SCIENCE_BUILD_CREATED must be an ISO timestamp with milliseconds and a Z suffix, ` +
+      `exactly as \`new Date().toISOString()\` writes it — for example ` +
+      `${Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString()}. ` +
+      `Got: ${JSON.stringify(value)}. It is also baked into the image as ` +
+      `org.opencontainers.image.created, so build the image with the same value rather than ` +
+      `correcting it only here.`,
+    );
+  }
+  return value;
+}
+
+
 async function buildManifest() {
   const pkg = JSON.parse(await read("package.json"));
   const versions = await currentVersions();
@@ -249,7 +282,7 @@ async function buildManifest() {
     },
     source: {
       revision: requiredEnv("OPEN_SCIENCE_SOURCE_REVISION").toLowerCase(),
-      createdAt: process.env.OPEN_SCIENCE_BUILD_CREATED ?? new Date().toISOString(),
+      createdAt: buildCreatedAt(),
     },
     web: {
       image: webImage,
