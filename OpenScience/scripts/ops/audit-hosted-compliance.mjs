@@ -457,8 +457,13 @@ async function checkRuntimeContainerTopology() {
   }
 
   if (
-    /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/.test(controllerService) &&
-    /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/.test(controllerService) &&
+    // The caps live in one anchor now, shared by the web API, the controller
+    // and the receipt scheduler; the controller merges it rather than
+    // restating it. Scanning its block for the literals would report a shared
+    // definition as a deleted control.
+    /<<: \*runtime-caps/.test(controllerService) &&
+    /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/.test(compose) &&
+    /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/.test(compose) &&
     /dockerRuntimeInventory\(config\)/.test(controller) &&
     /dockerManagedInventory\(config, "open-science\.web\.runtime=true"\)/.test(controller) &&
     /reserveRuntimeCapacity\(project\)/.test(controller) &&
@@ -471,8 +476,10 @@ async function checkRuntimeContainerTopology() {
   }
 
   if (
-    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/.test(controllerService) &&
-    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/.test(controllerService) &&
+    // Same shared anchor as the runtime caps above; see the note there.
+    /<<: \*runtime-caps/.test(controllerService) &&
+    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/.test(compose) &&
+    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/.test(compose) &&
     /kernelCapacityLimits\(config\)/.test(controller) &&
     /dockerKernelInventory\(config\)/.test(controller) &&
     /cleanupStaleKernelContainers\(config\)/.test(controller) &&

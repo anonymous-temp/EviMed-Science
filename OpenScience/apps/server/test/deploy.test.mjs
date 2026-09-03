@@ -418,16 +418,18 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
     controllerService,
     /group_add:\s*\n\s+- "\$\{OPEN_SCIENCE_DOCKER_SOCKET_GID:\?set OPEN_SCIENCE_DOCKER_SOCKET_GID\}"/,
   );
-  assert.match(controllerService, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/);
-  assert.match(
-    controllerService,
-    /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/,
-  );
-  assert.match(controllerService, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
-  assert.match(
-    controllerService,
-    /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/,
-  );
+  // The controller's caps come from the `x-runtime-caps` anchor now, so they are
+  // not text inside its own block. What matters is unchanged and is asserted
+  // where it is true: the anchor defines all four with these defaults, and the
+  // controller merges it. Scanning its block for the literals would have made
+  // sharing one definition look like deleting the check.
+  assert.match(controllerService, /<<: \*runtime-caps/, "the controller must take the shared caps");
+  assert.match(webService, /<<: \*runtime-caps/, "and so must the web service, or they can disagree again");
+  const capAnchor = compose.slice(compose.indexOf("x-runtime-caps: &runtime-caps"), compose.indexOf("\nservices:"));
+  assert.match(capAnchor, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2\}/);
+  assert.match(capAnchor, /OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1\}/);
+  assert.match(capAnchor, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/);
+  assert.match(capAnchor, /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/);
   assert.doesNotMatch(controllerService, /^\s+ports:/m);
   assert.match(compose, /OPEN_SCIENCE_RUNTIME_DATA_VOLUME:\s+\$\{OPEN_SCIENCE_DATA_VOLUME:-open-science-data\}/);
   assert.match(compose, /OPEN_SCIENCE_RUNTIME_TRANSPORT:\s+\$\{OPEN_SCIENCE_RUNTIME_TRANSPORT:-unix\}/);
@@ -1814,4 +1816,24 @@ test("every repository-root file the server reads at load is in the web image", 
       `apps/server/src reads ${file} from the repository root, and the web image does not copy it`,
     );
   }
+});
+
+test("the receipt scheduler declares the same runtime caps as the web service", async () => {
+  // The controller compares its caller's caps against its own and refuses on
+  // any difference. Three services must agree; two of them share the
+  // `x-runtime-caps` anchor, and the third is in an overlay file — compose
+  // parses each file alone, so an anchor cannot reach it. This is what an
+  // anchor would have guaranteed, across the boundary an anchor cannot cross.
+  const [main, receipt] = await Promise.all([
+    readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"),
+    readFile(path.join(repoRoot, "deploy/web/docker-compose.receipt.yml"), "utf8"),
+  ]);
+  const caps = (text) => Object.fromEntries(
+    [...text.matchAll(/^\s*(OPEN_SCIENCE_MAX_(?:RUNNING_RUNTIMES|CONCURRENT_KERNELS)(?:_PER_USER)?):\s*(\S+)\s*$/gm)]
+      .map((match) => [match[1], match[2]]),
+  );
+  const declared = caps(main);
+  const scheduler = caps(receipt);
+  assert.equal(Object.keys(declared).length, 4, "the anchor must still define all four caps");
+  assert.deepEqual(scheduler, declared, "a cap the scheduler does not share is a mint refused a day later");
 });

@@ -1,3 +1,17 @@
+# The four caps the runtime controller compares against its caller's.
+#
+# Written once and merged into every service that must agree on them: the web
+# API, the controller itself, and the receipt scheduler. They were repeated per
+# service, and the third one — added later — did not repeat them, so its first
+# call was refused with `runtime_controller_limit_mismatch`, a name that says
+# two configurations disagree without saying which value or which pair. One
+# definition removes the class rather than the instance.
+x-runtime-caps: &runtime-caps
+  OPEN_SCIENCE_MAX_CONCURRENT_KERNELS: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2}
+  OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1}
+  OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8}
+  OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4}
+
 services:
   evimed-postgres:
     image: postgres:16.14-bookworm
@@ -243,7 +257,12 @@ services:
       OPEN_SCIENCE_OPENFDA_API_KEY: ${OPEN_SCIENCE_OPENFDA_API_KEY:-}
       # Empty disables the sidecar's MCP row entirely; the runtime then
       # behaves exactly as it did before the sidecar existed.
-      OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL:-http://tooluniverse:8080/mcp}
+      # Empty by default, deliberately. The row this writes into the profile
+      # patch carries `failOnStartupError: false`, so a URL pointing at a
+      # sidecar that is not running does not refuse a run — it makes every run
+      # pay a connection timeout for a tool set it will never get. Set it
+      # together with the `tooluniverse` profile, not before.
+      OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ${OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL:-}
       OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE: /run/secrets/materials-project-api-key
       OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT: ${OPEN_SCIENCE_REQUIRE_MATERIALS_PROJECT:-true}
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/model/v1}
@@ -316,8 +335,7 @@ services:
       OPEN_SCIENCE_COMMAND_RATE_LIMIT_MAX_REQUESTS: ${OPEN_SCIENCE_COMMAND_RATE_LIMIT_MAX_REQUESTS:-120}
       OPEN_SCIENCE_TRUST_PROXY: ${OPEN_SCIENCE_TRUST_PROXY:-true}
       OPEN_SCIENCE_MAX_CONCURRENT_COMMANDS: ${OPEN_SCIENCE_MAX_CONCURRENT_COMMANDS:-8}
-      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2}
-      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1}
+      <<: *runtime-caps
       OPEN_SCIENCE_MAX_CONCURRENT_TASKS: ${OPEN_SCIENCE_MAX_CONCURRENT_TASKS:-2}
       OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT: ${OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT:-1}
       OPEN_SCIENCE_MAX_QUEUED_TASKS: ${OPEN_SCIENCE_MAX_QUEUED_TASKS:-100}
@@ -329,8 +347,6 @@ services:
       OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS: ${OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS:-30000}
       OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS: ${OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS:-64}
       OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT: ${OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT:-8}
-      OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8}
-      OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4}
     volumes:
       - open-science-data:/data
       - open-science-backups:/backups:ro
@@ -544,6 +560,12 @@ services:
   # internal network by MCP streamable-http.
   tooluniverse:
     image: ${TOOLUNIVERSE_IMAGE:-evimed-tooluniverse:1.4.1}
+    # Behind a profile until its authentication is wired. The server refuses to
+    # bind a non-loopback address without `TOOLUNIVERSE_API_TOKEN`, and the MCP
+    # row that mounts it (`dshProfilePatch.toolUniverseRows`) sends no headers,
+    # so switching the token on here alone would produce a sidecar every call is
+    # rejected by. Starting it unconditionally is what stopped this stack's
+    # first bring-up: it had never been started on this host.
     build:
       context: ../..
       dockerfile: deploy/tooluniverse/Dockerfile
@@ -552,6 +574,7 @@ services:
         APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+    profiles: ["tooluniverse"]
     environment:
       # ToolUniverse reads its credentials under its own names. Every one is
       # optional to the server's start: an absent key disables the tools that
@@ -600,7 +623,11 @@ services:
     # alone is not enough: the path it wants is under HOME.
     tmpfs:
       - "/tmp:rw,nosuid,nodev,size=512m"
-      - "/home/tooluniverse:rw,nosuid,nodev,size=64m"
+      # uid/gid, not just a mode: a tmpfs mounts root-owned, and the image runs
+      # as uid 10001, so the first thing the server does in its own HOME is a
+      # permission error rather than a read-only one. Both failures print at the
+      # same place and the second reads like the first was not fixed.
+      - "/home/tooluniverse:rw,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700"
     cpus: 1.5
     mem_limit: 3g
     pids_limit: 512
@@ -881,10 +908,7 @@ services:
       OPEN_SCIENCE_MAX_JSON_BYTES: ${OPEN_SCIENCE_MAX_JSON_BYTES:-12582912}
       OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES: ${OPEN_SCIENCE_KERNEL_MAX_OUTPUT_BYTES:-1048576}
       OPEN_SCIENCE_KERNEL_TIMEOUT_MS: ${OPEN_SCIENCE_KERNEL_TIMEOUT_MS:-10000}
-      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2}
-      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1}
-      OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8}
-      OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4}
+      <<: *runtime-caps
     volumes:
       - open-science-data:/data:ro
       - open-science-runtime-control:/run/open-science-controller
