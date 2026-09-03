@@ -22,11 +22,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LLM_ENABLE_THINKING=true \
     LLM_REASONING_EFFORT=high
 
+# Chinese figure labels need a CJK face, and the check below proves one landed.
+# The deployed 2026-08-01 meta-agent image was built from a Dockerfile carrying
+# this same install line and shipped with no CJK face under /usr/share/fonts, so
+# every Chinese label it drew was a tofu box -- and nothing said so, because the
+# agent's font search is designed to degrade with a warning. A mirror that omits
+# the package must fail the build instead of shipping that.
 RUN set -eux; \
     sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl fonts-noto-cjk; \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/*; \
+    test -n "$(find /usr/share/fonts -iname '*CJK*' -print -quit)"
 
 ARG AGENT_KIND
 RUN set -eux; \

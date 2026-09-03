@@ -34,3 +34,43 @@ def test_a_pan_cjk_family_satisfies_the_chinese_font_search() -> None:
         assert visualization._detect_chinese_font() == "Noto Sans CJK JP"
     finally:
         fm.fontManager.ttflist = original
+
+
+def test_a_font_installed_after_the_cache_was_built_is_still_found(monkeypatch) -> None:
+    # `ttflist` is a cache. Installing a CJK family after matplotlib first
+    # built it leaves the font on disk and out of the list, and the search
+    # reported "no Chinese-capable font found" on a host carrying five of them
+    # -- so a Chinese manuscript got tofu boxes from a machine that had the
+    # glyphs. The search must read the directories, not only the cache.
+    class _Face:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    registered: list[str] = []
+    monkeypatch.setattr(fm.fontManager, "ttflist", registered)
+    monkeypatch.setattr(
+        fm,
+        "findSystemFonts",
+        lambda *args, **kwargs: [
+            "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansMonoCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        ],
+    )
+
+    def _addfont(path: str) -> None:
+        assert path.endswith("NotoSansCJK-Regular.ttc"), path
+        registered.append(_Face("Noto Sans CJK JP"))
+
+    monkeypatch.setattr(fm.fontManager, "addfont", _addfont)
+
+    assert visualization._detect_chinese_font() == "Noto Sans CJK JP"
+
+
+def test_a_host_with_no_cjk_font_at_all_still_says_so(monkeypatch) -> None:
+    # The control. Registering nothing must not be reported as a font.
+    monkeypatch.setattr(fm.fontManager, "ttflist", [])
+    monkeypatch.setattr(fm, "findSystemFonts", lambda *args, **kwargs: ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"])
+    monkeypatch.setattr(fm.fontManager, "addfont", lambda path: (_ for _ in ()).throw(AssertionError("must not be called")))
+
+    assert visualization._detect_chinese_font() == ""
