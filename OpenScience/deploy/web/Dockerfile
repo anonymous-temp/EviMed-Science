@@ -70,6 +70,12 @@ ENV OPEN_SCIENCE_SOURCE_REVISION=${SOURCE_REVISION}
 ENV OPEN_SCIENCE_BUILD_CREATED=${BUILD_CREATED}
 
 COPY --from=build /server ./apps/server
+# The single definition of every tracked upstream pin, read by `config.mjs` at
+# module load — so without it the server cannot start at all, and the failure is
+# an ENOENT during import rather than anything about configuration. It became a
+# config dependency during the kernel migration, after the last image was built,
+# so nothing noticed until an image built from that code was first run.
+COPY --from=build /app/deps-version.json ./deps-version.json
 COPY --from=build /app/apps/desktop/dist ./apps/desktop/dist
 COPY --from=build /app/runtime/skills/core ./runtime/skills/core
 COPY --from=build /app/runtime/skills/external/ai4s-skills ./runtime/skills/external/ai4s-skills

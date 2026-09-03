@@ -1787,3 +1787,31 @@ test("an ops script shipped in the web image can resolve the workspace packages 
     "no ops script imports a workspace package any more — delete the link and this test together",
   );
 });
+
+test("every repository-root file the server reads at load is in the web image", async () => {
+  // `config.mjs` reads `deps-version.json` while it is being imported, so a
+  // missing one is not a misconfiguration — the process cannot start, and says
+  // ENOENT during module resolution. It became a config dependency during the
+  // kernel migration, after the last image was built, and the first image built
+  // from that code could not load its own config.
+  //
+  // Derived from the source rather than listed here: a second file read the
+  // same way must be copied too, and nobody will remember to update a list.
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  const serverSrc = path.join(repoRoot, "apps/server/src");
+  const rootFiles = new Set();
+  for (const name of await readdir(serverSrc)) {
+    if (!name.endsWith(".mjs")) continue;
+    const source = await readFile(path.join(serverSrc, name), "utf8");
+    for (const match of source.matchAll(/["'`]\.\.\/\.\.\/\.\.\/([A-Za-z0-9._-]+\.[A-Za-z0-9]+)["'`]/g)) {
+      rootFiles.add(match[1]);
+    }
+  }
+  assert.ok(rootFiles.size > 0, "the scan found nothing, so it proves nothing about the image");
+  for (const file of rootFiles) {
+    assert.ok(
+      dockerfile.includes(`/app/${file} ./${file}`),
+      `apps/server/src reads ${file} from the repository root, and the web image does not copy it`,
+    );
+  }
+});

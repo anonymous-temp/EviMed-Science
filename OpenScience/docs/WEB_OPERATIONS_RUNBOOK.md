@@ -79,7 +79,8 @@ evidence out of the resulting `session/*` events. It signs nothing it did not
 observe: a run that never completed a tool result, never wrote the artifact, or
 never answered with a structured object fails by name and leaves no receipt.
 
-Two consequences for operations. First, **it must run inside the deployment**:
+Three consequences for operations, all of them measured rather than assumed.
+First, **it must run inside the deployment**:
 the `evimed-universal` preset, the research MCP and the capability trees live at
 `/opt/evimed` inside the runtime image, and the runtime container reaches the
 gateway by the deployment's own service name — the `receipt` compose profile is
@@ -87,7 +88,13 @@ that container, and it needs the runtime controller socket and the runtime
 network, exactly as the web service does. Second, **it runs after
 `release:manifest`, not before**: the gate refuses to launch a runtime whose
 image the manifest does not name. The retired gate ran first only because it
-drove a bare binary that no manifest described.
+drove a bare binary that no manifest described. Third, and for the same family
+of reason, **it runs after the new stack is up**: the runtime controller checks
+that the caller's `releaseId` equals its own and answers
+`runtime_controller_release_mismatch` otherwise, so a receipt for the new
+release cannot be minted while the previous release's controller is the one
+running. Expect `/api/ready` to be red on the receipt alone for the minutes
+between `compose up` and the mint; the scheduler then keeps it fresh.
 
 There is no `--fake` chain. The flag is still read and still refused
 (`deepseek_release_mode_invalid`) rather than ignored, because emulating a chain
