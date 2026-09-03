@@ -75,6 +75,17 @@ services:
       OPEN_SCIENCE_RELEASE_ID: ${OPEN_SCIENCE_RELEASE_ID:?set OPEN_SCIENCE_RELEASE_ID}
       OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       OPEN_SCIENCE_EVIMED_MCP_SOURCE_DIR: /app/runtime/mcp/evimed-research
+      # The controller refuses a caller whose caps differ from its own, and this
+      # service not having them is what made its first call fail with
+      # `runtime_controller_limit_mismatch`. They cannot be merged from the
+      # `x-runtime-caps` anchor in `docker-compose.yml`: compose parses each
+      # file on its own, so an anchor does not cross one. `deploy.test.mjs`
+      # asserts these four equal the web service's, which is the guarantee an
+      # anchor would have given and one an anchor could not give across files.
+      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS:-2}
+      OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1}
+      OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8}
+      OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4}
     volumes:
       - open-science-receipts:/receipts
       - open-science-data:/data
