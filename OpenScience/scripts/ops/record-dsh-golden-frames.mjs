@@ -64,7 +64,7 @@ import { DshMux } from "../../apps/server/src/dshMux.mjs";
  * fixture actually certifies — still arrive through the real `DshMux`.
  * @param {{ url: string, cookie?: string|null, authority?: string|null }} runtime
  * @param {string} method @param {Record<string, any>} payload
- * @returns {Promise<{ ok: boolean, value?: any, error?: any, status: number }>}
+ * @returns {Promise<{ ok: boolean, value?: any, error?: any, status: number, envelope?: any }>}
  */
 async function callRuntimeUnary(runtime, method, payload) {
   const target = new URL(`${runtime.url}/api/${method}`);
@@ -101,8 +101,13 @@ async function callRuntimeUnary(runtime, method, payload) {
           return;
         }
         try {
-          const result = JSON.parse(text)?.result ?? {};
-          resolve({ ok: Boolean(result.ok), status, value: result.value, error: result.error });
+          // The envelope is kept whole, not just our decode of it: the wire
+          // split is checked against `{type, rpcId, result}`, and a fixture
+          // holding only `{ok, value}` records what this client made of the
+          // answer rather than what the kernel sent.
+          const envelope = JSON.parse(text);
+          const result = envelope?.result ?? {};
+          resolve({ ok: Boolean(result.ok), status, value: result.value, error: result.error, envelope });
         } catch (error) {
           reject(new Error(`${method} answered ${status} with a body that is not JSON: ${text.slice(0, 200)}`));
         }
@@ -127,9 +132,21 @@ function parseArgs(argv) {
   return out;
 }
 
+/**
+ * One prompt, doing two jobs, because one recording has to serve both.
+ *
+ * The file write is what puts a real `tool/call` and its paired `tool/result`
+ * into the session stream — the decoder's main subject. The delegation is what
+ * puts a child session's whole lifecycle onto the host `$events` stream, which
+ * is where alpha.5 announces subagents (`api-session/added` carrying
+ * `parentSessionId`) now that `subagent/descriptor` never reaches the parent.
+ * Recording them separately would mean two fixtures that no run ever produced
+ * together.
+ */
 const DEFAULT_PROMPT = [
-  "Delegate one short task to a subagent and then summarise its answer in one sentence.",
-  "The task: reply with the single word OK.",
+  "Create a file named recorded.txt containing exactly the word: recorded.",
+  "Then delegate one short task to a subagent: reply with the single word OK.",
+  "Then reply with only the word done.",
 ].join(" ");
 
 /**
@@ -263,7 +280,12 @@ async function main() {
   const eventStream = await openTracked(mux, "$events", {}, signal, events);
   streamIds.events = eventStream.streamId;
   streams.push(eventStream.task);
-  const workspaceStream = await openTracked(mux, "workspace/follow", { request: { cwd } }, signal, workspace);
+  // No `request`. It took one through 0.1.2-alpha.3 and alpha.5's descriptor
+  // refuses the whole call with `gateway/arguments-invalid: unexpected
+  // "request"` — found by this recorder, on this stream, which is what the
+  // fixture is for. The mock accepted the old spelling either way, so nothing
+  // in the test suite could have found it.
+  const workspaceStream = await openTracked(mux, "workspace/follow", {}, signal, workspace);
   streamIds.workspace = workspaceStream.streamId;
   streams.push(workspaceStream.task);
 
@@ -271,7 +293,7 @@ async function main() {
   /** @param {string} method @param {Record<string,any>} payload */
   const call = async (method, payload) => {
     const result = await callRuntimeUnary(runtime, method, payload);
-    unary.push({ kind: "unary", method, status: result.status, request: { args: payload }, response: result });
+    unary.push({ kind: "unary", method, status: result.status, request: { args: payload }, response: result.envelope });
     if (!result.ok) throw new Error(`${method} failed: ${JSON.stringify(result.error)}`);
     return result.value;
   };

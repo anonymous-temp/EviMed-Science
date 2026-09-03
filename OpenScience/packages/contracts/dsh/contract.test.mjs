@@ -98,10 +98,11 @@ test("the port's conversions still produce the port's shapes, replayed from gold
   // test comes to the recording.
   const call = golden.history.find((entry) => entry.event.type === "tool/call");
   assert.equal(call.event.data.name, "write");
-  assert.deepEqual(toArgs(call.event.data.arguments), {
-    file_path: "/tmp/dsh-probe/home-rec/work/recorded.txt",
-    content: "recorded",
-  });
+  // Compared against the very string it converts: what `toArgs` is for is
+  // turning the wire's JSON-encoded arguments into an object, and a literal
+  // here only ever pinned one recording's workspace path.
+  assert.deepEqual(toArgs(call.event.data.arguments), JSON.parse(call.event.data.arguments));
+  assert.deepEqual(Object.keys(toArgs(call.event.data.arguments)).sort(), ["content", "file_path"]);
 
   // Both assistant messages, because the property worth pinning is the cache
   // split, and one message alone cannot show it. Step 1 read nothing from
@@ -110,9 +111,22 @@ test("the port's conversions still produce the port's shapes, replayed from gold
   // how the counters were silently wrong before: the totals looked right and
   // only the split was missing.
   const assistants = golden.history.filter((entry) => entry.event.type === "assistant/message");
-  assert.equal(assistants.length, 2, "the recorded turn had two assistant messages");
-  assert.deepEqual(toUsage(assistants[0].event.data.usage), { input: 8052, output: 73, cacheHit: 0, cacheMiss: 0 });
-  assert.deepEqual(toUsage(assistants[1].event.data.usage), { input: 105, output: 2, cacheHit: 8064, cacheMiss: 0 });
+  assert.ok(assistants.length >= 2, "the recorded turn must carry more than one assistant message");
+  // The mapping, checked against the frame it maps: 0.1.2 sends
+  // `{inputTokens, outputTokens, cacheReadTokens}` where 0.1.1 sent
+  // `promptCacheHitTokens`, and reading the wrong name yields zeros that look
+  // like a free turn.
+  for (const message of assistants) {
+    const wire = message.event.data.usage;
+    assert.deepEqual(toUsage(wire), {
+      input: wire.inputTokens,
+      output: wire.outputTokens,
+      cacheHit: wire.cacheReadTokens ?? 0,
+      cacheMiss: 0,
+    });
+  }
+  assert.ok(assistants.some((message) => (message.event.data.usage?.cacheReadTokens ?? 0) > 0),
+    "the recording must carry a cache hit, or the mapping above proves nothing");
 
   // Replayed from the recorded `tool/result`, not from a hand-made envelope.
   // The live kernel nests the payload one level below where the old fixture put
@@ -120,7 +134,13 @@ test("the port's conversions still produce the port's shapes, replayed from gold
   const result = golden.history.find((entry) => entry.event.type === "tool/result");
   const outcome = toToolOutcome(result.event.data.message.content[0]);
   assert.equal(outcome.status, "completed");
-  assert.equal(outcome.text, "<path>/tmp/dsh-probe/home-rec/work/recorded.txt</path>\n<type>file</type>\n<content>\nCreated file\n</content>");
+  // Compared against the block it was handed, so what is asserted is the
+  // extraction — the nesting — rather than one recording's workspace path.
+  assert.equal(
+    outcome.text,
+    result.event.data.message.content[0].content.map((block) => block.text).join(""),
+  );
+  assert.match(outcome.text, /^<path>.+<\/path>\n<type>file<\/type>/, "the write's own report shape survives the conversion");
   assert.equal(outcome.error, null);
 
   // The last two take in-process DSH objects rather than wire frames — a

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { DshMux } from "../src/dshMux.mjs";
 import { openRuntimeMux, RUNTIME_DOWNLINK_RECONNECT_MS, RuntimeEventPump } from "../src/dshEventPump.mjs";
 import { startMockDshRuntime } from "../src/mockDshRuntime.mjs";
 import { RunEventHub } from "../src/runEventStream.mjs";
@@ -374,4 +375,45 @@ test("the pump refuses to publish anything when its cookie is wrong, rather than
   const mux = await openRuntimeMux({ url: mock.url, authority: mock.authority, cookie: mock.cookie }, { signal: AbortSignal.timeout(5_000) });
   assert.equal(mux.closed, false);
   mux.close();
+});
+
+test("the mock refuses the arguments the live kernel refuses on workspace/follow", async (t) => {
+  // 0.1.2-alpha.5 answers `gateway/arguments-invalid: unexpected "request"` and
+  // kills the stream; through alpha.3 the same call was accepted. This mock
+  // ignored args entirely, so the old spelling passed here and died on frame
+  // one against a real kernel — the recorder found it, not the suite.
+  const mock = await startMockDshRuntime();
+  t.after(() => mock.close());
+  const mux = new DshMux({ url: mock.url, cookie: mock.cookie ?? null });
+  const controller = new AbortController();
+  t.after(() => { controller.abort(); mux.close(); });
+  await mux.connect({ signal: controller.signal });
+
+  // Bounded by its own signal, so "the mock accepted it" fails as a red
+  // assertion rather than as a test that waits for a frame nobody will send.
+  const probe = new AbortController();
+  const giveUp = setTimeout(() => probe.abort(), 2_000);
+  let refusal = null;
+  try {
+    for await (const value of mux.open("workspace/follow", { request: { cwd: "/workspace" } }, { signal: probe.signal })) {
+      void value;
+    }
+  } catch (error) {
+    refusal = /** @type {any} */ (error)?.code ?? null;
+  } finally {
+    clearTimeout(giveUp);
+  }
+  assert.equal(
+    refusal,
+    "gateway/arguments-invalid",
+    "an argument the descriptor does not have must fail here, not only in production",
+  );
+
+  /** @type {any[]} */
+  const accepted = [];
+  for await (const value of mux.open("workspace/follow", {}, { signal: controller.signal })) {
+    accepted.push(value);
+    break;
+  }
+  assert.equal(accepted[0]?.type, "baseline", "the call the descriptor does accept still yields its baseline");
 });
