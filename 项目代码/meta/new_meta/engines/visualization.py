@@ -36,6 +36,27 @@ def _detect_chinese_font() -> str:
     fallback = sorted(name for name in available if "CJK" in name and "Serif" not in name)
     if fallback:
         return fallback[0]
+    # `ttflist` is a cache. A font installed after matplotlib first built that
+    # cache is on disk and absent from the list, which is how a host carrying
+    # five CJK families logged "no Chinese-capable font found" and drew tofu
+    # boxes into a Chinese manuscript. Ask the filesystem, then register what
+    # it finds -- `findSystemFonts` reads the directories rather than the
+    # cache, and includes the `.ttc` collections Noto CJK ships as.
+    for path in sorted(fm.findSystemFonts()):
+        name = Path(path).name
+        if "CJK" not in name or "Serif" in name or "Mono" in name:
+            continue
+        try:
+            fm.fontManager.addfont(path)
+        except Exception:  # noqa: BLE001 - an unreadable font file is not this function's problem
+            continue
+        registered = sorted(
+            entry.name for entry in fm.fontManager.ttflist
+            if "CJK" in entry.name and "Serif" not in entry.name
+        )
+        if registered:
+            logger.info("Registered %s for Chinese labels from %s", registered[0], path)
+            return registered[0]
     logger.warning("No Chinese-capable font found; Chinese labels may not render correctly")
     return ""
 
