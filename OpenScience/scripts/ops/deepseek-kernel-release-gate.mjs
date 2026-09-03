@@ -21,6 +21,7 @@
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
+import { constants as fsConstants } from "node:fs";
 import fsp from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
@@ -543,6 +544,29 @@ async function writeReceipt(receiptPath, receipt) {
 }
 
 /**
+ * That the receipt can be written, checked before the run that fills it.
+ *
+ * @param {string} receiptPath
+ * @returns {Promise<void>}
+ */
+async function assertReceiptDestinationWritable(receiptPath) {
+  if (typeof receiptPath !== "string" || !receiptPath.trim()) throw failure("deepseek_release_receipt_path_missing");
+  const target = path.resolve(receiptPath);
+  await fsp.mkdir(path.dirname(target), { recursive: true }).catch(() => {});
+  try {
+    // W_OK on the file when it exists, on its directory when it does not: the
+    // deployment bind-mounts the file itself, so the directory being writable
+    // says nothing about the file.
+    const exists = await fsp.stat(target).then(() => true).catch(() => false);
+    await fsp.access(exists ? target : path.dirname(target), fsConstants.W_OK);
+  } catch {
+    const error = failure("deepseek_release_receipt_not_writable");
+    error.diagnostic = JSON.stringify({ receiptPath: target });
+    throw error;
+  }
+}
+
+/**
  * Runs the chain against a real runtime container and returns what it observed.
  *
  * @param {{ config?: Record<string, any>, timeoutMs: number }} input
@@ -815,6 +839,13 @@ export async function runDeepSeekKernelReleaseGate({
   }
   if (!keyFile || !receiptId) throw failure("deepseek_release_input_missing");
   const signingSecret = receiptSigningSecret ?? readModelGatewaySigningSecretFile(modelGatewaySigningSecretFile);
+  // Before anything is spent. Everything below this line costs money and about
+  // ten minutes — a live provider preflight, a runtime container, a real turn —
+  // and the first version discovered an unwritable destination at the last
+  // line, after all of it, as a bare EACCES. The receipt is a bind-mounted host
+  // file and the container drops CAP_DAC_OVERRIDE, so any change of its owner
+  // makes it unwritable while it still looks present and correct.
+  await assertReceiptDestinationWritable(receiptPath);
 
   // Asked of the provider first, and separately: a model that cannot stream or
   // hold a tool loop fails here in seconds with a name, instead of fifteen

@@ -1837,3 +1837,27 @@ test("the receipt scheduler declares the same runtime caps as the web service", 
   assert.equal(Object.keys(declared).length, 4, "the anchor must still define all four caps");
   assert.deepEqual(scheduler, declared, "a cap the scheduler does not share is a mint refused a day later");
 });
+
+test("the preset root the control plane configures is the one the image's own smoke proves", async () => {
+  // `roots` is scanned FOR presets, so the value has to be the directory that
+  // contains `evimed-universal`, not `evimed-universal` itself. It was the
+  // latter, and the kernel answered `preset "evimed-universal" not found
+  // (available: standard, ptc, minimal, cordis, skills)` — which lists the
+  // built-ins and reads like ours was never built.
+  //
+  // Compared against `build-smoke-patch.yml`, because that file is what the
+  // image build actually mounts a session with: if these two disagree, one of
+  // them is describing a deployment that does not work, and the build smoke is
+  // the one that ran.
+  const [manager, smoke, dockerfile] = await Promise.all([
+    readFile(path.join(repoRoot, "apps/server/src/runtimeManager.mjs"), "utf8"),
+    readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke-patch.yml"), "utf8"),
+    readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8"),
+  ]);
+  const configured = manager.match(/presetRoot:\s*"([^"]+)"/)?.[1];
+  const proven = smoke.match(/- id: agent-presets[\s\S]*?- path:\s*(\S+)/)?.[1];
+  const built = dockerfile.match(/^ARG DSH_PRESET_ROOT=(\S+)/m)?.[1];
+  assert.ok(configured && proven && built, "all three must state a preset root");
+  assert.equal(configured, proven, "the control plane must configure the root the build smoke mounts a session with");
+  assert.equal(configured, built, "and the root the image actually creates");
+});

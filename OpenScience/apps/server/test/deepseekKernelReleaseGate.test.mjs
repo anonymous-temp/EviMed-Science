@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { readFile } from "node:fs/promises";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -85,6 +85,59 @@ test("the release gate refuses to mint a receipt it did not measure", async (t) 
     );
     await assert.rejects(() => stat(receiptPath), { code: "ENOENT" }, "a refused gate must leave no receipt behind");
   }
+});
+
+
+test("an unwritable receipt destination is found before the run that fills it", async (t) => {
+  // Everything after this check costs money and about ten minutes: a live
+  // provider preflight, a runtime container, a real turn. The first version
+  // discovered it at the last line, as a bare EACCES, having spent all of it.
+  // The receipt is a bind-mounted host file and the container drops
+  // CAP_DAC_OVERRIDE, so a change of owner makes it unwritable while it still
+  // looks present and correct.
+  const root = await mkdtemp(path.join(tmpdir(), "deepseek-receipt-perm-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const receiptPath = path.join(root, "receipt.json");
+  await writeFile(receiptPath, "", { mode: 0o400 });
+  // Only meaningful as an unprivileged user; root ignores the mode.
+  if (typeof process.getuid === "function" && process.getuid() === 0) return;
+
+  await assert.rejects(
+    () => runDeepSeekKernelReleaseGate({
+      mode: "production",
+      keyFile: path.join(root, "key.txt"),
+      receiptId: "dsrg_0123456789abcdef",
+      receiptPath,
+      sourceRevision: "source-1",
+      configRevision: "config-1",
+      receiptSigningSecret: testReceiptSigningSecret,
+    }),
+    (error) => {
+      assert.equal(error.code, "deepseek_release_receipt_not_writable");
+      return true;
+    },
+    "the destination must be checked before the chain, not after it",
+  );
+
+  // The control: made writable, the gate gets past this check and fails later
+  // on something else — so the assertion above is about the destination and not
+  // about the gate refusing everything.
+  await chmod(receiptPath, 0o600);
+  await assert.rejects(
+    () => runDeepSeekKernelReleaseGate({
+      mode: "production",
+      keyFile: path.join(root, "key.txt"),
+      receiptId: "dsrg_0123456789abcdef",
+      receiptPath,
+      sourceRevision: "source-1",
+      configRevision: "config-1",
+      receiptSigningSecret: testReceiptSigningSecret,
+    }),
+    (error) => {
+      assert.notEqual(error.code, "deepseek_release_receipt_not_writable");
+      return true;
+    },
+  );
 });
 
 /* ------------------------------------------------- what a transcript proves */
