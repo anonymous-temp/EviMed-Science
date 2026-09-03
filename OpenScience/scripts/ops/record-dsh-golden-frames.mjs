@@ -28,18 +28,27 @@
  * Whatever the answer is, it is not "use a prompt that delegates" — see the
  * debt register in packages/contracts/dsh/contract.test.mjs.
  *
- * NOT YET A DROP-IN REPLACEMENT for the committed fixture. The contract tests
- * also read `mux` (the first raw server frame on each logical stream),
- * `streamIds`, and `errors`, and this records none of them: `mux.open()` yields
- * decoded values, so capturing the raw frames means reaching one level below
- * it. Until that lands, this produces evidence, not a fixture — and installing
- * a fixture missing four sections would mean editing the tests that read them,
- * which is the shape of weakening a check to make it pass.
+ * Four sections need more than the decoded stream `mux.open()` yields, and each
+ * is recorded rather than described:
+ *
+ *   `mux`        the first RAW server frame on each logical stream. `open()`
+ *                hands out `frame.value`, so the frames are taken one level
+ *                below it, off the emitter the socket decodes onto.
+ *   `streamIds`  which minted id carried which logical stream. Not guessable:
+ *                `open()` mints privately, so each stream is started alone and
+ *                the id is the listener that appeared.
+ *   `errors`     three refusals, provoked on purpose against the live kernel —
+ *                a malformed `session/page`, a follow on a session that does
+ *                not exist, and an endpoint the Gateway does not export.
+ *   `synthesized` NOT recorded, and carried forward from the previous fixture
+ *                with its own provenance line intact. It is the one section a
+ *                hand-written frame may live in; re-authoring it here would
+ *                launder it into something that looks recorded.
  */
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import http from "node:http";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import process from "node:process";
 
 import { DshMux } from "../../apps/server/src/dshMux.mjs";
@@ -139,6 +148,77 @@ async function drain(mux, endpoint, args, signal, sink) {
   }
 }
 
+/**
+ * Every raw server frame, keyed by the stream it arrived on.
+ *
+ * `DshMux` decodes each text frame and emits it under its `streamId`; `open()`
+ * then hands the caller `frame.value` only. Wrapping the emitter is what makes
+ * the envelope — `item` / `error` / `end`, and the stream id itself — visible
+ * without a second socket implementation, which is the one thing this recorder
+ * must not have.
+ *
+ * @param {DshMux} mux
+ * @returns {Map<string, any[]>}
+ */
+function captureRawFrames(mux) {
+  /** @type {Map<string, any[]>} */
+  const byStream = new Map();
+  const emit = mux.frames.emit.bind(mux.frames);
+  mux.frames.emit = /** @type {any} */ ((event, ...rest) => {
+    if (typeof event === "string" && event !== "mux:closed") {
+      const seen = byStream.get(event);
+      if (seen) seen.push(rest[0]);
+      else byStream.set(event, [rest[0]]);
+    }
+    return emit(event, ...rest);
+  });
+  return byStream;
+}
+
+/**
+ * Starts one logical stream and reports which id the mux minted for it.
+ *
+ * The id is private to `open()`, so it is read as the listener that appeared:
+ * the generator registers `frames.on(streamId, …)` on its first resumption, and
+ * one stream is started at a time so the difference names exactly one.
+ *
+ * @param {DshMux} mux @param {string} endpoint @param {Record<string,any>} args
+ * @param {AbortSignal} signal @param {any[]} sink
+ * @returns {Promise<{ task: Promise<void>, streamId: string }>}
+ */
+async function openTracked(mux, endpoint, args, signal, sink) {
+  const before = new Set(mux.frames.eventNames().map(String));
+  const task = drain(mux, endpoint, args, signal, sink);
+  // One turn of the event loop: enough for the async generator to run to its
+  // first suspension, which is where the listener is registered.
+  await new Promise((resolve) => setImmediate(resolve));
+  const added = mux.frames.eventNames().map(String).filter((name) => !before.has(name) && name !== "mux:closed");
+  if (added.length !== 1) {
+    throw new Error(`${endpoint}: expected exactly one new stream listener, saw ${JSON.stringify(added)}`);
+  }
+  return { task, streamId: added[0] };
+}
+
+/**
+ * Provokes one refusal and returns the kernel's own words for it.
+ *
+ * Recorded rather than written down: three of the five error entries in the
+ * fixture are what the decoder is checked against, and an error message someone
+ * typed from memory is the same defect as a hand-authored frame.
+ *
+ * @param {DshMux} mux @param {Map<string, any[]>} raw @param {string} endpoint
+ * @param {Record<string,any>} args @param {AbortSignal} signal
+ * @returns {Promise<Record<string, any> | null>}
+ */
+async function provokeStreamError(mux, raw, endpoint, args, signal) {
+  /** @type {any[]} */
+  const sink = [];
+  const { task, streamId } = await openTracked(mux, endpoint, args, signal, sink);
+  await task;
+  const frame = (raw.get(streamId) ?? []).find((item) => item?.type === "error");
+  return frame?.error ?? null;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = args.url || "http://127.0.0.1:45011";
@@ -146,6 +226,13 @@ async function main() {
   const out = args.out || "/tmp/golden-frames.json";
   const prompt = args.prompt || DEFAULT_PROMPT;
   const settleMs = Number(args.settleMs || 240_000);
+  const pin = args.pin || "";
+  if (!pin) throw new Error("--pin is required: the fixture names the kernel it was taken from, and a fixture that cannot say which is not evidence.");
+  // The one section that is not recorded travels forward from the fixture being
+  // replaced, with its own provenance line. Re-authoring it here would turn a
+  // section that says "NOT recorded" into one that looks recorded.
+  const carryFrom = args.carryFrom || new URL("../../apps/server/test/fixtures/dsh/golden-frames.json", import.meta.url).pathname;
+  const previous = JSON.parse(await readFile(carryFrom, "utf8"));
   const runtime = { url, cookie: args.cookie || null, authority: args.authority || null, socketPath: null };
 
   const controller = new AbortController();
@@ -164,14 +251,21 @@ async function main() {
 
   const mux = new DshMux(runtime);
   await mux.connect({ signal });
+  const raw = captureRawFrames(mux);
 
   /** @type {any[]} */ const events = [];
   /** @type {any[]} */ const workspace = [];
   /** @type {any[]} */ const session = [];
-  const streams = [
-    drain(mux, "$events", {}, signal, events),
-    drain(mux, "workspace/follow", { request: { cwd } }, signal, workspace),
-  ];
+  /** @type {Record<string, string>} */ const streamIds = {};
+  /** @type {Promise<void>[]} */ const streams = [];
+
+  // One at a time, because that is what makes the minted id attributable.
+  const eventStream = await openTracked(mux, "$events", {}, signal, events);
+  streamIds.events = eventStream.streamId;
+  streams.push(eventStream.task);
+  const workspaceStream = await openTracked(mux, "workspace/follow", { request: { cwd } }, signal, workspace);
+  streamIds.workspace = workspaceStream.streamId;
+  streams.push(workspaceStream.task);
 
   /** @type {any[]} */ const unary = [];
   /** @param {string} method @param {Record<string,any>} payload */
@@ -185,7 +279,15 @@ async function main() {
   const created = await call("session/create", { request: { cwd } });
   const sessionId = created?.sessionId;
   if (!sessionId) throw new Error(`session/create returned no sessionId: ${JSON.stringify(created)}`);
-  streams.push(drain(mux, "session/follow", { request: { address: { kind: "session", sessionId } } }, signal, session));
+  const sessionStream = await openTracked(
+    mux,
+    "session/follow",
+    { request: { address: { kind: "session", sessionId } } },
+    signal,
+    session,
+  );
+  streamIds.session = sessionStream.streamId;
+  streams.push(sessionStream.task);
 
   await call("session/prompt", {
     request: { requestId: randomUUID(), sessionId, mode: "queue", content: [{ type: "text", text: prompt }] },
@@ -208,35 +310,84 @@ async function main() {
     request: { address: { kind: "session", sessionId }, throughSeq, maxMessages: 200 },
   });
 
+  /* --------------------------------------------------------- the refusals */
+  // Provoked after the run, so a refusal cannot disturb the turn being recorded.
+  const malformedPage = await callRuntimeUnary(runtime, "session/page", { request: {} });
+  const notFound = await provokeStreamError(
+    mux,
+    raw,
+    "session/follow",
+    { request: { address: { kind: "session", sessionId: "nope" } } },
+    signal,
+  );
+  const noSuchEndpoint = await provokeStreamError(mux, raw, "no/such-endpoint", {}, signal);
+  /** @type {Record<string, any>[]} */
+  const errors = [];
+  const recordError = (line, wire) => {
+    if (wire?.code) errors.push({ $recorded: line, ...wire });
+  };
+  recordError("verbatim: the live session/page refusal when `request` was sent without its required fields", malformedPage.error);
+  recordError("verbatim: the live /api/remote.mux `error` frame for session/follow on a session that does not exist", notFound);
+  recordError("verbatim: the live /api/remote.mux `error` frame for an endpoint the Gateway does not export", noSuchEndpoint);
+  // Carried forward, and only the entries that say in their own body that they
+  // were not observed. A previously-verbatim entry is not re-labelled: it either
+  // came off this wire or it did not.
+  for (const entry of Array.isArray(previous.errors) ? previous.errors : []) {
+    if (!String(entry?.$recorded ?? "").startsWith("verbatim")) errors.push(entry);
+  }
+  if (errors.filter((entry) => String(entry.$recorded).startsWith("verbatim")).length !== 3) {
+    throw new Error(`expected three provoked refusals, recorded ${JSON.stringify(errors.map((e) => e.code))}`);
+  }
+
   controller.abort();
   mux.close();
   await Promise.allSettled(streams);
 
+  // The first raw frame on each logical stream, which is what the decoder is
+  // checked against. Taken from the capture rather than reconstructed from the
+  // decoded values: the envelope is the part under test.
+  const muxFrames = Object.values(streamIds)
+    .map((streamId) => (raw.get(streamId) ?? [])[0])
+    .filter(Boolean);
+
   const types = [...new Set(session.map((item) => item?.event?.type ?? item?.type).filter(Boolean))].sort();
+  const today = new Date().toISOString().slice(0, 10);
   const document = {
     $comment: "Verbatim frames from one live run. Re-record with scripts/ops/record-dsh-golden-frames.mjs; never hand-author.",
-    dsh: args.pin || "",
+    dsh: pin,
     $recorded: {
-      procedure: `Recorded by scripts/ops/record-dsh-golden-frames.mjs against ${url}: host/describe, /api/remote.mux, subscribed $events + workspace/follow + session/follow, session/create, one session/prompt, and let a real turn run to ${settled ? "completion" : "the settle deadline"}. Prompt: ${JSON.stringify(prompt)}.`,
+      procedure: `Booted @deepseek-ai/dsh@${pin} and recorded by scripts/ops/record-dsh-golden-frames.mjs against ${url}: authenticated with a control-plane-minted browser-session cookie, opened /api/remote.mux, subscribed $events + workspace/follow + session/follow, created a session, sent one session/prompt, and let a real turn run to ${settled ? "completion" : "the settle deadline"}, then paged its history. Prompt: ${JSON.stringify(prompt)}.`,
+      unary: `verbatim request/response pairs from that run, POST /api/<endpoint> (${today})`,
+      history: `verbatim \`records\` of the live session/page response for that run (${today})`,
+      session: `verbatim \`session/follow\` stream items for that run, in arrival order (${today})`,
+      events: `verbatim \`$events\` stream items for that run, in arrival order (${today})`,
+      workspace: `verbatim \`workspace/follow\` stream items for that run (${today})`,
+      mux: `verbatim: the first /api/remote.mux server frame on each of the run's three logical streams, stream ids as recorded (${today})`,
+      errors: "each entry carries its own $recorded line; three were provoked against this kernel on this run, the rest are carried forward from the previous fixture unchanged",
+      synthesized: previous.$recorded?.synthesized ?? "NOT recorded.",
       turnSettled: settled,
       eventTypesSeen: types,
     },
     muxPath: "/api/remote.mux",
     muxTransport: "websocket",
+    streamIds,
     unary,
     history: Array.isArray(history?.records) ? history.records : history,
     session,
     events,
     workspace,
+    mux: muxFrames,
+    errors,
+    synthesized: previous.synthesized,
   };
   await writeFile(out, `${JSON.stringify(document, null, 2)}\n`, "utf8");
   console.log(`wrote ${out}`);
-  console.log(`  unary ${unary.length} | session ${session.length} | events ${events.length} | workspace ${workspace.length}`);
+  console.log(`  unary ${unary.length} | session ${session.length} | events ${events.length} | workspace ${workspace.length} | mux ${muxFrames.length} | errors ${errors.length}`);
   console.log(`  turn settled: ${settled}`);
+  console.log(`  stream ids: ${JSON.stringify(streamIds)}`);
   console.log(`  session event types: ${types.join(", ") || "(none)"}`);
   if (!types.includes("subagent/descriptor")) {
-    console.log("  WARNING: no subagent/descriptor frame — the run tree stays unproven. Use a prompt that delegates.");
-    process.exitCode = 2;
+    console.log("  NOTE: no subagent/descriptor frame. Against alpha.5 this is expected — see the header.");
   }
 }
 
