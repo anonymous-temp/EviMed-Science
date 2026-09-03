@@ -365,6 +365,26 @@ export function startMockDshRuntime(options = {}) {
       return;
     }
     if (endpoint === "workspace/follow") {
+      // The descriptor takes no arguments, and the live kernel refuses the call
+      // outright when it is given one — verbatim code and message shape from
+      // 0.1.2-alpha.5, which is where this was found. This mock used to ignore
+      // args entirely, so a caller still sending 0.1.2-alpha.3's `request`
+      // field passed every test here and had its stream killed on frame one in
+      // production. A fake that is more permissive than the thing it stands in
+      // for cannot fail for the reason the real one will.
+      if (args != null && Object.keys(args).length > 0) {
+        sendFrame(connection, {
+          type: "error",
+          streamId,
+          error: {
+            code: "gateway/arguments-invalid",
+            message: `typert gateway: workspace/follow: args fields do not match the descriptor: unexpected ${JSON.stringify(Object.keys(args)[0])}`,
+            details: { endpoint: "workspace/follow" },
+          },
+        });
+        sendFrame(connection, { type: "end", streamId });
+        return;
+      }
       connection.streams.set(streamId, { endpoint, sessionId: null });
       sendItem(connection, streamId, { type: "baseline", value: { items: [], archivedSessionIds: [] } });
       return;

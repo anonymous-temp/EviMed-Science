@@ -18,7 +18,19 @@ import {
 const golden = JSON.parse(await readFile(new URL("./fixtures/dsh/golden-frames.json", import.meta.url), "utf8"));
 
 /** The session the golden run actually happened in. Everything live in the fixture is this one. */
-const RECORDED_SESSION = "session-ef423c0f-24cd-4fc5-8026-2d20771f6990";
+// Read out of the recording, not restated beside it. Every one of these was a
+// literal, so a re-record meant editing four tests — and an assertion edited on
+// every recording is one that stops being read. What each test is FOR is
+// unchanged; only the run-specific values now come from the run.
+const RECORDED_SESSION = golden.unary
+  .find((entry) => entry.method === "session/create").response.result.value.sessionId;
+/** The highest sequence the recorded page carries — what `session/list`
+ *  publishes as `projections.asOfSeq` for this session. */
+const RECORDED_HEAD = Math.max(...golden.history.map((record) => Number(record?.event?.seq ?? -1)));
+/** The workspace the recorded run wrote into, taken from the write it made. */
+const RECORDED_WRITE = golden.history
+  .find((record) => record?.event?.type === "tool/call" && record.event.data?.name === "write")
+  .event.data;
 
 /**
  * A transport that answers from a script, so the adapter is tested without a
@@ -308,42 +320,63 @@ test("the live session/page records normalize into a transcript the gate can rea
   // pinned kernel returned for one real run.
   const transcript = normalizeTranscript(RECORDED_SESSION, golden.history);
   assert.equal(transcript.sessionId, RECORDED_SESSION);
-  assert.equal(transcript.lastSeq, 62);
+  assert.equal(transcript.lastSeq, RECORDED_HEAD);
   assert.deepEqual(transcript.turnEnd, { kind: "completed" });
 
   const users = transcript.messages.filter((message) => message.role === "user");
-  assert.equal(users.length, 2);
+  assert.ok(users.length >= 2, "the recording must carry the typed and the injected message this asserts about");
   assert.equal(users[0].source, "user");
   assert.match(users[0].parts[0].text, /^Create a file named recorded\.txt/);
-  // The injected runtime context arrives as a `plugin`-sourced user message —
-  // the distinction the injection is logged for, and the reason the research
-  // context is a workspace file rather than a side channel.
-  assert.equal(users[1].source, "plugin");
-  assert.match(users[1].parts[0].text, /Current runtime context/);
+  // What the source field is for: telling an injected context apart from
+  // something the user typed. Asserted as "at least one of each kind that is
+  // not `user`", because the composition decides how many injections a run
+  // gets and that is not a property of the decoder.
+  const injected = users.slice(1);
+  assert.ok(injected.length > 0 && injected.every((message) => message.source !== "user"),
+    "every message after the typed one is an injection and must say so");
+  assert.ok(injected.some((message) => message.source === "plugin" && /Current runtime context/.test(message.parts[0].text)),
+    "the runtime context arrives as a plugin-sourced user message, not a side channel");
 
+  // How many assistant turns a model takes is the model's business; that each
+  // decodes, and that the last one carries the answer, is the decoder's.
   const assistants = transcript.messages.filter((message) => message.role === "assistant");
-  assert.equal(assistants.length, 2);
+  assert.ok(assistants.length >= 2, "the recorded turn must carry more than one assistant message");
   // 0.1.2's usage is `{inputTokens, outputTokens, cacheReadTokens, …}`; the
-  // 0.1.1 fixture said `promptCacheHitTokens`. Both names are read, and this is
-  // the one the wire actually sends.
-  assert.deepEqual(assistants[1].usage, { input: 105, output: 2, cacheHit: 8064, cacheMiss: 0 });
-  // An assistant message whose only content block is a `tool-call` has no text
-  // parts: the call itself arrives as its own `tool/call` event, and counting
-  // it twice would double every tool in the transcript.
-  assert.deepEqual(assistants[0].parts, []);
-  assert.deepEqual(assistants[1].parts, [{ type: "text", text: "done" }]);
+  // 0.1.1 fixture said `promptCacheHitTokens`. Both names are read, and this
+  // compares the decode against the very frame it came from — stronger than a
+  // remembered number, which only ever pinned one recording's arithmetic.
+  const wireUsage = golden.history
+    .filter((record) => record?.event?.type === "assistant/message" && record.event.data?.usage)
+    .at(-1).event.data.usage;
+  assert.deepEqual(assistants.at(-1).usage, {
+    input: wireUsage.inputTokens,
+    output: wireUsage.outputTokens,
+    cacheHit: wireUsage.cacheReadTokens,
+    cacheMiss: 0,
+  });
+  assert.ok(wireUsage.cacheReadTokens > 0, "the recording must carry a cache hit, or the mapping above proves nothing");
+  // An assistant message whose content blocks are a `tool-call` (and, with
+  // thinking on, a `reasoning` block) contributes no text and no tool part: the
+  // call arrives as its own `tool/call` event, and counting it here as well
+  // would double every tool in the transcript.
+  assert.deepEqual(
+    assistants[0].parts.map((part) => part.type),
+    ["reasoning"],
+    "the tool call must not also appear as a part of the message that made it",
+  );
+  assert.deepEqual(assistants.at(-1).parts, [{ type: "text", text: "done" }]);
 
   const tools = transcript.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool");
-  assert.equal(tools.length, 1);
-  assert.equal(tools[0].tool, "write");
-  assert.equal(tools[0].callId, "call_00_ET_TEqlvPcXbdtnR1MeXsLR0708");
+  assert.deepEqual(tools.map((part) => part.tool), ["write", "subagent"],
+    "one run, both shapes: a file write and a delegation");
+  assert.equal(tools[0].callId, RECORDED_WRITE.callId);
   // The pairing that matters, and the one a hand-authored fixture got wrong:
   // the live call id hangs off `message.source.callId` and the text sits inside
   // a nested `tool-result` block. Read flat, every call on a real run stayed
   // `pending` with empty output.
   assert.equal(tools[0].status, "completed");
   assert.match(tools[0].output, /Created file/);
-  assert.deepEqual(tools[0].input, { file_path: "/tmp/dsh-probe/home-rec/work/recorded.txt", content: "recorded" });
+  assert.deepEqual(tools[0].input, JSON.parse(RECORDED_WRITE.arguments));
 
   // A `chunks` record is a run of deltas the following message already
   // summarises; replaying it would double the text.
@@ -402,29 +435,57 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   const decoded = golden.session.map((frame) => decodeSessionFrame(RECORDED_SESSION, frame)).filter(Boolean);
   assert.ok(decoded.length > 0, "the recording must not be empty, or this test proves nothing");
 
-  const counts = {};
-  for (const item of decoded) counts[item.event.type] = (counts[item.event.type] ?? 0) + 1;
-  assert.deepEqual(counts, {
-    "turn/start": 1,
-    "step/start": 2,
-    "step/end": 2,
-    "message/user": 2,
-    "message/assistant": 2,
-    "assistant/delta": 1,
-    "tool/call": 1,
-    "tool/result": 1,
-    "turn/end": 1,
-    // Seven frames this build has no variant for — `agent/inbox/spliced`,
+  // Not a census of one run — how many deltas a model emits is not a property
+  // of the decoder. What is: which decoded shapes this build produces at all,
+  // and that nothing the kernel sent vanished on the way.
+  const produced = new Set(decoded.map((item) => item.event.type));
+  assert.deepEqual([...produced].sort(), [
+    "assistant/delta",
+    "message/assistant",
+    "message/user",
+    "step/end",
+    "step/start",
+    "tool/call",
+    "tool/result",
+    "turn/end",
+    "turn/start",
+    // Frames this build has no variant for — `agent/inbox/spliced`,
     // `session/title`, `request/header`, `request/context`,
-    // `session/title-llm-request`. Counted under a named `unknown` rather than
+    // `session/title-llm-request`. Surfaced under a named `unknown` rather than
     // dropped, which is what makes a kernel that adds a frame show up in the
     // trajectory inspector instead of disappearing.
-    unknown: 7,
-  });
+    "unknown",
+  ], "a shape this build stops producing, or starts producing, must be read here");
+
+  // And the accounting, which is the half a set check cannot give: nothing the
+  // kernel sent may decode to nothing except for reasons named here. A decoder
+  // that started returning null for a whole class would still satisfy the set
+  // above while losing most of the run.
+  const dropped = golden.session
+    .filter((frame) => frame?.type !== "snapshot" && !decodeSessionFrame(RECORDED_SESSION, frame))
+    .map((frame) => (frame?.event?.type === "assistant/chunk"
+      ? `assistant/chunk:${frame.event.data?.chunk?.type ?? "?"}`
+      : String(frame?.event?.type ?? "?")));
+  assert.deepEqual([...new Set(dropped)].sort(), [
+    // Structural markers around a block, and the two trailers. The text and
+    // reasoning deltas inside the block are what carry content and every one of
+    // them decodes; these five say only where a block began, ended, what it
+    // cost and why it stopped — all of which arrive again on the
+    // `assistant/message` that follows.
+    "assistant/chunk:block-end",
+    "assistant/chunk:block-start",
+    "assistant/chunk:finish",
+    "assistant/chunk:tool-call-delta",
+    "assistant/chunk:usage",
+  ], "a frame class that stops decoding must be added here deliberately, not discovered in production");
+  assert.ok(dropped.length > 0 && decoded.length > dropped.length * 2,
+    "the recording must contain both kinds, or this accounting is vacuous");
+  const unknowns = decoded.filter((item) => item.event.type === "unknown");
+  assert.ok(unknowns.length > 0, "an unrecognized frame must still arrive, or this test proves nothing");
 
   const call = decoded.find((item) => item.event.type === "tool/call").event;
   assert.equal(call.tool, "write");
-  assert.equal(call.narration, "写入 /tmp/dsh-probe/home-rec/work/recorded.txt");
+  assert.equal(call.narration, `写入 ${JSON.parse(RECORDED_WRITE.arguments).file_path}`);
   const result = decoded.find((item) => item.event.type === "tool/result").event;
   assert.equal(result.callId, call.callId, "the result must pair with the call it answers");
   assert.equal(result.status, "completed");
@@ -434,9 +495,17 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // is how a kernel that starts sending one becomes visible.
   assert.equal(result.tool, "");
 
-  const delta = decoded.find((item) => item.event.type === "assistant/delta").event;
-  assert.equal(delta.kind, "text");
-  assert.equal(delta.text, "done");
+  // Deltas carry their kind, and with thinking on a real turn produces both.
+  // The old assertion read the first delta and called it text; against a kernel
+  // that reasons first, "the first one" is the reasoning stream — so the kind
+  // is asserted per kind rather than by position.
+  const deltas = decoded.filter((item) => item.event.type === "assistant/delta").map((item) => item.event);
+  assert.deepEqual(
+    [...new Set(deltas.map((delta) => delta.kind))].sort(),
+    ["reasoning", "text"],
+    "both delta kinds decode, and neither is folded into the other",
+  );
+  assert.equal(deltas.filter((delta) => delta.kind === "text").map((delta) => delta.text).join(""), "done");
   assert.equal(decoded.at(-1).event.type, "turn/end");
   assert.equal(decoded.at(-1).event.endKind, "completed");
 
@@ -555,7 +624,7 @@ test("running state comes from the $events stream, and 'we were not told' is not
   // The opening `ready` frame carries the host facts `host.describe` used to
   // answer, exactly once per connection generation.
   assert.equal(seen[0].type, "ready");
-  assert.deepEqual(adapter.hostInfo, { home: "/tmp/dsh-probe/home-rec" });
+  assert.deepEqual(adapter.hostInfo, golden.events[0].host);
 
   assert.equal(adapter.runningStatus(RECORDED_SESSION), "idle", "the run finished, and the last status emit said so");
   assert.equal(adapter.runningStatus("never-mentioned"), "unknown");
@@ -567,10 +636,23 @@ test("running state comes from the $events stream, and 'we were not told' is not
   assert.equal(busyAdapter.runningStatus(RECORDED_SESSION), "busy", "a running session must read busy, not idle and not unknown");
 
   // A removal forgets the session rather than pinning it to a stale answer.
-  const removal = golden.synthesized.events.find((frame) => frame.event === "api-session/removed");
-  const removedAdapter = new DshRuntimeAdapter(scriptedTransport({ $events: [...untilBusy, removal] }));
+  // Taken off the live stream rather than the synthesized section: the recorded
+  // run delegates, so a child session is added, runs, and is removed — the
+  // whole lifecycle, in frames the kernel actually sent.
+  const removedIndex = golden.events.findIndex((frame) => frame.event === "api-session/removed");
+  assert.ok(removedIndex > 0, "the recording must contain the removal this asserts about");
+  const removedSession = String(golden.events[removedIndex].args[0]);
+  const throughRemoval = golden.events.slice(0, removedIndex + 1);
+  const removedAdapter = new DshRuntimeAdapter(scriptedTransport({ $events: throughRemoval }));
   await removedAdapter.watchHost({ signal: AbortSignal.timeout(2_000) });
-  assert.equal(removedAdapter.runningStatus(RECORDED_SESSION), "unknown");
+  // The control, and it has to be a replay: an adapter that was never told
+  // anything answers "unknown" by construction, so comparing against one would
+  // assert nothing. Replayed to just before the removal, the same session is
+  // known.
+  const beforeRemoval = new DshRuntimeAdapter(scriptedTransport({ $events: throughRemoval.slice(0, removedIndex) }));
+  await beforeRemoval.watchHost({ signal: AbortSignal.timeout(2_000) });
+  assert.notEqual(beforeRemoval.runningStatus(removedSession), "unknown", "up to the removal the session is known");
+  assert.equal(removedAdapter.runningStatus(removedSession), "unknown", "a removed session is forgotten, not frozen at its last status");
 });
 
 test("a waterfall the control plane cannot answer is surfaced, not swallowed", async () => {
@@ -593,10 +675,14 @@ test("the transcript is read through to its head sequence, page by page, back to
   // "everything" with a large constant reads as an empty run, which is exactly
   // what the delivery gate would then grade. The head is published per session
   // by `session/list` as `projections.asOfSeq`.
-  const head = 62;
+  const head = RECORDED_HEAD;
+  // Split in the middle of whatever was recorded, newest page first — the order
+  // the kernel pages in. A fixed index only ever split the one recording it was
+  // written against.
+  const split = Math.floor(golden.history.length / 2);
   const pages = [
-    { ok: true, value: { records: golden.history.slice(20), hasMore: true } },
-    { ok: true, value: { records: golden.history.slice(0, 20), hasMore: false } },
+    { ok: true, value: { records: golden.history.slice(split), hasMore: true } },
+    { ok: true, value: { records: golden.history.slice(0, split), hasMore: false } },
   ];
   let index = 0;
   const transport = scriptedTransport({
@@ -613,14 +699,15 @@ test("the transcript is read through to its head sequence, page by page, back to
   assert.equal(first.maxMessages, 20);
   assert.equal(first.beforeSeq, undefined);
   const second = transport.calls[2].payload.request;
-  assert.equal(second.beforeSeq, Number(golden.history[20].event.seq), "the second page must be anchored to the first event of the first");
+  assert.equal(second.beforeSeq, Number(golden.history[split].event.seq), "the second page must be anchored to the first event of the first");
   assert.equal(second.throughSeq, head, "and still read through the same head");
 
   // The whole run survives the walk: a truncated transcript would mark the
-  // earliest work as never done.
+  // earliest work as never done. Compared against the same records read in one
+  // go, which is the property — "the walk loses nothing" — rather than a census
+  // of one recording.
+  assert.deepEqual(transcript, normalizeTranscript(RECORDED_SESSION, golden.history));
   assert.equal(transcript.lastSeq, head);
-  assert.equal(transcript.messages.filter((message) => message.role === "user").length, 2);
-  assert.equal(transcript.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool").length, 1);
 });
 
 test("a session the kernel never heard of is said so, not returned as an empty run", async () => {
