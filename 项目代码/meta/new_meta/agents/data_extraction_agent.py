@@ -105,11 +105,28 @@ class DataExtractionAgent(BaseAgent):
         audit["summary"]["overrides_applied"] = applied_overrides
         project.save_json("extraction_audit.json", audit, subdir="extraction")
         project.save_text("extraction_audit.md", self._audit_to_markdown(audit), subdir="extraction")
-        migrate_extractions_to_ledger(
+        migration = migrate_extractions_to_ledger(
             project,
             protocol=protocol,
             extracted_studies=results,
         )
+        # A dropped dependency-design result changes what the review pools, so
+        # it is reported where a reader will meet it rather than left in a
+        # return value nobody read.
+        for skipped in migration.skipped_results:
+            self.log(
+                "Dropped %s from the evidence ledger: a %s result is missing %s and cannot be pooled."
+                % (skipped["resultId"], skipped["design"], ", ".join(skipped["missing"])),
+                level="warning",
+            )
+            project.add_warning(
+                "extraction",
+                "A %s result was excluded from the meta-analysis because it is missing %s; pooling it as an "
+                "ordinary two-arm aggregate would overstate its precision."
+                % (skipped["design"], ", ".join(skipped["missing"])),
+                code="dependency_metadata_incomplete",
+                context=skipped,
+            )
         return results
 
     def _extract_single(

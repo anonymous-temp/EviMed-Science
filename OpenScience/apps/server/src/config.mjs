@@ -333,6 +333,7 @@ export function loadConfig(overrides = {}) {
     valueEnv: "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY",
     fileEnv: "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_FILE",
     codePrefix: "materials_project_api_key",
+    defaultFile: localSecretFile("materials-project.api-key"),
   });
   const publicSourceCredentialSpecs = {
     evimedEvidence: ["evimedApiKey", "OPEN_SCIENCE_EVIMED_API_KEY", "evimed.api-key"],

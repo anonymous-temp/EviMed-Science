@@ -103,6 +103,16 @@ const credentialProfiles = new Map([
   ["addgene", { configKey: "addgene", host: "api.developers.addgene.org", path: "/catalog/", header: "authorization", scheme: "Token" }],
   ["biogrid", { configKey: "biogrid", host: "webservice.thebiogrid.org", path: "/interactions", query: "accesskey" }],
   ["opengwas", { configKey: "opengwas", host: "api.opengwas.io", path: "/api/", header: "authorization", scheme: "Bearer" }],
+  // Materials Project's key is a first-party config secret rather than a
+  // `publicSourceCredentials` entry, so this profile names it with
+  // `configValue`. It is a profile at all because the runtime already asks for
+  // one by that name: the MCP's own `CREDENTIAL_PROFILES` has carried
+  // `materials-project` since the connector shipped, and with no entry here
+  // every `search_materials` call was refused as an invalid credential profile
+  // -- a 400 that never left the building, reported as "the source returned
+  // HTTP 400". Injecting the same key by host in a branch of its own is what
+  // let the two sides disagree without either looking wrong.
+  ["materials-project", { configValue: "materialsProjectApiKey", host: "api.materialsproject.org", path: "/materials/", header: "x-api-key" }],
 ]);
 const credentialHosts = new Set([...credentialProfiles.values()].map((profile) => profile.host));
 
@@ -127,8 +137,17 @@ const optionalRateCredentials = new Map([
 ]);
 
 
+// Every content type a connector may ask for. The set is here and the asks are
+// in `public_sources.py` and `science_connectors.py`, so a connector that
+// learns a new one and this set that does not are a 400 on every call --
+// `application/csv` was exactly that: the FRED connector was corrected to
+// accept what FRED actually serves, and every `get_fred_series` call was
+// refused by this list before it reached FRED at all.
+// `test/publicSourceGateway.test.mjs` reads the asks back out of the connectors
+// and requires them to be covered.
 const allowedAcceptTypes = new Set([
   "application/atom+xml",
+  "application/csv",
   "application/gzip",
   "application/json",
   "application/sparql-results+json",
@@ -753,7 +772,9 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
         if (request.method === "POST") upstreamHeaders["content-type"] = "application/json";
         if (request.credentialProfile) {
           const profile = credentialProfiles.get(request.credentialProfile);
-          const credential = String(config.publicSourceCredentials?.[profile.configKey] ?? "").trim();
+          const credential = String((profile.configValue
+            ? config[profile.configValue]
+            : config.publicSourceCredentials?.[profile.configKey]) ?? "").trim();
           if (!credential || credential.length > 8 * 1024 || /[\r\n\0]/.test(credential)) {
             throw gatewayError(
               503,
@@ -776,13 +797,6 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
           if (value && value.length <= 8 * 1024 && !/[\r\n\0]/.test(value)) {
             request.url.searchParams.set(rateCredential.query, value);
           }
-        }
-        if (request.url.hostname.toLowerCase() === "api.materialsproject.org") {
-          const apiKey = String(config.materialsProjectApiKey ?? "").trim();
-          if (!apiKey) {
-            throw gatewayError(503, "materials_project_api_key_missing", "The server-managed Materials Project key is unavailable.");
-          }
-          upstreamHeaders["x-api-key"] = apiKey;
         }
         upstream = await fetchImpl(request.url, {
           method: request.method,
@@ -836,3 +850,4 @@ export const PUBLIC_SOURCE_GATEWAY_PATH = gatewayPath;
 export const PUBLIC_SOURCE_ALLOWED_HOSTS = allowedHosts;
 export const PUBLIC_SOURCE_ALLOWED_POST_ENDPOINTS = allowedPostEndpoints;
 export const PUBLIC_SOURCE_CREDENTIAL_PROFILES = credentialProfiles;
+export const PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES = allowedAcceptTypes;

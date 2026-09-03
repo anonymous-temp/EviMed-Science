@@ -4,7 +4,7 @@ import pytest
 
 from new_meta.agents.data_extraction_agent import DataExtractionAgent
 from new_meta.core.evidence_ledger import EvidenceLedger
-from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
+from new_meta.core.extraction_ledger import migrate_extractions_to_ledger, result_entity_id
 from new_meta.core.project import Project
 from new_meta.schemas.evidence_ledger import ResultEntity
 from new_meta.schemas.protocol import PICO, ResearchProtocol
@@ -137,18 +137,31 @@ def test_generic_rct_label_without_dependency_metadata_keeps_aggregate_data(tmp_
 
 
 def test_complex_rct_label_without_dependency_metadata_fails_closed(tmp_path: Path) -> None:
+    # Fails closed on the result, not on the review. The result is kept out of
+    # the ledger entirely -- so nothing downstream can pool a cluster design as
+    # an ordinary two-arm aggregate -- and it is named in the report. Raising
+    # here instead ended the whole run: one crossover paper whose extraction
+    # omitted `precision_basis` discarded a completed nine-paper extraction.
     project = Project("incomplete cluster RCT", output_dir=tmp_path / "project")
     study = _study(tmp_path / "trial.pdf")
     study.outcomes[0].comparative_design = "cluster_rct"
     study.outcomes[0].treatment_arm = "Treatment"
     study.outcomes[0].reference_arm = "Control"
 
-    with pytest.raises(ValueError, match="incomplete cluster_rct dependency metadata"):
-        migrate_extractions_to_ledger(
-            project,
-            protocol=_protocol(),
-            extracted_studies=[study],
-        )
+    report = migrate_extractions_to_ledger(
+        project,
+        protocol=_protocol(),
+        extracted_studies=[study],
+    )
+
+    assert report.result_ids == []
+    assert len(report.skipped_results) == 1
+    skipped = report.skipped_results[0]
+    assert skipped["design"] == "cluster_rct"
+    assert skipped["missing"] == ["contrast_id", "estimand_id", "precision_basis"]
+    assert any("cannot be pooled without" in warning for warning in report.warnings)
+    ledger = EvidenceLedger(report.ledger_path, review_id=report.review_id)
+    assert ledger.current(result_entity_id(study, 0), model=ResultEntity) is None
 
 
 def test_comparative_result_without_computable_effect_is_preserved_but_not_synthesized(

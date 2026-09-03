@@ -153,7 +153,9 @@ def direct_query(connector, arguments):
         # Materials Project authenticates every request. Without the profile
         # this returned a bare HTTP 401, which reads as "the service is down"
         # — the live probe found it that way. Naming the credential makes an
-        # unprovisioned deployment say so instead.
+        # unprovisioned deployment say so instead. The gateway holds the key
+        # under the same profile name; it did not, once, and every call was
+        # refused as an invalid credential profile before it left the building.
         return {"source": url, "data": public_sources._get_json_value(url, credential_profile="materials-project")}
     if connector == "fred":
         series = str(arguments["series_id"]).upper()
