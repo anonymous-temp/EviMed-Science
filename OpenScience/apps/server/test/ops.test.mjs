@@ -690,6 +690,45 @@ test("ops backup skips the runtime scratch, and still refuses a symlink anywhere
   );
 });
 
+test("a file changing under a running backup is a note, and a real tar failure is not", async () => {
+  // tar's own distinction, and it is the right one. Exit 2 is fatal — could not
+  // read, could not write, out of space. Exit 1 means the archive was written
+  // and something moved underneath it, which on a live multi-tenant data
+  // directory happens whenever anyone is working: the first cycle after this
+  // stack came up failed on `./users`, and threw away a complete archive.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-ops-"));
+  const dataDir = path.join(tmp, "data");
+  const unreadable = path.join(dataDir, "users", "locked");
+  await mkdir(unreadable, { recursive: true });
+  await writeFile(path.join(dataDir, "users", "kept.txt"), "real\n");
+  await chmod(unreadable, 0o000);
+  try {
+    await assert.rejects(
+      () => run(backupScript, [dataDir, path.join(tmp, "backups")]),
+      (err) => {
+        assert.match(err.stderr, /Backup archive failed \(tar exit 2\)/, "a fatal tar error must still fail the backup");
+        assert.match(err.stderr, /Permission denied/, "and must say what tar said");
+        return true;
+      },
+    );
+  } finally {
+    await chmod(unreadable, 0o755);
+  }
+
+  // The control: with nothing unreadable, the same directory backs up cleanly,
+  // so the assertion above is about the fatal error and not about the script
+  // refusing everything.
+  const ok = await run(backupScript, [dataDir, path.join(tmp, "backups2")]);
+  assert.match(ok.stdout, /open-science-data-.*\.tar\.gz/, "an ordinary backup must still produce an archive");
+
+  // And the accept path is spelled out where the script decides it, so a later
+  // edit that drops the distinction is a visible change rather than a silent
+  // return to failing on every busy cycle.
+  const script = await readFile(backupScript, "utf8");
+  assert.match(script, /file changed as we read it/, "the one warning that is tolerated must be named");
+  assert.match(script, /tar_status" -ne 1/, "and it must be tolerated only at tar's warning exit code");
+});
+
 test("ops restore refuses archives containing symbolic links", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-ops-"));
   const src = path.join(tmp, "src");

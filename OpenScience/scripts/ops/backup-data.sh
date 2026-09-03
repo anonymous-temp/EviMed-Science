@@ -56,11 +56,39 @@ trap cleanup EXIT
 # backup, on every single cycle, because a runtime always leaves sockets. They
 # are live endpoints, not data, and nothing restores from them.
 #
-# --exclude removes the only reason tar had to complain, so a non-zero exit
-# again means a real failure. Warnings that remain (a file changing as it is
-# read) still fail the backup, which is the intended behaviour.
+# --exclude removes the reasons tar had to complain about things that are not
+# data. What is left is tar's own distinction, and it is the one that matters:
+# exit 2 is fatal — it could not read, could not write, ran out of space — and
+# exit 1 means the archive was written and something moved underneath it.
+#
+# "file changed as we read it" is exit 1, and on a live multi-tenant data
+# directory it happens whenever anyone is working: the first cycle after this
+# stack came up failed on `./users`. Failing the whole backup for that is a
+# backup system that stops working exactly when the system is in use, and the
+# archive it threw away was complete apart from one file's inconsistency —
+# which is what a point-in-time copy of a running system always is.
+#
+# So exit 1 is accepted only when every line tar printed is that warning, the
+# count is reported on stdout for the scheduler to record, and anything else —
+# including a single unrecognised line at exit 1 — still fails.
+set +e
+tar_stderr="$(mktemp)"
 tar --exclude=".runtime-sockets" --exclude="*.sock" --exclude="./users/*/projects/*/${RUNTIME_SCRATCH}" \
-  -czf "$tmp" -C "$DATA_DIR" .
+  -czf "$tmp" -C "$DATA_DIR" . 2> "$tar_stderr"
+tar_status=$?
+set -e
+if [ "$tar_status" -ne 0 ]; then
+  unexpected="$(grep -v 'file changed as we read it' < "$tar_stderr" | grep -v '^tar: Exiting with failure status due to previous errors$' || true)"
+  changed="$(grep -c 'file changed as we read it' < "$tar_stderr" || true)"
+  if [ "$tar_status" -ne 1 ] || [ -n "$unexpected" ]; then
+    echo "Backup archive failed (tar exit ${tar_status}):" >&2
+    sed -n '1,20p' "$tar_stderr" >&2
+    rm -f "$tar_stderr"
+    exit 1
+  fi
+  echo "backup note: ${changed} file(s) changed while being read; the archive is a point-in-time copy of a running system" >&2
+fi
+rm -f "$tar_stderr"
 mv "$tmp" "$archive"
 
 if [ -n "${OPEN_SCIENCE_BACKUP_PASSPHRASE:-}" ] || [ -n "${OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-}" ]; then
