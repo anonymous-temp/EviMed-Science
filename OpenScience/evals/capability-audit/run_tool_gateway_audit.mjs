@@ -25,6 +25,19 @@
  *   OPEN_SCIENCE_GEO_PROBE_URL       the GEO probe host (five logged-in vendors)
  *   OPEN_SCIENCE_LOCAL_AUTO_CONFIG=1 read credentials from .evimed-local/secrets
  *
+ * The full refresh, in order -- the specialists first, because the probe
+ * harvests their receipts rather than running them:
+ *
+ *   OPEN_SCIENCE_LOCAL_AUTO_CONFIG=1 \
+ *   OPEN_SCIENCE_WEB_SEARCH_URL=http://127.0.0.1:18080/ \
+ *   OPEN_SCIENCE_GEO_PROBE_URL=http://<probe-host>:9999 \
+ *   OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT=1 \
+ *   EVIMED_DISABLED_TOOLS=patent_search \
+ *     node evals/capability-audit/run_tool_gateway_audit.mjs --script run_specialist_jobs.py \
+ *       --probe-workspace evals/capability-audit/tool-probe-workspace \
+ *       --manuscript manuscripts/<a real manuscript>.pdf
+ *   # then the same environment, without --script, to record the document.
+ *
  * Arguments after the script name are passed through to `run_tool_audit.py`,
  * or to the script named by `--script` -- which is how `run_specialist_jobs.py`
  * runs the managed specialists the probe then harvests receipts from. Only a

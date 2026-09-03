@@ -207,10 +207,17 @@ def artifact_receipts(workspace: Path, artifacts) -> list[dict]:
     return receipts
 
 
-def workspace_roots(explicit) -> list[Path]:
+def workspace_roots(explicit, probe_workspace=None) -> list[Path]:
+    """Where to look for completed specialist jobs.
+
+    The probe workspace is always one of them. `run_specialist_jobs.py` starts
+    the managed jobs there, and leaving it out meant a sweep that had just run
+    all six of them reported `specialistReceipts: 0` -- which reads exactly
+    like six specialists that failed, and is instead one missing flag.
+    """
+    roots = [probe_workspace.resolve()] if probe_workspace else []
     if explicit:
-        return [Path(value).resolve() for value in explicit]
-    roots = []
+        return sorted(set(roots + [Path(value).resolve() for value in explicit]))
     for workspace_candidate in sorted((REPO / ".openscience-web-data" / "users").glob("*/projects/*/workspace")):
         if workspace_candidate.is_symlink() or not workspace_candidate.is_dir():
             continue
@@ -419,7 +426,7 @@ def main():
         raise SystemExit("tool audit fixtures do not cover the MCP registry -- " + "; ".join(parts))
     if disabled:
         print("deliberately not offered by this deployment: " + ", ".join(sorted(disabled)))
-    roots = workspace_roots(args.receipt_workspace)
+    roots = workspace_roots(args.receipt_workspace, probe_workspace=workspace)
     results = run_task_probes(server, workspace)
     for tool in SPECIALISTS:
         receipt = latest_specialist_receipt(tool, roots, args.max_receipt_age_days)
