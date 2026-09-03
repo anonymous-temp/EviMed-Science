@@ -81,6 +81,24 @@ function operationalError(value) {
     .slice(0, 400);
 }
 
+/**
+ * The gate's own error code, kept out of the redactor.
+ *
+ * The codes are a closed vocabulary of snake_case names and every one of them
+ * is longer than twenty characters, so the sanitiser above — which exists to
+ * stop a provider key reaching a log — ate the single field that says what went
+ * wrong. Eight consecutive failures were recorded as
+ * `{"ok":false,"code":"<redacted>"}`, which is a log line that costs a reader
+ * everything and protects nothing: it is a name from a list in this repository.
+ *
+ * Extracted before sanitising, and only when it matches the shape a code has.
+ * @param {string} text @returns {string | null}
+ */
+function gateErrorCode(text) {
+  const match = String(text ?? "").match(/"code"\s*:\s*"([a-z][a-z0-9_]{2,80})"/);
+  return match ? match[1] : null;
+}
+
 /** @param {string} file */
 async function readState(file) {
   try {
@@ -142,6 +160,10 @@ async function mintOnce(config) {
       successfulMints: Number.isSafeInteger(previous?.successfulMints) ? previous.successfulMints : 0,
       consecutiveFailures: (Number.isSafeInteger(previous?.consecutiveFailures) ? previous.consecutiveFailures : 0) + 1,
       error: operationalError(error instanceof Error ? error.message : error),
+      // Beside the sanitised text, never inside it.
+      ...(gateErrorCode(error instanceof Error ? error.message : String(error ?? ""))
+        ? { code: gateErrorCode(error instanceof Error ? error.message : String(error ?? "")) }
+        : {}),
     };
     await writeState(config.stateFile, state);
     log("receipt.failed", { consecutiveFailures: state.consecutiveFailures, error: state.error }, true);
