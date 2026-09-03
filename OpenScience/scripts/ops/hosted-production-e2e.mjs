@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
 
+// Host-importable on purpose: this script runs from a release directory that
+// has no `node_modules`, and `modelGateway.mjs` imports nothing outside Node.
+import { supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
+
 function failure(code, message) {
   const error = new Error(message);
   error.code = code;
@@ -148,6 +152,10 @@ async function waitForMemoryRecord(base, headers, initialIds, marker) {
   return null;
 }
 
+/**
+ * @param {Record<string, any>} ready
+ * @returns {string} the certified model this deployment actually serves
+ */
 function assertReady(ready) {
   const checks = ready?.data?.checks;
   if (!ready?.data?.ok || !checks) throw failure("hosted_e2e_not_ready", "The hosted deployment is not ready.");
@@ -176,18 +184,32 @@ function assertReady(ready) {
   if (checks.memory?.required !== true || checks.memory?.connected !== true) {
     throw failure("hosted_e2e_memory_not_connected", "Hosted E2E requires a connected Memos service.");
   }
-  if (checks.modelGateway?.enabled !== true || checks.modelGateway?.model !== "deepseek-v4-pro") {
-    throw failure("hosted_e2e_deepseek_not_ready", "Hosted E2E requires the validated DeepSeek V4 Pro gateway and release receipt.");
+  // Which certified model serves is a deployment decision — the pilot runs
+  // `deepseek-v4-flash` — and the receipt certifies whichever one actually
+  // answered rather than a name written here. This asked for `deepseek-v4-pro`
+  // by literal and refused a deployment that was green, with a message naming
+  // a model nobody had configured. The list comes from the gateway's own
+  // certified set, which is where that decision is made.
+  if (checks.modelGateway?.enabled !== true || !supportedDeepSeekModels.has(String(checks.modelGateway?.model ?? ""))) {
+    throw failure(
+      "hosted_e2e_deepseek_not_ready",
+      `Hosted E2E requires a certified DeepSeek gateway and release receipt; readiness reports ${JSON.stringify(checks.modelGateway?.model ?? null)}, certified are ${[...supportedDeepSeekModels].join(", ")}.`,
+    );
   }
   if (checks.release?.tracked !== true) {
     throw failure("hosted_e2e_release_untracked", "Hosted E2E requires immutable release provenance.");
   }
+  return String(checks.modelGateway.model);
 }
 
 async function main() {
   const base = baseUrl();
   const ready = await jsonFetch(`${base}/api/ready`);
-  assertReady(ready.body);
+  // The model this deployment certified, carried through every assertion below
+  // instead of written out again. Three of them named `deepseek-v4-pro` by
+  // literal while the pilot serves `deepseek-v4-flash`, so the run would have
+  // been asked to write one model's name and judged against another's.
+  const certifiedModel = assertReady(ready.body);
   const auth = await authenticate(base);
   const marker = randomBytes(12).toString("hex");
   const knowledgeMarker = `KB_${marker}`;
@@ -285,7 +307,7 @@ async function main() {
           `Use the automatically retrieved knowledge marker ${knowledgeMarker} and Memos memory marker ${memoryMarker}.`,
           `请记住：我的长期回答偏好是先呈现证据确定性，再给建议；偏好校验码是 ${preferenceMarker}。`,
           `Use the write tool to create exactly ${artifactPath} as valid JSON with keys marker, knowledge, memory, agent, and model.`,
-          `The values must be exactly ${marker}, ${knowledgeMarker}, ${memoryMarker}, evimed-adr-analysis, and deepseek-v4-pro.`,
+          `The values must be exactly ${marker}, ${knowledgeMarker}, ${memoryMarker}, evimed-adr-analysis, and ${certifiedModel}.`,
           "Do not invent or transform either evidence marker.",
         ].join("\n"),
       }),
@@ -294,7 +316,7 @@ async function main() {
     if (run?.status !== "succeeded") {
       throw failure("hosted_e2e_agent_run_failed", `The real specialist run ended as ${run?.status ?? "missing"} (${run?.errorCode ?? "no_error_code"}).`);
     }
-    if (run.mode !== "specialist" || run.runtimeAgent !== "evimed-adr-analysis" || run.model !== "deepseek/deepseek-v4-pro") {
+    if (run.mode !== "specialist" || run.runtimeAgent !== "evimed-adr-analysis" || run.model !== `deepseek/${certifiedModel}`) {
       throw failure("hosted_e2e_provenance_invalid", "The agent-run ledger does not prove specialist DeepSeek routing.");
     }
     for (const requiredPath of ["safety-report.md", "signals.csv"]) {
@@ -335,7 +357,7 @@ async function main() {
     }
     let evidence;
     try { evidence = JSON.parse(artifactText); } catch { throw failure("hosted_e2e_artifact_invalid", "The production artifact is not valid JSON."); }
-    assertExact(evidence, { marker, knowledge: knowledgeMarker, memory: memoryMarker, agent: "evimed-adr-analysis", model: "deepseek-v4-pro" });
+    assertExact(evidence, { marker, knowledge: knowledgeMarker, memory: memoryMarker, agent: "evimed-adr-analysis", model: certifiedModel });
 
     const safetyReport = await command(base, "read_artifact", { path: "safety-report.md" }, scoped);
     const reportText = safetyReport.body?.data?.data;

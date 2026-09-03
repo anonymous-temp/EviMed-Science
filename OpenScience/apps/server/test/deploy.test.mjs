@@ -968,9 +968,15 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
     'checks.runtime?.kernel !== "dsh"',
     'checks.stateStore?.mode !== "postgres"',
     'checks.memory?.connected !== true',
-    'checks.modelGateway?.model !== "deepseek-v4-pro"',
+    // The model is named by the deployment, not by this list: the receipt
+    // certifies whichever certified model actually answered, and the pilot
+    // serves `deepseek-v4-flash`. Both proofs are still here — the gateway must
+    // serve a certified model, and the ledger must show the run went through
+    // DeepSeek — stated against that value instead of one of its members.
+    'supportedDeepSeekModels.has(String(checks.modelGateway?.model ?? ""))',
+    'checks.runtime?.sandboxMode !== "docker"',
     'run.runtimeAgent !== "evimed-adr-analysis"',
-    'run.model !== "deepseek/deepseek-v4-pro"',
+    'run.model !== `deepseek/${certifiedModel}`',
     'agent.requiredInputs?.includes("drug")',
     'run.artifacts?.includes(requiredPath)',
     'item.kind === "preference"',
@@ -1860,4 +1866,26 @@ test("the preset root the control plane configures is the one the image's own sm
   assert.ok(configured && proven && built, "all three must state a preset root");
   assert.equal(configured, proven, "the control plane must configure the root the build smoke mounts a session with");
   assert.equal(configured, built, "and the root the image actually creates");
+});
+
+test("the hosted e2e accepts any certified model, not one written into it", async () => {
+  // Which certified model serves is a deployment decision — the pilot runs
+  // `deepseek-v4-flash` — and the release receipt certifies whichever one
+  // actually answered. The gate asked for `deepseek-v4-pro` by literal in four
+  // places and refused a deployment that was green, naming a model nobody had
+  // configured; three of the others would have had the run write one model's
+  // name and judged it against another's.
+  const e2e = await readFile(path.join(repoRoot, "scripts/ops/hosted-production-e2e.mjs"), "utf8");
+  const code = e2e.replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(code, /deepseek-v4-(pro|flash)/, "the e2e must not name a model; it reads the certified set");
+  assert.match(code, /supportedDeepSeekModels/, "and it must read that set from the gateway that defines it");
+
+  // The certified set has more than one member, or the assertion above is a
+  // statement about a single-model deployment rather than about the check.
+  const gateway = await readFile(path.join(repoRoot, "apps/server/src/modelGateway.mjs"), "utf8");
+  const listed = gateway.match(/supportedDeepSeekModels = Object\.freeze\(new Set\(\[([\s\S]*?)\]\)\)/)?.[1] ?? "";
+  assert.ok(
+    (listed.match(/"deepseek-[a-z0-9-]+"/g) ?? []).length >= 2,
+    "more than one model must be certified, or nothing here is being decided",
+  );
 });
