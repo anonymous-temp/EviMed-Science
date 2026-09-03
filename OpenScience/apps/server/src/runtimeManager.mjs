@@ -2243,6 +2243,18 @@ export class RuntimeManager {
         "Runtime controller release does not match the Web API release.",
       );
     }
+    // Where the control socket lives is decided by this, on both sides, and a
+    // disagreement is not a capacity question: the caller makes one directory
+    // and the controller mounts another, so the container is created and never
+    // starts. Compared here, with the other things both sides must agree on,
+    // rather than discovered as a timeout.
+    if (String(health.runtimeDataVolume ?? "") !== String(this.config.runtimeDataVolume ?? "")) {
+      throw new HttpError(
+        503,
+        "runtime_controller_data_volume_mismatch",
+        "Runtime controller and Web API disagree about the runtime data volume.",
+      );
+    }
     const expectedGlobal = positiveLimit(this.config.maxRunningRuntimes);
     const expectedPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     const expectedKernels = positiveLimit(this.config.maxConcurrentKernels);

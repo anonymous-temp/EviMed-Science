@@ -638,6 +638,15 @@ export function createRuntimeController(overrides = {}) {
             maxRunningRuntimesPerUser: limits.maxPerUser,
             maxConcurrentKernels: kernelLimits.maxGlobal,
             maxConcurrentKernelsPerUser: kernelLimits.maxPerUser,
+            // Reported because both sides build the launch plan, and this
+            // setting decides where the control socket lives: with a data
+            // volume the plan mounts an isolated subpath, without one it binds
+            // a directory under the project. A caller that disagrees creates
+            // the directory the controller will not use, and `docker run` then
+            // fails on a missing mount source — which reached the caller as
+            // `runtime_start_timeout`, a name that says nothing about a
+            // setting.
+            runtimeDataVolume: String(config.runtimeDataVolume ?? ""),
           },
         });
         return;

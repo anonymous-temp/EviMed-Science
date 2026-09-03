@@ -5,6 +5,7 @@ import net from "node:net";
 import path from "node:path";
 import test from "node:test";
 import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, requestRuntime } from "../src/runtimeManager.mjs";
+import { RUNTIME_CONTROLLER_PROTOCOL_VERSION } from "../src/runtimeControllerClient.mjs";
 import { RuntimeControllerClient } from "../src/runtimeControllerClient.mjs";
 import { createRuntimeController } from "../src/runtimeControllerServer.mjs";
 import { createWebApiApp } from "../src/server.mjs";
@@ -1083,5 +1084,50 @@ test("a container that dies noisily hands its last words back through the contro
     delete process.env.FAKE_VOLUME_ROOT;
     delete process.env.FAKE_RUNTIME_DIES;
     await removeTree(tmp);
+  }
+});
+
+test("a controller that mounts the control socket somewhere else is refused by name", async () => {
+  // Both sides build the launch plan, and the data volume decides where the
+  // control socket lives: with one, an isolated volume subpath; without one, a
+  // bind under the project. A caller that disagrees creates the directory the
+  // controller will not mount, `docker run` fails on a missing mount source,
+  // and the caller sees `runtime_start_timeout` — a name that says nothing
+  // about a setting. This is the same class as the release and capacity
+  // comparisons beside it, and it took a live mint to find.
+  const health = {
+    protocolVersion: RUNTIME_CONTROLLER_PROTOCOL_VERSION,
+    releaseId: "rel-1",
+    dockerMajor: 26,
+    maxRunningRuntimes: 8,
+    maxRunningRuntimesPerUser: 4,
+    maxConcurrentKernels: 2,
+    maxConcurrentKernelsPerUser: 1,
+    runtimeDataVolume: "evimed-science-data",
+  };
+  const base = {
+    production: true,
+    releaseId: "rel-1",
+    maxRunningRuntimes: 8,
+    maxRunningRuntimesPerUser: 4,
+    maxConcurrentKernels: 2,
+    maxConcurrentKernelsPerUser: 1,
+  };
+
+  const agreeing = new RuntimeManager({ ...base, runtimeDataVolume: "evimed-science-data" });
+  agreeing.runtimeController = { health: async () => health };
+  await assert.doesNotReject(
+    () => agreeing.controllerHealth(),
+    "the control: agreeing on the volume must not be refused, or the assertion below proves nothing",
+  );
+
+  for (const [label, mine] of [["empty against a named volume", ""], ["a different volume", "some-other-volume"]]) {
+    const manager = new RuntimeManager({ ...base, runtimeDataVolume: mine });
+    manager.runtimeController = { health: async () => health };
+    await assert.rejects(
+      () => manager.controllerHealth(),
+      (error) => error.code === "runtime_controller_data_volume_mismatch" && error.status === 503,
+      `${label} must be named, not left to time out`,
+    );
   }
 });
