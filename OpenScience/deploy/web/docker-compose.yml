@@ -268,6 +268,11 @@ services:
       EVIMED_GUIDELINE_SEARCH_URL: ${EVIMED_GUIDELINE_SEARCH_URL:-}
       EVIMED_CLINICAL_TRIAL_SEARCH_URL: ${EVIMED_CLINICAL_TRIAL_SEARCH_URL:-}
       EVIMED_PATENT_SEARCH_URL: ${EVIMED_PATENT_SEARCH_URL:-}
+      # Base tool names the deployment does not offer at all. Passed even when
+      # empty: compose forwards env item by item, and a variable that is not on
+      # this list simply does not exist in the container — so a lever left off
+      # it reads as "set and ignored".
+      EVIMED_DISABLED_TOOLS: ${EVIMED_DISABLED_TOOLS:-}
       EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ${EVIMED_PHARMACY_REFERENCE_SEARCH_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/pharmacy-reference-search}
       EVIMED_DRUG_LABEL_SEARCH_URL: ${EVIMED_DRUG_LABEL_SEARCH_URL:-}
       EVIMED_ADR_CASE_QUERY_URL: ${EVIMED_ADR_CASE_QUERY_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/adr-cases}

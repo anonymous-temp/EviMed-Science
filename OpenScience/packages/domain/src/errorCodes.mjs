@@ -96,6 +96,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "adapter_circuit_open",
   "adapter_unconfigured",
   "adapter_workload_token_unavailable",
+  // "This deployment does not offer that tool", which is the deployment's
+  // shape and not the run's mistake — the same class as an unconfigured
+  // adapter, and recoverable for the same reason: the run notes the capability
+  // it did not have and finishes with the sources it does.
+  "tool_disabled",
   // The open-web gateway's own codes. Only the MCP tool's codes were classified
   // when this was built; the gateway module was never scanned, so the deployment
   // lacking a search backend, or the aggregator being down, killed runs that had

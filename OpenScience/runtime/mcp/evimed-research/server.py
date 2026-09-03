@@ -760,8 +760,31 @@ TERM_VOCABULARY = {
 }
 
 
+def disabled_tools():
+    """Tools this deployment deliberately does not offer.
+
+    Distinct from an unconfigured adapter, and the difference matters to a run.
+    An unconfigured adapter means "this should work and does not" -- the tool is
+    advertised, the model reaches for it, and it fails with
+    `adapter_unconfigured`, which is the right answer to a misconfiguration. A
+    disabled tool means "this deployment does not do that at all", and
+    advertising one costs a wasted call and a failure the run then has to
+    reason about.
+
+    Base names, comma-separated, in EVIMED_DISABLED_TOOLS. A name nothing
+    matches is ignored rather than fatal: the roster is versioned with the image
+    and the environment is not, so a stale entry must not stop a container that
+    is otherwise correct.
+    """
+    raw = os.environ.get("EVIMED_DISABLED_TOOLS", "")
+    return {name.strip() for name in raw.split(",") if name.strip()}
+
+
 def list_tools():
-    return TOOL_DEFINITIONS
+    disabled = disabled_tools()
+    if not disabled:
+        return TOOL_DEFINITIONS
+    return [tool for tool in TOOL_DEFINITIONS if tool["name"] not in disabled]
 
 
 def success(summary, **fields):
@@ -1429,6 +1452,19 @@ def _managed_status_with_wait(status_call, arguments):
 
 
 def call_tool(name, arguments):
+    # Refused here as well as hidden from the catalog. A model that remembers a
+    # tool from an earlier session, or a caller that hard-codes a name, must get
+    # the deployment's answer rather than reach an adapter the deployment turned
+    # off -- and it must be told which, because "disabled" and "broken" call for
+    # opposite responses.
+    if name in disabled_tools():
+        return failure(
+            "tool_disabled",
+            "%s is not offered by this deployment." % name,
+            False,
+            "Stop and pick a different tool; this one is switched off, not failing.",
+            ["Call tools/list for what this deployment does offer."],
+        )
     definition = TOOLS.get(name)
     if definition is None:
         return failure(
