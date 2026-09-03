@@ -23,6 +23,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpToolBaseName } from "@evimed/domain";
@@ -555,12 +556,19 @@ async function runDshChain({ config: supplied, timeoutMs }) {
 
     manager = new RuntimeManager(config);
     gateway = await startCountingGateway(config, manager);
-    // Same host the deployment's own gateway answers on, a port of this
-    // process. Derived rather than configured: a second address to keep in step
-    // is a second address to get wrong, and the runtime must be able to resolve
-    // whatever is written here from inside the container network.
+    // The path is the deployment's; the authority is THIS process's. Taking the
+    // hostname from `modelGatewayInternalUrl` would name the web container —
+    // which is not where the gate runs, so the runtime would dial a port
+    // nothing listens on and the run would fail as "no gateway traffic", which
+    // names the symptom of a wrong address rather than the address.
+    //
+    // `os.hostname()` inside a container is its id, and Docker's embedded DNS
+    // resolves it for every container on the same user-defined network — the
+    // runtime network this launch plan attaches to. The override exists for a
+    // deployment whose DNS does not.
     const deployed = new URL(String(config.modelGatewayInternalUrl ?? ""));
-    config.modelGatewayInternalUrl = `http://${deployed.hostname}:${gateway.port}${deployed.pathname.replace(/\/$/, "")}`;
+    const gatewayHost = String(process.env.OPEN_SCIENCE_RELEASE_GATE_GATEWAY_HOST ?? "").trim() || os.hostname();
+    config.modelGatewayInternalUrl = `http://${gatewayHost}:${gateway.port}${deployed.pathname.replace(/\/$/, "")}`;
 
     const runtime = await manager.start(project);
     const transport = {
@@ -637,6 +645,15 @@ async function runDshChain({ config: supplied, timeoutMs }) {
       gateway: gateway.state,
       streamedEventCount: evidence.toolResults + (transcript.messages?.length ?? 0),
     });
+    // Nothing at all is a different fault from too little, and conflating them
+    // reports a wrong address as a security finding. A run that produced a
+    // transcript without touching this gateway reached a model somewhere else —
+    // in practice, an address the container could not resolve.
+    if (gateway.state.requests === 0) {
+      const error = failure("deepseek_release_gateway_unreachable");
+      error.diagnostic = JSON.stringify({ gatewayUrl: config.modelGatewayInternalUrl });
+      throw error;
+    }
     if (!gatewayOnly) throw failure("deepseek_release_gateway_bypass_detected");
     if (!streaming) {
       const error = failure("deepseek_release_streaming_evidence_missing");

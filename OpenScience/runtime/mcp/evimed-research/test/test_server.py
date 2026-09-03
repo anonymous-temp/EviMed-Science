@@ -1225,5 +1225,54 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(response["error"]["code"], -32603)
 
 
+class DisabledToolsTests(unittest.TestCase):
+    """A deployment that does not offer a tool must neither advertise it nor run
+    it -- and must say which of the two reasons applies, because "switched off"
+    and "the adapter is missing" call for opposite responses from a run."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.server = load_server()
+
+    def setUp(self):
+        self._previous = os.environ.get("EVIMED_DISABLED_TOOLS")
+
+    def tearDown(self):
+        if self._previous is None:
+            os.environ.pop("EVIMED_DISABLED_TOOLS", None)
+        else:
+            os.environ["EVIMED_DISABLED_TOOLS"] = self._previous
+
+    def test_unset_offers_the_whole_roster(self):
+        os.environ.pop("EVIMED_DISABLED_TOOLS", None)
+        self.assertEqual(len(self.server.list_tools()), len(self.server.TOOL_DEFINITIONS))
+        self.assertEqual(self.server.disabled_tools(), set())
+
+    def test_a_disabled_tool_leaves_the_catalog_and_is_refused_by_name(self):
+        os.environ["EVIMED_DISABLED_TOOLS"] = "patent_search"
+        names = [tool["name"] for tool in self.server.list_tools()]
+        self.assertNotIn("patent_search", names)
+        self.assertEqual(len(names), len(self.server.TOOL_DEFINITIONS) - 1)
+        # Hiding it is not enough: a model that remembers the name from an
+        # earlier session, or a caller that hard-codes it, must be told.
+        refused = self.server.call_tool("patent_search", {"query": "x", "limit": 1})
+        self.assertEqual(refused["status"], "error")
+        self.assertEqual(refused["error"]["code"], "tool_disabled")
+        self.assertFalse(refused["error"]["retryable"], "a switched-off tool is not worth retrying")
+        # The control: the same call, with the tool offered, must NOT answer
+        # `tool_disabled` -- otherwise the assertion above would hold for a
+        # server that refused everything.
+        os.environ.pop("EVIMED_DISABLED_TOOLS", None)
+        offered = self.server.call_tool("patent_search", {"query": "x", "limit": 1})
+        self.assertNotEqual(offered.get("error", {}).get("code"), "tool_disabled")
+
+    def test_a_name_nothing_matches_is_ignored_rather_than_fatal(self):
+        # The roster ships with the image and the environment does not, so a
+        # stale entry must not stop a container that is otherwise correct.
+        os.environ["EVIMED_DISABLED_TOOLS"] = " no_such_tool , "
+        self.assertEqual(len(self.server.list_tools()), len(self.server.TOOL_DEFINITIONS))
+        self.assertEqual(self.server.disabled_tools(), {"no_such_tool"})
+
+
 if __name__ == "__main__":
     unittest.main()

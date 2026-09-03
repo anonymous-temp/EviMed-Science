@@ -1465,6 +1465,11 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE = `${runtimeDshHome}/${modelGatewayTokenFileName}`;
   environment.EVIMED_MODEL_GATEWAY_URL = modelGatewayProviderUrl(config);
   environment.EVIMED_MODEL_GATEWAY_MODEL = String(config.deepseekModel ?? "");
+  // Set even when empty, unlike the adapter URLs below. A container that keeps
+  // a value from a previous deployment because the new one had nothing to say
+  // is the shape of "the lever was moved and nothing happened"; an explicit
+  // empty string is the deployment saying "everything is offered".
+  environment.EVIMED_DISABLED_TOOLS = String(config.evimedDisabledTools ?? "");
   for (const [key, envName] of Object.entries(evimedAdapterEnvironment)) {
     const value = String(configured[key] ?? "").trim();
     if (!value) continue;

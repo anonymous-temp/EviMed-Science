@@ -11,6 +11,21 @@
 # `run` in the command and `health` in the healthcheck, state in a JSON file on
 # a named volume. A second scheduling idiom is a second thing to learn and a
 # second thing to get wrong.
+#
+# What this service needs that a scheduler normally does not, and why. Minting
+# a DSH receipt means STARTING A RUNTIME CONTAINER and driving a real turn
+# through it — the composition, the research MCP and the capability trees live
+# inside the runtime image, so there is nothing to drive from outside it. So
+# this container gets the same three things the web service has and no more:
+# the controller socket (privileged Docker stays behind it), the project data
+# volume (the launch plan mounts a workspace out of it by subpath), and a leg on
+# the runtime network (the runtime dials this container's own gateway by name).
+# It cannot be `read_only` for the same reason it has the volume: it creates and
+# deletes one throwaway project per mint.
+#
+# Written as the previous shape — no Docker access, nothing writable, no
+# network — it could not have minted anything, and would have failed every
+# cycle with a message about the socket rather than about the receipt.
 services:
   open-science-release-receipt:
     image: ${OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0.1.3}
@@ -31,19 +46,70 @@ services:
       OPEN_SCIENCE_RECEIPT_MAX_FAILURES: ${OPEN_SCIENCE_RECEIPT_MAX_FAILURES:-3}
       # The gate needs the same gateway and signing material the web service
       # uses; both arrive by path, never by value.
-      OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-secret
+      OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-}
+      OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      # Where the freshly signed receipt lands. The web service mounts this same
+      # host file read-only; a mint that wrote anywhere else would succeed and
+      # change nothing readiness can see.
+      OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE: /run/receipt/deepseek-release-receipt.json
+      OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID: ${OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID:?set OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID}
+      OPEN_SCIENCE_SOURCE_REVISION: ${OPEN_SCIENCE_SOURCE_REVISION:?set OPEN_SCIENCE_SOURCE_REVISION}
+      OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION: ${OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION:-}
+      # Everything below is what `loadConfig` needs to build the same launch
+      # plan the web service builds. A value that differs here would certify a
+      # runtime nobody runs.
+      OPEN_SCIENCE_DATA_DIR: /data
+      OPEN_SCIENCE_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-}
+      OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
+      OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
+      OPEN_SCIENCE_RUNTIME_TRANSPORT: ${OPEN_SCIENCE_RUNTIME_TRANSPORT:-unix}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:?set OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}
+      OPEN_SCIENCE_RUNTIME_NETWORK_MODE: ${OPEN_SCIENCE_RUNTIME_NETWORK_MODE:-open-science-runtime-internal}
+      OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME: ${OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME:-open-science-runtime-internal}
+      OPEN_SCIENCE_RUNTIME_CONTROLLER_MODE: socket
+      OPEN_SCIENCE_RUNTIME_CONTROLLER_SOCKET: /run/open-science-controller/controller.sock
+      OPEN_SCIENCE_RELEASE_MANIFEST_FILE: /run/open-science/release-manifest.json
+      OPEN_SCIENCE_RELEASE_ID: ${OPEN_SCIENCE_RELEASE_ID:?set OPEN_SCIENCE_RELEASE_ID}
+      OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
+      OPEN_SCIENCE_EVIMED_MCP_SOURCE_DIR: /app/runtime/mcp/evimed-research
     volumes:
       - open-science-receipts:/receipts
-    secrets:
-      - source: open-science-model-gateway-signing-secret
-        target: model-gateway-signing-secret
-        mode: 0400
-      - source: open-science-deepseek-api-key
-        target: deepseek-api-key
-        mode: 0400
+      - open-science-data:/data
+      - open-science-runtime-control:/run/open-science-controller:ro
+      # Secrets arrive the way every other one in this stack does: a bind mount
+      # of a host file named by `*_HOST_FILE`. Compose `secrets:` would be a
+      # second mechanism for the same job, and the paths would have to be kept
+      # in step with the web service by hand.
+      #
+      # The receipt file is the one mount that is NOT read-only — this is the
+      # process that writes it, and the web service mounts the same host file
+      # read-only to verify it. A mint that wrote anywhere else would succeed
+      # and change nothing readiness can see.
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE}
+        target: /run/receipt/deepseek-release-receipt.json
+      - type: bind
+        source: ${OPEN_SCIENCE_RELEASE_MANIFEST_HOST_FILE:-./release-manifest.json}
+        target: /run/open-science/release-manifest.json
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE}
+        target: /run/secrets/deepseek-api-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/model-gateway-signing-key
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
+        target: /run/secrets/evimed-workload-signing-key
+        read_only: true
+    networks:
+      - default
+      - runtime-internal
     healthcheck:
       test: ["CMD", "node", "scripts/ops/release-receipt-scheduler.mjs", "health"]
       interval: 300s
@@ -54,16 +120,16 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    read_only: true
+    # Not read-only: a mint creates a throwaway project under /data, drives a
+    # run into it and deletes it again.
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=64m
     restart: unless-stopped
 
+# Only the volume this overlay introduces. `open-science-data`,
+# `open-science-runtime-control` and the `runtime-internal` network are declared
+# by `docker-compose.yml`, which is always loaded with this file — re-declaring
+# them here would either duplicate or contradict it. `docker-compose.backup.yml`
+# declares neither, for the same reason.
 volumes:
   open-science-receipts:
-
-secrets:
-  open-science-model-gateway-signing-secret:
-    file: ${OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE:-./secrets/model-gateway-signing-secret.txt}
-  open-science-deepseek-api-key:
-    file: ${OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE:-./secrets/deepseek-api-key.txt}

@@ -757,6 +757,13 @@ export function loadConfig(overrides = {}) {
       }]),
     ),
     evimedAdapterUrls,
+    // Base tool names this deployment deliberately does not offer, passed to
+    // the research MCP so a run never sees a tool nobody will serve. Distinct
+    // from an adapter URL left empty, which means "this should work and does
+    // not" and is answered with `adapter_unconfigured`.
+    evimedDisabledTools: String(
+      overrides.evimedDisabledTools ?? process.env.EVIMED_DISABLED_TOOLS ?? "",
+    ).split(",").map((name) => name.trim()).filter(Boolean).join(","),
     pharmacyReferenceDb: configuredPharmacyReferenceDb
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb

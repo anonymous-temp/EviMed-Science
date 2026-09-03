@@ -396,7 +396,13 @@ def main():
     os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(workspace)
     server = load_server()
     declared = [item["name"] for item in server.list_tools()]
-    fixtured = set(TASK_FIXTURES) | set(SPECIALISTS)
+    # A tool the deployment switched off is not a tool that departed. Both leave
+    # the registry, and telling them apart is the difference between "the
+    # fixtures are stale" and "this deployment does not do patents" -- one is a
+    # bug in the audit, the other is a decision the audit should record and
+    # carry on.
+    disabled = server.disabled_tools()
+    fixtured = (set(TASK_FIXTURES) | set(SPECIALISTS)) - disabled
     unaudited = sorted(set(declared) - fixtured)
     departed = sorted(fixtured - set(declared))
     if unaudited or departed:
@@ -411,6 +417,8 @@ def main():
         if departed:
             parts.append("fixtured but no longer declared: " + ", ".join(departed))
         raise SystemExit("tool audit fixtures do not cover the MCP registry -- " + "; ".join(parts))
+    if disabled:
+        print("deliberately not offered by this deployment: " + ", ".join(sorted(disabled)))
     roots = workspace_roots(args.receipt_workspace)
     results = run_task_probes(server, workspace)
     for tool in SPECIALISTS:
@@ -432,6 +440,10 @@ def main():
         "schemaVersion": 3,
         "probedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "registered": len(declared),
+        # Recorded in the document, not only printed. "25 of 25 certified" and
+        # "25 of 26, one switched off" are different claims, and a denominator
+        # that quietly shrank is the way the second becomes the first.
+        "notOffered": sorted(disabled),
         "executionCertified": certified,
         "unverified": len(declared) - certified,
         "operational": certified,
