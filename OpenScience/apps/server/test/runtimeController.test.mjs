@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import http from "node:http";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, requestRuntime } from "../src/runtimeManager.mjs";
@@ -1130,4 +1132,48 @@ test("a controller that mounts the control socket somewhere else is refused by n
       `${label} must be named, not left to time out`,
     );
   }
+});
+
+test("a request over the runtime socket carries the authority the cookie was minted for", async (t) => {
+  // `http.request` derives `Host` from the URL only when it dials one. Given a
+  // `socketPath` it has no host to derive from and sends `Host: localhost` —
+  // and the kernel derives the browser-session cookie's NAME from the Host it
+  // receives. So every call arrived looking for a cookie named for `localhost`,
+  // found none, and answered 401, with a correctly signed cookie for
+  // `dsh.runtime` unread in the request. The socket is the only transport a
+  // hosted runtime has, so that was every runtime call in production, and it
+  // reached the caller as a three-minute `runtime_start_timeout`.
+  const dir = await mkdtemp(path.join(os.tmpdir(), "runtime-host-header-"));
+  const socketPath = path.join(dir, "probe.sock");
+  /** @type {string[]} */
+  const seen = [];
+  const server = http.createServer((req, res) => {
+    seen.push(String(req.headers.host ?? "(absent)"));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  await new Promise((resolve) => server.listen(socketPath, () => resolve(undefined)));
+  // Registered before the first assertion, not after the last. Trailing cleanup
+  // never runs when an assertion throws, and a listening server keeps the event
+  // loop alive — so a broken `Host` made this test hang instead of fail, which
+  // is the one failure mode a test must not have.
+  t.after(async () => {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+    await rm(dir, { recursive: true, force: true });
+  });
+  const runtime = { url: "http://dsh.runtime", socketPath };
+  const answer = await requestRuntime(runtime, `${runtime.url}/api/session/list`, { method: "POST", body: "{}" });
+  await answer.body?.cancel?.().catch(() => {});
+  assert.deepEqual(seen, ["dsh.runtime"], "the kernel must receive the authority the cookie names, not localhost");
+
+  // A caller that set its own Host still wins: the proxy forwards a browser's
+  // headers, and this must not rewrite them.
+  const forwarded = await requestRuntime(runtime, `${runtime.url}/api/session/list`, {
+    method: "POST",
+    headers: { Host: "someone-else" },
+    body: "{}",
+  });
+  await forwarded.body?.cancel?.().catch(() => {});
+  assert.deepEqual(seen, ["dsh.runtime", "someone-else"]);
+
 });

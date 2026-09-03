@@ -317,6 +317,10 @@ export function readDeepSeekReleaseReceiptFile(file, options = {}) {
  * in the receipt schema is that requirement written down.
  */
 export const RELEASE_GATE_ARTIFACT = "artifacts/deepseek-release-gate.json";
+/** How old an abandoned gate project must be before a later mint removes it.
+ *  Comfortably longer than the gate's own ceiling, so the sweep can never
+ *  reach a run that is still going. */
+const STALE_GATE_PROJECT_MS = 2 * 60 * 60 * 1000;
 const RELEASE_GATE_TERM = "acetaminophen";
 const RELEASE_GATE_NORMALIZED = "paracetamol";
 /** The two MCP tools that answer a normalization; either is acceptable
@@ -585,11 +589,21 @@ async function runDshChain({ config: supplied, timeoutMs }) {
     // Anything a previous mint left behind, before this one adds to it. The
     // `finally` below removes this run's project, but a killed process skips
     // it, and what is left is not small: the kernel installs its profile with
-    // pnpm, so an abandoned project holds a whole node_modules tree. Swept at
-    // the start rather than trusted to a `finally` that may not run.
+    // pnpm, so an abandoned project holds a whole node_modules tree.
+    //
+    // By age, and this is the whole point of the rule. The first version swept
+    // every project under this user, and the receipt scheduler runs the gate
+    // unattended — so a scheduled mint and a manual one deleted each other's
+    // workspace mid-run, and what came back was `file_not_found` from the
+    // controller. Nothing younger than the ceiling can belong to a finished
+    // run, and nothing older can belong to a live one.
+    const staleBefore = Date.now() - STALE_GATE_PROJECT_MS;
     const projectsRoot = path.join(userRoot, "projects");
     for (const stale of await fsp.readdir(projectsRoot).catch(() => [])) {
-      await fsp.rm(path.join(projectsRoot, stale), { recursive: true, force: true }).catch(() => {});
+      const staleDir = path.join(projectsRoot, stale);
+      const stat = await fsp.stat(staleDir).catch(() => null);
+      if (!stat || stat.mtimeMs >= staleBefore) continue;
+      await fsp.rm(staleDir, { recursive: true, force: true }).catch(() => {});
     }
     await Promise.all([workspaceDir, project.runtimeDir, project.metaDir]
       .map((dir) => fsp.mkdir(dir, { recursive: true, mode: 0o700 })));

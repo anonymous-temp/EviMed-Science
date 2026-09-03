@@ -182,9 +182,22 @@ export function requestRuntime(runtime, target, { method = "GET", headers = {}, 
     method,
     headers,
   };
+  // `Host`, explicitly, on the socket path. `http.request` derives it from the
+  // URL only when it dials one; given a `socketPath` it has no host to derive
+  // from and sends `Host: localhost`. The kernel derives the browser-session
+  // cookie's NAME from the Host it receives, so every call over the socket
+  // arrived looking for a cookie named for `localhost`, found none, and
+  // answered 401 — with a correctly signed cookie for `dsh.runtime` sitting
+  // unread in the request. That is every runtime call this control plane
+  // makes: the socket is the only transport a hosted runtime has.
+  //
+  // Not overridden when a caller already set one in any spelling: the proxy
+  // forwards a browser's headers and its choice has to win.
+  const hasHostHeader = Object.keys(headers).some((name) => name.toLowerCase() === "host");
   const socketOptions = runtime.socketPath
     ? {
         ...requestOptions,
+        headers: hasHostHeader ? headers : { host: url.host, ...headers },
         socketPath: runtime.socketPath,
         path: `${url.pathname}${url.search}`,
       }
