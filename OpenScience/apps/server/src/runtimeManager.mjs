@@ -1581,7 +1581,13 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     // Empty when no sidecar is deployed, and then no row is emitted -- a
     // deployment without one behaves exactly as it did before.
     toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim(),
-    presetRoot: "/opt/evimed/socket/presets/evimed-universal",
+    // The directory that CONTAINS the presets, not the preset. `roots` is
+    // scanned for preset directories, so naming the preset itself gives the
+    // kernel a root with no presets under it and `agent-presets: preset
+    // "evimed-universal" not found (available: standard, ptc, minimal, cordis,
+    // skills)` — a message that lists the built-ins and reads like ours was
+    // never built. The image's own build smoke proves this exact value.
+    presetRoot: "/opt/evimed/dsh/presets",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",
