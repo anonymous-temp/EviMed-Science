@@ -83,8 +83,30 @@ def verify_tools():
     # count rather than the addition. The connector audit below already derives
     # its expected count for exactly this reason.
     server = load_module("evimed_release_tool_registry", REPO / "runtime" / "mcp" / "evimed-research" / "server.py")
-    expected = len({item["name"] for item in server.list_tools()})
-    require(expected > 0, "the MCP registry declares no tools")
+    registry = {item["name"] for item in server.TOOL_DEFINITIONS}
+    require(len(registry) > 0, "the MCP registry declares no tools")
+    # A deployment may decline to offer a capability, and the probe records
+    # which -- but `notOffered` is a denominator, so it is checked twice: every
+    # name must be a tool that exists, and the set must be one the product
+    # declares optional. Otherwise the way to a green audit is to switch off
+    # whatever failed, and the document would still read "all certified".
+    # `list_tools()` is not used here: it reads the same environment variable,
+    # so on a machine that happens to set it the expected count would move with
+    # the recording instead of pinning it.
+    not_offered = document.get("notOffered") or []
+    require(
+        isinstance(not_offered, list) and all(isinstance(name, str) for name in not_offered),
+        "tool audit notOffered is not a list of tool names",
+    )
+    not_offered = set(not_offered)
+    unknown = sorted(not_offered - registry)
+    require(not unknown, "tool audit reports tools the registry does not declare as not offered: %s" % ", ".join(unknown))
+    unapproved = sorted(not_offered - set(server.OPTIONAL_TOOLS))
+    require(
+        not unapproved,
+        "tools this product does not declare optional were switched off: %s" % ", ".join(unapproved),
+    )
+    expected = len(registry - not_offered)
     require(document.get("registered") == expected, "tool registry count is not %d" % expected)
     require(document.get("executionCertified") == expected, "all %d tools are not execution-certified" % expected)
     require(document.get("operational") == expected, "tool operational count is not %d" % expected)
@@ -95,7 +117,7 @@ def verify_tools():
         "evimed_release_execution_evidence",
         REPO / "runtime" / "mcp" / "evimed-research" / "execution_evidence.py",
     )
-    declared = {item["name"] for item in server.list_tools()}
+    declared = registry - not_offered
     require({item.get("tool") for item in results} == declared, "tool evidence does not exactly match the live MCP registry")
     certified = [item for item in results if item.get("operational") is True]
     require(document.get("executionCertified") == len(certified), "tool execution-certified count is inflated")
@@ -274,8 +296,23 @@ def verify_skills():
     global_installed = sorted(package for root in global_roots for package in enabled(root))
     specialist_installed = sorted(enabled(skill_root / "evimed"))
     installed = sorted(global_installed + specialist_installed)
-    require(len(global_installed) == 58 and summary.get("freshWebGlobalSkillPackages") == 58, "clean Web global Skill count is not 58")
-    require(len(specialist_installed) == 11 and summary.get("freshWebSpecialistSkillPackages") == 11, "clean Web specialist Skill count is not 11")
+    # Derived from the installed tree, not written down. Four packages were
+    # added after this audit was last recorded and three pinned literals here
+    # each failed in turn with a number rather than a name; the recording is
+    # what has to match the tree, and pinning the tree's own size only means an
+    # extra edit every time a Skill ships. The floors are the walk assertion:
+    # a glob that stopped matching would otherwise agree with a recording that
+    # had also stopped counting.
+    require(len(global_installed) >= 50, "the global Skill scan found %d packages; it is not reading the tree" % len(global_installed))
+    require(len(specialist_installed) >= 8, "the specialist Skill scan found %d packages; it is not reading the tree" % len(specialist_installed))
+    require(
+        summary.get("freshWebGlobalSkillPackages") == len(global_installed),
+        "clean Web global Skill count is not %d" % len(global_installed),
+    )
+    require(
+        summary.get("freshWebSpecialistSkillPackages") == len(specialist_installed),
+        "clean Web specialist Skill count is not %d" % len(specialist_installed),
+    )
     # `freshWebOpenCodeSkillPackages` is the same count under the name the
     # generator wrote while the retired kernel was the one being counted. The
     # recorded results in `results/` were measured then and are not rewritten —
@@ -293,7 +330,7 @@ def verify_skills():
             "so this count was recorded under the retired kernel; re-record the "
             "skill audit under the DSH runtime",
         )
-    require(len(installed) == 69 and installed_count == 69, "clean Web runtime Skill count is not 69")
+    require(installed_count == len(installed), "clean Web runtime Skill count is not %d" % len(installed))
     require(summary.get("freshWebInstalledPackageIds") == installed, "skill audit does not match the clean runtime delivery contract")
 
     execution = read("skill-execution-v1.json")
@@ -371,7 +408,10 @@ def verify_skills():
         evidence = tool_results.get(tool, {})
         require(evidence.get("operational") is True and evidence.get("operation") in {"task", "start_then_poll_to_terminal"}, "%s lacks linked tool-task evidence" % package)
     all_certified_packages = sorted(set(certified_packages) | expected_platform_packages | set(specialist_skill_tools))
-    require(summary.get("webExecutionCertifiedSkillPackages") == 61, "clean Web execution-certified Skill count is not 61")
+    require(
+        summary.get("webExecutionCertifiedSkillPackages") == len(all_certified_packages),
+        "clean Web execution-certified Skill count is not %d" % len(all_certified_packages),
+    )
     require(summary.get("webExecutionCertifiedPackageIds") == all_certified_packages, "Skill audit does not match retained execution receipts")
     require(summary.get("sourceCapabilitiesMapped") == 127, "source capability mapping count is not 127")
     require(summary.get("sourcePackagesPublished") == 0, "mapped source capabilities were misreported as published packages")

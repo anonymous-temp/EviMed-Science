@@ -2,11 +2,24 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createPublicSourceGatewayHandler,
+  PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES,
   PUBLIC_SOURCE_ALLOWED_HOSTS,
   PUBLIC_SOURCE_CREDENTIAL_PROFILES,
 } from "../src/publicSourceGateway.mjs";
+
+const connectorSources = ["public_sources.py", "science_connectors.py"].map((name) => {
+  const file = path.resolve(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "../../../runtime/mcp/evimed-research",
+    name,
+  );
+  return { name, text: fs.readFileSync(file, "utf8") };
+});
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -272,9 +285,18 @@ test("public-source gateway injects the server-held Materials Project key withou
   const response = await gatewayRequest(base, {
     url: "https://api.materialsproject.org/materials/summary/?material_ids=mp-149",
     accept: ["application/json"],
+    credentialProfile: "materials-project",
   });
   assert.equal(response.status, 200);
   assert.equal(observedHeaders["x-api-key"], "mp-server-secret");
+
+  // The host now requires the profile, so an unauthenticated Materials Project
+  // call cannot slip past as one the gateway happens not to sign.
+  const unprofiled = await gatewayRequest(base, {
+    url: "https://api.materialsproject.org/materials/summary/?material_ids=mp-149",
+    accept: ["application/json"],
+  });
+  assert.equal(unprofiled.status, 403);
 });
 
 test("public-source gateway injects source-specific credentials only into matching official endpoints", async (t) => {
@@ -290,7 +312,12 @@ test("public-source gateway injects source-specific credentials only into matchi
     biogrid: "biogrid-secret",
     opengwas: "opengwas-secret",
   };
-  const server = createServer(createPublicSourceGatewayHandler({ publicSourceCredentials: credentials }, runtimeManager(), {
+  const server = createServer(createPublicSourceGatewayHandler({
+    publicSourceCredentials: credentials,
+    // Not a `publicSourceCredentials` entry: its profile names a first-party
+    // config secret with `configValue`.
+    materialsProjectApiKey: "mp-secret",
+  }, runtimeManager(), {
     fetchImpl: async (url, options) => {
       observations.push({ url: new URL(url), headers: options.headers });
       return new Response(JSON.stringify({ result: "traceable" }), {
@@ -311,6 +338,7 @@ test("public-source gateway injects source-specific credentials only into matchi
     ["addgene", "https://api.developers.addgene.org/catalog/plasmid/?name=TP53"],
     ["biogrid", "https://webservice.thebiogrid.org/interactions?geneList=TP53"],
     ["opengwas", "https://api.opengwas.io/api/gwasinfo?id=ieu-a-2"],
+    ["materials-project", "https://api.materialsproject.org/materials/summary/?formula=Fe2O3"],
   ];
   for (const [credentialProfile, url, method, body] of cases) {
     const response = await gatewayRequest(base, {
@@ -320,7 +348,13 @@ test("public-source gateway injects source-specific credentials only into matchi
     assert.equal(response.status, 200, credentialProfile);
   }
 
-  assert.equal(PUBLIC_SOURCE_CREDENTIAL_PROFILES.size, 9);
+  // Derived, not counted. A profile added without a case here would otherwise
+  // ship unexercised, and a count in this file says nothing about which one.
+  assert.deepEqual(
+    cases.map(([profile]) => profile).sort(),
+    [...PUBLIC_SOURCE_CREDENTIAL_PROFILES.keys()].sort(),
+    "every credential profile must be exercised against its own endpoint",
+  );
   assert.equal(observations[0].headers.authorization, "Bearer evimed-secret");
   assert.equal(observations[1].headers["x-api-key"], "s2-secret");
   assert.equal(observations[2].headers.authorization, "Bearer core-secret");
@@ -330,6 +364,7 @@ test("public-source gateway injects source-specific credentials only into matchi
   assert.equal(observations[6].headers.authorization, "Token addgene-secret");
   assert.equal(observations[7].url.searchParams.get("accesskey"), "biogrid-secret");
   assert.equal(observations[8].headers.authorization, "Bearer opengwas-secret");
+  assert.equal(observations[9].headers["x-api-key"], "mp-secret");
 });
 
 test("EviMed evidence POST requests are fixed, read-only, and schema bounded", async (t) => {
@@ -628,4 +663,50 @@ test("every host a shipped specialist agent calls is on the gateway allowlist", 
   ]) {
     assert.ok(PUBLIC_SOURCE_ALLOWED_HOSTS.has(host), `${host} is called by a shipped agent and must be allowed`);
   }
+});
+
+test("the gateway accepts every content type the connectors ask it for", () => {
+  // Read the asks back out of the connectors rather than restating them. The
+  // two lists are in different languages in different trees, and when they
+  // disagree the gateway refuses the call with a 400 before it reaches the
+  // upstream -- so the connector looks broken and the upstream looks down.
+  // `application/csv` was the live instance: the FRED connector was corrected
+  // to accept what FRED actually serves and every call started failing.
+  const asked = new Map();
+  let tuples = 0;
+  for (const { name, text } of connectorSources) {
+    for (const match of text.matchAll(/accepted(?:=|\s*=\s*)?\(([^)]*)\)|_get_text\([^,]+,\s*\(([^)]*)\)/g)) {
+      const body = match[1] ?? match[2];
+      const types = [...body.matchAll(/"([a-z]+\/[a-z0-9.+-]+)"/g)].map((item) => item[1]);
+      if (types.length === 0) continue;
+      tuples += 1;
+      for (const type of types) if (!asked.has(type)) asked.set(type, name);
+    }
+  }
+  assert.ok(tuples >= 5, `the scan found ${tuples} accept lists; it is not reading the connectors`);
+  assert.ok(asked.has("application/csv"), "the scan missed the FRED connector's accept list");
+  for (const [type, source] of asked) {
+    assert.ok(
+      PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES.has(type),
+      `${source} asks for ${type}; the gateway refuses it, so every such call is a 400`,
+    );
+  }
+});
+
+test("no connector names a credential profile the gateway does not define", () => {
+  // Same failure in the other direction: `credential_profile="materials-project"`
+  // named a profile that was never in the map, and the gateway answered 400 --
+  // "the credential profile is invalid" -- to every `search_materials` call,
+  // while the key it needed was already being injected by host.
+  let named = 0;
+  for (const { name, text } of connectorSources) {
+    for (const match of text.matchAll(/credential_profile\s*=\s*"([a-z0-9-]+)"/g)) {
+      named += 1;
+      assert.ok(
+        PUBLIC_SOURCE_CREDENTIAL_PROFILES.has(match[1]),
+        `${name} asks for the ${match[1]} credential profile, which the gateway does not define`,
+      );
+    }
+  }
+  assert.ok(named >= 1, `the scan found ${named} credential-profile asks; it is not reading the connectors`);
 });

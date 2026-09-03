@@ -1284,5 +1284,47 @@ class DisabledToolsTests(unittest.TestCase):
         self.assertEqual(self.server.disabled_tools(), {"no_such_tool"})
 
 
+class PreservedSourceProvenanceTests(unittest.TestCase):
+    """A preserved artifact path must survive the provenance contract.
+
+    The guideline connector writes a retrieved guideline's own prose into the
+    workspace and returns the path on the source, because that path is what the
+    delivery gate reads a quote back out of. `_validated_sources` did not list
+    the key, so it rejected the whole call as an invalid source shape: the
+    tool failed precisely when preservation had succeeded, and only on a
+    deployment where the guideline upstream is reachable -- which is why no
+    test and no local run ever saw it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.server = load_server()
+
+    def source(self, **overrides):
+        value = {
+            "id": "g-1",
+            "source": "evimed-guideline",
+            "title": "\u6025\u6027\u80f8\u75db\u6025\u8bca\u8bca\u7597\u4e13\u5bb6\u5171\u8bc6",
+            "retrievedAt": "2026-09-03T00:00:00Z",
+        }
+        value.update(overrides)
+        return value
+
+    def test_a_preserved_guideline_source_is_accepted(self):
+        source = self.source(artifactPath=".evimed-sources/evimed-guidelines/abc123/guideline.md")
+        self.assertEqual(self.server._validated_sources([source]), [source])
+
+    def test_an_escaping_or_absolute_artifact_path_is_refused(self):
+        for path in ("/etc/passwd", "../outside/guideline.md", "a/../../b.md", "", "   "):
+            with self.assertRaises(ValueError, msg=path):
+                self.server._validated_sources([self.source(artifactPath=path)])
+        with self.assertRaises(ValueError):
+            self.server._validated_sources([self.source(artifactPath=17)])
+
+    def test_an_unknown_key_is_still_refused(self):
+        with self.assertRaises(ValueError):
+            self.server._validated_sources([self.source(retrievalDiary="I searched PubMed first")])
+
+
 if __name__ == "__main__":
     unittest.main()

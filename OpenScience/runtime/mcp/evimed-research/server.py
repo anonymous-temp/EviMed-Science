@@ -17,6 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import PurePosixPath
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
@@ -780,6 +781,22 @@ def disabled_tools():
     return {name.strip() for name in raw.split(",") if name.strip()}
 
 
+# Which capabilities a deployment may decline to offer at all.
+#
+# The environment variable above is what a container reads, and a container is
+# right to obey it: a stale entry must not stop a runtime that is otherwise
+# correct. But the release gate has the opposite job. `notOffered` is a
+# denominator, and "25 of 25 certified" is a different claim from "25 of 26,
+# one switched off" -- so an operator must not be able to reach a green audit
+# by switching off whatever failed. This list is the reviewed answer to "what
+# is this product allowed not to do", it lives in git where a change to it is
+# a change somebody approved, and `verify_release_audit.py` refuses any
+# `notOffered` set that is not a subset of it.
+#
+# patent_search: the EviMed ecosystem does not use patent evidence (2026-09-03).
+OPTIONAL_TOOLS = frozenset({"patent_search"})
+
+
 def list_tools():
     disabled = disabled_tools()
     if not disabled:
@@ -936,7 +953,15 @@ def _validated_sources(value):
     if not isinstance(value, list):
         raise ValueError("sources must be an array")
     output = []
-    allowed = {"id", "title", "url", "source", "retrievedAt", "evidenceAccess"}
+    # `artifactPath` belongs here because the evidence contract already asks
+    # for it: a synthesized claim names the preserved file it quotes, and the
+    # delivery gate reads the quote back out of that file. The guideline
+    # connector preserves a guideline's own prose and hands the path back on
+    # the source, which is how the model learns what it may quote -- but the
+    # key was missing from this set, so every guideline search that succeeded
+    # in preserving text failed the whole call as "sources[0] has an invalid
+    # shape". Preserving more made the tool work less.
+    allowed = {"id", "title", "url", "source", "retrievedAt", "evidenceAccess", "artifactPath"}
     for index, source in enumerate(value):
         if not isinstance(source, dict) or set(source) - allowed:
             raise ValueError("sources[%d] has an invalid shape" % index)
@@ -957,6 +982,13 @@ def _validated_sources(value):
         title = source.get("title")
         if title is not None and (not isinstance(title, str) or not title.strip()):
             raise ValueError("sources[%d].title must be a non-empty string" % index)
+        artifact_path = source.get("artifactPath")
+        if artifact_path is not None:
+            if not isinstance(artifact_path, str) or not artifact_path.strip():
+                raise ValueError("sources[%d].artifactPath must be a non-empty string" % index)
+            parts = PurePosixPath(artifact_path.replace("\\", "/")).parts
+            if artifact_path.startswith("/") or ".." in parts:
+                raise ValueError("sources[%d].artifactPath must be workspace-relative" % index)
         evidence_access = source.get("evidenceAccess")
         if evidence_access is not None and evidence_access not in {
             "full_text", "abstract", "regulatory_record", "registry_record",

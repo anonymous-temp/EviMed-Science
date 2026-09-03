@@ -42,6 +42,30 @@ from new_meta.core.rct_design_reconciliation import (
 )
 
 
+class DependencyMetadataIncomplete(ValueError):
+    """A dependency-design result that cannot be pooled and must not be flattened.
+
+    Cluster, crossover and multi-arm results carry within-study dependency, and
+    pooling one as an ordinary two-arm aggregate overstates its precision -- the
+    classic unit-of-analysis error. So the incomplete ones are neither pooled
+    nor guessed at. They used to raise straight out of the migration, which
+    ended the run: a single crossover paper whose extraction omitted
+    `precision_basis` destroyed a completed nine-paper extraction after
+    thirty-four minutes, and the traceback named the field rather than the
+    study. The result is now dropped from the ledger and named in the report,
+    so the analysis loses one result instead of all of them and the loss is
+    something a reader can see.
+    """
+
+    def __init__(self, result_id: str, design: str, missing: list[str]):
+        super().__init__(
+            "%s has incomplete %s dependency metadata: %s" % (result_id, design, ", ".join(missing))
+        )
+        self.result_id = result_id
+        self.design = design
+        self.missing = list(missing)
+
+
 class LedgerMigrationReport(BaseModel):
     schema_version: int = 1
     review_id: str
@@ -51,6 +75,7 @@ class LedgerMigrationReport(BaseModel):
     unchanged_entities: int = 0
     result_ids: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    skipped_results: list[dict] = Field(default_factory=list)
 
 
 def migrate_extractions_to_ledger(
@@ -141,12 +166,27 @@ def migrate_extractions_to_ledger(
             )
             _upsert(ledger, outcome_entity, actor, report, change_reason=change_reason)
             result_id = result_entity_id(study, outcome_index)
-            raw_data, estimate = _result_data(
-                outcome,
-                protocol,
-                warnings=report.warnings,
-                result_id=result_id,
-            )
+            try:
+                raw_data, estimate = _result_data(
+                    outcome,
+                    protocol,
+                    warnings=report.warnings,
+                    result_id=result_id,
+                )
+            except DependencyMetadataIncomplete as incomplete:
+                report.warnings.append(
+                    "%s was dropped: a %s result cannot be pooled without %s, and pooling it as an "
+                    "ordinary two-arm aggregate would overstate its precision."
+                    % (result_id, incomplete.design, ", ".join(incomplete.missing))
+                )
+                report.skipped_results.append({
+                    "resultId": result_id,
+                    "studyId": study_id,
+                    "design": incomplete.design,
+                    "missing": incomplete.missing,
+                    "outcome": canonical_name or outcome.outcome_name or "",
+                })
+                continue
             state = _result_state(outcome)
             result_arm_ids = [intervention_arm_id, control_arm_id]
             if outcome.treatment_arm and outcome.reference_arm:
@@ -436,10 +476,7 @@ def _result_data(
         )
         design = re.sub(r"[^a-z0-9]+", "_", str(outcome.comparative_design).strip().lower()).strip("_")
         if missing and design in {"cluster_rct", "crossover_rct", "multi_arm_rct"}:
-            raise ValueError(
-                f"{result_id} has incomplete {design} dependency metadata: "
-                f"{', '.join(missing)}"
-            )
+            raise DependencyMetadataIncomplete(result_id, design, missing)
         if missing:
             if warnings is not None:
                 warnings.append(
