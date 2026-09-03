@@ -26,12 +26,21 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mcpToolBaseName } from "@evimed/domain";
-import { loadConfig } from "../../apps/server/src/config.mjs";
-import { DshRuntimeAdapter } from "../../apps/server/src/dshRuntimeAdapter.mjs";
 import { certifiedDeepSeekModel, createModelGatewayHandler, supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
-import { RuntimeManager } from "../../apps/server/src/runtimeManager.mjs";
 import { runDeepSeekCompatibility } from "./deepseek-compatibility-preflight.mjs";
+
+// The control plane's own modules — `config`, the runtime manager, the wire
+// adapter — are loaded by the minting half only, at the point it runs, and not
+// by importing this file.
+//
+// The reason is where each half runs. Verification is imported by
+// `host-preflight.mjs` and by the server, and the host runs it out of a release
+// directory that has no `node_modules` at all: those modules import workspace
+// packages, so a static import here made `pnpm preflight:host` fail to load
+// with `Cannot find package '@evimed/domain'` — a gate reporting a missing
+// dependency instead of a missing receipt. Minting runs inside the web image,
+// where they resolve. Keeping the import where the code runs is what lets one
+// module serve both.
 
 const scriptFile = fileURLToPath(import.meta.url);
 // The kernel version a receipt attests, from the one place upstream pins are
@@ -326,6 +335,22 @@ const RELEASE_GATE_PROMPT = [
 ].join("\n");
 
 /**
+ * A tool's own name, with the MCP server prefix the model sees stripped off.
+ *
+ * `@evimed/domain` has `mcpToolBaseName`, and importing it here would put a
+ * workspace package on the load path of a module the host preflight imports
+ * out of a directory that has no `node_modules`. The convention is the MCP
+ * one — `mcp__<server>__<tool>` — so it is applied here and tied back to the
+ * domain by a test that asserts this function inverts `mcpToolName`, which runs
+ * where the package does resolve.
+ * @param {string} name
+ * @returns {string}
+ */
+export function mcpBaseName(name) {
+  return String(name ?? "").replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "");
+}
+
+/**
  * The payload inside a tool result, whatever envelope it arrived in.
  *
  * MCP puts the tool's own object under `structuredContent`; reading the
@@ -391,7 +416,7 @@ export function dshTranscriptEvidence(transcript) {
 
   let normalization = null;
   for (const part of completed) {
-    if (!normalizationTools.has(mcpToolBaseName(String(part.tool ?? "")))) continue;
+    if (!normalizationTools.has(mcpBaseName(String(part.tool ?? "")))) continue;
     const payload = parsedToolPayload(part.output);
     const data = payload?.data;
     if (
@@ -457,7 +482,8 @@ export function releaseTelemetryEvidence({ gateway, streamedEventCount }) {
  * The handler is the server's own — a second implementation would certify a
  * gateway nobody deploys — wrapped only to count requests and the responses
  * that came back as a stream.
- * @param {Record<string, any>} config @param {RuntimeManager} manager
+ * @param {Record<string, any>} config
+ * @param {import("../../apps/server/src/runtimeManager.mjs").RuntimeManager} manager
  */
 async function startCountingGateway(config, manager) {
   const handler = createModelGatewayHandler(config, manager);
@@ -518,6 +544,11 @@ async function writeReceipt(receiptPath, receipt) {
  * @param {{ config?: Record<string, any>, timeoutMs: number }} input
  */
 async function runDshChain({ config: supplied, timeoutMs }) {
+  const [{ loadConfig }, { DshRuntimeAdapter }, { RuntimeManager }] = await Promise.all([
+    import("../../apps/server/src/config.mjs"),
+    import("../../apps/server/src/dshRuntimeAdapter.mjs"),
+    import("../../apps/server/src/runtimeManager.mjs"),
+  ]);
   const config = supplied ?? loadConfig();
   if (String(config.runtimeMode ?? "") !== "kernel") throw failure("deepseek_release_runtime_mode_invalid");
   if (String(config.runtimeSandboxMode ?? "") !== "docker") throw failure("deepseek_release_runtime_sandbox_invalid");
@@ -546,7 +577,7 @@ async function runDshChain({ config: supplied, timeoutMs }) {
     activeWorkspace: "",
   };
 
-  /** @type {RuntimeManager | null} */
+  /** @type {import("../../apps/server/src/runtimeManager.mjs").RuntimeManager | null} */
   let manager = null;
   /** @type {{ port: number, state: { requests: number, sseResponses: number }, close: () => Promise<unknown> } | null} */
   let gateway = null;
@@ -583,15 +614,15 @@ async function runDshChain({ config: supplied, timeoutMs }) {
         // `callKernel` already maps a wire error to a named control-plane error
         // and throws it. Catching it here to re-wrap would map it twice and
         // rename it on the way.
-        value: await /** @type {RuntimeManager} */ (manager).callKernel(runtime, project, method, payload, options.signal),
+        value: await /** @type {any} */ (manager).callKernel(runtime, project, method, payload, options.signal),
       }),
     };
     const adapter = new DshRuntimeAdapter(transport);
 
-    const session = await /** @type {RuntimeManager} */ (manager).createRuntimeSession(project);
+    const session = await /** @type {any} */ (manager).createRuntimeSession(project);
     const sessionId = session.id;
     if (!sessionId) throw failure("deepseek_release_session_missing");
-    await /** @type {RuntimeManager} */ (manager).dispatchPrompt(project, sessionId, { text: RELEASE_GATE_PROMPT });
+    await /** @type {any} */ (manager).dispatchPrompt(project, sessionId, { text: RELEASE_GATE_PROMPT });
 
     // The turn is over when the transcript says so. Polling the transcript is
     // what the control plane's own monitor does, and it is the only signal that

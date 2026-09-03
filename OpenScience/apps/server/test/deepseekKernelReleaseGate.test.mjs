@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { readFile } from "node:fs/promises";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { mcpToolName } from "@evimed/domain";
 import {
   RELEASE_GATE_ARTIFACT,
+  mcpBaseName,
   dshTranscriptEvidence,
   releaseTelemetryEvidence,
   runDeepSeekKernelReleaseGate,
@@ -211,6 +214,40 @@ test("gateway telemetry is a count, and an unstreamed run is not certified", () 
     false,
     "streamed responses with nothing in them are not evidence of a turn",
   );
+});
+
+
+test("the gate's own prefix stripping inverts the domain's tool naming", () => {
+  // The gate cannot import `@evimed/domain`: the host preflight loads this
+  // module out of a release directory with no `node_modules`. So the naming
+  // convention is applied locally and tied back to its definition here, where
+  // the package does resolve — a rename upstream fails this test rather than
+  // silently making the gate stop recognising its own tool.
+  for (const base of ["term_normalize", "drug_term_normalize", "literature_search"]) {
+    assert.equal(mcpBaseName(mcpToolName(base)), base);
+  }
+  assert.equal(mcpBaseName("write"), "write", "a tool with no MCP prefix keeps its name");
+  assert.equal(mcpBaseName(""), "");
+});
+
+test("the module a host preflight imports does not pull in the control plane", async () => {
+  // The minting half needs the runtime manager; the verification half is
+  // imported by `host-preflight.mjs` on a host that has no `node_modules`. A
+  // static import of either one turns `pnpm preflight:host` into a module
+  // resolution error, which reads as a missing dependency rather than a missing
+  // receipt — and that is exactly how it failed.
+  const source = await readFile(
+    new URL("../../../scripts/ops/deepseek-kernel-release-gate.mjs", import.meta.url),
+    "utf8",
+  );
+  const staticImports = [...source.matchAll(/^import\s[^;]*?from\s+["']([^"']+)["']/gm)].map((match) => match[1]);
+  assert.ok(staticImports.length > 0, "the scan found no imports at all, so it proves nothing");
+  for (const specifier of staticImports) {
+    assert.ok(
+      !specifier.startsWith("@evimed/") && !/runtimeManager|dshRuntimeAdapter|\/config\.mjs/.test(specifier),
+      `${specifier} must be imported where the minting half runs, not at module load`,
+    );
+  }
 });
 
 test("production receipt validation requires every capability and matching release identity", () => {
