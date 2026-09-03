@@ -79,6 +79,17 @@ COPY --from=build /app/runtime/skills/evimed ./runtime/skills/evimed
 COPY --from=build /app/runtime/mcp/evimed-research ./runtime/mcp/evimed-research
 COPY --from=build /app/examples/climate-trends ./examples/climate-trends
 COPY --from=build /app/scripts/ops ./scripts/ops
+# The ops scripts ship inside this image and several of them import workspace
+# packages — the release gate, the runtime-image check, the gate health probe,
+# the session-stream acceptance run. `pnpm deploy` puts those packages under
+# `apps/server/node_modules`, and Node resolves from the importing file's
+# directory upwards, so `/app/scripts/ops/x.mjs` never reaches them and every
+# one of those scripts died on `Cannot find package '@evimed/domain'` the first
+# time one was run in here.
+#
+# A link rather than a second copy: the same directory, reachable from the
+# repository root the way it is in a checkout.
+RUN ln -s apps/server/node_modules /app/node_modules
 
 VOLUME ["/data"]
 EXPOSE 8787
