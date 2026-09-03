@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+  RELEASE_GATE_ARTIFACT,
+  dshTranscriptEvidence,
+  releaseTelemetryEvidence,
   runDeepSeekKernelReleaseGate,
   signDeepSeekReleaseReceipt,
   validateDeepSeekReleaseReceipt,
@@ -48,38 +51,166 @@ function signed(overrides = {}) {
   return signDeepSeekReleaseReceipt(unsignedReceipt(overrides), { signingSecret: testReceiptSigningSecret });
 }
 
-// The minting half drove the retired kernel through the whole tool chain and
-// read its own message and part shapes for the evidence. Nothing on the DSH
-// wire replaces it yet, so the gate refuses instead of signing. This is the
-// property the two OpenCode chain tests existed for, in the only form left: a
-// receipt exists only if the chain was actually driven, and a gate that cannot
-// drive it produces nothing at all rather than something weaker.
-test("the release gate refuses to mint a receipt for a chain it cannot drive", async (t) => {
+// A receipt exists only if the chain was actually driven. These are the two
+// ways the gate can be asked to produce one without driving anything, and both
+// have to end with no file on disk: `--fake` (there is no fake chain — see the
+// gate's own note on why emulating one would certify the mock), and a
+// production call with nothing to authenticate or identify the receipt with.
+test("the release gate refuses to mint a receipt it did not measure", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "deepseek-release-refusal-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const before = new Set((await readdir(tmpdir())).filter((name) => name.startsWith("evimed-deepseek-gate-")));
 
-  for (const mode of ["fake", "production"]) {
-    const receiptPath = path.join(root, `${mode}.json`);
+  for (const [label, options, code] of [
+    ["fake", { mode: "fake" }, "deepseek_release_mode_invalid"],
+    ["production without inputs", { mode: "production" }, "deepseek_release_input_missing"],
+  ]) {
+    const receiptPath = path.join(root, `${label.replace(/\s+/g, "-")}.json`);
     await assert.rejects(
       () => runDeepSeekKernelReleaseGate({
-        mode,
+        ...options,
+        keyFile: "",
+        receiptId: "",
         receiptPath,
         sourceRevision: "test-source-revision",
         configRevision: "test-config-revision",
         receiptSigningSecret: testReceiptSigningSecret,
       }),
       (error) => {
-        assert.equal(error.code, "deepseek_release_chain_unavailable");
+        assert.equal(error.code, code, `${label} must name its refusal`);
         return true;
       },
-      `the ${mode} gate must name its refusal rather than certifying an undriven chain`,
     );
     await assert.rejects(() => stat(receiptPath), { code: "ENOENT" }, "a refused gate must leave no receipt behind");
   }
+});
 
-  const after = (await readdir(tmpdir())).filter((name) => name.startsWith("evimed-deepseek-gate-") && !before.has(name));
-  assert.deepEqual(after, [], "refusing must happen before any workspace is created");
+/* ------------------------------------------------- what a transcript proves */
+
+/** @param {{ tool: string, status?: string, output?: string, input?: any }[]} calls */
+function transcriptOf(calls, finalText) {
+  return {
+    messages: [
+      ...calls.map((call) => ({
+        role: "tool",
+        parts: [{
+          type: "tool",
+          tool: call.tool,
+          callId: `c-${call.tool}`,
+          status: call.status ?? "completed",
+          input: call.input ?? {},
+          output: call.output ?? "",
+          error: null,
+        }],
+      })),
+      ...(finalText === undefined ? [] : [{ role: "assistant", parts: [{ type: "text", text: finalText }] }]),
+    ],
+  };
+}
+
+const normalizationOutput = JSON.stringify({
+  status: "success",
+  data: {
+    input: "acetaminophen",
+    preferred: "paracetamol",
+    provenance: { tool: "term_normalize" },
+  },
+});
+const goodCalls = [
+  { tool: "mcp__evimed__term_normalize", output: normalizationOutput },
+  { tool: "write", input: { file_path: RELEASE_GATE_ARTIFACT, content: "{}" } },
+];
+const goodFinal = JSON.stringify({ normalized: "paracetamol", artifact: RELEASE_GATE_ARTIFACT });
+
+test("a transcript proves the chain only when both tools completed and the answer was structured", () => {
+  const complete = dshTranscriptEvidence(transcriptOf(goodCalls, goodFinal));
+  assert.deepEqual(
+    {
+      normalizationCompleted: complete.normalizationCompleted,
+      artifactWriteCompleted: complete.artifactWriteCompleted,
+      structuredFinal: complete.structuredFinal,
+      toolResults: complete.toolResults,
+    },
+    { normalizationCompleted: true, artifactWriteCompleted: true, structuredFinal: true, toolResults: 2 },
+  );
+
+  // Each way the chain can fall short, one at a time. The point of listing them
+  // is that every one of them used to be indistinguishable from success in a
+  // gate that only asked whether the run finished.
+  const pending = dshTranscriptEvidence(transcriptOf(
+    [{ ...goodCalls[0], status: "pending" }, goodCalls[1]],
+    goodFinal,
+  ));
+  assert.equal(pending.normalizationCompleted, false, "a call whose result never arrived is not evidence");
+  assert.equal(pending.toolResults, 1);
+
+  const wrongTerm = dshTranscriptEvidence(transcriptOf(
+    [{ ...goodCalls[0], output: JSON.stringify({ status: "success", data: { input: "ibuprofen", preferred: "ibuprofen", provenance: { tool: "term_normalize" } } }) }, goodCalls[1]],
+    goodFinal,
+  ));
+  assert.equal(wrongTerm.normalizationCompleted, false, "a normalization of some other term proves nothing about this one");
+
+  const envelopeOnly = dshTranscriptEvidence(transcriptOf(
+    [{ ...goodCalls[0], output: JSON.stringify({ structuredContent: JSON.parse(normalizationOutput) }) }, goodCalls[1]],
+    goodFinal,
+  ));
+  assert.equal(envelopeOnly.normalizationCompleted, true, "the payload sits under structuredContent and must be read there");
+
+  assert.equal(
+    dshTranscriptEvidence(transcriptOf([goodCalls[0]], goodFinal)).artifactWriteCompleted,
+    false,
+    "an answer naming the artifact is not a tool call that wrote it",
+  );
+  assert.equal(
+    dshTranscriptEvidence(transcriptOf(goodCalls, "I normalized it and wrote the file.")).structuredFinal,
+    false,
+    "prose is not a structured final answer",
+  );
+  assert.equal(
+    dshTranscriptEvidence(transcriptOf(goodCalls, JSON.stringify({ normalized: "paracetamol", artifact: "other.json" }))).structuredFinal,
+    false,
+    "a final answer naming a different artifact is not this run's answer",
+  );
+  // Both directions of the leniency, so neither can be changed by accident:
+  // presentation around the object does not disqualify it, and the object
+  // itself must still parse.
+  assert.equal(
+    dshTranscriptEvidence(transcriptOf(goodCalls, `\`\`\`json\n${goodFinal}\n\`\`\``)).structuredFinal,
+    true,
+    "a fence is presentation, not a different answer",
+  );
+  assert.equal(
+    dshTranscriptEvidence(transcriptOf(goodCalls, `Done. ${goodFinal} Let me know if you need more.`)).structuredFinal,
+    true,
+    "an object with a sentence around it is still the structured answer",
+  );
+  assert.equal(
+    dshTranscriptEvidence(transcriptOf(goodCalls, `{normalized: paracetamol, artifact: ${RELEASE_GATE_ARTIFACT}}`)).structuredFinal,
+    false,
+    "text shaped like an object is not one",
+  );
+  assert.equal(dshTranscriptEvidence({}).toolResults, 0, "an empty transcript proves nothing and says so");
+});
+
+test("gateway telemetry is a count, and an unstreamed run is not certified", () => {
+  assert.deepEqual(
+    releaseTelemetryEvidence({ gateway: { requests: 3, sseResponses: 3 }, streamedEventCount: 5 }),
+    { gatewayOnly: true, streaming: true },
+  );
+  assert.equal(
+    releaseTelemetryEvidence({ gateway: { requests: 1, sseResponses: 3 }, streamedEventCount: 5 }).gatewayOnly,
+    false,
+    "one request cannot evidence a tool loop through the gateway",
+  );
+  assert.equal(
+    releaseTelemetryEvidence({ gateway: { requests: 3, sseResponses: 0 }, streamedEventCount: 5 }).streaming,
+    false,
+    "a run answered without a single stream did not stream",
+  );
+  assert.equal(
+    releaseTelemetryEvidence({ gateway: { requests: 3, sseResponses: 3 }, streamedEventCount: 0 }).streaming,
+    false,
+    "streamed responses with nothing in them are not evidence of a turn",
+  );
 });
 
 test("production receipt validation requires every capability and matching release identity", () => {

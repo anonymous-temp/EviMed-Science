@@ -3,13 +3,15 @@
  * The signed receipt that says the model which actually answers can drive the
  * whole tool chain, and the reader that production readiness uses to check one.
  *
- * The minting half is not here. It drove the retired kernel — `opencode run`
- * against a fake provider, then `opencode export` for the session history —
- * reading that kernel's own message and part shapes throughout, and none of
- * that survives the kernel it read. What has to replace it is stated at
- * `runDeepSeekKernelReleaseGate`, which refuses by name rather than minting
- * anything: a receipt that certifies less than it claims is worse than no
- * receipt, because everything downstream trusts it exactly as much either way.
+ * The minting half drives a real runtime container through a two-tool run and
+ * reads what the session actually recorded; see `runDeepSeekKernelReleaseGate`
+ * for what it needs and where it has to run. It replaces one that drove the
+ * retired kernel as a bare binary — `opencode run` against a fake provider,
+ * then `opencode export` — reading that kernel's own message and part shapes
+ * throughout, none of which survives the kernel it read. Nothing in either
+ * version certifies more than it measured: a receipt that claims more is worse
+ * than no receipt, because everything downstream trusts it exactly as much
+ * either way.
  *
  * The verification half — schema, signature, freshness, and the readiness
  * comparison that reads it — is unchanged apart from the field naming the
@@ -17,11 +19,18 @@
  * signer, the validator and readiness, because a receipt is signed over its
  * whole body and a field renamed on one side alone verifies as tampering.
  */
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { certifiedDeepSeekModel, supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
+import { mcpToolBaseName } from "@evimed/domain";
+import { loadConfig } from "../../apps/server/src/config.mjs";
+import { DshRuntimeAdapter } from "../../apps/server/src/dshRuntimeAdapter.mjs";
+import { certifiedDeepSeekModel, createModelGatewayHandler, supportedDeepSeekModels } from "../../apps/server/src/modelGateway.mjs";
+import { RuntimeManager } from "../../apps/server/src/runtimeManager.mjs";
+import { runDeepSeekCompatibility } from "./deepseek-compatibility-preflight.mjs";
 
 const scriptFile = fileURLToPath(import.meta.url);
 // The kernel version a receipt attests, from the one place upstream pins are
@@ -285,55 +294,510 @@ export function readDeepSeekReleaseReceiptFile(file, options = {}) {
   }
 }
 
+/* ----------------------------------------------------------- the chain */
+
+/**
+ * The self-check the receipt certifies, written once and read by both the
+ * prompt and the evidence reader.
+ *
+ * Two tools, not one, and the second one writes a file. A single tool call
+ * proves the model can be handed a tool; it does not prove the loop — that a
+ * result came back, was read, and decided what happened next. The retired gate
+ * required the same two things for the same reason, and `toolResultIterations`
+ * in the receipt schema is that requirement written down.
+ */
+export const RELEASE_GATE_ARTIFACT = "artifacts/deepseek-release-gate.json";
+const RELEASE_GATE_TERM = "acetaminophen";
+const RELEASE_GATE_NORMALIZED = "paracetamol";
+/** The two MCP tools that answer a normalization; either is acceptable
+ *  evidence, and both are named because a run may reach for either. */
+const normalizationTools = new Set(["term_normalize", "drug_term_normalize"]);
+
+const RELEASE_GATE_PROMPT = [
+  "This is a deployment self-check. Do it directly: no plan, no delegation, no other tools.",
+  `Step 1: call mcp__evimed__term_normalize with {"term":"${RELEASE_GATE_TERM}","domain":"drug"} and read its result.`,
+  `Step 2: write the file ${RELEASE_GATE_ARTIFACT} containing exactly this JSON object,`,
+  "taking every value from step 1's input or result:",
+  `{"normalized":"<the preferred term>","provenanceTool":"<the tool name the result's provenance names>","sourceTerm":"${RELEASE_GATE_TERM}"}`,
+  "Do not rename or nest those three fields.",
+  "Step 3: reply with exactly one JSON object and no other text, no code fence:",
+  `{"normalized":"<the same preferred term>","artifact":"${RELEASE_GATE_ARTIFACT}"}`,
+].join("\n");
+
+/**
+ * The payload inside a tool result, whatever envelope it arrived in.
+ *
+ * MCP puts the tool's own object under `structuredContent`; reading the
+ * envelope as the payload is how twenty-six tools once looked like they had
+ * returned nothing at all.
+ * @param {unknown} output
+ * @returns {Record<string, any> | null}
+ */
+function parsedToolPayload(output) {
+  if (typeof output !== "string" || !output.trim()) return null;
+  let value;
+  try {
+    value = JSON.parse(output);
+  } catch {
+    return null;
+  }
+  if (value != null && typeof value === "object" && !Array.isArray(value) && value.structuredContent !== undefined) {
+    value = value.structuredContent;
+  }
+  return value != null && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+/** @param {unknown} text @returns {Record<string, any> | null} */
+function parsedFinalAnswer(text) {
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  // Bounded by the outermost brace pair, which is deliberately lenient in one
+  // direction and strict in the other: a code fence or a sentence around the
+  // object is presentation and does not change what the model produced, while
+  // the slice between the braces must parse whole — so "an object with a
+  // trailing apology" passes and "prose that mentions the fields" does not.
+  //
+  // There was an unfencing regex here as well. It never decided anything: for
+  // every fenced answer the brace bounds already selected the same slice, so
+  // it read as a second protection while providing none.
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first < 0 || last < first) return null;
+  try {
+    const value = JSON.parse(trimmed.slice(first, last + 1));
+    return value != null && typeof value === "object" && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What one transcript proves about the chain.
+ *
+ * Pure, and exported, because this is the half of the gate a test can reach:
+ * everything above it needs Docker, a runtime image and a paid model, and a
+ * check nothing can exercise is a check nobody notices breaking.
+ *
+ * @param {{ messages?: readonly any[] }} transcript
+ * @returns {{ normalizationCompleted: boolean, artifactWriteCompleted: boolean, structuredFinal: boolean, toolResults: number, normalization: Record<string, any> | null, finalAnswer: Record<string, any> | null }}
+ */
+export function dshTranscriptEvidence(transcript) {
+  const messages = Array.isArray(transcript?.messages) ? transcript.messages : [];
+  /** @type {Record<string, any>[]} */
+  const toolParts = messages.flatMap((message) =>
+    (Array.isArray(message?.parts) ? message.parts : []).filter((part) => part?.type === "tool"));
+  const completed = toolParts.filter((part) => part.status === "completed");
+
+  let normalization = null;
+  for (const part of completed) {
+    if (!normalizationTools.has(mcpToolBaseName(String(part.tool ?? "")))) continue;
+    const payload = parsedToolPayload(part.output);
+    const data = payload?.data;
+    if (
+      payload?.status === "success" &&
+      data?.preferred === RELEASE_GATE_NORMALIZED &&
+      normalizationTools.has(String(data?.provenance?.tool ?? "")) &&
+      String(data?.input ?? "").trim().toLowerCase() === RELEASE_GATE_TERM
+    ) normalization = data;
+  }
+
+  // Which tool wrote it is deliberately not asserted. The composition mounts
+  // several that can — `tool-fs`, `tool-bash` — and pinning one would make the
+  // gate fail on a run that did the work by a route the deployment also ships.
+  // What is asserted is that a tool call completed naming this path, and (in
+  // the caller) that the file is on disk with the right content.
+  const artifactWriteCompleted = completed.some((part) =>
+    JSON.stringify(part.input ?? {}).includes(RELEASE_GATE_ARTIFACT));
+
+  let finalAnswer = null;
+  for (const message of messages) {
+    if (message?.role !== "assistant") continue;
+    for (const part of Array.isArray(message.parts) ? message.parts : []) {
+      if (part?.type !== "text") continue;
+      const value = parsedFinalAnswer(part.text);
+      if (value?.normalized === RELEASE_GATE_NORMALIZED && value?.artifact === RELEASE_GATE_ARTIFACT) finalAnswer = value;
+    }
+  }
+
+  return {
+    normalizationCompleted: normalization !== null,
+    artifactWriteCompleted,
+    structuredFinal: finalAnswer !== null,
+    toolResults: completed.length,
+    normalization,
+    finalAnswer,
+  };
+}
+
+/**
+ * What the gateway's own counters prove.
+ *
+ * `gatewayOnly` is a count and not an absence: nothing here can observe a
+ * request the runtime made somewhere else, so the claim it can support is that
+ * the model traffic this run needed did arrive at our gateway. The container's
+ * network is `internal` and the kernel holds no provider key — that is what
+ * makes bypass impossible; this is what makes the gateway's use observable.
+ *
+ * @param {{ gateway: { requests: number, sseResponses: number }, streamedEventCount: number }} input
+ * @returns {{ gatewayOnly: boolean, streaming: boolean }}
+ */
+export function releaseTelemetryEvidence({ gateway, streamedEventCount }) {
+  const gatewayOnly = Number.isSafeInteger(gateway?.requests) && gateway.requests >= 2;
+  const streaming = Number.isSafeInteger(gateway?.sseResponses) &&
+    gateway.sseResponses >= 2 &&
+    Number.isSafeInteger(streamedEventCount) &&
+    streamedEventCount > 0;
+  return { gatewayOnly, streaming };
+}
+
+/**
+ * The model gateway of this process, counting what passes through it.
+ *
+ * The handler is the server's own — a second implementation would certify a
+ * gateway nobody deploys — wrapped only to count requests and the responses
+ * that came back as a stream.
+ * @param {Record<string, any>} config @param {RuntimeManager} manager
+ */
+async function startCountingGateway(config, manager) {
+  const handler = createModelGatewayHandler(config, manager);
+  const state = { requests: 0, sseResponses: 0 };
+  const server = http.createServer((req, res) => {
+    state.requests += 1;
+    const writeHead = res.writeHead.bind(res);
+    res.writeHead = /** @type {any} */ ((statusCode, statusMessage, headers) => {
+      const supplied = typeof statusMessage === "object" ? statusMessage : headers;
+      const contentType = supplied?.["content-type"] ?? supplied?.["Content-Type"] ?? res.getHeader("content-type");
+      if (String(contentType ?? "").includes("text/event-stream")) state.sseResponses += 1;
+      return typeof statusMessage === "string"
+        ? writeHead(statusCode, statusMessage, headers)
+        : writeHead(statusCode, statusMessage);
+    });
+    void handler(req, res);
+  });
+  // Every interface: the runtime container reaches this by the deployment's own
+  // service name, not by loopback, because it is a different container.
+  server.listen(0, "0.0.0.0");
+  await new Promise((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", reject);
+  });
+  return {
+    port: /** @type {import("node:net").AddressInfo} */ (server.address()).port,
+    state,
+    close: () => new Promise((resolve) => server.close(resolve)),
+  };
+}
+
+/** @param {string} value @param {string} fallback */
+function safeRevision(value, fallback) {
+  const normalized = String(value ?? fallback).trim();
+  if (!normalized || normalized.length > 256 || /[\r\n\0]/.test(normalized)) throw failure("deepseek_release_revision_invalid");
+  return normalized;
+}
+
+/** @param {string} receiptPath @param {Record<string, any>} receipt */
+async function writeReceipt(receiptPath, receipt) {
+  if (typeof receiptPath !== "string" || !receiptPath.trim()) throw failure("deepseek_release_receipt_path_missing");
+  const target = path.resolve(receiptPath);
+  await fsp.mkdir(path.dirname(target), { recursive: true });
+  // 0600 written before the content, because the reader refuses a receipt any
+  // group or other can read and a chmod after the write leaves a window.
+  const handle = await fsp.open(target, "w", 0o600);
+  try {
+    await handle.writeFile(`${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+  } finally {
+    await handle.close();
+  }
+  await fsp.chmod(target, 0o600);
+}
+
+/**
+ * Runs the chain against a real runtime container and returns what it observed.
+ *
+ * @param {{ config?: Record<string, any>, timeoutMs: number }} input
+ */
+async function runDshChain({ config: supplied, timeoutMs }) {
+  const config = supplied ?? loadConfig();
+  if (String(config.runtimeMode ?? "") !== "kernel") throw failure("deepseek_release_runtime_mode_invalid");
+  if (String(config.runtimeSandboxMode ?? "") !== "docker") throw failure("deepseek_release_runtime_sandbox_invalid");
+  const dataDir = String(config.dataDir ?? "");
+  if (!dataDir) throw failure("deepseek_release_data_dir_missing");
+
+  // A project of its own, under the layout the store uses, deleted at the end.
+  // Reusing a user's project would run the gate's prompt inside their workspace
+  // and leave its artifact there.
+  const userId = "release-gate";
+  const projectId = `gate-${randomBytes(6).toString("hex")}`;
+  const userRoot = path.join(dataDir, "users", userId);
+  const rootDir = path.join(userRoot, "projects", projectId);
+  const workspaceDir = path.join(rootDir, "workspace");
+  const project = {
+    id: projectId,
+    name: projectId,
+    tenantId: userId,
+    userId,
+    userRoot,
+    rootDir,
+    baseDir: workspaceDir,
+    workspaceDir,
+    runtimeDir: path.join(rootDir, "runtime"),
+    metaDir: path.join(rootDir, "meta"),
+    activeWorkspace: "",
+  };
+
+  /** @type {RuntimeManager | null} */
+  let manager = null;
+  /** @type {{ port: number, state: { requests: number, sseResponses: number }, close: () => Promise<unknown> } | null} */
+  let gateway = null;
+  try {
+    await Promise.all([workspaceDir, project.runtimeDir, project.metaDir]
+      .map((dir) => fsp.mkdir(dir, { recursive: true, mode: 0o700 })));
+
+    manager = new RuntimeManager(config);
+    gateway = await startCountingGateway(config, manager);
+    // Same host the deployment's own gateway answers on, a port of this
+    // process. Derived rather than configured: a second address to keep in step
+    // is a second address to get wrong, and the runtime must be able to resolve
+    // whatever is written here from inside the container network.
+    const deployed = new URL(String(config.modelGatewayInternalUrl ?? ""));
+    config.modelGatewayInternalUrl = `http://${deployed.hostname}:${gateway.port}${deployed.pathname.replace(/\/$/, "")}`;
+
+    const runtime = await manager.start(project);
+    const transport = {
+      // The gate makes unary calls only. `stream` is required by the transport
+      // contract and refuses rather than being left undefined: an adapter path
+      // that reached for a stream here would be a defect, and a refusal names
+      // it where `undefined is not a function` would not.
+      stream: () => { throw failure("deepseek_release_stream_unsupported"); },
+      /** @param {string} method @param {Record<string, unknown>} payload @param {{ signal?: AbortSignal }} [options] */
+      call: async (method, payload, options = {}) => ({
+        ok: true,
+        // `callKernel` already maps a wire error to a named control-plane error
+        // and throws it. Catching it here to re-wrap would map it twice and
+        // rename it on the way.
+        value: await /** @type {RuntimeManager} */ (manager).callKernel(runtime, project, method, payload, options.signal),
+      }),
+    };
+    const adapter = new DshRuntimeAdapter(transport);
+
+    const session = await /** @type {RuntimeManager} */ (manager).createRuntimeSession(project);
+    const sessionId = session.id;
+    if (!sessionId) throw failure("deepseek_release_session_missing");
+    await /** @type {RuntimeManager} */ (manager).dispatchPrompt(project, sessionId, { text: RELEASE_GATE_PROMPT });
+
+    // The turn is over when the transcript says so. Polling the transcript is
+    // what the control plane's own monitor does, and it is the only signal that
+    // distinguishes "still working" from "died in its first minute".
+    const deadline = Date.now() + timeoutMs;
+    let transcript = await adapter.transcript({ sessionId });
+    while (!transcript.turnEnd && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      transcript = await adapter.transcript({ sessionId });
+    }
+    if (!transcript.turnEnd) throw failure("deepseek_release_turn_unfinished");
+
+    const evidence = dshTranscriptEvidence(transcript);
+    if (!evidence.normalizationCompleted) {
+      const error = failure("deepseek_release_mcp_tool_missing");
+      error.diagnostic = JSON.stringify(transcriptStructure(transcript));
+      throw error;
+    }
+    if (!evidence.artifactWriteCompleted) {
+      const error = failure("deepseek_release_artifact_tool_missing");
+      error.diagnostic = JSON.stringify(transcriptStructure(transcript));
+      throw error;
+    }
+    if (evidence.toolResults < 2) throw failure("deepseek_release_tool_result_iterations_missing");
+    if (!evidence.structuredFinal) throw failure("deepseek_release_structured_final_missing");
+
+    // The file itself, host-side. The transcript says a tool reported writing
+    // it; this is the deployment's own mount answering whether it exists — the
+    // one claim in the chain that does not depend on the model's account of
+    // what it did.
+    const artifactFile = path.join(workspaceDir, RELEASE_GATE_ARTIFACT);
+    let artifact;
+    try {
+      artifact = JSON.parse(await fsp.readFile(artifactFile, "utf8"));
+    } catch {
+      throw failure("deepseek_release_artifact_missing");
+    }
+    if (
+      artifact?.normalized !== RELEASE_GATE_NORMALIZED ||
+      !normalizationTools.has(String(artifact?.provenanceTool ?? "")) ||
+      String(artifact?.sourceTerm ?? "").trim().toLowerCase() !== RELEASE_GATE_TERM
+    ) {
+      const error = failure("deepseek_release_artifact_invalid");
+      error.diagnostic = JSON.stringify({
+        keys: artifact && typeof artifact === "object" ? Object.keys(artifact).sort() : [],
+      });
+      throw error;
+    }
+
+    const { gatewayOnly, streaming } = releaseTelemetryEvidence({
+      gateway: gateway.state,
+      streamedEventCount: evidence.toolResults + (transcript.messages?.length ?? 0),
+    });
+    if (!gatewayOnly) throw failure("deepseek_release_gateway_bypass_detected");
+    if (!streaming) {
+      const error = failure("deepseek_release_streaming_evidence_missing");
+      error.diagnostic = JSON.stringify(gateway.state);
+      throw error;
+    }
+
+    return {
+      evidence: {
+        gatewayOnly,
+        streaming,
+        toolResultIterations: evidence.toolResults,
+        sessionHistory: true,
+        structuredFinal: evidence.structuredFinal,
+      },
+    };
+  } finally {
+    await manager?.stop(project).catch(() => {});
+    await manager?.closeAll().catch(() => {});
+    await gateway?.close().catch(() => {});
+    await fsp.rm(rootDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * What the transcript looked like when it did not carry what the gate needed.
+ *
+ * Attached to the failure rather than printed: it names tools and paths, so it
+ * travels only when `OPEN_SCIENCE_RELEASE_GATE_DIAGNOSTICS` is on.
+ * @param {{ messages?: readonly any[] }} transcript
+ */
+function transcriptStructure(transcript) {
+  const messages = Array.isArray(transcript?.messages) ? transcript.messages : [];
+  return {
+    messages: messages.length,
+    rows: messages.slice(0, 60).map((message) => ({
+      role: message?.role ?? null,
+      parts: (Array.isArray(message?.parts) ? message.parts : []).map((part) => ({
+        type: part?.type ?? null,
+        tool: part?.tool ?? null,
+        status: part?.status ?? null,
+        outputBytes: typeof part?.output === "string" ? part.output.length : 0,
+      })),
+    })),
+  };
+}
+
 /**
  * Mints a signed receipt by driving the kernel through the whole tool chain.
  *
- * Not implemented for this kernel, and it refuses rather than pretending. What
- * the retired implementation did — spawn the kernel binary, point it at a fake
- * provider behind the real model gateway, make it call the EviMed research MCP
- * and a file-writing tool, then read its exported session history for completed
- * tool results and a structured final answer — has no host-side equivalent
- * here: the `evimed-universal` preset and the research MCP are baked into the
- * runtime image at `/opt/evimed`, and the generated profile patch names those
- * paths, so a kernel started from a bare binary has no tool chain to drive.
+ * What this must prove, and why each half exists. The provider half asks the
+ * DeepSeek API directly whether the configured model still does the four
+ * things a run depends on. The kernel half asks whether *this deployment* can
+ * turn that model into finished work: the runtime image, the `evimed-universal`
+ * composition, the research MCP, the file tools, and the gateway between them.
+ * Either half alone certifies a system nobody runs.
  *
- * What a replacement needs, so the next attempt starts from the requirement
- * rather than from this comment:
- *   - the runtime image (`deploy/runtime-dsh`), started the way
- *     `buildRuntimeLaunchPlan` starts it, with the model gateway of this
- *     process reachable from inside it;
- *   - the 0.1.2 wire to drive it: `session/create` with `agentPreset`,
- *     `session/prompt`, and `session/page` through `projections.asOfSeq` for
- *     the history — the same calls `RuntimeManager` already makes;
- *   - the evidence read from session events (`tool/call`, `tool/result`,
- *     `assistant/message`) rather than from the retired kernel's message parts.
+ * It drives the real thing rather than a copy. `RuntimeManager.start` launches
+ * the container — same launch plan, same profile patch, same browser-session
+ * cookie, same unix transport — and `callKernel` makes the calls, so a wire
+ * change breaks this gate in the same place it breaks production instead of
+ * leaving a gate that passes against a protocol the product no longer speaks.
  *
- * Until then production readiness has no receipt and says so, which is the
- * intended failure: it is visible, it is named, and it does not certify
- * anything that was not measured.
+ * The one thing it does not borrow is the model gateway: this process starts
+ * its own, on the handler the server mounts, because `gatewayOnly` and
+ * `streaming` are counts and a count needs a counter. The runtime reaches it by
+ * the same service name production uses, so what is certified is the path
+ * production takes.
+ *
+ * Where it runs. Inside the web image, on the deployment's own network — the
+ * `receipt` compose profile is exactly that container. It cannot run from a
+ * bare checkout: the composition, the MCP and the capability trees live at
+ * `/opt/evimed` inside the runtime image, and a kernel that cannot find them
+ * boots, serves, answers its health probe and satisfies nothing.
+ *
+ * Ordering. The gate needs `config.releaseManifest` to name the image it is
+ * about to run, so it comes AFTER `release:manifest`, not before. The retired
+ * gate ran first because it drove a bare binary that no manifest described.
  *
  * @param {Record<string, any>} [options]
- * @returns {Promise<never>}
+ * @returns {Promise<Record<string, any>>}
  */
-export async function runDeepSeekKernelReleaseGate(options = {}) {
-  void options;
-  throw failure("deepseek_release_chain_unavailable");
+export async function runDeepSeekKernelReleaseGate({
+  mode = "production",
+  config: suppliedConfig,
+  keyFile = process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE,
+  modelGatewaySigningSecretFile = process.env.OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE,
+  receiptPath = process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE,
+  receiptId = process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID,
+  sourceRevision = process.env.OPEN_SCIENCE_SOURCE_REVISION,
+  configRevision = process.env.OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION,
+  receiptSigningSecret,
+  timeoutMs = 900_000,
+} = {}) {
+  // `fake` is refused rather than emulated. The retired gate's fake mode drove
+  // a REAL kernel binary against a scripted provider; the equivalent here would
+  // still need the runtime image and Docker, so it would not buy the one thing
+  // a fake is for — running where the real thing cannot. What it would buy is a
+  // second definition of "passed", and the mock kernel in this repository
+  // answers one tool call and a fixed sentence, so a gate that accepted it
+  // would certify the mock.
+  if (mode !== "production") throw failure("deepseek_release_mode_invalid");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 60_000 || timeoutMs > 30 * 60_000) {
+    throw failure("deepseek_release_timeout_invalid");
+  }
+  if (!keyFile || !receiptId) throw failure("deepseek_release_input_missing");
+  const signingSecret = receiptSigningSecret ?? readModelGatewaySigningSecretFile(modelGatewaySigningSecretFile);
+
+  // Asked of the provider first, and separately: a model that cannot stream or
+  // hold a tool loop fails here in seconds with a name, instead of fifteen
+  // minutes later as "the run produced no tool results".
+  const providerCapabilities = await runDeepSeekCompatibility({
+    keyFile,
+    baseUrl: process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL || undefined,
+    model: REQUIRED_MODEL,
+  });
+
+  const chain = await runDshChain({ config: suppliedConfig, timeoutMs });
+  const unsignedReceipt = {
+    schemaVersion: 1,
+    id: receiptId,
+    mode: "production",
+    productionEligible: true,
+    createdAt: new Date().toISOString(),
+    dshVersion: REQUIRED_DSH_VERSION,
+    model: REQUIRED_MODEL,
+    sourceRevision: safeRevision(sourceRevision, ""),
+    configRevision: safeRevision(configRevision, ""),
+    capabilities: {
+      providerBaseline: providerCapabilities.ok === true,
+      providerStreaming: providerCapabilities.ok === true,
+      providerToolLoop: providerCapabilities.ok === true,
+      providerStructuredOutput: providerCapabilities.ok === true,
+      ...chain.evidence,
+    },
+  };
+  const receipt = signDeepSeekReleaseReceipt(unsignedReceipt, { signingSecret });
+  // Verified with the same reader production uses, before it is written. A
+  // receipt that only fails when readiness reads it fails on the wrong machine
+  // at the wrong time.
+  validateDeepSeekReleaseReceipt(receipt, { requireProduction: true, signingSecret, receiptId });
+  await writeReceipt(receiptPath, receipt);
+  return receipt;
 }
 
 async function main() {
   try {
+    // `--fake` is still read, and still refused by name. Silently ignoring a
+    // flag an operator typed would mint a production receipt for someone who
+    // asked for a rehearsal.
     const mode = process.argv.includes("--fake") ? "fake" : "production";
-    // `Promise<never>` is the truth today: the gate refuses, so this reporting is
-    // unreachable. It stays because it is the shape a minting gate has to return
-    // to, and the cast here is what lets the signature keep saying "cannot
-    // succeed" instead of being widened to hide that.
-    const receipt = /** @type {Record<string, any>} */ (await runDeepSeekKernelReleaseGate({
+    const receipt = await runDeepSeekKernelReleaseGate({
       mode,
       keyFile: process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE,
       modelGatewaySigningSecretFile: process.env.OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE,
       receiptPath: process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE,
       receiptId: process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID,
-    }));
+      ...(process.env.OPEN_SCIENCE_RELEASE_GATE_TIMEOUT_MS
+        ? { timeoutMs: Number(process.env.OPEN_SCIENCE_RELEASE_GATE_TIMEOUT_MS) }
+        : {}),
+    });
     process.stdout.write(`${JSON.stringify({ ok: true, receiptId: receipt.id, mode: receipt.mode })}\n`);
   } catch (error) {
     const code = error instanceof ReleaseGateError || typeof error?.code === "string"

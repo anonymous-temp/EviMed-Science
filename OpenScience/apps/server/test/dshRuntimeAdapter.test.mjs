@@ -687,7 +687,13 @@ test("every section of the fixture says where it came from, and the live ones ar
     assert.ok(golden.$recorded[section], `${section} must say where it came from`);
     assert.ok(Array.isArray(golden[section]) && golden[section].length > 0, `${section} must not be empty`);
   }
-  assert.match(golden.$recorded.procedure, /0\.1\.2-alpha\.3/);
+  // Derived from the pin, not written out. A literal here meant every repin
+  // edited this assertion, and an assertion edited on every repin is one that
+  // stops being read.
+  assert.ok(
+    golden.$recorded.procedure.includes(SEAMS.dsh),
+    `the procedure must name the kernel it was taken from (${SEAMS.dsh})`,
+  );
   assert.match(golden.$recorded.synthesized, /NOT recorded/);
   // The synthesized section is the one place a hand-written frame may live, and
   // it must keep saying so in its own body, not only in the index above.

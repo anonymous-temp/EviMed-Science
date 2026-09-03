@@ -60,13 +60,12 @@
    工具链中完成编译、镜像构建和容器 smoke，不能用本机较新 JDK 的失败或成功替代验收。
 5. **确定生产域名、TLS 和登录方式。** 配置正式域名；在 OIDC 与本地账号中选定一种，关闭
    开发登录；验证 Cookie、反向代理和跨域设置。
-6. **重建 DeepSeek 发布凭据的签发链路。** 兼容性预检（`pnpm preflight:deepseek`）仍然可用，
-   但签发 release receipt 的那一半随旧内核一起删除了：它靠裸二进制驱动 OpenCode，而 DSH
-   的工具链烘焙在运行时镜像的 `/opt/evimed` 里，裸二进制根本无链路可驱动。今天
-   `pnpm preflight:deepseek:release` 与 `open-science-release-receipt` 调度器都以
-   `deepseek_release_chain_unavailable` 退出，`/api/ready` 因此没有凭据可验——这是刻意的
-   显式失败，不要用 `mode: "fake"` 凭据绕开。上线前必须按运行手册所述，用运行时镜像和
-   `session/*` 事件重建签发链路。
+6. **签发 DeepSeek 发布凭据（链路已重建，2026-09-03）。** 签发端现在启动真运行时容器、
+   把模型网关指向本进程以便计数、让模型走一次 research MCP 归一化并写一个文件，再从
+   `session/*` 事件里读证据；没测到的一律不签，并按名报错。两条运维后果：**必须在部署内部
+   运行**（`receipt` compose profile 那个容器，需要运行时控制器套接字与运行时网络），
+   以及**必须排在 `release:manifest` 之后**——网关拒绝启动清单没有指名的镜像。
+   `--fake` 仍被显式拒绝（`deepseek_release_mode_invalid`），不是被忽略。
 7. **生成并验证发布清单。** 构建固定版本 Web/Runtime/Proxy 镜像，生成
    `release-manifest.json`，验证镜像 ID、Skills 摘要、源码 revision 和构建时间。
 8. **落实最低限度运维。** 指定告警接收人，配置加密备份、保留周期，并至少做一次恢复演练。
@@ -83,12 +82,12 @@ pnpm lint
 pnpm ci:web
 pnpm check:tauri
 
-# 在目标主机和真实生产 env 上执行
-# preflight:deepseek:release 目前必然失败（见第 6 条）；链路重建之前它是一个
-# 已知的、有名字的阻断项，不是一条可以跳过或用假凭据糊过去的步骤。
-pnpm preflight:deepseek:release
+# 在目标主机和真实生产 env 上执行。
+# 顺序变了：签发凭据要启动运行时容器，而它拒绝启动清单没有指名的镜像，
+# 所以 release:manifest 必须先于 preflight:deepseek:release。
 pnpm release:manifest
 pnpm verify:release-manifest
+pnpm preflight:deepseek:release
 pnpm preflight:host --env-file deploy/web/.env.production
 pnpm smoke:deployment
 ```

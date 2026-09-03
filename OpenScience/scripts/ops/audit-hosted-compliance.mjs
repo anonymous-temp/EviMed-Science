@@ -359,10 +359,15 @@ async function checkDeepSeekCompatibilityPreflight() {
     /createHmac/.test(releaseGate) &&
     /timingSafeEqual/.test(releaseGate) &&
     /MAX_RECEIPT_FUTURE_MS/.test(releaseGate) &&
-    // The gate can no longer mint: driving the chain needs the runtime image,
-    // not a host binary. What matters for compliance is that it refuses with a
-    // named code instead of signing a receipt for something it never measured.
-    /deepseek_release_chain_unavailable/.test(releaseGate) &&
+    // The gate mints again, and the compliance property is unchanged: it may
+    // sign only what it measured. These are the three places that could stop
+    // being true without any test noticing — the evidence must come from the
+    // session the run actually produced, a run that reached the provider
+    // outside our gateway must be refused by name, and there must be no second
+    // "passed" for a chain nobody drove (`--fake` is refused, not emulated).
+    /dshTranscriptEvidence\(/.test(releaseGate) &&
+    /deepseek_release_gateway_bypass_detected/.test(releaseGate) &&
+    /deepseek_release_mode_invalid/.test(releaseGate) &&
     /test\/deepseekCompatibility\.test\.mjs/.test(workflow) &&
     /validateDeepSeekCompatibilityTool/.test(hostPreflight) &&
     /readDeepSeekReleaseReceiptFile/.test(hostPreflight) &&
@@ -374,7 +379,7 @@ async function checkDeepSeekCompatibilityPreflight() {
     /MODEL_GATEWAY_SIGNING_SECRET_FILE/.test(operations) &&
     /HMAC-authenticated/.test(privacy)
   ) {
-    pass("deepseek_compatibility_preflight", "File-keyed DeepSeek tooling and the kernel release gate are runnable, pinned from the single version definition, HMAC/freshness-bound, response-bounded, refuse to mint an unmeasured receipt, and make no live CI calls.");
+    pass("deepseek_compatibility_preflight", "File-keyed DeepSeek tooling and the kernel release gate are runnable, pinned from the single version definition, HMAC/freshness-bound, response-bounded, sign only session evidence from a driven chain, and make no live CI calls.");
   } else {
     fail("deepseek_compatibility_preflight_missing", "DeepSeek compatibility tooling must be file-keyed, runnable, preflight-checked, and fake-provider tested.");
   }

@@ -70,25 +70,29 @@ whole tool chain — streaming, tool-result iterations, session history, structu
 final answer — through the internal gateway, rather than that a model of that
 name exists.
 
-**The minting half does not exist for the DSH kernel, and it refuses instead of
-pretending.** `pnpm preflight:deepseek:release` exits non-zero with
-`deepseek_release_chain_unavailable`, and the unattended
-`open-science-release-receipt` scheduler runs the same gate, so it records a
-failed attempt on every cycle and exits 1 once
-`OPEN_SCIENCE_RECEIPT_MAX_FAILURES` consecutive attempts have failed — expect
-that service to be down, and expect `/api/ready` to report a missing receipt.
-Do not treat that as a misconfiguration to
-work around: the retired implementation drove the old kernel from a bare binary
-(`opencode run` against a fake provider, then `opencode export` for the session
-history, reading that kernel's own message and part shapes throughout), and none
-of it survives the kernel it read. A DSH kernel started from a bare binary has no
-tool chain to drive at all — the `evimed-universal` preset and the research MCP
-are baked into the runtime image at `/opt/evimed`, and the generated profile
-patch names those paths. A replacement has to start the runtime image the way
-`buildRuntimeLaunchPlan` starts it and read its evidence from `session/*` events;
-until it exists, production readiness has no receipt and says so by name. That
-visible failure is the intended state. Never mint a `mode: "fake"` receipt to
-clear it — that is CI evidence only, and readiness rejects it.
+**The minting half drives a real runtime container, so it runs where one can be
+started — not from a laptop checkout.** `pnpm preflight:deepseek:release` starts
+the runtime image the way `buildRuntimeLaunchPlan` starts it, points it at a
+model gateway this process owns so the requests can be counted, asks the model
+to normalize one term through the research MCP and write one file, and reads the
+evidence out of the resulting `session/*` events. It signs nothing it did not
+observe: a run that never completed a tool result, never wrote the artifact, or
+never answered with a structured object fails by name and leaves no receipt.
+
+Two consequences for operations. First, **it must run inside the deployment**:
+the `evimed-universal` preset, the research MCP and the capability trees live at
+`/opt/evimed` inside the runtime image, and the runtime container reaches the
+gateway by the deployment's own service name — the `receipt` compose profile is
+that container, and it needs the runtime controller socket and the runtime
+network, exactly as the web service does. Second, **it runs after
+`release:manifest`, not before**: the gate refuses to launch a runtime whose
+image the manifest does not name. The retired gate ran first only because it
+drove a bare binary that no manifest described.
+
+There is no `--fake` chain. The flag is still read and still refused
+(`deepseek_release_mode_invalid`) rather than ignored, because emulating a chain
+here would mean certifying the mock kernel — which answers one tool call and a
+fixed sentence.
 
 The verification half is unchanged and still enforced. A receipt is HMAC-signed
 with a domain-separated key derived from the Model Gateway signing secret, over
@@ -99,9 +103,7 @@ receipt age is 24 hours and timestamps more than five minutes in the future are
 rejected.
 
 Every credential the gate touches arrives by path, never by value. These are the
-variables it reads, and they are what a rebuilt minting path will read too; keep
-this block for the day it works again, and expect the command to exit non-zero
-with `deepseek_release_chain_unavailable` until then:
+variables it reads:
 
 ```bash
 umask 077
@@ -110,7 +112,7 @@ export OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE="$PWD/deploy/web/secrets/m
 export OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_FILE="$PWD/deploy/web/secrets/deepseek-release-receipt.json"
 export OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID="dsrg_$(openssl rand -hex 16)"
 export OPEN_SCIENCE_SOURCE_REVISION="$(git rev-parse HEAD)"
-export OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION="gateway-v1-deepseek-v4-pro"
+export OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION="$(grep -E '^OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION=' deploy/web/.env | cut -d= -f2-)"
 pnpm preflight:deepseek:release
 ```
 
