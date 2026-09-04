@@ -2715,6 +2715,45 @@ test("a browser holding a deleted project's id can still open its account", asyn
   });
 });
 
+test("this month's usage is the month's, not the last hundred log lines", async () => {
+  // The other ledgers are read with a row-capped tail, which is right for
+  // "show me recent audit lines" and wrong for a total: a hundred rows is a
+  // hundred model calls across every account on the deployment, so a month's
+  // spend would come back understated by however much traffic other accounts
+  // made — a partial sum presented as a total, which is a number people act on.
+  await withAuthApp(async ({ app, base }) => {
+    const loggedIn = await login(base);
+    const usageFile = path.join(app.config.dataDir, ".openscience", "usage.jsonl");
+    await mkdir(path.dirname(usageFile), { recursive: true });
+    const line = (userId, cost, index) =>
+      JSON.stringify({
+        at: new Date(Date.now() - index * 1000).toISOString(),
+        resourceType: "model",
+        userId,
+        projectId: "default",
+        model: "deepseek-v4-pro",
+        cacheHit: 0,
+        cacheMiss: 1000,
+        output: 500,
+        cost,
+        currency: "CNY",
+        priced: true,
+      });
+    // 150 of this account's calls, and 150 of somebody else's interleaved, so
+    // a hundred-row tail would see neither all of one nor all of the other.
+    const lines = [];
+    for (let index = 0; index < 150; index += 1) {
+      lines.push(line("alice", 1, index * 2));
+      lines.push(line("bob", 7, index * 2 + 1));
+    }
+    await writeFile(usageFile, `${lines.join("\n")}\n`, "utf8");
+
+    const usage = await (await fetch(`${base}/api/account/usage`, { headers: { Cookie: loggedIn.cookie } })).json();
+    assert.equal(usage.data.calls, 150);
+    assert.equal(usage.data.cost, 150);
+  });
+});
+
 test("an account cannot hold more projects than its limit", async () => {
   // A per-project storage quota and a per-user runtime limit bound nothing on
   // their own: an account at either limit can make another project and have
