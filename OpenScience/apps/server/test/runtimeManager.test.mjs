@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { AgentRunStore } from "../src/agentRuns.mjs";
+import { createWebApiApp } from "../src/server.mjs";
 import { assertDockerDataVolumeSupport } from "../src/dockerMounts.mjs";
 import {
   RUNTIME_KERNEL_NAME,
@@ -2019,4 +2020,46 @@ test("an over-limit response releases its socket, proven at the socket, not at t
     server.close();
     await rm(tmp, { recursive: true, force: true });
   }
+});
+
+
+test("the kernel's browser application is not reachable unless the deployment enables it", async (t) => {
+  // Off by default on purpose. Turning it on lets an authenticated browser
+  // reach that project's kernel surface, which is exactly what the retired
+  // pass-through route was retired to prevent -- so it ships dark and an
+  // operator decides, rather than the merge deciding.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-off-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true });
+  const address = await app.listen(0, "127.0.0.1");
+  t.after(async () => {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/`, {
+    headers: { "x-open-science-project": "default" },
+  });
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).code, "runtime_ui_not_enabled");
+});
+
+test("the retired pass-through stays retired when the browser application is enabled", async (t) => {
+  // Enabling one surface must not resurrect the other: `/api/opencode/` is the
+  // route already-deployed clients type, and it has to keep saying what
+  // replaced it rather than starting to work again.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-on-"));
+  const app = createWebApiApp({
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true, runtimeUiProxyEnabled: true,
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  t.after(async () => {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  const retired = await fetch(`http://127.0.0.1:${address.port}/api/opencode/default/session`, {
+    headers: { "x-open-science-project": "default" },
+  });
+  assert.equal(retired.status, 410);
+  assert.equal((await retired.json()).code, "runtime_passthrough_retired");
 });
