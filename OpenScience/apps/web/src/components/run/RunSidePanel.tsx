@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { FileText, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { listWebAgentRuns, webFileDownloadUrl, type WebAgentRun } from "@/lib/apiClient";
+import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
+import { downloadArtifact } from "@/lib/artifactFile";
 import { runDotClass, runTitle, WEB_RUN_STATUS_LABEL } from "@/lib/runPresentation";
 
 /** How many runs the panel keeps on screen; the ledger holds the rest. */
@@ -140,16 +141,20 @@ function RunCard({ run, open, onToggle }: { run: WebAgentRun; open: boolean; onT
           {run.errorCode && <p className="mb-2 text-xs text-error">失败原因：{run.errorCode}</p>}
 
           {run.artifacts.length > 0 ? (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col items-start gap-1">
+              {/* The same download the ledger uses, not a second one: one way
+                  to fetch a deliverable means one place its auth, its root and
+                  its filename are decided. */}
               {run.artifacts.map((artifact) => (
-                <a
+                <button
                   key={artifact}
-                  href={webFileDownloadUrl(artifact)}
-                  className="flex items-center gap-1.5 truncate text-xs text-accent hover:underline"
+                  type="button"
+                  onClick={() => void downloadArtifact(artifact, "workspace")}
+                  className="flex max-w-full items-center gap-1.5 truncate text-xs text-accent hover:underline"
                 >
                   <FileText size={12} strokeWidth={1.5} className="shrink-0" />
                   <span className="truncate">{artifact.split("/").pop()}</span>
-                </a>
+                </button>
               ))}
             </div>
           ) : (
