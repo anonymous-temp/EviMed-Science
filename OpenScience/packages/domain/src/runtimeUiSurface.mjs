@@ -11,6 +11,19 @@
  * but hiding a panel hides a button, not a method: the page is JavaScript the
  * browser can call anything from. This list is the part that holds.
  *
+ * Derived from a live kernel rather than from a package grep. On 2026-09-04
+ * this was probed against a running `@deepseek-ai/dsh@0.1.2-rc.1` booted from
+ * the production runtime image, and every method named below answered
+ * `gateway/arguments-invalid` or `ok` — that is, it exists and is reachable —
+ * **except** the `cordis/` and `agentTeams/`
+ * namespaces, which this composition does not export at all (`not found`).
+ * Those two are kept as forward bans and are named here as not-yet-real, so
+ * nobody later reads this list as uniformly load-bearing: a ban that matches
+ * nothing protects nothing, and the way that stays invisible is by not being
+ * written down. `settings/describe` is worth singling out — it answered `ok`,
+ * so before this list a hosted page could read the deployment's own
+ * configuration document.
+ *
  * It is a deny list, not an allow list, and that is a deliberate,
  * time-boxed choice. Enumerating what the application legitimately calls means
  * observing it, and no such observation exists yet; an allow list written from
@@ -48,6 +61,12 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   "directoryPicker",
   "goals",
   "agentTeams",
+  // Not exported by the composition the hosted image runs: on 2026-09-04,
+  // against a running kernel at 0.1.2-rc.1, every `cordis/*` and
+  // `agentTeams/*` name answered `not found`. Kept because both are upstream
+  // features that a later
+  // composition could mount, and a ban that arrives with the feature is worth
+  // more than one written after it ships.
   "cordis",
   "messageFeedback",
 ]);
