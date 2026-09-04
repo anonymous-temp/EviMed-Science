@@ -2063,3 +2063,24 @@ test("the retired pass-through stays retired when the browser application is ena
   assert.equal(retired.status, 410);
   assert.equal((await retired.json()).code, "runtime_passthrough_retired");
 });
+
+
+test("the proxied application is told where it is served, and only the document is touched", async (t) => {
+  // It ships `<base href="/">` because it expects the origin root. Left alone
+  // under a prefix, every asset and every fetch it derives from that base
+  // resolves to this control plane's own single-page app: the page loads and
+  // then nothing on it works, which reads as the application being broken.
+  const { rebasedUiDocumentForTest } = await import("../src/runtimeManager.mjs");
+  const document = Buffer.from('<!doctype html><html><head><base href="/"><script src="/a.js"></script></head></html>', "utf8");
+
+  const served = rebasedUiDocumentForTest(document, { "content-type": "text/html; charset=utf-8" }, "/api/runtime-ui/");
+  assert.match(served.toString("utf8"), /<base href="\/api\/runtime-ui\/">/);
+  assert.match(served.toString("utf8"), /src="\/a\.js"/, "only the base element may be rewritten");
+
+  // An asset that happens to contain the same bytes is not a document.
+  const asset = rebasedUiDocumentForTest(document, { "content-type": "application/javascript" }, "/api/runtime-ui/");
+  assert.equal(asset, document, "a non-HTML response must pass through byte for byte");
+
+  const json = rebasedUiDocumentForTest(Buffer.from('{"base":"/"}', "utf8"), { "content-type": "application/json" }, "/api/runtime-ui/");
+  assert.equal(json.toString("utf8"), '{"base":"/"}');
+});
