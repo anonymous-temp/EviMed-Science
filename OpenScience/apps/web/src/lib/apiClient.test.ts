@@ -58,6 +58,25 @@ describe("apiClient", () => {
     await expect(client.invokeCommand("workspace_path")).rejects.toThrow(/No backend is configured/);
   });
 
+  // `sessionView` used to gate the whole profile assignment, from when it
+  // chose between two views. There is one view now, and a field nothing reads
+  // must not decide whether the field everything reads survives.
+  it("keeps the session surface's origin even when the server sends nothing else", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      responseJson({
+        user: { id: "alice", name: "Alice" },
+        project: { id: "default", name: "Default" },
+        projects: [],
+        runtime: { uiOrigin: "https://science.example:8443" },
+      }),
+    );
+    const client = await loadClient("https://science.example/api");
+
+    await client.fetchWebMe();
+
+    expect(client.webRuntimeProfile().uiOrigin).toBe("https://science.example:8443");
+  });
+
   it("posts browser commands to the configured web API", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(csrfMeResponse())

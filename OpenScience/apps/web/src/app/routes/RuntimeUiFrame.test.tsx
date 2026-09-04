@@ -13,7 +13,7 @@ vi.mock("@/components/run/RunSidePanel", () => ({
   ),
 }));
 
-const profile = { sessionView: "run-stream" as const, uiOrigin: "https://host.example:8443" };
+const profile = { uiOrigin: "https://host.example:8443" };
 vi.mock("@/lib/apiClient", () => ({
   hasWebApi: true,
   fetchWebMe: () => Promise.resolve({}),
