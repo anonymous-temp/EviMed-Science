@@ -2113,6 +2113,50 @@ test("the browser application's origin refuses anyone who is not logged in", asy
   assert.match(anonymous.headers.get("content-type") ?? "", /text\/html/, "a frame shows a page, not JSON");
 });
 
+test("a framed prompt is refused when the account is over its cap, and reading is not", async (t) => {
+  // The primary surface never passes through `/api/agent-runs/dispatch`, so a
+  // cap that only guarded dispatch would be one the product's main path walks
+  // around. It refuses the method that spends, not every method: reading your
+  // own finished work is not spending, and locking someone out of it because
+  // they are over a limit is the wrong refusal.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-spend-"));
+  await mkdir(path.join(dataDir, ".openscience"), { recursive: true });
+  await writeFile(
+    path.join(dataDir, ".openscience", "usage.jsonl"),
+    `${JSON.stringify({
+      at: new Date().toISOString(),
+      resourceType: "model",
+      userId: "dev",
+      projectId: "default",
+      model: "deepseek-v4-pro",
+      cacheHit: 0,
+      cacheMiss: 1000,
+      output: 500,
+      cost: 40,
+      currency: "CNY",
+      priced: true,
+    })}\n`,
+    "utf8",
+  );
+  const { uiBase, cookie } = await uiSurfaceFixture(t, { dataDir, userDailySpendLimit: 10 });
+
+  const prompted = await fetch(`${uiBase}/api/session/prompt`, {
+    method: "POST",
+    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "1", method: "session/prompt", payload: { args: {} } }),
+  });
+  assert.equal(prompted.status, 402);
+
+  // A read of the same session is not refused for the same reason. Whatever
+  // else the mock runtime answers, it is not a refusal about money.
+  const read = await fetch(`${uiBase}/api/session/page`, {
+    method: "POST",
+    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "2", method: "session/page", payload: { request: {} } }),
+  });
+  assert.notEqual(read.status, 402);
+});
+
 test("the hosted browser application cannot reach the methods that change the deployment", async (t) => {
   // The panels that call these are hidden in the profile, but hiding a panel
   // hides a button: the page is JavaScript and can call anything. Each of
@@ -2230,52 +2274,6 @@ test("a production deployment cannot serve the application at an address nobody 
     assert.equal(runtime.code, "runtime_ui_port_required");
   } finally {
     await app.close();
-    await rm(dataDir, { recursive: true, force: true });
-  }
-});
-
-test("starting a runtime is refused for an account over its spend cap", async () => {
-  // The other surface. A run begun inside the kernel's own browser application
-  // never passes through `/api/agent-runs/dispatch`, and that application is
-  // the primary one — a cap that only guarded dispatch would be a cap the
-  // product's main path walks around.
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-spend-"));
-  try {
-    await mkdir(path.join(dataDir, ".openscience"), { recursive: true });
-    await writeFile(
-      path.join(dataDir, ".openscience", "usage.jsonl"),
-      `${JSON.stringify({
-        at: new Date().toISOString(),
-        resourceType: "model",
-        userId: "alice",
-        projectId: "paper1",
-        model: "deepseek-v4-pro",
-        cacheHit: 0,
-        cacheMiss: 1000,
-        output: 500,
-        cost: 40,
-        currency: "CNY",
-        priced: true,
-      })}\n`,
-      "utf8",
-    );
-
-    const manager = new RuntimeManager({ dataDir, userDailySpendLimit: 10, maxLogReadBytes: 1024 * 1024 });
-    // Bounded on purpose: "refused before anything starts" is the property, so
-    // a build that stopped refusing must fail here as a wrong answer rather
-    // than as a test that hangs on a real container start.
-    const refusal = await Promise.race([
-      manager.start(project).then(() => null, (error) => error),
-      sleep(5_000).then(() => "no refusal within 5s; start() got past the cap"),
-    ]);
-    assert.notEqual(refusal, "no refusal within 5s; start() got past the cap");
-    assert.equal(refusal?.status, 402);
-    assert.equal(refusal?.code, "credits_daily_limit_reached");
-
-    // "No cap set refuses nothing" is a property of the check itself and is
-    // covered where the check lives; asserting it here would mean waiting for
-    // a real container start to fail for its own unrelated reasons.
-  } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
