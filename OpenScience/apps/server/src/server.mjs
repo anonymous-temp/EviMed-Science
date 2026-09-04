@@ -1265,7 +1265,7 @@ export function createWebApiApp(overrides = {}) {
         // and the one they can still change their behaviour within.
         const now = new Date();
         const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-        const rows = await readServerUsageJsonl(req, config, user);
+        const rows = await readServerUsageJsonl(config, user);
         sendJson(res, 200, {
           data: {
             since: since.toISOString(),
@@ -2759,13 +2759,20 @@ async function assertSpendAdmission(config, user) {
 /**
  * This account's usage events.
  *
+ * Read with the byte-bounded reader, not the log reader the other ledgers use:
+ * that one keeps the last hundred rows, which is right for "show me recent
+ * audit lines" and wrong for a total. A hundred rows is a hundred model calls
+ * across every account on the deployment, so a month's spend would have been
+ * understated by however much traffic the other accounts made — a partial sum
+ * presented as a total, which is the kind of number people act on.
+ *
  * Filtered by user here as well as in the summary: the file holds every
  * account's events, and a read that returned another account's rows would be
  * a leak whether or not the caller's arithmetic happened to drop them.
  */
-async function readServerUsageJsonl(req, config, user) {
+async function readServerUsageJsonl(config, user) {
   const file = path.join(config.dataDir, ".openscience", USAGE_EVENTS_FILE);
-  return (await readJsonlTail(req, config, config.dataDir, file)).filter((row) => row.userId === user.id);
+  return (await readAllJsonl(config.dataDir, file, config)).filter((row) => row.userId === user.id);
 }
 
 async function readServerSecurityJsonl(req, ctx) {
