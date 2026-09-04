@@ -564,7 +564,10 @@ export function startMockDshRuntime(options = {}) {
           res.end(invalid("_request"));
           return;
         }
-        res.end(JSON.stringify(ok(rpcId, { items: [...sessions.values()].map(summaryOf) })));
+        // A bare array, which is what alpha.5 answers. It was `{ items: [...] }`
+        // here, and a mock that answers a shape the kernel does not is how a
+        // caller gets written against the mock and fails in production.
+        res.end(JSON.stringify(ok(rpcId, [...sessions.values()].map(summaryOf))));
         return;
       }
       if (endpoint === "subagents/list") {

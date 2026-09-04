@@ -161,6 +161,24 @@ export function mapWireError(error) {
  * @property {(endpoint: string, args: Record<string, unknown>, options: { signal: AbortSignal }) => AsyncIterable<Record<string, any>>} stream
  */
 
+/**
+ * The sessions in a `session/list` reply, whichever shape it arrives in.
+ *
+ * alpha.5 answers a bare array. Three separate readers here and in
+ * `runtimeManager` read `value.items` instead -- the shape the mock returned
+ * and the kernel never did -- so in production the adapter reported no sessions
+ * for a kernel holding several, transcript paging could not find a head
+ * sequence, and a busy session read `idle` forever. Each was a wrong answer
+ * that looks exactly like a correct one about an idle runtime. One reader now,
+ * accepting both, because the mock's shape is what every caller was written
+ * against.
+ * @param {any} value @returns {Record<string, any>[]}
+ */
+export function sessionListItems(value) {
+  if (Array.isArray(value)) return value;
+  return Array.isArray(value?.items) ? value.items : [];
+}
+
 export class DshRuntimeAdapter {
   /**
    * @param {WireTransport} transport
@@ -209,8 +227,7 @@ export class DshRuntimeAdapter {
    * @param {{ signal?: AbortSignal }} [options] @returns {Promise<Record<string, any>>}
    */
   async describe(options = {}) {
-    const value = await this.call("session/list", { _request: {} }, options);
-    return { sessions: Array.isArray(value?.items) ? value.items.length : 0 };
+    return { sessions: (await this.listSessions(options)).length };
   }
 
   /**
@@ -220,8 +237,7 @@ export class DshRuntimeAdapter {
    * @returns {Promise<Record<string, any>[]>}
    */
   async listSessions(options = {}) {
-    const value = await this.call("session/list", { _request: {} }, options);
-    return Array.isArray(value?.items) ? value.items : [];
+    return sessionListItems(await this.call("session/list", { _request: {} }, options));
   }
 
   /**
