@@ -208,6 +208,10 @@ export class RuntimeEventPump {
     /** @type {PumpProjectState} */
     const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), mintedSessions: new Set() };
     this.projects.set(key, state);
+    // On the project's own lifetime, not the mux's: a reconnect must not reset
+    // the sweep's clock, and the kernel is reachable for `session/list` whether
+    // or not the stream happens to be up.
+    this.#adoptUnownedSessions(state, runtime, controller.signal).catch(() => {});
     this.#run(project, runtime, state, controller.signal).catch(() => {
       // isolated: evimed_runtime_event_pump_fatal_total — the loop below
       // isolates every reconnect attempt already; reaching here at all means
@@ -322,7 +326,6 @@ export class RuntimeEventPump {
               })
               .catch(() => {}),
             this.#followSessions(state, adapter, generation.signal),
-            this.#adoptUnownedSessions(state, runtime, generation.signal).catch(() => {}),
           ]);
         } finally {
           signal.removeEventListener("abort", stopGeneration);
@@ -441,6 +444,13 @@ export class RuntimeEventPump {
    * Blank sessions are left alone. Opening the application creates one before
    * the person has said anything, and a ledger entry for a conversation that
    * does not exist is noise shaped like work.
+   *
+   * Tied to the project's attachment rather than to a mux generation. It lived
+   * inside the generation's `Promise.race` first, which meant every reconnect
+   * -- and the mux reconnects on its own schedule -- aborted the signal the
+   * sweep's timer was waiting on. The interval never elapsed, so in production
+   * the sweep ran exactly never while its unit test, whose fake mux never
+   * reconnects, passed.
    *
    * @param {PumpProjectState} state
    * @param {{ url: string, socketPath?: string|null, cookie?: string|null }} runtime

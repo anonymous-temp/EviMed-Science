@@ -588,12 +588,11 @@ test("the mock kernel answers 0.1.2 and refuses 0.1.1, the way the live binary d
   // `throughSeq` is required, and a value past the end returns NOTHING rather
   // than the tail. Asking for "everything" with a large constant therefore
   // reads as an empty run — which is what the delivery gate would grade.
-  // A bare array, which is what alpha.5 answers and what the mock now answers.
-  // It used to be `{ items: [...] }` here, and `DshRuntimeAdapter.listSessions`
-  // read that shape -- so in production it reported no sessions for a kernel
-  // holding several.
+  // `{ items: [...] }`, pinned here because it was briefly changed to a bare
+  // array on a misreading of a live probe whose own script had already unwrapped
+  // the envelope. The wire shape is the envelope.
   const head = (await post("session/list", { _request: {} }).then((r) => r.json())).result.value
-    .find((item) => item.sessionId === "s-fid").projections.asOfSeq;
+    .items.find((item) => item.sessionId === "s-fid").projections.asOfSeq;
   assert.ok(head > 0);
 
   const unbounded = await post("session/page", { request: { address: { kind: "session", sessionId: "s-fid" } } }).then((r) => r.json());
@@ -613,15 +612,11 @@ test("the mock kernel answers 0.1.2 and refuses 0.1.1, the way the live binary d
 });
 
 
-test("nothing reads a session list by a shape the kernel does not send", async () => {
-  // alpha.5 answers `session/list` with a bare array. Three shipped readers
-  // took `value.items` -- the mock's shape -- so the adapter reported no
-  // sessions for a kernel holding several, transcript paging could not find a
-  // head sequence, and a busy session read `idle` forever. Each is a wrong
-  // answer that looks exactly like a correct one about an idle runtime.
-  //
-  // Derived rather than a list of the three: the next reader has to go through
-  // the one helper too.
+test("every session-list caller goes through the one reader", async () => {
+  // Not because the shape was wrong -- alpha.5 sends `{ items: [...] }` and
+  // always did -- but because four copies of the same unwrap is four places to
+  // fix if it ever changes, and this file has already had one wrong answer
+  // about that shape written into it.
   const dir = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../src");
   const files = (await readdir(dir)).filter((name) => name.endsWith(".mjs") && name !== "dshRuntimeAdapter.mjs");
   let scanned = 0;
