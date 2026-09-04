@@ -149,6 +149,53 @@ function applySecurityHeaders(res, config) {
   );
 }
 
+/**
+ * `/api/runtime-ui/<projectId>/<rest>` split into its parts.
+ *
+ * The project is in the path and not in a header because a browser navigating
+ * to this URL sets no headers, and a WebSocket cannot set them at all. It is
+ * not in the query string either: the application resolves everything it loads
+ * against its `<base>`, and a query parameter does not survive that.
+ */
+function runtimeUiRoute(pathname) {
+  const rest = pathname.slice("/api/runtime-ui/".length);
+  const slash = rest.indexOf("/");
+  const projectId = slash === -1 ? rest : rest.slice(0, slash);
+  if (!projectId) return null;
+  const suffix = slash === -1 ? "/" : rest.slice(slash) || "/";
+  return { projectId, suffix, basePath: `/api/runtime-ui/${encodeURIComponent(projectId)}/` };
+}
+
+/** @param {any} req @param {Record<string, any>} config */
+function hasSessionCookie(req, config) {
+  const name = String(config.sessionCookieName ?? "");
+  if (!name) return false;
+  return String(req.headers.cookie ?? "")
+    .split(";")
+    .some((pair) => pair.trim().startsWith(`${name}=`));
+}
+
+/** @param {any} req @param {Record<string, any>} config */
+function sameOriginUpgrade(req, config) {
+  const origin = String(req.headers.origin ?? "").trim();
+  if (!origin) return true;
+  const allowed = String(config.publicUrl ?? "").trim();
+  if (!allowed) return false;
+  try {
+    return new URL(origin).origin === new URL(allowed).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** @param {any} socket @param {number} status @param {string} code */
+function destroyUpgrade(socket, status, code) {
+  try {
+    socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  } catch { /* the peer may already be gone */ }
+  socket.destroy();
+}
+
 function routePath(req) {
   return new URL(req.url ?? "/", "http://open-science.local").pathname;
 }
@@ -223,7 +270,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/logs/")) return "/api/logs/:kind";
   if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
-  if (pathname.startsWith("/api/runtime-ui/")) return "/api/runtime-ui/*";
+  if (pathname.startsWith("/api/runtime-ui/")) return "/api/runtime-ui/:projectId/*";
   if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/* (retired)";
   if (pathname.startsWith("/api/runs/") && pathname.includes("/interactions/")) return "/api/runs/:id/interactions/:eventId";
   if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events")) return "/api/runs/:id/events";
@@ -1371,9 +1418,16 @@ export function createWebApiApp(overrides = {}) {
       // deadlines and response-header sanitising every runtime call gets. It is
       // off unless the deployment turns it on.
       if (pathname.startsWith("/api/runtime-ui/")) {
-        const ctx = await context(req, res);
-        const suffix = pathname.slice("/api/runtime-ui".length) || "/";
-        await runtimeManager.proxy(req, res, ctx.project, suffix, { surface: "ui" });
+        const route = runtimeUiRoute(pathname);
+        if (!route) {
+          throw new HttpError(404, "runtime_ui_project_missing", "The runtime browser application is addressed as /api/runtime-ui/<projectId>/.");
+        }
+        const user = await store.ensureUser(req, res);
+        const project = await store.requireProject(user, route.projectId);
+        await runtimeManager.proxy(req, res, project, route.suffix, {
+          surface: "ui",
+          uiBasePath: route.basePath,
+        });
         return;
       }
 
@@ -1547,6 +1601,40 @@ export function createWebApiApp(overrides = {}) {
 
   const server = createServer((req, res) => {
     void handle(req, res);
+  });
+
+  // The browser application's live channel.
+  //
+  // A WebSocket handshake is not an ordinary request and never reaches
+  // `handle`: node routes it to `upgrade`. Without this the application loads,
+  // renders, and then fails when it opens its socket -- which looks like the
+  // application being broken rather than half-proxied. It is the same
+  // authorisation as the HTTP surface (this session's user, that user's
+  // project, the enable switch) because a socket that skipped any of them would
+  // be the hole the HTTP side was careful not to be.
+  server.on("upgrade", (req, socket, head) => {
+    void (async () => {
+      try {
+        const pathname = new URL(req.url ?? "/", "http://open-science.local").pathname;
+        const route = pathname.startsWith("/api/runtime-ui/") ? runtimeUiRoute(pathname) : null;
+        if (!route) return destroyUpgrade(socket, 404, "not_found");
+        // A browser cannot set headers on a WebSocket, so CSRF is answered by
+        // origin rather than by a token: only this deployment's own page may
+        // open one.
+        if (!sameOriginUpgrade(req, config)) return destroyUpgrade(socket, 403, "forbidden_origin");
+        // An upgrade is not a place to mint a session. A browser that opens
+        // this socket is already logged in; one that is not gets told so,
+        // rather than being handed a session whose cookie it can never
+        // receive -- and rather than learning from a 404 whether this
+        // deployment has the surface switched on.
+        if (!hasSessionCookie(req, config)) return destroyUpgrade(socket, 401, "unauthorized");
+        const user = await store.ensureUser(req, null);
+        const project = await store.requireProject(user, route.projectId);
+        await runtimeManager.proxyUpgrade(req, socket, head, project, route.suffix);
+      } catch (error) {
+        destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
+      }
+    })();
   });
 
   async function runStartupRuntimeCleanup() {

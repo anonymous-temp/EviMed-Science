@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -2036,11 +2036,16 @@ test("the kernel's browser application is not reachable unless the deployment en
     await rm(dataDir, { recursive: true, force: true });
   });
 
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/`, {
-    headers: { "x-open-science-project": "default" },
-  });
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/default/`);
   assert.equal(response.status, 404);
   assert.equal((await response.json()).code, "runtime_ui_not_enabled");
+
+  // The project is addressed in the path because a browser navigating here
+  // sets no headers and a WebSocket cannot set them at all. Omitting it says so
+  // rather than silently serving somebody's default project.
+  const unaddressed = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/`);
+  assert.equal(unaddressed.status, 404);
+  assert.equal((await unaddressed.json()).code, "runtime_ui_project_missing");
 });
 
 test("the retired pass-through stays retired when the browser application is enabled", async (t) => {
@@ -2083,4 +2088,121 @@ test("the proxied application is told where it is served, and only the document 
 
   const json = rebasedUiDocumentForTest(Buffer.from('{"base":"/"}', "utf8"), { "content-type": "application/json" }, "/api/runtime-ui/");
   assert.equal(json.toString("utf8"), '{"base":"/"}');
+});
+
+
+test("a browser application socket is refused unless it is this deployment's own page", async (t) => {
+  // A WebSocket carries the session cookie and cannot carry a CSRF token, so
+  // origin is the check. Without it any page on the internet could open a
+  // socket to somebody's kernel using their logged-in browser.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-origin-"));
+  const app = createWebApiApp({
+    dataDir,
+    port: 0,
+    runtimeMode: "mock",
+    devAuth: true,
+    runtimeUiProxyEnabled: true,
+    publicUrl: "https://science.example",
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  t.after(async () => {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  const handshake = (origin) => new Promise((resolve) => {
+    const req = httpRequest({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/runtime-ui/default/api/remote.mux",
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+        ...(origin ? { origin } : {}),
+      },
+    });
+    req.on("upgrade", (res, socket) => { socket.destroy(); resolve({ upgraded: true, status: res.statusCode }); });
+    req.on("response", (res) => { res.resume(); resolve({ upgraded: false, status: res.statusCode }); });
+    req.on("error", () => resolve({ upgraded: false, status: 0 }));
+    req.end();
+  });
+
+  const foreign = await handshake("https://attacker.example");
+  assert.equal(foreign.upgraded, false);
+  assert.equal(foreign.status, 403, "a cross-origin socket must be refused");
+});
+
+test("a browser application socket is refused when the surface is switched off", async (t) => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-socket-off-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true });
+  const address = await app.listen(0, "127.0.0.1");
+  t.after(async () => {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  // An unauthenticated socket is refused before the surface is consulted, so
+  // borrow a session from an ordinary request first.
+  const seeded = await fetch(`http://127.0.0.1:${address.port}/api/projects`);
+  const cookie = (seeded.headers.getSetCookie?.() ?? []).map((item) => item.split(";")[0]).join("; ");
+  assert.ok(cookie, "the test needs a session cookie to get past authentication");
+
+  const result = await new Promise((resolve) => {
+    const req = httpRequest({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/runtime-ui/default/api/remote.mux",
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+        cookie,
+      },
+    });
+    req.on("upgrade", (res, socket) => { socket.destroy(); resolve({ upgraded: true, status: res.statusCode }); });
+    req.on("response", (res) => { res.resume(); resolve({ upgraded: false, status: res.statusCode }); });
+    req.on("error", () => resolve({ upgraded: false, status: 0 }));
+    req.end();
+  });
+  assert.equal(result.upgraded, false, "the socket must not open when the HTTP surface is off");
+  assert.equal(result.status, 404);
+});
+
+
+test("an unauthenticated browser-application socket learns nothing about the surface", async (t) => {
+  // 401 before the enable check, so a stranger cannot use the difference
+  // between 401 and 404 to discover whether this deployment serves the kernel's
+  // application at all.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-socket-anon-"));
+  const app = createWebApiApp({
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true, runtimeUiProxyEnabled: true,
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  t.after(async () => {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  const result = await new Promise((resolve) => {
+    const req = httpRequest({
+      hostname: "127.0.0.1",
+      port: address.port,
+      path: "/api/runtime-ui/default/api/remote.mux",
+      headers: {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    });
+    req.on("upgrade", (res, socket) => { socket.destroy(); resolve({ upgraded: true, status: res.statusCode }); });
+    req.on("response", (res) => { res.resume(); resolve({ upgraded: false, status: res.statusCode }); });
+    req.on("error", () => resolve({ upgraded: false, status: 0 }));
+    req.end();
+  });
+  assert.equal(result.upgraded, false);
+  assert.equal(result.status, 401);
 });
