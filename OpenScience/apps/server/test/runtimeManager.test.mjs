@@ -2065,7 +2065,7 @@ test("the retired pass-through stays retired when the browser application is ena
 });
 
 
-test("the proxied application is told where it is served, and only the document is touched", async (t) => {
+test("the proxied application is told where it is served, and only the document is touched", async () => {
   // It ships `<base href="/">` because it expects the origin root. Left alone
   // under a prefix, every asset and every fetch it derives from that base
   // resolves to this control plane's own single-page app: the page loads and
