@@ -7,11 +7,14 @@ import { RunSidePanel } from "./RunSidePanel";
 const mocks = vi.hoisted(() => ({
   runs: [] as WebAgentRun[],
   listWebAgentRuns: vi.fn(),
+  downloadArtifact: vi.fn(),
 }));
 
 vi.mock("@/lib/apiClient", () => ({
   listWebAgentRuns: mocks.listWebAgentRuns,
-  webFileDownloadUrl: (path: string) => `/api/files/download/${encodeURIComponent(path)}`,
+}));
+vi.mock("@/lib/artifactFile", () => ({
+  downloadArtifact: (path: string, root?: string) => mocks.downloadArtifact(path, root),
 }));
 
 function run(overrides: Partial<WebAgentRun> & { id: string }): WebAgentRun {
@@ -43,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("RunSidePanel", () => {
-  it("opens the newest run and links its deliverables", async () => {
+  it("opens the newest run and downloads its deliverables the way the ledger does", async () => {
     mocks.runs = [
       run({ id: "r1", question: "阿司匹林的证据", artifacts: ["reports/aspirin.md"] }),
       run({ id: "r2", question: "更早的运行" }),
@@ -51,8 +54,8 @@ describe("RunSidePanel", () => {
     render(<RunSidePanel onClose={vi.fn()} />);
 
     expect(await screen.findByText("阿司匹林的证据")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: "aspirin.md" });
-    expect(link).toHaveAttribute("href", "/api/files/download/reports%2Faspirin.md");
+    await userEvent.click(screen.getByRole("button", { name: "aspirin.md" }));
+    expect(mocks.downloadArtifact).toHaveBeenCalledWith("reports/aspirin.md", "workspace");
     // The older run is listed but collapsed, so only one card's body is open.
     expect(screen.getByText("更早的运行")).toBeInTheDocument();
   });
