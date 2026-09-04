@@ -12,6 +12,7 @@ import {
   artifactCandidatesForTest,
   clinicalEvidenceRepairPromptForTest,
   delegatedDocumentReadsForTest,
+  ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
@@ -5405,4 +5406,59 @@ test("a package edited after its receipt into something that fails is still refu
     assert.equal(run.status, "failed");
     assert.deepEqual(run.artifacts, []);
   });
+});
+
+
+test("a terminal row still fits when the ledger is full of other runs' progress", async () => {
+  // Production wedge, reproduced. A project reached 7,800 progress rows across
+  // 31 runs and stopped 114 bytes under the cap. Progress kept writing, because
+  // that call site dropped its own superseded rows first; `finished` could not,
+  // because it did not -- so a run that had completed could never record it and
+  // its monitor retried once a minute forever. The rule now lives in the single
+  // function every append goes through, so the run that has to end can end.
+  const maxBytes = 1024 * 1024;
+  const events = [{ event: "started", id: "run_live", at: "2026-09-04T00:00:00.000Z" }];
+  const size = () => Buffer.byteLength(`${events.map((item) => JSON.stringify(item)).join("\n")}\n`, "utf8");
+  // Grown to the cap rather than to a magic count, so the fixture keeps
+  // reproducing the wedge when the row shape changes.
+  for (let index = 0; size() < maxBytes - 512; index += 1) {
+    events.push({
+      event: "progress",
+      id: `run_other_${index % 30}`,
+      at: "2026-09-04T00:00:00.000Z",
+      messages: index,
+      toolCalls: index,
+    });
+  }
+  const wedged = size();
+  assert.ok(
+    wedged > maxBytes - 1024 && wedged < maxBytes,
+    `the fixture is ${wedged} bytes; it must sit just under the cap to reproduce the wedge`,
+  );
+
+  const text = ledgerTextForTest(events, { event: "finished", id: "run_live", status: "succeeded" }, maxBytes);
+  const rows = text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+
+  assert.ok(rows.some((row) => row.event === "finished" && row.id === "run_live"), "the terminal row was refused");
+  assert.ok(rows.some((row) => row.event === "started" && row.id === "run_live"), "history was dropped with the gauge");
+  const progress = rows.filter((row) => row.event === "progress");
+  assert.equal(progress.length, 30, "one progress row per run should survive, and only the latest");
+  assert.deepEqual(
+    progress.map((row) => row.messages),
+    events.filter((item) => item.event === "progress").slice(-30).map((item) => item.messages),
+    "the surviving progress row must be the newest, not the first",
+  );
+});
+
+test("a ledger that is genuinely too large is still refused", () => {
+  // The cap is not removed, only stopped from being reached by a gauge. A
+  // ledger of history alone that exceeds it must still fail loudly.
+  const history = [];
+  for (let index = 0; index < 40_000; index += 1) {
+    history.push({ event: "started", id: `run_${index}`, at: "2026-09-04T00:00:00.000Z" });
+  }
+  assert.throws(
+    () => ledgerTextForTest(history, { event: "finished", id: "run_0", status: "succeeded" }, 1024 * 1024),
+    /agent run ledger exceeds its size limit/i,
+  );
 });
