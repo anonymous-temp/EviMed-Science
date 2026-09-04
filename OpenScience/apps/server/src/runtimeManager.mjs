@@ -4119,6 +4119,83 @@ export class RuntimeManager {
    * written to prevent. Shipping it dark means the code can land and be
    * reviewed without moving anybody's boundary on the day it merges.
    */
+  /**
+   * The browser application's WebSocket, tunnelled to the project's kernel.
+   *
+   * `requestRuntime` cannot carry this: a handshake is answered with 101 and
+   * then the connection stops being HTTP, so the two sockets have to be joined
+   * directly. Everything that identifies the caller has already happened before
+   * this is reached -- the session's user, that user's project, the same-origin
+   * check, the enable switch -- and the only thing added here is the
+   * browser-session cookie the kernel wants, plus the `Host` it derives that
+   * cookie's name from.
+   *
+   * @param {any} req @param {any} socket @param {Buffer} head
+   * @param {Record<string, any>} project @param {string} suffix
+   */
+  async proxyUpgrade(req, socket, head, project, suffix) {
+    this.enforceUiProxyEnabled();
+    socket.on("error", () => socket.destroy());
+    const runtime = await this.start(project);
+    const upstream = new URL(`${runtime.url}${suffix}`);
+    const incoming = new URL(req.url ?? "/", "http://open-science.local");
+    for (const [key, value] of incoming.searchParams) upstream.searchParams.append(key, value);
+
+    const headers = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      const lower = key.toLowerCase();
+      // `connection` and `upgrade` are exactly what a handshake is, so unlike
+      // the request proxy they are forwarded rather than stripped.
+      if (lower === "host" || lower === "cookie" || lower === "origin") continue;
+      if (Array.isArray(value)) headers[key] = value.join(", ");
+      else if (value != null) headers[key] = value;
+    }
+    headers.host = upstream.host;
+    if (runtime.cookie) headers.cookie = runtime.cookie;
+
+    /** @type {any} */
+    const options = { method: "GET", headers };
+    if (runtime.socketPath) {
+      options.socketPath = runtime.socketPath;
+      options.path = `${upstream.pathname}${upstream.search}`;
+    }
+    const request = runtime.socketPath
+      ? http.request(options)
+      : http.request(upstream, /** @type {any} */ (options));
+
+    const fail = (status, code) => {
+      try {
+        socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+      } catch { /* the peer may already be gone */ }
+      socket.destroy();
+    };
+
+    request.on("upgrade", (upstreamRes, upstreamSocket, upstreamHead) => {
+      const lines = [`HTTP/1.1 ${upstreamRes.statusCode} ${upstreamRes.statusMessage}`];
+      for (const [key, value] of Object.entries(upstreamRes.headers)) {
+        for (const item of Array.isArray(value) ? value : [value]) {
+          if (item != null) lines.push(`${key}: ${item}`);
+        }
+      }
+      socket.write(`${lines.join("\r\n")}\r\n\r\n`);
+      if (upstreamHead?.length) socket.unshift(upstreamHead);
+      upstreamSocket.on("error", () => upstreamSocket.destroy());
+      socket.on("close", () => upstreamSocket.destroy());
+      upstreamSocket.on("close", () => socket.destroy());
+      upstreamSocket.pipe(socket);
+      socket.pipe(upstreamSocket);
+    });
+    // A kernel that answers the handshake with an ordinary response refused it;
+    // saying so beats a socket that closes without a reason.
+    request.on("response", (upstreamRes) => {
+      upstreamRes.resume();
+      fail(upstreamRes.statusCode ?? 502, "runtime_ui_upgrade_refused");
+    });
+    request.on("error", () => fail(502, "runtime_unavailable"));
+    if (head?.length) request.write(head);
+    request.end();
+  }
+
   enforceUiProxyEnabled() {
     if (!this.config.runtimeUiProxyEnabled) {
       throw new HttpError(404, "runtime_ui_not_enabled", "The runtime browser application is not enabled on this deployment.");
