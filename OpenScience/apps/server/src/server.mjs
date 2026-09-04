@@ -2743,8 +2743,14 @@ async function readinessAuth(config, store) {
     if (/^(?:replace(?:-with)?|change-?me|example|placeholder|test)(?:[-_ ]|$)/i.test(config.bootstrapPassword)) {
       throw readinessFailure("bootstrap_password_placeholder");
     }
-    if (Buffer.byteLength(config.bootstrapPassword, "utf8") < 16) {
-      throw readinessFailure("bootstrap_password_too_short", { minimumBytes: 16 });
+    // Six, not sixteen. Lowered on 2026-09-04 at the operator's instruction,
+    // knowing what it allows: this deployment answers on a bare public IP with
+    // a valid certificate, so the bootstrap account is reachable by anything
+    // that scans the address space, and six bytes is inside every dictionary.
+    // The floor is kept rather than removed because an empty or one-character
+    // password is a different thing from a short one somebody chose.
+    if (Buffer.byteLength(config.bootstrapPassword, "utf8") < 6) {
+      throw readinessFailure("bootstrap_password_too_short", { minimumBytes: 6 });
     }
   }
   const users = await store.loginUserCount();
