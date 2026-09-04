@@ -23,6 +23,7 @@ import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { summarizeUsage, USAGE_EVENTS_FILE } from "./usageMetering.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -212,7 +213,7 @@ function requestIdFor(req) {
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
   if (pathname === "/api/auth/register") return pathname;
-  if (pathname === "/api/account" || pathname === "/api/account/export") return pathname;
+  if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage") return pathname;
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (
@@ -1245,6 +1246,22 @@ export function createWebApiApp(overrides = {}) {
           });
         });
         sendJson(res, 202, { data: run });
+        return;
+      }
+
+      if (pathname === "/api/account/usage" && req.method === "GET") {
+        const user = await store.ensureUser(req, res);
+        // This month, because that is the period a person is asked to pay for
+        // and the one they can still change their behaviour within.
+        const now = new Date();
+        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const rows = await readServerUsageJsonl(req, config, user);
+        sendJson(res, 200, {
+          data: {
+            since: since.toISOString(),
+            ...summarizeUsage(rows, { userId: user.id, since }),
+          },
+        });
         return;
       }
 
@@ -2673,6 +2690,18 @@ async function readServerErrorJsonl(req, ctx) {
   return (await readJsonlTail(req, ctx.config, ctx.config.dataDir, file)).filter(
     (row) => row.projectId == null || row.projectId === ctx.project.id,
   );
+}
+
+/**
+ * This account's usage events.
+ *
+ * Filtered by user here as well as in the summary: the file holds every
+ * account's events, and a read that returned another account's rows would be
+ * a leak whether or not the caller's arithmetic happened to drop them.
+ */
+async function readServerUsageJsonl(req, config, user) {
+  const file = path.join(config.dataDir, ".openscience", USAGE_EVENTS_FILE);
+  return (await readJsonlTail(req, config, config.dataDir, file)).filter((row) => row.userId === user.id);
 }
 
 async function readServerSecurityJsonl(req, ctx) {

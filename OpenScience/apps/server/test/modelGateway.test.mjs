@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { loadConfig } from "../src/config.mjs";
+import { summarizeUsage } from "../src/usageMetering.mjs";
+import { readFile } from "node:fs/promises";
 import {
   certifiedDeepSeekModel,
   createModelGatewayHandler,
@@ -82,6 +84,18 @@ test("model gateway backpressure exits immediately when the downstream closes", 
   await assert.rejects(pending, (error) => error?.code === "model_gateway_downstream_closed");
   assert.equal(Date.now() - startedAt < 500, true);
 });
+
+/** The recorded usage lines, once the append has landed. */
+async function usageRows(dataDir, timeoutMs = 2_000) {
+  const file = path.join(dataDir, ".openscience", "usage.jsonl");
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const text = await readFile(file, "utf8").catch(() => null);
+    if (text) return text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    if (Date.now() > deadline) throw new Error(`no usage was recorded within ${timeoutMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
 function runtimeManager(activeToken = "runtime-token") {
   return {
@@ -473,4 +487,79 @@ test("a gateway failure is reported to the caller's ledger, including one that a
   assert.equal(failures.length, 1);
   assert.equal(failures[0].code, "model_gateway_timeout");
   assert.equal(failures[0].truncated, true, "a stream cut after its 200 must say so");
+});
+
+test("a forwarded answer is counted against the account that asked for it", async (t) => {
+  // The gateway is the only place the provider's own token counts pass
+  // through, and it authenticates the runtime, so it knows whose call it is.
+  // Nothing else in the system can say both at once.
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-gateway-usage-"));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    const body = JSON.stringify({
+      id: "chat-1",
+      choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000, prompt_cache_hit_tokens: 0, prompt_cache_miss_tokens: 1_000_000 },
+    });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(body);
+  });
+  const upstreamBase = await listen(upstream);
+  t.after(() => close(upstream));
+  const gateway = createServer(
+    createModelGatewayHandler(config(upstreamBase, { dataDir, maxLogFileBytes: 1024 * 1024 }), runtimeManager()),
+  );
+  const gatewayBase = await listen(gateway);
+  t.after(() => close(gateway));
+
+  const response = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ model: "deepseek-v4-pro", messages: [{ role: "user", content: "hi" }] }),
+  });
+  assert.equal(response.status, 200);
+  // The answer reaches the caller unchanged; metering is not in its way.
+  assert.equal((await response.json()).choices[0].message.content, "ok");
+
+  // The ledger write happens after the last byte reaches the caller, on
+  // purpose: accounting must never be in the answer's way. So the answer can
+  // arrive first, and this waits for the write rather than assuming the order.
+  const rows = await usageRows(dataDir);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].userId, "alice");
+  assert.equal(rows[0].projectId, "paper-1");
+  assert.equal(rows[0].model, "deepseek-v4-pro");
+  assert.equal(summarizeUsage(rows, { userId: "alice" }).calls, 1);
+  assert.ok(summarizeUsage(rows, { userId: "alice" }).cost > 0);
+  // And it is this account's, not everyone's.
+  assert.equal(summarizeUsage(rows, { userId: "bob" }).calls, 0);
+});
+
+test("a call the provider refused is not billed", async (t) => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-gateway-usage-"));
+  t.after(() => rm(dataDir, { recursive: true, force: true }));
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(429, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "rate limited" }));
+  });
+  const upstreamBase = await listen(upstream);
+  t.after(() => close(upstream));
+  const gateway = createServer(
+    createModelGatewayHandler(config(upstreamBase, { dataDir, maxLogFileBytes: 1024 * 1024 }), runtimeManager()),
+  );
+  const gatewayBase = await listen(gateway);
+  t.after(() => close(gateway));
+
+  const response = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ model: "deepseek-v4-pro", messages: [{ role: "user", content: "hi" }] }),
+  });
+  assert.equal(response.status, 429);
+  // Give the write the same window the successful case gets, so "nothing was
+  // billed" is a fact rather than a race this test happened to win.
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  await assert.rejects(readFile(path.join(dataDir, ".openscience", "usage.jsonl"), "utf8"));
 });
