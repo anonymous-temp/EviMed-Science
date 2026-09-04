@@ -70,9 +70,11 @@ export function isPeak(at) {
 
 /**
  * @typedef {object} UsageEvent
- * @property {string} runId
- * @property {string} sessionId
- * @property {number} step
+ * @property {string} userId      who the call is billed to
+ * @property {string} projectId   which of their projects it belongs to
+ * @property {string} [runId]     absent when the observer is below the run
+ * @property {string} [sessionId] absent for the same reason
+ * @property {number} [step]      absent for the same reason
  * @property {string} resourceType
  * @property {string} model
  * @property {number} cacheHit    prompt tokens served from the provider's cache
@@ -80,8 +82,18 @@ export function isPeak(at) {
  * @property {number} output
  * @property {boolean} peak
  * @property {number} cost
+ * @property {string} currency
+ * @property {boolean} priced     false when the price list did not know the model
  * @property {string} at
  */
+
+// Why the run is optional. Model usage is observed at the gateway, which is
+// the only place the provider's own token counts arrive, and the gateway
+// authenticates a *runtime* rather than a run: one project can have several
+// runs in flight, so a run id here would be a guess. An event without one is
+// still billable, still attributable to a person, and still countable against
+// a cap; a guessed run id would make a per-run invoice that looks precise and
+// is not.
 
 /**
  * A price list.

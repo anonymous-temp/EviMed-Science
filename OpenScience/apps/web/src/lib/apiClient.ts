@@ -861,6 +861,25 @@ export async function exportWebProject(projectId: string): Promise<Blob> {
   return res.blob();
 }
 
+export interface WebUsageSummary {
+  /** Start of the period the totals cover (the current calendar month, UTC). */
+  since: string;
+  calls: number;
+  cost: number;
+  currency: string;
+  promptTokens: number;
+  completionTokens: number;
+  /** Calls whose model the price list did not know — counted, not priced. */
+  unpricedCalls: number;
+  byModel: { model: string; calls: number; cost: number }[];
+}
+
+export async function fetchWebAccountUsage(): Promise<WebUsageSummary> {
+  if (!hasWebApi) throw new BackendUnavailableError("account.usage");
+  const res = await fetchWithWebAuth(apiUrl("/account/usage"));
+  return parseApiResponse<WebUsageSummary>(res);
+}
+
 export async function exportWebAccount(): Promise<Blob> {
   if (!hasWebApi) throw new BackendUnavailableError("account.export");
   const res = await fetchWithWebAuth(apiUrl("/account/export"));

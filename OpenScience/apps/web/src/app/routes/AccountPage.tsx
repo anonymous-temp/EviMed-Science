@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { fetchWebMe } from "@/lib/apiClient";
 import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
 import { WebAccountCard } from "@/components/settings/WebAccountCard";
+import { UsageCard } from "@/components/settings/UsageCard";
 import { Card } from "@/components/ui/Card";
 
 export function AccountPage() {
@@ -49,6 +50,8 @@ export function AccountPage() {
             </div>
           </div>
         </Card>
+
+        <UsageCard />
 
         <WebAccountCard onAccountDeleted={leaveHostedSession} onSignedOut={leaveHostedSession} />
 

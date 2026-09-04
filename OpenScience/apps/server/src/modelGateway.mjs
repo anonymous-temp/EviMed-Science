@@ -4,6 +4,8 @@
 // to launch with any other. Adding a model here is a commitment to certify it —
 // the gate will run against whichever of these is configured, so a model that
 // cannot drive the chain fails the release rather than reaching a reader.
+import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
+
 export const supportedDeepSeekModels = Object.freeze(new Set([
   "deepseek-v4-pro",
   "deepseek-v4-flash",
@@ -282,7 +284,8 @@ function waitForDrain(res, signal) {
 }
 
 /** @param {any} body @param {any} res @param {any} signal @param {number} maxBytes
- *  @param {(() => void) | null} onChunk */
+ *  @param {((chunk: Uint8Array) => void) | null} onChunk called per delivered
+ *  chunk, before it is written on */
 export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk = null) {
   const reader = body.getReader();
   let total = 0;
@@ -295,7 +298,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
       // this the deadline set before the call kept running through the
       // response, so a reasoning turn that streamed steadily for longer than
       // the limit was aborted mid-answer.
-      onChunk?.();
+      onChunk?.(value);
       total += value.byteLength;
       if (total > maxBytes) {
         throw gatewayError(502, "model_gateway_response_too_large", "The model provider response exceeded the gateway limit.");
@@ -349,8 +352,9 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         throw gatewayError(503, "model_gateway_unavailable", "The model gateway is not configured.");
       }
       const token = bearerToken(req);
+      let caller;
       try {
-        runtimeManager.assertActiveModelGatewayToken(token);
+        caller = runtimeManager.assertActiveModelGatewayToken(token);
       } catch {
         throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
       }
@@ -404,7 +408,25 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         "cache-control": "no-store",
         "x-accel-buffering": "no",
       });
-      await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit, armIdleDeadline);
+      // The provider's own token counts are the only trustworthy ones, and
+      // this is the one place they pass through. The tail is kept rather than
+      // the body: `usage` is last in both shapes, and holding a whole response
+      // would undo the reason this is a stream.
+      const usageTail = createUsageTail();
+      await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit, (chunk) => {
+        armIdleDeadline();
+        usageTail.observe(chunk);
+      });
+      // After the body, never before: a call that failed halfway is not a call
+      // to bill, and awaiting a ledger write before the last byte would put
+      // the accounting in the answer's way.
+      await recordModelUsage({
+        config,
+        userId: caller.userId,
+        projectId: caller.projectId,
+        model: normalized.model,
+        usage: usageTail.usage(),
+      });
     } catch (error) {
       const abortReason = abortController.signal.reason;
       const clientDisconnected = abortController.signal.aborted && abortReason?.name === "AbortError";

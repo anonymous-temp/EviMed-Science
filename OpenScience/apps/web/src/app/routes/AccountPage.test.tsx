@@ -17,6 +17,10 @@ vi.mock("@/lib/apiClient", () => ({
 vi.mock("@/components/settings/WebAccountCard", () => ({
   WebAccountCard: () => <div>托管账户自助管理</div>,
 }));
+// Usage has its own test; here it is only a slot on the page.
+vi.mock("@/components/settings/UsageCard", () => ({
+  UsageCard: () => <div>本月用量</div>,
+}));
 
 describe("AccountPage", () => {
   beforeEach(() => {
@@ -70,6 +74,9 @@ describe("AccountPage", () => {
 
     expect(await screen.findByText("tenant: alice")).toBeInTheDocument();
     expect(screen.getByText("托管账户自助管理")).toBeInTheDocument();
+    // What the account has spent belongs with the account, not with the
+    // deployment's settings.
+    expect(screen.getByText("本月用量")).toBeInTheDocument();
   });
 
   // Everything about how the deployment runs moved to /app/settings. Keeping a
