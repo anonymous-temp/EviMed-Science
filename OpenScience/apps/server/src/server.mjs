@@ -45,6 +45,7 @@ import { readinessSaasProfile } from "./saasProfile.mjs";
 import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
+import { createRuntimeUiServer } from "./runtimeUiServer.mjs";
 import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
   HttpError,
@@ -124,6 +125,10 @@ function applySecurityHeaders(res, config) {
     ? "connect-src 'self'"
     : "connect-src 'self' http://127.0.0.1:* http://localhost:* ws: wss:";
   const publicOrigin = originFor(config.publicUrl);
+  // The kernel's browser application is the product's session surface and it
+  // is served on an origin of its own, so `default-src 'self'` would refuse to
+  // frame it. Named rather than widened: only that origin, only as a frame.
+  const uiOrigin = config.runtimeUiProxyEnabled ? originFor(config.runtimeUiPublicOrigin) : null;
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
@@ -145,79 +150,9 @@ function applySecurityHeaders(res, config) {
       "object-src 'none'",
       "base-uri 'none'",
       "frame-ancestors 'none'",
+      uiOrigin ? `frame-src ${uiOrigin}` : "frame-src 'none'",
     ].join("; "),
   );
-}
-
-/**
- * `/api/runtime-ui/<projectId>/<rest>` split into its parts.
- *
- * The project is in the path and not in a header because a browser navigating
- * to this URL sets no headers, and a WebSocket cannot set them at all. It is
- * not in the query string either: the application resolves everything it loads
- * against its `<base>`, and a query parameter does not survive that.
- */
-function runtimeUiRoute(pathname) {
-  const rest = pathname.slice("/api/runtime-ui/".length);
-  const slash = rest.indexOf("/");
-  const projectId = slash === -1 ? rest : rest.slice(0, slash);
-  if (!projectId) return null;
-  const suffix = slash === -1 ? "/" : rest.slice(slash) || "/";
-  return { projectId, suffix, basePath: `/api/runtime-ui/${encodeURIComponent(projectId)}/` };
-}
-
-/** @param {any} req @param {Record<string, any>} config */
-function hasSessionCookie(req, config) {
-  const name = String(config.sessionCookieName ?? "");
-  if (!name) return false;
-  return String(req.headers.cookie ?? "")
-    .split(";")
-    .some((pair) => pair.trim().startsWith(`${name}=`));
-}
-
-/**
- * Whether a request came from this deployment's own page.
- *
- * Used where a CSRF token cannot be: the proxied application does not know
- * ours, and a WebSocket cannot carry one at all. Unlike the socket rule this
- * one refuses a missing `Origin`, because a browser sends it on exactly the
- * requests that need guarding and something that omits it is not the browser
- * this is protecting.
- * @param {any} req @param {Record<string, any>} config
- */
-function sameOriginRequest(req, config) {
-  const method = String(req.method ?? "GET").toUpperCase();
-  if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
-  const origin = String(req.headers.origin ?? "").trim();
-  if (!origin) return false;
-  const allowed = String(config.publicUrl ?? "").trim();
-  if (!allowed) return false;
-  try {
-    return new URL(origin).origin === new URL(allowed).origin;
-  } catch {
-    return false;
-  }
-}
-
-/** @param {any} req @param {Record<string, any>} config */
-function sameOriginUpgrade(req, config) {
-  const origin = String(req.headers.origin ?? "").trim();
-  if (!origin) return true;
-  const allowed = String(config.publicUrl ?? "").trim();
-  if (!allowed) return false;
-  try {
-    return new URL(origin).origin === new URL(allowed).origin;
-  } catch {
-    return false;
-  }
-}
-
-/** @param {any} socket @param {number} status @param {string} code */
-function destroyUpgrade(socket, status, code) {
-  try {
-    socket.write(`HTTP/1.1 ${status} ${code}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
-  } catch { /* the peer may already be gone */ }
-  socket.destroy();
 }
 
 function routePath(req) {
@@ -809,20 +744,7 @@ export function createWebApiApp(overrides = {}) {
     }
     try {
       enforceRequestRateLimits(req, pathname);
-      // The kernel's browser application cannot carry this control plane's CSRF
-      // token: it is a different application that has never heard of it. Every
-      // non-GET request it made was refused, so the surface loaded, opened its
-      // socket, and could not create a session. Same origin is the defence
-      // there instead -- the same one the socket already uses, and for the same
-      // reason. It is required rather than merely accepted: a request with no
-      // Origin at all is not a browser obeying this rule.
-      if (pathname.startsWith("/api/runtime-ui/")) {
-        if (!sameOriginRequest(req, config)) {
-          throw new HttpError(403, "forbidden_origin", "The runtime browser application accepts same-origin requests only.");
-        }
-      } else {
-        await store.assertCsrf(req, pathname);
-      }
+      await store.assertCsrf(req, pathname);
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -944,6 +866,10 @@ export function createWebApiApp(overrides = {}) {
             runtime: {
               kernel: RUNTIME_KERNEL_NAME,
               sessionView: "run-stream",
+              // Where the kernel's own browser application is served. Empty
+              // when this deployment does not serve it, which is how the shell
+              // knows to render its own session view instead of a frame.
+              uiOrigin: config.runtimeUiProxyEnabled ? String(config.runtimeUiPublicOrigin ?? "") : "",
             },
           },
         });
@@ -1520,18 +1446,20 @@ export function createWebApiApp(overrides = {}) {
       // browser-session cookie minted here, and the same quota accounting,
       // deadlines and response-header sanitising every runtime call gets. It is
       // off unless the deployment turns it on.
+      // The path form of this surface is retired, and by name rather than by
+      // 404: it was linked to, and a bookmark that opens it should say what
+      // happened. It could serve the document and every asset and still not
+      // work, because the application's plugin bundles and method calls are
+      // absolute paths built from `location.origin` — under a prefix they
+      // arrived here and were answered with this control plane's own page, so
+      // the application died at boot while every request read 200. It is
+      // served on an origin of its own now; `/api/me` names it.
       if (pathname.startsWith("/api/runtime-ui/")) {
-        const route = runtimeUiRoute(pathname);
-        if (!route) {
-          throw new HttpError(404, "runtime_ui_project_missing", "The runtime browser application is addressed as /api/runtime-ui/<projectId>/.");
-        }
-        const user = await store.ensureUser(req, res);
-        const project = await store.requireProject(user, route.projectId);
-        await runtimeManager.proxy(req, res, project, route.suffix, {
-          surface: "ui",
-          uiBasePath: route.basePath,
-        });
-        return;
+        throw new HttpError(
+          410,
+          "runtime_ui_path_retired",
+          "The kernel browser application is served on its own origin; read runtime.uiOrigin from /api/me.",
+        );
       }
 
       if (pathname.startsWith("/api/opencode/")) {
@@ -1710,39 +1638,16 @@ export function createWebApiApp(overrides = {}) {
     void handle(req, res);
   });
 
-  // The browser application's live channel.
-  //
-  // A WebSocket handshake is not an ordinary request and never reaches
-  // `handle`: node routes it to `upgrade`. Without this the application loads,
-  // renders, and then fails when it opens its socket -- which looks like the
-  // application being broken rather than half-proxied. It is the same
-  // authorisation as the HTTP surface (this session's user, that user's
-  // project, the enable switch) because a socket that skipped any of them would
-  // be the hole the HTTP side was careful not to be.
-  server.on("upgrade", (req, socket, head) => {
-    void (async () => {
-      try {
-        const pathname = new URL(req.url ?? "/", "http://open-science.local").pathname;
-        const route = pathname.startsWith("/api/runtime-ui/") ? runtimeUiRoute(pathname) : null;
-        if (!route) return destroyUpgrade(socket, 404, "not_found");
-        // A browser cannot set headers on a WebSocket, so CSRF is answered by
-        // origin rather than by a token: only this deployment's own page may
-        // open one.
-        if (!sameOriginUpgrade(req, config)) return destroyUpgrade(socket, 403, "forbidden_origin");
-        // An upgrade is not a place to mint a session. A browser that opens
-        // this socket is already logged in; one that is not gets told so,
-        // rather than being handed a session whose cookie it can never
-        // receive -- and rather than learning from a 404 whether this
-        // deployment has the surface switched on.
-        if (!hasSessionCookie(req, config)) return destroyUpgrade(socket, 401, "unauthorized");
-        const user = await store.ensureUser(req, null);
-        const project = await store.requireProject(user, route.projectId);
-        await runtimeManager.proxyUpgrade(req, socket, head, project, route.suffix);
-      } catch (error) {
-        destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
-      }
-    })();
-  });
+  // The kernel's browser application, on an origin of its own. It is a
+  // listener rather than a route because the application builds every URL it
+  // fetches from `location.origin`; see `runtimeUiServer.mjs`.
+  const runtimeUi = createRuntimeUiServer({ config, store, runtimeManager });
+
+  // No `upgrade` handler here on purpose. The only WebSocket this deployment
+  // serves belongs to the kernel's browser application, and that application
+  // has an origin of its own; a handshake arriving on the control plane's
+  // origin has nowhere to go, and node's default -- close the socket -- is the
+  // right answer rather than one worth writing.
 
   async function runStartupRuntimeCleanup() {
     if (startupRuntimeCleanup) return startupRuntimeCleanup;
@@ -1784,15 +1689,22 @@ export function createWebApiApp(overrides = {}) {
     agentRegistry,
     researchSessions,
     server,
+    runtimeUi,
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       await runStartupRuntimeCleanup();
-      return new Promise((resolve, reject) => {
+      const address = await new Promise((resolve, reject) => {
         server.once("error", reject);
         server.listen(port, host, () => resolve(server.address()));
       });
+      // After the control plane, and only if it came up: a listener that
+      // survived a failed main listen would hold the port open and make the
+      // restart look like a port conflict.
+      await runtimeUi.listen();
+      return address;
     },
     async close() {
+      await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
       // following makes it reconnect to a kernel that is going away.
@@ -3525,6 +3437,15 @@ async function readinessRuntime(config, runtimeManager) {
   // branch. There is one kernel now, but "what am I actually running" is still
   // a question an operator must be able to answer without reading env files.
   const kernel = { kernel: RUNTIME_KERNEL_NAME, kernelVersion: config.dshVersion };
+  // The kernel's browser application is this product's session surface, so a
+  // production deployment that switches it on and leaves it unaddressable has
+  // no session surface at all -- and would say nothing about it. Both halves
+  // are required: a listener on an arbitrary free port is unreachable from the
+  // outside, and a page that cannot name the origin cannot frame it.
+  if (config.production && config.runtimeUiProxyEnabled) {
+    if (!Number(config.runtimeUiPort)) throw readinessFailure("runtime_ui_port_required");
+    if (!originFor(config.runtimeUiPublicOrigin)) throw readinessFailure("runtime_ui_public_origin_required");
+  }
   if (config.runtimeMode === "mock") {
     if (config.production && !config.allowMockRuntime) throw readinessFailure("runtime_mock_forbidden");
     return { mode: "mock", sandboxMode: "mock", explicit: Boolean(config.allowMockRuntime), ...kernel };

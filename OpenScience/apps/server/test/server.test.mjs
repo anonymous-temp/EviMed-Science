@@ -2617,11 +2617,11 @@ test("production auth rejects anonymous requests and accepts login cookies", asy
     });
     assert.equal(body.csrfToken, loggedIn.csrfToken);
 
-    // Which session view this deployment serves. The browser must not decide it
-    // from a build flag: the kernel is a deployment choice with a one-line
-    // rollback, and the two views read different sources, so a rollback that
-    // needed a new bundle would not be a rollback.
-    assert.deepEqual(body.runtime, { kernel: "dsh", sessionView: "run-stream" });
+    // What the deployment serves as its session surface, decided here and not
+    // by a build flag: the views read different sources, and a deployment that
+    // serves the kernel's own application serves it from an origin only the
+    // server knows. Empty here because this app does not serve it.
+    assert.deepEqual(body.runtime, { kernel: "dsh", sessionView: "run-stream", uiOrigin: "" });
 
     const securityLog = await readFile(path.join(app.config.dataDir, ".openscience", "security.jsonl"), "utf8");
     assert.ok(

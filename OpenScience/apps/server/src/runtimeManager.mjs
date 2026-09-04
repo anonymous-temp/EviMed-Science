@@ -311,7 +311,7 @@ function connectionHeaderTokens(headers) {
  * would leak it into a log or a stored location just as effectively, so the
  * rewrite stays.
  */
-function proxiedRuntimeLocation(value, runtime, project) {
+function proxiedRuntimeLocation(value, runtime, project, surface = "runtime") {
   if (!value) return null;
   try {
     const runtimeOrigin = new URL(runtime.url).origin;
@@ -319,25 +319,40 @@ function proxiedRuntimeLocation(value, runtime, project) {
     if (target.origin !== runtimeOrigin) return null;
     target.searchParams.delete("directory");
     target.searchParams.delete("auth_token");
+    // On its own origin the application's own redirects are already correct
+    // relative paths -- it redirects to its clean root after taking a cookie,
+    // and prefixing that would send the browser to a path this deployment does
+    // not serve.
+    if (surface === "ui") return `${target.pathname}${target.search}${target.hash}`;
     return `/api/runtime/${encodeURIComponent(project.id)}${target.pathname}${target.search}${target.hash}`;
   } catch {
     return null;
   }
 }
 
-function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project) {
+function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options = {}) {
+  const surface = options.surface ?? "runtime";
   const responseHeaders = {};
   const connectionTokens = connectionHeaderTokens(upstreamRes.headers);
   upstreamRes.headers.forEach((value, key) => {
     const lower = key.toLowerCase();
     if (lower === "location") {
-      const location = proxiedRuntimeLocation(value, runtime, project);
+      const location = proxiedRuntimeLocation(value, runtime, project, surface);
       if (location) responseHeaders[lower] = location;
       return;
     }
+    // Who may frame this application is a decision of the deployment that
+    // embeds it, not of the kernel that has no idea it is embedded. Whatever
+    // it said is dropped and replaced below, so the two cannot disagree.
+    if (surface === "ui" && (lower === "x-frame-options" || lower === "content-security-policy")) return;
     if (blockedRuntimeResponseHeaders.has(lower) || connectionTokens.has(lower)) return;
     responseHeaders[lower] = value;
   });
+  if (surface === "ui") {
+    const embedder = options.frameAncestors ? String(options.frameAncestors) : "'none'";
+    responseHeaders["content-security-policy"] = `frame-ancestors ${embedder}`;
+    responseHeaders["x-content-type-options"] = "nosniff";
+  }
   return responseHeaders;
 }
 
@@ -368,10 +383,31 @@ function rebasedUiDocument(payload, responseHeaders, basePath) {
 
 export { rebasedUiDocument as rebasedUiDocumentForTest };
 
+/**
+ * The one origin allowed to embed the kernel's application: this deployment's
+ * own page. Written from the public URL rather than configured separately, so
+ * a deployment cannot end up embeddable by a origin it never named.
+ *
+ * @param {Record<string, any>} config
+ */
+function frameAncestorsFor(config) {
+  const value = String(config?.publicUrl ?? "").trim();
+  if (!value) return "'self'";
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "'none'";
+  }
+}
+
 function uiProxyAuditTarget(suffix) {
   const pathname = suffix.split("?")[0] || "/";
   if (pathname === "/" || pathname === "/index.html") return "/";
-  if (/^\/api(?:\/|$)/.test(pathname)) return pathname.replace(/^(\/api\/[^/]+).*$/, "$1");
+  // Both segments of a method, not just its namespace. The allow half of this
+  // surface is a deny list today, so the audit row is where the set of methods
+  // the application actually calls is observed -- and a row naming only
+  // `/api/session` cannot tell `session/prompt` from `session/selectModel`.
+  if (/^\/api(?:\/|$)/.test(pathname)) return pathname.replace(/^(\/api\/[^/]+\/[^/]+).*$/, "$1");
   return `/asset${pathname.replace(/\/[^/]*$/, "/*")}`;
 }
 
@@ -3675,7 +3711,10 @@ export class RuntimeManager {
         await this.onSessionAbort(project, abortedSessionId);
       }
       streaming = (upstreamRes.headers.get("content-type") ?? "").toLowerCase().includes("text/event-stream");
-      const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project);
+      const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
+        surface,
+        frameAncestors: frameAncestorsFor(this.config),
+      });
       if (!upstreamRes.body) {
         try {
           await this.stopRuntimeIfProjectQuotaExceeded(project);

@@ -208,7 +208,7 @@ services:
       OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS:-500}
       OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL: "false"
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.5-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -281,9 +281,13 @@ services:
       # nothing, so setting the URL in `.env` did exactly nothing and said
       # nothing; compose forwards env item by item.
       OPEN_SCIENCE_GEO_PROBE_URL: ${OPEN_SCIENCE_GEO_PROBE_URL:-}
-      # The kernel's own browser application, proxied per project behind this
-      # control plane's session. Empty leaves it unreachable.
+      # The kernel's own browser application: the product's session surface,
+      # served on an origin of its own because it builds every URL it fetches
+      # from `location.origin`. Empty leaves it unreachable and the shell
+      # renders its own session view instead.
       OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-}
+      OPEN_SCIENCE_RUNTIME_UI_PORT: ${OPEN_SCIENCE_RUNTIME_UI_PORT:-8788}
+      OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN: ${OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN:-}
       OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/geo-probe/v1}
       OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT: ${OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT:-}
       OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ${OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS:-360000}
@@ -424,6 +428,10 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:${OPEN_SCIENCE_API_PORT:-8787}:8787"
+      # The browser application's origin. Loopback like the API: whatever
+      # terminates TLS in front of this deployment is what publishes it, and
+      # `OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN` is the address it publishes it at.
+      - "127.0.0.1:${OPEN_SCIENCE_RUNTIME_UI_HOST_PORT:-8788}:8788"
     networks:
       - default
       - runtime-internal
@@ -902,7 +910,7 @@ services:
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.5-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -966,12 +974,12 @@ services:
   # nothing else. While two kernels shipped this service built under a second
   # name, so the profile produced the image the control plane never launched.
   dsh-runtime-image:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-alpha.5-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26}
     build:
       context: ../..
       dockerfile: deploy/runtime-dsh/Dockerfile
       args:
-        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.2-alpha.5}
+        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.2-rc.1}
         DSH_CORDIS_VERSION: ${OPEN_SCIENCE_DSH_CORDIS_VERSION:-4.0.2}
         SOCKET_VERSION: ${OPEN_SCIENCE_SOCKET_VERSION:-0.1.0}
         NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-22.22.0}

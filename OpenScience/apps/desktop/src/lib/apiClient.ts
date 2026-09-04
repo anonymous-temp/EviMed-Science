@@ -596,6 +596,13 @@ export function getWebOidcStartUrl(returnTo = "/settings"): string {
  */
 export interface WebRuntimeProfile {
   sessionView: "run-stream" | "legacy";
+  /**
+   * Where the kernel's own browser application is served, or `""` when this
+   * deployment does not serve it. It is a whole origin rather than a path
+   * because the application builds every URL it fetches from
+   * `location.origin`; under a path prefix it cannot boot.
+   */
+  uiOrigin: string;
 }
 
 /**
@@ -605,11 +612,17 @@ export interface WebRuntimeProfile {
  * to ask, and the retiring view is the only one it renders. In a browser the
  * default holds for the one render before the control plane answers.
  */
-let runtimeProfile: WebRuntimeProfile = { sessionView: "legacy" };
+let runtimeProfile: WebRuntimeProfile = { sessionView: "legacy", uiOrigin: "" };
 
 function rememberRuntimeProfile(profile: WebRuntimeProfile | undefined): void {
   if (profile?.sessionView === "run-stream" || profile?.sessionView === "legacy") {
-    runtimeProfile = { sessionView: profile.sessionView };
+    runtimeProfile = {
+      sessionView: profile.sessionView,
+      // A server older than this bundle does not send it, and an absent origin
+      // is not an empty one: it means "render your own view", which is what
+      // the default already is.
+      uiOrigin: typeof profile.uiOrigin === "string" ? profile.uiOrigin : "",
+    };
   }
 }
 

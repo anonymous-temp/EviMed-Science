@@ -97,7 +97,7 @@
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'
-    dshVersion: '0.1.2-alpha.5'
+    dshVersion: '0.1.2-rc.1'
 
 
 # Inside a container whose only writable place is the workspace nothing
@@ -145,3 +145,28 @@
         name: 'evimed-hosted'
         description: 'Confined to the workspace, and refuses anything that asks to leave it.'
     defaultPreset: 'evimed-hosted'
+
+# Panels the hosted browser application does not show; see
+# apps/server/src/dshProfilePatch.mjs for why each one.
+- id: ui-settings-general
+  disabled: true
+- id: ui-settings-models
+  disabled: true
+- id: ui-settings-plugin-inventory
+  disabled: true
+- id: ui-settings-plugins
+  disabled: true
+- id: ui-model-selection
+  disabled: true
+- id: ui-permission
+  disabled: true
+- id: ui-agent-preset
+  disabled: true
+- id: ui-message-feedback
+  disabled: true
+- id: ui-goal
+  disabled: true
+- id: ui-cordis
+  disabled: true
+- id: ui-brand-official
+  disabled: true

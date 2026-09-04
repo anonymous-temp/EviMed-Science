@@ -311,7 +311,7 @@ test("a profile that asks for approval is deployed alongside something that can 
   const { SEAMS } = await import("@evimed/harness-port");
 
   const input = {
-    dshVersion: "0.1.2-alpha.5",
+    dshVersion: "0.1.2-rc.1",
     workspaceDir: "/workspace",
     model: { provider: "deepseek", id: "deepseek-v4-flash", baseURL: "http://gateway/v1" },
     flags: { hosted: false, askUser: true, review: true, capsule: true, requiredEnforcement: "partial" },

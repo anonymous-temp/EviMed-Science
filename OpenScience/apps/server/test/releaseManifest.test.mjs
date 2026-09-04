@@ -22,7 +22,7 @@ const releaseEnv = {
   OPEN_SCIENCE_BUILD_CREATED: "2026-07-10T03:00:00.000Z",
   OPEN_SCIENCE_WEB_CONTAINER_IMAGE: "registry.example.com/open-science-web:0.1.3",
   OPEN_SCIENCE_WEB_IMAGE_ID: `sha256:${"1".repeat(64)}`,
-  OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: "registry.example.com/open-science-runtime:dsh-0.1.2-alpha.5-uv-0.11.26",
+  OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: "registry.example.com/open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26",
   OPEN_SCIENCE_RUNTIME_IMAGE_ID: `sha256:${"2".repeat(64)}`,
   OPEN_SCIENCE_CADDY_VERSION: "2.11.4-alpine",
   OPEN_SCIENCE_CADDY_IMAGE_ID: `sha256:${"3".repeat(64)}`,

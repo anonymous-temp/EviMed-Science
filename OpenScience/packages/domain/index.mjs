@@ -289,6 +289,14 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
+// runtimeUiSurface — 4 exports
+export {
+  RUNTIME_UI_DENIED_METHODS,
+  RUNTIME_UI_DENIED_NAMESPACES,
+  isDeniedRuntimeUiMethod,
+  runtimeUiMethodFromPath,
+} from './src/runtimeUiSurface.mjs'
+
 // Types are re-exported separately because they are not runtime bindings: a
 // JSDoc typedef named in an `export {}` clause would make the module throw on
 // load. Consumers write `import('@evimed/domain').RunTranscript`, so the root
