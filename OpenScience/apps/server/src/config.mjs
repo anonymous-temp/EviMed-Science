@@ -479,6 +479,11 @@ export function loadConfig(overrides = {}) {
     restoreDrillAck: overrides.restoreDrillAck ?? boolEnv("OPEN_SCIENCE_RESTORE_DRILL_ACK", false),
     authMode,
     devAuth,
+    // Whether anyone may create an account here. Off by default: a deployment
+    // that turns it on is choosing to be open, and that choice belongs to the
+    // operator rather than to whichever build happens to be running.
+    selfRegistrationEnabled:
+      overrides.selfRegistrationEnabled ?? boolEnv("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED", false),
     oidcIssuer: overrides.oidcIssuer ?? process.env.OPEN_SCIENCE_OIDC_ISSUER ?? "",
     oidcClientId: overrides.oidcClientId ?? process.env.OPEN_SCIENCE_OIDC_CLIENT_ID ?? "",
     oidcClientAuthMethod:

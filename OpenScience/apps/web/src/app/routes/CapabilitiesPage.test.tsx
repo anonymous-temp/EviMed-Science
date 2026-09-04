@@ -72,7 +72,6 @@ const agents = [
 const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
   hasWebApi: true,
-  sessionView: "run-stream" as "run-stream" | "legacy",
 }));
 
 vi.mock("@/lib/apiClient", () => ({
@@ -80,7 +79,6 @@ vi.mock("@/lib/apiClient", () => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
-  webRuntimeProfile: () => ({ sessionView: mocks.sessionView }),
 }));
 
 function LocationProbe() {
@@ -93,7 +91,6 @@ describe("CapabilitiesPage", () => {
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     mocks.hasWebApi = true;
-    mocks.sessionView = "run-stream";
     useUiStore.setState({ composerDraft: null });
   });
 
@@ -171,37 +168,21 @@ describe("CapabilitiesPage", () => {
     // package the session is married to — so the URL carries no agent and the
     // draft carries the capability by name.
     render(
-      <MemoryRouter initialEntries={["/agents"]}>
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
         <Routes>
-          <Route path="/agents" element={<CapabilitiesPage />} />
-          <Route path="/live" element={<LocationProbe />} />
+          <Route path="/app/capabilities" element={<CapabilitiesPage />} />
+          <Route path="/app/chat" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     );
     await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析模板/ }));
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/live"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
     expect(screen.getByTestId("location")).not.toHaveTextContent("agent=");
     const draft = useUiStore.getState().composerDraft ?? "";
     expect(draft).toContain("药品安全性分析");
     expect(draft).toContain("分析奥希替尼相关的心脏安全性信号");
     expect(draft).toBe(capabilityBrief("药品安全性分析", "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"));
-  });
-
-  it("keeps the retiring view's session binding, because the desktop shell still renders it", async () => {
-    mocks.sessionView = "legacy";
-    render(
-      <MemoryRouter initialEntries={["/agents"]}>
-        <Routes>
-          <Route path="/agents" element={<CapabilitiesPage />} />
-          <Route path="/live" element={<LocationProbe />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    await userEvent.click(await screen.findByRole("button", { name: /使用药品安全性分析模板/ }));
-
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/live?agent=adr-analysis"));
-    expect(useUiStore.getState().composerDraft).toBeNull();
   });
 
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {

@@ -69,7 +69,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   // the user reviews and sends it (human in the loop, never auto-run).
   const reproduce = (r: ProvenanceRecord) => {
     setComposerDraft(reproducePrompt(r));
-    navigate(r.sessionId ? `/live/${r.sessionId}` : "/live");
+    navigate(r.sessionId ? `/app/chat/${r.sessionId}` : "/app/chat");
   };
 
   useEffect(() => {
@@ -168,7 +168,7 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
                   {r.sessionId && (
                     <button
                       className="flex items-center gap-1 text-link hover:underline"
-                      onClick={() => navigate(`/live/${r.sessionId}`)}
+                      onClick={() => navigate(`/app/chat/${r.sessionId}`)}
                       title="打开此版本的来源对话"
                     >
                       <MessageSquare size={12} /> 打开对话

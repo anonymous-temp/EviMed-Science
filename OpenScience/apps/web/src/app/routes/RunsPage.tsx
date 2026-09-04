@@ -354,7 +354,7 @@ function HostedRunsView() {
       `复查科研运行 \`${run.id}\`（${activeAgent ? `${run.mode === "open-domain" ? "开放域路由 · " : ""}${activeAgent}` : "开放域科研"}）。` +
         `请读取该会话的原始消息、工具记录和产物，核对证据来源、失败项与可复现性；不要重新编造缺失数据。`,
     );
-    navigate(`/live/${run.sessionId}`);
+    navigate(`/app/chat/${run.sessionId}`);
   };
 
   const toggle = (value: WebAgentRunStatus | "degraded") =>
@@ -448,7 +448,7 @@ function HostedRunsView() {
                   open={expanded === run.id}
                   onToggle={() => setExpanded((e) => (e === run.id ? null : run.id))}
                   onReproduce={() => reproduce(run)}
-                  onOpenConversation={() => navigate(`/live/${run.sessionId}`)}
+                  onOpenConversation={() => navigate(`/app/chat/${run.sessionId}`)}
                 />
               ))}
             </DaySection>

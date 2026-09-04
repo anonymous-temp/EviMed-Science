@@ -387,6 +387,8 @@ export interface WebReadiness {
 
 export interface WebAuthMethods {
   mode: "development" | "local" | "oidc";
+  /** Whether this deployment accepts new accounts. Only ever true for `local`. */
+  selfRegistration?: boolean;
   oidc?: {
     label: string;
     startUrl: string;
@@ -544,6 +546,24 @@ export async function loginWeb(username: string, password: string): Promise<void
   notifyWebSessionStarted();
 }
 
+/**
+ * Create an account and sign in with it, in one call.
+ *
+ * The server signs the new account in itself, so this settles the same way a
+ * login does — including the session-started event the shell listens for.
+ */
+export async function registerWeb(username: string, password: string, name?: string): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("auth.register");
+  const res = await fetch(apiUrl("/auth/register"), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, ...(name ? { name } : {}) }),
+  });
+  await parseApiResponse<{ user: { id: string; name: string }; csrfToken?: string }>(res);
+  notifyWebSessionStarted();
+}
+
 export async function loginDevelopmentWeb(): Promise<void> {
   if (!hasWebApi) throw new BackendUnavailableError("auth.devLogin");
   const res = await fetch(apiUrl("/auth/dev-login"), {
@@ -569,8 +589,8 @@ export async function fetchWebAuthMethods(): Promise<WebAuthMethods> {
   return parseApiResponse<WebAuthMethods>(res);
 }
 
-export function getWebOidcStartUrl(returnTo = "/settings"): string {
-  const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/settings";
+export function getWebOidcStartUrl(returnTo = "/app/settings"): string {
+  const safeReturnTo = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/app/settings";
   return `${apiUrl("/auth/oidc/start")}?returnTo=${encodeURIComponent(safeReturnTo)}`;
 }
 
