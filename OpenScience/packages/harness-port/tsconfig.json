@@ -11,7 +11,7 @@
     "strict": true,
     "resolveJsonModule": true,
     "types": ["node"],
-    "typeRoots": ["../../apps/desktop/node_modules/@types", "../../apps/server/node_modules/@types"]
+    "typeRoots": ["../../apps/web/node_modules/@types", "../../apps/server/node_modules/@types"]
   },
   "include": ["index.mjs", "src/**/*.mjs", "test/**/*.mjs"]
 }

@@ -4,7 +4,7 @@
 // It was documented in AGENTS.md and checked nowhere outside this package's own
 // neighbour — `packages/socket/test/socket.test.mjs` walks `socket/plugins` and
 // `socket/src`, which is two directories out of a repository. `apps/server`,
-// `apps/desktop` and every other package could import a harness package with
+// `apps/web` and every other package could import a harness package with
 // nothing to say so. A documented rule with no enforcement is not a boundary;
 // it is a note about one someone hoped for.
 //

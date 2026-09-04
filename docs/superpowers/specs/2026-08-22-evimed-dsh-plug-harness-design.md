@@ -2998,6 +2998,10 @@ capsule-<capsuleId>-v<version>.evimedcap          zip（仅存储或 deflate）
 
 ## 附 B：OpenCode 残留清零清单（P2 退出标准）
 
+> **状态（2026-09-04）：PR-delete 已执行，前两类归零。** 删除的是 `apps/desktop/src-tauri`、`packages/sdk`、`runtime/harness`、`apps/desktop/src/lib/runtime.ts`(2049 行)、`LiveSessionPage` 与 `WorkspaceChip`，另加可达性扫描扫出的 14 个因此变孤儿的模块。范围比本清单大三处，都是删掉 Rust 壳之后才成立的：`isTauri` / `hasCommandBackend` 两个常量（后者与 `hasWebApi` 已是同一个谓词）、`lib/tauri.ts` 里 25 个只在桌面下有意义的函数（该文件收成 `lib/backend.ts`，只留九个还有调用者的）、`lib/runs.ts` 与 RunsPage 的桌面运行视图（读本地 SQLite 索引）。`apps/desktop` 同步改名 `apps/web`、包名 `@ai4s/desktop` → `@ai4s/web`（§9.8），`@tauri-apps/*` 依赖与桌面打包工作流 `.github/workflows/build.yml` 一并移除。第三类（评测历史产物）按本清单保留不动。
+>
+> #23 把删除拆成 PR-flip → 静养 → PR-delete 三步，理由是「翻默认那一刻旧栈就是回滚杆」。那根杆在 2026-09-01 被用户裁决取消（决策 #24，无回滚、无窗口），所以这一步执行时没有杆可拆。
+
 2026-08-22 对 `OpenScience/` 的检索（排除 `node_modules`、`PROGRESS.md`、lockfile）：**216 个文件**提到 OpenCode。按处置分三类；P2 的退出标准是前两类归零，`grep -rIli opencode` 只剩第三类。
 
 | 处置 | 范围 | 文件（数量） |

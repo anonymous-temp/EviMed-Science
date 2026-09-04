@@ -434,7 +434,7 @@ export OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE="$PWD/.openscience-local/bootstrap-p
 pnpm configure:local-auth
 
 OPEN_SCIENCE_DATA_DIR=.openscience-web-data \
-OPEN_SCIENCE_STATIC_DIR=apps/desktop/dist \
+OPEN_SCIENCE_STATIC_DIR=apps/web/dist \
 OPEN_SCIENCE_AUTH_MODE=local \
 OPEN_SCIENCE_DEV_AUTH=false \
 OPEN_SCIENCE_BOOTSTRAP_USER=admin \
@@ -448,13 +448,13 @@ Build the frontend first:
 
 ```bash
 VITE_OPEN_SCIENCE_API_URL=http://127.0.0.1:8787/api \
-pnpm --filter @ai4s/desktop build
+pnpm --filter @ai4s/web build
 ```
 
 When the frontend is served by the same Node server, `/api` is enough:
 
 ```bash
-VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/desktop build
+VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/web build
 ```
 
 Useful runtime controls:
@@ -1404,10 +1404,9 @@ OPEN_SCIENCE_SMOKE_PASSWORD="$(pass show open-science/admin-password)" \
 pnpm smoke:deployment
 CI=true pnpm --filter @ai4s/server test
 pnpm --filter @ai4s/server test:e2e
-pnpm --filter @ai4s/desktop typecheck
-CI=true pnpm --filter @ai4s/desktop test
-CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/desktop build
-cd apps/desktop/src-tauri && cargo check
+pnpm --filter @ai4s/web typecheck
+CI=true pnpm --filter @ai4s/web test
+CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/web build
 ```
 
 Root-level shortcuts:

@@ -35,9 +35,9 @@ Working language: discussion in Chinese is fine, but **code, files, comments, an
 
 Read `OpenScience/AGENTS.md` first — it is the authoritative rules file (its `CLAUDE.md` is a symlink to it; edit only `AGENTS.md`). pnpm monorepo `evimed-science` v0.1.3 (root `engines.node >= 22.22.0`, `pnpm@9.4.0`; workspace globs `apps/*` + `packages/*`):
 
-- `apps/desktop` — Tauri 2 + React + Vite shell (`@ai4s/desktop`); frontend in `src/app/`, `src/components/` (incl. `components/ui/` primitives), `src/lib/`; Rust in `src-tauri/`.
+- `apps/web` — Tauri 2 + React + Vite shell (`@ai4s/web`); frontend in `src/app/`, `src/components/` (incl. `components/ui/` primitives), `src/lib/`; Rust in `src-tauri/`.
 - `apps/server` — plain-Node (`.mjs`, no build step) hosted web boundary (`@ai4s/server`); two entrypoints — `src/index.mjs` (HTTP API) and `src/runtimeControllerIndex.mjs` (`start:controller`). Not typeless: `tsconfig.json` runs `checkJs` over `src/**/*.mjs` and ESLint gates it at `--max-warnings 0`, so `pnpm lint` / `pnpm typecheck:server` cover it.
-- `packages/` — `domain` (`@evimed/domain`, the vocabulary every other package derives from: tool names, contract kinds, the workspace layout, the state vocabularies, the error-code registry, the delivery-gate rules), `harness-port` (the anti-corruption layer in front of the kernel, and **the only package allowed to import `@deepseek-ai/*`**), `socket` (`@evimed/dsh-socket` — the `evimed-universal` plugin composition the runtime image plugs into the kernel), `contracts` (one directory per tracked upstream pin), `shared`, and `sdk` (the desktop `RuntimeClient`, retiring together with the desktop shell); `packages/ui` is a README-only placeholder (real primitives live in `apps/desktop/src/components/ui/`).
+- `packages/` — `domain` (`@evimed/domain`, the vocabulary every other package derives from: tool names, contract kinds, the workspace layout, the state vocabularies, the error-code registry, the delivery-gate rules), `harness-port` (the anti-corruption layer in front of the kernel, and **the only package allowed to import `@deepseek-ai/*`**), `socket` (`@evimed/dsh-socket` — the `evimed-universal` plugin composition the runtime image plugs into the kernel), `contracts` (one directory per tracked upstream pin), `shared`, and `sdk` (the desktop `RuntimeClient`, retiring together with the desktop shell); `packages/ui` is a README-only placeholder (real primitives live in `apps/web/src/components/ui/`).
 - `runtime/` — `mcp` (`evimed-research` MCP server with its own Python unittest suite), `kernel` (the Python/R notebook bridge), `harness` (design notes and knowledge for the kernel migration), `skills` (`core`, `community`, `curated-scientific` and `office` are what the runtime image ships whole; `evimed` and `external` predate `capabilities/` — the image takes only `open-domain-answer` out of `evimed`, and the rest of that tree survives as one of the four places a capability's `preflight.py` is copied to, held byte-identical by `test/capabilityPreflightCopiesAgree.test.mjs`). Capability packages live at the repo root in `capabilities/` (`capability.yaml` + SKILL.md + scripts) with their shared skill bodies in `capability-skills/`.
 - `deploy/` — `web/` (Caddyfile + docker-compose stacks: saas, oidc, local-auth, monitoring, backup, receipt + `release-manifest.json`), `runtime-dsh/` (the hosted runtime image — Debian, Node, uv, R, Chromium, the pinned DSH kernel, the socket bundle, the capability manifests, and a profile pre-initialized at build time so the container never writes to its own installation at run time), `specialist-adapter/` (Python adapter for the `项目代码/` agents, with Dockerfiles), `tooluniverse/`, `memos/`.
 - `evals/` — Python eval harnesses: `capability-audit`, `drug-evidence-quality`, `geo-content`, `geo-gate-coverage`, `open-domain-answer-quality`, `research-grant-development`, `specialist-smoke`, `title-to-paper`, `writing-incidents`. `examples/` — `bci-trends`, `climate-trends`.
@@ -62,20 +62,19 @@ Surrounding infrastructure: `runtimeManager.mjs` (~4.1k lines, the largest modul
 ```bash
 cd OpenScience
 pnpm install
-pnpm dev            # desktop frontend (Vite); `pnpm --filter @ai4s/desktop tauri dev` for the full shell
+pnpm dev            # desktop frontend (Vite); `pnpm --filter @ai4s/web tauri dev` for the full shell
 pnpm dev:server     # hosted web / server variant
 pnpm dev:evimed     # local EviMed-flavored dev stack (scripts/dev/start-evimed-local.mjs)
 pnpm build          # build desktop; `pnpm build:web` for the hosted bundle
 pnpm typecheck      # tsc --noEmit (desktop); `typecheck:server` for apps/server (checkJs over .mjs)
 pnpm lint           # ESLint: desktop AND server (`lint:server` alone for the server)
-pnpm check:tauri    # cargo check for the Rust side (apps/desktop/src-tauri)
 pnpm test           # desktop unit tests (Vitest)
 pnpm test:server    # server tests (node --test test/*.test.mjs)
 pnpm test:mcp       # runtime/mcp/evimed-research Python unittest suite
 pnpm test:web       # test:mcp + test:server + lint:server + typecheck:server + typecheck + test
 pnpm test:web:e2e   # hosted production e2e (scripts/ops/hosted-production-e2e.mjs)
 pnpm ci:web         # full CI pipeline: test:web + all audits + build:web
-# single desktop test: pnpm --filter @ai4s/desktop exec vitest run <file> -t "<name>"
+# single desktop test: pnpm --filter @ai4s/web exec vitest run <file> -t "<name>"
 # single server test:  pnpm --filter @ai4s/server exec node --test test/<file>.test.mjs
 #   (server also has focused `test:unit` and `test:contract` scripts)
 ```

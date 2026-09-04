@@ -504,11 +504,11 @@ Monorepo:
 
 ```text
 ai4s-workbench/
-  apps/desktop/{src,src-tauri}/
+  apps/web/                        # the React single-page frontend
   apps/server/                     # the hosted web boundary and control plane
-  packages/{domain,harness-port,socket,contracts,shared,sdk,ui}/
+  packages/{domain,harness-port,socket,contracts,shared,ui}/
   capabilities/  capability-skills/
-  runtime/{mcp,kernel,harness,skills}/
+  runtime/{mcp,kernel,skills}/
   deploy/{web,runtime-dsh,specialist-adapter,memos,tooluniverse}/
   deps-version.json                # the one place an upstream pin is written
   docs/{PRD.md,TECHNICAL_DESIGN.md}
@@ -517,8 +517,8 @@ ai4s-workbench/
 ```
 
 - `apps/server` — the hosted web boundary; owns the only connection to a kernel.
-- `apps/desktop` — Tauri + React desktop app; `packages/sdk` is its client wrapper and
-  retires together with the desktop shell.
+- `apps/web` — the React single-page frontend, served by `apps/server`. The Tauri
+  desktop shell and its browser-side kernel client were deleted on 2026-09-04.
 - `packages/harness-port` — the anti-corruption layer; the only importer of
   `@deepseek-ai/*`.
 - `packages/socket` — the `evimed-universal` plugin composition.

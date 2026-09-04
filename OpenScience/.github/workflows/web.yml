@@ -31,14 +31,6 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: apps/desktop/src-tauri
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -99,17 +91,13 @@ jobs:
         run: pnpm audit:dependencies
 
       - name: Typecheck frontend
-        run: pnpm --filter @ai4s/desktop typecheck
+        run: pnpm --filter @ai4s/web typecheck
 
       - name: Test frontend
-        run: CI=true pnpm --filter @ai4s/desktop test
+        run: CI=true pnpm --filter @ai4s/web test
 
       - name: Build hosted frontend
-        run: CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/desktop build
-
-      - name: Check Tauri backend
-        working-directory: apps/desktop/src-tauri
-        run: cargo check
+        run: CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/web build
 
   docker-hosted:
     runs-on: ubuntu-22.04

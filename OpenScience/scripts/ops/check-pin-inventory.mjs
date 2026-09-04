@@ -109,7 +109,7 @@ export const RULES = [
   { kind: "pin", where: /^OpenScience\/docs\/WEB_DEPLOYMENT\.md$/, why: "operator instructions must name the version being deployed" },
   { kind: "pin", where: /^OpenScience\/apps\/server\/src\/config\.mjs$/, why: "the control plane refuses a runtime that is not this version" },
   { kind: "pin", where: /^OpenScience\/apps\/server\/test\//, why: "a fixture or an assertion that a derived copy equals the pin; moves with them" },
-  { kind: "pin", where: /^OpenScience\/apps\/desktop\/src\//, why: "frontend commentary naming the kernel it decodes" },
+  { kind: "pin", where: /^OpenScience\/apps\/web\/src\//, why: "frontend commentary naming the kernel it decodes" },
 ];
 
 /**

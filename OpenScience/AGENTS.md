@@ -1,4 +1,4 @@
-# EviMed Science (hosted SaaS + optional desktop)
+# EviMed Science (hosted SaaS)
 
 Brand name: **EviMed** — an AI research workbench for evidence-based medicine.
 (Bundle identifier stays `com.ai4s.workbench` and
@@ -18,25 +18,27 @@ Keep it **simple, explicit, clear, complete**.
 
 ## What this project is
 
-The primary release is a hosted, multi-tenant SaaS research platform. The same
-frontend can also be packaged as an optional local-first desktop workbench for
-macOS and Windows, but desktop packaging is not the core production release.
-See `README.md`, `docs/PRD.md`, and `docs/TECHNICAL_DESIGN.md`.
+A hosted, multi-tenant SaaS research platform. There is no second form: the
+optional desktop packaging was deleted on 2026-09-04 along with the Tauri shell
+and the browser-side kernel client. See `README.md`, `docs/PRD.md`, and
+`docs/TECHNICAL_DESIGN.md`.
 
-Recommended stack: **Tauri 2 + React + TypeScript + Vite**, Tailwind (design-token CSS variables; hand-built components + cmdk + lucide; only one Radix package remains: `react-popover`),
+Stack: **React + TypeScript + Vite**, Tailwind (design-token CSS variables; hand-built components + cmdk + lucide; only one Radix package remains: `react-popover`),
 **DeepSeek Harness** as the agent kernel, one per project runtime container, reached
 only by the control plane (never by a browser),
-local workspace + SQLite + JSONL provenance.
+per-project workspace + JSONL provenance.
 
 ## Repository map
 
-- `apps/desktop/` — Tauri + React desktop shell (`src/` frontend, `src-tauri/` Rust).
-  Frontend layout: `src/app/` (router, routes, layout, providers), `src/components/`
-  (feature components + `components/ui/` primitives: Button, Input/Textarea, Card,
-  SegmentedControl, ConfirmDialog, Toaster, EmptyState, Skeletons, ShortcutHelp),
-  `src/lib/` (stores, runtime, hooks). There is no `src/features/` — it was removed.
+- `apps/web/` — the React single-page frontend (`@ai4s/web`), served by `apps/server`.
+  Layout: `src/app/` (router — every page under `/app`, layout, providers),
+  `src/components/` (feature components + `components/ui/` primitives: Button,
+  Input/Textarea, Card, SegmentedControl, ConfirmDialog, Toaster, EmptyState,
+  Skeletons, ShortcutHelp), `src/lib/` (api client, project store, run stream).
+  There is no desktop packaging: the Tauri shell, its Rust command layer,
+  `packages/sdk` and the browser-side kernel store were deleted on 2026-09-04.
 - `packages/` — `ui` (placeholder README only — real primitives live in
-  `apps/desktop/src/components/ui/`), `shared`, `domain` (`@evimed/domain` — the
+  `apps/web/src/components/ui/`), `shared`, `domain` (`@evimed/domain` — the
   vocabulary every other package derives from: tool names, contract kinds, the
   workspace layout, the four state vocabularies, the error-code registry and the
   delivery-gate rules), `harness-port` (the only package that may import
@@ -45,7 +47,7 @@ local workspace + SQLite + JSONL provenance.
   preset (`guidance`, `run-policy`, `evidence`, `capsule`, `screening`,
   `review`) plus `seam-probe` and `evidence-store`, inserted by the bundle's
   own `cordis.patch.yml`), `contracts` (one
-  directory per tracked upstream pin), `sdk` (retiring with the desktop shell).
+  directory per tracked upstream pin).
 - `capabilities/` — one directory per capability: `capability.yaml` (the only
   definition of a capability) plus its SKILL.md and scripts. `capability-skills/`
   holds the shared skill bodies delegation pre-injects.
@@ -56,8 +58,7 @@ local workspace + SQLite + JSONL provenance.
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
 - `runtime/` — `mcp` (the `evimed` research server, 26 tools), `kernel` (the
-  Python/R notebook bridge), `harness` (design notes and knowledge from the
-  kernel migration), `skills` (the general skill libraries the image ships:
+  Python/R notebook bridge), `skills` (the general skill libraries the image ships:
   `core`, `community`, `curated-scientific`, `office`; `evimed` and `external`
   predate `capabilities/` — the image takes only `open-domain-answer` out of
   `evimed`, and the rest of that tree survives as one of the four places a
@@ -100,7 +101,7 @@ local workspace + SQLite + JSONL provenance.
   first tagged release, so the discipline is: exact pin, fail-closed startup
   self-check, contract tests with golden frames, nightly matrix, security fixes
   evaluated the day they land.
-- Keep the frontend, desktop shell, and agent runtime decoupled.
+- Keep the frontend, the control plane, and the agent runtime decoupled.
 - Skills, MCP servers, and model providers must stay pluggable.
 - Keep the artifact schema and workflow templates stable and versioned.
 

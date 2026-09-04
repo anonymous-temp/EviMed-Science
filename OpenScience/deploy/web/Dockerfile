@@ -8,9 +8,8 @@ RUN corepack enable && corepack prepare pnpm@9.4.0 --activate
 RUN pnpm config set registry "${NPM_REGISTRY}"
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/desktop/package.json apps/desktop/package.json
+COPY apps/web/package.json apps/web/package.json
 COPY apps/server/package.json apps/server/package.json
-COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
 RUN pnpm install --frozen-lockfile
@@ -36,7 +35,7 @@ RUN for pack in runtime/skills/external/ai4s-skills; do \
 
 ARG VITE_OPEN_SCIENCE_API_URL=/api
 ENV VITE_OPEN_SCIENCE_API_URL=${VITE_OPEN_SCIENCE_API_URL}
-RUN pnpm --filter @ai4s/desktop build
+RUN pnpm --filter @ai4s/web build
 RUN pnpm --filter @ai4s/server deploy --prod /server
 
 FROM ${NODE_BASE_IMAGE} AS runtime
@@ -62,7 +61,7 @@ ENV NODE_ENV=production
 ENV OPEN_SCIENCE_HOST=0.0.0.0
 ENV OPEN_SCIENCE_PORT=8787
 ENV OPEN_SCIENCE_DATA_DIR=/data
-ENV OPEN_SCIENCE_STATIC_DIR=/app/apps/desktop/dist
+ENV OPEN_SCIENCE_STATIC_DIR=/app/apps/web/dist
 ENV OPEN_SCIENCE_EXAMPLES_DIR=/app/examples
 ENV OPEN_SCIENCE_APP_VERSION=${APP_VERSION}
 ENV OPEN_SCIENCE_RELEASE_ID=${RELEASE_ID}
@@ -76,7 +75,7 @@ COPY --from=build /server ./apps/server
 # config dependency during the kernel migration, after the last image was built,
 # so nothing noticed until an image built from that code was first run.
 COPY --from=build /app/deps-version.json ./deps-version.json
-COPY --from=build /app/apps/desktop/dist ./apps/desktop/dist
+COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/runtime/skills/core ./runtime/skills/core
 COPY --from=build /app/runtime/skills/external/ai4s-skills ./runtime/skills/external/ai4s-skills
 COPY --from=build /app/runtime/skills/curated-scientific ./runtime/skills/curated-scientific

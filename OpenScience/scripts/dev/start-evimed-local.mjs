@@ -7,7 +7,7 @@ import { ensureLocalMemos, registerMemosCleanup } from "./local-memos.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const secretsDir = path.resolve(rootDir, "..", ".evimed-local", "secrets");
-const staticDir = path.join(rootDir, "apps", "desktop", "dist");
+const staticDir = path.join(rootDir, "apps", "web", "dist");
 const memosRoot = path.resolve(rootDir, "..", "记忆模块");
 const memosDataDir = path.resolve(rootDir, "..", ".evimed-local", "memos");
 

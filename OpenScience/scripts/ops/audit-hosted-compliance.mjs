@@ -32,6 +32,28 @@ async function read(rel) {
   return fs.readFile(path.join(repoRoot, rel), "utf8");
 }
 
+/**
+ * Every matching file under a directory, concatenated.
+ *
+ * For checks whose subject is the absence of something anywhere in a tree. A
+ * check like that must fail loudly when the walk finds nothing, or deleting or
+ * renaming the tree turns it into a permanent pass.
+ */
+async function readTree(rel, pattern) {
+  const root = path.join(repoRoot, rel);
+  const files = [];
+  const walk = async (dir) => {
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (pattern.test(entry.name)) files.push(full);
+    }
+  };
+  await walk(root);
+  if (files.length === 0) throw new Error(`readTree(${rel}) matched no files; the walk, not the tree, is wrong`);
+  return (await Promise.all(files.map((file) => fs.readFile(file, "utf8")))).join("\n");
+}
+
 function bashComposeStartupBlocks(document) {
   return [...document.matchAll(/```bash\s*\n([\s\S]*?)```/g)]
     .map((match) => match[1])
@@ -681,7 +703,6 @@ async function checkScientificCapabilityDelivery() {
   const officeEntrypoints = officeExecutable.flatMap(([skill, contract]) =>
     (contract.entrypoints ?? []).map((entrypoint) => path.join(officeRoot, skill, entrypoint)),
   );
-  const tauriConfig = await read("apps/desktop/src-tauri/tauri.conf.json");
   const fetchSkills = await read("scripts/dev/fetch-skills.sh");
   if (
     office.license === "MIT" &&
@@ -689,12 +710,10 @@ async function checkScientificCapabilityDelivery() {
     officeExecutable.length === 4 &&
     officeEntrypoints.every((entrypoint) => existsSync(entrypoint)) &&
     inRuntimeImage(/runtime\/skills\/office/) &&
-    /skills-office/.test(tauriConfig) &&
-    !/anthropic-skills/.test(tauriConfig) &&
     !/ANTHROPIC_SKILLS_(?:COMMIT|ARCHIVE|LICENSE)/.test(fetchSkills) &&
     /the four first-party Office skills execute independent artifact smoke tests/.test(skillTests)
   ) {
-    pass("first_party_office_artifact_chain", "Four first-party MIT Office exporters have executable entrypoints, parseable-artifact tests, and desktop/Hosted packaging.", {
+    pass("first_party_office_artifact_chain", "Four first-party MIT Office exporters have executable entrypoints, parseable-artifact tests, and runtime-image packaging.", {
       executable: officeExecutable.length,
     });
   } else {
@@ -1137,13 +1156,11 @@ async function checkWorkspaceIoBoundary() {
 
 async function checkHostedNotebookKernel() {
   const commands = await read("apps/server/src/commands.mjs");
-  const editor = await read("apps/desktop/src/components/notebook/NotebookEditor.tsx");
-  const notebooksPage = await read("apps/desktop/src/app/routes/NotebooksPage.tsx");
-  const inspector = await read("apps/desktop/src/components/inspector/NotebookInspector.tsx");
+  const editor = await read("apps/web/src/components/notebook/NotebookEditor.tsx");
+  const notebooksPage = await read("apps/web/src/app/routes/NotebooksPage.tsx");
   const serverTests = await read("apps/server/test/server.test.mjs");
-  const editorTests = await read("apps/desktop/src/components/notebook/NotebookEditor.web.test.tsx");
-  const pageTests = await read("apps/desktop/src/app/routes/NotebooksPage.web.test.tsx");
-  const inspectorTests = await read("apps/desktop/src/components/inspector/NotebookInspector.web.test.tsx");
+  const editorTests = await read("apps/web/src/components/notebook/NotebookEditor.web.test.tsx");
+  const pageTests = await read("apps/web/src/app/routes/NotebooksPage.web.test.tsx");
   const deploymentSmoke = await read("scripts/ops/deployment-smoke.mjs");
   const workflow = await read(".github/workflows/web.yml");
 
@@ -1152,18 +1169,16 @@ async function checkHostedNotebookKernel() {
     /activeKernelExecutions/.test(commands) &&
     /AbortSignal\.any/.test(commands) &&
     /Kernel execution was reset/.test(commands) &&
-    /const kernelActionsEnabled = !hostedWeb \|\| hasCommandBackend/.test(editor) &&
+    /const kernelActionsEnabled = hasWebApi/.test(editor) &&
     !/hostedWeb && lang !== "python"/.test(editor) &&
     !/!hostedWeb \|\| cell\.language === "python"/.test(editor) &&
     /kernelReset\(runningLanguageRef\.current, path, root\)/.test(editor) &&
     !/hostedWeb && language !== "python"/.test(notebooksPage) &&
-    /kernelReset\("python"\)/.test(inspector) &&
     /kernel_execute mounts the workspace selected by a base-scoped notebook/.test(serverTests) &&
     /kernel_reset aborts an in-flight execution/.test(serverTests) &&
     /runs Python cells through the hosted command backend/.test(editorTests) &&
     /runs R cells through the hosted command backend/.test(editorTests) &&
     /offers Python and R hosted notebook creation/.test(pageTests) &&
-    /stops an in-flight hosted expression/.test(inspectorTests) &&
     /async function smokeKernel/.test(deploymentSmoke) &&
     /project-scoped Python\/R scientific kernels read\/write ok/.test(deploymentSmoke) &&
     /OPEN_SCIENCE_ENABLE_KERNEL=true/.test(workflow) &&
@@ -1177,53 +1192,58 @@ async function checkHostedNotebookKernel() {
 }
 
 async function checkHostedDesktopBoundary() {
-  const appShell = await read("apps/desktop/src/app/layout/AppShell.tsx");
-  const settings = await read("apps/desktop/src/app/routes/SettingsPage.tsx");
+  // This used to check that the hosted build took the "not desktop" branch at
+  // a dozen call sites. There is no other branch now — the packaged shell, its
+  // Tauri bridge and the browser-side kernel client were deleted on
+  // 2026-09-04 — so the check is that those branches cannot come back by
+  // accident, plus the half that was never about the frontend: the server
+  // still refuses the mutations a browser must not make.
+  const frontend = await readTree("apps/web/src", /\.(ts|tsx)$/);
+  const settings = await read("apps/web/src/app/routes/SettingsPage.tsx");
   const commands = await read("apps/server/src/commands.mjs");
-  const appShellTests = await read("apps/desktop/src/app/layout/AppShell.web.test.tsx");
-  const settingsTests = await read("apps/desktop/src/app/routes/SettingsPage.test.tsx");
+  const settingsTests = await read("apps/web/src/app/routes/SettingsPage.test.tsx");
   const serverTests = await read("apps/server/test/server.test.mjs");
 
   if (
-    /if \(isTauri\) void ensureJupyter\(\)/.test(appShell) &&
-    /if \(hostedWeb\) setJupyter\(null\)/.test(settings) &&
-    /else setJupyter\(await jupyterStatus\(\)\)/.test(settings) &&
+    !/@tauri-apps/.test(frontend) &&
+    !/\bisTauri\b/.test(frontend) &&
+    !/jupyterStatus|setupJupyter|ensureJupyter/.test(settings) &&
     /approval_mode_managed/.test(commands) &&
     /remove_config_entry\(\) \{[\s\S]*?Provider and MCP configuration is managed by the server deployment/.test(commands) &&
-    /without probing Jupyter provisioning/.test(appShellTests) &&
-    /jupyterStatus\)\.not\.toHaveBeenCalled/.test(settingsTests) &&
+    /offers no model, credential or approval control/.test(settingsTests) &&
     /approval policy is immutable through the hosted command API/.test(serverTests) &&
     /provider and MCP mutation commands fail explicitly/.test(serverTests)
   ) {
-    pass("hosted_desktop_boundary", "Hosted Web does not probe desktop Jupyter provisioning, keeps approval policy operator-owned, and explicitly rejects browser-side provider or MCP mutation commands.");
+    pass("hosted_desktop_boundary", "The frontend has no desktop bridge left to call, its settings page offers no model, credential or approval control, and the server explicitly rejects browser-side provider, MCP and approval mutation.");
   } else {
-    fail("hosted_desktop_boundary_missing", "Hosted Web must not invoke deferred desktop provisioning or allow authenticated users to mutate process-wide approval, provider, or MCP policy.");
+    fail("hosted_desktop_boundary_missing", "The frontend must carry no desktop bridge and no provisioning or policy control, and the server must reject browser-side provider, MCP or approval mutation.");
   }
 }
 
 async function checkHostedEventStreamRecovery() {
-  const runtime = await read("apps/desktop/src/lib/runtime.ts");
-  // The class these two files hold is the browser's HTTP/SSE client, and it was
-  // always kernel-neutral — only its name carried the retired kernel, and the
-  // rename to `RuntimeClient` caught up with that. The property below is about
-  // reconnect recovery and nothing else.
-  const sdk = await read("packages/sdk/src/RuntimeClient.ts");
-  const runtimeTests = await read("apps/desktop/src/lib/runtime.store.test.ts");
-  const sdkTests = await read("apps/desktop/src/test/runtime-client.node.test.ts");
+  // The browser used to hold a kernel client and recover by re-reading the
+  // kernel's own session state after a dropped SSE stream. It reads the control
+  // plane's run stream now, so recovery is resumption by our own sequence
+  // number: a reconnecting tab says where it got to, replayed frames it has
+  // already applied are no-ops, and a gap the server cannot replay is reported
+  // rather than papered over.
+  const stream = await read("apps/web/src/lib/runStream.ts");
+  const hook = await read("apps/web/src/lib/useRunStream.ts");
+  const streamTests = await read("apps/web/src/lib/runStream.test.ts");
+  const hookTests = await read("apps/web/src/lib/useRunStream.test.tsx");
 
   if (
-    /EventSource auto-reconnects; reflect the transient state[\s\S]*?this\.setStatus\("connecting"\)/.test(sdk) &&
-    /if \(openedOnce\) void recoverAfterEventReconnect\(c, set, get\)/.test(runtime) &&
-    /get\(\)\.refreshSessions\(\)/.test(runtime) &&
-    /refreshInteractiveRequests\(c, set\)/.test(runtime) &&
-    /await get\(\)\.reconcileRunning\(\)/.test(runtime) &&
-    /repairs missed turn and approval state after an established SSE stream reconnects/.test(runtimeTests) &&
-    /does not repopulate cleared account state when reconnect recovery finishes after logout/.test(runtimeTests) &&
-    /source!\.onerror\?\.\(\)[\s\S]*?source!\.onopen\?\.\(\)/.test(sdkTests)
+    /\?since=\$\{encodeURIComponent\(String\(options\.since\)\)\}/.test(stream) &&
+    /if \(frame\.seq <= view\.seq && frame\.type !== "stream\/gap"\) return view;/.test(stream) &&
+    /case "stream\/gap":/.test(stream) &&
+    /reconnection resumes from `view\.seq`/.test(hook) &&
+    /ignores a frame it has already applied, so a reconnect does not duplicate anything/.test(streamTests) &&
+    /surfaces a replay gap so a client that fell too far behind re-reads instead of guessing/.test(streamTests) &&
+    /counts reconnects instead of retrying silently/.test(hookTests)
   ) {
-    pass("hosted_event_stream_recovery", "Hosted EventSource reconnects established streams, reconciles missed server state, and rejects late recovery writes after logout or client replacement.");
+    pass("hosted_event_stream_recovery", "Hosted run streams resume by sequence number, ignore replayed frames, and report a gap the server could not replay.");
   } else {
-    fail("hosted_event_stream_recovery_missing", "Hosted SSE reconnect must restore transport status and reconcile state that may have changed while the browser was disconnected.");
+    fail("hosted_event_stream_recovery_missing", "Hosted run streams must resume from the client's own sequence number, treat replayed frames as no-ops, and surface an unreplayable gap.");
   }
 }
 
@@ -1232,7 +1252,7 @@ async function checkTaskResourceControl() {
   const serverTests = await read("apps/server/test/server.test.mjs");
   const controllerTests = await read("apps/server/test/runtimeController.test.mjs");
   const compose = await read("deploy/web/docker-compose.yml");
-  const taskUi = await read("apps/desktop/src/components/settings/WebTasksCard.tsx");
+  const taskUi = await read("apps/web/src/components/settings/WebTasksCard.tsx");
 
   if (
     /projectHydrations/.test(taskManager) &&
@@ -1555,14 +1575,14 @@ async function checkReleaseProvenance() {
 
   if (
     [
-      "apps/desktop/src",
+      "apps/web/src",
       "apps/server/src",
-      "packages/sdk/src",
+      "packages/domain",
       "packages/shared/src",
     ].every((sourcePath) => releaseGenerator.includes(`"${sourcePath}"`)) &&
     /digestDirectory\(full, \{ errorPrefix: "release_input" \}\)/.test(releaseGenerator)
   ) {
-    pass("release_manifest_source_coverage", "Release manifests bind deterministic digests of the complete hosted frontend, server, SDK, and shared source trees.");
+    pass("release_manifest_source_coverage", "Release manifests bind deterministic digests of the complete hosted frontend, server, domain, and shared source trees.");
   } else {
     fail("release_manifest_source_coverage_missing", "Release manifests must detect content and file-set drift across all hosted source trees.");
   }

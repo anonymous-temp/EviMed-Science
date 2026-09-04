@@ -2636,6 +2636,59 @@ test("production auth rejects anonymous requests and accepts login cookies", asy
   });
 });
 
+test("a browser holding a deleted project's id can still open its account", async () => {
+  // A browser remembers its project and sends it on every request, including
+  // the one the shell asks before it renders anything. Deleting that project
+  // -- from another device, or from this one with the tab still open -- used
+  // to make this route 404: the account became unopenable, and logging in
+  // again did not help, because the browser sent the same dead id.
+  await withAuthApp(async ({ base }) => {
+    const loggedIn = await login(base);
+
+    const created = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers: {
+        Cookie: loggedIn.cookie,
+        "Content-Type": "application/json",
+        "X-Open-Science-CSRF": loggedIn.csrfToken,
+      },
+      body: JSON.stringify({ id: "paper1", name: "Paper 1" }),
+    });
+    assert.equal(created.status, 200);
+
+    const deleted = await fetch(`${base}/api/projects/paper1`, {
+      method: "DELETE",
+      headers: {
+        Cookie: loggedIn.cookie,
+        "Content-Type": "application/json",
+        "X-Open-Science-CSRF": loggedIn.csrfToken,
+      },
+      body: JSON.stringify({ confirm: "paper1" }),
+    });
+    assert.equal(deleted.status, 200);
+
+    const me = await fetch(`${base}/api/me`, {
+      headers: { Cookie: loggedIn.cookie, "X-Open-Science-Project": "paper1" },
+    });
+    assert.equal(me.status, 200);
+    // And it says which project it actually selected, so the browser can
+    // correct itself rather than keep sending the dead one.
+    assert.equal((await me.json()).data.project.id, "default");
+  });
+
+  // Every other route still refuses it. The fallback is for the one read the
+  // shell cannot recover from, not a licence to silently redirect work into
+  // another project.
+  await withAuthApp(async ({ base }) => {
+    const loggedIn = await login(base);
+    const runs = await fetch(`${base}/api/agent-runs`, {
+      headers: { Cookie: loggedIn.cookie, "X-Open-Science-Project": "never-existed" },
+    });
+    assert.equal(runs.status, 404);
+    assert.equal((await runs.json()).code, "project_not_found");
+  });
+});
+
 test("production auth ignores malformed cookie values without internal errors", async () => {
   await withAuthApp(async ({ base }) => {
     let res = await fetch(`${base}/api/me`, {
