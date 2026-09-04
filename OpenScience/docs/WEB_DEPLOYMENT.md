@@ -606,6 +606,37 @@ use OIDC for provider-managed MFA, recovery, and broader access. Deleting the
 bootstrap account creates a tombstone, so recovery requires a deliberately new
 bootstrap username or a controlled user-state restore rather than a restart.
 
+### Admitting other people
+
+`OPEN_SCIENCE_AUTH_MODE=local` starts with exactly one account, the bootstrap
+one, and there is no operator command that creates a second. The supported way
+to admit anyone else is to open registration:
+
+```bash
+OPEN_SCIENCE_SELF_REGISTRATION_ENABLED=1
+```
+
+It is off by default, and it has one prerequisite that is a decision rather
+than a setting: **set the spend caps first.** Registration without a cap means
+any account that reaches the deployment can spend against the model gateway
+without bound, and the caps are per account, so they only bound anything once
+accounts stop being one.
+
+```bash
+OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT=20     # in the price list's currency
+OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT=80
+OPEN_SCIENCE_MAX_PROJECTS_PER_USER=20
+```
+
+Read a month of `/api/account/usage` before choosing the numbers. A cap nobody
+chose from real usage fires at the worst possible moment, which is why the
+default is no cap rather than a guess.
+
+Registration does not make this deployment `individual-saas`-ready: readiness
+keeps declaring `oidc-identity` unconfigured, because a local password store is
+not a managed identity provider and declaring otherwise would be a claim the
+deployment cannot back.
+
 ## Production OIDC
 
 Register this exact redirect URI with the identity provider:
