@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchWebMe, hasWebApi, webRuntimeProfile } from "@/lib/apiClient";
 import { LiveSessionPage } from "./LiveSessionPage";
 import { RunStreamSessionPage } from "./RunStreamSessionPage";
@@ -21,6 +21,10 @@ import { RuntimeUiFrame } from "./RuntimeUiFrame";
 export function SessionRoute() {
   const [view, setView] = useState(() => webRuntimeProfile().sessionView);
   const [uiOrigin, setUiOrigin] = useState(() => webRuntimeProfile().uiOrigin);
+  const [uiUnreachable, setUiUnreachable] = useState(false);
+  // Stable identity: the frame probes on this callback changing, and an inline
+  // arrow would make it probe again on every render.
+  const markUnreachable = useCallback(() => setUiUnreachable(true), []);
 
   useEffect(() => {
     if (!hasWebApi) return;
@@ -41,8 +45,13 @@ export function SessionRoute() {
   }, []);
 
   // A deployment that serves the kernel's application serves it as the session
-  // surface; the built-in views are what a deployment without it renders, and
-  // what the desktop shell renders.
-  if (uiOrigin) return <RuntimeUiFrame />;
+  // surface; the built-in views are what a deployment without it renders, what
+  // the desktop shell renders, and what this browser falls back to when it
+  // cannot reach that origin. Falling back rather than spinning is the point:
+  // the origin is a second port, and a port is what a firewall in front of
+  // this deployment can refuse without either side being broken.
+  if (uiOrigin && !uiUnreachable) {
+    return <RuntimeUiFrame onUnreachable={markUnreachable} />;
+  }
   return view === "run-stream" ? <RunStreamSessionPage /> : <LiveSessionPage />;
 }

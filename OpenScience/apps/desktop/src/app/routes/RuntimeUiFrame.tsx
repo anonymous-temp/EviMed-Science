@@ -21,7 +21,7 @@ import { getWebProjectId, webRuntimeProfile } from "@/lib/apiClient";
  * application then owns its own URL, and re-pinning on every render would walk
  * over wherever the person had navigated to inside it.
  */
-export function RuntimeUiFrame() {
+export function RuntimeUiFrame({ onUnreachable }: { onUnreachable?: () => void }) {
   const origin = webRuntimeProfile().uiOrigin;
   const projectId = getWebProjectId();
   const [loaded, setLoaded] = useState(false);
@@ -38,6 +38,30 @@ export function RuntimeUiFrame() {
   useEffect(() => {
     setLoaded(false);
   }, [src]);
+
+  // Whether the browser can reach that origin at all, asked before the frame
+  // is trusted to show anything.
+  //
+  // The origin is a second port on the same host, and a port is the one part
+  // of this that something between the browser and the server can refuse: a
+  // cloud firewall, a corporate proxy, a captive network. An iframe cannot
+  // report that — `onerror` does not fire for a network failure and `onload`
+  // fires for an error page — so a frame pointed at an unreachable origin
+  // spins forever and reads as the product being broken. A `no-cors` request
+  // is the one thing that answers the question honestly across origins: it
+  // resolves opaque when something answered and rejects when nothing did.
+  useEffect(() => {
+    if (!origin || !onUnreachable) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    void fetch(`${origin.replace(/\/+$/, "")}/`, { mode: "no-cors", credentials: "include", signal: controller.signal })
+      .catch(() => onUnreachable())
+      .finally(() => clearTimeout(timer));
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [origin, onUnreachable]);
 
   if (!origin) return null;
 
