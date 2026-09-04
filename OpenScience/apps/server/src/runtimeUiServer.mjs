@@ -30,11 +30,21 @@
 import { createServer } from "node:http";
 
 import { isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
+import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError } from "./security.mjs";
 
 /** The cookie naming the project this origin is showing. */
-export const RUNTIME_UI_PROJECT_COOKIE = "evimed_ui_project";
+export /**
+ * The methods that make the deployment spend money.
+ *
+ * Only prompting does: everything else the application calls reads state,
+ * navigates or renders. Refusing those on a spend cap would lock someone out
+ * of work they have already paid for.
+ */
+const RUNTIME_UI_SPENDING_METHODS = new Set(["session/prompt"]);
+
+const RUNTIME_UI_PROJECT_COOKIE = "evimed_ui_project";
 
 /** @param {any} req @param {string} name @returns {string} */
 function cookieValue(req, name) {
@@ -148,6 +158,16 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     }
 
     const { project, pinned } = await resolveProject(req, res);
+
+    // Where a turn begins on this surface. A run started inside the kernel's
+    // application never passes through `/api/agent-runs/dispatch`, so a spend
+    // cap that only guarded dispatch would be one the primary surface walks
+    // around. It is this method and not the runtime's start, because starting
+    // a runtime is what reading a transcript also does, and reading your own
+    // finished work is not spending.
+    if (RUNTIME_UI_SPENDING_METHODS.has(method)) {
+      await assertSpendWithinLimits(config, project.userId);
+    }
     // Pinning is a redirect rather than a rewrite so the application never
     // sees the query parameter: it would carry it into its own history and
     // into the URLs it builds, and a stale `?project=` in a bookmark would
