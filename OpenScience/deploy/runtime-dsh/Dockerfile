@@ -51,9 +51,6 @@ ARG UV_LICENSE_MIT_SHA256=860e3d7a86b84e6a7012c7a635fc64df475cebc6cce34dfeb73a59
 ARG GITHUB_DOWNLOAD_PREFIX=
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG APP_VERSION=0.1.3
-ARG RELEASE_ID=untracked
-ARG SOURCE_REVISION=unknown
-ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
 ARG APT_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ARG PIP_INDEX_URL=https://pypi.org/simple
@@ -61,9 +58,6 @@ ARG PIP_INDEX_URL=https://pypi.org/simple
 LABEL org.opencontainers.image.title="EviMed agent runtime"
 LABEL org.opencontainers.image.description="Server-managed DeepSeek Harness runtime image for hosted EviMed workspaces."
 LABEL org.opencontainers.image.source="https://github.com/ai4s-research/open-science"
-LABEL org.opencontainers.image.version="${RELEASE_ID}"
-LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
-LABEL org.opencontainers.image.created="${BUILD_CREATED}"
 LABEL io.open-science.app.version="${APP_VERSION}"
 LABEL io.open-science.dsh.version="${DSH_VERSION}"
 # Kernel-neutral pair. The readiness gate used to read
@@ -504,3 +498,19 @@ WORKDIR /workspace
 VOLUME ["/workspace", "/runtime"]
 
 CMD ["dsh", "--version"]
+
+# Release identity, last on purpose.
+#
+# These three change on every release and nothing else in the image depends on
+# them. Declared up with the other ARGs, they invalidated the build cache from
+# the first LABEL that read one — which sat above the apt install, the R
+# packages, Chromium, the npm closure and the profile build. A release that
+# changed one line of server code therefore paid for a forty-minute rebuild of
+# the whole runtime, every time, and the tax fell hardest on the releases that
+# should be cheapest to ship.
+ARG RELEASE_ID=untracked
+ARG SOURCE_REVISION=unknown
+ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
+LABEL org.opencontainers.image.version="${RELEASE_ID}"
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED}"
