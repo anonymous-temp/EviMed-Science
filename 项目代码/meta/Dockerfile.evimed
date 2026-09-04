@@ -3,7 +3,24 @@ FROM ${PYTHON_BASE_IMAGE}
 
 ARG APP_VERSION=0.9.0
 ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG APT_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 WORKDIR /app
+
+# A forest plot with Chinese axis labels needs a CJK face, and this image had
+# none: every zh manuscript it rendered carried tofu boxes, and nothing said so
+# because the agent's font search is designed to degrade with a warning. The
+# sibling specialist image installs the same package; this one is built from a
+# different Dockerfile and was simply missed. The test at the end is what makes
+# the install evidence rather than intent -- a mirror that omits the package
+# must fail the build.
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then sources=/etc/apt/sources.list.d/debian.sources; else sources=/etc/apt/sources.list; fi; \
+    sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" "$sources"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends fonts-noto-cjk; \
+    rm -rf /var/lib/apt/lists/*; \
+    test -n "$(find /usr/share/fonts -iname '*CJK*' -print -quit)"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
