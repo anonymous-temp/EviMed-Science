@@ -2715,6 +2715,21 @@ test("a browser holding a deleted project's id can still open its account", asyn
   });
 });
 
+test("an account that has spent nothing gets zeros, not an error", async () => {
+  // The usage log does not exist until the first model call, and a fresh
+  // account asking what it has spent must not be told the server broke.
+  await withAuthApp(async ({ base }) => {
+    const loggedIn = await login(base);
+    const response = await fetch(`${base}/api/account/usage`, { headers: { Cookie: loggedIn.cookie } });
+    assert.equal(response.status, 200);
+    const usage = (await response.json()).data;
+    assert.equal(usage.calls, 0);
+    assert.equal(usage.cost, 0);
+    assert.deepEqual(usage.byModel, []);
+    assert.ok(Date.parse(usage.since) > 0, "the period it covers is stated even when it is empty");
+  });
+});
+
 test("this month's usage is the month's, not the last hundred log lines", async () => {
   // The other ledgers are read with a row-capped tail, which is right for
   // "show me recent audit lines" and wrong for a total: a hundred rows is a
