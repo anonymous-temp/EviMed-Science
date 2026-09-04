@@ -273,6 +273,18 @@ services:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS: ${OPEN_SCIENCE_WEB_SEARCH_TIMEOUT_MS:-30000}
+      # The GEO probe channel: what the consumer LLM front-ends actually answer.
+      # Empty disables it and `geo_visibility_probe` refuses with a stated
+      # reason, which is the right answer for a deployment that cannot measure
+      # -- an estimate presented as a measurement is the failure that tool
+      # exists to avoid. These four were read by the server and passed by
+      # nothing, so setting the URL in `.env` did exactly nothing and said
+      # nothing; compose forwards env item by item.
+      OPEN_SCIENCE_GEO_PROBE_URL: ${OPEN_SCIENCE_GEO_PROBE_URL:-}
+      OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/geo-probe/v1}
+      OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT: ${OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT:-}
+      OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ${OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS:-360000}
+      OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE: ${OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE:-}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS:-60000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES:-16777216}
       OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_MODEL_GATEWAY_TIMEOUT_MS:-300000}
