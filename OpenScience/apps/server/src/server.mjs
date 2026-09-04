@@ -498,7 +498,14 @@ export function createWebApiApp(overrides = {}) {
       const user = await store.userById(project.userId);
       if (!user) return null;
       const full = await store.requireProject(user, project.id);
-      return agentRuns.adoptRuntimeSession(full, sessionId);
+      // Routed on what the person actually asked, exactly as a dispatch is.
+      // Adoption used to file the run with no agent at all, which meant no
+      // deliverable contract and so nothing for the delivery gate to check --
+      // work that ran outside the evidence rules and was only labelled as such.
+      // The first user message is already there by the time a session stops
+      // being blank, which is what makes routing possible at adoption.
+      const routed = await routeAdoptedSession(full, sessionId).catch(() => ({}));
+      return agentRuns.adoptRuntimeSession(full, sessionId, routed);
     },
   });
   let agentRuns;
@@ -686,6 +693,47 @@ export function createWebApiApp(overrides = {}) {
   const operationalMetrics = new OperationalMetrics();
   let activeCommands = 0;
   let startupRuntimeCleanup = null;
+
+  /**
+   * The contract an adopted session should be graded against.
+   *
+   * The same two steps a dispatch takes -- the named/regex router and the model
+   * classifier, then the answer line for anything they do not claim -- reading
+   * the question out of the session's own transcript instead of a request body.
+   * @param {Record<string, any>} project @param {string} sessionId
+   */
+  async function routeAdoptedSession(project, sessionId) {
+    const transcript = await runtimeManager.sessionTranscript(project, sessionId, { wake: false });
+    const first = (transcript?.messages ?? []).find((message) => message.role === "user");
+    const text = (first?.parts ?? [])
+      .map((part) => (part?.type === "text" ? String(/** @type {any} */ (part).text ?? "") : ""))
+      .join(" ")
+      .trim();
+    if (!text) return {};
+    const registry = await agentRegistry;
+    const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const named = routeNamedSpecialist(text, routableAgents);
+    /** @type {{ failure?: string, verdict?: string }} */
+    const trace = {};
+    const specialist = named ?? await specialistClassifier.classify(text, routableAgents, trace)
+      ?? routeOpenDomainSpecialist(text, routableAgents, { afterCleanNone: trace.verdict === "none" });
+    const answerAgent = specialist ? null : registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
+    const effective = specialist ?? (answerAgent
+      ? {
+          agentId: answerAgent.id,
+          agentVersion: answerAgent.version,
+          runtimeAgent: answerAgent.runtimeAgent,
+          reason: "unrouted:open-domain",
+        }
+      : null);
+    return {
+      question: text,
+      effectiveAgentId: effective?.agentId ?? null,
+      effectiveAgentVersion: effective?.agentVersion ?? null,
+      effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
+      effectiveRouteReason: effective?.reason ?? null,
+    };
+  }
 
   async function context(req, res) {
     const user = await store.ensureUser(req, res);

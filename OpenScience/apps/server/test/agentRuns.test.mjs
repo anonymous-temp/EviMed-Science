@@ -5489,9 +5489,24 @@ test("an adopted run is marked unchecked and a dispatch may take its session ove
     assert.equal(adopted.mode, "open-domain");
     assert.equal(adopted.effectiveRouteReason, "adopted:runtime-ui");
     assert.equal(adopted.effectiveRuntimeAgent, null);
-    // The one machine-readable field that separates ungated work from work
-    // that passed. A layer that could not run has to say so.
+    // Nothing to grade against, because no question was supplied to route on.
+    // The one machine-readable field that separates ungated work from work that
+    // passed has to say so.
     assert.equal(adopted.verification, "unchecked");
+
+    // With a question, the same routing a dispatch gets, and then it is graded
+    // like any other run rather than labelled ungradable.
+    const routed = await store.adoptRuntimeSession(project, "ses_routed", {
+      question: "run a meta-analysis of SGLT2 inhibitors",
+      effectiveAgentId: "meta-analysis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-meta-analysis",
+      effectiveRouteReason: "matched:meta-analysis",
+    });
+    assert.equal(routed.effectiveRuntimeAgent, "evimed-meta-analysis");
+    assert.equal(routed.effectiveRouteReason, "adopted:runtime-ui:matched:meta-analysis");
+    assert.equal(routed.question, "run a meta-analysis of SGLT2 inhibitors");
+    assert.equal(routed.verification, null, "a routed adoption has a contract, so it is not unchecked");
 
     // Adopting twice is the same run: a burst of announcements must not file
     // the same session repeatedly.
