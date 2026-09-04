@@ -223,6 +223,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/logs/")) return "/api/logs/:kind";
   if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
+  if (pathname.startsWith("/api/runtime-ui/")) return "/api/runtime-ui/*";
   if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/* (retired)";
   if (pathname.startsWith("/api/runs/") && pathname.includes("/interactions/")) return "/api/runs/:id/interactions/:eventId";
   if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events")) return "/api/runs/:id/events";
@@ -1362,6 +1363,20 @@ export function createWebApiApp(overrides = {}) {
       // requests into an anonymous 404 and lose the one chance to name the
       // replacement. The vendor word survives here as a wire identifier, not
       // as a live dependency.
+      // The kernel's own browser application, per project, behind this
+      // session. `/api/opencode/` above is the retired route that let a browser
+      // talk to a kernel directly and answers 410; this is not that. It is the
+      // control plane forwarding, with the caller's project resolved here, the
+      // browser-session cookie minted here, and the same quota accounting,
+      // deadlines and response-header sanitising every runtime call gets. It is
+      // off unless the deployment turns it on.
+      if (pathname.startsWith("/api/runtime-ui/")) {
+        const ctx = await context(req, res);
+        const suffix = pathname.slice("/api/runtime-ui".length) || "/";
+        await runtimeManager.proxy(req, res, ctx.project, suffix, { surface: "ui" });
+        return;
+      }
+
       if (pathname.startsWith("/api/opencode/")) {
         throw new HttpError(
           410,

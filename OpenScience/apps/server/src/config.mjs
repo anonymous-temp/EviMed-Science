@@ -895,6 +895,13 @@ export function loadConfig(overrides = {}) {
     // public source. Empty means the deployment has no measured-visibility
     // channel, and the tool says so instead of the runtime silently getting
     // nothing back and reporting a brand as absent.
+    // The kernel's own browser application, proxied per project behind this
+    // control plane's session. Off by default: switching it on lets an
+    // authenticated browser reach that kernel's whole surface, which is the
+    // rule the pass-through route was retired to enforce, so it is an
+    // operator's decision rather than a deployment default.
+    runtimeUiProxyEnabled: overrides.runtimeUiProxyEnabled
+      ?? boolEnv("OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED", false),
     geoProbeUrl: overrides.geoProbeUrl ?? process.env.OPEN_SCIENCE_GEO_PROBE_URL ?? "",
     geoProbeGatewayInternalUrl:
       overrides.geoProbeGatewayInternalUrl ??

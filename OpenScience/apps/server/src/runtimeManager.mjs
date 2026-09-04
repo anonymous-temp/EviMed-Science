@@ -340,6 +340,19 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project) {
   return responseHeaders;
 }
 
+/**
+ * One audit row per asset kind rather than per asset.
+ *
+ * The kernel's application requests hashed bundle names, so auditing the raw
+ * path would make every deploy of it a new route in the metrics.
+ */
+function uiProxyAuditTarget(suffix) {
+  const pathname = suffix.split("?")[0] || "/";
+  if (pathname === "/" || pathname === "/index.html") return "/";
+  if (/^\/api(?:\/|$)/.test(pathname)) return pathname.replace(/^(\/api\/[^/]+).*$/, "$1");
+  return `/asset${pathname.replace(/\/[^/]*$/, "/*")}`;
+}
+
 function proxyAuditTarget(suffix) {
   const pathname = suffix.split("?")[0] || "/";
   return pathname
@@ -3532,10 +3545,23 @@ export class RuntimeManager {
     throw new HttpError(502, mapped.code, mapped.message);
   }
 
-  async proxy(req, res, project, suffix) {
+  /**
+   * @param {any} req @param {any} res @param {Record<string, any>} project
+   * @param {string} suffix @param {{ surface?: string }} [options]
+   *
+   * `surface: "ui"` forwards the kernel's own browser application instead of
+   * the retired route vocabulary. Three things differ and nothing else does:
+   * which routes are allowed, whether the OpenCode-era `directory` and
+   * `auth_token` query parameters are rewritten, and whether the minted
+   * browser-session cookie is attached. Everything the hosted proxy already
+   * does -- the project's quota accounting, the connect and request deadlines,
+   * response-header sanitising, the audit row -- is the same code, because a
+   * second proxy would be a second set of those decisions to keep in step.
+   */
+  async proxy(req, res, project, suffix, { surface = "runtime" } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
-    const target = proxyAuditTarget(suffix);
+    const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
     let status = null;
     let streaming = false;
     let error = null;
@@ -3547,7 +3573,8 @@ export class RuntimeManager {
     try {
       this.beginProxy(project);
       proxyActive = true;
-      this.enforceProxyAllowlist(req, suffix);
+      if (surface === "ui") this.enforceUiProxyEnabled();
+      else this.enforceProxyAllowlist(req, suffix);
       await bufferProxyRequestBody(req, method, this.config.maxJsonBytes);
       requestBytes = Buffer.isBuffer(req.__openScienceProxyBody) ? req.__openScienceProxyBody.length : requestBytes;
       await this.enforcePreStartProxyPolicy(req, suffix);
@@ -3566,9 +3593,12 @@ export class RuntimeManager {
       const incoming = new URL(req.url ?? "/", "http://open-science.local");
       const upstream = new URL(`${runtime.url}${suffix}`);
       for (const [key, value] of incoming.searchParams) {
-        if (key !== "directory" && key !== "auth_token") upstream.searchParams.append(key, value);
+        if (surface === "ui") upstream.searchParams.append(key, value);
+        else if (key !== "directory" && key !== "auth_token") upstream.searchParams.append(key, value);
       }
-      upstream.searchParams.set("directory", runtime.proxyWorkspaceDir ?? project.workspaceDir);
+      if (surface !== "ui") {
+        upstream.searchParams.set("directory", runtime.proxyWorkspaceDir ?? project.workspaceDir);
+      }
 
       const headers = {};
       for (const [key, value] of Object.entries(req.headers)) {
@@ -3578,6 +3608,12 @@ export class RuntimeManager {
         else if (value != null) headers[key] = value;
       }
       headers["accept-encoding"] = "identity";
+      // The browser's own cookies are stripped as hop-by-hop; the kernel's
+      // application needs the browser-session cookie this control plane minted
+      // for it, and the runtime record is where that cookie lives. Without it
+      // every request is answered "dsh web authentication required", which
+      // reads as the UI being broken rather than unauthenticated.
+      if (surface === "ui" && runtime.cookie) headers.cookie = runtime.cookie;
 
       const body = req.__openScienceProxyBody ?? (["GET", "HEAD"].includes(method) ? undefined : req);
       const controller = new AbortController();
@@ -4048,6 +4084,21 @@ export class RuntimeManager {
     const maxProject = positiveLimit(this.config.maxRuntimeProxyConnectionsPerProject);
     if (maxProject != null && this.activeProxyCountForProject(project) >= maxProject) {
       throw proxyLimitExceeded("this project", maxProject);
+    }
+  }
+
+  /**
+   * The kernel's own browser application is off unless an operator turns it on.
+   *
+   * Turning it on is a real change of exposure: an authenticated, project-scoped
+   * browser reaches that kernel's whole surface, which is what makes its UI
+   * usable and is also what the "the browser never reaches a kernel" rule was
+   * written to prevent. Shipping it dark means the code can land and be
+   * reviewed without moving anybody's boundary on the day it merges.
+   */
+  enforceUiProxyEnabled() {
+    if (!this.config.runtimeUiProxyEnabled) {
+      throw new HttpError(404, "runtime_ui_not_enabled", "The runtime browser application is not enabled on this deployment.");
     }
   }
 

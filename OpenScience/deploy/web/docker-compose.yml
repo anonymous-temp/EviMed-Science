@@ -281,6 +281,9 @@ services:
       # nothing, so setting the URL in `.env` did exactly nothing and said
       # nothing; compose forwards env item by item.
       OPEN_SCIENCE_GEO_PROBE_URL: ${OPEN_SCIENCE_GEO_PROBE_URL:-}
+      # The kernel's own browser application, proxied per project behind this
+      # control plane's session. Empty leaves it unreachable.
+      OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ${OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED:-}
       OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_GEO_PROBE_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/geo-probe/v1}
       OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT: ${OPEN_SCIENCE_GEO_PROBE_ALLOW_PLAINTEXT:-}
       OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS: ${OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS:-360000}
