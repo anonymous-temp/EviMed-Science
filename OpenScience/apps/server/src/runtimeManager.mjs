@@ -24,6 +24,7 @@ import {
   transcriptToLedgerMessages,
   sessionListItems,
 } from "./dshRuntimeAdapter.mjs";
+import { assertSpendWithinLimits } from "./usageMetering.mjs";
 import {
   HttpError,
   appendJsonLineNoFollow,
@@ -2434,6 +2435,13 @@ export class RuntimeManager {
     const key = this.key(project);
     await this.runtimeQuotaStops.get(key);
     await this.enforceProjectQuota(project);
+    // The other "before it starts" moment. A run begun inside the kernel's own
+    // browser application never passes through `/api/agent-runs/dispatch`, and
+    // that application is the primary surface — a spend cap that only guarded
+    // dispatch would be one the product's main path walks around. Checked on
+    // start rather than per request: an already-running turn is work already
+    // paid for, and stopping it delivers nothing for the money.
+    await assertSpendWithinLimits(this.config, project.userId);
     let existing = this.runtimes.get(key);
     if (existing && existing.workspaceDir !== project.workspaceDir) {
       await this.stop(project);

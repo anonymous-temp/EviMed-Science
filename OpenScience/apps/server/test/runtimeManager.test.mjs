@@ -2233,3 +2233,49 @@ test("a production deployment cannot serve the application at an address nobody 
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("starting a runtime is refused for an account over its spend cap", async () => {
+  // The other surface. A run begun inside the kernel's own browser application
+  // never passes through `/api/agent-runs/dispatch`, and that application is
+  // the primary one — a cap that only guarded dispatch would be a cap the
+  // product's main path walks around.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-spend-"));
+  try {
+    await mkdir(path.join(dataDir, ".openscience"), { recursive: true });
+    await writeFile(
+      path.join(dataDir, ".openscience", "usage.jsonl"),
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        resourceType: "model",
+        userId: "alice",
+        projectId: "paper1",
+        model: "deepseek-v4-pro",
+        cacheHit: 0,
+        cacheMiss: 1000,
+        output: 500,
+        cost: 40,
+        currency: "CNY",
+        priced: true,
+      })}\n`,
+      "utf8",
+    );
+
+    const manager = new RuntimeManager({ dataDir, userDailySpendLimit: 10, maxLogReadBytes: 1024 * 1024 });
+    // Bounded on purpose: "refused before anything starts" is the property, so
+    // a build that stopped refusing must fail here as a wrong answer rather
+    // than as a test that hangs on a real container start.
+    const refusal = await Promise.race([
+      manager.start(project).then(() => null, (error) => error),
+      sleep(5_000).then(() => "no refusal within 5s; start() got past the cap"),
+    ]);
+    assert.notEqual(refusal, "no refusal within 5s; start() got past the cap");
+    assert.equal(refusal?.status, 402);
+    assert.equal(refusal?.code, "credits_daily_limit_reached");
+
+    // "No cap set refuses nothing" is a property of the check itself and is
+    // covered where the check lives; asserting it here would mean waiting for
+    // a real container start to fail for its own unrelated reasons.
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
