@@ -50,6 +50,7 @@ export { runPhaseHistory };
 // from the public API without standing up a whole run, and the rule itself is
 // what a future kernel change would break.
 export { readRequiredFile as readRequiredFileForTest };
+export { serializeNext as ledgerTextForTest };
 
 const ledgerFileName = "runs.jsonl";
 const terminalStatuses = new Set(["succeeded", "failed", "canceled"]);
@@ -496,8 +497,34 @@ function runPhaseHistory(events, runId) {
   return { phase, illegalTransitions, notices }
 }
 
+/**
+ * The ledger with one more event on it, minus the progress rows that event
+ * supersedes.
+ *
+ * Progress is a live gauge: only a run's latest observation says anything, and
+ * the ones before it are a record of how often the monitor woke up. The
+ * started, dispatch and finished rows are the run's history and are never
+ * dropped.
+ *
+ * The rule used to live at the progress call site alone, which fixed the path
+ * that produced the bloat and left the path that has to survive it. A project
+ * reached 7,800 progress rows across 31 runs and stopped 114 bytes under the
+ * cap: progress kept writing, because it made its own room, and `finished`
+ * could not, because it did not -- so a run that had actually completed could
+ * never record that it had, and its monitor retried once a minute forever.
+ * Holding the rule here means no call site can be the one that forgets.
+ */
 function serializeNext(events, event, maxBytes) {
-  const text = `${[...events, event].map((item) => JSON.stringify(item)).join("\n")}\n`;
+  const superseded = new Set();
+  const keep = [...events, event];
+  for (let index = keep.length - 1; index >= 0; index -= 1) {
+    const item = keep[index];
+    if (item?.event !== "progress") continue;
+    if (superseded.has(item.id)) keep[index] = null;
+    else superseded.add(item.id);
+  }
+  const retained = keep.filter(Boolean);
+  const text = `${retained.map((item) => JSON.stringify(item)).join("\n")}\n`;
   if (Buffer.byteLength(text, "utf8") > maxBytes) {
     throw new HttpError(413, "agent_runs_too_large", "Agent run ledger exceeds its size limit.");
   }
@@ -2997,14 +3024,9 @@ export class AgentRunStore {
         toolCalls,
         ...(activity === null ? {} : { runSideActivity: activity }),
       };
-      // Only the latest observation of a run is worth keeping. Appending every
-      // one filled the ledger with 7,800 progress rows across 31 runs and left
-      // it 114 bytes under the limit, after which no further run could start at
-      // all: the ledger holds started/dispatch/finished, which cannot be
-      // dropped, in the same bounded file as progress, which is a live gauge
-      // and is replaced by its successor. Superseded rows for this run go.
-      const retained = events.filter((item) => !(item?.event === "progress" && item?.id === run.id));
-      const text = serializeNext(retained, event, this.maxBytes);
+      // Superseded progress rows go, for every run rather than only this one:
+      // `serializeNext` holds that rule now, so the terminal path drops them too.
+      const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
     });
     return true;
