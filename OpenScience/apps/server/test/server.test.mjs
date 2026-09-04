@@ -471,6 +471,31 @@ test("API responses include hosted security headers", async () => {
   });
 });
 
+test("the origin the shell frames is also an origin it may ask about", async () => {
+  // The shell asks whether the kernel application's origin is reachable before
+  // it frames it, because an iframe cannot report a network failure and a
+  // frame pointed at a blocked port spins forever. That question is a `fetch`,
+  // which `connect-src` governs — and with only `frame-src` widened, our own
+  // policy refused the probe, the probe reported the origin unreachable, and
+  // the frame was never rendered even when the origin was fine. Seen in a real
+  // browser on 2026-09-04, invisible to every test before this one, because a
+  // test browser enforces no CSP.
+  await withAuthApp(
+    async ({ base }) => {
+      const csp = (await fetch(`${base}/api/health`)).headers.get("content-security-policy") ?? "";
+      assert.match(csp, /frame-src https:\/\/science\.example\.com:8443/);
+      assert.match(csp, /connect-src 'self' https:\/\/science\.example\.com:8443/);
+    },
+    {
+      production: true,
+      publicUrl: "https://science.example.com",
+      allowMockRuntime: true,
+      runtimeUiProxyEnabled: true,
+      runtimeUiPublicOrigin: "https://science.example.com:8443",
+    },
+  );
+});
+
 test("production security headers do not allow browser-local runtime connections", async () => {
   await withAuthApp(
     async ({ base }) => {
@@ -483,6 +508,7 @@ test("production security headers do not allow browser-local runtime connections
       assert.equal(csp.includes("localhost"), false);
       assert.equal(csp.includes("ws:"), false);
       assert.equal(csp.includes("wss:"), false);
+      assert.match(csp, /frame-src 'none'/);
       assert.equal(res.headers.get("strict-transport-security"), "max-age=31536000");
     },
     {
