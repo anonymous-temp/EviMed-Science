@@ -5462,3 +5462,56 @@ test("a ledger that is genuinely too large is still refused", () => {
     /agent run ledger exceeds its size limit/i,
   );
 });
+
+
+test("an adopted run is marked unchecked and a dispatch may take its session over", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-adopt-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+
+    const bindings = new Map();
+    const store = new AgentRunStore({
+      get: async (_project, sessionId) => bindings.get(sessionId) ?? null,
+    }, {
+      model: "deepseek/deepseek-v4-pro",
+      agentRegistry: { list: async () => [] },
+    });
+
+    const adopted = await store.adoptRuntimeSession(project, "ses_from_the_browser");
+    assert.equal(adopted.mode, "open-domain");
+    assert.equal(adopted.effectiveRouteReason, "adopted:runtime-ui");
+    assert.equal(adopted.effectiveRuntimeAgent, null);
+    // The one machine-readable field that separates ungated work from work
+    // that passed. A layer that could not run has to say so.
+    assert.equal(adopted.verification, "unchecked");
+
+    // Adopting twice is the same run: a burst of announcements must not file
+    // the same session repeatedly.
+    const again = await store.adoptRuntimeSession(project, "ses_from_the_browser");
+    assert.equal(again.id, adopted.id);
+
+    // A session the control plane owns is never adopted, however it is announced.
+    bindings.set("ses_dispatched", { sessionId: "ses_dispatched", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+    assert.equal(await store.adoptRuntimeSession(project, "ses_dispatched"), null);
+
+    // And a dispatch on the adopted session takes it over rather than being
+    // refused by the placeholder that only exists because nothing else did.
+    bindings.set("ses_from_the_browser", { sessionId: "ses_from_the_browser", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+    const claimed = await store.createRun(project, bindings.get("ses_from_the_browser"), { baselineCursor: null });
+    assert.notEqual(claimed.id, adopted.id);
+    const all = await store.list(project);
+    const placeholder = all.find((run) => run.id === adopted.id);
+    assert.equal(placeholder.status, "canceled");
+    assert.equal(placeholder.errorCode, "superseded_by_dispatch");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

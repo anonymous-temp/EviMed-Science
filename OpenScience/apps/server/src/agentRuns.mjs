@@ -80,6 +80,9 @@ const maxQualityNoticeLength = 300;
 // firing on a stray word and the classifier answering at 0.76 look identical in
 // the ledger, and there is no way to tell which layer to fix.
 const routeReasonPattern = /^[a-z][a-z0-9_.:-]{0,63}$/;
+// What an adopted run is marked with, in the one field a reader and
+// `reserveRun` both look at.
+const adoptedRouteReason = "adopted:runtime-ui";
 
 function invalid(message) {
   return new HttpError(400, "invalid_agent_run", message);
@@ -2104,8 +2107,27 @@ export class AgentRunStore {
         ? null
         : [...runs.values()].find((run) => run.dispatchId === dispatchId);
       if (duplicate) return { run: duplicate, owner: false };
-      if ([...runs.values()].some((run) => run.sessionId === session.sessionId && run.status === "running")) {
+      const active = [...runs.values()].find((run) => run.sessionId === session.sessionId && run.status === "running");
+      // An adopted run is a placeholder for a session nobody had claimed. A
+      // dispatch is somebody claiming it, so it takes the session over instead
+      // of being refused by the placeholder -- otherwise the first real request
+      // on a session the browser application had already opened is answered
+      // `agent_run_active` by a run that exists only because nothing else did.
+      const adopted = active?.effectiveRouteReason === adoptedRouteReason;
+      if (active && !adopted) {
         throw new HttpError(409, "agent_run_active", "This research session already has an active run.");
+      }
+      if (adopted) {
+        events.push({
+          event: "finished",
+          id: active.id,
+          status: "canceled",
+          errorCode: "superseded_by_dispatch",
+          artifacts: [],
+          finishedAt: this.now().toISOString(),
+          durationMs: Math.max(0, Date.parse(this.now().toISOString()) - Date.parse(active.startedAt)),
+        });
+        runs.delete(active.id);
       }
       if (runs.size >= this.maxRuns) {
         throw new HttpError(409, "agent_run_limit_reached", "This project has reached its agent run limit.");
@@ -3151,6 +3173,56 @@ export class AgentRunStore {
    * @param {readonly any[]} projects
    * @returns {Promise<{ adopted: number }>}
    */
+  /**
+   * A kernel session this control plane did not start, recorded as a run.
+   *
+   * The browser application creates sessions directly on the kernel. Before
+   * this they existed nowhere in the ledger: the event pump followed only what
+   * a dispatch had registered, so such a session was never followed, its events
+   * reached no `/api/runs/:id/events` subscriber, and any approval it asked for
+   * was declined by a control plane that could not route it.
+   *
+   * Adopted as `open-domain` with no agent, because nobody chose one, and with
+   * `verification: "unchecked"` from the first event rather than at the end.
+   * That value already means "a layer did not run at all", and no layer can run
+   * here: the delivery gate checks a deliverable contract, and a session typed
+   * into a chat box declares none. Recording it as an ordinary run would make
+   * ungated work indistinguishable from work that passed.
+   *
+   * @param {Record<string, any>} project @param {string} sessionId
+   */
+  async adoptRuntimeSession(project, sessionId) {
+    const id = safeId(sessionId, "runtime session id");
+    const existing = (await this.list(project)).find((run) => run.sessionId === id);
+    if (existing) return existing;
+    // A session this control plane is starting is announced by the kernel
+    // before the dispatch has written its run, so "no run yet" does not mean
+    // "nobody owns it". What does mean that is the research session: a
+    // dispatch binds one first and refuses without it, and a session typed
+    // into the browser application has none. Adopting on the ledger alone
+    // raced every dispatch and took the session out from under it -- the run
+    // that followed was refused with `agent_run_active`.
+    if (await this.researchSessions.get(project, id)) return null;
+    // `reserveRun` rather than `createRun`: the latter forwards only the cursor
+    // and the dispatch id, so the route reason that marks this run adopted --
+    // the field `reserveRun` itself reads to decide a later dispatch may take
+    // the session over -- would have been dropped on the way in.
+    const { run } = await this.reserveRun(project, {
+      sessionId: id,
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    }, {
+      baselineCursor: null,
+      effectiveRouteReason: adoptedRouteReason,
+    });
+    await this.appendQualityNotices(project, run.id, [
+      "Started in the runtime's own browser application. It declares no deliverable contract, so the delivery gate did not run on this session.",
+    ], { unchecked: true });
+    return (await this.list(project)).find((item) => item.id === run.id) ?? run;
+  }
+
   async adoptRunningRuns(projects) {
     let adopted = 0;
     for (const project of projects) {

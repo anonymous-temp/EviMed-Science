@@ -458,7 +458,25 @@ export function createWebApiApp(overrides = {}) {
   // The kernel's own live stream, decoded onto the same fan-out. The flag is
   // what the pump was given when a second kernel without a downlink could be
   // selected; there is one kernel now and it always publishes one.
-  const runtimeEventPump = new RuntimeEventPump({ runEvents, isDshKernel: true });
+  const runtimeEventPump = new RuntimeEventPump({
+    runEvents,
+    isDshKernel: true,
+    // Sessions the runtime's own browser application creates. `agentRuns` is
+    // assigned just below, so this reads it at call time rather than closing
+    // over the binding before it exists.
+    //
+    // The pump holds only `{ userId, id }`; the ledger and the research-session
+    // store both read from a project's directories, so they need the full
+    // record. Handing them the pump's stub made both lookups fail quietly, and
+    // a check that cannot see the research session adopts every session the
+    // control plane is in the middle of starting.
+    adoptSession: async (project, sessionId) => {
+      const user = await store.userById(project.userId);
+      if (!user) return null;
+      const full = await store.requireProject(user, project.id);
+      return agentRuns.adoptRuntimeSession(full, sessionId);
+    },
+  });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
     agentRegistry,
@@ -1445,6 +1463,10 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/runtime/sessions" && req.method === "POST") {
         const ctx = await context(req, res);
         const created = await runtimeManager.createRuntimeSession(ctx.project);
+        // Told before it can be announced: the kernel emits `api-session/added`
+        // for this id, and without knowing the control plane minted it the pump
+        // would adopt the session out from under the dispatch about to use it.
+        runtimeEventPump.noteMintedSession(ctx.project, created.id);
         if (!created.id) throw new HttpError(502, "runtime_session_create_failed", "The runtime returned no session id.");
         sendJson(res, 200, { data: created });
         return;
@@ -1689,7 +1711,7 @@ export function createWebApiApp(overrides = {}) {
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
       // following makes it reconnect to a kernel that is going away.
-      runtimeEventPump.closeAll();
+      await runtimeEventPump.closeAll();
       await agentRuns.closeAll();
       await runtimeManager.closeAll();
       await new Promise((resolve, reject) => {

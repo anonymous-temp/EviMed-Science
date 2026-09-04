@@ -235,11 +235,22 @@ test("mock hosted contract pins specialty identity but cannot certify specialist
       .json.data.find((run) => run.id === openRun.json.data.id);
     assert.equal(openLedgerRun.effectiveRuntimeAgent, "evimed-open-domain-answer");
     const runs = await jsonFetch(`${base}/api/agent-runs`, { headers: scoped });
-    assert.equal(runs.json.data.length, 3);
-    assert.equal(runs.json.data.filter((run) => run.mode === "specialist").length, 2);
-    assert.equal(runs.json.data.filter((run) => run.mode === "open-domain").length, 1);
-    assert.equal(runs.json.data.filter((run) => run.mode === "specialist").every((run) => run.status === "failed"), true);
-    assert.equal(runs.json.data.find((run) => run.mode === "open-domain").status, "succeeded");
+    // Counted by what dispatched them rather than by total. A session the
+    // kernel already had -- which is what the runtime's own browser application
+    // leaves behind -- is adopted into the ledger, so the total is whatever the
+    // runtime happened to be carrying and says nothing. What this test is about
+    // is the three runs the control plane dispatched.
+    const dispatched = runs.json.data.filter((run) => run.effectiveRouteReason !== "adopted:runtime-ui");
+    const adoptedRuns = runs.json.data.filter((run) => run.effectiveRouteReason === "adopted:runtime-ui");
+    assert.equal(dispatched.length, 3);
+    assert.equal(dispatched.filter((run) => run.mode === "specialist").length, 2);
+    assert.equal(dispatched.filter((run) => run.mode === "open-domain").length, 1);
+    // An adopted run declares no deliverable contract, so no layer of the gate
+    // ran on it. It has to say so, or ungated work reads as work that passed.
+    assert.ok(adoptedRuns.every((run) => run.verification === "unchecked"), "an adopted run must not read as gated");
+    assert.ok(adoptedRuns.every((run) => run.mode === "open-domain" && run.effectiveRuntimeAgent === null));
+    assert.equal(dispatched.filter((run) => run.mode === "specialist").every((run) => run.status === "failed"), true);
+    assert.equal(dispatched.find((run) => run.mode === "open-domain").status, "succeeded");
 
     const artifact = await command(base, "read_artifact", { path: "mock-agent-artifact.md" }, scoped);
     assert.equal(artifact.json.data.encoding, "utf8");
