@@ -125,12 +125,15 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
 
 /**
  * @typedef {object} PumpProjectState
+ * @property {{ userId: string, id: string }} project
  * @property {AbortController} controller
  * @property {Map<string, string>} rootSessions - kernel sessionId -> run id, for a run's own top-level session
  * @property {Map<string, { runId: string, label: string, capability: string }>} childSessions - kernel sessionId -> owning run, for a subagent's session
  * @property {Map<string, AbortController>} follows - kernel sessionId -> the follow stream open for it
  * @property {(() => void) | null} resync - wakes the follow reconciler when the session maps change
  * @property {Map<string, { runId: string, kind: 'approval'|'question', adapter: DshRuntimeAdapter }>} pending - kernel eventId -> the question awaiting a person
+ * @property {Set<string>} adopting - sessions whose adoption is in flight, so a burst announces one run and not several
+ * @property {Set<string>} mintedSessions - sessions this control plane created, which are never adopted
  */
 
 /**
@@ -144,9 +147,20 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any> }} options
    */
-  constructor({ runEvents, isDshKernel, openMux = openRuntimeMux, callUnary = callRuntimeUnary, reconnectDelayMs = RUNTIME_DOWNLINK_RECONNECT_MS }) {
+  constructor({
+    runEvents,
+    isDshKernel,
+    openMux = openRuntimeMux,
+    callUnary = callRuntimeUnary,
+    reconnectDelayMs = RUNTIME_DOWNLINK_RECONNECT_MS,
+    // Called with a session the kernel announced that no run owns. Default is
+    // to ignore it, which is what this pump did before the runtime's own
+    // browser application could create one.
+    adoptSession = async () => null,
+  }) {
+    this.adoptSession = adoptSession;
     this.runEvents = runEvents;
     this.isDshKernel = isDshKernel;
     this.openMux = openMux;
@@ -158,6 +172,8 @@ export class RuntimeEventPump {
     this.reconnectDelayMs = reconnectDelayMs;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
+    /** Adoptions still writing, so `closeAll` can wait for them. @type {Set<Promise<void>>} */
+    this.inFlightAdoptions = new Set();
   }
 
   /** @param {{ userId: string, id: string }} project @returns {string} */
@@ -184,7 +200,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map() };
+    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), mintedSessions: new Set() };
     this.projects.set(key, state);
     this.#run(project, runtime, state, controller.signal).catch(() => {
       // isolated: evimed_runtime_event_pump_fatal_total — the loop below
@@ -205,12 +221,16 @@ export class RuntimeEventPump {
    * passed and the runner then sat on an open mux until it was killed, which
    * reads as "the suite hangs" and says nothing about a socket.
    */
-  closeAll() {
+  async closeAll() {
     for (const project of [...this.projects.keys()]) {
       const state = this.projects.get(project);
       state?.controller.abort();
       this.projects.delete(project);
     }
+    // Aborting stops the streams; it does not stop an adoption already writing
+    // to a project's ledger. Waiting is what makes "closed" mean the pump has
+    // stopped touching the data directory.
+    await Promise.allSettled([...this.inFlightAdoptions]);
   }
 
   /** Stops watching a project's runtime and forgets its session map. @param {{ userId: string, id: string }} project */
@@ -231,6 +251,20 @@ export class RuntimeEventPump {
    * @param {{ userId: string, id: string }} project
    * @param {{ id: string, sessionId?: string, status: string }} run
    */
+  /**
+   * A session this control plane created, so the pump never adopts it.
+   *
+   * Recorded at creation because that is the only moment the distinction
+   * exists: by the time the kernel announces it, a control-plane session and
+   * one typed into the browser application look identical from here.
+   * @param {{ userId: string, id: string }} project @param {string} sessionId
+   */
+  noteMintedSession(project, sessionId) {
+    if (!sessionId) return;
+    const state = this.projects.get(this.#key(project));
+    state?.mintedSessions.add(String(sessionId));
+  }
+
   noteRun(project, run) {
     const state = this.projects.get(this.#key(project));
     if (!state || !run?.sessionId) return;
@@ -387,7 +421,59 @@ export class RuntimeEventPump {
    * @param {DshRuntimeAdapter} adapter
    * @param {Record<string, any>} frame
    */
+  /**
+   * A session the kernel announced that this control plane did not start.
+   *
+   * The runtime's own browser application creates sessions directly, and
+   * before this they were invisible here: not followed, so no subscriber ever
+   * saw their events, and any approval they asked for was declined by a
+   * control plane with nowhere to route it. Adoption gives the session a run,
+   * which is what everything downstream is addressed by.
+   *
+   * Serialised per session so a burst of announcements cannot create two runs
+   * for one session, and failures are swallowed: an adoption that cannot be
+   * written is not a reason to drop the mux everything else rides on.
+   * @param {PumpProjectState} state @param {any} frame
+   */
+  #maybeAdopt(state, frame) {
+    if (frame?.event !== "api-session/added") return;
+    const summary = Array.isArray(frame.args) ? frame.args[0] : null;
+    const sessionId = summary && typeof summary === "object" ? String(summary.sessionId ?? "") : "";
+    if (!sessionId) return;
+    if (state.rootSessions.has(sessionId) || state.childSessions.has(sessionId)) return;
+    // A session this control plane minted is announced by the kernel before
+    // anything has been bound to it or dispatched on it, so "the ledger has no
+    // run for it" and "the research-session store has never heard of it" are
+    // both true of a session that is seconds away from being both. Only who
+    // created it settles this, and only the creator knows.
+    if (state.mintedSessions.has(sessionId)) return;
+    // A subagent's session is announced the same way and is already owned by
+    // its parent's run; adopting it would file the same work twice.
+    if (summary.parentSessionId || summary.origin === "subagent") return;
+    if (state.adopting.has(sessionId)) return;
+    state.adopting.add(sessionId);
+    // Tracked, not fired and forgotten. An adoption writes to the project's
+    // ledger, and a pump that closed without waiting for it left a write
+    // landing in a directory the caller had already started removing.
+    const inFlight = Promise.resolve(this.adoptSession(state.project, sessionId))
+      .then((run) => {
+        if (run?.id && !state.controller.signal.aborted) {
+          state.rootSessions.set(sessionId, run.id);
+          state.resync?.();
+        }
+      })
+      .catch(() => {
+        // isolated: evimed_runtime_session_adoption_failed_total
+      })
+      .finally(() => {
+        state.adopting.delete(sessionId);
+        this.inFlightAdoptions.delete(inFlight);
+      });
+    this.inFlightAdoptions.add(inFlight);
+  }
+
   #handleHostFrame(state, adapter, frame) {
+    this.#maybeAdopt(state, frame);
     const decoded = decodeHostInteraction(frame);
     if (!decoded) {
       if (frame?.type === "waterfall" && frame?.eventId) this.#decline(adapter, String(frame.eventId));
