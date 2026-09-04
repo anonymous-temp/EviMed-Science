@@ -346,6 +346,27 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project) {
  * The kernel's application requests hashed bundle names, so auditing the raw
  * path would make every deploy of it a new route in the metrics.
  */
+/**
+ * The kernel's application document, told where it is actually being served.
+ *
+ * It ships `<base href="/">` because it expects the origin root, and under a
+ * prefix every asset and every fetch it derives from that base resolves to this
+ * control plane's own single-page app instead. The page loads and then nothing
+ * on it works, which reads as the application being broken.
+ *
+ * Only the document is touched, only that one element, and only when the
+ * upstream called it HTML. Assets and API responses pass through byte for byte.
+ */
+function rebasedUiDocument(payload, responseHeaders, basePath) {
+  const contentType = String(responseHeaders["content-type"] ?? responseHeaders["Content-Type"] ?? "");
+  if (!contentType.toLowerCase().includes("text/html")) return payload;
+  const text = payload.toString("utf8");
+  const rebased = text.replace(/<base\s+href="\/"\s*\/?>/i, `<base href="${basePath}">`);
+  return rebased === text ? payload : Buffer.from(rebased, "utf8");
+}
+
+export { rebasedUiDocument as rebasedUiDocumentForTest };
+
 function uiProxyAuditTarget(suffix) {
   const pathname = suffix.split("?")[0] || "/";
   if (pathname === "/" || pathname === "/index.html") return "/";
@@ -3547,7 +3568,7 @@ export class RuntimeManager {
 
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project
-   * @param {string} suffix @param {{ surface?: string }} [options]
+   * @param {string} suffix @param {{ surface?: string, uiBasePath?: string }} [options]
    *
    * `surface: "ui"` forwards the kernel's own browser application instead of
    * the retired route vocabulary. Three things differ and nothing else does:
@@ -3558,7 +3579,7 @@ export class RuntimeManager {
    * response-header sanitising, the audit row -- is the same code, because a
    * second proxy would be a second set of those decisions to keep in step.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime" } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/" } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -3685,9 +3706,11 @@ export class RuntimeManager {
               await this.stopRuntimeIfProjectQuotaExceeded(project);
               postResponseQuotaChecked = true;
             } catch { /* a quota probe must not break a response already in flight */ }
+            const served = surface === "ui" ? rebasedUiDocument(payload, responseHeaders, uiBasePath) : payload;
+            if (served !== payload) responseHeaders["content-length"] = String(served.length);
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;
-            res.end(method === "HEAD" ? undefined : payload);
+            res.end(method === "HEAD" ? undefined : served);
           }
         } catch (err) {
           if (requestTimedOut) {
