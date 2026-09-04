@@ -122,14 +122,23 @@ function applyCors(req, res, config) {
 
 function applySecurityHeaders(res, config) {
   if (!config.securityHeaders) return;
-  const connectSrc = config.production
-    ? "connect-src 'self'"
-    : "connect-src 'self' http://127.0.0.1:* http://localhost:* ws: wss:";
   const publicOrigin = originFor(config.publicUrl);
   // The kernel's browser application is the product's session surface and it
   // is served on an origin of its own, so `default-src 'self'` would refuse to
-  // frame it. Named rather than widened: only that origin, only as a frame.
+  // frame it. Named rather than widened: only that origin.
   const uiOrigin = config.runtimeUiProxyEnabled ? originFor(config.runtimeUiPublicOrigin) : null;
+  // …and `connect-src` has to name it too. The shell asks whether that origin
+  // is reachable before it frames it, because an iframe cannot report a
+  // network failure and a frame pointed at a blocked port spins forever. That
+  // question is a `fetch`, which `connect-src` governs — so with only
+  // `frame-src` widened, our own policy refused the probe, the probe reported
+  // the origin unreachable, and the frame was never rendered even when the
+  // origin was fine. Observed in a real browser on 2026-09-04; the unit tests
+  // could not see it, because a test browser has no CSP.
+  const connectSrc = [
+    config.production ? "connect-src 'self'" : "connect-src 'self' http://127.0.0.1:* http://localhost:* ws: wss:",
+    uiOrigin,
+  ].filter(Boolean).join(" ");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
