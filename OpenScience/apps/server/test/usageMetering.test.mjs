@@ -3,7 +3,7 @@
 // properties that make the count worth trusting.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createUsageTail, parseModelUsage, recordModelUsage, summarizeUsage } from "../src/usageMetering.mjs";
+import { createUsageTail, parseModelUsage, recordModelUsage, spendAdmission, summarizeUsage } from "../src/usageMetering.mjs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -140,4 +140,64 @@ test("a summary totals one account and leaves the others out", () => {
   assert.equal(summary.promptTokens, 100);
   assert.equal(summary.completionTokens, 50);
   assert.deepEqual(summary.byModel, [{ model: "deepseek-v4-pro", calls: 1, cost: 1.5 }]);
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+
+function event(userId, cost, atMsAgo, now = Date.now()) {
+  return {
+    at: new Date(now - atMsAgo).toISOString(),
+    resourceType: "model",
+    userId,
+    projectId: "p1",
+    model: "deepseek-v4-pro",
+    cacheHit: 0,
+    cacheMiss: 1000,
+    output: 500,
+    cost,
+    currency: "CNY",
+    priced: true,
+  };
+}
+
+test("no cap configured refuses nothing", () => {
+  const rows = [event("alice", 1000, 0)];
+  assert.deepEqual(spendAdmission(rows, { userId: "alice" }), { allowed: true });
+});
+
+test("a daily cap refuses once the day's spend reaches it, and says when it frees up", () => {
+  const now = new Date("2026-09-04T12:00:00.000Z");
+  const rows = [
+    event("alice", 6, 20 * 60 * 60 * 1000, now.getTime()),
+    event("alice", 5, 1 * 60 * 60 * 1000, now.getTime()),
+  ];
+  const verdict = spendAdmission(rows, { userId: "alice", dailyLimit: 10, now });
+  assert.equal(verdict.allowed, false);
+  assert.equal(verdict.window, "day");
+  assert.equal(verdict.spent, 11);
+  assert.equal(verdict.limit, 10);
+  // The window is rolling, so it frees up 24h after the oldest charge still
+  // inside it — not at a midnight the reader cannot see coming.
+  assert.equal(verdict.resetsAt, new Date(now.getTime() - 20 * 60 * 60 * 1000 + DAY).toISOString());
+});
+
+test("spend outside the window does not count against it", () => {
+  const now = new Date("2026-09-04T12:00:00.000Z");
+  const rows = [event("alice", 100, 2 * DAY, now.getTime())];
+  assert.deepEqual(spendAdmission(rows, { userId: "alice", dailyLimit: 10, now }), { allowed: true });
+});
+
+test("a weekly cap catches what a daily cap lets through", () => {
+  const now = new Date("2026-09-04T12:00:00.000Z");
+  const rows = [1, 2, 3, 4, 5, 6].map((days) => event("alice", 9, days * DAY - 3600_000, now.getTime()));
+  assert.deepEqual(spendAdmission(rows, { userId: "alice", dailyLimit: 10, now }), { allowed: true });
+  const weekly = spendAdmission(rows, { userId: "alice", dailyLimit: 10, weeklyLimit: 50, now });
+  assert.equal(weekly.allowed, false);
+  assert.equal(weekly.window, "week");
+});
+
+test("one account's spend never refuses another's run", () => {
+  const now = new Date("2026-09-04T12:00:00.000Z");
+  const rows = [event("bob", 1000, 3600_000, now.getTime())];
+  assert.deepEqual(spendAdmission(rows, { userId: "alice", dailyLimit: 10, now }), { allowed: true });
 });

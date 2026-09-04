@@ -11,6 +11,11 @@ x-runtime-caps: &runtime-caps
   OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER: ${OPEN_SCIENCE_MAX_CONCURRENT_KERNELS_PER_USER:-1}
   OPEN_SCIENCE_MAX_RUNNING_RUNTIMES: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8}
   OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER: ${OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4}
+  # Spend caps in the price list's currency. Zero is no cap, which is the
+  # default: until a deployment has watched a month of real usage there is no
+  # number to choose, and a limit nobody chose fires at the worst moment.
+  OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT: ${OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT:-0}
+  OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT: ${OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT:-0}
 
 services:
   evimed-postgres:

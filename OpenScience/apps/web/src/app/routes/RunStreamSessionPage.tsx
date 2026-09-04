@@ -3,7 +3,14 @@ import { useNavigate, useParams } from "react-router";
 import { Composer } from "@/components/thread/Composer";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunStreamThread } from "@/components/run/RunStreamThread";
-import { answerRunInteraction, dispatchWebAgentRun, fetchWebRunTranscript, listWebAgentRuns } from "@/lib/apiClient";
+import { ERROR_CODE_MESSAGES } from "@evimed/domain";
+import {
+  answerRunInteraction,
+  dispatchWebAgentRun,
+  fetchWebRunTranscript,
+  listWebAgentRuns,
+  WebApiError,
+} from "@/lib/apiClient";
 import { useRunStream } from "@/lib/useRunStream";
 
 /**
@@ -80,7 +87,7 @@ export function RunStreamSessionPage() {
         setRunId(run.id);
         if (run.sessionId !== sessionId) navigate(`/app/chat/${encodeURIComponent(run.sessionId)}`, { replace: true });
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(dispatchFailureMessage(cause));
       } finally {
         setSending(false);
       }
@@ -133,4 +140,19 @@ export function RunStreamSessionPage() {
       <Composer onSend={(text) => void send(text)} disabled={sending} working={working && sending} />
     </div>
   );
+}
+
+/**
+ * What a refused dispatch says to the person who asked for it.
+ *
+ * `@evimed/domain` has carried a Chinese sentence per error code since the
+ * registry was written; this is where they reach a reader. A code with no
+ * sentence falls back to the server's own message rather than to a generic
+ * one, because a specific English line beats a vague Chinese one.
+ */
+function dispatchFailureMessage(cause: unknown): string {
+  const code = cause instanceof WebApiError ? cause.code : "";
+  const known = code ? ERROR_CODE_MESSAGES[code as keyof typeof ERROR_CODE_MESSAGES] : undefined;
+  if (known) return known;
+  return cause instanceof Error ? cause.message : String(cause);
 }
