@@ -162,16 +162,12 @@ export function mapWireError(error) {
  */
 
 /**
- * The sessions in a `session/list` reply, whichever shape it arrives in.
+ * The sessions in a `session/list` reply.
  *
- * alpha.5 answers a bare array. Three separate readers here and in
- * `runtimeManager` read `value.items` instead -- the shape the mock returned
- * and the kernel never did -- so in production the adapter reported no sessions
- * for a kernel holding several, transcript paging could not find a head
- * sequence, and a busy session read `idle` forever. Each was a wrong answer
- * that looks exactly like a correct one about an idle runtime. One reader now,
- * accepting both, because the mock's shape is what every caller was written
- * against.
+ * alpha.5 answers `{ items: [...] }`, which is what every caller assumed and
+ * what the mock returns. It is one function rather than four copies of the same
+ * two lines, and it tolerates a bare array so that a caller reading it is not
+ * the thing that breaks if the kernel ever flattens the envelope.
  * @param {any} value @returns {Record<string, any>[]}
  */
 export function sessionListItems(value) {

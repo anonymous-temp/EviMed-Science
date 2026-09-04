@@ -417,3 +417,81 @@ test("the mock refuses the arguments the live kernel refuses on workspace/follow
   }
   assert.equal(accepted[0]?.type, "baseline", "the call the descriptor does accept still yields its baseline");
 });
+
+
+test("a session the kernel holds and no run owns is adopted on the sweep", async () => {
+  // The trigger is a sweep because the kernel announces nothing: alpha.5 emits
+  // no `api-session/added` for a session created through the unary
+  // `session/create` the browser application uses, so the announcement-driven
+  // version adopted exactly nothing in production while its tests stayed green
+  // against a mock that did emit one.
+  const runEvents = new RunEventHub();
+  const adopted = [];
+  const listed = [
+    { sessionId: "s-blank", blank: true },
+    { sessionId: "s-typed", blank: false },
+    { sessionId: "s-child", blank: false, parentSessionId: "s-typed" },
+    { sessionId: "s-minted", blank: false },
+  ];
+  const pump = new RuntimeEventPump({
+    runEvents,
+    isDshKernel: true,
+    openMux: async () => new FakeMux(),
+    reconnectDelayMs: 20,
+    adoptIntervalMs: 10,
+    callUnary: async (_runtime, method) => (
+      method === "session/list" ? { ok: true, value: listed } : { ok: true, value: {} }
+    ),
+    adoptSession: async (_project, sessionId) => {
+      adopted.push(sessionId);
+      return { id: `run-for-${sessionId}` };
+    },
+  });
+  const project = { userId: "alice", id: "paper-1" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  // A session this control plane minted is one it is about to dispatch on.
+  pump.noteMintedSession(project, "s-minted");
+
+  await waitFor(() => adopted.includes("s-typed"), "the unowned session to be adopted");
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  assert.deepEqual(adopted, ["s-typed"], `adopted ${JSON.stringify(adopted)}`);
+  await pump.closeAll();
+});
+
+test("the sweep survives the mux reconnecting", async () => {
+  // It was started inside the mux generation's `Promise.race`, so every
+  // reconnect aborted the signal its interval was waiting on. The interval
+  // never elapsed and the sweep ran exactly never in production, while this
+  // suite's fake mux -- which does not reconnect on its own -- stayed green.
+  const runEvents = new RunEventHub();
+  const adopted = [];
+  let opens = 0;
+  const pump = new RuntimeEventPump({
+    runEvents,
+    isDshKernel: true,
+    openMux: async () => {
+      opens += 1;
+      const mux = new FakeMux();
+      // Every connection ends its streams immediately, which drops the
+      // generation and makes the pump reconnect. That churn is what the sweep
+      // has to outlive.
+      setTimeout(() => { for (const stream of mux.streams) stream.finish(); }, 5);
+      return mux;
+    },
+    reconnectDelayMs: 5,
+    adoptIntervalMs: 40,
+    callUnary: async (_runtime, method) => (
+      method === "session/list" ? { ok: true, value: { items: [{ sessionId: "s-typed", blank: false }] } } : { ok: true, value: {} }
+    ),
+    adoptSession: async (_project, sessionId) => {
+      adopted.push(sessionId);
+      return { id: `run-for-${sessionId}` };
+    },
+  });
+  pump.attach({ userId: "alice", id: "paper-1" }, { url: "http://127.0.0.1:1" });
+
+  await waitFor(() => adopted.length > 0, "an adoption despite the reconnect churn");
+  assert.ok(opens > 1, `the mux should have reconnected; it opened ${opens} time(s)`);
+  await pump.closeAll();
+});
