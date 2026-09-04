@@ -33,7 +33,17 @@ export const USAGE_EVENTS_FILE = "usage.jsonl";
 export function parseModelUsage(text) {
   if (typeof text !== "string" || !text) return null;
   // The last one wins: a stream repeats the field and only the final frame is
-  // the whole turn.
+  // the whole turn, and in both shapes the provider puts it after the content.
+  //
+  // This reads the response as text rather than parsing it, which is what lets
+  // it work on a tail instead of a whole body. The cost is that an answer
+  // whose own text ended with a JSON object carrying numeric `prompt_tokens`
+  // and `completion_tokens` would be read as the turn's usage. That requires
+  // the model to emit the provider's exact field names as the last thing in
+  // the response, and the harm is over-counting the person who asked for it —
+  // which is the direction a billing mistake should err away from the reader,
+  // not toward them. Worth revisiting if non-streaming answers ever become
+  // common here; today the kernel streams every call.
   let found = null;
   for (const match of text.matchAll(/"usage"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g)) {
     const parsed = safeJson(match[1]);
