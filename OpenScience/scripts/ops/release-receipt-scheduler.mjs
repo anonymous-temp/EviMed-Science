@@ -214,11 +214,26 @@ async function run() {
       process.exit(1);
     }
     const waitSeconds = state.status === "healthy" ? config.intervalSeconds : config.retrySeconds;
+    // Neither timer may be unref'd. `unref` tells node the timer must not hold
+    // the event loop open, and with both of them unref'd and the gate's child
+    // process already reaped there was nothing left to hold it: the scheduler
+    // exited cleanly the moment it finished minting, `restart: unless-stopped`
+    // started it again, and it minted again -- about three times a minute
+    // instead of twice a day, every one of them a real kernel chain against a
+    // paid model. 2,165 mints had gone through by the time the restart counter
+    // was read. The sleep is the whole job of this loop; it has to be the thing
+    // keeping the process alive.
+    //
+    // Shutdown stays prompt without them: the poll notices `stopping` within
+    // half a second and clears both timers, which empties the loop.
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, waitSeconds * 1000);
-      if (typeof timer.unref === "function") timer.unref();
-      const poll = setInterval(() => { if (stopping) { clearInterval(poll); clearTimeout(timer); resolve(undefined); } }, 500);
-      if (typeof poll.unref === "function") poll.unref();
+      const poll = setInterval(() => {
+        if (!stopping) return;
+        clearInterval(poll);
+        clearTimeout(timer);
+        resolve(undefined);
+      }, 500);
     });
   }
   log("receipt.scheduler.stopped", {});
