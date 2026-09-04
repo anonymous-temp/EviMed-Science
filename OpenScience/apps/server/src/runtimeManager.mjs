@@ -22,6 +22,7 @@ import {
   mapWireError,
   normalizeTranscript,
   transcriptToLedgerMessages,
+  sessionListItems,
 } from "./dshRuntimeAdapter.mjs";
 import {
   HttpError,
@@ -3055,7 +3056,7 @@ export class RuntimeManager {
         "runtime_history_unavailable",
         "Runtime session list did not answer in time.",
       );
-      const head = (Array.isArray(listed?.items) ? listed.items : [])
+      const head = sessionListItems(listed)
         .find((item) => String(item?.sessionId) === String(sessionId));
       const throughSeq = Number(head?.projections?.asOfSeq ?? NaN);
       if (!Number.isFinite(throughSeq)) {
@@ -3145,7 +3146,7 @@ export class RuntimeManager {
         "runtime_status_unavailable",
         "Runtime session status did not answer in time.",
       );
-      const items = Array.isArray(value?.items) ? value.items : [];
+      const items = sessionListItems(value);
       const entry = items.find((item) => String(item?.sessionId) === String(sessionId));
       return entry?.running ? "busy" : "idle";
     } finally {

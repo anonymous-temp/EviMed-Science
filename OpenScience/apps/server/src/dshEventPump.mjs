@@ -27,7 +27,7 @@
  * @module dshEventPump
  */
 
-import { DshRuntimeAdapter, decodeHostInteraction } from "./dshRuntimeAdapter.mjs";
+import { DshRuntimeAdapter, decodeHostInteraction, sessionListItems } from "./dshRuntimeAdapter.mjs";
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
 
@@ -41,6 +41,10 @@ const MAX_UNARY_REPLY_BYTES = 64 * 1024;
 
 /** How long to wait before retrying a dropped or refused mux connection. */
 export const RUNTIME_DOWNLINK_RECONNECT_MS = 2_000;
+// How often the kernel is asked which sessions it holds. Fast enough that a
+// person who starts a conversation in the browser application sees it in the
+// ledger while they are still in it; slow enough to be one small call.
+export const ADOPTION_SWEEP_MS = 15_000;
 
 /**
  * @param {number} ms
@@ -147,7 +151,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any> }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number }} options
    */
   constructor({
     runEvents,
@@ -159,6 +163,7 @@ export class RuntimeEventPump {
     // to ignore it, which is what this pump did before the runtime's own
     // browser application could create one.
     adoptSession = async () => null,
+    adoptIntervalMs = ADOPTION_SWEEP_MS,
   }) {
     this.adoptSession = adoptSession;
     this.runEvents = runEvents;
@@ -170,6 +175,7 @@ export class RuntimeEventPump {
     // like a question that was handled.
     this.callUnary = callUnary;
     this.reconnectDelayMs = reconnectDelayMs;
+    this.adoptIntervalMs = adoptIntervalMs;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
     /** Adoptions still writing, so `closeAll` can wait for them. @type {Set<Promise<void>>} */
@@ -316,6 +322,7 @@ export class RuntimeEventPump {
               })
               .catch(() => {}),
             this.#followSessions(state, adapter, generation.signal),
+            this.#adoptUnownedSessions(state, runtime, generation.signal).catch(() => {}),
           ]);
         } finally {
           signal.removeEventListener("abort", stopGeneration);
@@ -422,34 +429,56 @@ export class RuntimeEventPump {
    * @param {Record<string, any>} frame
    */
   /**
-   * A session the kernel announced that this control plane did not start.
+   * Sessions the kernel holds that no run here owns, adopted on a sweep.
    *
-   * The runtime's own browser application creates sessions directly, and
-   * before this they were invisible here: not followed, so no subscriber ever
-   * saw their events, and any approval they asked for was declined by a
-   * control plane with nowhere to route it. Adoption gives the session a run,
-   * which is what everything downstream is addressed by.
+   * Not driven by an announcement. `api-session/added` was the obvious trigger
+   * and the mock runtime emits it, so the tests went green -- but alpha.5
+   * announces nothing when a session is created through the unary
+   * `session/create` the browser application uses: the `$events` stream carries
+   * one `ready` frame and then silence. Nothing was ever adopted in production.
+   * Asking the kernel what it holds is what it actually supports.
    *
-   * Serialised per session so a burst of announcements cannot create two runs
-   * for one session, and failures are swallowed: an adoption that cannot be
-   * written is not a reason to drop the mux everything else rides on.
-   * @param {PumpProjectState} state @param {any} frame
+   * Blank sessions are left alone. Opening the application creates one before
+   * the person has said anything, and a ledger entry for a conversation that
+   * does not exist is noise shaped like work.
+   *
+   * @param {PumpProjectState} state
+   * @param {{ url: string, socketPath?: string|null, cookie?: string|null }} runtime
+   * @param {AbortSignal} signal
    */
-  #maybeAdopt(state, frame) {
-    if (frame?.event !== "api-session/added") return;
-    const summary = Array.isArray(frame.args) ? frame.args[0] : null;
-    const sessionId = summary && typeof summary === "object" ? String(summary.sessionId ?? "") : "";
+  async #adoptUnownedSessions(state, runtime, signal) {
+    while (!signal.aborted) {
+      await delay(this.adoptIntervalMs, signal);
+      if (signal.aborted) return;
+      const reply = await this.callUnary(runtime, "session/list", { _request: {} }, { signal }).catch(() => null);
+      const sessions = sessionListItems(reply?.ok ? reply.value : null);
+      for (const summary of sessions) {
+        if (signal.aborted) return;
+        if (summary && typeof summary === "object" && !summary.blank) {
+          this.#adopt(state, String(summary.sessionId ?? ""), summary);
+        }
+      }
+    }
+  }
+
+  /**
+   * Files one unowned session as a run.
+   *
+   * Serialised per session so a sweep landing on the previous one cannot create
+   * two runs for it, and failures are swallowed: an adoption that cannot be
+   * written is not a reason to drop the mux everything else rides on.
+   * @param {PumpProjectState} state @param {string} sessionId @param {any} summary
+   */
+  #adopt(state, sessionId, summary) {
     if (!sessionId) return;
     if (state.rootSessions.has(sessionId) || state.childSessions.has(sessionId)) return;
-    // A session this control plane minted is announced by the kernel before
-    // anything has been bound to it or dispatched on it, so "the ledger has no
-    // run for it" and "the research-session store has never heard of it" are
-    // both true of a session that is seconds away from being both. Only who
-    // created it settles this, and only the creator knows.
+    // A session this control plane minted is one it is about to bind and
+    // dispatch on, so neither the ledger nor the research-session store can
+    // tell it from an unclaimed one yet. Only the creator knows.
     if (state.mintedSessions.has(sessionId)) return;
-    // A subagent's session is announced the same way and is already owned by
-    // its parent's run; adopting it would file the same work twice.
-    if (summary.parentSessionId || summary.origin === "subagent") return;
+    // A subagent's session is already owned by its parent's run; adopting it
+    // would file the same work twice.
+    if (summary?.parentSessionId || summary?.origin === "subagent") return;
     if (state.adopting.has(sessionId)) return;
     state.adopting.add(sessionId);
     // Tracked, not fired and forgotten. An adoption writes to the project's
@@ -473,7 +502,6 @@ export class RuntimeEventPump {
   }
 
   #handleHostFrame(state, adapter, frame) {
-    this.#maybeAdopt(state, frame);
     const decoded = decodeHostInteraction(frame);
     if (!decoded) {
       if (frame?.type === "waterfall" && frame?.eventId) this.#decline(adapter, String(frame.eventId));

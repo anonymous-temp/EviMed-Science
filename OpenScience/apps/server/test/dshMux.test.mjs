@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { browserSessionCookie } from "../src/dshBrowserAuth.mjs";
 import { DshMux, REMOTE_EVENT_STREAM_ENDPOINT, REMOTE_STREAM_MUX_PATH } from "../src/dshMux.mjs";
@@ -587,8 +588,12 @@ test("the mock kernel answers 0.1.2 and refuses 0.1.1, the way the live binary d
   // `throughSeq` is required, and a value past the end returns NOTHING rather
   // than the tail. Asking for "everything" with a large constant therefore
   // reads as an empty run — which is what the delivery gate would grade.
+  // A bare array, which is what alpha.5 answers and what the mock now answers.
+  // It used to be `{ items: [...] }` here, and `DshRuntimeAdapter.listSessions`
+  // read that shape -- so in production it reported no sessions for a kernel
+  // holding several.
   const head = (await post("session/list", { _request: {} }).then((r) => r.json())).result.value
-    .items.find((item) => item.sessionId === "s-fid").projections.asOfSeq;
+    .find((item) => item.sessionId === "s-fid").projections.asOfSeq;
   assert.ok(head > 0);
 
   const unbounded = await post("session/page", { request: { address: { kind: "session", sessionId: "s-fid" } } }).then((r) => r.json());
@@ -605,4 +610,29 @@ test("the mock kernel answers 0.1.2 and refuses 0.1.1, the way the live binary d
   // Slashed error codes, which is the other half of the 0.1.2 rename.
   const missing = await post("session/cancel", { request: { sessionId: "nobody" } }).then((r) => r.json());
   assert.equal(missing.result.error.code, "session/not-found");
+});
+
+
+test("nothing reads a session list by a shape the kernel does not send", async () => {
+  // alpha.5 answers `session/list` with a bare array. Three shipped readers
+  // took `value.items` -- the mock's shape -- so the adapter reported no
+  // sessions for a kernel holding several, transcript paging could not find a
+  // head sequence, and a busy session read `idle` forever. Each is a wrong
+  // answer that looks exactly like a correct one about an idle runtime.
+  //
+  // Derived rather than a list of the three: the next reader has to go through
+  // the one helper too.
+  const dir = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "../src");
+  const files = (await readdir(dir)).filter((name) => name.endsWith(".mjs") && name !== "dshRuntimeAdapter.mjs");
+  let scanned = 0;
+  for (const name of files) {
+    const text = await readFile(path.join(dir, name), "utf8");
+    if (!text.includes("session/list")) continue;
+    scanned += 1;
+    assert.ok(
+      !/\.items\b/.test(text.slice(Math.max(0, text.indexOf("session/list") - 2_000))),
+      `${name} calls session/list and reads .items; the kernel sends a bare array — use sessionListItems`,
+    );
+  }
+  assert.ok(scanned >= 2, `the scan found ${scanned} callers of session/list; it is not reading the sources`);
 });
