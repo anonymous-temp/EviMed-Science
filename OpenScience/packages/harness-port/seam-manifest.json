@@ -1,5 +1,5 @@
 {
-  "dsh": "0.1.2-alpha.5",
+  "dsh": "0.1.2-rc.1",
   "cordis": "4.0.2",
   "services": {
     "required": [

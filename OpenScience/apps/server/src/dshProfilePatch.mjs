@@ -180,9 +180,85 @@ export function renderProfilePatch(input) {
     "",
     ...toolUniverseRows(input),
     ...presetRows(input),
+    ...hostedBrowserPanelRows(input),
   ];
   return `${rows.join("\n")}\n`;
 }
+
+/**
+ * The panels the kernel's browser application must not show a hosted user.
+ *
+ * On a laptop the person reading a settings panel owns the machine. Hosted,
+ * they own one project inside somebody else's deployment, and the runtime's
+ * home directory is a writable volume — so a change made in one of these
+ * panels is a durable change to the deployment, not a preference. Three of
+ * them are worse than confusing: models, because the release receipt certifies
+ * the model that actually ran; presets, because switching one swaps the
+ * composition every delivery gate assumes; the directory picker, because it
+ * reaches outside the project.
+ *
+ * This is the visible half only. Hiding a panel hides a button, and the page
+ * is JavaScript that can call anything — `@evimed/domain`'s runtime-UI surface
+ * is what actually refuses the calls, and it is not derived from this list
+ * because the two answer different questions ("should a person see this" and
+ * "may this deployment be changed from a browser").
+ *
+ * Only leaves are disabled. `ui-settings` is the shell nine other rows inject,
+ * and `ui-workspace` is injected by the sidebar, the conversation and the
+ * chat: disabling either takes the application down at boot, which is the
+ * opposite of hiding a panel. The settings shell therefore stays and opens
+ * empty.
+ *
+ * @param {ProfilePatchInput} input
+ * @returns {string[]}
+ */
+function hostedBrowserPanelRows(input) {
+  if (!input.flags?.hosted) return [];
+  return [
+    "",
+    "# Panels the hosted browser application does not show; see",
+    "# apps/server/src/dshProfilePatch.mjs for why each one.",
+    ...HOSTED_DISABLED_BROWSER_PANELS.flatMap((id) => [`- id: ${id}`, "  disabled: true"]),
+  ];
+}
+
+/**
+ * The row ids of those panels, as the composition names them.
+ *
+ * Listed here rather than inline so the test that checks them against the
+ * image's recorded composition reads the same list the patch writes — a row id
+ * that upstream renames must fail that test rather than silently stop
+ * disabling anything.
+ */
+export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
+  "ui-settings-general",
+  "ui-settings-models",
+  "ui-settings-plugin-inventory",
+  "ui-settings-plugins",
+  "ui-model-selection",
+  // The composition names this row `ui-permission`, not
+  // `ui-permission-presets` after its package. Written from the package name it
+  // addressed nothing, and the check that reads the recorded composition is
+  // what said so -- the same class of miss as the `permission-presets` row the
+  // patch addressed with a key that did not exist for weeks.
+  "ui-permission",
+  "ui-agent-preset",
+  "ui-message-feedback",
+  "ui-goal",
+  "ui-cordis",
+  "ui-brand-official",
+]);
+
+/**
+ * The browser's directory picker is deliberately absent from that list.
+ *
+ * It is loaded by the client (`dsh-client-ui-directory-picker-browse` appears
+ * in the page's boot manifest) but the image's composition has no row for it:
+ * the only picker row there is the host-side `directory-picker`. Disabling a
+ * row id that does not exist would have looked exactly like disabling one that
+ * does. What actually stops it is the method deny list -- `directoryPicker/*`
+ * is refused whether or not a button is drawn.
+ */
 
 /**
  * The ToolUniverse sidecar, when the deployment runs one.

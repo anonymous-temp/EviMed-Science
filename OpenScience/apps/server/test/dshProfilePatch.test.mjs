@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-import { EVIMED_PRESET, HOSTED_PERMISSION_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
+import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
@@ -23,7 +23,7 @@ const input = {
   capsuleGatewayUrl: "https://open-science-web:8787/internal/capsule/v1",
   workloadTokenFile: "/runtime/secrets/workload-token",
   bundleVersion: "0.1.0",
-  dshVersion: "0.1.2-alpha.5",
+  dshVersion: "0.1.2-rc.1",
   limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 },
   flags: { hosted: true, askUser: false, review: false, capsule: true, requiredEnforcement: "full" },
 };
@@ -362,5 +362,41 @@ test("a hostile ToolUniverse URL becomes a quoted scalar, never YAML structure",
     // tag, and no injected key becomes a sibling row.
     assert.match(urlLine, /^\s+url: ['"]/, `must be quoted: ${urlLine}`);
     assert.ok(!/^\s+url: !!js/.test(urlLine), `must not emit an expression tag: ${urlLine}`);
+  }
+});
+
+
+test("the hosted browser application ships without the panels that change the deployment", () => {
+  // Settings, models, presets, permission presets and the directory picker are
+  // written for somebody who owns the machine. Hosted, the person owns one
+  // project inside somebody else's deployment and the runtime home is a
+  // writable volume, so each of these panels offers a durable change to the
+  // deployment as if it were a preference.
+  const hosted = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: true } });
+  for (const id of HOSTED_DISABLED_BROWSER_PANELS) {
+    assert.match(
+      hosted,
+      new RegExp(`- id: ${id}\\n  disabled: true`),
+      `${id} is still offered to a hosted browser`,
+    );
+  }
+
+  // Two rows are deliberately absent from that list, and being explicit about
+  // it is the point: `ui-settings` is the shell nine other rows inject, and
+  // `ui-workspace` is injected by the sidebar, the conversation and the chat.
+  // Disabling either does not hide a panel, it stops the application booting —
+  // which is how a hardening change becomes an outage.
+  for (const load_bearing of ["ui-settings", "ui-workspace"]) {
+    assert.ok(
+      !HOSTED_DISABLED_BROWSER_PANELS.includes(load_bearing),
+      `${load_bearing} is injected by other rows; disabling it takes the application down at boot`,
+    );
+    assert.doesNotMatch(hosted, new RegExp(`- id: ${load_bearing}\\n  disabled: true`));
+  }
+
+  // A local profile is a person on their own machine. Nothing is hidden there.
+  const local = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: false } });
+  for (const id of HOSTED_DISABLED_BROWSER_PANELS) {
+    assert.doesNotMatch(local, new RegExp(`- id: ${id}`), `${id} must stay available off the hosted surface`);
   }
 });

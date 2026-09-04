@@ -653,7 +653,7 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DSH_VERSION ??
       release.manifest?.runtime?.dshVersion ??
       depsVersions.dsh?.version ??
-      "0.1.2-alpha.5",
+      "0.1.2-rc.1",
     socketBundleVersion:
       overrides.socketBundleVersion ??
       process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??
@@ -902,6 +902,26 @@ export function loadConfig(overrides = {}) {
     // operator's decision rather than a deployment default.
     runtimeUiProxyEnabled: overrides.runtimeUiProxyEnabled
       ?? boolEnv("OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED", false),
+    // The application is served on a listener of its own, and that is not a
+    // deployment preference — it is what the application requires. It builds
+    // every URL it fetches from `location.origin`: the plugin bundles it boots
+    // from are `/plugins/??...`, its method calls are `/api/<method>`. Behind a
+    // path prefix those resolve against this control plane instead, which
+    // answers them with its own single-page document, and the page dies at
+    // boot with "bootstrap facade is missing" while every individual request
+    // reads 200. Rewriting the document does not reach them: most are built at
+    // run time, not written in the HTML. So it gets an origin.
+    //
+    // Same host, different port, which makes it a different origin (the iframe
+    // is cross-origin, as it should be) while staying the same *site* — ports
+    // are not part of a site — so the session cookie is still sent and the
+    // person is still the person who logged in.
+    runtimeUiPort: Number(overrides.runtimeUiPort ?? process.env.OPEN_SCIENCE_RUNTIME_UI_PORT ?? 0),
+    // What to put in the iframe. The listener's own port is not it: a browser
+    // reaches this deployment through whatever terminates TLS in front of it,
+    // and that is the origin the page must name.
+    runtimeUiPublicOrigin:
+      overrides.runtimeUiPublicOrigin ?? process.env.OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN ?? "",
     geoProbeUrl: overrides.geoProbeUrl ?? process.env.OPEN_SCIENCE_GEO_PROBE_URL ?? "",
     geoProbeGatewayInternalUrl:
       overrides.geoProbeGatewayInternalUrl ??

@@ -548,17 +548,23 @@ test("web Caddy proxy caps browser upload body size", async () => {
 
 test("web compose includes a buildable runtime image profile with every download digest-pinned", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  // Read from the pin rather than written out here. A pin spelled as an
+  // escaped regex is invisible to a search for the literal, which is how ten
+  // of these sat at a stale version while a sweep reported the tree clean;
+  // derived, they cannot be the ones left behind.
+  const dshPin = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8")).dsh.version;
+  const escaped = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   assert.match(compose, /dsh-runtime-image:/);
   assert.match(
     compose,
-    /image:\s+\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0\.1\.2-alpha\.5-uv-0\.11\.26\}/,
+    new RegExp(`image:\\s+\\$\\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-${escaped(dshPin)}-uv-0\\.11\\.26\\}`),
   );
   assert.match(compose, /dockerfile:\s+deploy\/runtime-dsh\/Dockerfile/);
   assert.match(compose, /profiles:\s+\["runtime-image"\]/);
   // The kernel arrives as an npm global at a pinned version rather than as a
   // fetched archive, so what is version-pinned and what is digest-pinned are
   // different lists now. Both still have to be pinned.
-  assert.match(compose, /DSH_VERSION:\s+\$\{OPEN_SCIENCE_DSH_VERSION:-0\.1\.2-alpha\.5\}/);
+  assert.match(compose, new RegExp(`DSH_VERSION:\\s+\\$\\{OPEN_SCIENCE_DSH_VERSION:-${escaped(dshPin)}\\}`));
   assert.match(compose, /DSH_CORDIS_VERSION:\s+\$\{OPEN_SCIENCE_DSH_CORDIS_VERSION:-4\.0\.2\}/);
   assert.match(compose, /SOCKET_VERSION:\s+\$\{OPEN_SCIENCE_SOCKET_VERSION:-0\.1\.0\}/);
   assert.match(compose, /UV_VERSION:\s+\$\{OPEN_SCIENCE_UV_VERSION:-0\.11\.26\}/);
@@ -592,9 +598,10 @@ test("web compose includes a buildable runtime image profile with every download
 // filter and the whole-tree version assertion, checked below in their place.
 test("the runtime image pins and verifies tools, architectures, and licenses", async () => {
   const dockerfile = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const dshPin = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8")).dsh.version;
   assert.match(dockerfile, /^ARG TARGETARCH$/m);
   assert.doesNotMatch(dockerfile, /^ARG TARGETARCH=/m);
-  assert.match(dockerfile, /ARG DSH_VERSION=0\.1\.2-alpha\.5/);
+  assert.match(dockerfile, new RegExp(`ARG DSH_VERSION=${dshPin.replace(/[.]/g, "\\.")}`));
   assert.match(dockerfile, /ARG UV_VERSION=0\.11\.26/);
   // Both architectures of both downloads. `NODE_SHA256_ARM64` used to be absent
   // from this list and empty in the Dockerfile, where the verification sat
@@ -792,7 +799,7 @@ test("web deployment env example documents required hosted settings", async () =
   // launching the image it just built.
   const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
-  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.2-alpha.5-uv-0.11.26");
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26");
   assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
@@ -1899,14 +1906,19 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   // tool reported itself unconfigured on a host whose probe was up.
   const config = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
-  const read = [...config.matchAll(/process\.env\.(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH)_[A-Z0-9_]+)/g)]
+  // `RUNTIME_UI` joined the scan when the kernel's browser application became
+  // the session surface: its port and public origin are the same kind of
+  // lever, and a surface switched on in `.env` that never reaches the
+  // container is a product with no session view and no explanation.
+  const read = [...config.matchAll(/process\.env\.(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI)_[A-Z0-9_]+)/g)]
     .map((match) => match[1]);
   const names = [...new Set(read)].sort();
   assert.ok(
-    names.length >= 6,
+    names.length >= 8,
     `the scan found ${names.length} optional-channel levers in config.mjs; it is not reading the file`,
   );
   assert.ok(names.includes("OPEN_SCIENCE_GEO_PROBE_URL"), "the scan missed the GEO probe URL");
+  assert.ok(names.includes("OPEN_SCIENCE_RUNTIME_UI_PORT"), "the scan missed the browser application's port");
   for (const name of names) {
     assert.ok(
       compose.includes(`\${${name}`),

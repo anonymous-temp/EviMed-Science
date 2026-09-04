@@ -22,7 +22,7 @@ function passingChecks() {
       ok: true,
       mode: "kernel",
       kernel: "dsh",
-      kernelVersion: "0.1.2-alpha.5",
+      kernelVersion: "0.1.2-rc.1",
       sandboxMode: "docker",
       controlPlane: "controller_socket",
     },

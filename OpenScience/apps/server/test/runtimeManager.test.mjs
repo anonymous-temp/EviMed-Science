@@ -2023,12 +2023,14 @@ test("an over-limit response releases its socket, proven at the socket, not at t
 });
 
 
-test("the kernel's browser application is not reachable unless the deployment enables it", async (t) => {
-  // Off by default on purpose. Turning it on lets an authenticated browser
-  // reach that project's kernel surface, which is exactly what the retired
-  // pass-through route was retired to prevent -- so it ships dark and an
-  // operator decides, rather than the merge deciding.
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-off-"));
+test("the path form of the kernel's browser application is retired by name", async (t) => {
+  // It could serve the document and every asset and still not work: the
+  // application's plugin bundles and method calls are absolute paths built
+  // from `location.origin`, so under a prefix they arrived at this control
+  // plane and were answered with its own single-page document. Every request
+  // read 200 and the page died at boot with "bootstrap facade is missing".
+  // 410 rather than 404 because the path was linked to.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-path-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true });
   const address = await app.listen(0, "127.0.0.1");
   t.after(async () => {
@@ -2037,15 +2039,8 @@ test("the kernel's browser application is not reachable unless the deployment en
   });
 
   const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/default/`);
-  assert.equal(response.status, 404);
-  assert.equal((await response.json()).code, "runtime_ui_not_enabled");
-
-  // The project is addressed in the path because a browser navigating here
-  // sets no headers and a WebSocket cannot set them at all. Omitting it says so
-  // rather than silently serving somebody's default project.
-  const unaddressed = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/`);
-  assert.equal(unaddressed.status, 404);
-  assert.equal((await unaddressed.json()).code, "runtime_ui_project_missing");
+  assert.equal(response.status, 410);
+  assert.equal((await response.json()).code, "runtime_ui_path_retired");
 });
 
 test("the retired pass-through stays retired when the browser application is enabled", async (t) => {
@@ -2069,32 +2064,12 @@ test("the retired pass-through stays retired when the browser application is ena
   assert.equal((await retired.json()).code, "runtime_passthrough_retired");
 });
 
-
-test("the proxied application is told where it is served, and only the document is touched", async () => {
-  // It ships `<base href="/">` because it expects the origin root. Left alone
-  // under a prefix, every asset and every fetch it derives from that base
-  // resolves to this control plane's own single-page app: the page loads and
-  // then nothing on it works, which reads as the application being broken.
-  const { rebasedUiDocumentForTest } = await import("../src/runtimeManager.mjs");
-  const document = Buffer.from('<!doctype html><html><head><base href="/"><script src="/a.js"></script></head></html>', "utf8");
-
-  const served = rebasedUiDocumentForTest(document, { "content-type": "text/html; charset=utf-8" }, "/api/runtime-ui/");
-  assert.match(served.toString("utf8"), /<base href="\/api\/runtime-ui\/">/);
-  assert.match(served.toString("utf8"), /src="\/a\.js"/, "only the base element may be rewritten");
-
-  // An asset that happens to contain the same bytes is not a document.
-  const asset = rebasedUiDocumentForTest(document, { "content-type": "application/javascript" }, "/api/runtime-ui/");
-  assert.equal(asset, document, "a non-HTML response must pass through byte for byte");
-
-  const json = rebasedUiDocumentForTest(Buffer.from('{"base":"/"}', "utf8"), { "content-type": "application/json" }, "/api/runtime-ui/");
-  assert.equal(json.toString("utf8"), '{"base":"/"}');
-});
-
-
-test("a browser application socket is refused unless it is this deployment's own page", async (t) => {
-  // A WebSocket carries the session cookie and cannot carry a CSRF token, so
-  // origin is the check. Without it any page on the internet could open a
-  // socket to somebody's kernel using their logged-in browser.
+/**
+ * An app with the browser-application origin bound, and a logged-in cookie for
+ * it. The cookie is the same one the control plane issued: ports are not part
+ * of a site, so the browser sends it to both.
+ */
+async function uiSurfaceFixture(t, overrides = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-origin-"));
   const app = createWebApiApp({
     dataDir,
@@ -2102,95 +2077,119 @@ test("a browser application socket is refused unless it is this deployment's own
     runtimeMode: "mock",
     devAuth: true,
     runtimeUiProxyEnabled: true,
+    runtimeUiPort: 0,
     publicUrl: "https://science.example",
+    runtimeUiPublicOrigin: "https://science.example:8443",
+    ...overrides,
   });
   const address = await app.listen(0, "127.0.0.1");
   t.after(async () => {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   });
-
-  const handshake = (origin) => new Promise((resolve) => {
-    const req = httpRequest({
-      hostname: "127.0.0.1",
-      port: address.port,
-      path: "/api/runtime-ui/default/api/remote.mux",
-      headers: {
-        connection: "Upgrade",
-        upgrade: "websocket",
-        "sec-websocket-version": "13",
-        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-        ...(origin ? { origin } : {}),
-      },
-    });
-    req.on("upgrade", (res, socket) => { socket.destroy(); resolve({ upgraded: true, status: res.statusCode }); });
-    req.on("response", (res) => { res.resume(); resolve({ upgraded: false, status: res.statusCode }); });
-    req.on("error", () => resolve({ upgraded: false, status: 0 }));
-    req.end();
-  });
-
-  const foreign = await handshake("https://attacker.example");
-  assert.equal(foreign.upgraded, false);
-  assert.equal(foreign.status, 403, "a cross-origin socket must be refused");
-});
-
-test("a browser application socket is refused when the surface is switched off", async (t) => {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-socket-off-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true });
-  const address = await app.listen(0, "127.0.0.1");
-  t.after(async () => {
-    await app.close();
-    await rm(dataDir, { recursive: true, force: true });
-  });
-
-  // An unauthenticated socket is refused before the surface is consulted, so
-  // borrow a session from an ordinary request first.
   const seeded = await fetch(`http://127.0.0.1:${address.port}/api/projects`);
   const cookie = (seeded.headers.getSetCookie?.() ?? []).map((item) => item.split(";")[0]).join("; ");
-  assert.ok(cookie, "the test needs a session cookie to get past authentication");
+  assert.ok(cookie, "the fixture needs a session cookie");
+  const ui = app.runtimeUi.address();
+  assert.ok(ui, "the browser-application origin must be bound when the surface is on");
+  return { app, address, cookie, uiBase: `http://127.0.0.1:${ui.port}` };
+}
 
-  const result = await new Promise((resolve) => {
-    const req = httpRequest({
-      hostname: "127.0.0.1",
-      port: address.port,
-      path: "/api/runtime-ui/default/api/remote.mux",
-      headers: {
-        connection: "Upgrade",
-        upgrade: "websocket",
-        "sec-websocket-version": "13",
-        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-        cookie,
-      },
-    });
-    req.on("upgrade", (res, socket) => { socket.destroy(); resolve({ upgraded: true, status: res.statusCode }); });
-    req.on("response", (res) => { res.resume(); resolve({ upgraded: false, status: res.statusCode }); });
-    req.on("error", () => resolve({ upgraded: false, status: 0 }));
-    req.end();
-  });
-  assert.equal(result.upgraded, false, "the socket must not open when the HTTP surface is off");
-  assert.equal(result.status, 404);
-});
-
-
-test("an unauthenticated browser-application socket learns nothing about the surface", async (t) => {
-  // 401 before the enable check, so a stranger cannot use the difference
-  // between 401 and 404 to discover whether this deployment serves the kernel's
-  // application at all.
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-socket-anon-"));
-  const app = createWebApiApp({
-    dataDir, port: 0, runtimeMode: "mock", devAuth: true, runtimeUiProxyEnabled: true,
-  });
-  const address = await app.listen(0, "127.0.0.1");
+test("the browser application's origin is bound only when the deployment serves it", async (t) => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-off-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true });
+  await app.listen(0, "127.0.0.1");
   t.after(async () => {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   });
+  assert.equal(app.runtimeUi.address(), null, "an unserved surface must not hold a port open");
+});
 
+test("the browser application's origin refuses anyone who is not logged in", async (t) => {
+  const { uiBase } = await uiSurfaceFixture(t);
+  const anonymous = await fetch(`${uiBase}/`, { redirect: "manual" });
+  assert.equal(anonymous.status, 401);
+  assert.match(anonymous.headers.get("content-type") ?? "", /text\/html/, "a frame shows a page, not JSON");
+});
+
+test("the hosted browser application cannot reach the methods that change the deployment", async (t) => {
+  // The panels that call these are hidden in the profile, but hiding a panel
+  // hides a button: the page is JavaScript and can call anything. Each of
+  // these either rewrites the runtime's own configuration, chooses a model the
+  // release receipt does not certify, swaps the composition every gate
+  // assumes, or reaches outside the project.
+  const { uiBase, cookie } = await uiSurfaceFixture(t);
+  const denied = [
+    "settings/update",
+    "settings/describe",
+    "credentials/set",
+    "llm/discoverModels",
+    "directoryPicker/pick",
+    "goals/create",
+    "agentTeams/createTask",
+    "cordis/dynamic-package",
+    "messageFeedback/put",
+    "agentPresets/select",
+    "session/selectModel",
+    "session/openWorkspacePath",
+    "workspace/delete",
+  ];
+  for (const method of denied) {
+    const response = await fetch(`${uiBase}/api/${method}`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(response.status, 403, `${method} must be refused`);
+    const body = await response.json();
+    assert.equal(body.error.code, "runtime_ui_method_denied");
+    assert.match(body.error.message, new RegExp(method.replace("/", "\\/")), "the refusal names the method");
+  }
+
+  // And the conversation itself is not collateral damage: whatever the kernel
+  // answers, it is not this surface refusing the call.
+  const allowed = await fetch(`${uiBase}/api/session/create`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: "{}",
+  });
+  const body = await allowed.json().catch(() => ({}));
+  assert.notEqual(body?.error?.code, "runtime_ui_method_denied");
+});
+
+test("the frame is pinned to a project by cookie, and only to a project its viewer owns", async (t) => {
+  const { uiBase, cookie, address } = await uiSurfaceFixture(t);
+  const created = await fetch(`http://127.0.0.1:${address.port}/api/projects`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ id: "second", name: "Second" }),
+  });
+  assert.ok([200, 201].includes(created.status), `creating the second project answered ${created.status}`);
+
+  const pinned = await fetch(`${uiBase}/?project=second`, { headers: { cookie }, redirect: "manual" });
+  assert.equal(pinned.status, 302);
+  assert.equal(pinned.headers.get("location"), "/", "the parameter must not survive into the application");
+  const setCookie = (pinned.headers.getSetCookie?.() ?? []).join("; ");
+  assert.match(setCookie, /evimed_ui_project=second/);
+  assert.match(setCookie, /HttpOnly/);
+
+  // A project the viewer does not own is refused rather than quietly replaced
+  // by their default one: a frame showing a different project than the shell
+  // asked for is worse than an error.
+  const foreign = await fetch(`${uiBase}/?project=someone-elses`, { headers: { cookie }, redirect: "manual" });
+  assert.ok(foreign.status >= 400, `a foreign project answered ${foreign.status}`);
+  assert.ok(foreign.status !== 302, "a foreign project must not be pinned");
+});
+
+test("an unauthenticated browser-application socket is refused", async (t) => {
+  const { uiBase } = await uiSurfaceFixture(t);
+  const port = Number(new URL(uiBase).port);
   const result = await new Promise((resolve) => {
     const req = httpRequest({
       hostname: "127.0.0.1",
-      port: address.port,
-      path: "/api/runtime-ui/default/api/remote.mux",
+      port,
+      path: "/api/remote.mux",
       headers: {
         connection: "Upgrade",
         upgrade: "websocket",
@@ -2207,52 +2206,30 @@ test("an unauthenticated browser-application socket learns nothing about the sur
   assert.equal(result.status, 401);
 });
 
-
-test("the browser application may write without our CSRF token, but only from our own page", async (t) => {
-  // It is a different application and has never heard of this control plane's
-  // token, so every non-GET request it made was refused: the surface loaded,
-  // opened its socket, and could not create a session. Origin is the defence
-  // there -- and a request that carries no Origin at all is not the browser
-  // this is protecting, so it is refused too.
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-csrf-"));
+test("a production deployment cannot serve the application at an address nobody can reach", async () => {
+  // Switched on with no port is a listener on an arbitrary free one; switched
+  // on with no public origin is a page that cannot name what to frame. Both
+  // read, from the outside, exactly like the product having no session surface.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-readiness-"));
   const app = createWebApiApp({
     dataDir,
     port: 0,
     runtimeMode: "mock",
-    devAuth: false,
+    allowMockRuntime: true,
+    production: true,
     runtimeUiProxyEnabled: true,
+    runtimeUiPort: 0,
     publicUrl: "https://science.example",
-    bootstrapUser: "operator",
-    bootstrapPassword: "a-sufficiently-long-password",
   });
-  const address = await app.listen(0, "127.0.0.1");
-  const base = `http://127.0.0.1:${address.port}`;
-  t.after(async () => {
+  try {
+    const address = await app.listen(0, "127.0.0.1");
+    const ready = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+    const body = await ready.json();
+    const runtime = body?.data?.checks?.runtime ?? body?.checks?.runtime ?? {};
+    assert.equal(runtime.ok, false, "readiness must refuse the pair");
+    assert.equal(runtime.code, "runtime_ui_port_required");
+  } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
-  });
-
-  const login = await fetch(`${base}/api/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username: "operator", password: "a-sufficiently-long-password" }),
-  });
-  assert.equal(login.status, 200);
-  const cookie = (login.headers.getSetCookie?.() ?? []).map((item) => item.split(";")[0]).join("; ");
-
-  const post = (origin) => fetch(`${base}/api/runtime-ui/default/api/session/create`, {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json", ...(origin ? { origin } : {}) },
-    body: "{}",
-  });
-
-  assert.equal((await post("https://attacker.example")).status, 403, "a cross-origin write must be refused");
-  assert.equal((await post(null)).status, 403, "a write with no Origin must be refused");
-  // Same origin gets past the guard: whatever the kernel then answers, it is
-  // not this control plane refusing the request.
-  const allowed = await post("https://science.example");
-  assert.notEqual(allowed.status, 403);
-  const body = await allowed.json().catch(() => ({}));
-  assert.notEqual(body.code, "csrf_required");
-  assert.notEqual(body.code, "forbidden_origin");
+  }
 });

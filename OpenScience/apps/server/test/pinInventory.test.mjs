@@ -85,11 +85,11 @@ test("a file no rule claims is reported rather than absorbed", () => {
     "OpenScience/runtime/mcp/evimed-research/server.py",
     "OpenScience/capabilities/clinical-evidence-synthesis/capability.yaml",
   ]) {
-    assert.equal(classify({ file, line: 1, text: "0.1.2-alpha.5" }), null, `${file} must be reported, not defaulted`);
+    assert.equal(classify({ file, line: 1, text: "0.1.2-rc.1" }), null, `${file} must be reported, not defaulted`);
   }
   // And a rule cannot claim everything: the catch-all that would make this
   // test pass forever is the failure mode, so assert a real path still lands
   // where it should.
-  assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.1.2-alpha.5"' })?.kind, "pin");
+  assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.1.2-rc.1"' })?.kind, "pin");
   assert.ok(RULES.every((rule) => rule.why && rule.why.length > 20), "every rule states why its kind is the right one");
 });

@@ -14,9 +14,9 @@ export const releaseManifestFixture = Object.freeze({
     imageId: `sha256:${"b".repeat(64)}`,
   },
   runtime: {
-    image: "evimed-runtime-dsh:dsh-0.1.2-alpha.5-uv-0.11.26",
+    image: "evimed-runtime-dsh:dsh-0.1.2-rc.1-uv-0.11.26",
     imageId: `sha256:${"a".repeat(64)}`,
-    dshVersion: "0.1.2-alpha.5",
+    dshVersion: "0.1.2-rc.1",
     cordisVersion: "4.0.2",
     socketVersion: "0.1.0",
     domainVersion: "0.1.0",

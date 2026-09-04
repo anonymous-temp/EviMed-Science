@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchWebMe, hasWebApi, webRuntimeProfile } from "@/lib/apiClient";
 import { LiveSessionPage } from "./LiveSessionPage";
 import { RunStreamSessionPage } from "./RunStreamSessionPage";
+import { RuntimeUiFrame } from "./RuntimeUiFrame";
 
 /**
  * Picks the session view the deployment serves.
@@ -19,13 +20,16 @@ import { RunStreamSessionPage } from "./RunStreamSessionPage";
  */
 export function SessionRoute() {
   const [view, setView] = useState(() => webRuntimeProfile().sessionView);
+  const [uiOrigin, setUiOrigin] = useState(() => webRuntimeProfile().uiOrigin);
 
   useEffect(() => {
     if (!hasWebApi) return;
     let cancelled = false;
     void fetchWebMe()
       .then(() => {
-        if (!cancelled) setView(webRuntimeProfile().sessionView);
+        if (cancelled) return;
+        setView(webRuntimeProfile().sessionView);
+        setUiOrigin(webRuntimeProfile().uiOrigin);
       })
       .catch(() => {
         // isolated: an unreachable control plane leaves the page on the view it
@@ -36,5 +40,9 @@ export function SessionRoute() {
     };
   }, []);
 
+  // A deployment that serves the kernel's application serves it as the session
+  // surface; the built-in views are what a deployment without it renders, and
+  // what the desktop shell renders.
+  if (uiOrigin) return <RuntimeUiFrame />;
   return view === "run-stream" ? <RunStreamSessionPage /> : <LiveSessionPage />;
 }

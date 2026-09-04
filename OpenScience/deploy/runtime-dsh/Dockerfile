@@ -12,10 +12,10 @@ FROM ${RUNTIME_BASE_IMAGE}
 ARG TARGETARCH
 # Every version below is derived from OpenScience/deps-version.json. A test
 # asserts they are equal, so a pin bump is one edit in one file.
-ARG DSH_VERSION=0.1.2-alpha.5
+ARG DSH_VERSION=0.1.2-rc.1
 ARG DSH_CORDIS_VERSION=4.0.2
 # The instant the pin was published. `@deepseek-ai/dsh` declares all 61 of its
-# subpackages as `^0.1.2-alpha.5`, so naming an exact version pins one package
+# subpackages as `^0.1.2-rc.1`, so naming an exact version pins one package
 # and floats the other 214: installing the pin on 2026-09-02 resolved 213 of
 # them to 0.1.2-alpha.4, published the day before. npm's `--before` resolves
 # every dependency to what existed at this instant, which is the only way to
@@ -28,7 +28,7 @@ ARG DSH_CORDIS_VERSION=4.0.2
 # failure an adversarial review predicted of a rewriter that moved versions and
 # nothing else. `apps/server/test/deploy.test.mjs` now asks the registry
 # whether this instant admits the pin.
-ARG DSH_PUBLISHED_BEFORE=2026-09-02T09:38:34.797Z
+ARG DSH_PUBLISHED_BEFORE=2026-09-03T07:21:52.107Z
 ARG SOCKET_VERSION=0.1.0
 ARG NODE_VERSION=22.22.0
 # Where to fetch the Node tarball. The default is upstream; a deployment behind
@@ -131,7 +131,7 @@ RUN set -eux; \
 # here said why without noticing it was describing this build: a range installs
 # "a mixture of releases that no test has ever seen together". The ranges are
 # inside `@deepseek-ai/dsh`'s own dependencies — 61 of them at
-# `^0.1.2-alpha.5` — so `npm install @deepseek-ai/dsh@0.1.2-alpha.5` on
+# `^0.1.2-rc.1` — so `npm install @deepseek-ai/dsh@0.1.2-rc.1` on
 # 2026-09-02 produced a root at alpha.3 and 213 subpackages at alpha.4, while
 # the version assertion below it passed. An image labelled with one kernel
 # containing another, reporting success: the failure looked exactly like
