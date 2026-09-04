@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "strict": false,
     "types": ["node"],
-    "typeRoots": ["../desktop/node_modules/@types", "./node_modules/@types"]
+    "typeRoots": ["../web/node_modules/@types", "./node_modules/@types"]
   },
   "include": ["src/**/*.mjs"]
 }

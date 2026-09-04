@@ -35,7 +35,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 
 /** The browser's registered listeners, read from its own source. */
 async function browserFrameTypes() {
-  const source = await readFile(path.join(repoRoot, "apps/desktop/src/lib/runStream.ts"), "utf8");
+  const source = await readFile(path.join(repoRoot, "apps/web/src/lib/runStream.ts"), "utf8");
   const block = /export const RUN_STREAM_FRAME_TYPES = \[([\s\S]*?)\]/.exec(source);
   assert.ok(block, "RUN_STREAM_FRAME_TYPES not found — this test cannot conclude anything");
   const types = [...block[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);

@@ -69,6 +69,10 @@ SPEC D12、§16 #10、§18.1 结论、ARCH §14、FEPLAN「不把容器里的 DS
 
 ### 批次 2 · 产品壳与入口（3–4 天，含一次发版）
 
+> **T2.1 / T2.2 / T2.3 / T2.4 / T2.5 / T2.6 已完成（2026-09-04）**，见 `STATUS` S480–S486 与 `OpenScience/PROGRESS.md`。两处与初稿不同，都记在这里而不是悄悄照做：
+> ① **当前项目仍存在浏览器本地**，没有做 `PUT /api/me/current-project`。URL 里没有项目 id（用户提的正是这一条），服务端持久化只影响换一台设备时落在哪个项目，代价是要同时改 `InMemoryStore` 与 `PostgresStore` 两侧。改为先修真正的故障：`/api/me` 现在会捕获 `project_not_found` 回落到 default 并把真正选中的项目回给浏览器——此前从另一台设备删掉当前项目，这台浏览器就再也打不开账户，重新登录也没用。
+> ② **删除范围比初稿大**：`isTauri` / `hasCommandBackend` 两个常量、`lib/tauri.ts` 的 25 个只在桌面下有意义的函数、`lib/runs.ts`（本地 SQLite 运行索引）与 RunsPage 的桌面视图一并删除，因为它们在删掉 Rust 壳之后一律走「不是桌面」那条分支。可达性扫描另外扫出 14 个因此变孤儿的模块。
+
 - **T2.1 入口与路由**：`/` 未登录→`/login`，已登录→`/app`。壳内路由：`/app/chat`（新任务）、`/app/runs`（运行记录）、`/app/files`（知识库）、`/app/notebooks`（科研笔记本）、`/app/capabilities`（能力模板，原 `/agents`）、`/app/account`（账户与额度）、`/app/settings`（设置）。`/agenda`、`/inbox`、`/capsule` 随 A / B / C 轨落地，导航先不显示。项目 = 顶部切换器；**当前项目存服务端**（`/api/me` 返回 `currentProjectId`，`PUT /api/me/current-project` 切换），URL 不带 id。
 - **T2.2 对话区嵌入**（批次 1 已落地其主体）：`/app/chat` 内 iframe 指向内核界面**自己的源**（同主机、独立端口）。路径前缀方案已被实测否掉——应用用 `location.origin` 拼绝对路径，`/plugins/…` 与 `/api/<方法>` 在前缀下落回我们自己的 SPA，页面在启动时就死。项目由该源的 cookie 记住（`?project=` 一次性钉入）。切换项目即换 iframe。
 - **T2.3 运行面板与门禁可见**：壳在对话区旁展示该会话对应运行的 `status / verification / deliverables / receipt`（数据源已有：认领 + 路由 + `agentRuns` 台账 + `GET /api/runs/:id/events`），交付物下载、修复回环提示、`unchecked` 的原因说明。`RunsPage`（1158 行）保留并接同一数据。

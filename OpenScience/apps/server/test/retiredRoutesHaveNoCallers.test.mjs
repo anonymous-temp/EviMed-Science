@@ -35,7 +35,7 @@ async function sourceFiles(root, found = []) {
 }
 
 test("nothing calls the retired runtime pass-through", async () => {
-  const roots = ["apps/server/src", "apps/desktop/src", "evals", "scripts", "packages"]
+  const roots = ["apps/server/src", "apps/web/src", "evals", "scripts", "packages"]
     .map((rel) => path.join(repoRoot, rel));
   for (const root of roots) await stat(root); // a missing root would silently shrink the sweep
 

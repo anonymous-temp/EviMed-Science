@@ -32,7 +32,7 @@
     {
       "id": "research-workbench",
       "status": "adapted",
-      "evidence": ["apps/desktop/src/app/routes/LiveSessionPage.tsx", "docs/PRD.md"]
+      "evidence": ["apps/web/src/app/routes/SessionRoute.tsx", "apps/web/src/app/routes/RuntimeUiFrame.tsx", "docs/PRD.md"]
     },
     {
       "id": "identity-and-tenancy",
@@ -77,12 +77,12 @@
     {
       "id": "artifacts-and-provenance",
       "status": "adapted",
-      "evidence": ["apps/desktop/src/lib/artifacts.ts", "apps/desktop/src/lib/provenance.ts"]
+      "evidence": ["apps/web/src/lib/artifacts.ts", "apps/web/src/lib/provenance.ts"]
     },
     {
       "id": "hosted-notebooks",
       "status": "adapted",
-      "evidence": ["apps/desktop/src/components/notebook/NotebookEditor.tsx", "apps/server/src/runtimeManager.mjs"]
+      "evidence": ["apps/web/src/components/notebook/NotebookEditor.tsx", "apps/server/src/runtimeManager.mjs"]
     },
     {
       "id": "research-memory",
@@ -92,7 +92,7 @@
     {
       "id": "account-self-service-and-operations",
       "status": "adapted",
-      "evidence": ["apps/desktop/src/app/routes/AccountPage.tsx", "apps/desktop/src/components/settings/WebReadinessCard.tsx"]
+      "evidence": ["apps/web/src/app/routes/AccountPage.tsx", "apps/web/src/components/settings/WebReadinessCard.tsx"]
     },
     {
       "id": "security-and-isolation",

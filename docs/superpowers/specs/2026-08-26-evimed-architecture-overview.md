@@ -72,7 +72,7 @@
 
 依赖只向内：浏览器 → 控制面 → 运行时 → 外部；反向只有 SSE 与账本事件。**控制面是多租户边界**（DSH 的 Web 宿主是单机单用户产品，spec §2.4），所以租户、权限、计量、通知、调度全部在控制面，运行时对这些一无所知。
 
-仓库落点（`OpenScience/`）：`apps/server`（控制面）· `apps/desktop`（React 前端；`src-tauri` 待附 B 删除）· `packages/domain`（契约、门禁、状态词汇、工具名、错误码——**唯一实现**）· `packages/harness-port`（防腐层）· `packages/socket`（插座：plugins/ + presets/evimed-universal/）· `packages/contracts/<dep>`（对上游依赖的契约测试）· `capabilities/<id>`（11 份能力清单 + SKILL.md）· `capability-skills/`（打包进镜像的能力正文）· `runtime/mcp/evimed-research`（MCP server）· `deploy/{runtime-dsh,web,specialist-adapter,memos}` · `evals/`（五套评测）· `deps-version.json`（版本单点）。
+仓库落点（`OpenScience/`）：`apps/server`（控制面）· `apps/web`（React 前端；`src-tauri` 已于 2026-09-04 随附 B 删除，目录同步改名）· `packages/domain`（契约、门禁、状态词汇、工具名、错误码——**唯一实现**）· `packages/harness-port`（防腐层）· `packages/socket`（插座：plugins/ + presets/evimed-universal/）· `packages/contracts/<dep>`（对上游依赖的契约测试）· `capabilities/<id>`（11 份能力清单 + SKILL.md）· `capability-skills/`（打包进镜像的能力正文）· `runtime/mcp/evimed-research`（MCP server）· `deploy/{runtime-dsh,web,specialist-adapter,memos}` · `evals/`（五套评测）· `deps-version.json`（版本单点）。
 
 ---
 

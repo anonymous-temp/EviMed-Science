@@ -23,12 +23,11 @@ must be checked against the original evidence.
 
 ## Architecture
 
-The primary production surface is the hosted SaaS product: the React/TypeScript
-frontend connects through the EviMed server to isolated DeepSeek Harness (DSH)
-runtimes, the DeepSeek model gateway, append-only run records, artifact
-provenance, Jupyter kernels, curated scientific skills, and EviMed data/tool
-adapters. Tauri packages the same frontend as an optional desktop shell; it is
-not the core release target.
+EviMed is a hosted SaaS product and nothing else: the React/TypeScript frontend
+connects through the EviMed server to isolated DeepSeek Harness (DSH) runtimes,
+the DeepSeek model gateway, append-only run records, artifact provenance,
+Jupyter kernels, curated scientific skills, and EviMed data/tool adapters. The
+optional Tauri desktop shell was removed on 2026-09-04.
 
 Specialist adapters are registered through `EVIMED_*_URL` environment variables.
 The meta-analysis service is included in the hosted Compose stack. Other specialist
@@ -37,8 +36,7 @@ production release; see [the release checklist](./docs/EVIMED_RELEASE_AND_DELIVE
 
 ## Local development
 
-Requirements: Node.js 20+, pnpm 9, Rust, and the platform dependencies required by
-Tauri.
+Requirements: Node.js 22+ and pnpm 9.
 
 ```bash
 pnpm install
@@ -60,7 +58,6 @@ Core checks:
 ```bash
 pnpm lint
 pnpm ci:web
-pnpm check:tauri
 ```
 
 ## Deployment and operations
@@ -71,8 +68,8 @@ pnpm check:tauri
 - [Security incident response](./docs/WEB_SECURITY_INCIDENT_RESPONSE.md)
 - [Release and delivery checklist](./docs/EVIMED_RELEASE_AND_DELIVERY_CHECKLIST.md)
 
-The hosted Web deployment is the main release path. Desktop installers, when
-needed, remain optional draft artifacts and require separate signing/notarization.
+The hosted Web deployment is the only release path. Desktop packaging was
+removed on 2026-09-04 together with the Tauri shell.
 
 ## License and upstream attribution
 

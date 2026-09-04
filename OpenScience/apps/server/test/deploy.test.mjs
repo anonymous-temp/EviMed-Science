@@ -161,9 +161,9 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
   // visible rather than absent.
   const equivalents = {
     "test:server": /pnpm --filter @ai4s\/server test\b/,
-    test: /pnpm --filter @ai4s\/desktop test\b/,
-    typecheck: /pnpm --filter @ai4s\/desktop typecheck\b/,
-    "build:web": /pnpm --filter @ai4s\/desktop build\b/,
+    test: /pnpm --filter @ai4s\/web test\b/,
+    typecheck: /pnpm --filter @ai4s\/web typecheck\b/,
+    "build:web": /pnpm --filter @ai4s\/web build\b/,
     "audit:capabilities": /pnpm check:capabilities\b/,
     // `pnpm test:packages`, which CI runs, is exactly these four.
     "test:domain": /pnpm test:packages\b/,
@@ -241,17 +241,35 @@ test("web image packages the isolated backup scheduler runtime", async () => {
   assert.match(dockerfile, /ENV OPEN_SCIENCE_EXAMPLES_DIR=\/app\/examples/);
 });
 
-test("hosted command registry explicitly covers every registered Tauri command", async () => {
-  const tauriEntry = await readFile(path.join(repoRoot, "apps/desktop/src-tauri/src/lib.rs"), "utf8");
-  const handlerBlock = tauriEntry.match(/\.invoke_handler\(tauri::generate_handler!\[([\s\S]*?)\]\)/)?.[1];
-  assert.ok(handlerBlock, "Tauri command registration block must be discoverable");
+test("every command the frontend invokes is a command the registry serves", async () => {
+  // This used to compare the registry against the Tauri command table, which
+  // was the second place every command name was written. That table is gone,
+  // and the remaining second place is the browser: `invokeCommand("<name>")`
+  // call sites. A name that is not in the registry is a button that 404s, and
+  // nothing else would say so — the call is typed as a string.
+  const frontendRoot = path.join(repoRoot, "apps/web/src");
+  const files = [];
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (/\.tsx?$/.test(entry.name) && !entry.name.includes(".test.")) files.push(full);
+    }
+  };
+  await walk(frontendRoot);
+  assert.ok(files.length > 50, `only ${files.length} frontend files scanned; the walk, not the app, is wrong`);
 
-  const desktopCommands = [...handlerBlock.matchAll(/\b[a-z_]+::([a-z_][a-z0-9_]*)\s*,?/g)]
-    .map((match) => match[1])
-    .sort();
-  const hostedCommands = createCommandRegistry({ config: {}, runtimeManager: {} }).list();
-  const missing = desktopCommands.filter((command) => !hostedCommands.includes(command));
+  const invoked = new Set();
+  for (const file of files) {
+    const body = await readFile(file, "utf8");
+    for (const [, name] of body.matchAll(/invokeCommand(?:<[^>]*>)?\(\s*"([a-z_]+)"/g)) {
+      invoked.add(name);
+    }
+  }
+  assert.ok(invoked.size > 0, "no invokeCommand call sites found; the scan, not the app, is wrong");
 
+  const hosted = createCommandRegistry({ config: {}, runtimeManager: {} }).list();
+  const missing = [...invoked].filter((command) => !hosted.includes(command)).sort();
   assert.deepEqual(missing, [], `Hosted command registry is missing: ${missing.join(", ")}`);
 });
 
@@ -939,15 +957,18 @@ test("root package exposes the deployment smoke test script", async () => {
 });
 
 test("release workflows enforce source credential and quality gates before packaging", async () => {
+  // The workflow this used to read packaged the desktop installers and is
+  // gone. The property it protected is unchanged: nothing may be packaged
+  // before the secret scan and the quality gates have run, and CI must be
+  // where that ordering is expressed rather than a person's habit.
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  const buildWorkflow = await readFile(path.join(repoRoot, ".github/workflows/build.yml"), "utf8");
+  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
 
   assert.equal(packageJson.scripts["audit:source-secrets"], "node scripts/ops/audit-source-secrets.mjs");
   assert.match(packageJson.scripts["ci:web"], /audit:source-secrets/);
-  assert.match(buildWorkflow, /quality:/);
-  assert.match(buildWorkflow, /build:\n\s+needs: quality/);
-  assert.match(buildWorkflow, /pnpm ci:web/);
-  assert.match(buildWorkflow, /pnpm check:tauri/);
+  assert.match(workflow, /pnpm audit:source-secrets/);
+  // The image build is the packaging step, and it waits for the gate job.
+  assert.match(workflow, /docker-hosted:\n\s+runs-on: [^\n]+\n\s+needs: web/);
 });
 
 test("Hosted E2E targets a real deployed release while the mock flow is labeled as a contract test", async () => {

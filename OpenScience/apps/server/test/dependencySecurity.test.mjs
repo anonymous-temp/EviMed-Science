@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const desktopRequire = createRequire(path.join(repoRoot, "apps/desktop/package.json"));
+const desktopRequire = createRequire(path.join(repoRoot, "apps/web/package.json"));
 
 function dependencyVersion(parent, dependency) {
   const parentPackage = desktopRequire.resolve(`${parent}/package.json`);
@@ -44,7 +44,7 @@ test("no production advisory is accepted, because the last one is now fixable", 
 });
 
 test("the shipped web bundle carries no exceljs Node archive dependency", async () => {
-  const assets = path.join(repoRoot, "apps", "desktop", "dist", "assets");
+  const assets = path.join(repoRoot, "apps", "web", "dist", "assets");
   const entries = await readdir(assets).catch(() => []);
   if (entries.length === 0) return; // build:web has not run in this checkout
   const bundled = [];

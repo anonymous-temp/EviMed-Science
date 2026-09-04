@@ -17,11 +17,10 @@ async function productionTsxFiles(directory) {
 }
 
 test("all visible application branding uses EviMed", async () => {
-  const frontendFiles = await productionTsxFiles(path.join(repoRoot, "apps/desktop/src"));
+  const frontendFiles = await productionTsxFiles(path.join(repoRoot, "apps/web/src"));
   const frontend = (await Promise.all(frontendFiles.map((file) => readFile(file, "utf8")))).join("\n");
-  const html = await readFile(path.join(repoRoot, "apps/desktop/index.html"), "utf8");
-  const tauri = JSON.parse(await readFile(path.join(repoRoot, "apps/desktop/src-tauri/tauri.conf.json"), "utf8"));
-  const mark = await readFile(path.join(repoRoot, "apps/desktop/src/assets/evimed-mark.svg"), "utf8");
+  const html = await readFile(path.join(repoRoot, "apps/web/index.html"), "utf8");
+  const mark = await readFile(path.join(repoRoot, "apps/web/src/assets/evimed-mark.svg"), "utf8");
   const mockRuntime = await readFile(path.join(repoRoot, "apps/server/src/mockDshRuntime.mjs"), "utf8");
 
   assert.doesNotMatch(frontend, /Open Science/i);
@@ -29,9 +28,6 @@ test("all visible application branding uses EviMed", async () => {
   assert.match(frontend, />\s*EviMed\s*</);
   assert.match(html, /<title>EviMed<\/title>/);
   assert.doesNotMatch(html, /Open Science/i);
-  assert.equal(tauri.productName, "EviMed");
-  assert.equal(tauri.identifier, "com.evimed.science");
-  assert.equal(tauri.app.windows[0].title, "EviMed");
   assert.match(mark, /aria-label="EviMed"/);
   assert.doesNotMatch(mockRuntime, /OPENCODE|OpenCode/);
   assert.match(mockRuntime, /EviMed 测试运行时/);
@@ -39,17 +35,16 @@ test("all visible application branding uses EviMed", async () => {
 
 test("public release metadata and documentation identify the product as EviMed", async () => {
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  const workflow = await readFile(path.join(repoRoot, ".github/workflows/build.yml"), "utf8");
   const readme = await readFile(path.join(repoRoot, "README.md"), "utf8");
   const readmeZh = await readFile(path.join(repoRoot, "README.zh.md"), "utf8");
 
   assert.equal(packageJson.name, "evimed-science");
   assert.match(packageJson.description, /^EviMed/);
-  assert.match(workflow, /releaseName:.*EviMed/);
-  assert.match(workflow, /name: evimed-science-\$\{\{ matrix\.target \}\}/);
-  assert.doesNotMatch(workflow, /releaseName:.*Open Science/);
   assert.match(readme, /^# EviMed/m);
   assert.match(readmeZh, /^# EviMed/m);
-  assert.doesNotMatch(readme, /\/Applications\/Open Science\.app/);
-  assert.doesNotMatch(readmeZh, /\/Applications\/Open Science\.app/);
+  // The desktop bundle these named is gone; a README that still tells someone
+  // to open an application in /Applications is telling them to install a thing
+  // that is not published any more.
+  assert.doesNotMatch(readme, /\/Applications\//);
+  assert.doesNotMatch(readmeZh, /\/Applications\//);
 });

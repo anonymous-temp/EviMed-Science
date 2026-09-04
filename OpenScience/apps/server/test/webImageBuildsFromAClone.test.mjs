@@ -42,7 +42,7 @@ test("every git-ignored path the web image copies is checked for, by name", asyn
     .flatMap((match) => match[1].trim().split(/\s+/)));
 
   // A git-ignored path is only a problem if it has to arrive WITH the context.
-  // `apps/desktop/dist` is git-ignored and copied, and is fine: the build stage
+  // `apps/web/dist` is git-ignored and copied, and is fine: the build stage
   // produces it. The difference is evidence in this same file — a RUN that
   // builds it — not a name on an allowlist.
   const buildProduced = (relative) => {

@@ -850,7 +850,18 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/me" && req.method === "GET") {
         const { user, session } = await store.ensureSessionUser(req, res);
-        const project = await store.selectedProject(req, user);
+        // A browser remembers its project and sends it on every request,
+        // including this one. Deleting that project — from another device, or
+        // from this one with the tab still open — used to make this route 404,
+        // and this route is what the shell asks before it renders anything: the
+        // account became unopenable, and logging in again did not help because
+        // the browser sent the same dead id. Falling back to the default here
+        // is what lets the answer say which project was actually selected, so
+        // the browser can correct itself.
+        const project = await store.selectedProject(req, user).catch(async (error) => {
+          if (error?.code !== "project_not_found") throw error;
+          return store.defaultProject(user);
+        });
         sendJson(res, 200, {
           data: {
             user: store.publicUser(user),

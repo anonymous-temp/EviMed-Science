@@ -844,14 +844,12 @@ export function createCommandRegistry({ config, runtimeManager }) {
       );
     },
 
-    // These two keep the retired kernel's name because the name is the wire.
-    // The same string is spelled in four places that must agree — the Tauri
-    // command table (`apps/desktop/src-tauri/src/lib.rs`), its handlers
-    // (`src-tauri/src/runtime.rs`), the client that invokes them
-    // (`apps/desktop/src/lib/tauri.ts`), and here — so renaming one side is a
-    // silent break, not a refactor. Hosted mode answers both without a kernel:
-    // providers are configured by the deployment, and there is no desktop
-    // credential store to import from.
+    // These two keep the retired kernel's name because the name is the wire:
+    // an already-loaded browser bundle can still call them, and a rename would
+    // turn each of those calls into an anonymous 404. Nothing in this repo
+    // calls them any more — the desktop shell and its client are gone — and
+    // both answer without a kernel: providers are configured by the
+    // deployment, and there is no credential store to import from.
     async configure_opencode() {
       unsupported("Model/provider configuration is deferred for this web slice.");
     },
