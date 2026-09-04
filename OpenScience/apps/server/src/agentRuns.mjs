@@ -3190,8 +3190,9 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null }} [routed]
    */
-  async adoptRuntimeSession(project, sessionId) {
+  async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
     const existing = (await this.list(project)).find((run) => run.sessionId === id);
     if (existing) return existing;
@@ -3215,11 +3216,32 @@ export class AgentRunStore {
       runtimeAgent: null,
     }, {
       baselineCursor: null,
-      effectiveRouteReason: adoptedRouteReason,
+      question: routed.question ?? null,
+      effectiveAgentId: routed.effectiveAgentId ?? null,
+      effectiveAgentVersion: routed.effectiveAgentVersion ?? null,
+      effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? null,
+      // The route reason still says the session was adopted, and now also says
+      // where it was routed, because both are true and a reader needs both:
+      // `adopted:runtime-ui` alone could not tell a graded run from an ungraded
+      // one.
+      // Joined with `:` because the reason pattern allows it and `+` is not in
+      // the character class -- a reason the ledger refuses is a run that cannot
+      // be written at all.
+      effectiveRouteReason: routed.effectiveRouteReason
+        ? `${adoptedRouteReason}:${routed.effectiveRouteReason}`.slice(0, 64)
+        : adoptedRouteReason,
     });
-    await this.appendQualityNotices(project, run.id, [
-      "Started in the runtime's own browser application. It declares no deliverable contract, so the delivery gate did not run on this session.",
-    ], { unchecked: true });
+    if (routed.effectiveRuntimeAgent) {
+      // A contract was found for what the person actually asked, so the run is
+      // graded like any other and the monitor is what carries it to a verdict.
+      this.scheduleMonitor(project, run.id);
+    } else {
+      // Nothing to grade against: no text to route, so no contract. Said in the
+      // one machine-readable field rather than left to look like a pass.
+      await this.appendQualityNotices(project, run.id, [
+        "Adopted from the runtime's own browser application with no readable first message, so no deliverable contract could be selected and the delivery gate did not run on this session.",
+      ], { unchecked: true });
+    }
     return (await this.list(project)).find((item) => item.id === run.id) ?? run;
   }
 
