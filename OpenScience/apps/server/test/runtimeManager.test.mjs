@@ -2206,3 +2206,53 @@ test("an unauthenticated browser-application socket learns nothing about the sur
   assert.equal(result.upgraded, false);
   assert.equal(result.status, 401);
 });
+
+
+test("the browser application may write without our CSRF token, but only from our own page", async (t) => {
+  // It is a different application and has never heard of this control plane's
+  // token, so every non-GET request it made was refused: the surface loaded,
+  // opened its socket, and could not create a session. Origin is the defence
+  // there -- and a request that carries no Origin at all is not the browser
+  // this is protecting, so it is refused too.
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-runtime-ui-csrf-"));
+  const app = createWebApiApp({
+    dataDir,
+    port: 0,
+    runtimeMode: "mock",
+    devAuth: false,
+    runtimeUiProxyEnabled: true,
+    publicUrl: "https://science.example",
+    bootstrapUser: "operator",
+    bootstrapPassword: "a-sufficiently-long-password",
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  t.after(async () => {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username: "operator", password: "a-sufficiently-long-password" }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = (login.headers.getSetCookie?.() ?? []).map((item) => item.split(";")[0]).join("; ");
+
+  const post = (origin) => fetch(`${base}/api/runtime-ui/default/api/session/create`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json", ...(origin ? { origin } : {}) },
+    body: "{}",
+  });
+
+  assert.equal((await post("https://attacker.example")).status, 403, "a cross-origin write must be refused");
+  assert.equal((await post(null)).status, 403, "a write with no Origin must be refused");
+  // Same origin gets past the guard: whatever the kernel then answers, it is
+  // not this control plane refusing the request.
+  const allowed = await post("https://science.example");
+  assert.notEqual(allowed.status, 403);
+  const body = await allowed.json().catch(() => ({}));
+  assert.notEqual(body.code, "csrf_required");
+  assert.notEqual(body.code, "forbidden_origin");
+});

@@ -175,6 +175,30 @@ function hasSessionCookie(req, config) {
     .some((pair) => pair.trim().startsWith(`${name}=`));
 }
 
+/**
+ * Whether a request came from this deployment's own page.
+ *
+ * Used where a CSRF token cannot be: the proxied application does not know
+ * ours, and a WebSocket cannot carry one at all. Unlike the socket rule this
+ * one refuses a missing `Origin`, because a browser sends it on exactly the
+ * requests that need guarding and something that omits it is not the browser
+ * this is protecting.
+ * @param {any} req @param {Record<string, any>} config
+ */
+function sameOriginRequest(req, config) {
+  const method = String(req.method ?? "GET").toUpperCase();
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
+  const origin = String(req.headers.origin ?? "").trim();
+  if (!origin) return false;
+  const allowed = String(config.publicUrl ?? "").trim();
+  if (!allowed) return false;
+  try {
+    return new URL(origin).origin === new URL(allowed).origin;
+  } catch {
+    return false;
+  }
+}
+
 /** @param {any} req @param {Record<string, any>} config */
 function sameOriginUpgrade(req, config) {
   const origin = String(req.headers.origin ?? "").trim();
@@ -737,7 +761,20 @@ export function createWebApiApp(overrides = {}) {
     }
     try {
       enforceRequestRateLimits(req, pathname);
-      await store.assertCsrf(req, pathname);
+      // The kernel's browser application cannot carry this control plane's CSRF
+      // token: it is a different application that has never heard of it. Every
+      // non-GET request it made was refused, so the surface loaded, opened its
+      // socket, and could not create a session. Same origin is the defence
+      // there instead -- the same one the socket already uses, and for the same
+      // reason. It is required rather than merely accepted: a request with no
+      // Origin at all is not a browser obeying this rule.
+      if (pathname.startsWith("/api/runtime-ui/")) {
+        if (!sameOriginRequest(req, config)) {
+          throw new HttpError(403, "forbidden_origin", "The runtime browser application accepts same-origin requests only.");
+        }
+      } else {
+        await store.assertCsrf(req, pathname);
+      }
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
