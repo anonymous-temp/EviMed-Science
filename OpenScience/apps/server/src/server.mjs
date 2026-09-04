@@ -23,7 +23,7 @@ import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
-import { spendAdmission, summarizeUsage, USAGE_EVENTS_FILE } from "./usageMetering.mjs";
+import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -1146,7 +1146,7 @@ export function createWebApiApp(overrides = {}) {
             "The research model provider is not configured on this EviMed server.",
           );
         }
-        await assertSpendAdmission(config, ctx.user);
+        await assertSpendWithinLimits(config, ctx.user.id);
         const registry = await agentRegistry;
         const boundSession = await researchSessions.get(ctx.project, body.sessionId);
         // The default open-domain answer agent is the fallback handler, never
@@ -2719,44 +2719,6 @@ async function readServerErrorJsonl(req, ctx) {
 }
 
 /**
- * Refuse a dispatch the account cannot afford, before anything starts.
- *
- * Only when the deployment set a cap: with no cap configured this reads no
- * files and refuses nothing, so an operator who has not chosen a number does
- * not get one chosen for them.
- */
-async function assertSpendAdmission(config, user) {
-  if (!(config.userDailySpendLimit > 0) && !(config.userWeeklySpendLimit > 0)) return;
-  const file = path.join(config.dataDir, ".openscience", USAGE_EVENTS_FILE);
-  const rows = await readAllJsonl(config.dataDir, file, config);
-  const verdict = spendAdmission(rows, {
-    userId: user.id,
-    dailyLimit: config.userDailySpendLimit,
-    weeklyLimit: config.userWeeklySpendLimit,
-  });
-  if (verdict.allowed !== false) return;
-  // The numbers go in the message and the wait goes in `Retry-After`. The
-  // error envelope carries `error`, `code` and `requestId` and nothing else,
-  // and widening it for one refusal would change the shape every client parses
-  // — so the machine-readable part is the code and the seconds, and the
-  // specifics are in the sentence an operator reads in the log.
-  const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(verdict.resetsAt) - Date.now()) / 1000));
-  // Which window, not just "no credits". The registry already distinguishes
-  // them, and they lead to different actions: a daily cap frees up on its own,
-  // a weekly one is a conversation with whoever set it. `credits_exhausted`
-  // stays reserved for a balance, which this deployment does not have yet —
-  // its message offers a top-up, and offering one that does not exist is worse
-  // than saying nothing.
-  throw new HttpError(
-    402,
-    verdict.window === "day" ? "credits_daily_limit_reached" : "credits_weekly_limit_reached",
-    `This account reached its ${verdict.window === "day" ? "daily" : "weekly"} spending limit: ` +
-      `${verdict.spent} of ${verdict.limit} ${verdict.currency} used; it frees up at ${verdict.resetsAt}.`,
-    { retryAfterSeconds },
-  );
-}
-
-/**
  * This account's usage events.
  *
  * Read with the byte-bounded reader, not the log reader the other ledgers use:
@@ -2771,8 +2733,7 @@ async function assertSpendAdmission(config, user) {
  * a leak whether or not the caller's arithmetic happened to drop them.
  */
 async function readServerUsageJsonl(config, user) {
-  const file = path.join(config.dataDir, ".openscience", USAGE_EVENTS_FILE);
-  return (await readAllJsonl(config.dataDir, file, config)).filter((row) => row.userId === user.id);
+  return (await readUsageEvents(config)).filter((row) => row.userId === user.id);
 }
 
 async function readServerSecurityJsonl(req, ctx) {
@@ -2808,33 +2769,6 @@ async function readJsonlTail(req, config, rootDir, file) {
     })
     .filter(Boolean)
     .reverse();
-}
-
-/**
- * Every usage line the retained log still holds, newest rotation included.
- *
- * Reads a tail rather than the whole file, and a generous one: a spend window
- * is at most a week, and the cap is on what the reader can be charged, so
- * missing older rows can only ever undercount. The bound exists because an
- * unbounded read of a log is how a dispatch starts costing seconds.
- */
-async function readAllJsonl(rootDir, file, config) {
-  const maxBytes = Math.max(1024 * 1024, Number(config.maxLogReadBytes) || 0) * 4;
-  const current = await readTailText(rootDir, file, maxBytes);
-  const remaining = Math.max(0, maxBytes - Buffer.byteLength(current));
-  const rotated = remaining > 0 ? await readTailText(rootDir, `${file}.1`, remaining) : "";
-  const joined = rotated && current && !rotated.endsWith("\n") ? `${rotated}\n${current}` : `${rotated}${current}`;
-  const lines = joined.split("\n").filter(Boolean);
-  const rows = [];
-  for (const line of lines) {
-    try {
-      rows.push(JSON.parse(line));
-    } catch {
-      // A truncated first line is what reading a tail produces; skipping it
-      // is right, and it can only ever undercount.
-    }
-  }
-  return rows;
 }
 
 async function readTailText(rootDir, file, maxBytes) {

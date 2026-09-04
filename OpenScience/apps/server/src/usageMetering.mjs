@@ -1,6 +1,6 @@
 import path from "node:path";
 import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
-import { appendJsonLineNoFollow } from "./security.mjs";
+import { HttpError, appendJsonLineNoFollow, openScopedFileNoFollow } from "./security.mjs";
 
 /**
  * What the deployment spent, per request, recorded where it happened.
@@ -227,4 +227,91 @@ export function spendAdmission(rows, { userId, dailyLimit = 0, weeklyLimit = 0, 
     }
   }
   return { allowed: true };
+}
+
+/**
+ * Every usage line the retained log still holds.
+ *
+ * Bounded by bytes rather than rows. The row-capped reader the audit ledgers
+ * use is right for "show me recent lines" and wrong for a total: the file
+ * holds every account's events, so a hundred rows is a hundred calls across
+ * the whole deployment and one account's month would come back understated by
+ * however much traffic the others made.
+ *
+ * Missing older rows can only ever undercount, which for a spend cap errs
+ * toward letting work happen — the right direction for a limit whose failure
+ * mode is refusing a researcher mid-afternoon.
+ */
+export async function readUsageEvents(config) {
+  const file = path.join(config.dataDir, ".openscience", USAGE_EVENTS_FILE);
+  const maxBytes = Math.max(1024 * 1024, Number(config.maxLogReadBytes) || 0) * 4;
+  const current = await readTail(config.dataDir, file, maxBytes);
+  const remaining = Math.max(0, maxBytes - Buffer.byteLength(current));
+  const rotated = remaining > 0 ? await readTail(config.dataDir, `${file}.1`, remaining) : "";
+  const joined = rotated && current && !rotated.endsWith("\n") ? `${rotated}\n${current}` : `${rotated}${current}`;
+  const rows = [];
+  for (const line of joined.split("\n")) {
+    if (!line) continue;
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      // Reading a tail can cut the first line in half. Skipping it can only
+      // undercount, which is the safe direction here.
+    }
+  }
+  return rows;
+}
+
+async function readTail(rootDir, file, maxBytes) {
+  const opened = await openScopedFileNoFollow(rootDir, file).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!opened) return "";
+  const { handle, stat } = opened;
+  try {
+    if (!stat.isFile()) return "";
+    if (stat.size <= maxBytes) return await handle.readFile("utf8");
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, stat.size - maxBytes);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Refuse an account that is over its cap, before whatever it asked for starts.
+ *
+ * Called at the two moments something begins: dispatching a run, and starting
+ * a project's runtime. The second is not redundant — a run begun inside the
+ * kernel's own browser application never passes through dispatch, and the
+ * frame is the primary surface, so a cap that only guarded dispatch would be
+ * one the product's main path walks around.
+ *
+ * Never mid-flight. A cap enforced against a running turn abandons work that
+ * has already been paid for and delivers nothing for it.
+ *
+ * @param {object} config @param {string} userId
+ */
+export async function assertSpendWithinLimits(config, userId) {
+  const dailyLimit = Number(config.userDailySpendLimit) || 0;
+  const weeklyLimit = Number(config.userWeeklySpendLimit) || 0;
+  if (dailyLimit <= 0 && weeklyLimit <= 0) return;
+  const verdict = spendAdmission(await readUsageEvents(config), { userId, dailyLimit, weeklyLimit });
+  if (verdict.allowed !== false) return;
+  const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(verdict.resetsAt) - Date.now()) / 1000));
+  // Which window, not just "no credits". The registry distinguishes them and
+  // they lead to different actions: a daily cap frees up on its own, a weekly
+  // one is a conversation with whoever set it. `credits_exhausted` stays
+  // reserved for a balance, which this deployment does not have — its message
+  // offers a top-up, and offering one that does not exist is worse than
+  // saying nothing.
+  throw new HttpError(
+    402,
+    verdict.window === "day" ? "credits_daily_limit_reached" : "credits_weekly_limit_reached",
+    `This account reached its ${verdict.window === "day" ? "daily" : "weekly"} spending limit: ` +
+      `${verdict.spent} of ${verdict.limit} ${verdict.currency} used; it frees up at ${verdict.resetsAt}.`,
+    { retryAfterSeconds },
+  );
 }
