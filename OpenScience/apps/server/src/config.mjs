@@ -619,6 +619,18 @@ export function loadConfig(overrides = {}) {
         8,
     ),
     maxRunningRuntimes: Number(overrides.maxRunningRuntimes ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES ?? 8),
+    // Spend caps, in the price list's currency, per account. Zero means no
+    // cap, which is the default: a limit nobody chose is a limit that fires at
+    // the worst moment, and until the deployment has seen a month of real
+    // usage there is no number to choose. Both are checked at dispatch, not
+    // mid-run — stopping a run halfway spends everything it cost and delivers
+    // nothing.
+    userDailySpendLimit: Number(
+      overrides.userDailySpendLimit ?? process.env.OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT ?? 0,
+    ) || 0,
+    userWeeklySpendLimit: Number(
+      overrides.userWeeklySpendLimit ?? process.env.OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT ?? 0,
+    ) || 0,
     maxRunningRuntimesPerUser: Number(
       overrides.maxRunningRuntimesPerUser ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER ?? 4,
     ),

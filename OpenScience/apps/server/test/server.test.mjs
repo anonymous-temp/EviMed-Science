@@ -2689,6 +2689,78 @@ test("a browser holding a deleted project's id can still open its account", asyn
   });
 });
 
+test("a run is refused before it starts when the account is over its cap", async () => {
+  // At dispatch and nowhere else. A cap enforced mid-run abandons a run that
+  // has already spent most of what it was going to spend and delivers nothing
+  // for it — the one outcome worse than going slightly over.
+  await withAuthApp(async ({ app, base }) => {
+    const loggedIn = await login(base);
+    const usageFile = path.join(app.config.dataDir, ".openscience", "usage.jsonl");
+    await mkdir(path.dirname(usageFile), { recursive: true });
+    await writeFile(
+      usageFile,
+      `${JSON.stringify({
+        at: new Date().toISOString(),
+        resourceType: "model",
+        userId: "alice",
+        projectId: "default",
+        model: "deepseek-v4-pro",
+        cacheHit: 0,
+        cacheMiss: 1000,
+        output: 500,
+        cost: 25,
+        currency: "CNY",
+        priced: true,
+      })}\n`,
+      "utf8",
+    );
+
+    const refused = await fetch(`${base}/api/agent-runs/dispatch`, {
+      method: "POST",
+      headers: {
+        Cookie: loggedIn.cookie,
+        "Content-Type": "application/json",
+        "X-Open-Science-CSRF": loggedIn.csrfToken,
+      },
+      body: JSON.stringify({ sessionId: "ses-1", dispatchId: "turn-1", text: "analyze this" }),
+    });
+    assert.equal(refused.status, 402);
+    const body = await refused.json();
+    // The window, not just "no credits": a daily cap frees up on its own, a
+    // weekly one is a conversation with whoever set it.
+    assert.equal(body.code, "credits_daily_limit_reached");
+    assert.match(body.error, /25 of 10 CNY used/);
+    // And when it frees up, as a number the client can act on.
+    assert.ok(Number(refused.headers.get("retry-after")) > 0);
+  }, { userDailySpendLimit: 10 });
+});
+
+test("no cap configured refuses no dispatch, whatever the account has spent", async () => {
+  await withAuthApp(async ({ app, base }) => {
+    const loggedIn = await login(base);
+    const usageFile = path.join(app.config.dataDir, ".openscience", "usage.jsonl");
+    await mkdir(path.dirname(usageFile), { recursive: true });
+    await writeFile(
+      usageFile,
+      `${JSON.stringify({ at: new Date().toISOString(), resourceType: "model", userId: "alice", projectId: "default", model: "deepseek-v4-pro", cacheHit: 0, cacheMiss: 1, output: 1, cost: 10_000, currency: "CNY", priced: true })}\n`,
+      "utf8",
+    );
+
+    const response = await fetch(`${base}/api/agent-runs/dispatch`, {
+      method: "POST",
+      headers: {
+        Cookie: loggedIn.cookie,
+        "Content-Type": "application/json",
+        "X-Open-Science-CSRF": loggedIn.csrfToken,
+      },
+      body: JSON.stringify({ sessionId: "ses-1", dispatchId: "turn-1", text: "analyze this" }),
+    });
+    // Whatever else this deployment says about the dispatch, it is not a
+    // refusal about money.
+    assert.notEqual(response.status, 402);
+  });
+});
+
 test("self-registration is off unless the deployment turns it on", async () => {
   await withAuthApp(async ({ base }) => {
     const methods = await (await fetch(`${base}/api/auth/methods`)).json();

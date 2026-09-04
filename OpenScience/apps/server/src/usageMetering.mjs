@@ -182,3 +182,49 @@ export function summarizeUsage(rows, filter = {}) {
     byModel: [...byModel.values()].sort((left, right) => right.cost - left.cost),
   };
 }
+
+/**
+ * Whether this account may start another run, and why not when it may not.
+ *
+ * Checked at dispatch and nowhere else. A cap enforced mid-run would abandon
+ * a run that had already spent most of what it was going to spend and deliver
+ * nothing for it — the one outcome worse than going slightly over.
+ *
+ * Both windows are rolling rather than calendar. A calendar day resets at
+ * midnight UTC, which for a researcher in Beijing is the middle of the working
+ * afternoon; a rolling window spends the same budget without a cliff nobody
+ * can see coming.
+ *
+ * @param {readonly any[]} rows recorded usage events
+ * @param {{ userId: string, dailyLimit?: number, weeklyLimit?: number, now?: Date }} input
+ * @returns {{ allowed: true } | { allowed: false, window: "day" | "week", limit: number, spent: number, currency: string, resetsAt: string }}
+ */
+export function spendAdmission(rows, { userId, dailyLimit = 0, weeklyLimit = 0, now = new Date() }) {
+  const windows = [
+    { name: /** @type {const} */ ("day"), limit: Number(dailyLimit) || 0, ms: 24 * 60 * 60 * 1000 },
+    { name: /** @type {const} */ ("week"), limit: Number(weeklyLimit) || 0, ms: 7 * 24 * 60 * 60 * 1000 },
+  ];
+  for (const window of windows) {
+    if (window.limit <= 0) continue;
+    const since = new Date(now.getTime() - window.ms);
+    const spent = summarizeUsage(rows, { userId, since }).cost;
+    if (spent >= window.limit) {
+      // When the oldest charge in the window ages out, which is the moment
+      // this stops refusing. "Try again later" without a time is a dead end.
+      const inWindow = rows
+        .filter((row) => row?.userId === userId && Date.parse(row.at) >= since.getTime())
+        .map((row) => Date.parse(row.at))
+        .sort((left, right) => left - right);
+      const resetsAt = new Date((inWindow[0] ?? now.getTime()) + window.ms).toISOString();
+      return {
+        allowed: false,
+        window: window.name,
+        limit: window.limit,
+        spent,
+        currency: REFERENCE_PRICE_LIST.currency,
+        resetsAt,
+      };
+    }
+  }
+  return { allowed: true };
+}
