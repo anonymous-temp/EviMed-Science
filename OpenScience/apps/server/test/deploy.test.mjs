@@ -1889,3 +1889,28 @@ test("the hosted e2e accepts any certified model, not one written into it", asyn
     "more than one model must be certified, or nothing here is being decided",
   );
 });
+
+test("every optional-channel lever the server reads is forwarded by compose", async () => {
+  // Compose forwards environment item by item, so a variable the server reads
+  // and this file does not list simply does not exist in the container: setting
+  // it does nothing and says nothing. `OPEN_SCIENCE_GEO_PROBE_URL` was exactly
+  // that -- read by `config.mjs`, passed by no compose file -- so the GEO probe
+  // channel could not be switched on from the deployment's own `.env` and the
+  // tool reported itself unconfigured on a host whose probe was up.
+  const config = await readFile(path.join(repoRoot, "apps/server/src/config.mjs"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const read = [...config.matchAll(/process\.env\.(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH)_[A-Z0-9_]+)/g)]
+    .map((match) => match[1]);
+  const names = [...new Set(read)].sort();
+  assert.ok(
+    names.length >= 6,
+    `the scan found ${names.length} optional-channel levers in config.mjs; it is not reading the file`,
+  );
+  assert.ok(names.includes("OPEN_SCIENCE_GEO_PROBE_URL"), "the scan missed the GEO probe URL");
+  for (const name of names) {
+    assert.ok(
+      compose.includes(`\${${name}`),
+      `${name} is read by the server and forwarded by no compose entry, so setting it does nothing`,
+    );
+  }
+});
