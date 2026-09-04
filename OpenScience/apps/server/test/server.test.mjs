@@ -2715,6 +2715,35 @@ test("a browser holding a deleted project's id can still open its account", asyn
   });
 });
 
+test("an account cannot hold more projects than its limit", async () => {
+  // A per-project storage quota and a per-user runtime limit bound nothing on
+  // their own: an account at either limit can make another project and have
+  // another of each.
+  await withAuthApp(async ({ base }) => {
+    const loggedIn = await login(base);
+    const create = (id) =>
+      fetch(`${base}/api/projects`, {
+        method: "POST",
+        headers: {
+          Cookie: loggedIn.cookie,
+          "Content-Type": "application/json",
+          "X-Open-Science-CSRF": loggedIn.csrfToken,
+        },
+        body: JSON.stringify({ id, name: id }),
+      });
+
+    // `default` already exists, so one more reaches the limit of two.
+    assert.equal((await create("paper1")).status, 200);
+    const refused = await create("paper2");
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).code, "project_limit_reached");
+
+    // Re-creating one that exists is not a new project and is not refused —
+    // otherwise an account at its limit could never touch its own projects.
+    assert.equal((await create("paper1")).status, 200);
+  }, { maxProjectsPerUser: 2 });
+});
+
 test("a run is refused before it starts when the account is over its cap", async () => {
   // At dispatch and nowhere else. A cap enforced mid-run abandons a run that
   // has already spent most of what it was going to spend and delivers nothing

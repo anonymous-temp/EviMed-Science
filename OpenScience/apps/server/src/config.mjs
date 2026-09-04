@@ -540,6 +540,13 @@ export function loadConfig(overrides = {}) {
     maxJsonBytes: Number(overrides.maxJsonBytes ?? process.env.OPEN_SCIENCE_MAX_JSON_BYTES ?? 12 * 1024 * 1024),
     maxFileBytes: Number(overrides.maxFileBytes ?? process.env.OPEN_SCIENCE_MAX_FILE_BYTES ?? 50 * 1024 * 1024),
     maxProjectBytes: Number(overrides.maxProjectBytes ?? process.env.OPEN_SCIENCE_MAX_PROJECT_BYTES ?? 1024 * 1024 * 1024),
+    // How many projects one account may hold. Each carries its own storage
+    // quota and its own runtime, so without a count the per-project limits
+    // bound nothing: an account can have as much disk and as many containers
+    // as it cares to create projects.
+    maxProjectsPerUser: Number(
+      overrides.maxProjectsPerUser ?? process.env.OPEN_SCIENCE_MAX_PROJECTS_PER_USER ?? 20,
+    ) || 20,
     maxWorkspaceScanEntries: Number(
       overrides.maxWorkspaceScanEntries ?? process.env.OPEN_SCIENCE_MAX_WORKSPACE_SCAN_ENTRIES ?? 10_000,
     ),

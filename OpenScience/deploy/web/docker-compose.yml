@@ -16,6 +16,7 @@ x-runtime-caps: &runtime-caps
   # number to choose, and a limit nobody chose fires at the worst moment.
   OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT: ${OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT:-0}
   OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT: ${OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT:-0}
+  OPEN_SCIENCE_MAX_PROJECTS_PER_USER: ${OPEN_SCIENCE_MAX_PROJECTS_PER_USER:-20}
 
 services:
   evimed-postgres:
