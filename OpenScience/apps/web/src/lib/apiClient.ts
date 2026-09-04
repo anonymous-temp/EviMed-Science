@@ -595,19 +595,14 @@ export function getWebOidcStartUrl(returnTo = "/app/settings"): string {
 }
 
 /**
- * Which session view this deployment serves.
+ * What this deployment serves as its session surface.
  *
- * A deployment decision, not a build flag: the two views read different
- * sources, and only the server knows which one it is serving.
- *
- * It carries no kernel name. `/api/me` still reports one, and the browser
- * deliberately ignores it — the frontend knowing which kernel is running is
- * how a kernel change became a frontend change (AGENTS.md: the browser never
- * reaches a kernel). What the page needs is which stream to read, and that is
- * what this says.
+ * A deployment decision, not a build flag. It carries no kernel name: `/api/me`
+ * still reports one and the browser deliberately ignores it, because the
+ * frontend knowing which kernel is running is how a kernel change became a
+ * frontend change (AGENTS.md: the browser never reaches a kernel).
  */
 export interface WebRuntimeProfile {
-  sessionView: "run-stream" | "legacy";
   /**
    * Where the kernel's own browser application is served, or `""` when this
    * deployment does not serve it. It is a whole origin rather than a path
@@ -620,25 +615,25 @@ export interface WebRuntimeProfile {
 /**
  * The deployment's runtime profile, remembered from the last `/api/me`.
  *
- * Defaults to the retiring view, and must: the desktop shell has no `/api/me`
- * to ask, and the retiring view is the only one it renders. In a browser the
- * default holds for the one render before the control plane answers.
+ * Empty until the control plane answers, which is also the right answer for a
+ * deployment that serves no kernel application: render the built-in view.
  */
-let runtimeProfile: WebRuntimeProfile = { sessionView: "legacy", uiOrigin: "" };
+let runtimeProfile: WebRuntimeProfile = { uiOrigin: "" };
 
-function rememberRuntimeProfile(profile: WebRuntimeProfile | undefined): void {
-  if (profile?.sessionView === "run-stream" || profile?.sessionView === "legacy") {
-    runtimeProfile = {
-      sessionView: profile.sessionView,
-      // A server older than this bundle does not send it, and an absent origin
-      // is not an empty one: it means "render your own view", which is what
-      // the default already is.
-      uiOrigin: typeof profile.uiOrigin === "string" ? profile.uiOrigin : "",
-    };
-  }
+function rememberRuntimeProfile(profile: (WebRuntimeProfile & { sessionView?: string }) | undefined): void {
+  if (!profile) return;
+  // `sessionView` used to gate this whole assignment, from when it chose
+  // between two views. There is one view now, and a field nothing reads must
+  // not decide whether a field everything reads is kept — the server dropping
+  // it would have silently taken `uiOrigin` with it, and the session surface
+  // would have quietly reverted with nothing to point at.
+  //
+  // An absent origin is not an empty one: it means "render your own view",
+  // which is what the default already says.
+  runtimeProfile = { uiOrigin: typeof profile.uiOrigin === "string" ? profile.uiOrigin : "" };
 }
 
-/** @returns the session view this deployment serves */
+/** @returns what this deployment serves as its session surface */
 export function webRuntimeProfile(): WebRuntimeProfile {
   return runtimeProfile;
 }
