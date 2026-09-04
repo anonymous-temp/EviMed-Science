@@ -78,7 +78,7 @@ export function RunStreamSessionPage() {
         setRunSessionId(run.sessionId);
         setRunStatus(run.status);
         setRunId(run.id);
-        if (run.sessionId !== sessionId) navigate(`/live/${encodeURIComponent(run.sessionId)}`, { replace: true });
+        if (run.sessionId !== sessionId) navigate(`/app/chat/${encodeURIComponent(run.sessionId)}`, { replace: true });
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
       } finally {

@@ -1931,8 +1931,14 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   // the session surface: its port and public origin are the same kind of
   // lever, and a surface switched on in `.env` that never reaches the
   // container is a product with no session view and no explanation.
-  const read = [...config.matchAll(/process\.env\.(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI)_[A-Z0-9_]+)/g)]
-    .map((match) => match[1]);
+  // `SELF_REGISTRATION` joined when the deployment gained the choice of being
+  // open: a login page that offers a register form the container never learned
+  // to accept is the same failure in a place people see first.
+  // Both shapes the file uses. A lever read through `boolEnv`/`listEnv` was
+  // invisible to a scan that only knew `process.env.X`, which is the exact way
+  // a guard against a missing forward can itself go missing.
+  const pattern = /(?:process\.env\.|(?:bool|list)Env\(")(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI|SELF_REGISTRATION)[A-Z0-9_]*)/g;
+  const read = [...config.matchAll(pattern)].map((match) => match[1]);
   const names = [...new Set(read)].sort();
   assert.ok(
     names.length >= 8,
@@ -1940,6 +1946,7 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   );
   assert.ok(names.includes("OPEN_SCIENCE_GEO_PROBE_URL"), "the scan missed the GEO probe URL");
   assert.ok(names.includes("OPEN_SCIENCE_RUNTIME_UI_PORT"), "the scan missed the browser application's port");
+  assert.ok(names.includes("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED"), "the scan missed the registration switch");
   for (const name of names) {
     assert.ok(
       compose.includes(`\${${name}`),

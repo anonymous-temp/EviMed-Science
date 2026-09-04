@@ -286,7 +286,12 @@ export class OidcService {
 
   methods() {
     if (this.config.authMode === "development") return { mode: "development" };
-    if (this.config.authMode === "local") return { mode: "local" };
+    // Whether the login page offers to create an account. It is reported here
+    // rather than inferred in the browser because a build cannot know what a
+    // deployment accepts, and a register form that 403s is worse than none.
+    if (this.config.authMode === "local") {
+      return { mode: "local", selfRegistration: Boolean(this.config.selfRegistrationEnabled) };
+    }
     const settings = this.settings();
     return {
       mode: "oidc",

@@ -212,7 +212,17 @@ export class InMemoryStore {
     if (this.config.devAuth) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-    if (pathname === "/api/auth/login" || pathname === "/api/auth/dev-login") return;
+    // The three routes a caller reaches before it has a session. A CSRF token
+    // is bound to a session, so requiring one here would make them
+    // unreachable. Registration joins login rather than getting a weaker rule
+    // of its own: both let a cross-site page make a visitor's browser end up
+    // signed in as an account the page chose, both are bounded by the auth
+    // rate limiter, and neither can reach data that was already there.
+    if (
+      pathname === "/api/auth/login" ||
+      pathname === "/api/auth/register" ||
+      pathname === "/api/auth/dev-login"
+    ) return;
 
     await this.loadSessions();
     const cookies = parseCookies(req.headers.cookie ?? "");
@@ -852,7 +862,17 @@ export class PostgresStore extends InMemoryStore {
     if (this.config.devAuth) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-    if (pathname === "/api/auth/login" || pathname === "/api/auth/dev-login") return;
+    // The three routes a caller reaches before it has a session. A CSRF token
+    // is bound to a session, so requiring one here would make them
+    // unreachable. Registration joins login rather than getting a weaker rule
+    // of its own: both let a cross-site page make a visitor's browser end up
+    // signed in as an account the page chose, both are bounded by the auth
+    // rate limiter, and neither can reach data that was already there.
+    if (
+      pathname === "/api/auth/login" ||
+      pathname === "/api/auth/register" ||
+      pathname === "/api/auth/dev-login"
+    ) return;
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
     const key = sessionId ? sessionKey(sessionId) : null;

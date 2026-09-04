@@ -2689,6 +2689,93 @@ test("a browser holding a deleted project's id can still open its account", asyn
   });
 });
 
+test("self-registration is off unless the deployment turns it on", async () => {
+  await withAuthApp(async ({ base }) => {
+    const methods = await (await fetch(`${base}/api/auth/methods`)).json();
+    assert.deepEqual(methods.data, { mode: "local", selfRegistration: false });
+
+    const refused = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "bob", password: "correct horse battery staple" }),
+    });
+    assert.equal(refused.status, 403);
+    assert.equal((await refused.json()).code, "self_registration_disabled");
+  });
+});
+
+test("registering creates the account, signs it in, and gives it its own space", async () => {
+  await withAuthApp(async ({ base }) => {
+    // The login page asks before it offers the form: a register link that 403s
+    // is worse than no link.
+    const methods = await (await fetch(`${base}/api/auth/methods`)).json();
+    assert.deepEqual(methods.data, { mode: "local", selfRegistration: true });
+
+    const registered = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "bob", password: "another correct horse", name: "Bob" }),
+    });
+    assert.equal(registered.status, 201);
+    const cookie = String(registered.headers.get("set-cookie") ?? "").split(";")[0];
+    assert.ok(cookie.startsWith("os_session="), "registration signs the new account in");
+
+    // Its own tenant, and a project nobody else can see.
+    const me = await (await fetch(`${base}/api/me`, { headers: { Cookie: cookie } })).json();
+    assert.equal(me.data.user.id, "bob");
+    assert.equal(me.data.tenant.id, "bob");
+    assert.equal(me.data.project.id, "default");
+
+    // The name is taken now, and says so rather than overwriting the account.
+    const again = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "bob", password: "yet another horse" }),
+    });
+    assert.equal(again.status, 409);
+    assert.equal((await again.json()).code, "user_exists");
+  }, { selfRegistrationEnabled: true });
+});
+
+test("registration refuses a weak password and a name the store cannot hold", async () => {
+  await withAuthApp(async ({ base }) => {
+    const weak = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "carol", password: "short" }),
+    });
+    assert.equal(weak.status, 400);
+    assert.equal((await weak.json()).code, "weak_password");
+
+    // `safeId` is what keeps a username from becoming a path segment.
+    const unsafe = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "../root", password: "correct horse battery staple" }),
+    });
+    assert.equal(unsafe.status, 400);
+  }, { selfRegistrationEnabled: true });
+});
+
+test("registration is closed under OIDC, where the provider owns the account", async () => {
+  await withAuthApp(async ({ base }) => {
+    const refused = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "dave", password: "correct horse battery staple" }),
+    });
+    assert.equal(refused.status, 404);
+    assert.equal((await refused.json()).code, "auth_method_disabled");
+  }, {
+    selfRegistrationEnabled: true,
+    authMode: "oidc",
+    oidcIssuer: "https://issuer.example",
+    oidcClientId: "evimed",
+    oidcClientSecret: "secret",
+    publicUrl: "https://science.example",
+  });
+});
+
 test("production auth ignores malformed cookie values without internal errors", async () => {
   await withAuthApp(async ({ base }) => {
     let res = await fetch(`${base}/api/me`, {

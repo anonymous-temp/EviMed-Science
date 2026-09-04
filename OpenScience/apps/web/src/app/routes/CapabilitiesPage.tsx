@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, Clock3, FileCheck2, RefreshCw, Search, ServerCrash } from "lucide-react";
 import { useNavigate } from "react-router";
-import { hasWebApi, listWebResearchAgents, webRuntimeProfile, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
+import { hasWebApi, listWebResearchAgents, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
 import { researchAgentUi } from "@/lib/researchAgentUi";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
@@ -77,13 +77,8 @@ export function CapabilitiesPage() {
       const ui = researchAgentUi(agent);
       // The retiring session view still binds a session to a package, and its
       // rollback must not need a new bundle — so the old link survives there
-      // and only the new view gets the prefill.
-      if (webRuntimeProfile().sessionView === "legacy") {
-        navigate(`/live?agent=${encodeURIComponent(agent.id)}`);
-        return;
-      }
       setComposerDraft(capabilityBrief(ui.title, ui.starterPrompts[0] ?? ""));
-      navigate("/live");
+      navigate("/app/chat");
     },
     [navigate, setComposerDraft],
   );

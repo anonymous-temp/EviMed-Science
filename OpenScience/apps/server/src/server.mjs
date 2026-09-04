@@ -211,6 +211,7 @@ function requestIdFor(req) {
 
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
+  if (pathname === "/api/auth/register") return pathname;
   if (pathname === "/api/account" || pathname === "/api/account/export") return pathname;
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
@@ -822,6 +823,40 @@ export function createWebApiApp(overrides = {}) {
           sendJson(res, 200, { data: login });
         } catch (err) {
           await securityAudit(config, "auth.login", "failed", {
+            username,
+            code: err instanceof HttpError ? err.code : "internal_error",
+          });
+          throw err;
+        }
+        return;
+      }
+
+      if (pathname === "/api/auth/register" && req.method === "POST") {
+        // Registration exists only where a password is the credential. Under
+        // OIDC the identity provider owns the account, and under development
+        // auth there is nothing to register into.
+        if (config.authMode !== "local") {
+          throw new HttpError(404, "auth_method_disabled", "Local password authentication is disabled.");
+        }
+        if (!config.selfRegistrationEnabled) {
+          throw new HttpError(403, "self_registration_disabled", "This deployment does not accept new accounts.");
+        }
+        let username = "";
+        try {
+          const body = await readJson(req, config.maxJsonBytes);
+          username = assertString(body.username, "username", { max: 64 });
+          const password = assertString(body.password, "password", { max: 4096 });
+          const name = body.name === undefined ? username : assertString(body.name, "name", { max: 64 });
+          await store.createUser(username, password, name);
+          // Signed in by the same call. A registration that leaves someone on
+          // the login page has them type the credential they just chose, and
+          // the first thing they learn about the product is that it did not
+          // notice.
+          const login = await store.login(username, password, req, res);
+          await securityAudit(config, "auth.register", "completed", { username });
+          sendJson(res, 201, { data: login });
+        } catch (err) {
+          await securityAudit(config, "auth.register", "failed", {
             username,
             code: err instanceof HttpError ? err.code : "internal_error",
           });
@@ -1634,6 +1669,10 @@ export function createWebApiApp(overrides = {}) {
     });
     if (
       (pathname === "/api/auth/login" && req.method === "POST") ||
+      // Registration is the other way an anonymous caller reaches the account
+      // store, and the cheaper one to abuse: a login attempt costs a hash, a
+      // registration costs a user directory.
+      (pathname === "/api/auth/register" && req.method === "POST") ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {
       authRateLimiter.check(`auth:${ip}`, {

@@ -217,11 +217,11 @@ describe("apiClient", () => {
       "https://science.example/api/auth/methods",
       expect.objectContaining({ credentials: "include" }),
     );
-    expect(client.getWebOidcStartUrl("/settings?tab=account")).toBe(
-      "https://science.example/api/auth/oidc/start?returnTo=%2Fsettings%3Ftab%3Daccount",
+    expect(client.getWebOidcStartUrl("/app/settings?tab=account")).toBe(
+      "https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fsettings%3Ftab%3Daccount",
     );
     expect(client.getWebOidcStartUrl("https://evil.example")).toBe(
-      "https://science.example/api/auth/oidc/start?returnTo=%2Fsettings",
+      "https://science.example/api/auth/oidc/start?returnTo=%2Fapp%2Fsettings",
     );
   });
 
