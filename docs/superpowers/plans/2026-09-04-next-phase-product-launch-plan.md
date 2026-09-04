@@ -82,6 +82,13 @@ SPEC D12、§16 #10、§18.1 结论、ARCH §14、FEPLAN「不把容器里的 DS
 
 ### 批次 3 · 多用户与开放（4–6 天，含一次发版）
 
+> **进度（2026-09-04）**：T3.1 本地注册、T3.2 计量与上限、T3.3 每账号项目数上限已完成（`STATUS` S487–S495）。三处与初稿不同：
+> ① **注册默认关**，且这一轮不打开——初稿自己写了「额度先于功能」，所以先让计量与上限在生产跑一轮。
+> ② 上限没有做 `credit_ledger` 与手工充值。先做的是**度量**：`metering.mjs` 写好一个多月零引用，平台能定价却从不计数，所以第一步是让模型网关成为那个调用方；余额是下一步，而且在有余额之前，拒绝用 `credits_daily_limit_reached` / `credits_weekly_limit_reached` 而不是 `credits_exhausted`——后者的文案承诺充值。
+> ③ T3.3 真正缺的不是初稿列的那三条，而是**项目数**：存储配额与运行时上限本来就有，但账号在任一上限处再建一个项目就又有一份。
+>
+> **T3.4 外部备份缺输入**（S496）：需要一个 S3 兼容桶（地域 + 桶名）、一对访问密钥、端点地址。这三样到位之前 `external-recovery` 只能继续声明未配置——不猜、不假装达标。
+
 - **T3.1 身份：本地注册**（用户裁决：先本地，OIDC 后议）。`POST /api/auth/register`（用户名 + 口令，口令下限沿用当前 6 字节，`hashPassword` 已有，`createUser` 已有，只缺路由与页面），注册即建租户与默认项目；登录页加「注册」；速率限制复用 `authRateLimiter`；开关 `OPEN_SCIENCE_SELF_REGISTRATION_ENABLED`，默认关，本部署开。`saasProfileUnconfigured` 继续声明 `oidc-identity`——本地注册**不是** `individual-saas` 的达标项，声明它就是不假装达标。
 - **T3.2 计量与上限（B0 最小集，先于开放注册）**：模型网关按请求写 `usage_events`（用户 / 项目 / 运行 / 峰谷 / tokens）；`credit_ledger` + 手工充值 ops 命令；每用户日 / 周上限，超限 `credits_exhausted` 拒派发并在 UI 直达提示；`/app/account` 显示用量与余额。接入已写好的 `metering.mjs`，不另起价目。对账测试：计量与网关日志误差 0（SPEC §13 B 轨退出标准）。
 - **T3.3 每用户配额接到租户**：`MAX_RUNNING_RUNTIMES_PER_USER`、项目数、存储上限；容器资源限制已有。
