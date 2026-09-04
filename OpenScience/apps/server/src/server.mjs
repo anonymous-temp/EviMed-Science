@@ -1340,6 +1340,22 @@ export function createWebApiApp(overrides = {}) {
         const body = await readJson(req, config.maxJsonBytes);
         const id = assertString(body.id, "id", { max: 64 });
         const name = assertString(body.name ?? id, "name", { max: 128 });
+        // Counted before the create, and only for a project that is new: a
+        // per-project storage quota and a per-user runtime limit bound nothing
+        // on their own, because an account at the limit can make another
+        // project and have another of each.
+        const existing = await store.listProjects(user);
+        if (
+          config.maxProjectsPerUser > 0 &&
+          existing.length >= config.maxProjectsPerUser &&
+          !existing.some((project) => project.id === id)
+        ) {
+          throw new HttpError(
+            409,
+            "project_limit_reached",
+            `This account already holds ${existing.length} projects, which is its limit. Delete one to make another.`,
+          );
+        }
         const data = await store.createProject(user, id, name);
         const project = await store.requireProject(user, id);
         await audit({ config, user, project }, "project.create", "completed", { target: id });
