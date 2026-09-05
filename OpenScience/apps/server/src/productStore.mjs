@@ -22,6 +22,39 @@ export class ProductDocuments {
   /** @param {any} database */
   constructor(database) { this.database = database; }
 
+  /** Create a bounded batch with its history in one transaction. No partial import is observable.
+   * @param {string} userId @param {{kind:string,id:string,payload:Record<string,any>,projectId?:string|null}[]} records */
+  async createBatch(userId, records) {
+    productId(userId, "user");
+    if (!Array.isArray(records) || records.length < 1 || records.length > 257) throw new HttpError(400, "product_batch_invalid", "Invalid record batch.");
+    const seen = new Set();
+    const rows = records.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !["kind", "id", "payload", "projectId"].includes(key))) throw new HttpError(400, "product_batch_invalid", "Invalid batch record.");
+      const kind = productKind(item.kind);
+      const id = productId(item.id);
+      const key = JSON.stringify([kind, id]);
+      if (seen.has(key)) throw new HttpError(400, "product_batch_invalid", "Duplicate batch record.");
+      seen.add(key);
+      return { kind, id, payload: JSON.parse(productPayload(item.payload)), project_id: item.projectId == null ? null : productId(item.projectId, "project") };
+    });
+    const input = JSON.stringify(rows);
+    if (Buffer.byteLength(input) > 16 * 1024 * 1024) throw new HttpError(413, "product_batch_too_large", "Record batch exceeds 16 MiB.");
+    await migrateProductStore(this.database);
+    return this.database.transaction(async (client) => {
+      const result = await client.query(`WITH inserted AS (
+        INSERT INTO evimed_product.documents(user_id,kind,id,payload,project_id)
+        SELECT $1,kind,id,payload,project_id FROM jsonb_to_recordset($2::jsonb) AS x(kind text,id text,payload jsonb,project_id text)
+        ON CONFLICT DO NOTHING RETURNING *
+      ), history AS (
+        INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at)
+        SELECT user_id,kind,id,revision,payload,deleted_at FROM inserted RETURNING id
+      ) SELECT * FROM inserted`, [userId, input]);
+      if (result.rows.length !== rows.length) throw new HttpError(409, "product_revision_conflict", "An imported record already exists.");
+      const byKey = new Map(result.rows.map((row) => [JSON.stringify([row.kind, row.id]), record(row)]));
+      return rows.map((row) => byKey.get(JSON.stringify([row.kind, row.id])));
+    });
+  }
+
   /** @param {string} userId @param {string} kind @param {string} id @param {{ includeDeleted?: boolean }} options */
   async get(userId, kind, id, { includeDeleted = false } = {}) {
     const values = [productId(userId, "user"), productKind(kind), productId(id), includeDeleted];
