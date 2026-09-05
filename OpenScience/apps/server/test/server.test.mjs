@@ -18,6 +18,7 @@ const productionReadinessReady = {
   trustProxy: true,
   requireDurableUsageLedger: false,
   requireInbox: false,
+  requireDocumentParser: false,
   ...productionReleaseConfig,
 };
 

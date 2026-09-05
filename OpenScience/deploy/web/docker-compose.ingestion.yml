@@ -1,0 +1,71 @@
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: "true"
+      OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: "true"
+      OPEN_SCIENCE_DOCUMENT_PARSER_URL: http://evimed-document-parser:8090
+      OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
+      OPEN_SCIENCE_AUTOPILOT_ENABLED: "true"
+      OPEN_SCIENCE_REQUIRE_INBOX: "true"
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
+        target: /run/secrets/document-parser-token
+        read_only: true
+    depends_on:
+      evimed-document-parser:
+        condition: service_healthy
+
+  evimed-document-parser:
+    image: ${OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE:-evimed-document-parser:3.4.5}
+    build:
+      context: ../..
+      dockerfile: deploy/document-parser/Dockerfile
+    environment:
+      EVIMED_PARSER_DATA_ROOT: /data
+      EVIMED_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
+    volumes:
+      - open-science-data:/data:ro
+      - type: bind
+        source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
+        target: /run/secrets/document-parser-token
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health',timeout=3)); raise SystemExit(0 if data.get('ok') and data.get('mineruVersion')=='3.4.5' else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=2g
+    mem_limit: ${OPEN_SCIENCE_DOCUMENT_PARSER_MEMORY_LIMIT:-6g}
+    cpus: ${OPEN_SCIENCE_DOCUMENT_PARSER_CPU_LIMIT:-4}
+    pids_limit: 512
+    restart: unless-stopped
+
+  evimed-openlist:
+    image: openlistteam/openlist:v4.2.5
+    environment:
+      PUID: "0"
+      PGID: "0"
+      UMASK: "077"
+    volumes:
+      - evimed-openlist-data:/opt/openlist/data
+      - open-science-data:/sources:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5244/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  evimed-openlist-data:

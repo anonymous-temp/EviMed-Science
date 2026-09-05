@@ -16,6 +16,5 @@ COPY deploy/document-parser/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --requirement requirements.txt
 COPY deploy/document-parser/parser_service.py ./parser_service.py
 
-USER evimed
 EXPOSE 8090
 CMD ["uvicorn", "parser_service:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1", "--limit-concurrency", "2"]
