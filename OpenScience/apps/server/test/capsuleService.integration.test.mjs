@@ -90,3 +90,14 @@ test("project account has a different activation namespace from account-wide con
   assert.equal((await service.recall(other, { projectId: "other", query: "collision" })).items.length, 0);
   assert.equal((await service.recall(other, { projectId: "account", query: "collision" })).items.length, 1);
 });
+
+
+test("runtime notes are idempotent candidates until the account approves them", options, async () => {
+  const first = await service.note(other, "other", { factKind: "preference", content: "Retain analytic assumptions." });
+  const again = await service.note(other, "other", { factKind: "preference", content: "Retain analytic assumptions." });
+  assert.equal(first.id, again.id);
+  assert.equal(first.payload.status, "candidate");
+  assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 0);
+  await service.updateEntry(other, first.payload.capsuleId, first.id, { status: "approved", expectedRevision: first.revision });
+  assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 1);
+});
