@@ -42,7 +42,7 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
     const recalled = (await recall.json()).data;
     assert.equal(recalled.items.length, 1);
     assert.equal(recalled.items[0].contextOnly, true);
-    const project = await app.store.defaultProject(user);
+    const project = await app.store.defaultProject(await app.store.userById(user.id));
     const token = issueEviMedWorkloadToken({ secret, userId: user.id, projectId: project.id });
     const workloadTokenFile = path.join(dataDir, "test-workload.token");
     await writeFile(workloadTokenFile, token, { mode: 0o600 });

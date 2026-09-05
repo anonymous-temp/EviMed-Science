@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { CAPSULE_ACTIVATION_MODES, CAPSULE_FACT_KINDS, CAPSULE_FACT_ORIGINS, CAPSULE_FACT_STATES, CAPSULE_LAYERS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
@@ -131,9 +131,54 @@ export class CapsuleService {
     }
   }
 
-  /** @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number }} input */
-  async recall(userId, { query, projectId = null, limit = 10 }) {
+  /** Model suggestions remain candidates, including when the model labels them explicit.
+   * @param {string} userId @param {string} projectId @param {Record<string,any>} input */
+  async note(userId, projectId, input) {
+    productId(projectId, "projectId");
+    const content = text(input.content, "content", 20_000);
+    const factKind = member(input.factKind, CAPSULE_FACT_KINDS, "fact kind");
+    const current = await this.active(userId, projectId);
+    let capsule = null;
+    for (const item of current.items) {
+      if (item.mode !== "own") continue;
+      const found = await this.documents.get(userId, "capsule", item.capsuleId);
+      if (found && !found.payload.imported) { capsule = found; break; }
+    }
+    if (!capsule) {
+      const id = `runtime-notes:${createHash("sha256").update(projectId).digest("hex")}`;
+      capsule = await this.documents.get(userId, "capsule", id, { includeDeleted: true });
+      if (capsule?.deletedAt) throw new HttpError(409, "capsule_notes_paused", "Restore the project notes capsule before recording new suggestions.");
+      if (!capsule) {
+        try { capsule = await this.documents.put(userId, "capsule", id,
+          { title: "Research memory", description: "Suggestions from this project's research runs.", imported: false, activationMode: "own" },
+          { expectedRevision: 0, projectId }); }
+        catch (error) { if (error.code !== "product_revision_conflict") throw error; capsule = await this.get(userId, id); }
+      }
+      if (current.items.length === 0) {
+        try { await this.documents.put(userId, "preferences", activationKey(projectId), { items: [{ capsuleId: capsule.id, mode: "own" }] },
+          { expectedRevision: current.record?.revision ?? 0, projectId }); }
+        catch (error) { if (error.code !== "product_revision_conflict") throw error; }
+      }
+    }
+    const id = `runtime-note:${createHash("sha256").update(JSON.stringify([capsule.id, factKind, content])).digest("hex")}`;
+    const existing = await this.documents.get(userId, "fact", id);
+    if (existing) return existing;
+    try {
+      return await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, factKind,
+        layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred", status: "candidate",
+        provenance: [{ type: "source", id: `runtime-project:${projectId}` }], contextOnly: true }, { expectedRevision: 0, projectId });
+    } catch (error) {
+      if (error.code !== "product_revision_conflict") throw error;
+      return this.documents.get(userId, "fact", id);
+    }
+  }
+
+  /** @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string }} input */
+  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all" }) {
     const needle = text(query, "query", 2000);
+    if (!["all", "capsule"].includes(scope)) throw new HttpError(400, "capsule_scope_unavailable", "This memory scope is unavailable.");
+    if (!Array.isArray(factKinds) || factKinds.length > CAPSULE_FACT_KINDS.length) throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
+    for (const kind of factKinds) member(kind, CAPSULE_FACT_KINDS, "fact kind");
     productInteger(limit, 1, 30);
     const local = await this.active(userId, projectId);
     const global = projectId ? await this.active(userId, null) : { items: [] };
@@ -142,7 +187,7 @@ export class CapsuleService {
     for (const selection of active) {
       const capsule = await this.documents.get(userId, "capsule", selection.capsuleId);
       if (!capsule) continue;
-      const entries = await this.documents.search(userId, "fact", needle, { limit, filter: { capsuleId: capsule.id, status: "approved" } });
+      const entries = await this.documents.search(userId, "fact", needle, { limit, filter: { capsuleId: capsule.id, status: "approved" }, since, any: { field: "factKind", values: factKinds } });
       for (const entry of entries) matches.push({
         id: entry.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: selection.mode,
         factKind: entry.payload.factKind, layer: entry.payload.layer, content: entry.payload.content,

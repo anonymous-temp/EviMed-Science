@@ -35,6 +35,7 @@ import { ProductDocuments } from "./productStore.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
+import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
@@ -226,6 +227,7 @@ function requestIdFor(req) {
 
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
+  if (pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)) return `${CAPSULE_GATEWAY_PATH}/:action`;
   if (pathname === "/api/capsules") return pathname;
   if (pathname.startsWith("/api/capsules/")) return "/api/capsules/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
@@ -632,6 +634,7 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager);
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.publicSourceFetch ?? globalThis.fetch,
@@ -730,7 +733,9 @@ export function createWebApiApp(overrides = {}) {
         truncated: failure?.truncated === true,
       });
     };
-    const gateway = pathname === MODEL_GATEWAY_PATH
+    const gateway = pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
+      ? capsuleGatewayHandler
+      : pathname === MODEL_GATEWAY_PATH
       ? modelGatewayHandler
       : pathname === PUBLIC_SOURCE_GATEWAY_PATH
         ? publicSourceGatewayHandler
