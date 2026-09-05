@@ -783,6 +783,12 @@ async function bufferProxyRequestBody(req, method, limit) {
   if (length !== null && length > limit) {
     throw new HttpError(413, "runtime_proxy_body_too_large", "Runtime proxy request body is too large.");
   }
+  // A policy may already have inspected the body. Keep those exact bytes;
+  // rereading the drained stream would silently replace a valid RPC with empty input.
+  if (Buffer.isBuffer(req.__openScienceProxyBody)) {
+    if (req.__openScienceProxyBody.length > limit) throw new HttpError(413, "runtime_proxy_body_too_large", "Runtime proxy request body is too large.");
+    return;
+  }
   try {
     req.__openScienceProxyBody = await readBody(req, limit);
   } catch (err) {
