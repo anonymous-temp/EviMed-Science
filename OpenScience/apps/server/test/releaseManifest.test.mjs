@@ -26,6 +26,12 @@ const releaseEnv = {
   OPEN_SCIENCE_RUNTIME_IMAGE_ID: `sha256:${"2".repeat(64)}`,
   OPEN_SCIENCE_CADDY_VERSION: "2.11.4-alpine",
   OPEN_SCIENCE_CADDY_IMAGE_ID: `sha256:${"3".repeat(64)}`,
+  OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE: "evimed-document-parser:test-release",
+  OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID: `sha256:${"4".repeat(64)}`,
+  OPEN_SCIENCE_MEMOS_ENGINE_IMAGE: "evimed-memos-engine:test-release",
+  OPEN_SCIENCE_MEMOS_ENGINE_IMAGE_ID: `sha256:${"5".repeat(64)}`,
+  OPEN_SCIENCE_OLLAMA_IMAGE_ID: `sha256:${"6".repeat(64)}`,
+  OPEN_SCIENCE_OPENLIST_IMAGE_ID: `sha256:${"7".repeat(64)}`,
 };
 
 function runManifest(output, args = [], env = {}) {
@@ -82,6 +88,12 @@ test("release manifest generator records exact images, tools, skills, and source
       imageId: releaseEnv.OPEN_SCIENCE_CADDY_IMAGE_ID,
       caddyVersion: "2.11.4-alpine",
     });
+    assert.deepEqual(manifest.services, [
+      { name: "document-parser", image: releaseEnv.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE, imageId: releaseEnv.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID },
+      { name: "memos-engine", image: releaseEnv.OPEN_SCIENCE_MEMOS_ENGINE_IMAGE, imageId: releaseEnv.OPEN_SCIENCE_MEMOS_ENGINE_IMAGE_ID },
+      { name: "ollama", image: `${deps.ollama.image}:${deps.ollama.version}@${deps.ollama.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OLLAMA_IMAGE_ID },
+      { name: "openlist", image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OPENLIST_IMAGE_ID },
+    ]);
     // Every entry is digest-bound, not just whichever one sorts first — that
     // was the shape of the defect this list grew to close.
     for (const skill of manifest.skills) {
@@ -110,6 +122,7 @@ test("release manifest generator records exact images, tools, skills, and source
       manifest.inputs.map((item) => item.path),
       [
         "package.json",
+        "deps-version.json",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
         "apps/web/package.json",
@@ -148,6 +161,10 @@ test("release manifest generator records exact images, tools, skills, and source
         "examples/climate-trends",
         "deploy/web/Dockerfile",
         "deploy/memos/Dockerfile",
+        "deploy/memos-engine",
+        "deploy/memos-ollama",
+        "deploy/document-parser",
+        "deploy/openlist",
         "deploy/specialist-adapter",
         "scripts/ops/archive-crypto.mjs",
         "scripts/ops/backup-data.sh",
@@ -170,6 +187,8 @@ test("release manifest generator records exact images, tools, skills, and source
         "deploy/web/docker-compose.oidc.yml",
         "deploy/web/docker-compose.saas.yml",
         "deploy/web/docker-compose.monitoring.yml",
+        "deploy/web/docker-compose.memos-engine.yml",
+        "deploy/web/docker-compose.ingestion.yml",
         "deploy/web/saas-capability-contract.json",
         "deploy/web/Caddyfile",
         "deploy/web/monitoring/prometheus.json",

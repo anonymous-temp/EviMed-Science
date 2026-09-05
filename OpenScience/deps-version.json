@@ -16,11 +16,26 @@
     "contractDir": "packages/contracts/memos",
     "notes": "MemTensor/MemOS 2.0 Stardust, self-hosted. Not the vendored usememos note app, which is retired.",
     "githubRepo": "MemTensor/MemOS",
-    "sourceRevision": "b41c8996a8dcb9df81998cced68d11457ce950c3"
+    "sourceRevision": "b41c8996a8dcb9df81998cced68d11457ce950c3",
+    "tokenizer": "gpt2",
+    "tokenizerRevision": "607a30d783dfa663caf39e06633721c8d4cfcd7e"
+  },
+  "ollama": {
+    "version": "0.33.3",
+    "image": "ollama/ollama",
+    "imageDigest": "sha256:32931b46719f673c05fdbaa81ccb26da18ea4a1c57590a754874ab28ba269eb2",
+    "linuxAmd64Digest": "sha256:57a73f11f75b32b97b59b003f351445c9c2a8af4b9d586ecdc928dee6150ef26",
+    "model": "bge-m3:latest",
+    "modelManifestDigest": "sha256:7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+    "contractDir": "packages/contracts/ollama",
+    "notes": "Private CPU embedding runtime for MemOS. The OCI index, linux/amd64 child and bge-m3 registry manifest are independently pinned; only the one-shot initializer has egress.",
+    "githubRepo": "ollama/ollama"
   },
   "openlist": {
     "version": "4.2.6",
     "image": "openlistteam/openlist",
+    "imageDigest": "sha256:c555c6e1c8af2aead38ed12ec761ac077fdf046d19cf033414be8e056aec6b64",
+    "linuxAmd64Digest": "sha256:c942c98018ae219aeed5bff38e7f638964febe0eddccc68e856b1aeb17a16d2e",
     "contractDir": "packages/contracts/openlist",
     "notes": "Self-hosted drive aggregator; v4.2.6 (2026-09-01), including access-control and authentication fixes from the current stable release. EviMed uses the pinned list, get and link contracts, then reads bytes through OpenList's same-origin proxy without following a provider-controlled redirect. The service runs with an isolated data volume and tenant-prefixed paths.",
     "githubRepo": "OpenListTeam/OpenList"

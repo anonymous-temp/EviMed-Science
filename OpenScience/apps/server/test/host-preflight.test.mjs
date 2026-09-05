@@ -89,6 +89,7 @@ test("host preflight accepts only a matching non-fake DeepSeek release receipt w
     OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE: "./secrets/deepseek-release-receipt.json",
     OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID: receiptId,
     OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION: configRevision,
+    OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4-flash",
     OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE: "./secrets/model-gateway-signing-key.txt",
   });
   const fixture = await deploymentFixture(values);
@@ -103,7 +104,7 @@ test("host preflight accepts only a matching non-fake DeepSeek release receipt w
     productionEligible: true,
     createdAt: new Date().toISOString(),
     dshVersion: requiredDshVersion,
-    model: "deepseek-v4-pro",
+    model: "deepseek-v4-flash",
     sourceRevision: values.OPEN_SCIENCE_SOURCE_REVISION,
     configRevision,
     capabilities: {
@@ -121,6 +122,19 @@ test("host preflight accepts only a matching non-fake DeepSeek release receipt w
   await writeFile(receiptFile, `${JSON.stringify(receipt)}\n`, { mode: 0o600 });
   await chmod(receiptFile, 0o600);
   assert.doesNotThrow(() => validateDeploymentConfig(values, fixture.envFile));
+
+  const unsupportedModelReceipt = signDeepSeekReleaseReceipt({
+    ...receipt,
+    model: "unsupported-model",
+  }, { signingSecret });
+  await writeFile(receiptFile, `${JSON.stringify(unsupportedModelReceipt)}\n`, { mode: 0o600 });
+  assert.throws(
+    () => validateDeploymentConfig({
+      ...values,
+      OPEN_SCIENCE_DEEPSEEK_MODEL: "unsupported-model",
+    }, fixture.envFile),
+    (error) => error?.code === "deepseek_release_receipt_invalid",
+  );
 
   const fakeReceipt = signDeepSeekReleaseReceipt({
     ...receipt,
@@ -231,6 +245,20 @@ test("host preflight requires a private no-follow local-auth password file", asy
     ),
     { code: "preflight_bootstrap_password_environment" },
   );
+
+  await writeFile(fixture.bootstrapPasswordFile, "six-ok\n", { mode: 0o600 });
+  assert.doesNotThrow(() => validateDeploymentConfig(fixture.values, fixture.envFile));
+  await writeFile(fixture.bootstrapPasswordFile, "short\n", { mode: 0o600 });
+  assert.throws(() => validateDeploymentConfig(fixture.values, fixture.envFile), {
+    code: "preflight_bootstrap_password",
+  });
+  await writeFile(fixture.bootstrapPasswordFile, `${"x".repeat(8192)}\n`, { mode: 0o600 });
+  assert.doesNotThrow(() => validateDeploymentConfig(fixture.values, fixture.envFile));
+  await writeFile(fixture.bootstrapPasswordFile, "x".repeat(8193), { mode: 0o600 });
+  assert.throws(() => validateDeploymentConfig(fixture.values, fixture.envFile), {
+    code: "preflight_bootstrap_password",
+  });
+  await writeFile(fixture.bootstrapPasswordFile, "six-ok\n", { mode: 0o600 });
 
   await chmod(fixture.bootstrapPasswordFile, 0o644);
   assert.throws(() => validateDeploymentConfig(fixture.values, fixture.envFile), {

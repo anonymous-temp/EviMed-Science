@@ -10,6 +10,10 @@ function provenanceIds(provenance) {
   return provenance.map((item) => `${item.type}:${item.id}`);
 }
 
+function accountLockName(userId) {
+  return `memory-index-account:${userId}`;
+}
+
 /** Canonical PostgreSQL remains authoritative; MemOS supplies ranking only. */
 export class MemoryIndexing {
   /** @param {{database:any,engine:any,jobs:any}} dependencies */
@@ -25,11 +29,53 @@ export class MemoryIndexing {
     return account.rows[0]?.generation ?? null;
   }
 
+  /** Acquire before the account row lock so rebuild, FK checks and deletion share one lock order.
+   * @param {string} userId @param {any} client */
+  async lockAccountDeletion(userId, client) {
+    if (!client || typeof client.query !== "function") {
+      throw new HttpError(503, "memory_index_delete_unavailable", "Memory index account deletion requires the transactional database client.");
+    }
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [accountLockName(userId)]);
+  }
+
+  /** Purge every registered capsule namespace while the caller holds the account deletion transaction.
+   * Taking the same capsule locks as rebuild prevents an index worker from restoring data after purge.
+   * @param {string} userId @param {string} accountCreatedAt @param {any} client */
+  async prepareAccountDeletion(userId, accountCreatedAt, client) {
+    if (!client || typeof client.query !== "function") {
+      throw new HttpError(503, "memory_index_delete_unavailable", "Memory index account deletion requires the transactional database client.");
+    }
+    const account = await client.query(
+      "SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1",
+      [userId],
+    );
+    if (account.rows[0]?.generation !== accountCreatedAt) {
+      throw new HttpError(409, "memory_account_changed", "The account changed before memory index deletion completed.");
+    }
+    const result = await client.query(`SELECT id AS capsule_id FROM evimed_product.documents
+      WHERE user_id=$1 AND kind='capsule'
+      UNION SELECT capsule_id FROM evimed_product.memory_index_state WHERE user_id=$1
+      ORDER BY capsule_id`, [userId]);
+    const capsuleIds = result.rows.map((row) => row.capsule_id);
+    for (const capsuleId of capsuleIds) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`memory-index:${userId}:${capsuleId}`]);
+    }
+    for (const capsuleId of capsuleIds) {
+      await this.engine.deleteScope(userId, { accountCreatedAt, capsuleId });
+    }
+    return { scopes: capsuleIds.length, verified: true };
+  }
+
   /** @param {string} userId @param {string} capsuleId @param {{client?:any,lock?:boolean}} [options] */
   async snapshot(userId, capsuleId, { client = this.database, lock = false } = {}) {
     const lockClause = lock ? " FOR SHARE" : "";
+    // Account generation is immutable. Do not lock its row here: rebuild holds
+    // the capsule advisory lock, while account deletion holds the user row and
+    // then requests that advisory lock. Locking both in the opposite order
+    // creates a real PostgreSQL deadlock. Capsule and fact rows still receive
+    // FOR SHARE below, which is the mutable canonical state being published.
     const account = await client.query(
-      `SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1${lockClause}`,
+      "SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1",
       [userId],
     );
     if (!account.rows[0]) return null;
@@ -89,9 +135,15 @@ export class MemoryIndexing {
       throw new HttpError(400, "memory_index_job_invalid", "Memory index job payload is invalid.");
     }
     const lock = await this.database.pool.connect();
+    const accountLock = accountLockName(job.userId);
     const lockName = `memory-index:${job.userId}:${capsuleId}`;
+    let accountLocked = false;
+    let capsuleLocked = false;
     try {
+      await lock.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [accountLock]);
+      accountLocked = true;
       await lock.query("SELECT pg_advisory_lock(hashtextextended($1,0))", [lockName]);
+      capsuleLocked = true;
       const snapshot = await this.snapshot(job.userId, capsuleId);
       if (!snapshot || snapshot.generation !== accountCreatedAt) {
         return this.jobs.finish(job.userId, job.id, job.leaseToken, { status: "superseded_account_generation" });
@@ -132,7 +184,13 @@ export class MemoryIndexing {
             status, JSON.stringify(memoryIds.length ? memoryIds : readback.map((record) => record.id)), job.id]);
         });
     } finally {
-      try { await lock.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [lockName]); } finally { lock.release(); }
+      try {
+        if (capsuleLocked) await lock.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [lockName]);
+      } finally {
+        try {
+          if (accountLocked) await lock.query("SELECT pg_advisory_unlock(hashtextextended($1,0))", [accountLock]);
+        } finally { lock.release(); }
+      }
     }
   }
 

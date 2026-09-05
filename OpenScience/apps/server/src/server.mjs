@@ -1774,12 +1774,21 @@ export function createWebApiApp(overrides = {}) {
         const memoryPurge = memosClient.configured
           ? await memosClient.purgeUserMemory(user.id)
           : { structured: 0, manual: 0 };
-        const data = await store.deleteUser(user, { beforeDelete: capsuleTransferService
-          ? (id, client) => capsuleTransferService.prepareAccountDeletion(id, client) : null });
+        let memoryIndexPurge = null;
+        const data = await store.deleteUser(user, {
+          beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
+          beforeDelete: capsuleTransferService || memoryIndexing ? async (id, client) => {
+              if (memoryIndexing) {
+                memoryIndexPurge = await memoryIndexing.prepareAccountDeletion(id, user.accountCreatedAt, client);
+              }
+              if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
+            }
+            : null,
+        });
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
-        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge });
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge });
         sendJson(res, 200, { data });
         return;
       }
@@ -3750,6 +3759,7 @@ function readinessModelGateway(config) {
         receiptId: config.deepseekReleaseReceiptId,
         sourceRevision: config.sourceRevision,
         configRevision: config.deepseekConfigRevision,
+        model: config.deepseekModel,
       });
     } catch (error) {
       throw readinessFailure(error?.code ?? "deepseek_release_receipt_invalid");

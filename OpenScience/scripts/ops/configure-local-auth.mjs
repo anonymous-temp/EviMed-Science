@@ -43,8 +43,8 @@ function validateValue(value) {
     throw failure("local_auth_secret_placeholder", "Bootstrap password must not use a placeholder value.");
   }
   const bytes = Buffer.byteLength(value, "utf8");
-  if (bytes < 16 || bytes > 8192) {
-    throw failure("local_auth_secret_size", "Bootstrap password must contain between 16 and 8192 UTF-8 bytes.");
+  if (bytes < 6 || bytes > 8192) {
+    throw failure("local_auth_secret_size", "Bootstrap password must contain between 6 and 8192 UTF-8 bytes.");
   }
 }
 
@@ -57,7 +57,7 @@ async function validateSecret() {
     if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
       throw failure("local_auth_secret_permissions", "Bootstrap password must not be accessible by group or other users.");
     }
-    if (stat.size <= 0 || stat.size > 8193) {
+    if (stat.size <= 0 || stat.size > 8194) {
       throw failure("local_auth_secret_size", "Bootstrap password file size is invalid.");
     }
     validateValue((await handle.readFile("utf8")).replace(/\r?\n$/, ""));

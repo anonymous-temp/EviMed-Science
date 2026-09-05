@@ -5,7 +5,7 @@
   "type": "module",
   "description": "One directory per tracked upstream dependency: the assertions that must pass before its pin may move.",
   "scripts": {
-    "test": "node --test dsh/*.test.mjs memos/*.test.mjs openlist/*.test.mjs mineru/*.test.mjs"
+    "test": "node --test dsh/*.test.mjs memos/*.test.mjs ollama/*.test.mjs openlist/*.test.mjs mineru/*.test.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

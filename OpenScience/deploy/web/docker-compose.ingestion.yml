@@ -10,7 +10,7 @@ services:
       OPEN_SCIENCE_DOCUMENT_PARSER_UID: "1000"
       OPEN_SCIENCE_DOCUMENT_PARSER_GID: "1000"
       OPEN_SCIENCE_OPENLIST_URL: http://evimed-openlist:5244
-      OPEN_SCIENCE_OPENLIST_TOKEN_FILE: /run/secrets/openlist-token
+      OPEN_SCIENCE_OPENLIST_TOKEN_FILE: /run/openlist-secrets/openlist.token
       OPEN_SCIENCE_OPENLIST_TENANT_ROOT: ${OPEN_SCIENCE_OPENLIST_TENANT_ROOT:-/tenants}
       OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES: ${OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES:-67108864}
       OPEN_SCIENCE_REQUIRE_OPENLIST: "true"
@@ -24,10 +24,7 @@ services:
         target: /run/secrets/document-parser-token
         read_only: true
       - evimed-parser-staging:/var/lib/evimed-parser-staging
-      - type: bind
-        source: ${OPEN_SCIENCE_OPENLIST_TOKEN_HOST_FILE:?set OPEN_SCIENCE_OPENLIST_TOKEN_HOST_FILE}
-        target: /run/secrets/openlist-token
-        read_only: true
+      - evimed-openlist-secrets:/run/openlist-secrets:ro
     depends_on:
       evimed-document-parser:
         condition: service_healthy
@@ -72,11 +69,56 @@ services:
       - ingestion-internal
     restart: unless-stopped
 
+  evimed-openlist-init:
+    image: openlistteam/openlist:v4.2.6@sha256:c555c6e1c8af2aead38ed12ec761ac077fdf046d19cf033414be8e056aec6b64
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown -R 1001:1001 /opt/openlist/data"]
+    volumes:
+      - evimed-openlist-data:/opt/openlist/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    restart: "no"
+
+  evimed-openlist-bootstrap:
+    image: openlistteam/openlist:v4.2.6@sha256:c555c6e1c8af2aead38ed12ec761ac077fdf046d19cf033414be8e056aec6b64
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/opt/evimed/bootstrap-openlist.sh"]
+    volumes:
+      - evimed-openlist-data:/opt/openlist/data
+      - evimed-openlist-secrets:/run/openlist-secrets
+      - ../openlist/bootstrap.sh:/opt/evimed/bootstrap-openlist.sh:ro
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE:?set OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE}
+        target: /run/secrets/openlist-admin-password
+        read_only: true
+    depends_on:
+      evimed-openlist-init:
+        condition: service_completed_successfully
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    restart: "no"
+
   evimed-openlist:
-    image: openlistteam/openlist:v4.2.6
+    image: openlistteam/openlist:v4.2.6@sha256:c555c6e1c8af2aead38ed12ec761ac077fdf046d19cf033414be8e056aec6b64
+    user: "1001:1001"
     environment:
-      PUID: "1000"
-      PGID: "1000"
       UMASK: "077"
     volumes:
       - evimed-openlist-data:/opt/openlist/data
@@ -86,6 +128,9 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    depends_on:
+      evimed-openlist-bootstrap:
+        condition: service_completed_successfully
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -95,6 +140,7 @@ services:
 
 volumes:
   evimed-openlist-data:
+  evimed-openlist-secrets:
   evimed-parser-staging:
 
 networks:

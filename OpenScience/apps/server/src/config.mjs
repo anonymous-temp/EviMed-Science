@@ -48,11 +48,16 @@ function readSecretFile(file, codePrefix) {
     handle = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     const stat = fs.fstatSync(handle);
     if (!stat.isFile()) return { value: "", error: `${codePrefix}_file_not_regular` };
-    if (stat.size > 8 * 1024) return { value: "", error: `${codePrefix}_file_too_large` };
+    // A secret may carry one LF or CRLF terminator. Bound the content after
+    // removing that terminator so every caller agrees on the same 8 KiB value.
+    if (stat.size > 8 * 1024 + 2) return { value: "", error: `${codePrefix}_file_too_large` };
     if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
       return { value: "", error: `${codePrefix}_file_permissions` };
     }
     const value = fs.readFileSync(handle, "utf8").replace(/\r?\n$/, "");
+    if (Buffer.byteLength(value, "utf8") > 8 * 1024) {
+      return { value: "", error: `${codePrefix}_file_too_large` };
+    }
     if (value.includes("\0")) return { value: "", error: `${codePrefix}_file_invalid` };
     return { value, error: null };
   } catch (err) {

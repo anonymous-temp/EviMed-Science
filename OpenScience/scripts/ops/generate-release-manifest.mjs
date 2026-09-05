@@ -22,6 +22,7 @@ const manifestFile = path.resolve(
 
 const inputPaths = [
   "package.json",
+  "deps-version.json",
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   "apps/web/package.json",
@@ -68,6 +69,10 @@ const inputPaths = [
   "examples/climate-trends",
   "deploy/web/Dockerfile",
   "deploy/memos/Dockerfile",
+  "deploy/memos-engine",
+  "deploy/memos-ollama",
+  "deploy/document-parser",
+  "deploy/openlist",
   "deploy/specialist-adapter",
   "scripts/ops/archive-crypto.mjs",
   "scripts/ops/backup-data.sh",
@@ -90,6 +95,8 @@ const inputPaths = [
   "deploy/web/docker-compose.oidc.yml",
   "deploy/web/docker-compose.saas.yml",
   "deploy/web/docker-compose.monitoring.yml",
+  "deploy/web/docker-compose.memos-engine.yml",
+  "deploy/web/docker-compose.ingestion.yml",
   "deploy/web/saas-capability-contract.json",
   "deploy/web/Caddyfile",
   "deploy/web/monitoring/prometheus.json",
@@ -230,6 +237,32 @@ async function currentVersions() {
   };
 }
 
+async function currentServiceImages() {
+  const deps = JSON.parse(await read("deps-version.json"));
+  return [
+    {
+      name: "document-parser",
+      image: process.env.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE ?? `evimed-document-parser:${deps.mineru.version}`,
+      envName: "OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID",
+    },
+    {
+      name: "memos-engine",
+      image: process.env.OPEN_SCIENCE_MEMOS_ENGINE_IMAGE ?? `evimed-memos-engine:${deps.memos.version}`,
+      envName: "OPEN_SCIENCE_MEMOS_ENGINE_IMAGE_ID",
+    },
+    {
+      name: "ollama",
+      image: `${deps.ollama.image}:${deps.ollama.version}@${deps.ollama.imageDigest}`,
+      envName: "OPEN_SCIENCE_OLLAMA_IMAGE_ID",
+    },
+    {
+      name: "openlist",
+      image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`,
+      envName: "OPEN_SCIENCE_OPENLIST_IMAGE_ID",
+    },
+  ];
+}
+
 /**
  * The build timestamp, refused by shape rather than by the validator's name.
  *
@@ -272,7 +305,7 @@ async function buildManifest() {
     `open-science-runtime:dsh-${versions.dshVersion}-uv-${versions.uvVersion}`;
   const proxyImage = `caddy:${versions.caddyVersion}`;
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     app: {
       name: pkg.name,
       version: pkg.version,
@@ -303,6 +336,11 @@ async function buildManifest() {
       imageId: dockerImageId(proxyImage, "OPEN_SCIENCE_CADDY_IMAGE_ID"),
       caddyVersion: versions.caddyVersion,
     },
+    services: (await currentServiceImages()).map((service) => ({
+      name: service.name,
+      image: service.image,
+      imageId: dockerImageId(service.image, service.envName),
+    })),
     skills: await currentSkills(),
     inputs: await currentInputs(),
     monitoring: versions.monitoring,
@@ -353,6 +391,14 @@ async function checkManifest(manifest, { images = false } = {}) {
     fail("release_manifest_version_mismatch", "Release manifest component versions do not match deployment sources.");
   }
 
+  const expectedServices = new Map((await currentServiceImages()).map((service) => [service.name, service]));
+  if (
+    manifest.services.length !== expectedServices.size ||
+    manifest.services.some((service) => expectedServices.get(service.name)?.image !== service.image)
+  ) {
+    fail("release_manifest_service_mismatch", "Release manifest service images do not match deployment sources.");
+  }
+
   const expectedInputs = new Map((await currentInputs()).map((item) => [item.path, item.digest]));
   if (
     manifest.inputs.length !== expectedInputs.size ||
@@ -381,6 +427,12 @@ async function checkManifest(manifest, { images = false } = {}) {
     }
     if (dockerImageId(manifest.proxy.image, "OPEN_SCIENCE_CADDY_IMAGE_ID") !== manifest.proxy.imageId) {
       fail("release_manifest_proxy_image_mismatch", "Caddy image id does not match the release manifest.");
+    }
+    for (const service of manifest.services) {
+      const expected = expectedServices.get(service.name);
+      if (!expected || dockerImageId(service.image, expected.envName) !== service.imageId) {
+        fail("release_manifest_service_image_mismatch", `${service.name} image id does not match the release manifest.`);
+      }
     }
   }
 }

@@ -51,8 +51,11 @@ test("an unconfigured deployment is still a working one", async () => {
   // crash. What must not exist is the state this replaced: external mode
   // declared, nothing configured, and nobody told.
   const source = await readFile(path.join(repoRoot, "scripts/ops/backup-scheduler.mjs"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.backup.yml"), "utf8");
   assert.match(source, /let offsite = "not_configured"/);
   assert.match(source, /if \(config\.objectBackupUri\) \{/, "an empty URI must skip the upload rather than fail the backup");
+  assert.match(compose, /OPEN_SCIENCE_OBJECT_BACKUP_CREDENTIALS_FILE:-\/dev\/null/,
+    "local-only backup must not require an invented cloud credential file");
 });
 
 // The deployment's declaration has to reach every container, and on 2026-08-31

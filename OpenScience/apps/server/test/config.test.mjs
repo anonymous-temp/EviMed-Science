@@ -80,6 +80,23 @@ test("Materials Project credentials load from a private server-only file", async
   }
 });
 
+test("file secrets accept 8 KiB content plus one line ending and reject larger content", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "evimed-secret-limit-"));
+  try {
+    const secret = path.join(root, "bootstrap-password.txt");
+    await writeFile(secret, `${"x".repeat(8192)}\r\n`, { mode: 0o600 });
+    const accepted = loadConfig({ rootDir: repoRoot, bootstrapPasswordFile: secret });
+    assert.equal(Buffer.byteLength(accepted.bootstrapPassword, "utf8"), 8192);
+    assert.equal(accepted.bootstrapPasswordError, null);
+    await writeFile(secret, "x".repeat(8193), { mode: 0o600 });
+    const rejected = loadConfig({ rootDir: repoRoot, bootstrapPasswordFile: secret });
+    assert.equal(rejected.bootstrapPassword, "");
+    assert.equal(rejected.bootstrapPasswordError, "bootstrap_password_file_too_large");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("credentialed public-source adapters load server-only credentials from private files", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "evimed-public-source-config-"));
   try {
