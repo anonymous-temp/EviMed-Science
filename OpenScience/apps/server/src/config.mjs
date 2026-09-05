@@ -1009,6 +1009,18 @@ export function loadConfig(overrides = {}) {
     memosContextMaxChars: Number(
       overrides.memosContextMaxChars ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS ?? 20_000,
     ),
+    memOsEngineUrl: String(overrides.memOsEngineUrl ?? process.env.OPEN_SCIENCE_MEMOS_ENGINE_URL ?? ""),
+    requireMemoryIndex:
+      overrides.requireMemoryIndex ?? boolEnv("OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", false),
+    memoryIndexPollMs: Number(
+      overrides.memoryIndexPollMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_POLL_MS ?? 1_000,
+    ),
+    memoryIndexLeaseMs: Number(
+      overrides.memoryIndexLeaseMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_LEASE_MS ?? 300_000,
+    ),
+    memoryIndexReconcileMs: Number(
+      overrides.memoryIndexReconcileMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_RECONCILE_MS ?? 300_000,
+    ),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a
     // working run from a dead one, so both used to wait out the full timeout.

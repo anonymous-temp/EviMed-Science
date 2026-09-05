@@ -22,14 +22,17 @@ async function harness(t, responder, config = {}) {
   const client = new MemOsClient({ memOsBaseUrl: `http://127.0.0.1:${server.address().port}`, ...config });
   return { client, calls };
 }
-const scope = memOsNamespace("account-one", "project-one");
+const generation = "2026-09-05 00:00:00+00";
+const scoped = (values = {}) => ({ accountCreatedAt: generation, ...values });
+const scope = memOsNamespace("account-one", generation, "project-one");
 
 test("namespaces distinguish account, project, and delimiter collisions", () => {
   const scopes = [["a", "b:c"], ["a:b", "c"], ["a"], ["a", ""], ["a", "b"], ["b", "b"]];
   assert.throws(() => memOsNamespace("a", ""), { code: "mem_os_payload_invalid" });
-  assert.equal(new Set(scopes.filter(([,p]) => p !== "").map(([u,p]) => memOsNamespace(u,p).cubeId)).size, 5);
+  assert.equal(new Set(scopes.filter(([,p]) => p !== "").map(([u,p]) => memOsNamespace(u,generation,p).cubeId)).size, 5);
   assert.notEqual(scope.userId, "account-one");
-  assert.equal(memOsNamespace("account-one", "other").userId, scope.userId);
+  assert.equal(memOsNamespace("account-one", generation, "other").userId, scope.userId);
+  assert.notEqual(memOsNamespace("account-one", "another-generation").userId, scope.userId);
 });
 
 test("health validates service identity and labels schema version honestly", async t => {
@@ -41,7 +44,7 @@ test("health validates service identity and labels schema version honestly", asy
 
 test("add stores one record per request with server scope and provenance", async t => {
   const {client,calls} = await harness(t, () => addResponse(scope.cubeId));
-  const receipt = await client.add("account-one", [exampleRecord], {projectId:"project-one"});
+  const receipt = await client.add("account-one", [exampleRecord], scoped({projectId:"project-one"}));
   assert.deepEqual(calls[0].body, {
     user_id: scope.userId, writable_cube_ids: [scope.cubeId], async_mode: "async", task_id: calls[0].body.task_id,
     messages: [{role:"user",content:exampleRecord.content}], chat_history: [],
@@ -55,16 +58,16 @@ test("add stores one record per request with server scope and provenance", async
 test("add validates the whole batch before writing and refuses tenant payload fields", async t => {
   const {client,calls} = await harness(t, () => assert.fail("must not request"));
   for (const extra of [{user_id:"foreign"},{writable_cube_ids:["foreign"]},{info:{user_id:"foreign"}},{doc_path:"/etc/passwd"}]) {
-    await assert.rejects(client.add("account-one",[{...exampleRecord,...extra}]),{code:"mem_os_payload_invalid"});
+    await assert.rejects(client.add("account-one",[{...exampleRecord,...extra}],scoped()),{code:"mem_os_payload_invalid"});
   }
-  await assert.rejects(client.add("account-one",[exampleRecord,{entryId:"other",content:""}]),{code:"mem_os_payload_invalid"});
-  await assert.rejects(client.search("account-one","query",{projectId:"project-one",filter:{}}),{code:"mem_os_payload_invalid"});
+  await assert.rejects(client.add("account-one",[exampleRecord,{entryId:"other",content:""}],scoped()),{code:"mem_os_payload_invalid"});
+  await assert.rejects(client.search("account-one","query",scoped({projectId:"project-one",filter:{}})),{code:"mem_os_payload_invalid"});
   assert.equal(calls.length,0);
 });
 
 test("partial write failure retains successful identifiers without retrying", async t => {
   const {client,calls} = await harness(t, (_, n) => n === 1 ? addResponse(scope.cubeId) : {httpStatus:503,json:{message:"private upstream body"}});
-  await assert.rejects(client.add("account-one",[exampleRecord,{...exampleRecord,entryId:"entry-two"}],{projectId:"project-one"}), error => {
+  await assert.rejects(client.add("account-one",[exampleRecord,{...exampleRecord,entryId:"entry-two"}],scoped({projectId:"project-one"})), error => {
     assert.equal(error.code,"mem_os_partial_write");
     assert.deepEqual(error.completed,[{entryId:"entry-one",memoryIds:["memory-one"],taskId:calls[0].body.task_id}]);
     assert.equal(error.failedEntryId,"entry-two");
@@ -77,7 +80,7 @@ test("partial write failure retains successful identifiers without retrying", as
 
 test("search scopes reads and preserves product provenance", async t => {
   const {client,calls} = await harness(t, () => searchResponse(scope.userId,scope.cubeId));
-  const records = await client.search("account-one","methods",{projectId:"project-one",limit:3});
+  const records = await client.search("account-one","methods",scoped({projectId:"project-one",limit:3}));
   assert.equal(records[0].id,"memory-one");
   assert.equal(records[0].entryId,"entry-one");
   assert.deepEqual(records[0].provenanceIds,exampleRecord.provenanceIds);
@@ -91,13 +94,13 @@ test("search scopes reads and preserves product provenance", async t => {
 test("foreign bucket and mismatched owner responses fail closed", async t => {
   for (const [user,cube] of [[scope.userId,"foreign"],["foreign",scope.cubeId],[null,scope.cubeId]]) {
     const {client}=await harness(t,()=>searchResponse(user,cube));
-    await assert.rejects(client.search("account-one","x",{projectId:"project-one"}),{code:"mem_os_scope_mismatch"});
+    await assert.rejects(client.search("account-one","x",scoped({projectId:"project-one"})),{code:"mem_os_scope_mismatch"});
   }
 });
 
 test("export is paginated and never labels a partial page complete", async t => {
   const {client,calls}=await harness(t,()=>searchResponse(scope.userId,scope.cubeId,{total:2}));
-  const page=await client.export("account-one",{projectId:"project-one",page:1,pageSize:1});
+  const page=await client.export("account-one",scoped({projectId:"project-one",page:1,pageSize:1}));
   assert.equal(page.complete,false); assert.equal(page.nextPage,2); assert.equal(page.total,2);
   assert.equal(calls[0].path,"/product/get_memory");
   assert.deepEqual(calls[0].body,{mem_cube_id:scope.cubeId,user_id:scope.userId,include_preference:false,include_tool_memory:false,include_skill_memory:false,page:1,page_size:1});
@@ -105,22 +108,22 @@ test("export is paginated and never labels a partial page complete", async t => 
 
 test("deleteRecord uses a scoped filter, never upstream unscoped memory_ids", async t => {
   const {client,calls}=await harness(t,()=>deleteResponse);
-  assert.deepEqual(await client.deleteRecord("account-one","memory-one",{projectId:"project-one"}),{status:"deleted",verified:false});
+  assert.deepEqual(await client.deleteRecord("account-one","memory-one",scoped({projectId:"project-one"})),{status:"deleted",verified:false});
   assert.equal(calls[0].path,"/product/delete_memory");
   assert.deepEqual(calls[0].body,{user_id:scope.userId,writable_cube_ids:[scope.cubeId],filter:{and:[{id:"memory-one"},{user_name:scope.cubeId}]}});
 });
 
 test("deleteUser selects only the account across its project cubes", async t => {
   const {client,calls}=await harness(t,()=>deleteResponse);
-  await client.deleteUser("account-one");
+  await client.deleteUser("account-one",generation);
   assert.deepEqual(calls[0].body,{user_id:scope.userId});
 });
 
 test("HTTP 200 with deletion failure or empty add is not success", async t => {
   const {client}=await harness(t,()=>({code:200,message:"ignored",data:{status:"failure"}}));
-  await assert.rejects(client.deleteUser("account-one"),{code:"mem_os_operation_failed"});
+  await assert.rejects(client.deleteUser("account-one",generation),{code:"mem_os_operation_failed"});
   const {client:empty}=await harness(t,()=>({code:200,message:"ignored",data:[]}));
-  await assert.rejects(empty.add("account-one",[exampleRecord]),{code:"mem_os_response_invalid"});
+  await assert.rejects(empty.add("account-one",[exampleRecord],scoped()),{code:"mem_os_response_invalid"});
 });
 
 test("HTTP, JSON, envelope, health and response size failures are named and sanitized", async t => {
@@ -142,7 +145,7 @@ test("timeout bounds the whole response and request sizes are checked before sen
   const {client}=await harness(t,()=>undefined,{memOsTimeoutMs:30});
   await assert.rejects(client.health(),{code:"mem_os_timeout"});
   const {client:bounded,calls}=await harness(t,()=>assert.fail("not sent"),{memOsMaxRequestBytes:128});
-  await assert.rejects(bounded.add("account-one",[exampleRecord]),{code:"mem_os_request_too_large"});
+  await assert.rejects(bounded.add("account-one",[exampleRecord],scoped()),{code:"mem_os_request_too_large"});
   assert.equal(calls.length,0);
 });
 
@@ -152,7 +155,7 @@ test("URL, config and limits validation fails before network access", async () =
   }
   assert.throws(()=>new MemOsClient({memOsBaseUrl:"http://localhost",memOsTimeoutMs:0}),{code:"mem_os_config_invalid"});
   const client=new MemOsClient({memOsBaseUrl:"http://127.0.0.1:1"});
-  await assert.rejects(client.search("account-one","x",{limit:0}),{code:"mem_os_payload_invalid"});
+  await assert.rejects(client.search("account-one","x",scoped({limit:0})),{code:"mem_os_payload_invalid"});
   await assert.rejects(client.health(),{code:"mem_os_unavailable"});
 });
 
@@ -163,31 +166,55 @@ test("scheduler status is scoped and missing task remains unverified", async t =
     if(call.path === "/product/add") { savedTaskId=call.body.task_id; return addResponse(scope.cubeId); }
     return {code:200,message:"Memory get status successfully",data:[{task_id:savedTaskId,status:"completed"}]};
   });
-  const added=await client.add("account-one",[exampleRecord],{projectId:"project-one"});
+  const added=await client.add("account-one",[exampleRecord],scoped({projectId:"project-one"}));
   const taskId=added.records[0].taskId;
-  assert.deepEqual(await client.getTaskStatus("account-one",taskId,{projectId:"project-one"}),{taskId,status:"completed"});
+  assert.deepEqual(await client.getTaskStatus("account-one",taskId,scoped({projectId:"project-one"})),{taskId,status:"completed"});
   assert.equal(new URL(calls[1].path,"http://localhost").searchParams.get("user_id"),scope.userId);
-  await assert.rejects(client.getTaskStatus("another-account",taskId,{projectId:"project-one"}),{code:"mem_os_payload_invalid"});
+  await assert.rejects(client.getTaskStatus("another-account",taskId,scoped({projectId:"project-one"})),{code:"mem_os_payload_invalid"});
   const {client:missing}=await harness(t,()=>({httpStatus:404,json:{detail:"not found"}}));
-  await assert.rejects(missing.getTaskStatus("account-one",taskId,{projectId:"project-one"}),{code:"mem_os_not_found"});
+  await assert.rejects(missing.getTaskStatus("account-one",taskId,scoped({projectId:"project-one"})),{code:"mem_os_not_found"});
 });
 
 test("capsule namespaces are explicit and cannot alias project or account scopes",async t=>{
-  const capsule=memOsNamespace("account-one",undefined,"capsule-one");
-  assert.notEqual(capsule.cubeId,memOsNamespace("account-one","capsule-one").cubeId);
+  const capsule=memOsNamespace("account-one",generation,undefined,"capsule-one");
+  assert.notEqual(capsule.cubeId,memOsNamespace("account-one",generation,"capsule-one").cubeId);
+  assert.notEqual(capsule.cubeId,memOsNamespace("account-one",generation,undefined,"capsule-two").cubeId);
   const {client,calls}=await harness(t,()=>addResponse(capsule.cubeId),{memOsWriteMode:"sync-fast"});
-  await client.add("account-one",[{...exampleRecord,revision:3}],{capsuleId:"capsule-one"});
+  await client.add("account-one",[{...exampleRecord,revision:3}],scoped({capsuleId:"capsule-one"}));
   assert.deepEqual(calls[0].body.writable_cube_ids,[capsule.cubeId]);
   assert.equal(calls[0].body.async_mode,"sync");assert.equal(calls[0].body.mode,"fast");
   assert.equal(calls[0].body.info.evimed_entry_revision,3);
-  await assert.rejects(client.search("account-one","query",{projectId:"project-one",capsuleId:"capsule-one"}),{code:"mem_os_payload_invalid"});
+  await assert.rejects(client.search("account-one","query",scoped({projectId:"project-one",capsuleId:"capsule-one"})),{code:"mem_os_payload_invalid"});
 });
 
 test("scoped deletion and readback keep the capsule and indexed revision explicit",async t=>{
-  const capsule=memOsNamespace("account-one",undefined,"capsule-one");
+  const capsule=memOsNamespace("account-one",generation,undefined,"capsule-one");
   const response=searchResponse(capsule.userId,capsule.cubeId,{total:1});response.data.text_mem[0].memories[0].metadata.info.evimed_entry_revision=4;
   const {client,calls}=await harness(t,call=>call.path==="/product/delete_memory"?deleteResponse:response);
-  await client.deleteScope("account-one",{capsuleId:"capsule-one"});
+  await client.deleteScope("account-one",scoped({capsuleId:"capsule-one"}));
   assert.deepEqual(calls[0].body,{user_id:capsule.userId,writable_cube_ids:[capsule.cubeId],filter:{user_name:capsule.cubeId}});
-  assert.equal((await client.export("account-one",{capsuleId:"capsule-one"})).records[0].revision,4);
+  assert.equal((await client.export("account-one",scoped({capsuleId:"capsule-one"}))).records[0].revision,4);
+});
+
+test("an empty scope deletion is idempotent only after a bounded empty readback",async t=>{
+  const capsule=memOsNamespace("account-one",generation,undefined,"capsule-empty");
+  const empty=searchResponse(capsule.userId,capsule.cubeId,{total:0});
+  empty.data.text_mem[0].memories=[];
+  const {client,calls}=await harness(t,call=>call.path==="/product/delete_memory"
+    ? {code:200,message:"Failed to delete memories",data:{status:"failure"}} : empty);
+  assert.deepEqual(await client.deleteScope("account-one",scoped({capsuleId:"capsule-empty"})),{status:"absent",verified:true});
+  assert.equal(calls[1].path,"/product/get_memory");
+});
+
+test("2.0.30 flattened metadata retains canonical entry identity",async t=>{
+  const capsule=memOsNamespace("account-one",generation,undefined,"capsule-flat");
+  const response=searchResponse(capsule.userId,capsule.cubeId,{total:1});
+  const metadata=response.data.text_mem[0].memories[0].metadata;
+  Object.assign(metadata,metadata.info,{evimed_entry_revision:7});
+  delete metadata.info;
+  const {client}=await harness(t,()=>response);
+  const [record]=await client.search("account-one","query",scoped({capsuleId:"capsule-flat"}));
+  assert.equal(record.entryId,"entry-one");
+  assert.equal(record.revision,7);
+  assert.deepEqual(record.provenanceIds,exampleRecord.provenanceIds);
 });

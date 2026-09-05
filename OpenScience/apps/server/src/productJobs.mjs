@@ -19,15 +19,21 @@ export class ProductJobs {
   constructor(database) { this.database = database; }
 
   /** @param {string} userId @param {string} kind @param {Record<string,any>} payload
-   * @param {{ idempotencyKey: string, projectId?: string|null, maxAttempts?: number, runAfter?: Date }} options */
-  async enqueue(userId, kind, payload, { idempotencyKey, projectId = null, maxAttempts = 3, runAfter = new Date() }) {
+   * @param {{ idempotencyKey: string, projectId?: string|null, maxAttempts?: number, runAfter?: Date, rearmFailed?:boolean }} options */
+  async enqueue(userId, kind, payload, { idempotencyKey, projectId = null, maxAttempts = 3, runAfter = new Date(), rearmFailed = false }) {
     productInteger(maxAttempts, 1, 10);
     const values = [randomUUID(), productId(userId, "user"), productKind(kind, PRODUCT_JOB_KINDS), productPayload(payload),
-      productId(idempotencyKey, "idempotency key"), projectId == null ? null : productId(projectId, "project"), maxAttempts, productTime(runAfter)];
+      productId(idempotencyKey, "idempotency key"), projectId == null ? null : productId(projectId, "project"), maxAttempts, productTime(runAfter), rearmFailed];
     await migrateProductStore(this.database);
     const result = await this.database.query(`INSERT INTO evimed_product.jobs(id,user_id,kind,payload,idempotency_key,project_id,max_attempts,run_after)
       VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8)
-      ON CONFLICT(user_id,idempotency_key) DO UPDATE SET id=jobs.id
+      ON CONFLICT(user_id,idempotency_key) DO UPDATE SET id=jobs.id,
+        status=CASE WHEN $9::boolean AND jobs.status='failed' THEN 'queued' ELSE jobs.status END,
+        attempts=CASE WHEN $9::boolean AND jobs.status='failed' THEN 0 ELSE jobs.attempts END,
+        error=CASE WHEN $9::boolean AND jobs.status='failed' THEN NULL ELSE jobs.error END,
+        finished_at=CASE WHEN $9::boolean AND jobs.status='failed' THEN NULL ELSE jobs.finished_at END,
+        run_after=CASE WHEN $9::boolean AND jobs.status='failed' THEN excluded.run_after ELSE jobs.run_after END,
+        updated_at=CASE WHEN $9::boolean AND jobs.status='failed' THEN clock_timestamp() ELSE jobs.updated_at END
       WHERE jobs.kind=excluded.kind AND jobs.payload=excluded.payload AND jobs.project_id IS NOT DISTINCT FROM excluded.project_id
       RETURNING *`, values);
     if (!result.rows[0]) throw new HttpError(409, "product_job_idempotency_conflict", "This request key already names a different job.");
@@ -102,12 +108,23 @@ export class ProductJobs {
 
   /** @param {string} userId @param {string} id @param {string} leaseToken @param {Record<string,any>} result */
   async finish(userId, id, leaseToken, result) {
+    return this.finishWithLease(userId, id, leaseToken, result, async () => {});
+  }
+
+  /** Complete a job and its canonical side effect in the same lease-checked transaction.
+   * @param {string} userId @param {string} id @param {string} leaseToken @param {Record<string,any>} result
+   * @param {(client:any) => Promise<void>} operation */
+  async finishWithLease(userId, id, leaseToken, result, operation) {
+    if (typeof operation !== "function") throw new HttpError(400, "product_job_operation_invalid", "A job completion operation is required.");
     await migrateProductStore(this.database);
     const payload = productPayload(result);
-    const updated = await this.withLease(userId, id, leaseToken, (client) => client.query(`UPDATE evimed_product.jobs SET status='succeeded',result=$4::jsonb,error=NULL,
-      finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
-      WHERE user_id=$1 AND id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp() RETURNING *`,
-    [userId, id, leaseToken, payload]));
+    const updated = await this.withLease(userId, id, leaseToken, async (client) => {
+      await operation(client);
+      return client.query(`UPDATE evimed_product.jobs SET status='succeeded',result=$4::jsonb,error=NULL,
+        finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
+        WHERE user_id=$1 AND id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp() RETURNING *`,
+      [userId, id, leaseToken, payload]);
+    });
     if (!updated?.rows[0]) throw new HttpError(409, "product_job_lease_lost", "This worker no longer owns the job.");
     return job(updated.rows[0]);
   }

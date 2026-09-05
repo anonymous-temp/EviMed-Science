@@ -76,6 +76,9 @@ class PrivateMemoryApplication:
 def main() -> None:
     silence_upstream_logging()
     try:
+        from index_profile import configure_scheduler, prepare_environment
+        prepare_environment()
+        configure_scheduler(importlib.import_module("memos.api.config").APIConfig)
         app = importlib.import_module("memos.api.server_api").app
         import uvicorn
 

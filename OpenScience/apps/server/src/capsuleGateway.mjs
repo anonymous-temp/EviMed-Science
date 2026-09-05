@@ -48,7 +48,9 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service }) 
         if (body.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(body.scope)) {
           throw new HttpError(400, "capsule_payload_invalid", "Invalid memory scope.");
         }
-        sendJson(res, 200, await service.recall(user.id, { ...body, projectId: identity.projectId }));
+        sendJson(res, 200, await service.recall(currentUser.id, {
+          ...body, projectId: identity.projectId, accountCreatedAt: currentUser.accountCreatedAt,
+        }));
       } else {
         // A model's claim that its input was explicit is not a user's approval.
         const entry = await service.note(user.id, identity.projectId, { factKind: body.factKind, content: body.content, origin: "inferred" });

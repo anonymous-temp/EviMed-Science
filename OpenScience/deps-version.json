@@ -15,7 +15,8 @@
     "image": "memtensor/memos",
     "contractDir": "packages/contracts/memos",
     "notes": "MemTensor/MemOS 2.0 Stardust, self-hosted. Not the vendored usememos note app, which is retired.",
-    "githubRepo": "MemTensor/MemOS"
+    "githubRepo": "MemTensor/MemOS",
+    "sourceRevision": "b41c8996a8dcb9df81998cced68d11457ce950c3"
   },
   "openlist": {
     "version": "4.2.5",
