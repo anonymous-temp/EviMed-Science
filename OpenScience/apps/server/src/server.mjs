@@ -86,6 +86,7 @@ import {
   openScopedFileNoFollow,
   randomId,
   readJson,
+  readFileNoFollow,
   readJsonWithSize,
   resolveScopedPath,
   safeId,
@@ -522,6 +523,8 @@ export function createWebApiApp(overrides = {}) {
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
   let autopilotWorker = null;
+  let autopilotScheduleTimer = null;
+  let autopilotScheduleRun = null;
   let capsuleCleanupTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
@@ -643,6 +646,25 @@ export function createWebApiApp(overrides = {}) {
         attempts: run.attempts ?? 0,
       });
       runtimeEventPump.noteRun(project, run);
+      if (autopilotService) {
+        let claims = [];
+        const delta = (run.artifacts ?? []).find((artifact) => typeof artifact?.path === "string" && artifact.path.endsWith("agenda-delta.json"));
+        if (delta) {
+          try {
+            const file = resolveScopedPath(project.workspaceDir, delta.path);
+            const parsed = JSON.parse(String(await readFileNoFollow(project.workspaceDir, file, "utf8")));
+            if (Array.isArray(parsed?.claims)) claims = parsed.claims.slice(0, 500);
+          } catch { /* the delivery gate already reports malformed artifacts */ }
+        }
+        await autopilotService.completeRun(project.userId, {
+          projectId: project.id, runId: run.id, status: run.status, claims, costCny: 0,
+        }).catch(async (error) => {
+          await securityAudit(config, "autopilot.run.complete", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "autopilot_completion_failed",
+          });
+        });
+      }
       if (notificationService) {
         try {
           await notificationService.create(project.userId, {
@@ -2035,6 +2057,33 @@ export function createWebApiApp(overrides = {}) {
     return startupRuntimeCleanup;
   }
 
+  const scheduleAutopilot = async () => {
+    if (!autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
+    autopilotScheduleRun = (async () => {
+      const result = await productDatabase.query(`SELECT user_id,id,payload FROM evimed_product.documents
+        WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active' AND payload->>'enabled'='true'
+        ORDER BY updated_at,id LIMIT 100`);
+      const now = new Date();
+      for (const row of result.rows) {
+        try {
+          const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+            timeZone: row.payload.timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23",
+          }).formatToParts(now).map((part) => [part.type, part.value]));
+          const date = `${parts.year}-${parts.month}-${parts.day}`;
+          if (Number(parts.hour) >= Number(row.payload.scheduleHour) && row.payload.lastScheduledDate !== date) {
+            await autopilotService.schedule(row.user_id, row.id, { date });
+          }
+        } catch (error) {
+          await securityAudit(config, "autopilot.schedule", "failed", {
+            userId: row.user_id, agendaId: row.id,
+            code: typeof error?.code === "string" ? error.code : "autopilot_schedule_failed",
+          });
+        }
+      }
+    })().finally(() => { autopilotScheduleRun = null; });
+    return autopilotScheduleRun;
+  };
+
   return {
     config,
     store,
@@ -2074,6 +2123,8 @@ export function createWebApiApp(overrides = {}) {
       memoryIndexWorker?.start();
       sourceWorker?.start();
       autopilotWorker?.start();
+      await scheduleAutopilot();
+      if (autopilotService) { autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000); autopilotScheduleTimer.unref(); }
       await applyNotificationDefaults();
       if (notificationService) {
         notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
@@ -2087,6 +2138,8 @@ export function createWebApiApp(overrides = {}) {
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await autopilotWorker?.close();
+      if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
+      await autopilotScheduleRun;
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       await runtimeUi.close();
