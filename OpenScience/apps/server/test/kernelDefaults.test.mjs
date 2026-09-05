@@ -416,7 +416,7 @@ test("two identical configurations differ in nothing, and that is asserted rathe
   ]);
 });
 
-test("losing one entry from the ban list is caught, not absorbed", async (t) => {
+test("losing one entry from the ban list is caught, not absorbed", async () => {
   // Found by an adversarial pass. The deliberately-absent block is parsed with
   // whitespace-sensitive patterns — an entry is `#` + 2-3 spaces, a
   // continuation is `#` + 4 or more — so re-indenting one entry line by a
@@ -424,9 +424,7 @@ test("losing one entry from the ban list is caught, not absorbed", async (t) => 
   // entries, three bans could vanish and every run stayed green. The count is
   // pinned exactly now: changing it is how a reviewer says the composition's
   // ban list changed on purpose.
-  const presetPath = path.join(repoRoot, SOURCES.preset);
-  const preset = await readFile(presetPath, "utf8");
-  t.after(async () => { await writeFile(presetPath, preset, "utf8"); });
+  const preset = await readFile(path.join(repoRoot, SOURCES.preset), "utf8");
 
   const lines = preset.split("\n");
   const header = lines.findIndex((line) => /^#\s*Deliberately absent/i.test(line));
@@ -434,9 +432,9 @@ test("losing one entry from the ban list is caught, not absorbed", async (t) => 
   const entry = lines.findIndex((line, index) => index > header && /^#\s{2,3}\S/.test(line));
   assert.ok(entry > header, "the block must still hold at least one entry");
   lines[entry] = lines[entry].replace(/^#\s{2,3}/, (match) => `${match} `);
-  await writeFile(presetPath, lines.join("\n"), "utf8");
+  const presetPath = await mutatedCopy("agent.cordis.yml", preset, () => lines.join("\n"));
 
-  const report = await checkKernelDefaults({});
+  const report = await checkKernelDefaults({ overrideFiles: { preset: presetPath } });
   const drift = report.problems.filter((problem) => problem.kind === "extraction-drift");
   assert.equal(drift.length, 1, "one demoted entry must be reported");
   assert.match(drift[0].detail, /found 8, expected exactly 9/);
