@@ -140,7 +140,7 @@ export class InMemoryStore {
     return user;
   }
 
-  async ensureSessionUser(req, res) {
+  async ensureSessionUser(req, res, { allowDevAuth = true } = {}) {
     await this.loadSessions();
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
@@ -154,7 +154,7 @@ export class InMemoryStore {
       this.sessions.delete(key);
       await this.saveSessions();
     }
-    if (!this.config.devAuth) {
+    if (!allowDevAuth || !this.config.devAuth) {
       throw new HttpError(401, "unauthorized", "Authentication required.");
     }
     if (this.config.production) {
@@ -783,7 +783,7 @@ export class PostgresStore extends InMemoryStore {
 
   async saveSessions() {}
 
-  async ensureSessionUser(req, res) {
+  async ensureSessionUser(req, res, { allowDevAuth = true } = {}) {
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
     const key = sessionId ? sessionKey(sessionId) : null;
@@ -802,7 +802,7 @@ export class PostgresStore extends InMemoryStore {
       }
       await this.database.query(`DELETE FROM ${CONTROL_PLANE_SCHEMA}.auth_sessions WHERE id_hash = $1`, [key]);
     }
-    if (!this.config.devAuth) throw new HttpError(401, "unauthorized", "Authentication required.");
+    if (!allowDevAuth || !this.config.devAuth) throw new HttpError(401, "unauthorized", "Authentication required.");
     if (this.config.production) {
       throw new HttpError(503, "dev_auth_enabled", "Development authentication is disabled in production mode.");
     }

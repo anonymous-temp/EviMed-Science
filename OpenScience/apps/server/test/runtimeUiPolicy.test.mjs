@@ -98,7 +98,7 @@ const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpo
 test("mux rejects unauthenticated, forged/expired cookies and foreign or missing Origins", { timeout: 5000 }, async (t) => {
   const f = await fixture(t);
   for (const [headers, status] of [
-    [{ Cookie: "" }, 401], [{ Cookie: "evimed_session=forged" }, 401],
+    [{ Cookie: "" }, 401], [{ Cookie: `${f.config.sessionCookieName}=forged` }, 401],
     [{ Origin: "https://foreign.example" }, 403], [{ Origin: "null" }, 403], [{ Origin: "" }, 403],
   ]) assert.equal(await f.connect(headers).opened, status);
   f.session.expiresAt = Date.now() - 1;
