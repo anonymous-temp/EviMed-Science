@@ -141,14 +141,18 @@ test("missing local hosted metadata is never accepted as an unguarded foreign tr
 });
 
 test("cleanup fsyncs deleted directories before recording completion",options,async()=>{
-  const owner=await account();const capsule=await source(owner);await transfers.export(owner,capsule.id,{password});
+  const owner=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});
   const events=[];const originalOpen=fs.open,originalRename=fs.rename;const hash=createHash("sha256").update(owner).digest("hex");
+  await fs.rename(path.join(root,"capsule-snapshots",`${hash}-${exported.snapshot.id}.evimedcap`),path.join(root,"capsule-snapshots",`${exported.snapshot.id}.evimedcap`));
+  const originalPrepare=transfers.prepareAccountDeletion.bind(transfers);transfers.prepareAccountDeletion=async(...args)=>{await originalPrepare(...args);events.push("prepared-before-db-delete");};
   try{fs.open=async(target,...args)=>{const handle=await originalOpen(target,...args);if([path.join(root,"capsule-keys"),path.join(root,"capsule-snapshots")].includes(String(target))){const sync=handle.sync.bind(handle);handle.sync=async()=>{events.push(String(target));await sync();};}return handle;};
-    fs.rename=async(from,to)=>{if(String(to)===path.join(root,"capsule-revocations",`account-${hash}.json`)){const state=JSON.parse(await fs.readFile(from,"utf8"));if(state.phase==="completed")events.push("completed-marker");}return originalRename(from,to);};
+    fs.rename=async(from,to)=>{if(String(from)===path.join(root,"capsule-snapshots",`${exported.snapshot.id}.evimedcap`))events.push("legacy-rename");if(String(to)===path.join(root,"capsule-revocations",`account-${hash}.json`)){const state=JSON.parse(await fs.readFile(from,"utf8"));if(state.phase==="completed")events.push("completed-marker");}return originalRename(from,to);};
     await deleteOwner(owner);
     const completed=events.indexOf("completed-marker");assert.ok(completed>=0);
+    const renamed=events.indexOf("legacy-rename"),prepared=events.indexOf("prepared-before-db-delete");
+    assert.ok(renamed>=0&&events.some((value,index)=>value===path.join(root,"capsule-snapshots")&&index>renamed&&index<prepared));
     for(const directory of ["capsule-keys","capsule-snapshots"]){const synced=events.lastIndexOf(path.join(root,directory));assert.ok(synced>=0&&synced<completed,`${directory} must be synced before completion`);}
-  }finally{fs.open=originalOpen;fs.rename=originalRename;}
+  }finally{fs.open=originalOpen;fs.rename=originalRename;transfers.prepareAccountDeletion=originalPrepare;}
 });
 
 test("account cleanup also removes attributable interrupted-write temporaries without touching another account",options,async()=>{

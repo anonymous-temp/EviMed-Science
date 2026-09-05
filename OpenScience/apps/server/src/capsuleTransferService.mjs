@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { packCapsule, openCapsule } from "./capsuleContainer.mjs";
-import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile } from "./capsuleIdentityStore.mjs";
+import { packCapsule, openCapsule, verifyCapsule } from "./capsuleContainer.mjs";
+import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile, syncCapsuleDirectory } from "./capsuleIdentityStore.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -163,9 +163,14 @@ export class CapsuleTransferService {
     productId(userId); fields(input, ["archive", "password"]); checkedText(input.password, 1024);
     const { envelope, container, passwordWrap } = parseArchive(input.archive);
     const manifest = envelope.manifest;
-    const known = await this.identities.resolve(manifest.issuer?.userId, manifest.issuer?.signingKeyId);
-    const opened = await openCapsule(container, { issuer: { signingPublicKey: known?.publicKey ?? envelope.issuerPublicKey }, password: input.password, passwordWrap });
+    const beforeKdf = await this.identities.resolve(manifest.issuer?.userId, manifest.issuer?.signingKeyId);
+    const opened = await openCapsule(container, { issuer: { signingPublicKey: beforeKdf?.publicKey ?? envelope.issuerPublicKey }, password: input.password, passwordWrap });
     if ("issues" in opened) throw new HttpError(opened.issues[0]?.code === "capsule_password_busy" ? 429 : 400, "capsule_transfer_open_failed", "The capsule could not be verified or decrypted.");
+    // KDF can outlive account deletion. Refresh the issuer and retain any prior
+    // local classification; disappearance must never grant foreign-import fallback.
+    const currentIssuer = await this.identities.resolve(manifest.issuer?.userId, manifest.issuer?.signingKeyId);
+    const known = currentIssuer ?? beforeKdf;
+    if (currentIssuer && !verifyCapsule(container, { signingPublicKey: currentIssuer.publicKey }).ok) throw invalid();
     const scopes = scopesOf(opened.manifest.scope);
     let metadata;
     try { metadata = JSON.parse(opened.entries["provenance.json"]); } catch { throw invalid(); }
@@ -189,10 +194,10 @@ export class CapsuleTransferService {
     const replacements = hosted ? await this.documents.list(known.ownerId, "preferences", { limit: 1, filter: { recordType: "capsule-snapshot", supersedes: metadata.snapshotId } }) : { items: [] };
     const preview = { archiveSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
-      hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? "unknown",
-      canImport: (!known || (!known.revoked && sourceAccountPresent)) && hosted?.payload.status !== "revoked", offlineRevocable: false };
+      hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? (known ? "unavailable" : "unknown"),
+      canImport: !known || Boolean(currentIssuer && !currentIssuer.revoked && sourceAccountPresent && hosted?.payload.status === "active"), offlineRevocable: false };
     if (!preview.canImport) preview.entries = [];
-    const guards = hosted ? [{ userId: known.ownerId, kind: "preferences", id: metadata.snapshotId, filter: { status: "active", archiveSha256 } }] : [];
+    const guards = known?.ownerId ? [{ userId: known.ownerId, kind: "preferences", id: metadata.snapshotId, filter: { status: "active", archiveSha256 } }] : [];
     return { preview, guards, accountCreatedAt };
   }
 
@@ -243,6 +248,7 @@ export class CapsuleTransferService {
       if (!UUID.test(snapshot.id)) throw invalid();
       await fs.rename(path.join(directory, `${snapshot.id}.evimedcap`), path.join(directory, `${capsuleAccountHash(userId)}-${snapshot.id}.evimedcap`)).catch(error => { if (error.code !== "ENOENT") throw error; });
     }
+    await syncCapsuleDirectory(directory);
     await this.identities.prepareDeletion(userId, row.generation);
   }
 
@@ -258,8 +264,9 @@ export class CapsuleTransferService {
         const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
         const files = await fs.opendir(directory);
         for await (const file of files) {
-          if (file.name.startsWith(`${capsuleAccountHash(userId)}-`) && file.name.endsWith(".evimedcap")) await unlinkCapsuleFile(directory, file.name);
+          if (file.name.startsWith(`${capsuleAccountHash(userId)}-`) && /\.evimedcap(?:\.[a-f0-9-]{36}\.tmp)?$/.test(file.name)) await unlinkCapsuleFile(directory, file.name);
         }
+        await syncCapsuleDirectory(directory);
         await this.identities.finishDeletion(userId, state);
         return { completed: true };
       });
