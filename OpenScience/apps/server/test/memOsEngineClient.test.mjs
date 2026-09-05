@@ -171,3 +171,23 @@ test("scheduler status is scoped and missing task remains unverified", async t =
   const {client:missing}=await harness(t,()=>({httpStatus:404,json:{detail:"not found"}}));
   await assert.rejects(missing.getTaskStatus("account-one",taskId,{projectId:"project-one"}),{code:"mem_os_not_found"});
 });
+
+test("capsule namespaces are explicit and cannot alias project or account scopes",async t=>{
+  const capsule=memOsNamespace("account-one",undefined,"capsule-one");
+  assert.notEqual(capsule.cubeId,memOsNamespace("account-one","capsule-one").cubeId);
+  const {client,calls}=await harness(t,()=>addResponse(capsule.cubeId),{memOsWriteMode:"sync-fast"});
+  await client.add("account-one",[{...exampleRecord,revision:3}],{capsuleId:"capsule-one"});
+  assert.deepEqual(calls[0].body.writable_cube_ids,[capsule.cubeId]);
+  assert.equal(calls[0].body.async_mode,"sync");assert.equal(calls[0].body.mode,"fast");
+  assert.equal(calls[0].body.info.evimed_entry_revision,3);
+  await assert.rejects(client.search("account-one","query",{projectId:"project-one",capsuleId:"capsule-one"}),{code:"mem_os_payload_invalid"});
+});
+
+test("scoped deletion and readback keep the capsule and indexed revision explicit",async t=>{
+  const capsule=memOsNamespace("account-one",undefined,"capsule-one");
+  const response=searchResponse(capsule.userId,capsule.cubeId,{total:1});response.data.text_mem[0].memories[0].metadata.info.evimed_entry_revision=4;
+  const {client,calls}=await harness(t,call=>call.path==="/product/delete_memory"?deleteResponse:response);
+  await client.deleteScope("account-one",{capsuleId:"capsule-one"});
+  assert.deepEqual(calls[0].body,{user_id:capsule.userId,writable_cube_ids:[capsule.cubeId],filter:{user_name:capsule.cubeId}});
+  assert.equal((await client.export("account-one",{capsuleId:"capsule-one"})).records[0].revision,4);
+});
