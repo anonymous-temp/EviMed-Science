@@ -172,7 +172,11 @@ export class SourceService {
   /** @param {string} userId @param {string} sourceId @param {Record<string,any>} input */
   async recordExtraction(userId, sourceId, input) {
     const current = await this.requireSource(userId, sourceId);
-    if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed before extraction completed.");
+    if (input.generation != null) {
+      if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this result.");
+    } else if (input.expectedRevision !== current.revision) {
+      throw new HttpError(409, "source_revision_conflict", "The source changed before extraction completed.");
+    }
     if (!Array.isArray(input.units) || input.units.length < 1 || input.units.length > 100_000) {
       throw new HttpError(400, "source_coverage_invalid", "Extraction must account for every source unit.");
     }
@@ -269,10 +273,14 @@ export class SourceService {
     }, { expectedRevision: current.revision, projectId: current.projectId });
   }
 
-  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,code:string,message?:string}} input */
+  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,generation?:number,code:string,message?:string}} input */
   async recordFailure(userId, sourceId, input) {
     const current = await this.requireSource(userId, sourceId);
-    if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "A newer source analysis superseded this failure.");
+    if (input.generation != null) {
+      if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this failure.");
+    } else if (input.expectedRevision !== current.revision) {
+      throw new HttpError(409, "source_revision_conflict", "A newer source analysis superseded this failure.");
+    }
     return this.documents.put(userId, "source", sourceId, {
       ...current.payload,
       status: "failed",

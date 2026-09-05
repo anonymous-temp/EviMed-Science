@@ -45,6 +45,8 @@ import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService } from "./sourceService.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
+import { SourceIngestionWorker } from "./sourceWorker.mjs";
+import { DocumentParserClient } from "./documentParserClient.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -462,6 +464,56 @@ export function createWebApiApp(overrides = {}) {
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
   const sourceRoutes = createSourceRoutes({ store, service: sourceService, maxJsonBytes: config.maxJsonBytes });
+  const documentParser = new DocumentParserClient({
+    baseUrl: config.documentParserUrl,
+    token: config.documentParserToken,
+    timeoutMs: config.documentParserTimeoutMs,
+    fetchImpl: overrides.documentParserFetch ?? globalThis.fetch,
+  });
+  const sourceProject = async (job) => {
+    const user = await store.userById(job.userId);
+    if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
+    return store.requireProject(user, job.projectId);
+  };
+  const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
+    jobs: productJobs,
+    sources: sourceService,
+    parser: documentParser,
+    pollMs: config.sourceIngestionPollMs,
+    leaseMs: config.sourceIngestionLeaseMs,
+    resolveSource: async (job, source) => {
+      if (!["upload", "internal"].includes(source.payload.connector?.type)) {
+        throw new HttpError(503, "source_connector_unavailable", "This source connector is not available to the ingestion worker.");
+      }
+      const project = await sourceProject(job);
+      const relative = source.payload.paths?.[0];
+      if (typeof relative !== "string") throw new HttpError(400, "source_path_invalid", "Source path is invalid.");
+      const full = resolveScopedPath(project.baseDir, relative);
+      await assertNoSymlinkPath(project.baseDir, full);
+      return full;
+    },
+    materialize: async (job, source, result) => {
+      const project = await sourceProject(job);
+      const relative = `knowledge-base/.evimed-derived/${source.id}/index.md`;
+      const full = resolveScopedPath(project.baseDir, relative);
+      const original = source.payload.paths?.[0] ?? source.id;
+      const value = [
+        `# ${path.posix.basename(String(original))}`,
+        "",
+        `Source: ${String(original)}`,
+        `SHA-256: ${source.payload.fingerprint.sha256}`,
+        `Extractor: ${result.extractor.name} ${result.extractor.version} (${result.extractor.parser})`,
+        "",
+        result.text,
+        "",
+      ].join("\n");
+      await withProjectStorageMutation(project, async () => {
+        await assertProjectCapacity(project, full, Buffer.byteLength(value), config);
+        await writeFileAtomicNoFollow(project.baseDir, full, value, { encoding: "utf8", mode: 0o600 });
+      });
+      return relative;
+    },
+  }) : null;
   let capsuleCleanupTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
@@ -1923,6 +1975,8 @@ export function createWebApiApp(overrides = {}) {
     memOsEngine,
     memoryIndexing,
     memoryIndexWorker,
+    sourceService,
+    sourceWorker,
     usageLedger,
     notificationService,
     capsuleService,
@@ -1948,6 +2002,7 @@ export function createWebApiApp(overrides = {}) {
       await runtimeUi.listen();
       if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
       memoryIndexWorker?.start();
+      sourceWorker?.start();
       await applyNotificationDefaults();
       if (notificationService) {
         notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
@@ -1959,6 +2014,7 @@ export function createWebApiApp(overrides = {}) {
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       await memoryIndexWorker?.close();
+      await sourceWorker?.close();
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       await runtimeUi.close();

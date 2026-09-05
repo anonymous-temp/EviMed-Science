@@ -372,6 +372,14 @@ export function loadConfig(overrides = {}) {
     codePrefix: "memos_access_token",
     defaultFile: localSecretFile("memos.pat"),
   });
+  const documentParserSecret = preferredFileSecret(overrides, {
+    overrideValue: "documentParserToken",
+    overrideFile: "documentParserTokenFile",
+    valueEnv: "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN",
+    fileEnv: "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE",
+    codePrefix: "document_parser_token",
+    defaultFile: localSecretFile("document-parser.token"),
+  });
   const databaseSecret = preferredFileSecret(overrides, {
     overrideValue: "databaseUrl",
     overrideFile: "databaseUrlFile",
@@ -1027,6 +1035,23 @@ export function loadConfig(overrides = {}) {
     ),
     memoryIndexReconcileMs: Number(
       overrides.memoryIndexReconcileMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_RECONCILE_MS ?? 300_000,
+    ),
+    documentParserUrl: String(overrides.documentParserUrl ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL ?? "").replace(/\/+$/, ""),
+    documentParserToken: documentParserSecret.value,
+    documentParserTokenSource: documentParserSecret.source,
+    documentParserTokenError: documentParserSecret.error,
+    documentParserTimeoutMs: Number(
+      overrides.documentParserTimeoutMs ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS ?? 900_000,
+    ),
+    sourceIngestionEnabled:
+      overrides.sourceIngestionEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_INGESTION_ENABLED", production),
+    requireDocumentParser:
+      overrides.requireDocumentParser ?? boolEnv("OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER", production),
+    sourceIngestionPollMs: Number(
+      overrides.sourceIngestionPollMs ?? process.env.OPEN_SCIENCE_SOURCE_INGESTION_POLL_MS ?? 1_000,
+    ),
+    sourceIngestionLeaseMs: Number(
+      overrides.sourceIngestionLeaseMs ?? process.env.OPEN_SCIENCE_SOURCE_INGESTION_LEASE_MS ?? 900_000,
     ),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a

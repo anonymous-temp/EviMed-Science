@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
@@ -17,7 +17,8 @@ test("the actual upload path creates one durable source manifest and ingest job"
 }, async () => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-source-app-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
-    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl });
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    sourceIngestionEnabled: true, sourceIngestionPollMs: 100, sourceIngestionLeaseMs: 1000 });
   const username = `source${randomUUID().slice(0, 8)}`;
   let user;
   try {
@@ -37,21 +38,29 @@ test("the actual upload path creates one durable source manifest and ingest job"
     const first = await upload("研究方案.txt");
     assert.equal(first.status, 200);
     const firstBody = await first.json();
-    assert.equal(firstBody.data.source.payload.status, "queued");
+    assert.ok(["queued", "parsing", "complete"].includes(firstBody.data.source.payload.status));
     assert.equal(firstBody.data.source.payload.docType, "research-protocol");
 
     const duplicate = await upload("研究方案-copy.txt");
     assert.equal(duplicate.status, 200);
     assert.equal((await duplicate.json()).data.duplicate, true);
 
-    const inventory = await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers });
-    assert.equal(inventory.status, 200);
-    const sources = (await inventory.json()).data.items;
+    let sources = [];
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const inventory = await fetch(`${base}/api/sources?projectId=${encodeURIComponent(project.id)}`, { headers });
+      assert.equal(inventory.status, 200);
+      sources = (await inventory.json()).data.items;
+      if (sources[0]?.payload.status === "complete") break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     assert.equal(sources.length, 1);
     assert.equal(sources[0].payload.paths.length, 2);
+    assert.equal(sources[0].payload.status, "complete");
+    assert.equal(sources[0].payload.coverage.percent, 100);
+    assert.match(await readFile(path.join(project.baseDir, sources[0].payload.outputs.artifactPath), "utf8"), /比较两种证据综合方法/);
     const jobs = await app.store.database.query("SELECT kind,status FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest'", [user.id]);
     assert.equal(jobs.rowCount, 1);
-    assert.equal(jobs.rows[0].status, "queued");
+    assert.equal(jobs.rows[0].status, "succeeded");
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
     await app.close();
