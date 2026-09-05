@@ -110,3 +110,53 @@ test("canceling a job removes execution authority and records a readable termina
   assert.equal(await jobs.renew(owner, row.id, lease.leaseToken, 1000), false);
   await assert.rejects(jobs.finish(owner, row.id, lease.leaseToken, {}), { code: "product_job_lease_lost" });
 });
+
+test("history exposes every retained revision through bounded revision pages", options, async () => {
+  const id = randomUUID();
+  for (let version = 0; version < 51; version++) {
+    await documents.put(owner, "profile", id, { version }, { expectedRevision: version });
+  }
+  const first = await documents.history(owner, "profile", id, { limit: 50 });
+  const second = await documents.history(owner, "profile", id, { beforeRevision: first.at(-1).revision, limit: 50 });
+  assert.equal(first.length, 50);
+  assert.deepEqual(second.map((x) => x.revision), [1]);
+});
+
+test("lease completion, failure and renewal recheck time after waiting for a row lock", options, async () => {
+  for (const action of ["finish", "fail", "renew"]) {
+    const row = await jobs.enqueue(owner, "verify", { action }, { idempotencyKey: randomUUID() });
+    const lease = await jobs.claim(["verify"], "slow-worker", { leaseMs: 1000 });
+    const blocker = await database.pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT id FROM evimed_product.jobs WHERE id=$1 FOR UPDATE", [row.id]);
+    const promise = (action === "finish" ? jobs.finish(owner, row.id, lease.leaseToken, {})
+      : action === "fail" ? jobs.fail(owner, row.id, lease.leaseToken, { code: "test_failure", message: "Fixture" })
+        : jobs.renew(owner, row.id, lease.leaseToken, 1000))
+      .then((value) => ({ value, error: null }), (error) => ({ value: null, error }));
+    try { await new Promise((resolve) => setTimeout(resolve, 1100)); }
+    finally { await blocker.query("COMMIT"); blocker.release(); }
+    const outcome = await promise;
+    if (action === "renew") assert.equal(outcome.value, false);
+    else assert.equal(outcome.error?.code, "product_job_lease_lost");
+    await jobs.cancel(owner, row.id);
+  }
+});
+
+test("an exhausted job locked by another worker does not block independent claims", options, async () => {
+  const exhausted = await jobs.enqueue(owner, "notify", {}, { idempotencyKey: randomUUID(), maxAttempts: 1 });
+  await jobs.claim(["notify"], "old-worker", { leaseMs: 1000 });
+  await database.query("UPDATE evimed_product.jobs SET lease_expires_at=now()-interval '1 second' WHERE id=$1", [exhausted.id]);
+  const ready = await jobs.enqueue(owner, "notify", {}, { idempotencyKey: randomUUID() });
+  const blocker = await database.pool.connect();
+  await blocker.query("BEGIN");
+  await blocker.query("SELECT id FROM evimed_product.jobs WHERE id=$1 FOR UPDATE", [exhausted.id]);
+  const claim = jobs.claim(["notify"], "new-worker");
+  try {
+    const outcome = await Promise.race([claim, new Promise((resolve) => setTimeout(() => resolve(null), 400))]);
+    assert.equal(outcome?.id, ready.id);
+  } finally {
+    await blocker.query("COMMIT"); blocker.release();
+    await claim;
+    await jobs.cancel(owner, ready.id);
+  }
+});
