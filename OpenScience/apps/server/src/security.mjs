@@ -610,7 +610,7 @@ export async function readTextFileNoFollow(rootDir, file, fallback = "") {
   try {
     return /** @type {string} */ (/** @type {unknown} */ (await readFileNoFollow(rootDir, file, "utf8")));
   } catch (err) {
-    if (err?.code === "ENOENT") return fallback;
+    if (err?.code === "ENOENT" || err?.code === "file_not_found") return fallback;
     throw err;
   }
 }
