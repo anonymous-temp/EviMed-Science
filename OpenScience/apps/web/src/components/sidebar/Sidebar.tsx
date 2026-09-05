@@ -17,6 +17,7 @@ import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { runDotClass, runTitle } from "@/lib/runPresentation";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { ProjectSwitcher } from "@/components/sidebar/ProjectSwitcher";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import evimedMark from "@/assets/evimed-mark.svg";
 
 /** Dragging the divider below this pointer x collapses the sidebar; dragging
@@ -145,7 +146,7 @@ export function Sidebar() {
               icon={item.icon}
               label={item.label}
               active={location.pathname.startsWith(item.to)}
-              onClick={() => navigate(item.to)}
+              onClick={() => navigate(item.to, item.to === "/app/chat" ? { state: { runtimeUiIntent: newRuntimeUiIntent() } } : undefined)}
             />
           ))}
         </nav>

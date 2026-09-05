@@ -77,6 +77,29 @@ describe("apiClient", () => {
     expect(client.webRuntimeProfile().uiOrigin).toBe("https://science.example:8443");
   });
 
+  it("creates an immutable frame with the authenticated CSRF transport and explicit project", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson({ frameId: "frame-a", frameUrl: "https://science.example:8443/__evimed/f/frame-a/", expiresAt: 12345 }));
+    const client = await loadClient("https://science.example/api");
+    const binding = await client.createWebRuntimeUiFrame("project-a");
+    expect(binding.frameId).toBe("frame-a");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://science.example/api/runtime-ui/frames");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST", credentials: "include", body: JSON.stringify({ projectId: "project-a" }) });
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  });
+
+  it("releases a frame cookie with authenticated CSRF and keepalive on its exact route", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson(true));
+    const client = await loadClient("https://science.example/api");
+    await client.releaseWebRuntimeUiFrame("frame-a");
+    expect(fetchMock.mock.calls[1][0]).toBe("https://science.example/api/runtime-ui/frames/frame-a");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "DELETE", keepalive: true, credentials: "include" });
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  });
+
   it("posts browser commands to the configured web API", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(csrfMeResponse())

@@ -79,11 +79,12 @@ vi.mock("@/lib/apiClient", () => ({
     return mocks.hasWebApi;
   },
   listWebResearchAgents: mocks.listWebResearchAgents,
+  getWebProjectId: () => "default",
 }));
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}{location.search}</div>;
+  return <div data-testid="location">{location.pathname}{location.search}<span data-testid="intent">{JSON.stringify(location.state?.runtimeUiIntent)}</span></div>;
 }
 
 describe("CapabilitiesPage", () => {
@@ -179,7 +180,12 @@ describe("CapabilitiesPage", () => {
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
     expect(screen.getByTestId("location")).not.toHaveTextContent("agent=");
-    const draft = useUiStore.getState().composerDraft ?? "";
+    const intent = JSON.parse(screen.getByTestId("intent").textContent!);
+    expect(intent).toMatchObject({ kind: "create", projectId: "default" });
+    expect(intent.sessionId).toBeTruthy();
+    expect(intent.requestId).toBeTruthy();
+    expect(useUiStore.getState().composerDraft).toBeNull();
+    const draft = intent.draft;
     expect(draft).toContain("药品安全性分析");
     expect(draft).toContain("分析奥希替尼相关的心脏安全性信号");
     expect(draft).toBe(capabilityBrief("药品安全性分析", "分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"));

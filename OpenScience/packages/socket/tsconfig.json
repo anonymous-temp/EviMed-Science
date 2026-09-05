@@ -13,5 +13,5 @@
     "types": ["node"],
     "typeRoots": ["../../apps/web/node_modules/@types", "../../apps/server/node_modules/@types"]
   },
-  "include": ["index.mjs", "plugins/**/*.mjs", "src/**/*.mjs", "test/**/*.mjs"]
+  "include": ["index.mjs", "client.mjs", "scripts/**/*.mjs", "plugins/**/*.mjs", "src/**/*.mjs", "test/**/*.mjs"]
 }

@@ -12,7 +12,9 @@
   "exports": {
     ".": "./index.mjs",
     "./seam-manifest.json": "./seam-manifest.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./runtime-ui-transport": "./src/runtimeUiTransport.mjs",
+    "./runtime-ui-bridge": "./src/runtimeUiBridge.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

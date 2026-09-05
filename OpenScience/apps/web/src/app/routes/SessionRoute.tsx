@@ -1,47 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelRight } from "lucide-react";
 import { fetchWebMe, webRuntimeProfile } from "@/lib/apiClient";
-import { RunStreamSessionPage } from "./RunStreamSessionPage";
 import { RuntimeUiFrame } from "./RuntimeUiFrame";
 import { RunSidePanel } from "@/components/run/RunSidePanel";
+import { Button } from "@/components/ui/Button";
 
 const PANEL_KEY = "evimed.chat.runPanel";
 
-/**
- * The session surface: the kernel's own browser application when this
- * deployment serves it, this shell's own view when it does not.
- *
- * The choice belongs to the server, not to a build flag — `/api/me` names the
- * origin the application is served on, and a deployment without one renders
- * the built-in view. A browser that cannot reach that origin falls back to the
- * same place: the origin is a second port, and a port is what a firewall in
- * front of this deployment can refuse without either side being broken.
- */
+/** The native application is the session surface, including its failure state. */
 export function SessionRoute() {
   const [uiOrigin, setUiOrigin] = useState(() => webRuntimeProfile().uiOrigin);
-  const [uiUnreachable, setUiUnreachable] = useState(false);
+  const [loading, setLoading] = useState(() => !webRuntimeProfile().uiOrigin);
+  const [attempt, setAttempt] = useState(0);
   const [panelOpen, setPanelOpen] = useState(
     () => typeof window !== "undefined" && window.localStorage.getItem(PANEL_KEY) !== "0",
   );
-  // Stable identity: the frame probes on this callback changing, and an inline
-  // arrow would make it probe again on every render.
-  const markUnreachable = useCallback(() => setUiUnreachable(true), []);
-
   useEffect(() => {
-    let cancelled = false;
-    void fetchWebMe()
-      .then(() => {
-        if (cancelled) return;
-        setUiOrigin(webRuntimeProfile().uiOrigin);
-      })
-      .catch(() => {
-        // isolated: an unreachable control plane leaves the page on the view it
-        // already had rather than blanking the session.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    let active = true;
+    setLoading(true);
+    const timer = setTimeout(() => { if (active) setLoading(false); }, 15_000);
+    void fetchWebMe().then(() => { if (active) setUiOrigin(webRuntimeProfile().uiOrigin); })
+      .catch(() => { /* The visible unavailable state offers retry when no profile was loaded. */ })
+      .finally(() => { clearTimeout(timer); if (active) setLoading(false); });
+    return () => { active = false; clearTimeout(timer); };
+  }, [attempt]);
 
   const togglePanel = () => {
     setPanelOpen((open) => {
@@ -51,21 +33,22 @@ export function SessionRoute() {
     });
   };
 
-  const framed = uiOrigin && !uiUnreachable;
-
   return (
     <div className="flex h-full w-full">
       <div className="relative min-w-0 flex-1">
-        {framed ? <RuntimeUiFrame onUnreachable={markUnreachable} /> : <RunStreamSessionPage />}
+        {uiOrigin ? <RuntimeUiFrame /> : loading ? (
+          <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">正在启动研究运行时…</div>
+        ) : (
+          <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui-sm text-error">
+            <p>研究会话暂时无法连接</p>
+            <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>
+          </div>
+        )}
         {!panelOpen && (
-          <button
-            onClick={togglePanel}
-            aria-label="打开运行面板"
-            title="运行记录"
-            className="absolute right-3 top-3 rounded-input border border-border bg-surface/90 p-1.5 text-muted shadow-card backdrop-blur hover:text-text"
-          >
+          <Button onClick={togglePanel} aria-label="打开运行面板" title="运行记录" variant="ghost"
+            className="absolute right-3 top-3" size="sm">
             <PanelRight size={14} strokeWidth={1.5} />
-          </button>
+          </Button>
         )}
       </div>
       {panelOpen && <RunSidePanel onClose={togglePanel} />}

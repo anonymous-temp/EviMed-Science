@@ -331,6 +331,8 @@ COPY capability-skills /opt/evimed/capability-skills
 # on `domain` in turn and resolves it by walking up to this same directory.
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+RUN node /opt/evimed/socket/scripts/build-client.mjs \
+  && test -s /opt/evimed/socket/dist/client.js
 
 # The preset ships inside the bundle as a *system*-trusted root, so a copy a
 # user made into their own root cannot shadow it: the first root wins on a name

@@ -603,20 +603,15 @@ export function getWebOidcStartUrl(returnTo = "/app/settings"): string {
  * frontend change (AGENTS.md: the browser never reaches a kernel).
  */
 export interface WebRuntimeProfile {
-  /**
-   * Where the kernel's own browser application is served, or `""` when this
-   * deployment does not serve it. It is a whole origin rather than a path
-   * because the application builds every URL it fetches from
-   * `location.origin`; under a path prefix it cannot boot.
-   */
+  /** Separate native application origin; each frame pins one authenticated project. */
   uiOrigin: string;
 }
 
 /**
  * The deployment's runtime profile, remembered from the last `/api/me`.
  *
- * Empty until the control plane answers, which is also the right answer for a
- * deployment that serves no kernel application: render the built-in view.
+ * Empty until the control plane answers. A missing native origin displays an
+ * explicit unavailable state rather than selecting another prompt path.
  */
 let runtimeProfile: WebRuntimeProfile = { uiOrigin: "" };
 
@@ -628,14 +623,35 @@ function rememberRuntimeProfile(profile: (WebRuntimeProfile & { sessionView?: st
   // it would have silently taken `uiOrigin` with it, and the session surface
   // would have quietly reverted with nothing to point at.
   //
-  // An absent origin is not an empty one: it means "render your own view",
-  // which is what the default already says.
+  // A missing origin is an unavailable native surface, represented explicitly.
   runtimeProfile = { uiOrigin: typeof profile.uiOrigin === "string" ? profile.uiOrigin : "" };
 }
 
 /** @returns what this deployment serves as its session surface */
 export function webRuntimeProfile(): WebRuntimeProfile {
   return runtimeProfile;
+}
+
+export interface WebRuntimeUiFrame {
+  frameId: string;
+  frameUrl: string;
+  expiresAt: number;
+}
+
+/** Create one immutable native frame through the authenticated control plane. */
+export async function createWebRuntimeUiFrame(projectId: string): Promise<WebRuntimeUiFrame> {
+  const res = await fetchWithWebAuth(apiUrl("/runtime-ui/frames"), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+  });
+  return parseApiResponse<WebRuntimeUiFrame>(res);
+}
+
+/** Release only this frame's browser cookie; logout owns authority revocation. */
+export async function releaseWebRuntimeUiFrame(frameId: string): Promise<void> {
+  const res = await fetchWithWebAuth(apiUrl(`/runtime-ui/frames/${encodeURIComponent(frameId)}`), {
+    method: "DELETE", keepalive: true,
+  });
+  await parseApiResponse(res);
 }
 
 export async function fetchWebMe(): Promise<{
