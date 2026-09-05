@@ -23,10 +23,21 @@ export class ProductDocuments {
   constructor(database) { this.database = database; }
 
   /** Create a bounded batch with its history in one transaction. No partial import is observable.
-   * @param {string} userId @param {{kind:string,id:string,payload:Record<string,any>,projectId?:string|null}[]} records */
-  async createBatch(userId, records) {
+   * @param {string} userId @param {{kind:string,id:string,payload:Record<string,any>,projectId?:string|null}[]} records
+   * @param {{guards?:{userId:string,kind:string,id:string,filter:Record<string,any>}[],accountCreatedAt?:string}} options */
+  async createBatch(userId, records, { guards = [], accountCreatedAt } = {}) {
     productId(userId, "user");
     if (!Array.isArray(records) || records.length < 1 || records.length > 257) throw new HttpError(400, "product_batch_invalid", "Invalid record batch.");
+    if (!Array.isArray(guards) || guards.length > 8 || (accountCreatedAt !== undefined && (typeof accountCreatedAt !== "string" || accountCreatedAt.length > 80))) {
+      throw new HttpError(400, "product_batch_invalid", "Invalid batch conditions.");
+    }
+    const conditions = guards.map((guard) => {
+      if (!guard || typeof guard !== "object" || Object.keys(guard).some((key) => !["userId", "kind", "id", "filter"].includes(key))) throw new HttpError(400, "product_batch_invalid", "Invalid source condition.");
+      const filter = productPayload(guard.filter);
+      if (Buffer.byteLength(filter) > 8192) throw new HttpError(400, "product_batch_invalid", "Source condition is too large.");
+      const values = [productId(guard.userId, "source owner"), productKind(guard.kind), productId(guard.id), filter];
+      return { values, key: JSON.stringify(values.slice(0, 3)) };
+    }).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
     const seen = new Set();
     const rows = records.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).some((key) => !["kind", "id", "payload", "projectId"].includes(key))) throw new HttpError(400, "product_batch_invalid", "Invalid batch record.");
@@ -41,6 +52,16 @@ export class ProductDocuments {
     if (Buffer.byteLength(input) > 16 * 1024 * 1024) throw new HttpError(413, "product_batch_too_large", "Record batch exceeds 16 MiB.");
     await migrateProductStore(this.database);
     return this.database.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-user:${userId}`]);
+      if (accountCreatedAt !== undefined) {
+        const account = await client.query("SELECT id FROM evimed_control.users WHERE id=$1 AND created_at::text=$2 FOR SHARE", [userId, accountCreatedAt]);
+        if (account.rowCount !== 1) throw new HttpError(409, "product_account_changed", "The account changed before import completed.");
+      }
+      for (const condition of conditions) {
+        const source = await client.query(`SELECT id FROM evimed_product.documents
+          WHERE user_id=$1 AND kind=$2 AND id=$3 AND deleted_at IS NULL AND payload @> $4::jsonb FOR SHARE`, condition.values);
+        if (source.rowCount !== 1) throw new HttpError(409, "product_guard_conflict", "The source changed before import completed.");
+      }
       const result = await client.query(`WITH inserted AS (
         INSERT INTO evimed_product.documents(user_id,kind,id,payload,project_id)
         SELECT $1,kind,id,payload,project_id FROM jsonb_to_recordset($2::jsonb) AS x(kind text,id text,payload jsonb,project_id text)
