@@ -35,7 +35,7 @@ export async function readProtectedCapsuleFile(directory, name, maxBytes) {
 /** Publish immutable bytes atomically, so concurrent creators never read a partial key file. */
 export async function writeProtectedCapsuleFile(directory, name, content) {
   if (!/^[a-zA-Z0-9_-]+\.(?:json|evimedcap)$/.test(name)) throw unavailable();
-  const temporary = path.join(directory, `${randomUUID()}.tmp`);
+  const temporary = path.join(directory, `${name}.${randomUUID()}.tmp`);
   let handle;
   try {
     handle = await fs.open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -44,7 +44,7 @@ export async function writeProtectedCapsuleFile(directory, name, content) {
     await syncCapsuleDirectory(directory);
     return true;
   } catch (error) { if (error.code === "EEXIST") return false; throw unavailable(); }
-  finally { await handle?.close(); await fs.unlink(temporary).catch(() => {}); }
+  finally { await handle?.close(); await fs.unlink(temporary).catch(error => { if (error.code !== "ENOENT") throw unavailable(); }); await syncCapsuleDirectory(directory); }
 }
 
 /** Private identities and local issuer bindings stay outside user/project mounts. */
@@ -83,6 +83,13 @@ export class CapsuleIdentityStore {
     }
     const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-keys");
     const content = await readProtectedCapsuleFile(directory, `issuer-${keyId}.json`, 4096);
+    // A deletion publishes its tombstone before removing the live binding.
+    // Re-read after the live read so that a move cannot look like a foreign issuer.
+    const after = await readProtectedCapsuleFile(revokedDirectory, `issuer-${keyId}.json`, 4096);
+    if (after) {
+      const binding = JSON.parse(after);
+      return binding.issuerId === issuerId && binding.keyId === keyId ? binding : null;
+    }
     if (!content) return null;
     let binding;
     try { binding = JSON.parse(content); } catch { throw unavailable(); }
@@ -123,7 +130,9 @@ export class CapsuleIdentityStore {
   async finishDeletion(userId, state) {
     const revoked = await protectedCapsuleDirectory(this.dataDir, "capsule-revocations");
     const keys = await protectedCapsuleDirectory(this.dataDir, "capsule-keys");
+    const issuerKeys = new Set();
     if (state.binding) {
+      issuerKeys.add(state.binding.keyId);
       await writeProtectedCapsuleFile(revoked, `issuer-${state.binding.keyId}.json`, JSON.stringify(state.binding));
       await unlinkCapsuleFile(keys, `issuer-${state.binding.keyId}.json`);
     }
@@ -135,10 +144,18 @@ export class CapsuleIdentityStore {
       const content = await readProtectedCapsuleFile(keys, file.name, 4096);
       const binding = content ? JSON.parse(content) : null;
       if (binding?.ownerId !== userId) continue;
+      issuerKeys.add(binding.keyId);
       await writeProtectedCapsuleFile(revoked, file.name, JSON.stringify({ issuerId: binding.issuerId, keyId: binding.keyId, publicKey: binding.publicKey, revoked: true }));
       await unlinkCapsuleFile(keys, file.name);
     }
     await unlinkCapsuleFile(keys, `account-${capsuleAccountHash(userId)}.json`);
+    const temporaryFiles = await fs.opendir(keys);
+    for await (const file of temporaryFiles) {
+      if (!file.name.endsWith(".tmp")) continue;
+      if (file.name.startsWith(`account-${capsuleAccountHash(userId)}.json.`)
+        || [...issuerKeys].some(keyId => file.name.startsWith(`issuer-${keyId}.json.`))) await unlinkCapsuleFile(keys, file.name);
+    }
+    await syncCapsuleDirectory(keys);
     await replaceProtectedCapsuleFile(revoked, `account-${capsuleAccountHash(userId)}.json`, JSON.stringify({ phase: "completed", accountCreatedAt: state.accountCreatedAt }));
   }
 
@@ -161,7 +178,7 @@ export class CapsuleIdentityStore {
 export function capsuleAccountHash(userId) { return createHash("sha256").update(productId(userId, "user")).digest("hex"); }
 
 export async function unlinkCapsuleFile(directory, name) {
-  if (!/^[a-zA-Z0-9_-]+\.(?:json|evimedcap)$/.test(name)) throw unavailable();
+  if (!/^[a-zA-Z0-9_-]+\.(?:json|evimedcap)(?:\.[a-f0-9-]{36}\.tmp)?$/.test(name)) throw unavailable();
   await fs.unlink(path.join(directory, name)).catch(error => { if (error.code !== "ENOENT") throw error; });
 }
 
@@ -174,7 +191,7 @@ async function replaceProtectedCapsuleFile(directory, name, content) {
   finally { await unlinkCapsuleFile(directory, temporary); }
 }
 
-async function syncCapsuleDirectory(directory) {
+export async function syncCapsuleDirectory(directory) {
   const handle = await fs.open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { await handle.sync(); } finally { await handle.close(); }
 }
