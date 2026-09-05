@@ -1,0 +1,153 @@
+services:
+  open-science-web:
+    environment:
+      OPEN_SCIENCE_MEMOS_ENGINE_URL: http://evimed-memos-engine:8000
+      OPEN_SCIENCE_REQUIRE_MEMORY_INDEX: "true"
+    depends_on:
+      evimed-memos-engine:
+        condition: service_healthy
+    networks:
+      - default
+      - runtime-internal
+      - memory-index-internal
+
+  evimed-memos-engine:
+    image: ${OPEN_SCIENCE_MEMOS_ENGINE_IMAGE:-evimed-memos-engine:2.0.30}
+    build:
+      context: ../..
+      dockerfile: deploy/memos-engine/Dockerfile
+      args:
+        PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
+    environment:
+      EVIMED_MEMOS_PROVIDER_CONFIG: /run/secrets/memos-engine-providers.json
+      GRAPH_DB_BACKEND: neo4j-community
+      NEO4J_URI: bolt://evimed-memos-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_DB_NAME: neo4j
+      MOS_NEO4J_SHARED_DB: "true"
+      QDRANT_HOST: evimed-memos-qdrant
+      QDRANT_PORT: "6333"
+      MOS_ENABLE_SCHEDULER: "true"
+      MEMSCHEDULER_USE_REDIS_QUEUE: "true"
+      MEMSCHEDULER_REDIS_HOST: evimed-memos-redis
+      MEMSCHEDULER_REDIS_PORT: "6379"
+      MEMSCHEDULER_REDIS_DB: "0"
+      MEMSCHEDULER_STREAM_KEY_PREFIX: evimed-memos
+      REDIS_URL: redis://evimed-memos-redis:6379/0
+      ENABLE_PREFERENCE_MEMORY: "false"
+      ENABLE_ACTIVATION_MEMORY: "false"
+      ENABLE_INTERNET: "false"
+      MOS_ENABLE_REORGANIZE: "false"
+      INCLUDE_EMBEDDING: "true"
+    volumes:
+      - evimed-memos-engine-data:/var/lib/memos
+      - type: bind
+        source: ${OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE:?set OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE}
+        target: /run/secrets/memos-engine-providers.json
+        read_only: true
+    depends_on:
+      evimed-memos-neo4j:
+        condition: service_healthy
+      evimed-memos-qdrant:
+        condition: service_healthy
+      evimed-memos-redis:
+        condition: service_healthy
+    networks:
+      - memory-index-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=128m
+    restart: unless-stopped
+
+  evimed-memos-neo4j:
+    image: neo4j:5.26.12-community
+    environment:
+      NEO4J_AUTH_FILE: /run/secrets/neo4j-auth
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 768m
+      NEO4J_server_memory_pagecache_size: 256m
+    volumes:
+      - evimed-memos-neo4j-data:/data
+      - type: bind
+        source: ${OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE:?set OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE}
+        target: /run/secrets/neo4j-auth
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:7474 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks:
+      - memory-index-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1280m
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  evimed-memos-qdrant:
+    image: qdrant/qdrant:v1.15.4
+    volumes:
+      - evimed-memos-qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - memory-index-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  evimed-memos-redis:
+    image: redis:7.4.5-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - evimed-memos-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    networks:
+      - memory-index-internal
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+volumes:
+  evimed-memos-engine-data:
+  evimed-memos-neo4j-data:
+  evimed-memos-qdrant-data:
+  evimed-memos-redis-data:
+
+networks:
+  memory-index-internal:
+    internal: true

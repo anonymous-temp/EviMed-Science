@@ -42,7 +42,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (parts.length === 1 && parts[0] === "recall" && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["query", "projectId", "limit"]);
       body.projectId = await project(body.projectId);
-      return reply(await service.recall(user.id, body));
+      return reply(await service.recall(user.id, { ...body, accountCreatedAt: user.accountCreatedAt }));
     }
     if (parts.length === 1 && parts[0] === "active" && method === "GET") {
       return reply(await service.active(user.id, await project(url.searchParams.get("projectId"))));

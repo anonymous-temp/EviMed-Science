@@ -36,8 +36,8 @@ function activationKey(projectId) {
 
 /** Capsules supply explicit user context. They never confer tools, permissions or evidence verdicts. */
 export class CapsuleService {
-  /** @param {import('./productStore.mjs').ProductDocuments} documents */
-  constructor(documents) { this.documents = documents; }
+  /** @param {import('./productStore.mjs').ProductDocuments} documents @param {{indexing?:any}} [options] */
+  constructor(documents, { indexing = null } = {}) { this.documents = documents; this.indexing = indexing; }
 
   /** @param {string} userId @param {Record<string,any>} input */
   async create(userId, input) {
@@ -173,8 +173,8 @@ export class CapsuleService {
     }
   }
 
-  /** @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string }} input */
-  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all" }) {
+  /** @param {string} userId @param {{ query: string, projectId?: string|null, limit?: number, factKinds?: string[], since?: string|null, scope?: string, accountCreatedAt?:string }} input */
+  async recall(userId, { query, projectId = null, limit = 10, factKinds = [], since = null, scope = "all", accountCreatedAt = undefined }) {
     const needle = text(query, "query", 2000);
     if (!["all", "capsule"].includes(scope)) throw new HttpError(400, "capsule_scope_unavailable", "This memory scope is unavailable.");
     if (!Array.isArray(factKinds) || factKinds.length > CAPSULE_FACT_KINDS.length) throw new HttpError(400, "capsule_payload_invalid", "Invalid memory kinds.");
@@ -183,6 +183,26 @@ export class CapsuleService {
     const local = await this.active(userId, projectId);
     const global = projectId ? await this.active(userId, null) : { items: [] };
     const active = [...local.items, ...global.items].filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, 8);
+    if (this.indexing && active.length) {
+      const generation = accountCreatedAt ?? await this.indexing.accountGeneration(userId);
+      if (!generation) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
+      const ranked = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4), projectId);
+      const items = [];
+      for (const match of ranked) {
+        const payload = match.row.payload;
+        if (factKinds.length && !factKinds.includes(payload.factKind)) continue;
+        if (since && new Date(match.row.created_at).getTime() < new Date(since).getTime()) continue;
+        const capsule = await this.documents.get(userId, "capsule", match.selection.capsuleId);
+        if (!capsule) continue;
+        items.push({
+          id: match.row.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: match.selection.mode,
+          factKind: payload.factKind, layer: payload.layer, content: payload.content,
+          origin: payload.origin, provenance: payload.provenance, revision: match.row.revision, contextOnly: true,
+        });
+        if (items.length === limit) break;
+      }
+      return { items, mode: "semantic", contextOnly: true };
+    }
     const matches = [];
     for (const selection of active) {
       const capsule = await this.documents.get(userId, "capsule", selection.capsuleId);

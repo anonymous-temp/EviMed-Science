@@ -193,3 +193,36 @@ test("batch imports enforce source status and recipient generation before any wr
   await assert.rejects(documents.createBatch(other, [afterRevocation], { accountCreatedAt: "1990-01-01 00:00:00+00" }), { code: "product_account_changed" });
   assert.equal(await documents.get(other, "capsule", afterRevocation.id), null);
 });
+
+test("capsule and fact revisions atomically enqueue generation-bound memory index jobs", options, async () => {
+  const capsuleId = randomUUID();
+  const factId = randomUUID();
+  await documents.put(owner, "capsule", capsuleId, { title: "Indexed capsule" }, { expectedRevision: 0 });
+  await documents.put(owner, "fact", factId, { capsuleId, status: "approved", content: "Canonical fact", provenance: [] }, { expectedRevision: 0 });
+  const result = await database.query(`SELECT kind,project_id,payload,idempotency_key FROM evimed_product.jobs
+    WHERE user_id=$1 AND kind='memory-index' AND payload->>'documentId'=ANY($2::text[]) ORDER BY payload->>'documentKind'`,
+  [owner, [capsuleId, factId]]);
+  assert.equal(result.rowCount, 2);
+  assert.ok(result.rows.every((row) => row.kind === "memory-index" && row.project_id === null));
+  assert.ok(result.rows.every((row) => typeof row.payload.accountCreatedAt === "string"));
+  assert.equal(new Set(result.rows.map((row) => row.idempotency_key)).size, 2);
+  const constraint = await database.query(`SELECT pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c
+    JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'`);
+  assert.match(constraint.rows[0].definition, /memory-index/);
+  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_product.schema_migrations WHERE name='2026-09-05-memory-index-outbox-v1'")).rows[0].count, 1);
+});
+
+test("an exhausted reconciliation job can be rearmed without creating a duplicate", options, async () => {
+  const key = `memory-index:reconcile:${randomUUID()}`;
+  const first = await jobs.enqueue(owner, "memory-index", { capsuleId: "retry", accountCreatedAt: "generation" },
+    { idempotencyKey: key, maxAttempts: 10 });
+  await database.query(`UPDATE evimed_product.jobs SET status='failed',attempts=max_attempts,
+    error='{"code":"fixture"}'::jsonb,finished_at=clock_timestamp() WHERE id=$1`, [first.id]);
+  const rearmed = await jobs.enqueue(owner, "memory-index", { capsuleId: "retry", accountCreatedAt: "generation" },
+    { idempotencyKey: key, maxAttempts: 10, rearmFailed: true });
+  assert.equal(rearmed.id, first.id);
+  assert.equal(rearmed.status, "queued");
+  assert.equal(rearmed.attempts, 0);
+  assert.equal(rearmed.error, null);
+});

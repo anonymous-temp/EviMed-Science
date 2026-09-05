@@ -41,7 +41,9 @@ test("MemTensor pin and captured source identity agree", () => {
 });
 
 test("real adapter serialization and normalization satisfy the observed MemOS contract", async t => {
-  const scope = memOsNamespace("contract-account", "contract-project");
+  const accountCreatedAt = "2026-09-06 00:00:00+00";
+  const options = { accountCreatedAt, projectId: "contract-project" };
+  const scope = memOsNamespace("contract-account", accountCreatedAt, "contract-project");
   const calls = [];
   let taskId;
   let requestFailure;
@@ -75,13 +77,13 @@ test("real adapter serialization and normalization satisfy the observed MemOS co
   t.after(() => { server.closeAllConnections(); server.close(); });
   const client = new MemOsClient({ memOsBaseUrl: `http://127.0.0.1:${server.address().port}` });
   await client.health();
-  const added = await client.add("contract-account", [exampleRecord], { projectId: "contract-project" });
+  const added = await client.add("contract-account", [exampleRecord], options);
   assert.equal(added.records[0].entryId, exampleRecord.entryId);
-  assert.equal((await client.search("contract-account", "methods", { projectId: "contract-project" }))[0].entryId, exampleRecord.entryId);
-  assert.equal((await client.export("contract-account", { projectId: "contract-project" })).complete, true);
-  assert.equal((await client.getTaskStatus("contract-account", added.records[0].taskId, { projectId: "contract-project" })).status, "waiting");
-  await client.deleteRecord("contract-account", "memory-one", { projectId: "contract-project" });
-  await client.deleteUser("contract-account");
+  assert.equal((await client.search("contract-account", "methods", options))[0].entryId, exampleRecord.entryId);
+  assert.equal((await client.export("contract-account", options)).complete, true);
+  assert.equal((await client.getTaskStatus("contract-account", added.records[0].taskId, options)).status, "waiting");
+  await client.deleteRecord("contract-account", "memory-one", options);
+  await client.deleteUser("contract-account", accountCreatedAt);
   assert.equal(requestFailure, undefined);
   assert.deepEqual(new Set(calls), new Set(Object.keys(openapi.paths)));
 });

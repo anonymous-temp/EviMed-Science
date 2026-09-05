@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
 
-/** @typedef {{memOsBaseUrl: string, memOsTimeoutMs?: number, memOsMaxRequestBytes?: number, memOsMaxResponseBytes?: number}} MemOsConfig */
-/** @typedef {{projectId?: string}} ScopeOptions */
-/** @typedef {{entryId: string, content: string, provenanceIds?: string[]}} MemOsInputRecord */
-/** @typedef {{entryId: string, memoryIds: string[], taskId: string}} MemOsReceipt */
-/** @typedef {{id: string, content: string, cubeId: string, entryId: string|null, provenanceIds: string[], refId: string|null, memoryType: string|null, status: string|null}} MemOsRecord */
+/** @typedef {{memOsBaseUrl: string, memOsTimeoutMs?: number, memOsMaxRequestBytes?: number, memOsMaxResponseBytes?: number, memOsWriteMode?: "async"|"sync-fast"}} MemOsConfig */
+/** @typedef {{accountCreatedAt: string, projectId?: string, capsuleId?: string}} ScopeOptions */
+/** @typedef {{entryId: string, content: string, provenanceIds?: string[], revision?: number}} MemOsInputRecord */
+/** @typedef {{entryId: string, memoryIds: string[], taskId: string|null}} MemOsReceipt */
+/** @typedef {{id: string, content: string, cubeId: string, entryId: string|null, provenanceIds: string[], refId: string|null, memoryType: string|null, status: string|null, revision: number|null, rank: number}} MemOsRecord */
 
 const inputCode = "mem_os_payload_invalid";
 const responseCode = "mem_os_response_invalid";
@@ -45,15 +45,22 @@ function fields(value, keys) {
 /**
  * Scope is built from authenticated account/project IDs, never request-body IDs.
  * JSON tuples distinguish account scope from projects and avoid delimiter collisions.
- * @param {string} userId @param {string} [projectId]
+ * Account creation time is part of the principal so a recreated account with
+ * the same public ID cannot recover an earlier account generation's index.
+ * @param {string} userId @param {string} accountCreatedAt @param {string} [projectId] @param {string} [capsuleId]
  */
-export function memOsNamespace(userId, projectId) {
+export function memOsNamespace(userId, accountCreatedAt, projectId, capsuleId) {
   text(userId, 512);
+  text(accountCreatedAt, 80);
   if (projectId !== undefined) text(projectId, 512);
+  if (capsuleId !== undefined) text(capsuleId, 512);
+  if (projectId !== undefined && capsuleId !== undefined) throw failure(inputCode, "A memory namespace cannot be both a project and a capsule.", 400);
   const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
   return {
-    userId: `evimed-user-${digest(["evimed-memos-v1", userId])}`,
-    cubeId: `evimed-cube-${digest(["evimed-memos-v1", userId, projectId ?? null])}`,
+    userId: `evimed-user-${digest(["evimed-memos-v2", userId, accountCreatedAt])}`,
+    cubeId: `evimed-cube-${digest(capsuleId === undefined
+      ? ["evimed-memos-v2", userId, accountCreatedAt, "account-or-project", projectId ?? null]
+      : ["evimed-memos-v2", userId, accountCreatedAt, "capsule", capsuleId])}`,
   };
 }
 
@@ -72,6 +79,7 @@ export class MemOsClient {
   #timeoutMs;
   #maxRequestBytes;
   #maxResponseBytes;
+  #writeMode;
 
   /** @param {MemOsConfig} config */
   constructor(config) {
@@ -83,6 +91,8 @@ export class MemOsClient {
       throw failure("mem_os_config_invalid", "MemOS requires an HTTP service origin without credentials, path, query or fragment.", 503);
     }
     this.#origin = url.origin;
+    this.#writeMode = config.memOsWriteMode ?? "async";
+    if (!["async", "sync-fast"].includes(this.#writeMode)) throw failure("mem_os_config_invalid", "MemOS write mode is invalid.", 503);
     this.#timeoutMs = integer(config.memOsTimeoutMs ?? 15_000, 1, 120_000, "mem_os_config_invalid");
     this.#maxRequestBytes = integer(config.memOsMaxRequestBytes ?? 256 * 1024, 1, 4 * 1024 * 1024, "mem_os_config_invalid");
     this.#maxResponseBytes = integer(config.memOsMaxResponseBytes ?? 2 * 1024 * 1024, 1, 16 * 1024 * 1024, "mem_os_config_invalid");
@@ -159,16 +169,17 @@ export class MemOsClient {
   }
 
   /** @param {string} userId @param {MemOsInputRecord[]} records @param {ScopeOptions} [options] */
-  async add(userId, records, options = {}) {
-    fields(options, ["projectId"]);
-    const scope = memOsNamespace(userId, options.projectId);
+  async add(userId, records, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
     if (!Array.isArray(records) || records.length < 1 || records.length > 20) {
       throw failure(inputCode, "MemOS add requires between 1 and 20 records.", 400);
     }
     const entryIds = new Set();
     // Validate every item and encoded byte size before the first mutation.
     const requests = records.map(record => {
-      fields(record, ["entryId", "content", "provenanceIds"]);
+      fields(record, ["entryId", "content", "provenanceIds", "revision"]);
+      if (record.revision !== undefined) integer(record.revision, 1, 2_147_483_647);
       const entryId = text(record.entryId, 512);
       if (entryIds.has(entryId)) throw failure(inputCode, "MemOS add contains duplicate entry IDs.", 400);
       entryIds.add(entryId);
@@ -178,10 +189,10 @@ export class MemOsClient {
       }
       provenanceIds.forEach(id => text(id, 512));
       const payload = {
-        user_id: scope.userId, writable_cube_ids: [scope.cubeId], async_mode: "async",
-        task_id: `${taskPrefix(scope)}${randomUUID()}`,
+        user_id: scope.userId, writable_cube_ids: [scope.cubeId],
+        ...(this.#writeMode === "sync-fast" ? { async_mode: "sync", mode: "fast" } : { async_mode: "async", task_id: `${taskPrefix(scope)}${randomUUID()}` }),
         messages: [{ role: "user", content: text(record.content, 128 * 1024) }], chat_history: [],
-        info: { evimed_entry_id: entryId, evimed_provenance_ids: provenanceIds },
+        info: { evimed_entry_id: entryId, evimed_provenance_ids: provenanceIds, ...(record.revision !== undefined ? { evimed_entry_revision: record.revision } : {}) },
       };
       this.#encode(payload);
       return { entryId, payload };
@@ -200,7 +211,7 @@ export class MemOsClient {
           }
           return text(record.memory_id, 512, responseCode);
         });
-        completed.push({ entryId, memoryIds, taskId: payload.task_id });
+        completed.push({ entryId, memoryIds, taskId: "task_id" in payload ? payload.task_id : null });
       } catch (error) {
         if (!completed.length) throw error;
         throw Object.assign(failure("mem_os_partial_write", "MemOS stored only part of the requested batch."), {
@@ -209,7 +220,7 @@ export class MemOsClient {
       }
     }
     // The upstream can swallow scheduler submission errors; stored is not processed.
-    return { status: "stored", processingStatus: "unverified", records: completed };
+    return { status: "stored", processingStatus: this.#writeMode === "sync-fast" ? "readback_required" : "unverified", records: completed };
   }
 
   /** @param {Record<string, any>} result @param {{userId: string, cubeId: string}} scope @returns {MemOsRecord[]} */
@@ -222,30 +233,34 @@ export class MemOsClient {
         throw failure("mem_os_scope_mismatch", "MemOS returned a cube outside the requested scope.");
       }
       if (!Array.isArray(bucket.memories)) throw failure(responseCode, "MemOS returned an invalid memory list.");
-      return bucket.memories.map(record => {
+      return bucket.memories.map((record, rank) => {
         if (!object(record) || !object(record.metadata)) throw failure(responseCode, "MemOS returned invalid memory metadata.");
         if (record.metadata.user_id !== scope.userId) {
           throw failure("mem_os_scope_mismatch", "MemOS returned a memory outside the requested account.");
         }
-        const info = record.metadata.info;
+        // 2.0.30 flattens request `info` into metadata; older fixture builds
+        // returned it under metadata.info. Accept only those two known shapes.
+        const info = object(record.metadata.info) ? record.metadata.info : record.metadata;
         const provenanceIds = object(info) ? info.evimed_provenance_ids ?? [] : [];
         if (!Array.isArray(provenanceIds)) throw failure(responseCode, "MemOS returned invalid provenance identifiers.");
         return {
           id: text(record.id, 512, responseCode), content: text(record.memory, this.#maxResponseBytes, responseCode),
           cubeId: scope.cubeId, entryId: object(info) && info.evimed_entry_id != null ? text(info.evimed_entry_id, 512, responseCode) : null,
           provenanceIds: provenanceIds.map(id => text(id, 512, responseCode)),
+          revision: object(info) && Number.isSafeInteger(info.evimed_entry_revision) ? info.evimed_entry_revision : null,
           refId: typeof record.ref_id === "string" ? record.ref_id : null,
           memoryType: typeof record.metadata.memory_type === "string" ? record.metadata.memory_type : null,
           status: typeof record.metadata.status === "string" ? record.metadata.status : null,
+          rank,
         };
       });
     });
   }
 
   /** @param {string} userId @param {string} query @param {ScopeOptions & {limit?: number}} [options] */
-  async search(userId, query, options = {}) {
-    fields(options, ["projectId", "limit"]);
-    const scope = memOsNamespace(userId, options.projectId);
+  async search(userId, query, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId", "limit"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
     const limit = integer(options.limit ?? 10, 1, 100);
     const result = await this.#request("/product/search", {
       user_id: scope.userId, readable_cube_ids: [scope.cubeId], query: text(query, 16 * 1024),
@@ -258,9 +273,9 @@ export class MemOsClient {
 
   /** Export text records in one bounded page. Other engine state is not an account backup.
    * @param {string} userId @param {ScopeOptions & {page?: number, pageSize?: number}} [options] */
-  async export(userId, options = {}) {
-    fields(options, ["projectId", "page", "pageSize"]);
-    const scope = memOsNamespace(userId, options.projectId);
+  async export(userId, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId", "page", "pageSize"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
     const page = integer(options.page ?? 1, 1, 1_000_000);
     const pageSize = integer(options.pageSize ?? 100, 1, 100);
     const result = await this.#request("/product/get_memory", {
@@ -278,9 +293,9 @@ export class MemOsClient {
   }
 
   /** @param {string} userId @param {string} recordId @param {ScopeOptions} [options] */
-  async deleteRecord(userId, recordId, options = {}) {
-    fields(options, ["projectId"]);
-    const scope = memOsNamespace(userId, options.projectId);
+  async deleteRecord(userId, recordId, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
     // memory_ids bypasses cube scoping upstream. Use the verified filter branch.
     const result = await this.#request("/product/delete_memory", {
       user_id: scope.userId, writable_cube_ids: [scope.cubeId],
@@ -289,10 +304,25 @@ export class MemOsClient {
     return this.#deletion(result);
   }
 
+  /** @param {string} userId @param {ScopeOptions} [options] */
+  async deleteScope(userId, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
+    const result = await this.#request("/product/delete_memory", {
+      user_id: scope.userId, writable_cube_ids: [scope.cubeId], filter: { user_name: scope.cubeId },
+    });
+    if (object(result.data) && result.data.status === "success") return { status: "deleted", verified: false };
+    // Upstream calls an already-empty scope a deletion failure. Verify absence
+    // rather than turning an idempotent rebuild into a permanent job failure.
+    const readback = await this.export(userId, { ...options, page: 1, pageSize: 1 });
+    if (readback.total === 0 && readback.records.length === 0) return { status: "absent", verified: true };
+    throw failure("mem_os_operation_failed", "MemOS did not confirm deletion.");
+  }
+
   /** Delete engine records for an account, including its project cubes; not a user/cube registry deletion.
-   * @param {string} userId */
-  async deleteUser(userId) {
-    const scope = memOsNamespace(userId);
+   * @param {string} userId @param {string} accountCreatedAt */
+  async deleteUser(userId, accountCreatedAt) {
+    const scope = memOsNamespace(userId, accountCreatedAt);
     return this.#deletion(await this.#request("/product/delete_memory", { user_id: scope.userId }));
   }
 
@@ -306,9 +336,9 @@ export class MemOsClient {
 
   /** Query only a task issued in this account/project scope; 404 stays an error, never completion.
    * @param {string} userId @param {string} taskId @param {ScopeOptions} [options] */
-  async getTaskStatus(userId, taskId, options = {}) {
-    fields(options, ["projectId"]);
-    const scope = memOsNamespace(userId, options.projectId);
+  async getTaskStatus(userId, taskId, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
     if (!text(taskId, 256).startsWith(taskPrefix(scope))) {
       throw failure(inputCode, "MemOS task does not belong to the requested scope.", 400);
     }
