@@ -946,6 +946,9 @@ export function loadConfig(overrides = {}) {
     // and that is the origin the page must name.
     runtimeUiPublicOrigin:
       overrides.runtimeUiPublicOrigin ?? process.env.OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN ?? "",
+    // Frame tickets cannot outlive the authenticated login that created them.
+    runtimeUiFrameTtlMs: Number(overrides.runtimeUiFrameTtlMs ?? process.env.OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS
+      ?? overrides.sessionTtlMs ?? process.env.OPEN_SCIENCE_SESSION_TTL_MS ?? defaultSessionTtlMs),
     geoProbeUrl: overrides.geoProbeUrl ?? process.env.OPEN_SCIENCE_GEO_PROBE_URL ?? "",
     geoProbeGatewayInternalUrl:
       overrides.geoProbeGatewayInternalUrl ??
