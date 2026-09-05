@@ -609,10 +609,18 @@ export function checkImportSafety(manifest) {
   /** @type {{ code: string, message: string }[]} */
   const issues = [];
   for (const entry of manifest.entries) {
-    if (REFUSED_IMPORT_PATHS.includes(entry.path) || /\.(pickle|adapter|so|dll|dylib|exe|sh|py|js|mjs)$/i.test(entry.path)) {
-      issues.push({ code: "capsule_executable_content", message: `payload/${entry.path} is executable content and is refused; a capsule carries text.` });
+    // This container stores and returns UTF-8 strings. Binary document formats
+    // need a separate, explicitly validated reader; a filename never makes code safe.
+    const formats = {
+      md: ["text/markdown"], txt: ["text/plain"], csv: ["text/csv"], tsv: ["text/tab-separated-values"],
+      json: ["application/json"], jsonl: ["application/x-ndjson", "application/jsonl"],
+    };
+    const extension = entry.path.split(".").at(-1);
+    const allowedMime = formats[extension];
+    if (REFUSED_IMPORT_PATHS.includes(entry.path) || !allowedMime?.includes(entry.mime)) {
+      issues.push({ code: "capsule_executable_content", message: `payload/${entry.path} is not a supported UTF-8 text format with a matching MIME type.` });
     }
-    if (entry.path.startsWith("methods/") && !entry.path.endsWith("SKILL.md")) {
+    if (entry.path.startsWith("methods/") && entry.path.split("/").at(-1) !== "SKILL.md") {
       issues.push({ code: "capsule_method_shape_invalid", message: `payload/${entry.path} is under methods/ and is not a SKILL.md.` });
     }
   }
