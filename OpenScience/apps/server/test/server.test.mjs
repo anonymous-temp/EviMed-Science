@@ -1711,6 +1711,7 @@ test("readiness validates local production backup settings without exposing path
         trustProxy: true,
         requireDurableUsageLedger: false,
         requireInbox: false,
+        requireDocumentParser: false,
         ...productionReleaseConfig,
       },
     );

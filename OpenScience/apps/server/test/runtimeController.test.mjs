@@ -1013,6 +1013,9 @@ test("production readiness verifies the isolated controller and runtime image pr
       backupExternalAck: true,
       restoreDrillAck: true,
       trustProxy: true,
+      requireDurableUsageLedger: false,
+      requireInbox: false,
+      requireDocumentParser: false,
     });
     const address = await app.listen(0, "127.0.0.1");
     const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
