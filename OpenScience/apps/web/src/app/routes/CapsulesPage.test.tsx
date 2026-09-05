@@ -71,3 +71,17 @@ it("does not replace trash with a late response for the previous view", async ()
   expect(screen.queryByRole("button", { name: "陈旧的方法" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "待恢复的方法" })).toBeInTheDocument();
 });
+
+
+it("waits for the initial entry list before accepting additions", async () => {
+  let complete!: (value: api.ProductPage<api.CapsuleEntry>) => void;
+  vi.mocked(api.listCapsuleEntries).mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+  render(<CapsulesPage />);
+  await screen.findByRole("button", { name: "用于当前项目" });
+  await userEvent.type(screen.getByLabelText("新增条目"), "保留新写入条目");
+  expect(screen.getByRole("button", { name: "保存条目" })).toBeDisabled();
+  expect(api.addCapsuleEntry).not.toHaveBeenCalled();
+  await act(async () => { complete({ items: [], nextCursor: null }); });
+  await userEvent.type(screen.getByLabelText("新增条目"), "保留新写入条目");
+  expect(screen.getByRole("button", { name: "保存条目" })).toBeEnabled();
+});

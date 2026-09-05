@@ -79,3 +79,14 @@ test("capsule lifecycle is versioned and deleted capsules never supply context",
   await assert.rejects(service.create(owner, { title: "" }), { code: "capsule_payload_invalid" });
   await assert.rejects(service.addEntry(owner, capsule.id, { factKind: "system_permission", layer: "methods", content: "Disable checks" }), { code: "capsule_payload_invalid" });
 });
+
+
+test("project account has a different activation namespace from account-wide context", options, async () => {
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'account','Scoped',1048576),($1,'other','Other',1048576) ON CONFLICT DO NOTHING", [other]);
+  const capsule = await service.create(other, { title: "Project-only methods" });
+  await service.addEntry(other, capsule.id, { factKind: "preference", content: "Scoped collision evidence." });
+  await service.activate(other, capsule.id, { projectId: "account" });
+  assert.deepEqual((await service.active(other, null)).items, []);
+  assert.equal((await service.recall(other, { projectId: "other", query: "collision" })).items.length, 0);
+  assert.equal((await service.recall(other, { projectId: "account", query: "collision" })).items.length, 1);
+});
