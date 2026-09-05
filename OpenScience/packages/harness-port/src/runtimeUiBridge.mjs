@@ -12,6 +12,7 @@ export function apply(ctx, _config, target = globalThis) {
   const frame = target.__EVIMED_FRAME__;
   if (!frame || frame.version !== 1 || target.parent === target) return;
   const parent = target.parent;
+  const boundCwd = frame.cwd;
   let outgoing = 0;
   let incoming = 0;
   let ready = false;
@@ -49,8 +50,17 @@ export function apply(ctx, _config, target = globalThis) {
       if (!ready) { request.queued = false; retain(command); return; }
       try {
         let sessionId = intent.sessionId;
-        if (intent.kind === 'create') sessionId = await ctx.sessions.create({ sessionId });
-        else await ctx.sessions.refresh();
+        if (intent.kind === 'create') {
+          // Only the server-authored frame can select the workspace. Native
+          // create does not infer cwd from the Host's current directory.
+          if (typeof boundCwd !== 'string' || !boundCwd.startsWith('/') || boundCwd.startsWith('//')
+            || boundCwd.length > 4096 || boundCwd.includes('\\')
+            || [...boundCwd].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+            || boundCwd.split('/').some(part => part === '.' || part === '..')) {
+            throw new Error('Native frame workspace unavailable');
+          }
+          sessionId = await ctx.sessions.create({ sessionId, cwd: boundCwd });
+        } else await ctx.sessions.refresh();
         if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('Invalid native session identity');
         if (disposed) return;
         ctx.sessions.open(sessionId);
