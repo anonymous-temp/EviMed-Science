@@ -701,6 +701,12 @@ test("every gate check declares its own id, and no finding function is left anon
   const stamped = new Map([...source.matchAll(/^checkedBy\((\w+), "([a-z0-9-]+)"\);$/gm)].map((match) => [match[1], match[2]]));
   const regions = [...source.matchAll(/issues\.region\("([a-z0-9-]+)"\)/g)].map((match) => match[1]);
   const literals = [...source.matchAll(/check: "([a-z0-9-]+)"/g)].map((match) => match[1]);
+  const methodsSource = await readFile(new URL("../src/reviewMethods.mjs", import.meta.url), "utf8");
+  // Review accounting lives in a pure helper. Read the actual finding sites,
+  // not just its exported list, so a registered but unused id still fails.
+  const methodChecks = [...methodsSource.matchAll(/note\(issues, "([a-z0-9-]+)"/g)].map((match) => match[1]);
+  assert.ok(methodChecks.length >= 3, "the review-method finding scan must inspect real note sites");
+  for (const id of methodChecks) assert.ok(registered.has(id), `review accounting declares unregistered check "${id}"`);
   // The walk has to prove it walked: a scan that stopped matching would
   // otherwise find no unregistered id and pass forever.
   assert.ok(stamped.size >= 12, `only ${stamped.size} finding functions carry a check id — the scan did not read the file`);
@@ -722,7 +728,7 @@ test("every gate check declares its own id, and no finding function is left anon
 
   // And no id is registered that nothing raises: a bucket nobody fills reads as
   // a rule that never fires.
-  const raised = new Set([...stamped.values(), ...regions, ...literals]);
+  const raised = new Set([...stamped.values(), ...regions, ...literals, ...methodChecks]);
   for (const id of clinicalEvidenceCheckIds) assert.ok(raised.has(id), `"${id}" is registered and declared by no rule`);
 
   // The contract registry raises three of its own, and attaches the clinical

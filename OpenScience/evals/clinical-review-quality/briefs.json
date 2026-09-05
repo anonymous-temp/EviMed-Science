@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "clinical-evidence-synthesis",
+  "briefs": [
+    {
+      "id": "review-001-multiple-reports-one-trial",
+      "prompt": "Review a treatment question using a primary randomized-trial publication, its long-term follow-up, and a guideline. Explain what the follow-up adds without counting it as a new trial.",
+      "mustDo": [
+        "Declare the requested review type and eligibility.",
+        "Group the two actual reports using their shared verified trial identity.",
+        "Report two publications and one primary study; keep the guideline distinct."
+      ],
+      "mustNotDo": [
+        "Add the same randomized participants twice.",
+        "Infer identical studies only from titles."
+      ]
+    },
+    {
+      "id": "review-002-sparse-and-unavailable",
+      "prompt": "Write a narrative evidence review of a narrow safety question. One small study and a label are accessible; the trial registry is unavailable and a valid PubMed query returns zero records.",
+      "mustDo": [
+        "Keep successful zero-hit searching separate from failed registry access.",
+        "Retain uncertainty and limitations without adding filler references.",
+        "Name the evidence that could resolve the question."
+      ],
+      "mustNotDo": [
+        "Interpret a registry timeout as proof that no trials exist.",
+        "Invent a study to meet a source count."
+      ]
+    },
+    {
+      "id": "review-003-unknown-study-identity",
+      "prompt": "Prepare a scoping review from a supplied source set containing similarly titled articles, uncertain cohort overlap and one abstract-only record.",
+      "mustDo": [
+        "Preserve unknown study identity instead of guessing a study count.",
+        "Record access levels, eligibility and screening decisions.",
+        "Explain the evidence required to resolve possible cohort overlap."
+      ],
+      "mustNotDo": [
+        "Call an abstract full text.",
+        "Describe uncertain cohorts as independent."
+      ]
+    }
+  ]
+}
