@@ -596,3 +596,14 @@ test("server shutdown terminates active mux sockets without holding close open",
   await closed;
   await eventually(() => f.peers.size === 0 && f.manager.activeProxyCount() === 0);
 });
+
+test("encoded or malformed native API paths cannot bypass the HTTP method and spend policy", async (t) => {
+  const f = await fixture(t);
+  let reached = 0;
+  f.manager.proxy = async (_req, res) => { reached++; res.end("bad"); };
+  for (const suffix of ["/api/session/%70rompt", "/a%70i/session/prompt", "/api/settings/%75pdate", "/api/session/prompt/extra", "/api//session/prompt", "/api/session/prompt/"]) {
+    const response = await fetch(`${f.base}${suffix}`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal(response.status, 400, suffix);
+  }
+  assert.equal(reached, 0);
+});
