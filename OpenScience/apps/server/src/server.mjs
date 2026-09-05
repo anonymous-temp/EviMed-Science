@@ -436,7 +436,7 @@ function clientAddress(req, config) {
  */
 export function createWebApiApp(overrides = {}) {
   const config = loadConfig(overrides);
-  const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs });
+  const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
   const productDatabase = "database" in store ? store.database : null;
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
