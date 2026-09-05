@@ -24,6 +24,7 @@ import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
+import { UsageLedger } from "./usageLedger.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -31,8 +32,11 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
-import { ProductDocuments } from "./productStore.mjs";
+import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { MemOsClient } from "./memOsEngineClient.mjs";
+import { MemoryIndexing } from "./memoryIndexing.mjs";
+import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
@@ -424,7 +428,17 @@ export function createWebApiApp(overrides = {}) {
   const store = createStore(config, { databasePool: overrides.databasePool });
   const productDatabase = "database" in store ? store.database : null;
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
-  const capsuleService = productDocuments ? new CapsuleService(productDocuments) : null;
+  const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
+  const usageLedger = productDatabase ? new UsageLedger(productDatabase) : null;
+  const memOsEngine = config.memOsEngineUrl
+    ? overrides.memOsEngineClient ?? new MemOsClient({ memOsBaseUrl: config.memOsEngineUrl, memOsWriteMode: "sync-fast" })
+    : null;
+  const memoryIndexing = productDatabase && productJobs && memOsEngine
+    ? new MemoryIndexing({ database: productDatabase, engine: memOsEngine, jobs: productJobs }) : null;
+  const memoryIndexWorker = memoryIndexing
+    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, pollMs: config.memoryIndexPollMs,
+      leaseMs: config.memoryIndexLeaseMs, reconcileMs: config.memoryIndexReconcileMs }) : null;
+  const capsuleService = productDocuments ? new CapsuleService(productDocuments, { indexing: memoryIndexing }) : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
   let capsuleCleanupTimer = null;
@@ -649,7 +663,10 @@ export function createWebApiApp(overrides = {}) {
     },
   });
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService });
-  const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager);
+  const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
+    fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
+    usageLedger,
+  });
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.publicSourceFetch ?? globalThis.fetch,
   });
@@ -801,7 +818,7 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname === "/api/ready") {
-        const readiness = await readinessStatus(config, store, runtimeManager, memosClient);
+        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -813,6 +830,9 @@ export function createWebApiApp(overrides = {}) {
           taskManager,
           runtimeManager,
           memosClient,
+          memOsEngine,
+          memoryIndexWorker,
+          usageLedger,
           operationalMetrics,
           activeCommands,
         });
@@ -1202,7 +1222,11 @@ export function createWebApiApp(overrides = {}) {
             "The research model provider is not configured on this EviMed server.",
           );
         }
-        await assertSpendWithinLimits(config, ctx.user.id);
+        if (usageLedger) await usageLedger.assertWithinLimits(ctx.user.id, {
+          dailyLimit: Number(config.userDailySpendLimit) || 0,
+          weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
+        });
+        else await assertSpendWithinLimits(config, ctx.user.id);
         const registry = await agentRegistry;
         const boundSession = await researchSessions.get(ctx.project, body.sessionId);
         // The default open-domain answer agent is the fallback handler, never
@@ -1321,13 +1345,18 @@ export function createWebApiApp(overrides = {}) {
         // and the one they can still change their behaviour within.
         const now = new Date();
         const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-        const rows = await readServerUsageJsonl(config, user);
-        sendJson(res, 200, {
-          data: {
-            since: since.toISOString(),
-            ...summarizeUsage(rows, { userId: user.id, since }),
-          },
-        });
+        if (usageLedger) {
+          const summary = await usageLedger.summary(user.id, { since });
+          sendJson(res, 200, { data: {
+            ...summary,
+            calls: summary.settledCalls,
+            cost: summary.actualCost,
+            promptTokens: summary.cacheHitTokens + summary.cacheMissTokens,
+          } });
+        } else {
+          const rows = await readServerUsageJsonl(config, user);
+          sendJson(res, 200, { data: { since: since.toISOString(), ...summarizeUsage(rows, { userId: user.id, since }) } });
+        }
         return;
       }
 
@@ -1792,7 +1821,7 @@ export function createWebApiApp(overrides = {}) {
   // The kernel's browser application, on an origin of its own. It is a
   // listener rather than a route because the application builds every URL it
   // fetches from `location.origin`; see `runtimeUiServer.mjs`.
-  const runtimeUi = createRuntimeUiServer({ config, store, runtimeManager });
+  const runtimeUi = createRuntimeUiServer({ config, store, runtimeManager, usageLedger });
 
   // No `upgrade` handler here on purpose. The only WebSocket this deployment
   // serves belongs to the kernel's browser application, and that application
@@ -1834,6 +1863,10 @@ export function createWebApiApp(overrides = {}) {
     store,
     runtimeManager,
     memosClient,
+    memOsEngine,
+    memoryIndexing,
+    memoryIndexWorker,
+    usageLedger,
     capsuleService,
     commands,
     taskManager,
@@ -1856,11 +1889,13 @@ export function createWebApiApp(overrides = {}) {
       // restart look like a port conflict.
       await runtimeUi.listen();
       if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
+      memoryIndexWorker?.start();
       return address;
     },
     async close() {
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
+      await memoryIndexWorker?.close();
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
@@ -2561,8 +2596,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, operationalMetrics, activeCommands }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memosClient);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, operationalMetrics, activeCommands }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -2858,7 +2893,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memosClient = null) {
+async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -2872,6 +2907,8 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
     memory: await readinessCheck(async () => readinessMemory(config, memosClient)),
+    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memOsEngine, memoryIndexWorker)),
+    usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     security: await readinessCheck(() => readinessSecurity(config)),
     observability: await readinessCheck(() => readinessObservability(config)),
     evimedAdapters: await readinessCheck(() => readinessEviMedAdapters(config)),
@@ -2888,6 +2925,12 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     ok: Object.values(checks).every((check) => check.ok),
     checks,
   };
+}
+
+async function readinessUsageLedger(config, ledger) {
+  if (!config.requireDurableUsageLedger) return { required: false, configured: Boolean(ledger) };
+  if (!ledger) throw readinessFailure("usage_ledger_unconfigured");
+  return { required: true, ...(await ledger.health()) };
 }
 
 async function readinessStateStore(config, store) {
@@ -2909,6 +2952,13 @@ async function readinessMemory(config, memosClient) {
     });
   }
   return { required: true, connected: true };
+}
+
+async function readinessMemoryIndex(config, memOsEngine, worker) {
+  if (!config.requireMemoryIndex) return { required: false, configured: Boolean(memOsEngine) };
+  if (!memOsEngine || !worker) throw readinessFailure("memory_index_unconfigured");
+  const health = await memOsEngine.health();
+  return { required: true, connected: health.status === "healthy", worker: worker.status() };
 }
 
 async function readinessExamples(config) {
@@ -3206,6 +3256,7 @@ function readinessModelGateway(config) {
     ["modelGatewayTimeoutMs", config.modelGatewayTimeoutMs, 100, 10 * 60_000],
     ["modelGatewayMaxBodyBytes", config.modelGatewayMaxBodyBytes, 1024, 16 * 1024 * 1024],
     ["modelGatewayMaxResponseBytes", config.modelGatewayMaxResponseBytes, 1024, 256 * 1024 * 1024],
+    ["modelGatewayReservationMaxOutputTokens", config.modelGatewayReservationMaxOutputTokens, 1, 384_000],
   ]) {
     if (!Number.isSafeInteger(value) || value < min || value > max) {
       throw readinessFailure("model_gateway_limit_invalid", { field });
