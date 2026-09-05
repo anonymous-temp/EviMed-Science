@@ -5,7 +5,7 @@ import { SEAMS } from "@evimed/harness-port";
 import { isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
-import { HttpError } from "./security.mjs";
+import { HttpError, readBody } from "./security.mjs";
 import { parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
 
@@ -37,11 +37,23 @@ function assertBrowserOrigin(req, config) {
 }
 
 /** @param {Record<string, any>} config @param {any} project @param {string} method */
-async function authorizeMethod(config, project, method) {
-  if (isDeniedRuntimeUiMethod(method)) {
+async function authorizeMethod(config, project, method, boundWorkspace = false) {
+  if (isDeniedRuntimeUiMethod(method) && !(method === "workspace/create" && boundWorkspace)) {
     throw new HttpError(403, "runtime_ui_method_denied", `${method} is not available in the hosted surface.`);
   }
   if (RUNTIME_UI_SPENDING_METHODS.has(method)) await assertSpendWithinLimits(config, project.userId);
+}
+
+const exactFields = (value, fields) => value !== null && typeof value === "object" && !Array.isArray(value)
+  && Object.keys(value).length === fields.length && fields.every(field => Object.hasOwn(value, field));
+
+/** Only register the directory already selected and isolated by this frame's runtime. */
+function isBoundWorkspaceRegistration(body, cwd) {
+  return exactFields(body, ["type", "rpcId", "method", "payload"]) && body.type === "client-request"
+    && typeof body.rpcId === "string" && body.rpcId.length > 0 && body.rpcId.length <= 128
+    && body.method === "workspace/create" && exactFields(body.payload, ["args"])
+    && exactFields(body.payload.args, ["request"]) && exactFields(body.payload.args.request, ["path"])
+    && typeof cwd === "string" && cwd.startsWith("/") && body.payload.args.request.path === cwd;
 }
 
 /**
@@ -117,8 +129,21 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
       && (!method || pathname !== `/api/${method}` || pathname !== decodedPath)) {
       throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical native API method is required.");
     }
+    let workspaceBody = null;
+    if (method === "workspace/create" && req.method === "POST") {
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      try { workspaceBody = JSON.parse(raw.toString("utf8")); } catch { /* Remains a denied workspace mutation. */ }
+    }
+    const boundWorkspace = method === "workspace/create"
+      && isBoundWorkspaceRegistration(workspaceBody, runtimeManager.runtimeWorkspaceRoot(project));
     const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
-    const revalidate = async () => { await resolveFrame(snapshot, null); };
+    const revalidate = async () => {
+      await resolveFrame(snapshot, null);
+      if (boundWorkspace && !isBoundWorkspaceRegistration(workspaceBody, runtimeManager.runtimeWorkspaceRoot(project))) {
+        throw new HttpError(403, "runtime_ui_method_denied", "The runtime workspace binding changed.");
+      }
+    };
     if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
       const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
       await revalidate();
@@ -127,7 +152,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
       res.end(req.method === "HEAD" ? undefined : source);
       return;
     }
-    if (isDeniedRuntimeUiMethod(method)) {
+    if (isDeniedRuntimeUiMethod(method) && !boundWorkspace) {
       // Named in the body so the page's own error surface says which one, and
       // named in the audit row by the proxy's target — the panels that call
       // these are hidden, so a call arriving here is worth seeing.
@@ -149,7 +174,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     // around. It is this method and not the runtime's start, because starting
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
-    await authorizeMethod(config, project, method);
+    await authorizeMethod(config, project, method, boundWorkspace);
     await runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,

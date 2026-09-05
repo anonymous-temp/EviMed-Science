@@ -73,11 +73,13 @@ export function apply(ctx, _config, target = globalThis) {
         else {
           await ctx.sessions.refresh();
           const known = ctx.sessions.list.getSnapshot().byId?.[sessionId];
-          // Older blank sessions have a cwd but no Workspace Registry account.
-          // Only a known, same-directory blank session may be adopted in place.
-          if (known?.blank === true && known.cwd === boundCwd
+          // Older control-plane sessions may have no Workspace Registry account.
+          // Native create with an existing identity idempotently adopts it; its
+          // transcript and identity survive while the registry attaches it.
+          if (known && known.cwd === boundCwd
             && !ctx.workspaces.list.getSnapshot().items.some((/** @type {any} */ item) => workspaceContains(item, sessionId))) {
-            sessionId = await createBoundSession(sessionId);
+            const attachedId = await createBoundSession(sessionId);
+            if (attachedId !== sessionId) throw new Error('Existing native session identity changed');
           }
         }
         if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('Invalid native session identity');
