@@ -186,3 +186,18 @@ test('opening an existing native session does not require or overwrite its works
   assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-a'));
   f.ctx.dispose();
 });
+
+test('new sessions join the native workspace registry before composer readiness is acknowledged', async () => {
+  const f = fixture(); const registrations = []; const requests = []; let attached = false;
+  f.ctx.workspaces = {
+    create: async input => { registrations.push(input); return { workspaceId: 'workspace-a', path: '/workspace/project-a', title: 'Project A', sessionIds: attached ? ['session-new'] : [] }; },
+    list: { getSnapshot: () => ({ items: [] }) },
+  };
+  f.ctx.sessions.create = async request => { requests.push(request); attached = request.workspaceId === 'workspace-a'; return request.sessionId; };
+  apply(f.ctx, {}, f.target); await settle(); f.navigate(); await settle();
+  assert.deepEqual(requests, [{ sessionId: 'session-new', workspaceId: 'workspace-a' }]);
+  assert.ok(registrations.every(value => value.path === '/workspace/project-a'));
+  assert.ok(attached);
+  assert.ok(f.sent.some(row => row.message.ok === true));
+  f.ctx.dispose();
+});
