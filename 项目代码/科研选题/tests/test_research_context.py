@@ -240,6 +240,7 @@ def test_report_prompts_cannot_reintroduce_removed_topic_scores():
 
     generator = ReportGenerator()
     material = {
+        "priority_ranking": [{"opportunity_id": "BOM1", "priority_score": 0.93}],
         "opportunities": [{
             "opportunity_id": "BOM1",
             "title": "Bounded opportunity",
@@ -285,12 +286,16 @@ def test_report_prompts_cannot_reintroduce_removed_topic_scores():
     assert "PMID=420001" in summary
 
 
-def test_release_rejects_a_numeric_priority_score_reintroduced_in_report_prose():
+@pytest.mark.parametrize("score_text", [
+    "**优先级评分**：综合0.92",
+    "priority_score: 0.92",
+])
+def test_release_rejects_a_numeric_priority_score_reintroduced_in_report_prose(score_text):
     from evimed_runner import _validate_release
 
     completed = SimpleNamespace(evidence_records=[], module_outputs={})
     with pytest.raises(RuntimeError, match="uncalibrated priority score"):
-        _validate_release(completed, "# Research agenda\n\n**优先级评分**：综合0.92")
+        _validate_release(completed, "# Research agenda\n\n" + score_text)
 
 
 def test_duplicate_opportunity_and_candidate_ids_are_rejected():
