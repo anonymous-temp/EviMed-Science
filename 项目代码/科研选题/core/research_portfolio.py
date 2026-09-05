@@ -32,9 +32,17 @@ def _description(value):
 
 def build_research_portfolio(direction, context, topics, opportunities, evidence_records):
     """Only export candidate lineages that resolve to the preserved evidence set."""
+    opportunity_ids = [
+        item.get("opportunity_id")
+        for item in opportunities
+        if isinstance(item, dict) and item.get("opportunity_id")
+    ]
+    if len(opportunity_ids) != len(set(opportunity_ids)):
+        raise ValueError("duplicate opportunity id in research portfolio")
     sources = {item["opportunity_id"]: item for item in opportunities}
     evidence = {record.pmid: record for record in evidence_records if record.pmid}
     candidates = []
+    candidate_ids = set()
     for topic in topics:
         source_id = topic.get("source_opportunity_id")
         source = sources.get(source_id)
@@ -45,8 +53,12 @@ def build_research_portfolio(direction, context, topics, opportunities, evidence
             raise ValueError("portfolio opportunity has missing or unknown evidence")
         if topic.get("source_evidence_pmids") != pmids or topic.get("support_level") != source.get("support_level"):
             raise ValueError("portfolio candidate did not inherit its source evidence and support level")
+        candidate_id = topic.get("topic_id") or f"R-{source_id}"
+        if candidate_id in candidate_ids:
+            raise ValueError("duplicate candidate id in research portfolio")
+        candidate_ids.add(candidate_id)
         candidate = {
-            "candidateId": topic.get("topic_id") or f"R-{source_id}",
+            "candidateId": candidate_id,
             "title": topic.get("title") or source.get("title"),
             "sourceOpportunityId": source_id,
             "sourceEvidenceIds": [evidence[pmid].id for pmid in pmids],

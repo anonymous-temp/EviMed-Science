@@ -568,10 +568,7 @@ M5_BREAKTHROUGH_OPPORTUNITY_PROMPT = """你是一位跨学科科研创新战略�
       "risk_assessment": "风险因素与应对",
       "evidence_pmids": ["必须来自上方证据库的PMID"],
       "support_level": "direct/indirect/speculative",
-      "priority_score": 0.0,
-      "feasibility_score": 0.0,
-      "novelty_score": 0.0,
-      "clinical_impact_score": 0.0
+      "priority_basis": "基于证据支持、可证伪性、数据条件和资源限制的定性排序理由"
     }}
   ],
   "deep_analysis": "综合科学解释（800-1000字，深度阐述跨域创新的逻辑与前景）"
@@ -691,9 +688,7 @@ M6_RESEARCH_AGENDA_PROMPT = """你是一位资深临床研究设计师和科研�
       "source_evidence_pmids": ["从突破机会原样复制，不得新增"],
       "support_level": "direct/indirect/speculative",
       "priority": "高/中/低",
-      "priority_score": 0.0,
-      "feasibility_score": 0.0,
-      "novelty_score": 0.0,
+      "priority_basis": "定性优先顺序的证据与资源依据，不输出数字评分",
       "hypothesis": "核心假说",
       "study_design": {{
         "type": "研究类型",

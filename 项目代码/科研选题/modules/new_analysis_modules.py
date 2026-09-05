@@ -19,7 +19,7 @@ _MATPLOTLIB_LOCK = threading.Lock()
 
 from utils import safe_parse_json
 from core.research_context import context_prompt
-from core.research_portfolio import DESIGN_FIELDS
+from core.research_portfolio import DESIGN_FIELDS, _description
 
 logger = logging.getLogger(__name__)
 
@@ -1706,6 +1706,7 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
             ("昼夜节律", "circadian"),
         )
         validated = []
+        seen_opportunity_ids = set()
         for index, raw in enumerate(opportunities or []):
             if not isinstance(raw, dict):
                 continue
@@ -1741,6 +1742,9 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
             if unsupported_mechanism:
                 continue
             item["opportunity_id"] = str(item.get("opportunity_id") or f"BOM{index + 1}")
+            if item["opportunity_id"] in seen_opportunity_ids:
+                raise ValueError(f"duplicate opportunity id: {item['opportunity_id']}")
+            seen_opportunity_ids.add(item["opportunity_id"])
             item["evidence_pmids"] = pmids
             proposal_concepts = M5_BreakthroughOpportunityModule._concept_families(item_text)
             evidence_concepts = M5_BreakthroughOpportunityModule._concept_families(evidence_text)
@@ -2044,6 +2048,13 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
     @staticmethod
     def _validate_topics(topics, opportunities):
         """Enforce one traceable topic per opportunity and inherit evidence."""
+        opportunity_ids = [
+            str(item.get("opportunity_id"))
+            for item in opportunities
+            if isinstance(item, dict) and item.get("opportunity_id")
+        ]
+        if len(opportunity_ids) != len(set(opportunity_ids)):
+            raise ValueError("duplicate opportunity id in research agenda input")
         by_id = {
             str(item.get("opportunity_id")): item
             for item in opportunities
@@ -2061,14 +2072,22 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
             seen.add(source_id)
             item = M5_BreakthroughOpportunityModule._sanitize_generated_value(dict(raw))
             item["source_opportunity_title"] = source.get("title", "")
-            item["design_gaps"] = [field for field in DESIGN_FIELDS.values() if not raw.get(field)]
+            item["design_gaps"] = [
+                field for field in DESIGN_FIELDS.values()
+                if (
+                    not isinstance(raw.get(field), str) or not raw[field].strip()
+                    if field == "hypothesis"
+                    else _description(raw.get(field)) is None
+                )
+            ]
             item["source_evidence_pmids"] = list(source.get("evidence_pmids", []))
             item["support_level"] = source.get("support_level", "indirect")
             item["support_rationale"] = source.get("support_rationale", "")
             item["missing_evidence_concepts"] = list(source.get("missing_evidence_concepts", []))
             if item["support_level"] == "speculative" and "待验证" not in str(item.get("title") or ""):
                 item["title"] = "待验证选题：" + str(item.get("title") or source.get("title") or source_id)
-            hypothesis = str(item.get("hypothesis") or "").strip()
+            raw_hypothesis = item.get("hypothesis")
+            hypothesis = raw_hypothesis.strip() if isinstance(raw_hypothesis, str) else ""
             if hypothesis and not hypothesis.startswith("待验证："):
                 item["hypothesis"] = "待验证：" + hypothesis
             elif not hypothesis:
