@@ -70,6 +70,7 @@ test("the gateway reserves before dispatch, requests provider usage and settles 
   await response.text();
   assert.deepEqual(events.map((event) => event.type), ["reserve", "upstream", "settle"]);
   assert.equal(upstreamBody.stream_options.include_usage, true);
+  assert.equal(upstreamBody.max_completion_tokens, 4096);
   assert.equal(events[0].input.priceVersion, "evimed-reference-2026-09-05");
   assert.equal(events[0].input.dailyLimit, 2);
   assert.ok(events[0].input.estimatedCost > 0);
