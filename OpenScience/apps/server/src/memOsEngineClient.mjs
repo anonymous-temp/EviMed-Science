@@ -264,7 +264,7 @@ export class MemOsClient {
     const limit = integer(options.limit ?? 10, 1, 100);
     const result = await this.#request("/product/search", {
       user_id: scope.userId, readable_cube_ids: [scope.cubeId], query: text(query, 16 * 1024),
-      top_k: limit, mode: "fast", filter: { user_id: scope.userId }, internet_search: false,
+      top_k: limit, mode: "fast", relativity: 0, threshold: 0, filter: { user_id: scope.userId }, internet_search: false,
       include_preference: false, search_tool_memory: false, include_skill_memory: false,
       rerank: false, dedup: "no", chat_history: [],
     });

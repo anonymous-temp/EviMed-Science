@@ -88,6 +88,8 @@ test("search scopes reads and preserves product provenance", async t => {
   assert.deepEqual(calls[0].body.readable_cube_ids,[scope.cubeId]);
   assert.deepEqual(calls[0].body.filter,{user_id:scope.userId});
   assert.equal(calls[0].body.top_k,3);
+  assert.equal(calls[0].body.relativity,0);
+  assert.equal(calls[0].body.threshold,0);
   assert.equal(calls[0].body.internet_search,false);
 });
 
