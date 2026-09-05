@@ -63,8 +63,11 @@ export class ProductDocuments {
 
   /** Bounded lexical fallback; semantic retrieval can enrich it without weakening ownership.
    * @param {string} userId @param {string} kind @param {string} query
-   * @param {{ limit?: number, filter?: Record<string,any> }} options */
-  async search(userId, kind, query, { limit = 20, filter = {} } = {}) {
+   * @param {{ limit?: number, filter?: Record<string,any>, since?: string|null, any?: { field: string, values: string[] } }} options */
+  async search(userId, kind, query, { limit = 20, filter = {}, since = null, any = { field: "", values: [] } } = {}) {
+    if (since != null && (typeof since !== "string" || since.length > 40 || !Number.isFinite(Date.parse(since)))) throw new HttpError(400, "product_filter_invalid", "Invalid record date.");
+    if (typeof any?.field !== "string" || any.field.length > 80 || !Array.isArray(any.values) || any.values.length > 100
+      || any.values.some((value) => typeof value !== "string" || value.length > 200)) throw new HttpError(400, "product_filter_invalid", "Invalid record filter.");
     productInteger(limit, 1, 100);
     if (typeof query !== "string" || query.length > 2000) throw new HttpError(400, "product_query_invalid", "Invalid record query.");
     const filterJson = productPayload(filter);
@@ -73,8 +76,10 @@ export class ProductDocuments {
     const result = await this.database.query(`SELECT * FROM evimed_product.documents
       WHERE user_id=$1 AND kind=$2 AND deleted_at IS NULL AND payload @> $3::jsonb
       AND strpos(lower(coalesce(payload->>'content','')),lower($4))>0
+      AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
+      AND (cardinality($8::text[])=0 OR payload->>$7::text=ANY($8::text[]))
       ORDER BY updated_at DESC,id DESC LIMIT $5`,
-    [productId(userId, "user"), productKind(kind), filterJson, query, limit]);
+    [productId(userId, "user"), productKind(kind), filterJson, query, limit, since, any.field, any.values]);
     return result.rows.map(record);
   }
 

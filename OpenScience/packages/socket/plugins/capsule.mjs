@@ -100,7 +100,7 @@ export async function apply(ctx, config) {
 
   const noteTool = await defineTool({
     name: 'evimed_capsule_note',
-    description: '当用户说「记住…」时，把这条写进他的胶囊。只记用户明确要求记住的内容，不要替他决定什么值得记。',
+    description: '当用户说「记住…」时，将内容提交到他的胶囊待确认列表。说明这条建议需要用户在记忆胶囊中采用，采用前不会用于后续回答。只记用户明确要求记住的内容。',
     parameters: {
       factKind: { type: 'string', required: true, description: '事实种类，例如 preference、stance、project_fact、method_preference。' },
       content: { type: 'string', required: true, description: '要记住的内容，用用户自己的说法。' },

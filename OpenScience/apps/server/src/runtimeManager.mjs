@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { lstatSync } from "node:fs";
+import { constants as fsConstants, lstatSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -1606,6 +1606,14 @@ function modelGatewayProviderUrl(config) {
   return url.toString().replace(/\/$/, "");
 }
 
+/** @param {any} config */
+export function capsuleGatewayProviderUrl(config) {
+  if (config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+  const url = new URL(modelGatewayProviderUrl(config));
+  url.pathname = "/internal/capsules/v1";
+  return url.toString().replace(/\/$/, "");
+}
+
 /**
  * The one description of a runtime's deployment settings.
  *
@@ -1639,14 +1647,8 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",
-    // The capsule product ledger and its recall endpoint are not built yet
-    // (§16 #20's own tracked gap list). An empty URL is not a placeholder that
-    // silently does the wrong thing: `evimed-capsule`'s plugin already checks
-    // for exactly this and disables its own tools with a named diagnostic
-    // rather than erroring, so a deployment without capsule support fails
-    // closed and visibly, not open and silently.
     capsuleMethodsDir: "",
-    capsuleGatewayUrl: "",
+    capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
     workloadTokenFile: workloadTokenPath,
     bundleVersion: String(config.socketBundleVersion ?? ""),
     dshVersion: String(config.dshVersion ?? ""),
@@ -1669,7 +1671,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
       review: Boolean(config.runtimeReviewEnabled),
       // Not a setting: the capsule is active when a recall endpoint is
       // configured, and the plugin reports its own absence.
-      capsule: false,
+      capsule: Boolean(capsuleGatewayProviderUrl(config)),
       requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
     },
   };
@@ -1999,7 +2001,7 @@ export function buildRuntimeLaunchPlan(config, project, port) {
           capabilitiesDir: "/opt/evimed/capabilities",
           capabilitySkillsDir: "/opt/evimed/capability-skills",
           capsuleMethodsDir: "",
-          capsuleGatewayUrl: "",
+          capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
           flags: {
@@ -2007,7 +2009,7 @@ export function buildRuntimeLaunchPlan(config, project, port) {
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
             review: Boolean(config.runtimeReviewEnabled),
-            capsule: false,
+            capsule: Boolean(capsuleGatewayProviderUrl(config)),
             requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
           },
           limits: {
@@ -2276,6 +2278,34 @@ export class RuntimeManager {
       active.runtime?.modelGatewayToken !== token
     ) throw modelGatewayTokenError();
     return payload;
+  }
+
+  /** Verify the current bounded token file and recheck liveness after I/O.
+   * @param {unknown} token */
+  async assertActiveEviMedWorkloadToken(token) {
+    try {
+      if (typeof token !== "string" || token.length > 8192) throw workloadTokenError();
+      const claims = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
+      if (typeof claims.userId !== "string" || typeof claims.projectId !== "string") throw workloadTokenError();
+      const payload = verifyEviMedWorkloadToken(token, { secret: this.config.evimedWorkloadSigningSecret,
+        userId: claims.userId, projectId: claims.projectId });
+      const key = this.key({ userId: payload.userId, id: payload.projectId });
+      const runtime = this.runtimes.get(key);
+      if (!runtime?.workloadTokenFile || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      const handle = await fs.open(runtime.workloadTokenFile, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+      let current;
+      try {
+        if (!(await handle.stat()).isFile()) throw workloadTokenError();
+        const buffer = Buffer.alloc(8193);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        current = buffer.subarray(0, bytesRead).toString("utf8").trim();
+      } finally { await handle.close(); }
+      const actual = Buffer.from(token);
+      const expected = Buffer.from(current);
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)
+        || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      return payload;
+    } catch { throw workloadTokenError(); }
   }
 
   assertDockerControlBoundary() {

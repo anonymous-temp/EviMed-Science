@@ -384,15 +384,13 @@ test("syncRuntimeDshProfile writes a patch and a credentials file the running ke
   const credentials = await readFile(path.join(plan.dshHomeDir, ".credentials.yaml"), "utf8");
   assert.match(credentials, /EVIMED_WORKLOAD_TOKEN: '[^']+'/);
 
-  // A capsule endpoint that is not built yet fails closed and visibly — an
-  // empty URL the plugin itself recognizes and disables on — not silently
-  // pointed at something that does not exist.
+  // An explicitly unconfigured memory deployment leaves the plugin disabled.
   assert.equal(runtimeEnvironment({
     capabilitiesDir: "", capabilitySkillsDir: "", capsuleMethodsDir: "", capsuleGatewayUrl: "",
     workloadTokenFile: "/t", bundleVersion: "0.1.0",
     flags: { hosted: true, askUser: false, review: true, capsule: false, requiredEnforcement: "full" },
     limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 400000, evidenceStaleMinutes: 10, screeningBatchSize: 50 },
-  }).EVIMED_CAPSULE_GATEWAY_URL, "", "an unbuilt capsule endpoint is empty, and the plugin disables itself visibly");
+  }).EVIMED_CAPSULE_GATEWAY_URL, "", "an unconfigured capsule endpoint stays disabled");
 
   const workloadToken = await readFile(result.workloadTokenFile, "utf8");
   assert.ok(workloadToken.trim().split(".").length >= 3, "the MCP subprocess token is a signed JWT-shaped value");
@@ -468,6 +466,13 @@ test("the two runtime capability settings reach the container, and the default d
   const off = argvFor({ runtimeAskUserEnabled: false, runtimeReviewEnabled: false });
   assert.ok(off.includes("EVIMED_ASK_USER=0"));
   assert.ok(off.includes("EVIMED_REVIEW_ENABLED=0"), "a setting that cannot turn something off is not a setting");
+
+  const capsuleOn = argvFor({ stateStore: "postgres" });
+  assert.ok(capsuleOn.includes("EVIMED_CAPSULE_GATEWAY_URL=http://127.0.0.1:8787/internal/capsules/v1"));
+  assert.ok(capsuleOn.includes("EVIMED_CAPSULE_ACTIVE=1"));
+  const capsuleOff = argvFor({ stateStore: "postgres", evimedWorkloadSigningSecret: "" });
+  assert.ok(capsuleOff.includes("EVIMED_CAPSULE_GATEWAY_URL="));
+  assert.ok(capsuleOff.includes("EVIMED_CAPSULE_ACTIVE=0"));
 
   // The shipped defaults must be the behaviour that was already shipping.
   const defaults = loadConfig({});

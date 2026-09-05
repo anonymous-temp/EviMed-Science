@@ -101,3 +101,15 @@ test("runtime notes are idempotent candidates until the account approves them", 
   await service.updateEntry(other, first.payload.capsuleId, first.id, { status: "approved", expectedRevision: first.revision });
   assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 1);
 });
+
+
+test("recall applies type and time filters before limiting the selected context", options, async () => {
+  const capsule = await service.create(owner, { title: "Filtered recall" });
+  const method = await service.addEntry(owner, capsule.id, { factKind: "method_preference", content: "Matching method" });
+  await service.addEntry(owner, capsule.id, { factKind: "preference", content: "Matching style" });
+  await service.activate(owner, capsule.id);
+  assert.deepEqual((await service.recall(owner, { query: "Matching", limit: 1, factKinds: ["method_preference"] })).items.map((x) => x.id), [method.id]);
+  assert.equal((await service.recall(owner, { query: "Matching", since: "2099-01-01" })).items.length, 0);
+  await assert.rejects(service.recall(owner, { query: "Matching", factKinds: ["permission"] }), { code: "capsule_payload_invalid" });
+  await assert.rejects(service.recall(owner, { query: "Matching", scope: "agenda" }), { code: "capsule_scope_unavailable" });
+});
