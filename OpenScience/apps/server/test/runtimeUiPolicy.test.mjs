@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
+import { connect as connectSocket } from "node:net";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -105,6 +106,34 @@ async function fixture(t, overrides = {}) {
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
 
+// Source-derived contract: @deepseek-ai/dsh-api-gateway@0.1.2-rc.1,
+// lib/client.js:105-146. Its native parser requires these exact keys and a
+// record for details; a malformed error closes the shared carrier with 4002.
+function assertNativeError(frame, streamId, code) {
+  assert.deepEqual(Object.keys(frame).sort(), ["error", "streamId", "type"]);
+  assert.equal(frame.type, "error");
+  assert.equal(frame.streamId, streamId);
+  assert.deepEqual(Object.keys(frame.error).sort(), ["code", "details", "message"]);
+  assert.equal(frame.error.code, code);
+  assert.equal(typeof frame.error.message, "string");
+  assert.deepEqual(frame.error.details, {});
+}
+
+function pauseUpgradeRevalidation(t, f) {
+  let resume;
+  let entered;
+  const paused = new Promise((resolve) => { entered = resolve; });
+  const proceed = new Promise((resolve) => { resume = resolve; });
+  const ensureSessionUser = f.store.ensureSessionUser.bind(f.store);
+  let calls = 0;
+  f.store.ensureSessionUser = async (...args) => {
+    if (++calls === 2) { entered(); await proceed; }
+    return ensureSessionUser(...args);
+  };
+  t.after(() => resume());
+  return { paused, resume };
+}
+
 test("mux rejects unauthenticated, forged/expired cookies and foreign or missing Origins", { timeout: 5000 }, async (t) => {
   const f = await fixture(t);
   for (const [headers, status] of [
@@ -132,16 +161,29 @@ test("mux denies forbidden logical methods per stream while allowing native read
   const f = await fixture(t);
   const c = f.connect({ Authorization: "Bearer browser-secret", "x-api-key": "browser-secret" });
   assert.equal(await c.opened, 101);
+  const subscription = open("events", "$events");
+  c.send(subscription);
+  assert.equal((await c.next()).value.reached, "$events");
   c.send(open("denied", "settings/update"));
-  assert.deepEqual((await c.next()).error?.code, "runtime_ui_method_denied");
+  assertNativeError(await c.next(), "denied", "runtime_ui_method_denied");
   assert.deepEqual(await c.next(), { type: "end", streamId: "denied" });
+  const event = { type: "item", streamId: "events", value: { sequence: 1 } };
+  [...f.peers][0].send(JSON.stringify(event));
+  assert.deepEqual(await c.next(), event);
+  const pong = once(c.ws, "pong");
+  c.ws.ping("after-policy-error");
+  assert.equal(String((await pong)[0]), "after-policy-error");
   const allowed = open("read", "session/page", { sessionId: "s1" });
   c.send(allowed);
   assert.deepEqual(await c.next(), { type: "item", streamId: "read", value: { reached: "session/page" } });
   const cancel = { type: "cancel", streamId: "read" };
   c.send(cancel);
   assert.deepEqual(await c.next(), { type: "end", streamId: "read" });
-  assert.deepEqual(f.received, [allowed, cancel]);
+  const control = open("control", "session/cancel", { sessionId: "s1" });
+  c.send(control);
+  assert.equal((await c.next()).value.reached, "session/cancel");
+  assert.deepEqual(f.received, [subscription, allowed, cancel, control]);
+  assert.equal(c.ws.readyState, WebSocket.OPEN);
   assert.equal(f.handshakes[0].cookie, "kernel_auth=internal-only");
   assert.equal(f.handshakes[0].host, "kernel.local");
   assert.equal(f.handshakes[0].authorization, undefined);
@@ -156,12 +198,19 @@ test("mux refuses spending at admission and preserves already available reads", 
   })}\n`);
   const c = f.connect();
   assert.equal(await c.opened, 101);
-  c.send(open("spend", "session/prompt", { sessionId: "s1", prompt: "no model may run" }));
-  assert.equal((await c.next()).error?.code, "credits_daily_limit_reached");
-  assert.equal((await c.next()).type, "end");
   c.send(open("read", "session/page"));
   assert.equal((await c.next()).type, "item");
-  assert.deepEqual(f.received.map((frame) => frame.endpoint), ["session/page"]);
+  c.send(open("spend", "session/prompt", { sessionId: "s1", prompt: "no model may run" }));
+  assertNativeError(await c.next(), "spend", "credits_daily_limit_reached");
+  assert.deepEqual(await c.next(), { type: "end", streamId: "spend" });
+  const page = { type: "item", streamId: "read", value: { sequence: 2 } };
+  [...f.peers][0].send(JSON.stringify(page));
+  assert.deepEqual(await c.next(), page);
+  c.send({ type: "cancel", streamId: "read" });
+  assert.deepEqual(await c.next(), { type: "end", streamId: "read" });
+  assert.deepEqual(f.received.map((frame) => frame.type), ["open", "cancel"]);
+  assert.equal(f.received[0].endpoint, "session/page");
+  assert.equal(c.ws.readyState, WebSocket.OPEN);
 });
 
 test("a revoked session terminates both mux peers before another operation", { timeout: 5000 }, async (t) => {
@@ -421,6 +470,47 @@ test("upstream handshake refusal releases capacity and returns a named HTTP erro
   f.upstream.on("upgrade", (_request, socket) => socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"));
   assert.equal(await f.connect().opened, 502);
   await eventually(() => f.manager.activeProxyCount() === 0);
+});
+
+test("upstream close during revalidation cannot complete a late browser upgrade or retain capacity", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, { maxRuntimeProxyConnections: 1, maxRuntimeProxyConnectionsPerProject: 1 });
+  const gate = pauseUpgradeRevalidation(t, f);
+  const c = f.connect();
+  await gate.paused;
+  assert.equal(c.ws.readyState, WebSocket.CONNECTING);
+  assert.equal(f.manager.activeProxyCount(), 1);
+  const upstream = [...f.peers][0];
+  const closed = once(upstream, "close");
+  upstream.close();
+  await closed;
+  // Outlast shutdown's forced-close timer while no browser WebSocket exists.
+  await delay(1100);
+  gate.resume();
+  assert.equal(await c.opened, 502);
+  await eventually(() => f.peers.size === 0 && f.manager.activeProxyCount() === 0);
+  assert.equal(await f.connect().opened, 101);
+});
+
+test("raw client close during revalidation cannot upgrade or retain proxy capacity", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, { maxRuntimeProxyConnections: 1, maxRuntimeProxyConnectionsPerProject: 1 });
+  const gate = pauseUpgradeRevalidation(t, f);
+  const client = connectSocket({ host: "127.0.0.1", port: Number(new URL(f.base).port) });
+  t.after(() => client.destroy());
+  let response = "";
+  client.on("data", (data) => { response += data.toString(); });
+  await once(client, "connect");
+  client.write(`GET /api/remote.mux HTTP/1.1\r\nHost: ${new URL(f.base).host}\r\n`
+    + `Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\n`
+    + `Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==\r\nCookie: ${f.cookie}\r\nOrigin: ${UI_ORIGIN}\r\n\r\n`);
+  await gate.paused;
+  assert.equal(f.manager.activeProxyCount(), 1);
+  const closed = once(client, "close");
+  client.destroy();
+  await closed;
+  gate.resume();
+  await eventually(() => f.peers.size === 0 && f.manager.activeProxyCount() === 0);
+  assert.doesNotMatch(response, /^HTTP\/1\.1 101/m);
+  assert.equal(await f.connect().opened, 101);
 });
 
 test("server shutdown terminates active mux sockets without holding close open", { timeout: 5000 }, async (t) => {
