@@ -25,7 +25,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -56,6 +56,9 @@ async function fixture(t, overrides = {}) {
   const socketPath = path.join(dataDir, "mux.sock");
   await new Promise((resolve) => upstream.listen(socketPath, resolve));
   const manager = new RuntimeManager(config);
+  const proxyUpgrade = manager.proxyUpgrade.bind(manager);
+  manager.proxyUpgrade = (req, socket, head, project, suffix, policy) =>
+    proxyUpgrade(req, socket, head, project, suffix, { ...policy, ...muxOptions });
   const started = [];
   manager.start = async (project) => {
     started.push(project.id);
@@ -69,8 +72,9 @@ async function fixture(t, overrides = {}) {
   const address = await ui.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   const clients = new Set();
-  function connect(headers = {}, suffix = "/api/remote.mux") {
+  function connect(headers = {}, suffix = "/api/remote.mux", options = {}) {
     const ws = new WebSocket(`${base.replace("http", "ws")}${suffix}`, {
+      ...options,
       headers: { Cookie: cookie, Origin: UI_ORIGIN, ...headers },
     });
     clients.add(ws);
@@ -395,6 +399,54 @@ test("closing either peer closes the other and releases its proxy capacity", { t
   [...f.peers][0].close();
   await clientClosed;
   await eventually(() => f.manager.activeProxyCount() === 0);
+});
+
+test("browser heartbeat releases capacity for a missing pong despite active upstream pings", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, { maxRuntimeProxyConnections: 1, maxRuntimeProxyConnectionsPerProject: 1 }, {
+    heartbeat: { intervalMs: 50, timeoutMs: 70 },
+  });
+  const c = f.connect({}, "/api/remote.mux", { autoPong: false });
+  assert.equal(await c.opened, 101);
+  const upstream = [...f.peers][0];
+  let browserPings = 0;
+  let upstreamPongs = 0;
+  c.ws.on("ping", () => { browserPings++; });
+  upstream.on("pong", () => { upstreamPongs++; });
+  const upstreamPingTimer = setInterval(() => {
+    if (upstream.readyState === WebSocket.OPEN) upstream.ping("kernel-is-alive");
+  }, 10);
+  t.after(() => clearInterval(upstreamPingTimer));
+  const clientClosed = once(c.ws, "close");
+  const upstreamClosed = once(upstream, "close");
+  await eventually(() => c.ws.readyState === WebSocket.CLOSED);
+  const [code, reason] = await clientClosed;
+  assert.equal(code, 1001);
+  assert.equal(String(reason), "runtime_ui_heartbeat_timeout");
+  await upstreamClosed;
+  assert.ok(browserPings > 0, "the proxy must probe the browser independently");
+  assert.ok(upstreamPongs > 1, "upstream auto-pongs cannot establish browser liveness");
+  await eventually(() => f.peers.size === 0 && f.manager.activeProxyCount() === 0);
+  const replacement = f.connect();
+  assert.equal(await replacement.opened, 101);
+  replacement.send(open("read", "session/page"));
+  assert.equal((await replacement.next()).value.reached, "session/page");
+});
+
+test("browser heartbeat preserves a healthy mux through repeated pong deadlines", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t, {}, { heartbeat: { intervalMs: 50, timeoutMs: 70 } });
+  const c = f.connect();
+  assert.equal(await c.opened, 101);
+  let pings = 0;
+  c.ws.on("ping", () => { pings++; });
+  await eventually(() => pings >= 4);
+  assert.equal(c.ws.readyState, WebSocket.OPEN);
+  assert.equal(f.manager.activeProxyCount(), 1);
+  c.send(open("read", "session/page"));
+  assert.equal((await c.next()).value.reached, "session/page");
+  const closed = once(c.ws, "close");
+  c.ws.close();
+  await closed;
+  await eventually(() => f.peers.size === 0 && f.manager.activeProxyCount() === 0);
 });
 
 test("slow browser delivery resumes without losing or reordering native frames", { timeout: 5000 }, async (t) => {
