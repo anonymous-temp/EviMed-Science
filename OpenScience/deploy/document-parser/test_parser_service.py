@@ -45,10 +45,10 @@ class ParserServiceTests(unittest.TestCase):
             link = self.root / "link.txt"
             link.symlink_to(outside)
             with self.assertRaisesRegex(ValueError, "symbolic link"):
-                parser_service.parse_document(self.request(outside).copy(update={"path": str(link)}), data_root=self.root)
+                parser_service.parse_document(self.request(outside).model_copy(update={"path": str(link)}), data_root=self.root)
             file = self.root / "inside.txt"
             file.write_text("inside", encoding="utf-8")
-            bad = self.request(file).copy(update={"sha256": "0" * 64})
+            bad = self.request(file).model_copy(update={"sha256": "0" * 64})
             with self.assertRaisesRegex(ValueError, "digest"):
                 parser_service.parse_document(bad, data_root=self.root)
         finally:
