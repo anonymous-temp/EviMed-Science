@@ -1,5 +1,6 @@
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
+import { SEAMS } from "@evimed/harness-port";
 
 import { isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
@@ -106,7 +107,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
     const { project, frame } = await resolveFrame(req, res);
     const pathname = new URL(frame.suffix, "http://runtime.local").pathname;
-    const method = runtimeUiMethodFromPath(pathname);
+    const hostResult = SEAMS.wire.gatewayEndpoints.hostInteractionResult;
+    const method = pathname === `/api/${hostResult}` ? hostResult : runtimeUiMethodFromPath(pathname);
     // Only canonical native API method names enter the policy. Decode solely
     // to detect a disguised /api namespace, never to rewrite or forward it.
     let decodedPath;
