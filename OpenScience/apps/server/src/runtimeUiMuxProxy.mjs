@@ -43,10 +43,11 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     closed = true;
     clearInterval(validationTimer);
     // A paused receiver must read the peer's close response as well.
-    browser?.resume();
-    upstream.resume();
     for (const peer of [browser, upstream]) {
-      if (peer?.readyState === WebSocket.OPEN) peer.close(code, reason);
+      if (peer?.readyState === WebSocket.OPEN) {
+        peer.resume();
+        peer.close(code, reason);
+      }
       else if (peer?.readyState === WebSocket.CONNECTING) peer.terminate();
     }
     closeTimer = setTimeout(terminate, 1000);
