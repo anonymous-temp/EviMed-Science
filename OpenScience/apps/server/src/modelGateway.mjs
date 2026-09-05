@@ -247,12 +247,18 @@ function normalizedRequest(body, config) {
     }
   }
   const stream = body.stream === true;
+  const configuredOutputLimit = Number(config.modelGatewayReservationMaxOutputTokens ?? 65_536);
+  if (!Number.isSafeInteger(configuredOutputLimit) || configuredOutputLimit < 1 || configuredOutputLimit > 384_000) {
+    throw gatewayError(500, "model_gateway_configuration_invalid", "The model output limit is invalid.");
+  }
   return {
     ...body,
     model: config.deepseekModel,
     thinking: { type: "enabled" },
     reasoning_effort: "high",
     stream,
+    ...(body.max_tokens == null && body.max_completion_tokens == null
+      ? { max_completion_tokens: configuredOutputLimit } : {}),
     ...(stream ? { stream_options: { ...(body.stream_options ?? {}), include_usage: true } } : {}),
   };
 }
