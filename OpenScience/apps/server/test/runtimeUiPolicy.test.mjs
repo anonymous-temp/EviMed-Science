@@ -618,3 +618,47 @@ test("the exact native host-event result endpoint remains available for user-que
   }
   assert.deepEqual(reached, [["default", "/api/$events/result"]]);
 });
+
+test("the relay rejects non-native request keys before they reach a live kernel stream", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  for (const invalid of [
+    { type: "cancel", streamId: "read", payload: {} },
+    { ...open("other", "session/page"), extra: true },
+    { type: "open", streamId: "other", endpoint: "session/page" },
+    { ...open("other", "session/page"), endpoint: null },
+    { ...open("other", "session/page"), endpoint: "" },
+  ]) {
+    const c = f.connect();
+    assert.equal(await c.opened, 101);
+    c.send(open("read", "session/page"));
+    assert.equal((await c.next()).value.reached, "session/page");
+    const before = f.received.length;
+    const closed = once(c.ws, "close");
+    c.send(invalid);
+    assert.equal((await closed)[0], 1008);
+    assert.equal(f.received.length, before, "malformed frame must not mutate the existing stream");
+  }
+});
+
+test("the relay rejects malformed upstream native frames instead of forwarding corrupted errors", { timeout: 5000 }, async (t) => {
+  const f = await fixture(t);
+  for (const invalid of [
+    { type: "error", streamId: "read", error: { code: "bad", message: "bad", details: [] } },
+    { type: "error", streamId: "read", error: { code: "bad", message: "bad", details: {}, extra: true } },
+    { type: "end", streamId: "read", extra: true },
+    { type: "item", streamId: "read", value: 1, extra: true },
+    { type: "item", streamId: "" },
+    { type: "other", streamId: "read" },
+  ]) {
+    const c = f.connect();
+    assert.equal(await c.opened, 101);
+    c.send(open("read", "session/page"));
+    await c.next();
+    const received = [];
+    c.ws.on("message", raw => received.push(raw.toString()));
+    const closed = once(c.ws, "close");
+    [...f.peers].at(-1).send(JSON.stringify(invalid));
+    assert.equal((await closed)[0], 1008);
+    assert.deepEqual(received, []);
+  }
+});
