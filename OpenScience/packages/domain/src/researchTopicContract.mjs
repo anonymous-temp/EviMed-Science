@@ -92,9 +92,11 @@ export function researchTopicPortfolioFindings(input) {
   }
 
   const evidenceValue = parsed(input.files, EVIDENCE_FILE)
-  const evidenceIds = new Set(
+  const evidenceById = new Map(
     Array.isArray(evidenceValue)
-      ? evidenceValue.filter(record).map((item) => item.id).filter((id) => typeof id === 'string' && id.trim())
+      ? evidenceValue
+        .filter((item) => record(item) && typeof item.id === 'string' && item.id.trim())
+        .map((item) => [item.id, item])
       : [],
   )
   let evidenceReconciled = Array.isArray(evidenceValue)
@@ -110,14 +112,23 @@ export function researchTopicPortfolioFindings(input) {
       || !meaningful(candidate.sourceOpportunityId) || !['direct', 'indirect', 'speculative'].includes(candidate.supportLevel)
       || !Array.isArray(candidate.sourceEvidenceIds) || candidate.sourceEvidenceIds.length === 0
       || candidate.sourceEvidenceIds.some((id) => typeof id !== 'string' || !id.trim())
+      || !Array.isArray(candidate.sourceEvidencePmids)
+      || candidate.sourceEvidencePmids.some((id) => typeof id !== 'string' || !id.trim())
       || !Array.isArray(candidate.gaps) || candidate.gaps.some((gap) => typeof gap !== 'string')) {
       notice(issues, 'topic-portfolio-schema', `${label} is missing its candidate identity, opportunity lineage, support level, evidence ids, or gaps array.`)
       evidenceReconciled = false
       continue
     }
-    const unknown = candidate.sourceEvidenceIds.filter((id) => !evidenceIds.has(id))
+    const unknown = candidate.sourceEvidenceIds.filter((id) => !evidenceById.has(id))
     if (unknown.length) {
       notice(issues, 'topic-evidence-lineage', `${label} names ${unknown.length} source evidence id(s) that do not resolve to ${EVIDENCE_FILE}.`)
+      evidenceReconciled = false
+    }
+    const preservedPmids = candidate.sourceEvidenceIds
+      .map((id) => evidenceById.get(id)?.pmid)
+      .filter((pmid) => typeof pmid === 'string' && pmid.trim())
+    if (!sameJson(candidate.sourceEvidencePmids, preservedPmids)) {
+      notice(issues, 'topic-evidence-lineage', `${label}.sourceEvidencePmids does not match the PMID values of its preserved source evidence ids.`)
       evidenceReconciled = false
     }
     const missing = DESIGN_FIELDS.filter((field) => !meaningful(candidate[field]))
@@ -125,7 +136,8 @@ export function researchTopicPortfolioFindings(input) {
     const declared = new Set(candidate.gaps)
     const undeclared = missing.filter((field) => !declared.has(field))
     const falseGaps = candidate.gaps.filter((field) => DESIGN_FIELDS.includes(field) && !missing.includes(field))
-    if (undeclared.length || falseGaps.length) {
+    const unknownGaps = candidate.gaps.filter((field) => !DESIGN_FIELDS.includes(field))
+    if (undeclared.length || falseGaps.length || unknownGaps.length) {
       notice(issues, 'topic-study-plan', `${label}.gaps must exactly expose absent design fields; unresolved: ${missing.join(', ') || 'none'}.`)
     }
     if (missing.length) {
