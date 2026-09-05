@@ -193,7 +193,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     expectedPong = Buffer.from(String(++heartbeatSequence));
     pongTimer = setTimeout(() => shutdown(1001, "runtime_ui_heartbeat_timeout"), heartbeat.timeoutMs);
     pongTimer.unref();
-    client.ping(expectedPong, (error) => { if (error) shutdown(1011, "runtime_ui_proxy_failed"); });
+    client.ping(expectedPong, false, (error) => { if (error) shutdown(1011, "runtime_ui_proxy_failed"); });
   }, heartbeat.intervalMs);
   heartbeatTimer.unref();
   validationTimer = setInterval(() => {
