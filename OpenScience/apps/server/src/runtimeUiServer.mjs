@@ -37,11 +37,17 @@ function assertBrowserOrigin(req, config) {
 }
 
 /** @param {Record<string, any>} config @param {any} project @param {string} method */
-async function authorizeMethod(config, project, method, boundWorkspace = false) {
+async function authorizeMethod(config, project, method, boundWorkspace = false, usageLedger = null) {
   if (isDeniedRuntimeUiMethod(method) && !(method === "workspace/create" && boundWorkspace)) {
     throw new HttpError(403, "runtime_ui_method_denied", `${method} is not available in the hosted surface.`);
   }
-  if (RUNTIME_UI_SPENDING_METHODS.has(method)) await assertSpendWithinLimits(config, project.userId);
+  if (RUNTIME_UI_SPENDING_METHODS.has(method)) {
+    if (usageLedger) await usageLedger.assertWithinLimits(project.userId, {
+      dailyLimit: Number(config.userDailySpendLimit) || 0,
+      weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
+    });
+    else await assertSpendWithinLimits(config, project.userId);
+  }
 }
 
 const exactFields = (value, fields) => value !== null && typeof value === "object" && !Array.isArray(value)
@@ -86,10 +92,10 @@ function destroyUpgrade(socket, status, code) {
 }
 
 /**
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any }} deps
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any }} deps
  * @returns {{ server: import('node:http').Server, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null }) {
   const upgradeSockets = new Set();
   /**
    * @param {any} req @param {any} res
@@ -174,7 +180,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     // around. It is this method and not the runtime's start, because starting
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
-    await authorizeMethod(config, project, method, boundWorkspace);
+    await authorizeMethod(config, project, method, boundWorkspace, usageLedger);
     await runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
@@ -210,7 +216,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
-          await authorizeMethod(config, project, endpoint);
+          await authorizeMethod(config, project, endpoint, false, usageLedger);
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize });
       } catch (error) {

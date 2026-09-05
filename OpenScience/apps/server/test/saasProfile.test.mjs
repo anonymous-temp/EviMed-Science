@@ -39,6 +39,7 @@ test("controlled pilot remains explicit and never claims public SaaS readiness",
       technicalSaas: false,
       organizationCollaboration: false,
       billingIntegrated: false,
+      commercialModel: "nonpaid-first-release",
     },
   );
 });

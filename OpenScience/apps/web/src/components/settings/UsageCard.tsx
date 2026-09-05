@@ -5,10 +5,8 @@ import { Card } from "@/components/ui/Card";
 /**
  * What this account has spent this month.
  *
- * The platform priced model calls long before it counted them; this is the
- * count, shown to the person it is charged to. It is deliberately a statement
- * and not a bill: there is no balance yet, and presenting one would imply a
- * limit that nothing enforces.
+ * This release is a nonpaid service. Converted cost remains visible because it
+ * drives the enforced safety budget and lets the researcher understand usage.
  */
 export function UsageCard() {
   const [usage, setUsage] = useState<WebUsageSummary | null>(null);
@@ -34,7 +32,7 @@ export function UsageCard() {
     <Card
       className="mt-5"
       title="本月用量"
-      hint={usage ? `统计自 ${month}，按 DeepSeek 峰谷价折算；谷时为五折。` : "统计本月的模型调用与折算金额。"}
+      hint={usage ? `统计自 ${month}，按 DeepSeek 峰谷价折算；首发阶段不收款。` : "统计本月的模型调用与额度占用；首发阶段不收款。"}
     >
       {error && <p className="text-ui text-error">读取用量失败：{error}</p>}
       {!error && !usage && <p className="text-ui text-muted">正在读取…</p>}
@@ -67,6 +65,15 @@ export function UsageCard() {
               其中 {usage.unpricedCalls} 次调用的模型不在价目表里，已计次但未计价。
             </p>
           )}
+          {(usage.reservedCalls ?? 0) > 0 && (
+            <p className="mt-3 text-caption text-muted">另有 {usage.reservedCalls} 次调用已预留额度，等待完成。</p>
+          )}
+          {(usage.uncertainCalls ?? 0) > 0 && (
+            <p className="mt-3 text-caption text-warn">
+              {usage.uncertainCalls} 次调用等待供应商用量核对，暂按预留金额 {Number(usage.reservedCost ?? 0).toFixed(2)} {usage.currency} 占用额度。
+            </p>
+          )}
+          <p className="mt-3 text-caption text-muted">折算金额仅用于额度保护和成本透明，不是账单，也不会触发收款。</p>
           {usage.calls === 0 && <p className="mt-3 text-caption text-muted">本月还没有模型调用。</p>}
         </div>
       )}

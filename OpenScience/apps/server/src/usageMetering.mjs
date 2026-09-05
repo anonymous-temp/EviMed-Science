@@ -32,34 +32,54 @@ export const USAGE_EVENTS_FILE = "usage.jsonl";
  */
 export function parseModelUsage(text) {
   if (typeof text !== "string" || !text) return null;
-  // The last one wins: a stream repeats the field and only the final frame is
-  // the whole turn, and in both shapes the provider puts it after the content.
-  //
-  // This reads the response as text rather than parsing it, which is what lets
-  // it work on a tail instead of a whole body. The cost is that an answer
-  // whose own text ended with a JSON object carrying numeric `prompt_tokens`
-  // and `completion_tokens` would be read as the turn's usage. That requires
-  // the model to emit the provider's exact field names as the last thing in
-  // the response, and the harm is over-counting the person who asked for it —
-  // which is the direction a billing mistake should err away from the reader,
-  // not toward them. Worth revisiting if non-streaming answers ever become
-  // common here; today the kernel streams every call.
+  // Parse only a top-level provider envelope. A usage-shaped object nested in
+  // content, a tool call or another field is model output, not an invoice.
   let found = null;
-  for (const match of text.matchAll(/"usage"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g)) {
-    const parsed = safeJson(match[1]);
-    if (parsed && typeof parsed === "object") found = parsed;
+  const envelopes = [];
+  const direct = safeJson(text);
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) envelopes.push(direct);
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const value = line.slice(5).trim();
+    if (!value || value === "[DONE]") continue;
+    const parsed = safeJson(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) envelopes.push(parsed);
+  }
+  for (const envelope of envelopes) {
+    if (envelope.usage && typeof envelope.usage === "object" && !Array.isArray(envelope.usage)) found = envelope.usage;
   }
   if (!found) return null;
-  const promptTokens = Math.max(0, Number(found.prompt_tokens) || 0);
-  const completionTokens = Math.max(0, Number(found.completion_tokens) || 0);
+  const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const promptTokens = count(found.prompt_tokens);
+  const completionTokens = count(found.completion_tokens);
+  if (promptTokens == null || completionTokens == null || (promptTokens === 0 && completionTokens === 0)) return null;
   // DeepSeek reports the split; when it does not, the whole prompt is charged
   // at the miss rate, which is the rate that cannot flatter the invoice.
-  const cacheHitTokens = Math.max(0, Number(found.prompt_cache_hit_tokens) || 0);
-  const cacheMissTokens = Number.isFinite(Number(found.prompt_cache_miss_tokens))
-    ? Math.max(0, Number(found.prompt_cache_miss_tokens))
-    : Math.max(0, promptTokens - cacheHitTokens);
-  if (promptTokens === 0 && completionTokens === 0) return null;
+  const cacheHitTokens = found.prompt_cache_hit_tokens == null ? 0 : count(found.prompt_cache_hit_tokens);
+  if (cacheHitTokens == null || cacheHitTokens > promptTokens) return null;
+  const cacheMissTokens = found.prompt_cache_miss_tokens == null
+    ? promptTokens - cacheHitTokens : count(found.prompt_cache_miss_tokens);
+  if (cacheMissTokens == null || cacheHitTokens + cacheMissTokens !== promptTokens) return null;
   return { promptTokens, completionTokens, cacheHitTokens, cacheMissTokens };
+}
+
+/** Provider request identity is evidence for later reconciliation, never authority. */
+export function parseModelProviderRequestId(text) {
+  if (typeof text !== "string" || !text) return null;
+  const candidates = [];
+  const direct = safeJson(text);
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) candidates.push(direct);
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const value = line.slice(5).trim();
+    if (!value || value === "[DONE]") continue;
+    const parsed = safeJson(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) candidates.push(parsed);
+  }
+  for (const value of candidates) {
+    if (typeof value.id === "string" && value.id.length > 0 && value.id.length <= 512 && !/[\0\r\n]/.test(value.id)) return value.id;
+  }
+  return null;
 }
 
 function safeJson(text) {
@@ -80,17 +100,162 @@ function safeJson(text) {
  * a fraction of the response, so a large answer costs the same memory as a
  * small one.
  */
-export function createUsageTail(maxBytes = 16 * 1024) {
+export function createUsageTail(maxBytes = 16 * 1024, { stream = false } = {}) {
   let tail = "";
+  const envelope = stream ? null : createTopLevelReceipt(maxBytes);
   return {
     /** @param {Uint8Array | string} chunk */
     observe(chunk) {
-      tail += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+      const value = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+      tail += value;
       if (tail.length > maxBytes) tail = tail.slice(tail.length - maxBytes);
+      envelope?.observe(value);
     },
     usage() {
-      return parseModelUsage(tail);
+      return envelope ? envelope.usage() : parseModelUsage(tail);
     },
+    providerRequestId() {
+      return envelope ? envelope.providerRequestId() : parseModelProviderRequestId(tail);
+    },
+    retainedBytes() {
+      return Buffer.byteLength(tail, "utf8") + (envelope?.retainedBytes() ?? 0);
+    },
+  };
+}
+
+/** Incrementally retain only top-level `id` and `usage` from a JSON object. */
+function createTopLevelReceipt(maxValueBytes) {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let rawString = "";
+  let stringRole = "other";
+  let stringTooLarge = false;
+  let state = "root";
+  let key = null;
+  let usage = null;
+  let providerRequestId = null;
+  let capture = null;
+  let captureDepth = 0;
+  let captureTooLarge = false;
+  let validRoot = false;
+
+  const finishString = () => {
+    if (stringRole === "other") {
+      if (depth === 1 && state === "value") state = "after-value";
+      return;
+    }
+    if (stringTooLarge) {
+      if (stringRole === "key") {
+        key = null;
+        state = "colon";
+      } else if (stringRole === "id") state = "after-value";
+      return;
+    }
+    const decoded = safeJson(`"${rawString}"`);
+    if (typeof decoded !== "string") return;
+    if (stringRole === "key") {
+      key = decoded;
+      state = "colon";
+    } else if (stringRole === "id") {
+      if (decoded.length > 0 && decoded.length <= 512 && !/[\0\r\n]/.test(decoded)) providerRequestId = decoded;
+      state = "after-value";
+    } else if (depth === 1 && state === "value") {
+      state = "after-value";
+    }
+  };
+
+  const appendCapture = (character) => {
+    if (capture == null || captureTooLarge) return;
+    capture += character;
+    if (Buffer.byteLength(capture, "utf8") > maxValueBytes) {
+      captureTooLarge = true;
+      capture = "";
+    }
+  };
+
+  const observe = (text) => {
+    for (const character of text) {
+      appendCapture(character);
+      if (inString) {
+        if (escape) {
+          if (stringRole !== "other" && !stringTooLarge) rawString += character;
+          escape = false;
+        } else if (character === "\\") {
+          if (stringRole !== "other" && !stringTooLarge) rawString += character;
+          escape = true;
+        } else if (character === '"') {
+          inString = false;
+          finishString();
+        } else {
+          if (stringRole !== "other" && !stringTooLarge) rawString += character;
+        }
+        const limit = stringRole === "key" ? 256 : 2048;
+        if (stringRole !== "other" && Buffer.byteLength(rawString, "utf8") > limit) {
+          rawString = "";
+          stringTooLarge = true;
+        }
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+        escape = false;
+        rawString = "";
+        stringTooLarge = false;
+        stringRole = depth === 1 && state === "key" ? "key"
+          : depth === 1 && state === "value" && key === "id" ? "id" : "other";
+        continue;
+      }
+      if (character === "{" || character === "[") {
+        depth += 1;
+        if (depth === 1) {
+          validRoot = character === "{";
+          state = validRoot ? "key" : "invalid";
+        } else if (depth === 2 && state === "value") {
+          if (key === "usage" && character === "{") {
+            capture = "{";
+            captureDepth = depth;
+            captureTooLarge = false;
+          }
+          state = "nested";
+        }
+        continue;
+      }
+      if (character === "}" || character === "]") {
+        const closingCapture = capture != null && depth === captureDepth;
+        depth -= 1;
+        if (closingCapture) {
+          if (!captureTooLarge) {
+            const parsed = safeJson(capture);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) usage = parsed;
+          }
+          capture = null;
+          captureTooLarge = false;
+        }
+        if (depth === 1 && state === "nested") state = "after-value";
+        if (depth < 0) state = "invalid";
+        continue;
+      }
+      if (!validRoot || depth !== 1) continue;
+      if (/\s/.test(character)) continue;
+      if (state === "colon" && character === ":") {
+        state = "value";
+        continue;
+      }
+      if (character === "," && ["value", "after-value", "scalar"].includes(state)) {
+        state = "key";
+        key = null;
+        continue;
+      }
+      if (state === "value") state = "scalar";
+    }
+  };
+
+  return {
+    observe,
+    usage: () => usage ? parseModelUsage(JSON.stringify({ usage })) : null,
+    providerRequestId: () => providerRequestId,
+    retainedBytes: () => Buffer.byteLength(rawString, "utf8") + Buffer.byteLength(capture ?? "", "utf8"),
   };
 }
 
