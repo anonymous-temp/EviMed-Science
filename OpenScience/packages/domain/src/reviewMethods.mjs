@@ -208,7 +208,7 @@ function studyAccounting(methods, sourceRecords, issues) {
     let usableReferences = 0;
     for (const number of group.referenceNumbers) {
       if (!Number.isInteger(number) || !sources.has(number)) {
-        note(issues, "review-study-accounting", label + " refers to " + String(number) + ", which is not an included reference.");
+        note(issues, "review-study-accounting", label + " contains a reference that is not an included integer referenceNumber.");
         complete = false;
         continue;
       }
@@ -268,4 +268,3 @@ export function reviewMethodsFindings(searchLog) {
     },
   };
 }
-
