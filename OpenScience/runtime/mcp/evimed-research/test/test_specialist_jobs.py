@@ -74,6 +74,31 @@ class SpecialistJobContractTests(unittest.TestCase):
                 self.assertTrue(result["data"]["available"])
                 self.assertEqual(result["data"]["model"], "deepseek-v4-pro")
 
+    def test_topic_job_preserves_bounded_research_context(self):
+        self.install_fake_specialist("research_topic_selection")
+        context = {"availableData": "Existing dialysis records", "population": "Adults",
+                   "studySetting": "One hospital", "resourceConstraints": ["Six months"]}
+        with mock.patch.object(self.jobs.subprocess, "Popen", return_value=mock.Mock()):
+            result = self.jobs.call("research_topic_selection", {
+                "action": "start", "researchDirection": "Dialysis adherence", **context,
+            })
+        self.assertEqual(result["status"], "warning")
+        state_path = self.workspace / "research-topic-runs" / ".jobs" / (result["data"]["jobId"] + ".json")
+        state = json.loads(state_path.read_text())
+        self.assertEqual(state["request"], {"researchDirection": "Dialysis adherence", **context})
+
+    def test_topic_job_rejects_invalid_context_before_start(self):
+        self.install_fake_specialist("research_topic_selection")
+        for invalid in ({"resourceConstraints": "six months"}, {"availableData": {}},
+                        {"resourceConstraints": ["x"] * 21}, {"population": "x" * 1001},
+                        {"resourceConstraints": ["x" * 201]}, {"command": "unsupported"}):
+            with self.subTest(invalid=invalid), mock.patch.object(self.jobs.subprocess, "Popen") as popen:
+                result = self.jobs.call("research_topic_selection", {
+                    "action": "start", "researchDirection": "Dialysis adherence", **invalid,
+                })
+                self.assertEqual(result["status"], "error")
+                popen.assert_not_called()
+
     def test_a_missing_gateway_token_file_names_the_variable_that_is_unset(self):
         """This used to fall back to parsing a kernel configuration file that
         nothing writes any more, so an unconfigured runtime reported only that
