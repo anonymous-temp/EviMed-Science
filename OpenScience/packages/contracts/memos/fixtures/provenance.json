@@ -1,0 +1,29 @@
+{
+  "dependencyVersion": "2.0.30",
+  "sourceCommit": "b41c8996a8dcb9df81998cced68d11457ce950c3",
+  "sourceUrl": "https://github.com/MemTensor/MemOS/tree/b41c8996a8dcb9df81998cced68d11457ce950c3",
+  "observedAt": "2026-09-05",
+  "openapiEvidence": "Read-only /openapi.json of the existing MemOS server; reduced to adapter endpoints and their transitive schemas. API schema version 1.0.1 is not the package version.",
+  "fixtureEvidence": "Health was observed read-only. Add/search/export/delete examples contain only synthetic data and follow the exact response constructors in the listed upstream source files; no existing memory was read or changed.",
+  "sourceFiles": [
+    "pyproject.toml",
+    "src/memos/api/server_api.py",
+    "src/memos/api/product_models.py",
+    "src/memos/api/handlers/add_handler.py",
+    "src/memos/api/handlers/search_handler.py",
+    "src/memos/api/handlers/memory_handler.py",
+    "src/memos/multi_mem_cube/single_cube.py",
+    "src/memos/api/handlers/formatters_handler.py",
+    "src/memos/graph_dbs/neo4j.py"
+  ],
+  "runtimeLimitations": [
+    "Running image is locally built memos-dev-memos, not a verified memtensor/memos:2.0.30 image.",
+    "Source reports package 2.0.30; installed package metadata is absent. Docker files differ locally; API sources are unmodified.",
+    "No auth in this server_api OpenAPI; network isolation is required.",
+    "Health reports HTTP API version 1.0.1 and does not verify databases or model readiness.",
+    "Add invokes embedding and schedules further processing even in sync/fast mode; paid-model live tests were not run.",
+    "Upstream add logs full request bodies; remove/redact that logging before production use.",
+    "Deletion response reports success/failure but no deletion count.",
+    "get_memory exports text memories and optional types, not complete database/user/cube administrative state."
+  ]
+}
