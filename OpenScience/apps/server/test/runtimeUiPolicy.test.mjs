@@ -339,13 +339,13 @@ test("closing either peer closes the other and releases its proxy capacity", { t
   const peerClosed = once([...f.peers][0], "close");
   c.ws.terminate();
   await peerClosed;
-  assert.equal(f.manager.activeProxyCount(), 0);
+  await eventually(() => f.manager.activeProxyCount() === 0);
   const next = f.connect();
   assert.equal(await next.opened, 101);
   const clientClosed = once(next.ws, "close");
   [...f.peers][0].close();
   await clientClosed;
-  assert.equal(f.manager.activeProxyCount(), 0);
+  await eventually(() => f.manager.activeProxyCount() === 0);
 });
 
 test("slow browser delivery resumes without losing or reordering native frames", { timeout: 5000 }, async (t) => {
