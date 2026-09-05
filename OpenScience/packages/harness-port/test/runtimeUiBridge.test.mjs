@@ -10,7 +10,8 @@ function fixture() {
   let generation = {}; let current = "session-a";
   /** @type {() => void} */ let generationListener = () => {};
   const parent = { postMessage: (/** @type {any} */ message, /** @type {string} */ origin) => sent.push({ message, origin }) };
-  const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example' };
+  /** @type {{version:number, frameId:string, projectId:string, shellOrigin:string, cwd:unknown}} */
+  const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', cwd: '/workspace/project-a' };
   const target = { __EVIMED_FRAME__: frame, parent, setTimeout, clearTimeout,
     addEventListener: (/** @type {string} */ type, /** @type {any} */ fn) => listeners.set(type, fn), removeEventListener: (/** @type {string} */ type) => listeners.delete(type) };
   /** @type {any} */ const ctx = {
@@ -148,5 +149,40 @@ test('retransmission while native create is already in flight joins that request
   assert.equal(creates, 1);
   assert.equal(f.calls.filter(row => row[0] === 'draft').length, 1);
   assert.equal(f.sent.filter(row => row.message.requestId === 'request-a' && row.message.ok).length, 2);
+  f.ctx.dispose();
+});
+
+
+test('create uses the server-bound working directory and ignores command-provided paths', async () => {
+  const f = fixture();
+  /** @type {any[]} */ const requests = [];
+  f.ctx.sessions.create = async (/** @type {any} */ request) => { requests.push(request); return 'session-canonical'; };
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', cwd: '/untrusted/path', draft: 'Review this evidence' } });
+  await settle();
+  assert.deepEqual(requests, [{ sessionId: 'session-new', cwd: '/workspace/project-a' }]);
+  assert.ok(f.calls.some(row => row[0] === 'open' && row[1] === 'session-canonical'));
+  assert.ok(f.calls.some(row => row[0] === 'draft' && row[1] === 'session-canonical'));
+  assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-canonical'));
+  f.ctx.dispose();
+});
+
+test('missing or invalid bound directories cannot create an unbound native session or acknowledge success', async () => {
+  for (const cwd of [undefined, null, '', 'relative/workspace', '/workspace/../other', '//other/workspace', '/workspace\0bad', '/workspace\nbad', 42]) {
+    const f = fixture(); f.target.__EVIMED_FRAME__.cwd = cwd;
+    apply(f.ctx, {}, f.target); await settle(); f.navigate(); await settle();
+    assert.equal(f.calls.length, 0, 'an invalid bound cwd reached native session mutation');
+    assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.requestId === 'request-a' && row.message.ok === false));
+    assert.ok(!f.sent.some(row => row.message.ok === true));
+    f.ctx.dispose();
+  }
+});
+
+test('opening an existing native session does not require or overwrite its workspace binding', async () => {
+  const f = fixture(); f.target.__EVIMED_FRAME__.cwd = undefined;
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
+  assert.deepEqual(f.calls, [['open', 'session-a']]);
+  assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-a'));
   f.ctx.dispose();
 });
