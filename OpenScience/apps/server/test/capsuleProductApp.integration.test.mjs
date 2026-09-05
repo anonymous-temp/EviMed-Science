@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
+import { issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -16,7 +17,8 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-capsule-app-"));
-  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+  const secret = randomBytes(32).toString("hex");
+  const app = createWebApiApp({ evimedWorkloadSigningSecret: secret, dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl });
   const username = `capsule${randomUUID().slice(0, 8)}`;
   let user;
@@ -40,6 +42,21 @@ test("the actual app delivers a persisted capsule create, activate and recall wo
     const recalled = (await recall.json()).data;
     assert.equal(recalled.items.length, 1);
     assert.equal(recalled.items[0].contextOnly, true);
+    const project = await app.store.defaultProject(user);
+    const token = issueEviMedWorkloadToken({ secret, userId: user.id, projectId: project.id });
+    const workloadTokenFile = path.join(dataDir, "test-workload.token");
+    await writeFile(workloadTokenFile, token, { mode: 0o600 });
+    app.runtimeManager.runtimes.set(app.runtimeManager.key(project), { workloadTokenFile });
+    try {
+      const runtimeHeaders = { "content-type": "application/json", authorization: `Bearer ${token}` };
+      const recalledByRuntime = await fetch(`${base}/internal/capsules/v1/recall`, { method: "POST", headers: runtimeHeaders, body: JSON.stringify({ query: "confidence" }) });
+      assert.equal(recalledByRuntime.status, 200);
+      assert.equal((await recalledByRuntime.json()).items[0].capsuleId, capsule.id);
+      const note = await fetch(`${base}/internal/capsules/v1/note`, { method: "POST", headers: runtimeHeaders,
+        body: JSON.stringify({ factKind: "preference", content: "Preserve study assumptions.", origin: "explicit" }) });
+      assert.equal(note.status, 200);
+      assert.equal((await note.json()).entry.payload.status, "candidate");
+    } finally { app.runtimeManager.runtimes.clear(); }
     assert.equal((await fetch(`${base}/api/capsules`)).status, 401);
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
