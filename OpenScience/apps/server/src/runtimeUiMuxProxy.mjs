@@ -76,6 +76,10 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     // Runtime start and handshake can take seconds. Never admit a cookie that
     // expired, was logged out, or lost project access during that wait.
     await revalidate();
+    if (socket.destroyed) { terminate(); return; }
+    if (closed || upstream.readyState !== WebSocket.OPEN) {
+      throw new HttpError(502, "runtime_unavailable", "Runtime mux unavailable.");
+    }
     const wss = new WebSocketServer({ noServer: true, clientTracking: false, maxPayload, perMessageDeflate: false });
     wss.handleUpgrade(req, socket, head, (peer) => { browser = peer; });
     if (!browser) { shutdown(); return; }
@@ -96,6 +100,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     await send(client, JSON.stringify({ type: "error", streamId, error: {
       code: known ? error.code : "runtime_ui_policy_failed",
       message: known ? error.message : "The runtime UI policy could not be verified.",
+      details: {},
     } }));
     await send(client, JSON.stringify({ type: "end", streamId }));
   };
