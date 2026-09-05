@@ -11,6 +11,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { loadConfig } from "../src/config.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
+import { issueRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
 import { RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 
@@ -37,6 +38,9 @@ async function fixture(t, overrides = {}, muxOptions = {}) {
   const req = { headers: {}, socket: {} };
   const res = { getHeader() { return undefined; }, setHeader(_name, value) { cookie = String(value).split(";")[0]; } };
   const session = await store.createSession(user, req, res);
+  const loginCookie = cookie;
+  const frame = issueRuntimeUiFrame({ config, req: { headers: { cookie } }, user, session, project: await store.requireProject(user, "default") });
+  cookie += `; ${frame.cookie.split(";")[0]}`;
   const received = [];
   const handshakes = [];
   const peers = new Set();
@@ -70,10 +74,12 @@ async function fixture(t, overrides = {}, muxOptions = {}) {
   };
   const ui = createRuntimeUiServer({ config, store, runtimeManager: manager });
   const address = await ui.listen(0, "127.0.0.1");
-  const base = `http://127.0.0.1:${address.port}`;
+  const origin = `http://127.0.0.1:${address.port}`;
+  const base = `${origin}${frame.prefix.slice(0, -1)}`;
   const clients = new Set();
   function connect(headers = {}, suffix = "/api/remote.mux", options = {}) {
-    const ws = new WebSocket(`${base.replace("http", "ws")}${suffix}`, {
+    const target = suffix.startsWith("/__evimed/") ? `${origin}${suffix}` : `${base}${suffix}`;
+    const ws = new WebSocket(target.replace("http", "ws"), {
       ...options,
       headers: { Cookie: cookie, Origin: UI_ORIGIN, ...headers },
     });
@@ -105,7 +111,7 @@ async function fixture(t, overrides = {}, muxOptions = {}) {
     await new Promise((resolve) => upstream.close(resolve));
     await rm(dataDir, { recursive: true, force: true });
   });
-  return { config, store, user, session, cookie, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
+  return { config, store, user, session, cookie, loginCookie, frame, origin, received, peers, handshakes, connect, base, dataDir, started, ui, manager, upstream };
 }
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
@@ -303,27 +309,43 @@ test("idle session expiration closes both peers without waiting for another brow
   await eventually(() => f.manager.activeProxyCount() === 0);
 });
 
-test("an upgraded socket stays on its project after another frame switches the shared cookie", { timeout: 5000 }, async (t) => {
+test("interleaved frame assets, unary calls and reconnects retain independent project bindings", { timeout: 5000 }, async (t) => {
   const f = await fixture(t);
   await f.store.createProject(f.user, "second", "Second");
-  const c = f.connect();
-  assert.equal(await c.opened, 101);
-  const validated = [];
-  const requireProject = f.store.requireProject.bind(f.store);
-  f.store.requireProject = async (user, id) => { validated.push(id); return requireProject(user, id); };
-  const switched = await fetch(`${f.base}/?project=second`, { headers: { Cookie: f.cookie }, redirect: "manual" });
-  assert.equal(switched.status, 302);
-  assert.match(switched.headers.get("set-cookie"), /evimed_ui_project=second/);
-  c.send(open("read", "session/page"));
-  assert.equal((await c.next()).type, "item");
-  assert.deepEqual(validated, ["second", "default"]);
-  assert.deepEqual(f.started, ["default"]);
+  const second = await f.store.requireProject(f.user, "second");
+  const secondFrame = issueRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session, project: second });
+  const secondCookie = `${f.loginCookie}; ${secondFrame.cookie.split(";")[0]}`;
+  const routed = [];
+  f.manager.proxy = async (_req, res, project, suffix) => { routed.push([project.id, suffix]); res.end("ok"); };
+  const first = f.connect();
+  const other = f.connect({ Cookie: secondCookie }, `${secondFrame.prefix}api/remote.mux`);
+  assert.equal(await first.opened, 101);
+  assert.equal(await other.opened, 101);
+  for (const [base, cookie, suffix] of [
+    [f.base, f.cookie, "/assets/a.js"],
+    [`${f.origin}${secondFrame.prefix.slice(0, -1)}`, secondCookie, "/plugins/??app&rev=b"],
+    [f.base, f.cookie, "/api/session/page"],
+    [`${f.origin}${secondFrame.prefix.slice(0, -1)}`, secondCookie, "/api/session/page"],
+  ]) assert.equal((await fetch(`${base}${suffix}`, { headers: { cookie } })).status, 200);
+  assert.deepEqual(routed, [["default", "/assets/a.js"], ["second", "/plugins/??app&rev=b"], ["default", "/api/session/page"], ["second", "/api/session/page"]]);
+  const closed = once(first.ws, "close");
+  first.ws.close(); await closed;
+  assert.equal(await f.connect().opened, 101);
+  assert.deepEqual(f.started, ["default", "second", "default"]);
+  const mismatched = await fetch(`${f.base}/assets/a.js`, { headers: { cookie: secondCookie } });
+  assert.equal(mismatched.status, 401);
+  assert.equal(routed.length, 4);
+  for (const suffix of ["/", "/?project=second", "/api/session/page", "/plugins/??app&rev=a"]) {
+    assert.equal((await fetch(`${f.origin}${suffix}`, { headers: { cookie: `${f.cookie}; evimed_ui_project=second` } })).status, 401);
+  }
 });
 
 test("deleting the pinned project revokes a live socket before its next operation", { timeout: 5000 }, async (t) => {
   const f = await fixture(t);
   await f.store.createProject(f.user, "second", "Second");
-  const c = f.connect({ Cookie: `${f.cookie}; evimed_ui_project=second` });
+  const second = await f.store.requireProject(f.user, "second");
+  const frame = issueRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session, project: second });
+  const c = f.connect({ Cookie: `${f.loginCookie}; ${frame.cookie.split(";")[0]}` }, `${frame.prefix}api/remote.mux`);
   assert.equal(await c.opened, 101);
   await f.store.deleteProject(f.user, "second");
   const closed = once(c.ws, "close");
@@ -551,7 +573,7 @@ test("raw client close during revalidation cannot upgrade or retain proxy capaci
   let response = "";
   client.on("data", (data) => { response += data.toString(); });
   await once(client, "connect");
-  client.write(`GET /api/remote.mux HTTP/1.1\r\nHost: ${new URL(f.base).host}\r\n`
+  client.write(`GET ${f.frame.prefix}api/remote.mux HTTP/1.1\r\nHost: ${new URL(f.base).host}\r\n`
     + `Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\n`
     + `Sec-WebSocket-Key: MDEyMzQ1Njc4OWFiY2RlZg==\r\nCookie: ${f.cookie}\r\nOrigin: ${UI_ORIGIN}\r\n\r\n`);
   await gate.paused;

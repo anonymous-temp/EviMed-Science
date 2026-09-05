@@ -2092,7 +2092,13 @@ async function uiSurfaceFixture(t, overrides = {}) {
   assert.ok(cookie, "the fixture needs a session cookie");
   const ui = app.runtimeUi.address();
   assert.ok(ui, "the browser-application origin must be bound when the surface is on");
-  return { app, address, cookie, uiBase: `http://127.0.0.1:${ui.port}` };
+  const me = await fetch(`http://127.0.0.1:${address.port}/api/me`, { headers: { cookie } });
+  const csrfToken = (await me.json()).data.csrfToken;
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/frames`, { method: "POST", headers: { cookie, "content-type": "application/json", "x-open-science-csrf": csrfToken }, body: JSON.stringify({ projectId: "default" }) });
+  assert.equal(response.status, 201);
+  const frame = (await response.json()).data;
+  const frameCookie = response.headers.getSetCookie().map((item) => item.split(";")[0]).join("; ");
+  return { app, address, cookie: `${cookie}; ${frameCookie}`, loginCookie: cookie, csrfToken, frame, uiBase: `http://127.0.0.1:${ui.port}${new URL(frame.frameUrl).pathname.slice(0, -1)}` };
 }
 
 test("the browser application's origin is bound only when the deployment serves it", async (t) => {
@@ -2202,28 +2208,20 @@ test("the hosted browser application cannot reach the methods that change the de
   assert.notEqual(body?.error?.code, "runtime_ui_method_denied");
 });
 
-test("the frame is pinned to a project by cookie, and only to a project its viewer owns", async (t) => {
-  const { uiBase, cookie, address } = await uiSurfaceFixture(t);
+test("a frame is minted by the authenticated control plane only for an owned project", async (t) => {
+  const { uiBase, loginCookie: cookie, csrfToken, address } = await uiSurfaceFixture(t);
   const created = await fetch(`http://127.0.0.1:${address.port}/api/projects`, {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ id: "second", name: "Second" }),
+    method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ id: "second", name: "Second" }),
   });
-  assert.ok([200, 201].includes(created.status), `creating the second project answered ${created.status}`);
-
-  const pinned = await fetch(`${uiBase}/?project=second`, { headers: { cookie }, redirect: "manual" });
-  assert.equal(pinned.status, 302);
-  assert.equal(pinned.headers.get("location"), "/", "the parameter must not survive into the application");
-  const setCookie = (pinned.headers.getSetCookie?.() ?? []).join("; ");
-  assert.match(setCookie, /evimed_ui_project=second/);
-  assert.match(setCookie, /HttpOnly/);
-
-  // A project the viewer does not own is refused rather than quietly replaced
-  // by their default one: a frame showing a different project than the shell
-  // asked for is worse than an error.
-  const foreign = await fetch(`${uiBase}/?project=someone-elses`, { headers: { cookie }, redirect: "manual" });
-  assert.ok(foreign.status >= 400, `a foreign project answered ${foreign.status}`);
-  assert.ok(foreign.status !== 302, "a foreign project must not be pinned");
+  assert.ok([200, 201].includes(created.status));
+  const create = (projectId) => fetch(`http://127.0.0.1:${address.port}/api/runtime-ui/frames`, {
+    method: "POST", headers: { cookie, "content-type": "application/json", "x-open-science-csrf": csrfToken }, body: JSON.stringify({ projectId }),
+  });
+  const pinned = await create("second");
+  assert.equal(pinned.status, 201);
+  assert.match(pinned.headers.get("set-cookie"), /evimed_ui_frame=.+; Path=\/__evimed\/f\/[^/]+\/; HttpOnly/);
+  assert.equal((await create("someone-elses")).status, 404);
+  assert.equal((await fetch(`${uiBase}/?project=second`, { headers: { cookie }, redirect: "manual" })).status, 401);
 });
 
 test("an unauthenticated browser-application socket is refused", async (t) => {
@@ -2276,4 +2274,44 @@ test("a production deployment cannot serve the application at an address nobody 
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+
+test("scoped native requests preserve raw combo queries exactly once, rewrite redirects and keep assets private", async (t) => {
+  const f = await uiSurfaceFixture(t);
+  const seen = [];
+  const upstream = createServer((req, res) => {
+    seen.push(req.url);
+    if (req.url.startsWith("/redirect")) { res.writeHead(302, { location: "/?native=yes", "cache-control": "public, max-age=3600" }); res.end(); return; }
+    res.writeHead(200, { "content-type": "text/javascript", "cache-control": "public, max-age=3600", etag: '"shared"' });
+    res.end("window.nativeAsset = true;");
+  });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => upstream.close(resolve)));
+  f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
+  for (const suffix of ["/plugins/??@deepseek-ai/client,@evimed/socket&rev=a%2Fb&x=1&x=2", "/api/session/page?cursor=%2B%2F&limit=20", "/assets/index.js"]) {
+    const response = await fetch(`${f.uiBase}${suffix}`, { headers: { cookie: f.cookie } });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "window.nativeAsset = true;");
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.equal(response.headers.get("etag"), null);
+    assert.equal(seen.at(-1), suffix);
+  }
+  const redirect = await fetch(`${f.uiBase}/redirect`, { headers: { cookie: f.cookie }, redirect: "manual" });
+  assert.equal(redirect.headers.get("location"), `${new URL(f.frame.frameUrl).pathname}?native=yes`);
+});
+
+test("HTTP frame authentication is revalidated after runtime startup before sending native requests", async (t) => {
+  const f = await uiSurfaceFixture(t);
+  let requests = 0;
+  const upstream = createServer((_req, res) => { requests++; res.end("should not reach"); });
+  await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => upstream.close(resolve)));
+  f.app.runtimeManager.start = async () => {
+    await f.app.store.logout({ headers: { cookie: f.loginCookie } });
+    return { url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} };
+  };
+  const response = await fetch(`${f.uiBase}/assets/index.js`, { headers: { cookie: f.cookie } });
+  assert.equal(response.status, 401);
+  assert.equal(requests, 0);
 });
