@@ -47,6 +47,9 @@ import { SourceService } from "./sourceService.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
+import { AutopilotService } from "./autopilotService.mjs";
+import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
+import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -514,6 +517,11 @@ export function createWebApiApp(overrides = {}) {
       return relative;
     },
   }) : null;
+  const autopilotService = productDocuments && productJobs ? new AutopilotService({
+    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
+  }) : null;
+  const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
+  let autopilotWorker = null;
   let capsuleCleanupTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
@@ -752,6 +760,65 @@ export function createWebApiApp(overrides = {}) {
       });
     },
   });
+  if (autopilotService && config.autopilotEnabled) {
+    const episodeAgents = {
+      "literature-sentinel": "clinical-evidence-synthesis",
+      "evidence-update": "clinical-evidence-synthesis",
+      "data-prospecting": "dataset-research-scoping",
+      "hypothesis-suggestion": "research-topic-selection",
+      "writing-pipeline": "manuscript-support",
+      "signal-monitoring": "adr-analysis",
+    };
+    autopilotWorker = new AutopilotWorker({
+      jobs: productJobs,
+      service: autopilotService,
+      pollMs: config.autopilotPollMs,
+      leaseMs: config.autopilotLeaseMs,
+      dispatchEpisode: async (episode) => {
+        const user = await store.userById(episode.userId);
+        if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
+        const project = await store.requireProject(user, episode.projectId);
+        if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
+          dailyLimit: Number(episode.budgetCny) || 0,
+          weeklyLimit: Number((await autopilotService.get(user.id, episode.agendaId)).payload.weeklyBudgetCny) || 0,
+        });
+        const registry = await agentRegistry;
+        const selected = registry.get(episodeAgents[episode.taskType]);
+        if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
+        const session = await runtimeManager.createRuntimeSession(project);
+        runtimeEventPump.noteMintedSession(project, session.id);
+        await researchSessions.put(project, session.id, {
+          mode: "specialist", agentId: selected.id, agentVersion: selected.version,
+        });
+        const run = await agentRuns.dispatch(project, {
+          sessionId: session.id,
+          dispatchId: episode.dispatchId,
+          question: episode.prompt,
+          effectiveAgentId: selected.id,
+          effectiveAgentVersion: selected.version,
+          effectiveRuntimeAgent: selected.runtimeAgent,
+          effectiveRouteReason: `autopilot:${episode.taskType}`,
+        }, async (binding, dispatchedRun, repairText = null) => {
+          const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
+          let memories = [];
+          let memoryError = null;
+          try { memories = await memosClient.relevant(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
+          catch (error) {
+            memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
+            if (config.requireMemos) throw error;
+          }
+          const prepared = await prepareResearchContext(project, binding, config, {
+            query: episode.prompt, memories, memoryError, specialists: [], routedSpecialist: null,
+          });
+          return runtimeManager.dispatchPrompt(project, session.id, {
+            text: promptText, system: prepared.system, agent: selected.runtimeAgent,
+            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id,
+          });
+        });
+        return { runId: run.id, sessionId: session.id };
+      },
+    });
+  }
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -896,6 +963,7 @@ export function createWebApiApp(overrides = {}) {
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
+      if (await autopilotRoutes(req, res)) return;
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -1977,6 +2045,8 @@ export function createWebApiApp(overrides = {}) {
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    autopilotService,
+    autopilotWorker,
     usageLedger,
     notificationService,
     capsuleService,
@@ -2003,6 +2073,7 @@ export function createWebApiApp(overrides = {}) {
       if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
       memoryIndexWorker?.start();
       sourceWorker?.start();
+      autopilotWorker?.start();
       await applyNotificationDefaults();
       if (notificationService) {
         notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
@@ -2015,6 +2086,7 @@ export function createWebApiApp(overrides = {}) {
       await capsuleCleanupRun;
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
+      await autopilotWorker?.close();
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       await runtimeUi.close();
