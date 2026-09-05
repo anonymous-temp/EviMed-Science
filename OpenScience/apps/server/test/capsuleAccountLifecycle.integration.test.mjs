@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { before, after, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
@@ -13,6 +14,7 @@ import { generateCapsuleIdentity } from "../src/capsuleContainer.mjs";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 const run=promisify(execFile);
+const repoRoot=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../../..");
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??"";
 if(url){const parsed=new URL(url);assert.ok(["127.0.0.1","localhost"].includes(parsed.hostname));assert.match(parsed.pathname,/evimed_test/);}
 const options={skip:!url};const password="test-only-lifecycle-passphrase";
@@ -94,8 +96,8 @@ test("encrypted local backup restores signing identities and ciphertext snapshot
   const storage=await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-backup-"));
   try{const passFile=path.join(storage,"backup-passphrase");await fs.writeFile(passFile,"test-only-encrypted-backup-passphrase",{mode:0o600});
     const env={...process.env,OPEN_SCIENCE_BACKUP_PASSPHRASE:"",OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:passFile,OPEN_SCIENCE_OBJECT_BACKUP_URI:"",OPEN_SCIENCE_BACKUP_RETENTION_DAYS:"",OPEN_SCIENCE_RESTORE_REPLACE:"false"};
-    const backup=await run("bash",["scripts/ops/backup-data.sh",root,path.join(storage,"backups")],{cwd:process.cwd(),env});const archive=backup.stdout.trim().split("\n").at(-1);assert.match(archive,/\.tar\.gz\.enc$/);assert.ok((await fs.readFile(archive)).subarray(0,64).toString().startsWith("OPEN_SCIENCE_BACKUP_ENCRYPTED_V1"));
-    const restored=path.join(storage,"restored");await run("bash",["scripts/ops/restore-data.sh",archive,restored],{cwd:process.cwd(),env});
+    const backup=await run("bash",[path.join(repoRoot,"scripts/ops/backup-data.sh"),root,path.join(storage,"backups")],{cwd:repoRoot,env});const archive=backup.stdout.trim().split("\n").at(-1);assert.match(archive,/\.tar\.gz\.enc$/);assert.ok((await fs.readFile(archive)).subarray(0,64).toString().startsWith("OPEN_SCIENCE_BACKUP_ENCRYPTED_V1"));
+    const restored=path.join(storage,"restored");await run("bash",[path.join(repoRoot,"scripts/ops/restore-data.sh"),archive,restored],{cwd:repoRoot,env});
     const restoredService=new CapsuleTransferService({documents,capsules,identities:new CapsuleIdentityStore(restored),dataDir:restored});
     const download=await restoredService.download(owner,capsule.id,exported.snapshot.id);assert.equal(download.archive,exported.archive);
     const preview=await restoredService.preview(recipient,{archive:download.archive,password});assert.equal(preview.issuerTrust,"verified");assert.equal(preview.entries.length,1);

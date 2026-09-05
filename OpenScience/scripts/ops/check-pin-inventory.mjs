@@ -73,6 +73,16 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/scripts\/ops\/native-ui-local\//,
+    why: "the offline acceptance harness is fixed to the exact native kernel whose transcript and UI behavior it records",
+  },
+  {
+    kind: "provenance",
+    where: /^OpenScience\/runtime\/skills\/community\/(plugin-support|try-install)\.json$/,
+    why: "the compatibility result names the exact kernel image on which each community bundle was booted or rejected",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/(apps|packages|scripts)\//,
     line: /recorded|confirmed against|probed against|Booted|booting|live from|a live |a running |newest published/,
     why: "a statement about what a running kernel produced, or an assertion about that statement",
