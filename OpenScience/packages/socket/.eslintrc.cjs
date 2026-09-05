@@ -44,7 +44,7 @@ module.exports = {
   },
   overrides: [
     {
-      files: ["test/**/*.mjs"],
+      files: ["test/**/*.mjs", "scripts/**/*.mjs"],
       env: { node: true },
       rules: { "no-shadow": "off", "no-useless-escape": "off", "no-control-regex": "off" },
     },

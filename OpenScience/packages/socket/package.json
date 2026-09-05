@@ -11,25 +11,38 @@
     "src",
     "cordis.patch.yml",
     "capabilities",
-    "capability-skills"
+    "capability-skills",
+    "client.mjs",
+    "dist/client.js",
+    "scripts/build-client.mjs"
   ],
   "exports": {
     ".": "./index.mjs",
     "./plugins/*": "./plugins/*.mjs",
     "./src/*": "./src/*.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": "./dist/client.js"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-connection"
+      ]
     }
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "lint": "eslint plugins src test index.mjs --ext .mjs --max-warnings 0",
+    "lint": "eslint plugins src test scripts client.mjs index.mjs --ext .mjs --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepack": "node ../../scripts/build/generate-capability-manifests.mjs --out packages/socket/capabilities && node -e \"require('node:fs').cpSync('../../capability-skills','capability-skills',{recursive:true})\""
+    "prepack": "node scripts/build-client.mjs && node ../../scripts/build/generate-capability-manifests.mjs --out packages/socket/capabilities && node -e \"require('node:fs').cpSync('../../capability-skills','capability-skills',{recursive:true})\"",
+    "build:client": "node scripts/build-client.mjs"
   },
   "engines": {
     "node": ">=22.22.0"

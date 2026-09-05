@@ -6,7 +6,8 @@ import { useUiStore } from "@/lib/store";
 import { CommandPalette } from "./CommandPalette";
 
 function Pathname() {
-  return <div data-testid="path">{useLocation().pathname}</div>;
+  const location = useLocation();
+  return <div data-testid="path">{location.pathname}<span data-testid="intent">{JSON.stringify(location.state?.runtimeUiIntent)}</span></div>;
 }
 
 describe("CommandPalette", () => {
@@ -88,6 +89,15 @@ describe("CommandPalette", () => {
     await user.click(screen.getByText("知识库"));
     expect(screen.getByTestId("path").textContent).toBe("/app/files");
     expect(useUiStore.getState().paletteOpen).toBe(false);
+  });
+
+  it("creates a native task intent without submitting a prompt", async () => {
+    useUiStore.setState({ paletteOpen: true });
+    render(<MemoryRouter initialEntries={["/app/chat"]}><Pathname /><CommandPalette /></MemoryRouter>);
+    await userEvent.click(screen.getByText("新任务"));
+    const intent = JSON.parse(screen.getByTestId("intent").textContent!);
+    expect(intent.kind).toBe("create"); expect(intent.requestId).toBeTruthy(); expect(intent.sessionId).toBeTruthy();
+    expect(intent.draft).toBeUndefined(); expect(useUiStore.getState().paletteOpen).toBe(false);
   });
 
   it("rotates the theme from the palette and shows the current mode as a hint", async () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/apiClient", () => ({
   listWebAgentRuns: mocks.listWebAgentRuns,
+  getWebProjectId: () => "default",
 }));
 
 vi.mock("@/lib/store", () => ({
@@ -54,7 +55,8 @@ function run(overrides: Partial<WebAgentRun> & { id: string }): WebAgentRun {
 }
 
 function LocationProbe() {
-  return <div data-testid="location">{useLocation().pathname}</div>;
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}<span data-testid="intent">{JSON.stringify(location.state?.runtimeUiIntent)}</span></div>;
 }
 
 function renderSidebar(initialPath = "/app/chat") {
@@ -82,6 +84,17 @@ beforeEach(() => {
 });
 
 describe("Sidebar navigation", () => {
+  it("makes repeated new-task clicks distinct native requests even on the same route", async () => {
+    renderSidebar();
+    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    const first = JSON.parse(screen.getByTestId("intent").textContent!);
+    await userEvent.click(screen.getByRole("button", { name: "新任务" }));
+    const second = JSON.parse(screen.getByTestId("intent").textContent!);
+    expect(first).toMatchObject({ kind: "create", projectId: "default" });
+    expect(second.requestId).not.toBe(first.requestId);
+    expect(second.sessionId).not.toBe(first.sessionId);
+  });
+
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 

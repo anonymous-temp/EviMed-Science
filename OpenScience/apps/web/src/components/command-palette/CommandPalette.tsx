@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { useUiStore, type Theme } from "@/lib/store";
 
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+
 interface Action {
   id: string;
   label: string;
@@ -60,7 +62,7 @@ export function CommandPalette() {
   };
 
   const navigation: Action[] = [
-    { id: "new", label: "新任务", icon: <SquarePen size={16} />, run: () => go("/app/chat") },
+    { id: "new", label: "新任务", icon: <SquarePen size={16} />, run: () => { navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }); close(); } },
     { id: "runs", label: "运行记录", icon: <FlaskConical size={16} />, run: () => go("/app/runs") },
     { id: "files", label: "知识库", icon: <FolderTree size={16} />, run: () => go("/app/files") },
     { id: "notebooks", label: "科研笔记本", icon: <NotebookPen size={16} />, run: () => go("/app/notebooks") },
@@ -68,11 +70,7 @@ export function CommandPalette() {
     { id: "capabilities", label: "能力模板", icon: <Bot size={16} />, run: () => go("/app/capabilities") },
   ];
 
-  // The palette navigates and changes appearance; it no longer starts a
-  // conversation. Starting one means typing into the session surface, and that
-  // surface is a frame on another origin — a prompt this shell "sent" would
-  // have had to travel through a store the shell no longer owns, which is how
-  // a palette entry becomes a button that does nothing.
+  // Task creation travels as a native navigation intent; no prompt is submitted.
   const actions: Action[] = [
     { id: "account", label: "账户与额度", icon: <UserRound size={16} />, run: () => go("/app/account") },
     { id: "settings", label: "打开设置", icon: <Settings size={16} />, run: () => go("/app/settings") },

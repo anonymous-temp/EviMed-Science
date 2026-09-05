@@ -6,7 +6,7 @@ import { researchAgentUi } from "@/lib/researchAgentUi";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { AgentsSkeleton } from "@/components/cards/Skeletons";
 import { Button } from "@/components/ui/Button";
-import { useUiStore } from "@/lib/store";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
 /**
  * Capability templates (§9.8).
@@ -19,9 +19,8 @@ import { useUiStore } from "@/lib/store";
  * high-confidence expectation the delivery gate reads (§9.4) — and the same
  * conversation can go on to ask for something else without switching anything.
  *
- * So the row prefills and navigates; it binds nothing. Which behaviour a
- * deployment gets is the kernel's answer, not a build flag, because the kernel
- * has a one-line rollback and the retiring page still needs its binding.
+ * The row opens a native session and fills its draft through the scoped input
+ * API. The researcher still chooses whether to submit that brief.
  */
 
 /**
@@ -41,7 +40,6 @@ export function capabilityBrief(title: string, prompt: string): string {
 
 export function CapabilitiesPage() {
   const navigate = useNavigate();
-  const setComposerDraft = useUiStore((state) => state.setComposerDraft);
   const [agents, setAgents] = useState<WebResearchAgent[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -75,12 +73,9 @@ export function CapabilitiesPage() {
   const open = useCallback(
     (agent: WebResearchAgent) => {
       const ui = researchAgentUi(agent);
-      // The retiring session view still binds a session to a package, and its
-      // rollback must not need a new bundle — so the old link survives there
-      setComposerDraft(capabilityBrief(ui.title, ui.starterPrompts[0] ?? ""));
-      navigate("/app/chat");
+      navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(capabilityBrief(ui.title, ui.starterPrompts[0] ?? "")) } });
     },
-    [navigate, setComposerDraft],
+    [navigate],
   );
 
   const localizedAgents = useMemo(() => agents.map(researchAgentUi), [agents]);

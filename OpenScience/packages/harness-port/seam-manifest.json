@@ -272,5 +272,29 @@
     "methodsRenamed": "0.1.2 renamed every method from dotted to slashed and moved arguments into a named descriptor: session.list became session/list taking {_request}. Verified against a running 0.1.2-alpha.3 binary, which 404s the dotted form and names the missing args field itself.",
     "sessionIdNotInFrame": "A session's events arrive on the `session/follow` stream opened for that session and no longer carry a session id. Whatever opens the stream owns the pairing.",
     "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does."
+  },
+  "browser": {
+    "transportGlobal": "__DSH_TRANSPORT__",
+    "transportHooks": [
+      "fetch",
+      "openStream",
+      "loadBundle"
+    ],
+    "ownership": "never",
+    "moduleLoaderGlobal": "__ModuleLoader__",
+    "clientServices": [
+      "sessions",
+      "conversation",
+      "connection"
+    ],
+    "sessionMethods": [
+      "create",
+      "open",
+      "refresh",
+      "scope"
+    ],
+    "inputMethod": "conversation.input.for(scope).setDraft",
+    "generation": "connection.generation",
+    "failureMarker": "dshRemoteStreamFailure"
   }
 }
