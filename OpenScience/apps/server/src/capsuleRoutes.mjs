@@ -1,4 +1,5 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
+import { CAPSULE_TRANSFER_MAX_BYTES } from "./capsuleTransferService.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
 async function bodyOf(req, limit, allowed) {
@@ -15,8 +16,8 @@ function pageOptions(url) {
 }
 
 /** Typed user endpoints; no generic product document write API is exposed.
- * @param {{ store: any, service: any, maxJsonBytes: number }} dependencies */
-export function createCapsuleRoutes({ store, service, maxJsonBytes }) {
+ * @param {{ store: any, service: any, transferService?: any, maxJsonBytes: number }} dependencies */
+export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -45,6 +46,33 @@ export function createCapsuleRoutes({ store, service, maxJsonBytes }) {
     }
     if (parts.length === 1 && parts[0] === "active" && method === "GET") {
       return reply(await service.active(user.id, await project(url.searchParams.get("projectId"))));
+    }
+    if ((parts[0] === "transfers" && parts.length === 2) || parts[1] === "exports") {
+      if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
+      if (parts[0] === "transfers" && method === "POST") {
+        if (parts[1] === "preview") return reply(await transferService.preview(user.id,
+          await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password"])));
+        if (parts[1] === "import") return reply(await transferService.import(user.id,
+          await bodyOf(req, CAPSULE_TRANSFER_MAX_BYTES * 2 + 4096, ["archive", "password", "expectedDigest", "confirmed", "title"])), 201);
+      }
+      if (parts[1] === "exports" && parts.length === 2) {
+        if (method === "GET") return reply(await transferService.history(user.id, parts[0], { cursor: url.searchParams.get("cursor") }));
+        if (method === "POST") return reply(await transferService.export(user.id, parts[0],
+          await bodyOf(req, 4096, ["password", "scopes", "supersedes"])), 201);
+      }
+      if (parts[1] === "exports" && parts.length === 3) {
+        if (method === "DELETE") {
+          const body = await bodyOf(req, 4096, ["expectedRevision"]);
+          return reply(await transferService.revoke(user.id, parts[0], parts[2], body.expectedRevision));
+        }
+        if (method === "GET") {
+          const result = await transferService.download(user.id, parts[0], parts[2]);
+          res.writeHead(200, { "content-type": "application/vnd.evimed.capsule+json", "cache-control": "no-store",
+            "x-content-type-options": "nosniff", "content-disposition": `attachment; filename="${result.filename}"` });
+          res.end(result.archive); return true;
+        }
+      }
+      throw new HttpError(404, "not_found", "Capsule transfer route not found.");
     }
     const [capsuleId, action, entryId, entryAction] = parts;
     if (parts.length === 1) {

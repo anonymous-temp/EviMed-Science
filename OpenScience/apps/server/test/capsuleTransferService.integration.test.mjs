@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, stat, readdir, symlink } from "node:fs/promises";
+import { mkdtemp, rm, stat, readdir, symlink, chmod } from "node:fs/promises";
 import path from "node:path";
 import { before, after, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -61,6 +61,7 @@ test("default export is encrypted and excludes private profile, knowledge, raw i
   assert.match(preview.entries[0].path,/^methods\/.+\/SKILL\.md$/);assert.equal(preview.entries[0].version,1);
   assert.ok(!JSON.stringify(preview).includes("private-run-id"));
   assert.equal((await transfers.history(owner,capsule.id)).items[0].id,result.snapshot.id);
+  assert.equal(result.snapshot.entryVersions[0].version,1);assert.match(result.snapshot.entryVersions[0].sha256,/^[a-f0-9]{64}$/);
   await assert.rejects(transfers.history(recipient,capsule.id),{code:"capsule_not_found"});
   assert.equal((await transfers.download(owner,capsule.id,result.snapshot.id)).archive,result.archive);
   const stored=await documents.get(owner,"preferences",result.snapshot.id);
@@ -99,8 +100,26 @@ test("invalid passwords/envelopes/base64 and failed batch imports leave no parti
     await assert.rejects(transfers.preview(recipient,{archive,password}));
   }
   const before=(await capsules.list(recipient)).items.length;
-  const faulting=new CapsuleTransferService({documents:{...documents,database,createBatch:async()=>{throw new Error("test-only-insert-failure");}},capsules,identities,dataDir:directory});
+  let batchCalls=0;const faultingDocuments=Object.create(documents);faultingDocuments.createBatch=async()=>{batchCalls++;throw new Error("test-only-insert-failure");};
+  const faulting=new CapsuleTransferService({documents:faultingDocuments,capsules,identities,dataDir:directory});
   const preview=await transfers.preview(recipient,{archive:result.archive,password});
   await assert.rejects(faulting.import(recipient,{archive:result.archive,password,expectedDigest:preview.archiveSha256,confirmed:true}));
-  assert.equal((await capsules.list(recipient)).items.length,before);
+  assert.equal(batchCalls,1);assert.equal((await capsules.list(recipient)).items.length,before);
+});
+
+test("updating creates a new immutable hosted snapshot and exposes replacement status",options,async()=>{
+  const capsule=await source();const first=await transfers.export(owner,capsule.id,{password});
+  const second=await transfers.export(owner,capsule.id,{password,supersedes:first.snapshot.id});
+  assert.notEqual(first.snapshot.id,second.snapshot.id);
+  assert.equal((await transfers.preview(recipient,{archive:first.archive,password})).newerSnapshotId,second.snapshot.id);
+  assert.equal((await transfers.download(owner,capsule.id,first.snapshot.id)).archive,first.archive);
+});
+
+
+test("permissive identity files are refused rather than loaded",async()=>{
+  const root=await mkdtemp("/tmp/evimed-key-permissions-");
+  try{const store=new CapsuleIdentityStore(root);await store.forUser("test-only-owner");const directory=path.join(root,"capsule-keys");
+    const file=(await readdir(directory)).find(name=>name.startsWith("account-"));await chmod(path.join(directory,file),0o644);
+    await assert.rejects(store.forUser("test-only-owner"),{code:"capsule_identity_unavailable"});
+  }finally{await rm(root,{recursive:true,force:true});}
 });
