@@ -21,6 +21,7 @@ from models.schemas import (
 )
 from services.llm_service import llm_service
 from utils import safe_parse_json
+from core.research_context import render_research_context
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,8 @@ class ReportGenerator:
         logger.info(f"[报告生成] 生成标题和元信息")
         title = self._generate_title(query_context, standardized_input)
         sections.append(self._render_cover(title, evidence_stats, query_context, module_outputs))
+        if standardized_input.research_context:
+            sections.append(render_research_context(json.loads(standardized_input.research_context)))
 
         # 4b: 执行摘要（基于所有模块的key_insights）
         logger.info(f"[报告生成] 生成执行摘要（调用LLM）")
@@ -236,6 +239,8 @@ class ReportGenerator:
         # 封面（同步，立即推）
         cover = self._render_cover(title, evidence_stats, query_context, module_outputs)
         sections.append(cover)
+        if standardized_input.research_context:
+            sections.append(render_research_context(json.loads(standardized_input.research_context)))
         yield "封面", "\n\n".join(sections)
 
         # ── 内部工具：流式分块 ──

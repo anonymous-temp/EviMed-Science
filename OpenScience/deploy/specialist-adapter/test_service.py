@@ -38,7 +38,7 @@ def _token(secret: str, *, user: str = "user1", project: str = "project1", expir
     return f"{header}.{body}.{signature}"
 
 
-def _load_service(tmp_path: Path, monkeypatch):
+def _load_service(tmp_path: Path, monkeypatch, *, kind="bibliometric-analysis"):
     secret = "test-only-workload-signing-secret-32-bytes"
     agent = tmp_path / "agent"
     (agent / "src" / "bibliometric").mkdir(parents=True)
@@ -60,7 +60,7 @@ def _load_service(tmp_path: Path, monkeypatch):
     model = tmp_path / "model.secret"
     model.write_text("test-model-key", encoding="utf-8")
     model.chmod(0o600)
-    monkeypatch.setenv("EVIMED_SPECIALIST_KIND", "bibliometric-analysis")
+    monkeypatch.setenv("EVIMED_SPECIALIST_KIND", kind)
     monkeypatch.setenv("EVIMED_AGENT_ROOT", str(agent))
     monkeypatch.setenv("EVIMED_DATA_ROOT", str(data))
     monkeypatch.setenv("EVIMED_WORKLOAD_SIGNING_SECRET_FILE", str(signing))
@@ -178,6 +178,24 @@ def test_topic_request_preserves_context_and_rejects_invalid_types(tmp_path, mon
                     {"resourceConstraints": ["x" * 201]}, {"population": None}):
         with pytest.raises(ValueError):
             module._validated_arguments({**request, **invalid})
+
+
+def test_http_topic_job_persists_the_validated_request(tmp_path, monkeypatch) -> None:
+    module, client, secret, workspace = _load_service(tmp_path, monkeypatch, kind="research-topic-selection")
+    marker = tmp_path / "agent" / "services" / "task_service.py"
+    marker.parent.mkdir()
+    marker.write_text("# topic marker\n")
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: object())
+    request = {"action": "start", "researchDirection": "Dialysis adherence",
+               "availableData": "Existing records", "population": "Adults", "studySetting": "One hospital",
+               "resourceConstraints": ["Six months"]}
+    response = client.post("/api/v1/evimed/research-topic-selection", json=request,
+                           headers={"Authorization": f"Bearer {_token(secret)}"})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "warning"
+    state = workspace / "research-topic-runs" / ".jobs" / (result["data"]["jobId"] + ".json")
+    assert json.loads(state.read_text())["request"] == {key: value for key, value in request.items() if key != "action"}
 
 
 def test_bibliometric_record_limit_is_rejected_before_queue(tmp_path, monkeypatch) -> None:

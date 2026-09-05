@@ -29,6 +29,18 @@ class ToolContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.server = load_server()
 
+    def test_topic_schema_accepts_only_bounded_research_context(self):
+        schema = self.server.TOOLS["research_topic_selection"]["inputSchema"]
+        request = {"action": "start", "researchDirection": "Dialysis adherence",
+                   "availableData": "x" * 4000, "population": "x" * 1000,
+                   "studySetting": "x" * 1000, "resourceConstraints": ["x" * 200] * 20}
+        self.server._validate(request, schema, "request")
+        for invalid in ({"availableData": {}}, {"population": "x" * 1001},
+                        {"resourceConstraints": "six months"}, {"resourceConstraints": ["x"] * 21},
+                        {"resourceConstraints": ["x" * 201]}, {"command": "unsupported"}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.server._validate({**request, **invalid}, schema, "request")
+
     def assert_contract(self, result):
         allowed = {
             "status",

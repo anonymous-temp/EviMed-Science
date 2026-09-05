@@ -57,7 +57,7 @@ SPECS: dict[str, dict[str, Any]] = {
         "directory": "research-topic-runs",
         "marker": "services/task_service.py",
         "required": ("researchDirection",),
-        "inputs": ("researchDirection", "outputLanguage"),
+        "inputs": ("researchDirection", "outputLanguage", "availableData", "population", "studySetting", "resourceConstraints"),
     },
     "peer-review": {
         "label": "Peer review",
@@ -272,6 +272,16 @@ def _validated_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
     if set(arguments) - allowed:
         raise ValueError("request contains unsupported fields")
     if action == "start":
+        if _kind() == "research-topic-selection":
+            for key, limit in (("researchDirection", 4000), ("availableData", 4000), ("population", 1000), ("studySetting", 1000)):
+                if key in arguments and (not isinstance(arguments[key], str) or not arguments[key].strip() or len(arguments[key]) > limit):
+                    raise ValueError(f"{key} must be a nonempty string of at most {limit} characters")
+            if "resourceConstraints" in arguments:
+                value = arguments["resourceConstraints"]
+                if not isinstance(value, list) or len(value) > 20 or any(
+                    not isinstance(item, str) or not item.strip() or len(item) > 200 for item in value
+                ):
+                    raise ValueError("resourceConstraints must be at most 20 nonempty strings of at most 200 characters")
         for required in spec["required"]:
             if not str(arguments.get(required) or "").strip():
                 raise ValueError(f"{required} is required")

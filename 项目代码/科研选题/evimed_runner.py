@@ -9,6 +9,8 @@ import re
 import traceback
 from pathlib import Path
 from types import SimpleNamespace
+from core.research_context import CONTEXT_FIELDS, render_research_context, validate_research_context
+from core.research_portfolio import build_research_portfolio
 
 ROOT = Path(__file__).resolve().parent
 
@@ -338,12 +340,14 @@ def _validate_release(completed, content: str, direction: str = "", module_artif
 
 
 async def _analyze_with_service(request: dict, output_dir: Path, service) -> dict:
-    direction = str(request.get("researchDirection") or "").strip()
-    if not direction:
+    direction = request.get("researchDirection")
+    if not isinstance(direction, str) or not direction.strip() or len(direction) > 4000:
         raise ValueError("researchDirection is required")
+    direction = direction.strip()
+    context = validate_research_context({key: request[key] for key in CONTEXT_FIELDS if key in request})
 
     from models.schemas import TaskStatus
-    task = await service.create_task(direction)
+    task = await service.create_task(direction, context)
     completed = await service.process_task(task.task_id)
     if completed.status != TaskStatus.COMPLETED or completed.report is None:
         # Say which condition failed. Raising error_message alone surfaced the
@@ -382,6 +386,9 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
     }
     report = completed.report
     content = report.content if hasattr(report, "content") else str(report)
+    context_section = render_research_context(context)
+    if context_section:
+        content = content.replace(context_section, "", 1)
     content = _normalize_report_certainty(content)
     content = _normalize_unbound_measurements(content, evidence_text)
     if hasattr(report, "content"):
@@ -389,9 +396,26 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
     if len(content.strip()) < 100:
         raise RuntimeError("research-topic pipeline produced an empty report")
     _validate_release(completed, content, direction, module_artifacts)
+    # Keep user-supplied context outside legacy prose normalization. It is input,
+    # not a scientific finding to rewrite or validate against retrieved abstracts.
+    if context_section and context_section not in content:
+        content += "\n\n" + context_section
+    if hasattr(report, "content"):
+        report.content = content
+    opportunities = completed.module_outputs.get("M5_BREAKTHROUGH_OPPORTUNITY")
+    agenda = completed.module_outputs.get("M6_RESEARCH_AGENDA")
+    portfolio = build_research_portfolio(
+        direction, context,
+        agenda.data.get("research_topics", []) if agenda else [],
+        opportunities.data.get("opportunities", []) if opportunities else [],
+        completed.evidence_records,
+    )
+    portfolio_path = output_dir / "research-portfolio.json"
+    portfolio_path.write_text(json.dumps(portfolio, ensure_ascii=False, indent=2), encoding="utf-8")
     report_path = output_dir / "research-topic-report.md"
     report_path.write_text(content, encoding="utf-8")
     details = _build_run_details(report, module_artifacts)
+    details["researchContext"] = context
     (output_dir / "research-topic-run.json").write_text(
         json.dumps(details, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -426,6 +450,7 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
             evidence_path.name,
             stats_path.name,
             modules_path.name,
+            portfolio_path.name,
         ],
     }
 
@@ -454,8 +479,13 @@ def revalidate_existing(output_dir: Path, direction: str) -> dict:
         module_id: _sanitize_module_artifact(value, _evidence_text=evidence_text)
         for module_id, value in raw_modules.items()
     }
+    details = json.loads(run_path.read_text(encoding="utf-8"))
+    context_section = render_research_context(details.get("researchContext", {}))
+    original = report_path.read_text(encoding="utf-8")
+    if context_section:
+        original = original.replace(context_section, "", 1)
     content = _normalize_unbound_measurements(
-        _normalize_report_certainty(report_path.read_text(encoding="utf-8")),
+        _normalize_report_certainty(original),
         evidence_text,
     )
     completed = SimpleNamespace(
@@ -466,7 +496,8 @@ def revalidate_existing(output_dir: Path, direction: str) -> dict:
         },
     )
     _validate_release(completed, content, direction, module_artifacts)
-    details = json.loads(run_path.read_text(encoding="utf-8"))
+    if context_section:
+        content += "\n\n" + context_section
     details["content"] = content
     details["module_outputs"] = module_artifacts
     report_path.write_text(content, encoding="utf-8")

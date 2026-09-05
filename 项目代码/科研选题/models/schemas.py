@@ -327,6 +327,7 @@ class AnalysisTask(BaseModel):
     task_id: str
     status: TaskStatus
     input_text: str
+    options: Dict[str, Any] = Field(default_factory=dict)
     standardized_input: Optional[StandardizedInput] = None
     execution_plan: Optional[ExecutionPlan] = None
     created_at: datetime

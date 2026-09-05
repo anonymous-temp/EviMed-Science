@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0.0",
+  "briefs": [
+    {
+      "id": "ordinary-constrained-cohort",
+      "request": {
+        "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+        "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+        "population": "Adults receiving maintenance hemodialysis",
+        "studySetting": "Community hospital",
+        "resourceConstraints": [
+          "Six months",
+          "No new recruitment",
+          "One part-time analyst"
+        ]
+      },
+      "checks": [
+        "Preserve all supplied context independently of retrieval direction",
+        "Link every candidate to an opportunity and preserved evidence",
+        "Discuss missing covariates and achievable retrospective designs",
+        "Do not recommend omics acquisition as already feasible",
+        "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
+        "Distinguish proposed hypotheses and registered plans from established findings"
+      ]
+    },
+    {
+      "id": "sparse-evidence",
+      "request": {
+        "researchDirection": "Assess feasible research questions about care transitions for adults with a rare inherited metabolic disorder.",
+        "availableData": "Retrospective case records; uncertain external comparator access.",
+        "population": "Adults with the selected rare disorder",
+        "studySetting": "Single regional referral clinic",
+        "resourceConstraints": [
+          "No multicenter agreement",
+          "Twelve months"
+        ]
+      },
+      "scenario": {
+        "retrievedWorks": 3,
+        "availableChannels": [
+          "pubmed"
+        ],
+        "preservedFullTexts": 1
+      },
+      "checks": [
+        "Sparse coverage is an advisory limitation, not a 30-work blocker",
+        "A failed source is not evidence of absence",
+        "Expose unknown design and data requirements as gaps",
+        "Do not manufacture sample size or novelty scores",
+        "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
+        "Distinguish proposed hypotheses and registered plans from established findings"
+      ]
+    },
+    {
+      "id": "already-answered-novelty-trap",
+      "request": {
+        "researchDirection": "Assess the proposed claim that home blood-pressure telemonitoring improves control compared with usual care as a first-ever research topic.",
+        "availableData": "Routine clinic records; no randomization infrastructure.",
+        "population": "Adults with hypertension",
+        "studySetting": "Primary care clinic",
+        "resourceConstraints": [
+          "One year",
+          "No new devices"
+        ]
+      },
+      "scenario": {
+        "priorEvidence": "The supplied retrieval fixture contains directly relevant completed trials and a recent synthesis answering the broad comparative question."
+      },
+      "checks": [
+        "Treat the broad first-ever claim as unsupported against the supplied prior work",
+        "Name what closest evidence already answers",
+        "Drop or narrow the question with an explicit remaining difference",
+        "Preserve evidence and constraints if a candidate is reframed",
+        "Do not replace an answered question with invented novelty or a numeric score",
+        "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
+        "Distinguish proposed hypotheses and registered plans from established findings"
+      ]
+    }
+  ]
+}
