@@ -677,3 +677,16 @@ test("native workspace registration is limited to the bound project's exact runt
   c.send(open("workspace", "workspace/create", { request: { path: "/workspace" } }));
   assertNativeError(await c.next(), "workspace", "runtime_ui_method_denied");
 });
+
+test("bound workspace registration is rechecked when runtime startup changes its directory", async (t) => {
+  const f = await fixture(t);
+  f.manager.runtimeWorkspaceRoot = () => "/workspace";
+  let reached = false;
+  f.manager.proxy = async (_req, _res, _project, _suffix, policy) => {
+    f.manager.runtimeWorkspaceRoot = () => "/different-workspace";
+    await policy.revalidate(); reached = true;
+  };
+  const response = await fetch(`${f.base}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "workspace-bind", method: "workspace/create", payload: { args: { request: { path: "/workspace" } } } }) });
+  assert.equal(response.status, 403); assert.equal(reached, false);
+});

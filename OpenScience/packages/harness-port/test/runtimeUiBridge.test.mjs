@@ -219,9 +219,9 @@ test('missing registry membership cannot produce a successful native readiness a
   f.ctx.dispose();
 });
 
-test('a known legacy blank session is attached in place instead of creating another identity', async () => {
+test('a known legacy session is adopted in place without replacing its identity or history', async () => {
   const f = fixture();
-  f.ctx.sessions.list.getSnapshot = () => ({ current: 'session-a', byId: { 'session-a': { blank: true, cwd: '/workspace/project-a' } } });
+  f.ctx.sessions.list.getSnapshot = () => ({ current: 'session-a', byId: { 'session-a': { blank: false, cwd: '/workspace/project-a' } } });
   f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', sessionIds: ['session-a'] });
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
