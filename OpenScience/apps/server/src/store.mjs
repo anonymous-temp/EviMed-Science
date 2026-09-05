@@ -533,7 +533,8 @@ export class InMemoryStore {
     return { id };
   }
 
-  async deleteUser(user) {
+  /** @param {any} user @param {{beforeDelete?: ((userId: string, client: any) => Promise<void>) | null}} options */
+  async deleteUser(user, { beforeDelete = null } = {}) {
     const id = safeId(user.id, "user id");
     await this.loadUsers();
     await this.loadSessions();
@@ -551,6 +552,7 @@ export class InMemoryStore {
       throw new HttpError(404, "user_not_found", "User not found.");
     }
 
+    if (beforeDelete) await beforeDelete(id, null);
     await fs.rm(userRoot, { recursive: true, force: true });
     for (const key of [...this.projects.keys()]) {
       if (key.startsWith(`${id}:`)) this.projects.delete(key);
@@ -686,6 +688,7 @@ function databaseUser(config, row) {
     name: row.name,
     passwordHash: row.password_hash,
     authType: row.auth_type,
+    ...(typeof row.account_created_at === "string" ? { accountCreatedAt: row.account_created_at } : {}),
     rootDir: path.join(config.dataDir, "users", row.id),
   };
 }
@@ -790,7 +793,7 @@ export class PostgresStore extends InMemoryStore {
     if (key) {
       const result = await this.database.query(
         `SELECT s.user_id, s.csrf_token, s.created_at, s.expires_at,
-                u.id, u.name, u.password_hash, u.auth_type
+                u.id, u.name, u.password_hash, u.auth_type, u.created_at::text AS account_created_at
            FROM ${CONTROL_PLANE_SCHEMA}.auth_sessions s
            JOIN ${CONTROL_PLANE_SCHEMA}.users u ON u.id = s.user_id
           WHERE s.id_hash = $1 AND s.expires_at > now()`,
@@ -1179,7 +1182,8 @@ export class PostgresStore extends InMemoryStore {
     return project;
   }
 
-  async deleteUser(user) {
+  /** @param {any} user @param {{beforeDelete?: ((userId: string, client: any) => Promise<void>) | null}} options */
+  async deleteUser(user, { beforeDelete = null } = {}) {
     const id = safeId(user.id, "user id");
     const root = usersRoot(this.config);
     const userRoot = path.join(root, id);
@@ -1190,6 +1194,7 @@ export class PostgresStore extends InMemoryStore {
         [id],
       );
       if (locked.rowCount !== 1) return false;
+      if (beforeDelete) await beforeDelete(id, client);
       await assertNoSymlinkPath(root, userRoot, { allowMissingTail: true });
       await fs.rm(userRoot, { recursive: true, force: true });
       const result = await client.query(`DELETE FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1`, [id]);

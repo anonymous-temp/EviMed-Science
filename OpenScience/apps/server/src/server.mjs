@@ -427,6 +427,17 @@ export function createWebApiApp(overrides = {}) {
   const capsuleService = productDocuments ? new CapsuleService(productDocuments) : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
+  let capsuleCleanupTimer = null;
+  let capsuleCleanupRun = null;
+  const retryCapsuleCleanup = () => {
+    if (!capsuleTransferService) return Promise.resolve();
+    if (capsuleCleanupRun) return capsuleCleanupRun;
+    capsuleCleanupRun = capsuleTransferService.recoverPendingDeletions()
+      .then(async result => { if (result.pending) await securityAudit(config, "capsule.cleanup", "pending", result); })
+      .catch(() => { console.error("Capsule cleanup retry failed; protected pending state was retained."); })
+      .finally(() => { capsuleCleanupRun = null; });
+    return capsuleCleanupRun;
+  };
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
   const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
@@ -1366,10 +1377,12 @@ export function createWebApiApp(overrides = {}) {
         const memoryPurge = memosClient.configured
           ? await memosClient.purgeUserMemory(user.id)
           : { structured: 0, manual: 0 };
-        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge });
-        const data = await store.deleteUser(user);
+        const data = await store.deleteUser(user, { beforeDelete: capsuleTransferService
+          ? (id, client) => capsuleTransferService.prepareAccountDeletion(id, client) : null });
         taskManager.purgeUser(user);
         clearSessionCookie(res, config.sessionCookieName);
+        if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
+        await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge });
         sendJson(res, 200, { data });
         return;
       }
@@ -1832,6 +1845,7 @@ export function createWebApiApp(overrides = {}) {
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      await retryCapsuleCleanup();
       await runStartupRuntimeCleanup();
       const address = await new Promise((resolve, reject) => {
         server.once("error", reject);
@@ -1841,9 +1855,12 @@ export function createWebApiApp(overrides = {}) {
       // survived a failed main listen would hold the port open and make the
       // restart look like a port conflict.
       await runtimeUi.listen();
+      if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
       return address;
     },
     async close() {
+      if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
+      await capsuleCleanupRun;
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
