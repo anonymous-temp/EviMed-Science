@@ -31,6 +31,10 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
+import { ProductDocuments } from "./productStore.mjs";
+import { migrateProductStore } from "./productPersistence.mjs";
+import { CapsuleService } from "./capsuleService.mjs";
+import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
@@ -222,6 +226,8 @@ function requestIdFor(req) {
 
 function routePattern(pathname) {
   if (pathname === "/api/health" || pathname === "/api/ready" || pathname === "/api/me") return pathname;
+  if (pathname === "/api/capsules") return pathname;
+  if (pathname.startsWith("/api/capsules/")) return "/api/capsules/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
   if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage") return pathname;
   if (pathname === "/api/ops/metrics") return pathname;
@@ -412,6 +418,10 @@ export function createWebApiApp(overrides = {}) {
   const config = loadConfig(overrides);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
+  const productDatabase = "database" in store ? store.database : null;
+  const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
+  const capsuleService = productDocuments ? new CapsuleService(productDocuments) : null;
+  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, maxJsonBytes: config.maxJsonBytes });
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
   const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
@@ -757,6 +767,7 @@ export function createWebApiApp(overrides = {}) {
     try {
       enforceRequestRateLimits(req, pathname);
       await store.assertCsrf(req, pathname);
+      if (await capsuleRoutes(req, res)) return;
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -1802,6 +1813,7 @@ export function createWebApiApp(overrides = {}) {
     store,
     runtimeManager,
     memosClient,
+    capsuleService,
     commands,
     taskManager,
     operationalMetrics,
@@ -1811,6 +1823,7 @@ export function createWebApiApp(overrides = {}) {
     runtimeUi,
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
+      if (productDatabase) await migrateProductStore(productDatabase);
       await runStartupRuntimeCleanup();
       const address = await new Promise((resolve, reject) => {
         server.once("error", reject);

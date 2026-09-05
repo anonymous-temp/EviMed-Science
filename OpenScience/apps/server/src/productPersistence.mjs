@@ -27,6 +27,7 @@ CREATE INDEX IF NOT EXISTS product_documents_list_idx ON evimed_product.document
 CREATE INDEX IF NOT EXISTS product_documents_project_idx ON evimed_product.documents
   (user_id,project_id,kind) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS product_documents_project_fk_idx ON evimed_product.documents(user_id,project_id);
+CREATE INDEX IF NOT EXISTS product_documents_payload_idx ON evimed_product.documents USING gin(payload jsonb_path_ops) WHERE deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS evimed_product.revisions (
   user_id text NOT NULL,
   kind text NOT NULL,
