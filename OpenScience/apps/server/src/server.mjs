@@ -3182,10 +3182,10 @@ async function readinessUsageLedger(config, ledger) {
 
 async function readinessInbox(config, service) {
   if (!service) {
-    if (config.production) throw readinessFailure("notification_unconfigured");
+    if (config.requireInbox) throw readinessFailure("notification_unconfigured");
     return { required: false, configured: false };
   }
-  return { required: Boolean(config.production), ...(await service.health()) };
+  return { required: Boolean(config.requireInbox), ...(await service.health()) };
 }
 
 async function readinessStateStore(config, store) {

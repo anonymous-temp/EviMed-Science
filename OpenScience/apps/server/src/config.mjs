@@ -1063,6 +1063,7 @@ export function loadConfig(overrides = {}) {
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
+    requireInbox: overrides.requireInbox ?? boolEnv("OPEN_SCIENCE_REQUIRE_INBOX", production),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a
     // working run from a dead one, so both used to wait out the full timeout.
