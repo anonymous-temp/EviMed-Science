@@ -11,12 +11,22 @@ import {
   assertNoSymlinkPath,
   openScopedDirectoryNoFollow,
   readFileNoFollow,
+  readTextFileNoFollow,
   resolveScopedPath,
   safeId,
   directorySize,
   writeFileAtomicNoFollow,
   writeFileExclusiveNoFollow,
 } from "../src/security.mjs";
+
+test("text fallback treats a missing parent directory as a missing file", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-web-text-fallback-"));
+  try {
+    assert.equal(await readTextFileNoFollow(root, path.join(root, "absent", "state.json"), "fallback"), "fallback");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 // The quota monitor walks a workspace an analysis is actively writing to. A
 // file removed between readdir and lstat is that workspace being alive, not a

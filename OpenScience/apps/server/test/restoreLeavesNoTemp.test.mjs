@@ -13,7 +13,7 @@
 // pass the moment someone wrote the same leak a different way.
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -39,7 +39,10 @@ async function encryptedArchive(workDir, passphraseFile) {
 }
 
 test("a successful restore leaves nothing behind in TMPDIR", { skip: hasBash && hasTar ? false : "bash/tar unavailable" }, async () => {
-  const work = await mkdtemp(path.join(tmpdir(), "restore-leak-"));
+  // macOS exposes /tmp and /var through system symlinks. The product correctly
+  // rejects a secret path containing symlinks, so fixtures use the canonical
+  // temporary root rather than weakening the production check.
+  const work = await mkdtemp(path.join(await realpath(tmpdir()), "restore-leak-"));
   const scratchTmp = path.join(work, "tmp");
   await mkdir(scratchTmp, { recursive: true });
   try {

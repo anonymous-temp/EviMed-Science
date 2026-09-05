@@ -461,6 +461,51 @@ test("canceling a runtime session records the active AgentRun as canceled", asyn
   }
 });
 
+test("canceling waits for the observer even when the terminal ledger write fails", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-cancel-failure-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = {
+      sessionId: "ses_cancel_failure",
+      mode: "open-domain",
+      agentId: null,
+      agentVersion: null,
+      runtimeAgent: null,
+    };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+    });
+    store.scheduleMonitor = () => {};
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    let observerExited = false;
+    let releaseObserver;
+    const observer = new Promise((resolve) => { releaseObserver = resolve; });
+    store.monitors.set(started.id, {
+      cancel: () => setTimeout(() => {
+        observerExited = true;
+        releaseObserver();
+      }, 20),
+      promise: observer,
+    });
+    const persistenceError = new Error("terminal ledger write failed");
+    store.finishInternal = async () => { throw persistenceError; };
+
+    await assert.rejects(() => store.cancelSession(project, binding.sessionId), (error) => error === persistenceError);
+    assert.equal(observerExited, true, "cancel returned before the observer stopped after a persistence failure");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a specialist turn cannot succeed without every declared required output", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-required-output-"));
   try {
@@ -1384,7 +1429,7 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
 });
 
 /** A run fixture whose root history and run-side projection are both scriptable. */
-async function delegatingRunFixture(t, { stallPolls = 3 } = {}) {
+async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40 } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = {
@@ -1397,7 +1442,7 @@ async function delegatingRunFixture(t, { stallPolls = 3 } = {}) {
   const store = new AgentRunStore({ get: async () => ({ sessionId: "ses_deleg", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
     model: "deepseek/deepseek-v4-pro",
     monitorIntervalMs: 1,
-    monitorMaxPolls: 40,
+    monitorMaxPolls: maxPolls,
     monitorStallPolls: stallPolls,
     // The root session never moves again after this: it delegated and is waiting.
     readSessionHistory: async () => [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }],
@@ -1453,7 +1498,10 @@ test("a run-side projection that will not parse is a named notice, never evidenc
 });
 
 test("projection frames are sent when the projection changes and not on every poll", async (t) => {
-  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0 });
+  // Keep the observer alive for the full timing window. A low poll count made
+  // this test depend on incidental ledger I/O being slow enough to prevent the
+  // monitor from reaching its timeout before the final projection update.
+  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
   await writeProjection({ evidence: { total: 1, byStatus: { ready: 1 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
   const run = await store.start(project, { sessionId: "ses_deleg" });
   await new Promise((resolve) => setTimeout(resolve, 40));
