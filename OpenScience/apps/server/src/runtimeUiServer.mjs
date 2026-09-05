@@ -122,7 +122,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
       const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
       await revalidate();
-      const source = runtimeUiBootstrapSource({ version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, shellOrigin: runtimeUiOrigins(config).shellOrigin }, installRuntimeUiTransport);
+      const source = runtimeUiBootstrapSource({ version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, shellOrigin: runtimeUiOrigins(config).shellOrigin, cwd: runtimeManager.runtimeWorkspaceRoot(project) }, installRuntimeUiTransport);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? undefined : source);
       return;
