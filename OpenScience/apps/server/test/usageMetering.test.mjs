@@ -60,11 +60,22 @@ test("charges the whole prompt at the miss rate when the split is absent", () =>
   });
 });
 
+test("provider usage is read only from the response envelope, never assistant prose", () => {
+  const body = JSON.stringify({
+    id: "chat-prose",
+    choices: [{ message: { role: "assistant", content: 'Example: "usage":{"prompt_tokens":999999,"completion_tokens":999999}' } }],
+  });
+  assert.equal(parseModelUsage(body), null);
+  const stream = `data: ${body}\n\ndata: [DONE]\n\n`;
+  assert.equal(parseModelUsage(stream), null);
+  assert.equal(parseModelUsage(JSON.stringify({ choices: [{ delta: { usage: { prompt_tokens: 9, completion_tokens: 9 } } }] })), null);
+});
+
 test("the tail keeps the end of a large body without holding the body", () => {
   const tail = createUsageTail(256);
   const filler = "x".repeat(64 * 1024);
   tail.observe(Buffer.from(filler));
-  tail.observe(Buffer.from('...,"usage":{"prompt_tokens":7,"completion_tokens":3}}'));
+  tail.observe(Buffer.from('\ndata: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'));
   assert.deepEqual(tail.usage(), {
     promptTokens: 7,
     completionTokens: 3,
