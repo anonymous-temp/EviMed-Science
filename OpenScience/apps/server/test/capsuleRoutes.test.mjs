@@ -65,3 +65,18 @@ test("activation and recall reject projects the account does not own", async (t)
   assert.equal(response.status, 200);
   assert.equal(calls[0].body.projectId, "owned-project");
 });
+
+test("transfer routes bind export/import to the live user and require explicit body fields",async(t)=>{
+  const calls=[];
+  const store={ensureSessionUser:async()=>({user:{id:"transfer-owner"}}),assertCsrf:async()=>{}};
+  const transferService={preview:async(user,input)=>{calls.push({user,input});return{canImport:true};},export:async(user,id,input)=>{calls.push({user,id,input});return{archive:"ciphertext"};}};
+  const handle=createCapsuleRoutes({store,service:{},transferService,maxJsonBytes:100000});
+  const server=createServer((req,res)=>{handle(req,res).catch(error=>sendError(res,error));});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const options={method:"POST",headers:{"content-type":"application/json"}};
+  assert.equal((await fetch(`${base}/api/capsules/transfers/preview`,{...options,body:JSON.stringify({archive:"fixture",password:"test-only-transfer"})})).status,200);
+  assert.equal(calls[0].user,"transfer-owner");
+  assert.equal((await fetch(`${base}/api/capsules/cap-one/exports`,{...options,body:JSON.stringify({password:"test-only-transfer",userId:"other"})})).status,400);
+});
