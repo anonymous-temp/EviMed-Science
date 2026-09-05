@@ -20,6 +20,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const iframe = useRef<HTMLIFrameElement>(null);
   const [binding, setBinding] = useState<WebRuntimeUiFrame | null>(null);
   const [ready, setReady] = useState(false);
+  const [readyGeneration, setReadyGeneration] = useState(0);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +49,9 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       if (released.has(id)) return;
       released.add(id);
       void releaseWebRuntimeUiFrame(id).catch(() => {
-      // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
-    }); };
+        // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
+      });
+    };
     setBinding(null); setReady(false); setPending(false); setNavigated(false); setError(null);
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
     void createWebRuntimeUiFrame(projectId).then(value => {
@@ -82,7 +84,10 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
         || !Number.isSafeInteger(message.seq) || message.seq <= incoming.current) return;
       if (message.type === "evimed.runtime-ui.ready") {
-        incoming.current = message.seq; setReady(true);
+        incoming.current = message.seq; lastSent.current = ""; setReady(true);
+        setReadyGeneration(value => value + 1);
+      } else if (message.type === "evimed.runtime-ui.connecting") {
+        incoming.current = message.seq; setReady(false);
       } else if (message.type === "evimed.runtime-ui.error") {
         incoming.current = message.seq; setError("研究会话暂时无法连接");
       } else if (message.type === "evimed.runtime-ui.ack") {
@@ -124,7 +129,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       requestId: intent.requestId, seq: ++outgoing.current,
       intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.draft === undefined ? {} : { draft: intent.draft }) },
     }, origin);
-  }, [ready, error, binding, intent, projectId, origin]);
+  }, [ready, readyGeneration, error, binding, intent, projectId, origin]);
 
   useEffect(() => {
     if (!pending || error) return;

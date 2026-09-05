@@ -9,8 +9,8 @@
  * deployment generates, which is what lets the same tarball plug into the
  * hosted container and into a laptop.
  *
- * This entry point exists for tooling (the consistency suite, the packaging
- * check). DSH itself loads the plugins by their subpath specifiers, listed in
+ * The bare host entry makes this package discoverable by the native client
+ * module registry. Backend features remain explicit subpath plugins in
  * `cordis.patch.yml` and `presets/evimed-universal/agent.cordis.yml`.
  *
  * @module @evimed/dsh-socket
@@ -18,8 +18,11 @@
 
 export const BUNDLE_NAME = '@evimed/dsh-socket'
 
+/** Host registration only: the native module scanner discovers dsh.client here. */
+export function apply() {}
+
 /** The plugin row ids this bundle owns. The `--dump-config` snapshot test walks it. */
-export const HOST_PLUGIN_IDS = Object.freeze(['evimed-seam-probe', 'evimed-evidence-store'])
+export const HOST_PLUGIN_IDS = Object.freeze(['evimed-runtime-ui', 'evimed-seam-probe', 'evimed-evidence-store'])
 export const AGENT_PLUGIN_IDS = Object.freeze(['evimed-guidance', 'evimed-run-policy', 'evimed-evidence', 'evimed-capsule', 'evimed-screening', 'evimed-review'])
 
 /** The single composition. There is no second one, and adding one is a design change. */
@@ -27,6 +30,7 @@ export const PRESET_NAME = 'evimed-universal'
 
 /** Module specifiers, so the packaging test can assert every row resolves. */
 export const PLUGIN_SPECIFIERS = Object.freeze({
+  'evimed-runtime-ui': './index.mjs',
   'evimed-seam-probe': './plugins/seam-probe.mjs',
   'evimed-evidence-store': './plugins/evidence-store.mjs',
   'evimed-guidance': './plugins/guidance.mjs',

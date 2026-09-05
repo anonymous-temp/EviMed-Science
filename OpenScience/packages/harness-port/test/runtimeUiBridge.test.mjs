@@ -129,3 +129,24 @@ test('the latest reconnect create intent is idempotent across ready-triggered re
   assert.equal(f.sent.filter(row => row.message.requestId === 'retained' && row.message.ok).length, 2);
   f.ctx.dispose();
 });
+
+test('retransmission while native create is already in flight joins that request', async () => {
+  const f = fixture();
+  /** @type {any} */ let releaseCreate;
+  let creates = 0;
+  f.ctx.sessions.create = (/** @type {{sessionId:string}} */ { sessionId }) => {
+    creates++;
+    return new Promise(resolve => { releaseCreate = () => resolve(sessionId); });
+  };
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate(); await settle();
+  f.replaceGeneration(); await settle();
+  f.navigate({ seq: 2 }); await settle();
+  assert.equal(creates, 1);
+  releaseCreate(); await settle();
+  f.navigate({ seq: 3 }); await settle();
+  assert.equal(creates, 1);
+  assert.equal(f.calls.filter(row => row[0] === 'draft').length, 1);
+  assert.equal(f.sent.filter(row => row.message.requestId === 'request-a' && row.message.ok).length, 2);
+  f.ctx.dispose();
+});
