@@ -42,6 +42,33 @@ CREATE TABLE IF NOT EXISTS evimed_inbox.preferences (
   revision integer NOT NULL DEFAULT 1,
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+DO $foreign_keys$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_inbox' AND t.relname='notifications' AND c.contype='f'
+      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
+  ) THEN
+    ALTER TABLE evimed_inbox.notifications ADD CONSTRAINT inbox_notifications_user_fk
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_inbox' AND t.relname='notifications' AND c.contype='f'
+      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)%'
+  ) THEN
+    ALTER TABLE evimed_inbox.notifications ADD CONSTRAINT inbox_notifications_project_fk
+      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_inbox' AND t.relname='preferences' AND c.contype='f'
+      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
+  ) THEN
+    ALTER TABLE evimed_inbox.preferences ADD CONSTRAINT inbox_preferences_user_fk
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+  END IF;
+END $foreign_keys$;
 `;
 
 /** @param {any} database */
