@@ -120,4 +120,29 @@ test("reservation retries cannot silently reuse another price or an expired requ
   await assert.rejects(ledger.reserveModel({ ...input, estimatedCost: input.estimatedCost + 0.01 }), { code: "usage_reservation_conflict" });
   await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 second' WHERE id=$1", [first.id]);
   await assert.rejects(ledger.reserveModel({ ...input }), { code: "usage_reservation_conflict" });
+  const past = reservation(owner, { now: new Date(Date.now() - 120_000), ttlMs: 60_000 });
+  await ledger.reserveModel(past);
+  await assert.rejects(ledger.reserveModel({ ...past }), { code: "usage_reservation_conflict" });
+});
+
+test("settlement and the next reservation serialize on the same account budget", options, async () => {
+  const first = await ledger.reserveModel(reservation(other, { estimatedCost: 0.4, dailyLimit: 1 }));
+  const blocker = await database.pool.connect();
+  await blocker.query("BEGIN");
+  await blocker.query("SELECT id FROM evimed_usage.model_requests WHERE id=$1 FOR UPDATE", [first.id]);
+  const settlement = ledger.settleModel(other, first.id, {
+    usage: { cacheHitTokens: 0, cacheMissTokens: 10, completionTokens: 10 },
+    actualCost: 0.9, priced: true,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const next = ledger.reserveModel(reservation(other, { estimatedCost: 0.2, dailyLimit: 1 }));
+  try {
+    const early = await Promise.race([next.then(() => "reserved", () => "rejected"), new Promise((resolve) => setTimeout(() => resolve("waiting"), 100))]);
+    assert.equal(early, "waiting", "a new reservation must wait for the in-flight settlement");
+  } finally {
+    await blocker.query("COMMIT");
+    blocker.release();
+  }
+  assert.equal((await settlement).status, "settled");
+  await assert.rejects(next, { code: "usage_budget_exceeded" });
 });
