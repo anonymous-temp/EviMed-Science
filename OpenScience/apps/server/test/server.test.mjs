@@ -310,10 +310,14 @@ test("specialty agent catalog requires authentication and exposes only public me
       "comprehensive-drug-evaluation",
       "dataset-research-scoping",
       "drug-selection",
+      "evidence-appraisal",
+      "geo-content",
+      "manuscript-support",
       "mendelian-randomization",
       "meta-analysis",
       "off-label-analysis",
       "peer-review",
+      "research-grant-development",
       "research-topic-selection",
     ]);
     assert.equal(body.data[0].title, "Drug Safety Analysis");

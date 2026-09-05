@@ -20,6 +20,10 @@ const bundledAgentPackagesDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../runtime/skills/evimed",
 );
+const bundledCapabilitiesDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../capabilities",
+);
 const bundledEviMedMcpDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../runtime/mcp/evimed-research",
@@ -206,6 +210,8 @@ export function loadConfig(overrides = {}) {
     (process.env.OPEN_SCIENCE_AGENT_PACKAGE_DIRS != null
       ? listEnv("OPEN_SCIENCE_AGENT_PACKAGE_DIRS")
       : [bundledAgentPackagesDir]);
+  const capabilityDirs = overrides.capabilityDirs ?? (process.env.OPEN_SCIENCE_CAPABILITY_DIRS != null
+    ? listEnv("OPEN_SCIENCE_CAPABILITY_DIRS") : [bundledCapabilitiesDir]);
   const configuredMcpSourceDir =
     overrides.evimedMcpSourceDir ??
     process.env.OPEN_SCIENCE_EVIMED_MCP_SOURCE_DIR ??
@@ -777,6 +783,7 @@ export function loadConfig(overrides = {}) {
     runtimeContainerUser: overrides.runtimeContainerUser ?? process.env.OPEN_SCIENCE_RUNTIME_CONTAINER_USER ?? "",
     runtimeSkillDirs: runtimeSkillDirs.map((dir) => (path.isAbsolute(dir) ? dir : path.join(rootDir, dir))),
     agentPackageDirs: agentPackageDirs.map((dir) => (path.isAbsolute(dir) ? dir : path.join(rootDir, dir))),
+    capabilityDirs: capabilityDirs.map((dir) => (path.isAbsolute(dir) ? dir : path.join(rootDir, dir))),
     evimedMcpSourceDir: path.isAbsolute(configuredMcpSourceDir)
       ? configuredMcpSourceDir
       : path.join(rootDir, configuredMcpSourceDir),

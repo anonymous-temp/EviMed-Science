@@ -2,7 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
-import { MCP_TOOL_BASE_NAMES } from "@evimed/domain";
+import { MCP_TOOL_BASE_NAMES, validateCapabilityManifest } from "@evimed/domain";
 
 const idPattern = /^[a-z0-9][a-z0-9-]{1,62}$/;
 // The server publishes bare names; a kernel adds its own prefix when it
@@ -11,6 +11,7 @@ const toolPattern = /^[a-z][a-z0-9_]{1,95}$/;
 const inputPattern = /^[a-z][A-Za-z0-9]{0,63}$/;
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 const manifestFileName = "agent.yaml";
+const capabilityManifestFileName = "capability.yaml";
 const skillFileName = "SKILL.md";
 const maxManifestBytes = 128 * 1024;
 const maxSkillBytes = 1024 * 1024;
@@ -64,6 +65,8 @@ export const EVIMED_AGENT_DATA_SOURCES = new Set([
   "local-gwas",
   "bibliometric-records",
   "reporting-guidelines",
+  "answering-engines",
+  "funding-calls",
 ]);
 
 export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([
@@ -341,6 +344,7 @@ class AgentRegistry {
  */
 export async function loadAgentRegistry({
   packageDirs,
+  capabilityDirs = [],
   allowedToolIds = EVIMED_AGENT_TOOL_IDS,
   allowedDataSources = EVIMED_AGENT_DATA_SOURCES,
   allowedCompletionChecks = EVIMED_AGENT_COMPLETION_CHECKS,
@@ -388,6 +392,60 @@ export async function loadAgentRegistry({
       if (ids.has(manifest.id)) throw registryError(`Duplicate agent id "${manifest.id}".`);
       ids.add(manifest.id);
       packages.push({ manifest, packageDir, manifestPath, skillPath, skillText });
+    }
+  }
+
+  if (!Array.isArray(capabilityDirs)) throw registryError("Capability roots must be an array.", "agent_package_config_invalid");
+  for (const capabilityRoot of capabilityDirs) {
+    if (typeof capabilityRoot !== "string" || !path.isAbsolute(capabilityRoot)) {
+      throw registryError("Capability roots must be absolute paths.", "agent_package_config_invalid");
+    }
+    await assertDirectoryNoFollow(capabilityRoot, `Capability root "${capabilityRoot}"`);
+    const entries = (await fsp.readdir(capabilityRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .sort((left, right) => left.name.localeCompare(right.name, "en"));
+    for (const entry of entries) {
+      const packageDir = path.join(capabilityRoot, entry.name);
+      const manifestPath = path.join(packageDir, capabilityManifestFileName);
+      const skillPath = path.join(packageDir, skillFileName);
+      const raw = parseYaml(
+        await readRegularFileNoFollow(manifestPath, `${entry.name}/${capabilityManifestFileName}`, maxManifestBytes),
+        `${entry.name}/${capabilityManifestFileName}`,
+      );
+      const capability = validateCapabilityManifest(raw);
+      if (!capability.ok || !capability.manifest) {
+        throw registryError(`${entry.name}/${capabilityManifestFileName} is invalid: ${capability.issues.map((issue) => issue.message).join("; ")}`);
+      }
+      const source = capability.manifest;
+      const tools = source.tools.map((tool) => tool.replace(/^mcp__evimed__/, ""));
+      const outputs = source.produces.flatMap((product) => product.outputs);
+      const checks = [...new Set(source.produces.flatMap((product) => product.checks))];
+      const mapped = validateManifest({
+        id: source.id,
+        version: source.version,
+        title: source.title,
+        category: source.category,
+        description: source.description,
+        skill: source.id,
+        companionSkills: source.skills.filter((skill) => skill !== source.id),
+        estimatedMinutes: source.estimatedMinutes,
+        starterPrompts: source.starterPrompts,
+        requiredInputs: source.inputs.required,
+        optionalInputs: source.inputs.optional,
+        requiredTools: tools,
+        optionalTools: [],
+        dataSources: source.dataSources,
+        outputs,
+        completionChecks: checks,
+      }, entry.name, toolIds, dataSources, completionChecks);
+      const skillText = await readRegularFileNoFollow(skillPath, `${entry.name}/${skillFileName}`, maxSkillBytes);
+      if (parseSkillName(skillText, `${entry.name}/${skillFileName}`) !== mapped.skill) {
+        throw registryError(`${entry.name}/${skillFileName} frontmatter name must be "${mapped.skill}".`);
+      }
+      const replacement = { manifest: mapped, packageDir, manifestPath, skillPath, skillText };
+      const existingIndex = packages.findIndex((candidate) => candidate.manifest.id === mapped.id);
+      if (existingIndex >= 0) packages[existingIndex] = replacement;
+      else { ids.add(mapped.id); packages.push(replacement); }
     }
   }
 
