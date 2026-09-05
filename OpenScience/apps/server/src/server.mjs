@@ -22,7 +22,7 @@ import { CoverageJudge } from "./coverageJudge.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService } from "./notificationService.mjs";
@@ -36,6 +36,7 @@ import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbe
 import { MemosClient } from "./memosClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemOsClient } from "./memOsEngineClient.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
@@ -47,6 +48,8 @@ import { SourceService } from "./sourceService.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
+import { OpenListClient } from "./openListClient.mjs";
+import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
 import { AutopilotService } from "./autopilotService.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
@@ -108,6 +111,11 @@ function originFor(value) {
   } catch {
     return null;
   }
+}
+
+function minimumPositive(...values) {
+  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return positive.length ? Math.min(...positive) : 0;
 }
 
 function isLocalDevelopmentOrigin(origin) {
@@ -467,13 +475,20 @@ export function createWebApiApp(overrides = {}) {
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
-  const sourceRoutes = createSourceRoutes({ store, service: sourceService, maxJsonBytes: config.maxJsonBytes });
   const documentParser = new DocumentParserClient({
     baseUrl: config.documentParserUrl,
     token: config.documentParserToken,
     timeoutMs: config.documentParserTimeoutMs,
     fetchImpl: overrides.documentParserFetch ?? globalThis.fetch,
   });
+  const openListClient = config.openListUrl && config.openListToken && !config.openListTokenError
+    ? new OpenListClient({
+      baseUrl: config.openListUrl, token: config.openListToken, timeoutMs: Math.min(300_000, config.documentParserTimeoutMs),
+      maxDownloadBytes: config.openListMaxDownloadBytes, fetchImpl: overrides.openListFetch ?? globalThis.fetch,
+    }) : null;
+  const openListConnector = openListClient
+    ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot }) : null;
+  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, maxJsonBytes: config.maxJsonBytes });
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);
     if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
@@ -486,19 +501,75 @@ export function createWebApiApp(overrides = {}) {
     pollMs: config.sourceIngestionPollMs,
     leaseMs: config.sourceIngestionLeaseMs,
     resolveSource: async (job, source) => {
-      if (!["upload", "internal"].includes(source.payload.connector?.type)) {
+      const connectorType = source.payload.connector?.type;
+      if (!["upload", "internal", "openlist"].includes(connectorType)) {
         throw new HttpError(503, "source_connector_unavailable", "This source connector is not available to the ingestion worker.");
       }
       const project = await sourceProject(job);
-      const relative = source.payload.paths?.[0];
-      if (typeof relative !== "string") throw new HttpError(400, "source_path_invalid", "Source path is invalid.");
-      const full = resolveScopedPath(project.baseDir, relative);
-      await assertNoSymlinkPath(project.baseDir, full);
-      return full;
+      let localPath;
+      if (connectorType === "openlist") {
+        if (!openListConnector) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
+        const remotePath = source.payload.connector?.id;
+        const buffer = await openListConnector.read(job.userId, remotePath);
+        const expectedSize = Number(source.payload.fingerprint?.size);
+        const actualHash = createHash("sha256").update(buffer).digest("hex");
+        if (buffer.length !== expectedSize || actualHash !== source.payload.fingerprint?.sha256) {
+          throw new HttpError(409, "openlist_source_changed", "The OpenList file changed after it was registered; refresh the source before analysis.");
+        }
+        const name = path.posix.basename(String(remotePath));
+        const relative = `knowledge-base/.evimed-openlist-staging/${source.id}/${job.id}/${name}`;
+        const full = resolveScopedPath(project.baseDir, relative);
+        await withProjectStorageMutation(project, async () => {
+          await assertProjectCapacity(project, full, buffer.length, config);
+          await writeFileAtomicNoFollow(project.baseDir, full, buffer, { mode: 0o600 });
+        });
+        localPath = full;
+      } else {
+        const relative = source.payload.paths?.[0];
+        if (typeof relative !== "string") throw new HttpError(400, "source_path_invalid", "Source path is invalid.");
+        localPath = resolveScopedPath(project.baseDir, relative);
+        await assertNoSymlinkPath(project.baseDir, localPath);
+      }
+      if (!config.documentParserUrl) return localPath;
+      if (!config.documentParserStagingDir) throw new HttpError(503, "document_parser_staging_unconfigured", "Document parser staging is unavailable.");
+      const opened = await openScopedFileNoFollow(project.baseDir, localPath);
+      let bytes;
+      try {
+        if (opened.stat.size > config.openListMaxDownloadBytes) {
+          throw new HttpError(413, "source_parser_input_too_large", "Use the local analysis agent for files above the hosted parser limit.");
+        }
+        bytes = await opened.handle.readFile();
+      } finally { await opened.handle.close(); }
+      const actualHash = createHash("sha256").update(bytes).digest("hex");
+      if (actualHash !== source.payload.fingerprint?.sha256 || bytes.length !== Number(source.payload.fingerprint?.size)) {
+        throw new HttpError(409, "source_changed", "The source changed after it was registered; refresh it before analysis.");
+      }
+      const stagingRoot = path.resolve(config.documentParserStagingDir);
+      const stagingRelative = `${job.id}/${path.basename(localPath)}`;
+      const stagingPath = resolveScopedPath(stagingRoot, stagingRelative);
+      await writeFileAtomicNoFollow(stagingRoot, stagingPath, bytes, { mode: 0o600 });
+      await fsp.chown(path.dirname(stagingPath), config.documentParserUid, config.documentParserGid);
+      await fsp.chown(stagingPath, config.documentParserUid, config.documentParserGid);
+      return { localPath, stagingPath, parserPath: `/data/${job.id}/${path.basename(localPath)}` };
+    },
+    releaseResolved: async (job, source, resolved) => {
+      const project = await sourceProject(job);
+      const localPath = typeof resolved === "string" ? resolved : resolved.localPath;
+      if (typeof resolved !== "string" && resolved.stagingPath && config.documentParserStagingDir) {
+        const stagingRoot = path.resolve(config.documentParserStagingDir);
+        await assertNoSymlinkPath(stagingRoot, resolved.stagingPath, { allowMissingTail: true });
+        await fsp.rm(path.dirname(resolved.stagingPath), { recursive: true, force: true });
+      }
+      if (source.payload.connector?.type === "openlist") {
+        await assertNoSymlinkPath(project.baseDir, localPath, { allowMissingTail: true });
+        await fsp.rm(path.dirname(localPath), { recursive: true, force: true });
+      }
     },
     materialize: async (job, source, result) => {
       const project = await sourceProject(job);
-      const relative = `knowledge-base/.evimed-derived/${source.id}/index.md`;
+      const generation = Number(source.payload?.generation);
+      if (!Number.isSafeInteger(generation) || generation < 1) throw new HttpError(409, "source_generation_stale", "Source generation is invalid.");
+      const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}/index.md`;
       const full = resolveScopedPath(project.baseDir, relative);
       const original = source.payload.paths?.[0] ?? source.id;
       const value = [
@@ -516,6 +587,12 @@ export function createWebApiApp(overrides = {}) {
         await writeFileAtomicNoFollow(project.baseDir, full, value, { encoding: "utf8", mode: 0o600 });
       });
       return relative;
+    },
+    discardMaterialized: async (job, _source, artifactPath) => {
+      const project = await sourceProject(job);
+      const full = resolveScopedPath(project.baseDir, artifactPath);
+      await assertNoSymlinkPath(project.baseDir, full, { allowMissingTail: true });
+      await fsp.rm(path.dirname(full), { recursive: true, force: true });
     },
   }) : null;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
@@ -648,20 +725,38 @@ export function createWebApiApp(overrides = {}) {
       runtimeEventPump.noteRun(project, run);
       if (autopilotService) {
         let claims = [];
-        const delta = (run.artifacts ?? []).find((artifact) => typeof artifact?.path === "string" && artifact.path.endsWith("agenda-delta.json"));
+        let deltaSchemaVersion = null;
+        let deltaErrorCode = null;
+        const delta = (run.artifacts ?? []).find((artifact) => typeof artifact === "string" && artifact.endsWith("agenda-delta.json"));
         if (delta) {
           try {
-            const file = resolveScopedPath(project.workspaceDir, delta.path);
+            const file = resolveScopedPath(project.workspaceDir, delta);
             const parsed = JSON.parse(String(await readFileNoFollow(project.workspaceDir, file, "utf8")));
+            deltaSchemaVersion = Number(parsed?.schemaVersion);
             if (Array.isArray(parsed?.claims)) claims = parsed.claims.slice(0, 500);
-          } catch { /* the delivery gate already reports malformed artifacts */ }
+            else deltaErrorCode = "agenda_delta_claims_invalid";
+          } catch { deltaErrorCode = "agenda_delta_unreadable"; }
         }
+        const boundedScope = runtimeManager.boundedRuntimeScope(project);
+        const episodeRecord = await autopilotService.episodeForRun(project.userId, project.id, run.id).catch(() => null)
+          ?? (String(run.effectiveRouteReason ?? "").startsWith("autopilot:") && run.dispatchId
+            ? await autopilotService.getEpisode(project.userId, run.dispatchId).catch(() => null) : null);
+        const episodeUsage = usageLedger ? await usageLedger.summaryRun(project.userId, episodeRecord?.id ?? boundedScope?.runId ?? run.id).catch(() => null) : null;
         await autopilotService.completeRun(project.userId, {
-          projectId: project.id, runId: run.id, status: run.status, claims, costCny: 0,
+          projectId: project.id, runId: run.id, episodeId: episodeRecord?.id ?? null, sessionId: run.sessionId,
+          status: run.status, deltaSchemaVersion, deltaErrorCode,
+          claims, artifacts: run.artifacts ?? [],
+          costCny: episodeUsage?.actualCost ?? 0,
         }).catch(async (error) => {
           await securityAudit(config, "autopilot.run.complete", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id,
             code: typeof error?.code === "string" ? error.code : "autopilot_completion_failed",
+          });
+        });
+        if (boundedScope) await runtimeManager.endBoundedRuntime(project, boundedScope.runId).catch(async (error) => {
+          await securityAudit(config, "autopilot.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
           });
         });
       }
@@ -793,51 +888,138 @@ export function createWebApiApp(overrides = {}) {
     };
     autopilotWorker = new AutopilotWorker({
       jobs: productJobs,
-      service: autopilotService,
-      pollMs: config.autopilotPollMs,
-      leaseMs: config.autopilotLeaseMs,
-      dispatchEpisode: async (episode) => {
+    service: autopilotService,
+    pollMs: config.autopilotPollMs,
+    leaseMs: config.autopilotLeaseMs,
+    busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleTimeoutMs) + 60_000)),
+    cancelDispatched: async ({ userId, projectId, sessionId }) => {
+      const user = await store.userById(userId);
+      if (!user) return;
+      const project = await store.requireProject(user, projectId);
+      let cancellationError = null;
+      try { await runtimeManager.cancelRuntimeSession(project, sessionId); }
+      catch (error) { cancellationError = error; }
+      let ledgerError = null;
+      try { await agentRuns.cancelSession(project, sessionId); }
+      catch (error) { ledgerError = error; }
+      const boundedScope = runtimeManager.boundedRuntimeScope(project);
+      let stopError = null;
+      if (boundedScope) {
+        try { await runtimeManager.endBoundedRuntime(project, boundedScope.runId); }
+        catch (error) { stopError = error; }
+        if (!stopError) cancellationError = null;
+      }
+      const failures = [cancellationError, ledgerError, stopError].filter(Boolean);
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) {
+        const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot cancellation did not complete."));
+        combined.code = failures[0]?.code ?? "autopilot_cancellation_failed";
+        throw combined;
+      }
+    },
+    dispatchEpisode: async (episode) => {
         const user = await store.userById(episode.userId);
         if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
         const project = await store.requireProject(user, episode.projectId);
+        const agenda = await autopilotService.get(user.id, episode.agendaId);
         if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
-          dailyLimit: Number(episode.budgetCny) || 0,
-          weeklyLimit: Number((await autopilotService.get(user.id, episode.agendaId)).payload.weeklyBudgetCny) || 0,
+          dailyLimit: Number(agenda.payload.dailyBudgetCny) || 0,
+          weeklyLimit: Number(agenda.payload.weeklyBudgetCny) || 0,
         });
         const registry = await agentRegistry;
         const selected = registry.get(episodeAgents[episode.taskType]);
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-        const session = await runtimeManager.createRuntimeSession(project);
-        runtimeEventPump.noteMintedSession(project, session.id);
-        await researchSessions.put(project, session.id, {
-          mode: "specialist", agentId: selected.id, agentVersion: selected.version,
+        const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
+        const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
+        const session = await runtimeManager.reserveBoundedRuntimeSession(project, {
+          runId: episode.episodeId,
+          dailyLimit,
+          weeklyLimit,
+          runLimit: Number(episode.budgetCny),
         });
-        const run = await agentRuns.dispatch(project, {
-          sessionId: session.id,
-          dispatchId: episode.dispatchId,
-          question: episode.prompt,
-          effectiveAgentId: selected.id,
-          effectiveAgentVersion: selected.version,
-          effectiveRuntimeAgent: selected.runtimeAgent,
-          effectiveRouteReason: `autopilot:${episode.taskType}`,
-        }, async (binding, dispatchedRun, repairText = null) => {
-          const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
-          let memories = [];
-          let memoryError = null;
-          try { memories = await memosClient.relevant(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
-          catch (error) {
-            memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
-            if (config.requireMemos) throw error;
+        try {
+          runtimeEventPump.noteMintedSession(project, session.id);
+          await researchSessions.put(project, session.id, {
+            mode: "specialist", agentId: selected.id, agentVersion: selected.version,
+          });
+          const run = await agentRuns.dispatch(project, {
+            sessionId: session.id,
+            dispatchId: episode.dispatchId,
+            question: episode.prompt,
+            effectiveAgentId: selected.id,
+            effectiveAgentVersion: selected.version,
+            effectiveRuntimeAgent: selected.runtimeAgent,
+            effectiveRouteReason: `autopilot:${episode.taskType}`,
+          }, async (binding, dispatchedRun, repairText = null) => {
+            try {
+              await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
+            } catch (error) {
+              await autopilotService.queueDispatchedCancellation(user.id, episode.episodeId, { runId: dispatchedRun.id, sessionId: session.id });
+              throw error;
+            }
+            const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
+            let memories = [];
+            let memoryError = null;
+            try { memories = await memosClient.relevant(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
+            catch (error) {
+              memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
+              if (config.requireMemos) throw error;
+            }
+            const prepared = await prepareResearchContext(project, binding, config, {
+              query: episode.prompt, memories, memoryError, specialists: [], routedSpecialist: null,
+            });
+            const budgetMarker = issueModelGatewayBudgetMarker({
+              secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
+              runId: episode.episodeId, dailyLimit,
+              weeklyLimit, runLimit: Number(episode.budgetCny),
+            });
+            return runtimeManager.dispatchPrompt(project, session.id, {
+              text: `<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}\n${promptText}`,
+              system: prepared.system, agent: selected.runtimeAgent, strictContext: true,
+              model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
+            });
+          });
+          if (run.status === "running") {
+            await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: run.id, sessionId: session.id });
           }
-          const prepared = await prepareResearchContext(project, binding, config, {
-            query: episode.prompt, memories, memoryError, specialists: [], routedSpecialist: null,
-          });
-          return runtimeManager.dispatchPrompt(project, session.id, {
-            text: promptText, system: prepared.system, agent: selected.runtimeAgent,
-            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id,
-          });
-        });
-        return { runId: run.id, sessionId: session.id };
+          return { runId: run.id, sessionId: session.id };
+        } catch (error) {
+          const existing = (await agentRuns.list(project)).find((run) => run.dispatchId === episode.dispatchId);
+          if (existing) {
+            if (existing.status !== "running") return { runId: existing.id, sessionId: session.id };
+            const currentEpisode = await autopilotService.getEpisode(user.id, episode.episodeId).catch(() => null);
+            if (currentEpisode && ["merged", "failed", "canceled", "verifying"].includes(currentEpisode.payload.status)
+              && currentEpisode.payload.runId === existing.id) {
+              return { runId: existing.id, sessionId: session.id };
+            }
+            try {
+              await autopilotService.markEpisodeDispatched(user.id, episode.episodeId, { runId: existing.id, sessionId: session.id });
+              return { runId: existing.id, sessionId: session.id };
+            } catch (bindingError) {
+              try {
+                await autopilotService.queueDispatchedCancellation(user.id, episode.episodeId, { runId: existing.id, sessionId: session.id });
+                return { runId: existing.id, sessionId: session.id };
+              } catch (queueError) {
+                let releaseError = null;
+                try { await runtimeManager.endBoundedRuntime(project, episode.episodeId); }
+                catch (failure) { releaseError = failure; }
+                const failures = [bindingError, queueError, releaseError].filter(Boolean);
+                const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot run identity could not be persisted."));
+                combined.code = failures[0]?.code ?? "autopilot_dispatch_identity_failed";
+                throw combined;
+              }
+            }
+          }
+          let releaseError = null;
+          try { await runtimeManager.endBoundedRuntime(project, episode.episodeId); }
+          catch (failure) { releaseError = failure; }
+          if (releaseError) {
+            const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError([error, releaseError], "Autopilot initialization and runtime release failed."));
+            combined.code = error?.code ?? "autopilot_initialization_failed";
+            throw combined;
+          }
+          throw error;
+        }
       },
     });
   }
@@ -1000,7 +1182,7 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname === "/api/ready") {
-        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser);
+        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -1017,6 +1199,8 @@ export function createWebApiApp(overrides = {}) {
           usageLedger,
           notificationService,
           documentParser,
+          openList: openListConnector,
+          productDatabase,
           operationalMetrics,
           activeCommands,
         });
@@ -2843,8 +3027,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, operationalMetrics, activeCommands }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -3140,7 +3324,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null) {
+async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -3158,6 +3342,8 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
+    openList: await readinessCheck(async () => readinessOpenList(config, openList)),
+    relationalIntegrity: await readinessCheck(async () => readinessRelationalIntegrity(config, productDatabase)),
     security: await readinessCheck(() => readinessSecurity(config)),
     observability: await readinessCheck(() => readinessObservability(config)),
     evimedAdapters: await readinessCheck(() => readinessEviMedAdapters(config)),
@@ -3179,8 +3365,29 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
 async function readinessDocumentParser(config, parser) {
   if (!config.requireDocumentParser) return { required: false, configured: Boolean(config.documentParserUrl) };
   if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
-  if (!config.documentParserUrl || !config.documentParserToken || !parser) throw readinessFailure("document_parser_unconfigured");
+  if (![config.documentParserUid, config.documentParserGid].every((value) => Number.isSafeInteger(value) && value > 0 && value <= 65_535)) {
+    throw readinessFailure("document_parser_identity_invalid");
+  }
+  if (!config.documentParserUrl || !config.documentParserToken || !config.documentParserStagingDir || !parser) throw readinessFailure("document_parser_unconfigured");
   return { required: true, ...(await parser.health()) };
+}
+
+async function readinessOpenList(config, connector) {
+  if (!config.requireOpenList) return { required: false, configured: Boolean(config.openListUrl && config.openListToken) };
+  if (config.openListTokenError) throw readinessFailure(config.openListTokenError);
+  if (!config.openListUrl || !config.openListToken || !connector) throw readinessFailure("openlist_unconfigured");
+  return { required: true, ...(await connector.health()) };
+}
+
+async function readinessRelationalIntegrity(config, database) {
+  if (!database) return { required: false, configured: false };
+  const status = await relationalIntegrity(database);
+  if (config.production && !status.ok) {
+    throw readinessFailure("relational_integrity_unverified", {
+      orphanTotal: status.orphanTotal, missing: status.missing, unvalidated: status.unvalidated,
+    });
+  }
+  return { required: config.production, configured: true, validated: status.ok, orphanTotal: status.orphanTotal };
 }
 
 async function readinessUsageLedger(config, ledger) {

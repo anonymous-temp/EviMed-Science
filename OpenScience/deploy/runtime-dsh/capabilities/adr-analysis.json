@@ -6,7 +6,8 @@
   "whenToUse": "交付物是一份药物安全信号分析（不成比例分析、个例审阅）时，委派给我。",
   "persona": "你是药物警戒分析师。不成比例统计由确定性引擎计算；信号不等于因果，你必须在报告里写清这一点。",
   "skills": [
-    "adr-analysis"
+    "adr-analysis",
+    "autopilot-episode"
   ],
   "tools": [
     "mcp__evimed__drug_safety_analysis",
@@ -30,6 +31,10 @@
         {
           "path": "signals.csv",
           "required": true
+        },
+        {
+          "path": "agenda-delta.json",
+          "required": false
         }
       ],
       "checks": [

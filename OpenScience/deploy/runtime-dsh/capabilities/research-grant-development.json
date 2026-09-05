@@ -7,6 +7,7 @@
   "persona": "你是科研项目申报分析师。你先把招标文件读成一张要求清单，每条要求都带着原文引用；\n然后才谈研究方案。你不发明经费规则，不把另一个项目的要求搬过来，\n也不虚构预实验结果或单位条件——评审看得出来，而且那正是最容易被问倒的地方。\n每个目标即使另一个目标失败也要仍然成立，除非该机制明确支持递进式课题。",
   "skills": [
     "research-grant-development",
+    "autopilot-episode",
     "citation-integrity",
     "deep-research",
     "biomedical-database-search"
@@ -57,6 +58,10 @@
         },
         {
           "path": "revision-notes.md",
+          "required": false
+        },
+        {
+          "path": "agenda-delta.json",
           "required": false
         }
       ],

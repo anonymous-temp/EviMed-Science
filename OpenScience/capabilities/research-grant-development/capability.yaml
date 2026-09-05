@@ -19,6 +19,7 @@ persona: |
 safetyClass: general
 skills:
 - research-grant-development
+- autopilot-episode
 - citation-integrity
 - deep-research
 - biomedical-database-search
@@ -54,6 +55,8 @@ produces:
   - path: delivery-summary.md
     required: true
   - path: revision-notes.md
+    required: false
+  - path: agenda-delta.json
     required: false
   checks:
   - requiredOutputsExist

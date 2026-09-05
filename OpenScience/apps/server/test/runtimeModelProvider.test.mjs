@@ -120,6 +120,16 @@ test("model gateway runtime token is audience and project bound", () => {
   );
 });
 
+test("a bounded runtime token keeps its run limits after conversation compaction", () => {
+  const token = issueModelGatewayRuntimeToken({ secret, userId: "alice", projectId: "paper-1", nowSeconds: 1_000,
+    jti: "runtime-token-bounded", budgetScope: { runId: "episode_one", dailyLimit: 20, weeklyLimit: 80, runLimit: 8 } });
+  const payload = verifyModelGatewayRuntimeToken(token, { secret, userId: "alice", projectId: "paper-1", nowSeconds: 100_001 });
+  assert.equal(payload.runId, "episode_one");
+  assert.equal(payload.runLimit, 8);
+  assert.equal(payload.dailyLimit, 20);
+  assert.equal(payload.weeklyLimit, 80);
+});
+
 test("RuntimeManager accepts only the current active runtime token and rejects it after stop", async (t) => {
   const manager = new RuntimeManager({
     deepseekProviderEnabled: true,

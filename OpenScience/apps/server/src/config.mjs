@@ -386,6 +386,14 @@ export function loadConfig(overrides = {}) {
     codePrefix: "document_parser_token",
     defaultFile: localSecretFile("document-parser.token"),
   });
+  const openListSecret = preferredFileSecret(overrides, {
+    overrideValue: "openListToken",
+    overrideFile: "openListTokenFile",
+    valueEnv: "OPEN_SCIENCE_OPENLIST_TOKEN",
+    fileEnv: "OPEN_SCIENCE_OPENLIST_TOKEN_FILE",
+    codePrefix: "openlist_token",
+    defaultFile: localSecretFile("openlist.token"),
+  });
   const databaseSecret = preferredFileSecret(overrides, {
     overrideValue: "databaseUrl",
     overrideFile: "databaseUrlFile",
@@ -1050,6 +1058,20 @@ export function loadConfig(overrides = {}) {
     documentParserTimeoutMs: Number(
       overrides.documentParserTimeoutMs ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS ?? 900_000,
     ),
+    documentParserStagingDir: String(
+      overrides.documentParserStagingDir ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_STAGING_DIR ?? "",
+    ),
+    documentParserUid: Number(overrides.documentParserUid ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_UID ?? 1000),
+    documentParserGid: Number(overrides.documentParserGid ?? process.env.OPEN_SCIENCE_DOCUMENT_PARSER_GID ?? 1000),
+    openListUrl: String(overrides.openListUrl ?? process.env.OPEN_SCIENCE_OPENLIST_URL ?? "").replace(/\/+$/, ""),
+    openListToken: openListSecret.value,
+    openListTokenSource: openListSecret.source,
+    openListTokenError: openListSecret.error,
+    openListTenantRoot: String(overrides.openListTenantRoot ?? process.env.OPEN_SCIENCE_OPENLIST_TENANT_ROOT ?? "/tenants"),
+    openListMaxDownloadBytes: Number(
+      overrides.openListMaxDownloadBytes ?? process.env.OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES ?? 64 * 1024 * 1024,
+    ),
+    requireOpenList: overrides.requireOpenList ?? boolEnv("OPEN_SCIENCE_REQUIRE_OPENLIST", false),
     sourceIngestionEnabled:
       overrides.sourceIngestionEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_INGESTION_ENABLED", production),
     requireDocumentParser:

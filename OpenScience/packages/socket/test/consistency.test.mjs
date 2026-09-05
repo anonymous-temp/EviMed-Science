@@ -531,9 +531,13 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   // The brief index is where the run's identity comes from.
   ctx.provide("fs", {
     resolve: async (/** @type {any} */ relative, /** @type {{ cwd?: string }} */ { cwd }) => `${cwd}/${relative}`,
-    readText: async (/** @type {any} */ target) => (target.endsWith(workspaceLayout.briefIndexFile)
-      ? JSON.stringify({ runId: "run_42", budget: { maxSteps: 10, maxTokens: 100, maxChildren: 2 } })
-      : null),
+    readText: async (/** @type {any} */ target) => {
+      if (target.endsWith(".evimed-brief/sessions/s-mirror/index.json")) {
+        return JSON.stringify({ runId: "run_42", budget: { maxSteps: 10, maxTokens: 100, maxChildren: 2 } });
+      }
+      if (target.endsWith(workspaceLayout.briefIndexFile)) return JSON.stringify({ runId: "stale-run" });
+      return null;
+    },
   });
 
   await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 2, bundleVersion: "0.1.0" });

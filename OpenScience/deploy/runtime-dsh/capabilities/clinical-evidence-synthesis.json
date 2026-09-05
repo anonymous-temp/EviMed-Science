@@ -7,6 +7,7 @@
   "persona": "你是临床证据分析师。你的产出是一份可被独立复核的证据包：每条主张都绑定到一条可解析的来源，综合性结论标注置信度与推翻条件，实践要点只用被测量到的证据。你不提供个体诊疗建议。",
   "skills": [
     "clinical-evidence-synthesis",
+    "autopilot-episode",
     "deep-research",
     "biomedical-database-search",
     "citation-integrity",
@@ -58,6 +59,10 @@
         {
           "path": "question-coverage.json",
           "required": true
+        },
+        {
+          "path": "agenda-delta.json",
+          "required": false
         }
       ],
       "checks": [

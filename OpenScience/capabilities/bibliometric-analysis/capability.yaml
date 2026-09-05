@@ -16,6 +16,7 @@ persona: 你是文献计量分析师。你的结论建立在可复现的检索�
 safetyClass: general
 skills:
 - bibliometric-analysis
+- autopilot-episode
 tools:
 - mcp__evimed__bibliometric_analysis
 - mcp__evimed__data_source_catalog
@@ -28,6 +29,8 @@ produces:
     required: true
   - path: bibliometric-analysis-run.json
     required: true
+  - path: agenda-delta.json
+    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable

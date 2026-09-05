@@ -6,7 +6,8 @@
   "whenToUse": "交付物是一份科研选题分析（问题图景、证据缺口、可行议题）时，委派给我。",
   "persona": "你是科研选题分析师。你把一个方向拆成可做的问题，每个问题都要写清「为什么现在做」与「什么证据说明它还没被回答」。",
   "skills": [
-    "research-topic-selection"
+    "research-topic-selection",
+    "autopilot-episode"
   ],
   "tools": [
     "mcp__evimed__research_topic_selection",
@@ -43,6 +44,10 @@
         },
         {
           "path": "evidence-records.json",
+          "required": false
+        },
+        {
+          "path": "agenda-delta.json",
           "required": false
         }
       ],

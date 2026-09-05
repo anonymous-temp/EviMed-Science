@@ -16,6 +16,7 @@ const CONNECTOR_TYPES = Object.freeze(["upload", "openlist", "local-agent", "int
 const UNIT_TYPES = Object.freeze(["page", "slide", "segment", "column", "chunk", "row_group"]);
 const UNIT_STATUSES = Object.freeze(["extracted", "indexed_only", "no_content", "failed"]);
 const shaPattern = /^[a-f0-9]{64}$/;
+const registrationLocks = new Map();
 
 /** @param {unknown} value @param {string} field @param {number} max */
 function text(value, field, max = 512) {
@@ -117,6 +118,7 @@ export class SourceService {
     const providerHash = input.providerHash == null ? null : text(input.providerHash, "provider hash", 256);
     const sourceId = `src_${digest(`${projectId}\0${sha256}`).slice(0, 32)}`;
     const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${file}`).slice(0, 32)}`;
+    return this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
     let exact = await this.documents.get(userId, "source", sourceId);
     if (exact) {
       if (exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
@@ -130,7 +132,9 @@ export class SourceService {
           exact = await this.documents.get(userId, "source", sourceId);
         }
       }
-      return { source: exact, duplicate: true, job: null };
+      const job = ["queued", "parsing", "failed"].includes(exact.payload.status)
+        ? await this.enqueue(exact, userId, { rearmFailed: true }) : null;
+      return { source: exact, duplicate: true, job };
     }
     const family = await this.documents.list(userId, "source", { projectId, filter: { familyId }, limit: 100 });
     const [docType, depth, reason] = classify(file);
@@ -163,15 +167,15 @@ export class SourceService {
       if (!exact) throw error;
       return { source: exact, duplicate: true, job: null };
     }
-    const job = await this.jobs.enqueue(userId, "ingest", {
-      sourceId, sourceRevision: exact.revision, sourceGeneration: exact.payload.generation, extractorVersion: this.extractorVersion,
-    }, { idempotencyKey: `ingest:${sourceId}:${this.extractorVersion}`, projectId });
+    const job = await this.enqueue(exact, userId);
     return { source: exact, duplicate: false, job };
+    });
   }
 
   /** @param {string} userId @param {string} sourceId @param {Record<string,any>} input */
   async recordExtraction(userId, sourceId, input) {
     const current = await this.requireSource(userId, sourceId);
+    if (current.payload.status !== "parsing") throw new HttpError(409, "source_state_conflict", "The source is no longer being parsed.");
     if (input.generation != null) {
       if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this result.");
     } else if (input.expectedRevision !== current.revision) {
@@ -211,11 +215,12 @@ export class SourceService {
       coverage: {
         total: units.length,
         accounted: units.length,
+        accountedPercent: 100,
         extracted: units.filter((unit) => unit.status === "extracted").length,
         indexedOnly: units.filter((unit) => unit.status === "indexed_only").length,
         noContent: units.filter((unit) => unit.status === "no_content").length,
         failed,
-        percent: 100,
+        percent: Number((((units.length - failed) / units.length) * 100).toFixed(2)),
         omissionRate,
         units,
         auditedAt: this.now().toISOString(),
@@ -246,9 +251,7 @@ export class SourceService {
       override: { docType, depth, reason, at: this.now().toISOString() },
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
-    await this.jobs.enqueue(userId, "ingest", {
-      sourceId, sourceRevision: updated.revision, sourceGeneration: updated.payload.generation, extractorVersion: this.extractorVersion, reason: "override",
-    }, { idempotencyKey: `ingest:${sourceId}:override:${updated.revision}`, projectId: current.projectId });
+    await this.enqueue(updated, userId);
     return updated;
   }
 
@@ -258,7 +261,8 @@ export class SourceService {
     if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before updating it.");
     const at = this.now().toISOString();
     return this.documents.put(userId, "source", sourceId, {
-      ...current.payload, status: "missing", missingAt: at, updatedAt: at,
+      ...current.payload, status: "missing", generation: (Number(current.payload.generation) || 1) + 1,
+      missingAt: at, updatedAt: at,
     }, { expectedRevision: current.revision, projectId: current.projectId });
   }
 
@@ -267,6 +271,7 @@ export class SourceService {
   async beginIngestion(userId, sourceId, input) {
     const current = await this.requireSource(userId, sourceId);
     if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this job.");
+    if (current.payload.status === "parsing") return current;
     if (!["queued", "failed"].includes(current.payload.status)) throw new HttpError(409, "source_state_conflict", "This source is not ready for processing.");
     return this.documents.put(userId, "source", sourceId, {
       ...current.payload, status: "parsing", error: null, updatedAt: this.now().toISOString(),
@@ -276,6 +281,7 @@ export class SourceService {
   /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,generation?:number,code:string,message?:string}} input */
   async recordFailure(userId, sourceId, input) {
     const current = await this.requireSource(userId, sourceId);
+    if (current.payload.status !== "parsing") throw new HttpError(409, "source_state_conflict", "The source is no longer being parsed.");
     if (input.generation != null) {
       if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this failure.");
     } else if (input.expectedRevision !== current.revision) {
@@ -310,7 +316,8 @@ export class SourceService {
       throw new HttpError(409, "source_state_conflict", "This source is no longer processing.");
     }
     return this.documents.put(userId, "source", sourceId, {
-      ...current.payload, status: "canceled", updatedAt: this.now().toISOString(),
+      ...current.payload, status: "canceled", generation: (Number(current.payload.generation) || 1) + 1,
+      updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
   }
 
@@ -326,9 +333,7 @@ export class SourceService {
       generation: (Number(current.payload.generation) || 1) + 1,
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
-    await this.jobs.enqueue(userId, "ingest", {
-      sourceId, sourceRevision: updated.revision, sourceGeneration: updated.payload.generation, extractorVersion: this.extractorVersion, reason: "retry",
-    }, { idempotencyKey: `ingest:${sourceId}:retry:${updated.revision}`, projectId: current.projectId, rearmFailed: true });
+    await this.enqueue(updated, userId, { rearmFailed: true });
     return updated;
   }
 
@@ -355,5 +360,52 @@ export class SourceService {
     const result = Number(value);
     if (!Number.isSafeInteger(result) || result < 0 || result > 1_000_000) throw new HttpError(400, "source_output_invalid", `${field} count is invalid.`);
     return result;
+  }
+
+  async enqueue(source, userId, { rearmFailed = false, keySuffix = "" } = {}) {
+    return this.jobs.enqueue(userId, "ingest", {
+      sourceId: source.id, sourceGeneration: source.payload.generation,
+      extractorVersion: this.extractorVersion,
+    }, { idempotencyKey: `ingest:${source.id}:generation:${source.payload.generation}${keySuffix}`, projectId: source.projectId, rearmFailed });
+  }
+
+  async withRegistrationLocks(keys, operation) {
+    const held = [];
+    for (const key of [...new Set(keys)].sort()) {
+      const previous = registrationLocks.get(key) ?? Promise.resolve();
+      /** @type {() => void} */
+      let release = () => {};
+      const gate = new Promise((resolve) => { release = () => resolve(undefined); });
+      const tail = previous.then(() => gate);
+      registrationLocks.set(key, tail);
+      await previous;
+      held.push({ key, tail, release });
+    }
+    try { return await operation(); }
+    finally {
+      for (const item of held.reverse()) {
+        item.release();
+        void item.tail.finally(() => { if (registrationLocks.get(item.key) === item.tail) registrationLocks.delete(item.key); });
+      }
+    }
+  }
+
+  /** Repair the write-before-enqueue crash window and re-arm failed outbox jobs. */
+  async reconcileJobs() {
+    const database = this.documents.database;
+    if (!database) return { scanned: 0, enqueued: 0 };
+    const result = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents d
+      WHERE kind='source' AND deleted_at IS NULL AND payload->>'status'=ANY($1::text[])
+      AND NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.kind='ingest'
+        AND j.payload->>'sourceId'=d.id AND j.payload->>'sourceGeneration'=d.payload->>'generation'
+        AND j.status IN ('queued','running','succeeded'))
+      ORDER BY updated_at,id LIMIT 100`, [["queued", "parsing", "failed"]]);
+    let enqueued = 0;
+    for (const row of result.rows) {
+      await this.enqueue({ id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload }, row.user_id,
+        { rearmFailed: true, keySuffix: `:reconcile:${row.revision}` });
+      enqueued += 1;
+    }
+    return { scanned: result.rows.length, enqueued };
   }
 }

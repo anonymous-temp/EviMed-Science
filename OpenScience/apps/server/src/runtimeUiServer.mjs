@@ -37,11 +37,12 @@ function assertBrowserOrigin(req, config) {
 }
 
 /** @param {Record<string, any>} config @param {any} project @param {string} method */
-async function authorizeMethod(config, project, method, boundWorkspace = false, usageLedger = null) {
+async function authorizeMethod(config, project, method, boundWorkspace = false, usageLedger = null, runtimeManager = null) {
   if (isDeniedRuntimeUiMethod(method) && !(method === "workspace/create" && boundWorkspace)) {
     throw new HttpError(403, "runtime_ui_method_denied", `${method} is not available in the hosted surface.`);
   }
   if (RUNTIME_UI_SPENDING_METHODS.has(method)) {
+    runtimeManager?.assertInteractiveRuntimeAvailable(project);
     if (usageLedger) await usageLedger.assertWithinLimits(project.userId, {
       dailyLimit: Number(config.userDailySpendLimit) || 0,
       weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
@@ -180,7 +181,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     // around. It is this method and not the runtime's start, because starting
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
-    await authorizeMethod(config, project, method, boundWorkspace, usageLedger);
+    await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager);
     await runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
@@ -216,7 +217,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
-          await authorizeMethod(config, project, endpoint, false, usageLedger);
+          await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize });
       } catch (error) {

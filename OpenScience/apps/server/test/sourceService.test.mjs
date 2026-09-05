@@ -106,6 +106,7 @@ test("exact content is deduplicated while a changed path remains in one version 
 test("coverage accounts for every source unit and deep omissions require attention", async () => {
   const { service } = fixture();
   const { source } = await service.register("user-one", upload());
+  const processing = await service.beginIngestion("user-one", source.id, { generation: source.payload.generation });
   const units = Array.from({ length: 20 }, (_, index) => ({
     id: `page-${index + 1}`,
     unitType: "page",
@@ -113,7 +114,7 @@ test("coverage accounts for every source unit and deep omissions require attenti
     itemIds: index === 0 ? [] : [`claim-${index + 1}`],
   }));
   const reviewed = await service.recordExtraction("user-one", source.id, {
-    expectedRevision: source.revision,
+    expectedRevision: processing.revision,
     extractor: { name: "mineru", version: "3.4.5", parser: "mineru" },
     units,
     summary: "A protocol about a randomized clinical study.",
@@ -122,12 +123,15 @@ test("coverage accounts for every source unit and deep omissions require attenti
   });
   assert.equal(reviewed.payload.coverage.total, 20);
   assert.equal(reviewed.payload.coverage.accounted, 20);
-  assert.equal(reviewed.payload.coverage.percent, 100);
+  assert.equal(reviewed.payload.coverage.accountedPercent, 100);
+  assert.equal(reviewed.payload.coverage.percent, 95);
   assert.equal(reviewed.payload.coverage.omissionRate, 0.05);
   assert.equal(reviewed.payload.status, "complete");
 
+  const queued = await service.retry("user-one", source.id, { expectedRevision: reviewed.revision });
+  const reprocessing = await service.beginIngestion("user-one", source.id, { generation: queued.payload.generation });
   const incomplete = await service.recordExtraction("user-one", source.id, {
-    expectedRevision: reviewed.revision,
+    expectedRevision: reprocessing.revision,
     extractor: { name: "mineru", version: "3.4.5", parser: "mineru" },
     units: units.map((unit, index) => index < 2 ? { ...unit, status: "failed", itemIds: [] } : unit),
     summary: "A protocol about a randomized clinical study.",
@@ -152,14 +156,15 @@ test("a user override is versioned, explainable and schedules selective reproces
   assert.equal(updated.payload.status, "queued");
   assert.equal(updated.payload.override.reason, "This folder contains teaching material.");
   assert.equal(jobs.enqueued.length, 2);
-  assert.match(jobs.enqueued[1].options.idempotencyKey, /override/);
+  assert.equal(jobs.enqueued[1].payload.sourceGeneration, updated.payload.generation);
 });
 
 test("a disappeared upstream source retains its derived understanding", async () => {
   const { service } = fixture();
   const { source } = await service.register("user-one", upload());
+  const processing = await service.beginIngestion("user-one", source.id, { generation: source.payload.generation });
   const complete = await service.recordExtraction("user-one", source.id, {
-    expectedRevision: source.revision,
+    expectedRevision: processing.revision,
     extractor: { name: "plain-text", version: "1.0.0", parser: "fallback" },
     units: [{ id: "chunk-1", unitType: "chunk", status: "extracted", itemIds: ["fact-1"] }],
     summary: "Preserved derived summary.", facts: 1, methods: 0,

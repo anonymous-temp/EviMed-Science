@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Database, FileSearch, RotateCcw, SlidersHorizontal, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, Cloud, Database, FilePlus2, FileSearch, Folder, RotateCcw, SlidersHorizontal, Trash2, XCircle } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
-import { cancelSource, listSources, overrideSource, removeSource, retrySource, type SourceRecord } from "@/lib/sourceClient";
+import { browseOpenList, cancelSource, importOpenListSource, listSources, overrideSource, removeSource, retrySource,
+  type OpenListEntry, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { baseName } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
@@ -33,6 +34,7 @@ export function SourcesPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SourceRecord | null>(null);
   const [deleting, setDeleting] = useState<SourceRecord | null>(null);
+  const [showOpenList, setShowOpenList] = useState(false);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const load = useCallback(async () => {
@@ -56,7 +58,9 @@ export function SourcesPage() {
   return (
     <main className="h-full overflow-y-auto px-5 py-6">
       <div className="mx-auto max-w-content-wide space-y-5">
-        <header><h1 className="font-serif text-title text-text">资料整理台</h1><p className="mt-2 text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p></header>
+        <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="font-serif text-title text-text">资料整理台</h1><p className="mt-2 text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p></div>
+          <Button variant="ghost" onClick={() => setShowOpenList((value) => !value)}><Cloud size={15} />连接网盘资料</Button></header>
+        {showOpenList && <OpenListBrowser busy={busy} setBusy={setBusy} onImported={load} onError={setError} />}
         <SegmentedControl value={filter} onChange={setFilter} aria-label="资料状态"
           options={[{ value: "all", label: "全部" }, { value: "needs_attention", label: "需要处理" }, { value: "parsing", label: "分析中" }, { value: "complete", label: "已完成" }]} />
         {error && <Card><div className="flex items-center gap-2 text-ui text-error"><AlertCircle size={16} /><span className="flex-1">{error}</span><Button size="sm" variant="ghost" onClick={() => void load()}>重试</Button></div></Card>}
@@ -75,17 +79,52 @@ export function SourcesPage() {
   );
 }
 
+function OpenListBrowser({ busy, setBusy, onImported, onError }: { busy: boolean; setBusy: (value: boolean) => void;
+  onImported: () => Promise<void>; onError: (value: string | null) => void }) {
+  const [remotePath, setRemotePath] = useState("/");
+  const [entries, setEntries] = useState<OpenListEntry[] | null>(null);
+  const browse = async (selected = remotePath) => {
+    setBusy(true); onError(null);
+    try { const page = await browseOpenList(getWebProjectId(), selected); setRemotePath(selected); setEntries(page.entries); }
+    catch (error) { onError(productErrorMessage(error)); setEntries([]); }
+    finally { setBusy(false); }
+  };
+  const importFile = async (selected: string) => {
+    setBusy(true); onError(null);
+    try { await importOpenListSource(getWebProjectId(), selected); await onImported(); }
+    catch (error) { onError(productErrorMessage(error)); }
+    finally { setBusy(false); }
+  };
+  const parent = remotePath === "/" ? "/" : remotePath.split("/").slice(0, -1).join("/") || "/";
+  return <Card title="OpenList 网盘" hint="每个账号只能浏览自己的 /tenants 命名空间；大文件请使用本地分析代理。">
+    <div className="space-y-3">
+      <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void browse(); }}>
+        <Input label="网盘路径" value={remotePath} onChange={(event) => setRemotePath(event.target.value)} />
+        <Button className="self-end" type="submit" loading={busy}>浏览</Button>
+      </form>
+      {entries && <div className="divide-y divide-border rounded-input border border-border">{remotePath !== "/" && <button type="button"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-ui text-text hover:bg-surface-2" onClick={() => void browse(parent)}><Folder size={15} />返回上级</button>}
+        {entries.length === 0 ? <p className="px-3 py-4 text-ui-sm text-muted">这里没有可导入的资料。</p> : entries.map((entry) => <div key={entry.path}
+          className="flex items-center gap-3 px-3 py-2 text-ui text-text"><span className="flex min-w-0 flex-1 items-center gap-2">{entry.entryType === "dir" ? <Folder size={15} /> : <FileSearch size={15} />}<span className="truncate">{entry.name}</span></span>
+          {entry.entryType === "dir" ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => void browse(entry.path)}>打开</Button>
+            : <Button size="sm" variant="ghost" disabled={busy || !entry.providerHash?.startsWith("sha256:")} title={entry.providerHash?.startsWith("sha256:") ? "导入并分析" : "此存储未提供 SHA-256，请改用平台上传或本地代理"}
+              onClick={() => void importFile(entry.path)}><FilePlus2 size={13} />导入</Button>}</div>)}</div>}
+    </div>
+  </Card>;
+}
+
 function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete }: {
   source: SourceRecord; busy: boolean; onEdit: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void;
 }) {
   const coverage = source.payload.coverage;
+  const accountedPercent = coverage ? coverage.accountedPercent ?? Math.round((coverage.accounted / Math.max(1, coverage.total)) * 100) : 0;
   return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`版本 ${source.payload.version} · ${STATUS[source.payload.status] ?? source.payload.status}`}>
     <div className="space-y-3 text-ui text-text">
       {source.payload.outputs.summary && <p>{source.payload.outputs.summary}</p>}
       <div className="flex flex-wrap gap-2 text-ui-sm text-muted">
         <span>{TYPE_OPTIONS.find(([value]) => value === source.payload.docType)?.[1] ?? source.payload.docType}</span><span>·</span>
         <span>{DEPTH_OPTIONS.find(([value]) => value === source.payload.depth)?.[1] ?? source.payload.depth}</span>
-        {coverage && <><span>·</span><span>覆盖 {coverage.percent}% · 遗漏 {Math.round(coverage.omissionRate * 100)}%</span></>}
+        {coverage && <><span>·</span><span>处理成功 {coverage.percent}% · 已逐单元核对 {accountedPercent}% · 遗漏 {Math.round(coverage.omissionRate * 100)}%</span></>}
         <span>·</span><span>事实 {source.payload.outputs.facts ?? 0} · 方法线索 {source.payload.outputs.methods ?? 0}</span>
       </div>
       <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted"><FileSearch size={14} className="mr-1 inline" />{source.payload.reasons[0]}</div>

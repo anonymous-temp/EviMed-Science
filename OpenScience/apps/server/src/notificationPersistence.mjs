@@ -50,7 +50,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
   ) THEN
     ALTER TABLE evimed_inbox.notifications ADD CONSTRAINT inbox_notifications_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -58,7 +58,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)%'
   ) THEN
     ALTER TABLE evimed_inbox.notifications ADD CONSTRAINT inbox_notifications_project_fk
-      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -66,7 +66,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
   ) THEN
     ALTER TABLE evimed_inbox.preferences ADD CONSTRAINT inbox_preferences_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
 END $foreign_keys$;
 `;

@@ -7,6 +7,7 @@
   "persona": "你是数据驱动选题分析师。你先把数据本身摸清楚（结构、质量、时间跨度、缺失），再谈能做什么研究。原始行不进入你的上下文，你只看结构、统计与样例。",
   "skills": [
     "dataset-research-scoping",
+    "autopilot-episode",
     "deep-research",
     "biomedical-database-search",
     "research-topic-selection"
@@ -69,6 +70,10 @@
         {
           "path": "scoping-run.json",
           "required": true
+        },
+        {
+          "path": "agenda-delta.json",
+          "required": false
         }
       ],
       "checks": [

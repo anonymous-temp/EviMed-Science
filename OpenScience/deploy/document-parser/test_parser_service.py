@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -67,11 +68,47 @@ class ParserServiceTests(unittest.TestCase):
                 {"page_idx": 1, "type": "equation", "text": "E = mc^2"},
             ]), encoding="utf-8")
 
-        with patch.object(parser_service, "run_mineru", side_effect=fake_run):
+        with patch.object(parser_service, "run_mineru", side_effect=fake_run), patch.object(parser_service, "physical_unit_count", return_value=3):
             result = parser_service.parse_document(self.request(file, "application/pdf"), data_root=self.root)
         self.assertEqual(result["extractor"], {"name": "mineru", "version": "3.4.5", "parser": "mineru"})
-        self.assertEqual([unit["id"] for unit in result["units"]], ["page-1", "page-2"])
+        self.assertEqual([unit["id"] for unit in result["units"]], ["page-1", "page-2", "page-3"])
+        self.assertEqual(result["units"][2]["status"], "failed")
         self.assertIn("E = mc^2", result["text"])
+
+    def test_physical_unit_count_reads_real_pdf_and_office_containers(self):
+        from pypdf import PdfWriter
+
+        pdf = self.root / "three-pages.pdf"
+        writer = PdfWriter()
+        for _ in range(3):
+            writer.add_blank_page(width=72, height=72)
+        with pdf.open("wb") as stream:
+            writer.write(stream)
+        self.assertEqual(parser_service.physical_unit_count(pdf), 3)
+
+        pptx = self.root / "two-slides.pptx"
+        with zipfile.ZipFile(pptx, "w") as archive:
+            archive.writestr("ppt/slides/slide1.xml", "<slide/>")
+            archive.writestr("ppt/slides/slide2.xml", "<slide/>")
+        self.assertEqual(parser_service.physical_unit_count(pptx), 2)
+
+        xlsx = self.root / "two-sheets.xlsx"
+        with zipfile.ZipFile(xlsx, "w") as archive:
+            archive.writestr("xl/worksheets/sheet1.xml", "<sheet/>")
+            archive.writestr("xl/worksheets/sheet2.xml", "<sheet/>")
+        self.assertEqual(parser_service.physical_unit_count(xlsx), 2)
+
+    def test_mineru_rejects_an_out_of_range_unit_before_allocating_coverage(self):
+        file = self.root / "hostile.pdf"
+        file.write_bytes(b"test-only-pdf")
+        output = self.root / "mineru-output"
+        output.mkdir()
+        (output / "hostile.md").write_text("content", encoding="utf-8")
+        (output / "hostile_content_list.json").write_text(json.dumps([
+            {"page_idx": parser_service.MAX_UNITS + 1, "text": "bad index"},
+        ]), encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "out-of-range"):
+            parser_service.mineru_result(output, file, "source-one")
 
     def test_bearer_token_is_read_from_owner_only_file(self):
         secret = self.root / "parser.token"

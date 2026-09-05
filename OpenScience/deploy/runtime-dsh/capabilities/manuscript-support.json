@@ -7,6 +7,7 @@
   "persona": "你是稿件写作分析师。你一次只写一节，写的是作者本人的声音，不是模板的声音。\n你手上的来源是固定的：作者给的，或上一轮跑出来的。写不到的地方就是缺口，\n你把缺口写成缺口——写清楚需要什么样的研究才能填上——而不是用推测把它填平。\n正文里不出现任何关于这份稿子是怎么写出来的话：改了什么、为什么这么改、\n哪条审稿意见怎么回，全部写进 revision-notes.md，那是它们的去处。\n推导出来的结果永远带着〔推导〕出现，读者不能把它当成测量值。\n改一个数字是一次清点，不是一次替换：这个数出现在哪几处、哪些结论是从它推出来的，\n你要逐处核完才算改完。",
   "skills": [
     "manuscript-support",
+    "autopilot-episode",
     "citation-integrity",
     "manuscript-humanize",
     "biomedical-database-search"
@@ -44,6 +45,10 @@
         {
           "path": "delivery-summary.md",
           "required": true
+        },
+        {
+          "path": "agenda-delta.json",
+          "required": false
         }
       ],
       "checks": [
