@@ -397,18 +397,28 @@ export interface WebAuthMethods {
 
 export function getWebProjectId(): string {
   if (typeof window === "undefined") return "default";
-  return window.localStorage.getItem(PROJECT_KEY) || "default";
+  const bound = window.sessionStorage.getItem(PROJECT_KEY);
+  if (bound) return bound;
+  // The remembered default initializes a new tab once. Another tab's project
+  // switch cannot retarget this tab's API headers or native frame.
+  const selected = window.localStorage.getItem(PROJECT_KEY) || "default";
+  window.sessionStorage.setItem(PROJECT_KEY, selected);
+  return selected;
 }
 
 export function setWebProjectId(projectId: string): void {
   if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(PROJECT_KEY, projectId);
   window.localStorage.setItem(PROJECT_KEY, projectId);
 }
 
 function clearWebSessionState(): void {
   webCsrfToken = null;
   webCsrfRefresh = null;
-  if (typeof window !== "undefined") window.localStorage.removeItem(PROJECT_KEY);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(PROJECT_KEY);
+    window.localStorage.removeItem(PROJECT_KEY);
+  }
 }
 
 function notifyWebSessionEnded(): void {
