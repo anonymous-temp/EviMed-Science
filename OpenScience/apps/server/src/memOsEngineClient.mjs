@@ -292,38 +292,44 @@ export class MemOsClient {
     return { records, total, page, pageSize, nextPage: complete ? null : page + 1, complete };
   }
 
+  /** Read one server-derived scope completely before destructive operations.
+   * @param {string} userId @param {ScopeOptions} options */
+  async #scopeRecords(userId, options) {
+    const records = [];
+    for (let page = 1; page <= 10_000; page++) {
+      const result = await this.export(userId, { ...options, page, pageSize: 100 });
+      records.push(...result.records);
+      if (result.nextPage === null) return records;
+    }
+    throw failure(responseCode, "MemOS scoped deletion readback did not terminate.");
+  }
+
   /** @param {string} userId @param {string} recordId @param {ScopeOptions} [options] */
   async deleteRecord(userId, recordId, options) {
     fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
-    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
-    // memory_ids bypasses cube scoping upstream. Use the verified filter branch.
-    const result = await this.#request("/product/delete_memory", {
-      user_id: scope.userId, writable_cube_ids: [scope.cubeId],
-      filter: { and: [{ id: text(recordId, 512) }, { user_name: scope.cubeId }] },
-    });
-    return this.#deletion(result);
+    const id = text(recordId, 512);
+    const records = await this.#scopeRecords(userId, options);
+    if (!records.some(record => record.id === id)) return { status: "absent", verified: true };
+    this.#deletion(await this.#request("/product/delete_memory", { memory_ids: [id], auto_cleanup_working: true }));
+    if ((await this.#scopeRecords(userId, options)).some(record => record.id === id)) {
+      throw failure("mem_os_operation_failed", "MemOS deletion readback still contains the record.");
+    }
+    return { status: "deleted", verified: true };
   }
 
   /** @param {string} userId @param {ScopeOptions} [options] */
   async deleteScope(userId, options) {
     fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
-    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
-    const result = await this.#request("/product/delete_memory", {
-      user_id: scope.userId, writable_cube_ids: [scope.cubeId], filter: { user_name: scope.cubeId },
-    });
-    if (object(result.data) && result.data.status === "success") return { status: "deleted", verified: false };
-    // Upstream calls an already-empty scope a deletion failure. Verify absence
-    // rather than turning an idempotent rebuild into a permanent job failure.
-    const readback = await this.export(userId, { ...options, page: 1, pageSize: 1 });
-    if (readback.total === 0 && readback.records.length === 0) return { status: "absent", verified: true };
-    throw failure("mem_os_operation_failed", "MemOS did not confirm deletion.");
-  }
-
-  /** Delete engine records for an account, including its project cubes; not a user/cube registry deletion.
-   * @param {string} userId @param {string} accountCreatedAt */
-  async deleteUser(userId, accountCreatedAt) {
-    const scope = memOsNamespace(userId, accountCreatedAt);
-    return this.#deletion(await this.#request("/product/delete_memory", { user_id: scope.userId }));
+    const records = await this.#scopeRecords(userId, options);
+    if (!records.length) return { status: "absent", verified: true };
+    for (let offset = 0; offset < records.length; offset += 100) {
+      const memoryIds = records.slice(offset, offset + 100).map(record => record.id);
+      this.#deletion(await this.#request("/product/delete_memory", { memory_ids: memoryIds, auto_cleanup_working: true }));
+    }
+    if ((await this.#scopeRecords(userId, options)).length) {
+      throw failure("mem_os_operation_failed", "MemOS scoped deletion readback still contains records.");
+    }
+    return { status: "deleted", verified: true };
   }
 
   #deletion(result) {

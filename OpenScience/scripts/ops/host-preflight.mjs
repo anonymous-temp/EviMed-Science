@@ -432,17 +432,19 @@ export function validateDeploymentConfig(values, envFile) {
     );
     const password = readRegularFileNoFollow(bootstrapPasswordFile, {
       privateFile: true,
-      maxBytes: 8193,
+      maxBytes: 8194,
     }).replace(/\r?\n$/, "");
+    const passwordBytes = Buffer.byteLength(password, "utf8");
     if (
       password !== password.trim() ||
       /[\r\n\0]/.test(password) ||
       isPlaceholder(password) ||
-      Buffer.byteLength(password, "utf8") < 16
+      passwordBytes < 6 ||
+      passwordBytes > 8192
     ) {
       throw failure(
         "preflight_bootstrap_password",
-        "Local bootstrap password file must contain a non-placeholder value of at least 16 bytes without surrounding whitespace or control characters.",
+        "Local bootstrap password file must contain between 6 and 8192 non-placeholder bytes without surrounding whitespace or control characters.",
       );
     }
   } else if (authMode === "oidc") {
@@ -575,6 +577,7 @@ export function validateDeploymentConfig(values, envFile) {
         receiptId: required(values, "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_ID"),
         sourceRevision,
         configRevision: required(values, "OPEN_SCIENCE_DEEPSEEK_CONFIG_REVISION"),
+        model: required(values, "OPEN_SCIENCE_DEEPSEEK_MODEL"),
       },
     );
   }

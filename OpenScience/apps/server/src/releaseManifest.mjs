@@ -83,8 +83,8 @@ function assertIsoTimestamp(value) {
 
 export function validateReleaseManifest(input) {
   const manifest = assertRecord(input, "release_manifest_invalid");
-  assertKeys(manifest, ["schemaVersion", "app", "source", "web", "runtime", "proxy", "skills", "inputs", "monitoring"], "release_manifest_fields_invalid");
-  if (manifest.schemaVersion !== 2) throw failure("release_manifest_schema_unsupported");
+  assertKeys(manifest, ["schemaVersion", "app", "source", "web", "runtime", "proxy", "services", "skills", "inputs", "monitoring"], "release_manifest_fields_invalid");
+  if (manifest.schemaVersion !== 3) throw failure("release_manifest_schema_unsupported");
 
   const app = assertRecord(manifest.app, "release_manifest_app_invalid");
   assertKeys(app, ["name", "version", "releaseId"], "release_manifest_app_fields_invalid");
@@ -127,6 +127,20 @@ export function validateReleaseManifest(input) {
   assertImageReference(proxy.image, "release_manifest_proxy_image_invalid");
   assertText(proxy.imageId, imageIdPattern, "release_manifest_proxy_image_id_invalid");
   assertText(proxy.caddyVersion, versionPattern, "release_manifest_caddy_version_invalid");
+
+  if (!Array.isArray(manifest.services) || manifest.services.length === 0 || manifest.services.length > 16) {
+    throw failure("release_manifest_services_invalid");
+  }
+  const serviceNames = new Set();
+  for (const service of manifest.services) {
+    const record = assertRecord(service, "release_manifest_service_invalid");
+    assertKeys(record, ["name", "image", "imageId"], "release_manifest_service_fields_invalid");
+    const name = assertText(record.name, releaseIdPattern, "release_manifest_service_name_invalid");
+    if (serviceNames.has(name)) throw failure("release_manifest_service_duplicate");
+    serviceNames.add(name);
+    assertImageReference(record.image, "release_manifest_service_image_invalid");
+    assertText(record.imageId, imageIdPattern, "release_manifest_service_image_id_invalid");
+  }
 
   if (!Array.isArray(manifest.skills) || manifest.skills.length > 64) {
     throw failure("release_manifest_skills_invalid");

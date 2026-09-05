@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { MemOsClient } from "../../../apps/server/src/memOsEngineClient.mjs";
 
@@ -14,7 +13,11 @@ test("live MemOS persistence, processing, provenance and tenant isolation", {
   timeout: 240_000,
 }, async () => {
   assert.ok(process.env.EVIMED_MEMOS_LIVE_BASE_URL, "Provide the isolated engine origin");
-  const client = new MemOsClient({ memOsBaseUrl: process.env.EVIMED_MEMOS_LIVE_BASE_URL, memOsTimeoutMs: 30_000 });
+  const client = new MemOsClient({
+    memOsBaseUrl: process.env.EVIMED_MEMOS_LIVE_BASE_URL,
+    memOsTimeoutMs: 30_000,
+    memOsWriteMode: "sync-fast",
+  });
   const suffix = randomUUID();
   const account = `disposable-contract-a-${suffix}`;
   const otherAccount = `disposable-contract-b-${suffix}`;
@@ -26,24 +29,11 @@ test("live MemOS persistence, processing, provenance and tenant isolation", {
   const provenanceId = `provenance-${suffix}`;
   const record = { entryId, content: `The synthetic contract canary is ${suffix}.`, provenanceIds: [provenanceId] };
   const failures = [];
-  async function settle(userId, receipt, project) {
-    const deadline = Date.now() + 60_000;
-    let status = "unverified";
-    while (Date.now() < deadline) {
-      const result = await client.getTaskStatus(userId, receipt.records[0].taskId, scope(project));
-      status = result.status;
-      if (status === "completed") return;
-      assert.ok(!["failed", "cancelled"].includes(status), `MemOS processing ${status}`);
-      await delay(500);
-    }
-    assert.fail(`MemOS processing did not complete: ${status}`);
-  }
   try {
     await client.health();
-    const initial = await client.add(account, [record], scope(projectId));
-    await settle(account, initial, projectId);
-    await settle(otherAccount, await client.add(otherAccount, [record], scope(projectId)), projectId);
-    await settle(account, await client.add(account, [{ ...record, entryId: `other-${entryId}` }], scope(otherProject)), otherProject);
+    await client.add(account, [record], scope(projectId));
+    await client.add(otherAccount, [record], scope(projectId));
+    await client.add(account, [{ ...record, entryId: `other-${entryId}` }], scope(otherProject));
     const exported = await client.export(account, scope(projectId));
     assert.equal(exported.complete, true);
     const memory = exported.records.find(item => item.entryId === entryId);
@@ -58,7 +48,7 @@ test("live MemOS persistence, processing, provenance and tenant isolation", {
     assert.ok((await client.export(otherAccount, scope(projectId))).records.some(item => item.id === foreign.id), "Cross-account deletion must do nothing");
     await client.deleteRecord(account, memory.id, scope(projectId));
     assert.ok(!(await client.export(account, scope(projectId))).records.some(item => item.id === memory.id), "Successful delete must be verified by a scoped read");
-    await client.deleteUser(account, accountCreatedAt);
+    await client.deleteScope(account, scope(otherProject));
     assert.equal((await client.export(account, scope(projectId))).total, 0);
     assert.equal((await client.export(account, scope(otherProject))).total, 0);
     assert.ok((await client.export(otherAccount, scope(projectId))).total > 0);
@@ -67,8 +57,8 @@ test("live MemOS persistence, processing, provenance and tenant isolation", {
   } finally {
     for (const userId of [account, otherAccount]) {
       try {
-        await client.deleteUser(userId, accountCreatedAt);
         for (const project of [projectId, otherProject]) {
+          await client.deleteScope(userId, scope(project));
           assert.equal((await client.export(userId, scope(project))).total, 0, `Disposable cleanup failed for ${userId}`);
         }
       } catch (error) { failures.push(error); }

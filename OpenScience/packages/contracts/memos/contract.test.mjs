@@ -34,6 +34,8 @@ test("MemTensor pin and captured source identity agree", () => {
   assert.equal(versions.memos.version, provenance.dependencyVersion);
   assert.equal(versions.memos.githubRepo, "MemTensor/MemOS");
   assert.equal(versions.memos.contractDir, "packages/contracts/memos");
+  assert.equal(versions.memos.tokenizer, "gpt2");
+  assert.match(versions.memos.tokenizerRevision, /^[a-f0-9]{40}$/);
   assert.match(provenance.sourceCommit, /^[0-9a-f]{40}$/);
   assert.equal(openapi.info.title, "MemOS Server REST APIs");
   assert.equal(openapi.info.version, "1.0.1");
@@ -46,6 +48,7 @@ test("real adapter serialization and normalization satisfy the observed MemOS co
   const scope = memOsNamespace("contract-account", accountCreatedAt, "contract-project");
   const calls = [];
   let taskId;
+  let deleted = false;
   let requestFailure;
   const server = http.createServer(async (req, res) => {
     try {
@@ -60,10 +63,15 @@ test("real adapter serialization and normalization satisfy the observed MemOS co
         assert.ok(schemaMatches(body, operation.requestBody.content["application/json"].schema), "Body differs from observed OpenAPI");
         if (path === "/product/add") taskId = body.task_id;
       }
+      if (path === "/product/delete_memory") deleted = true;
       const result = path === "/health" ? healthResponse
         : path === "/product/add" ? addResponse(scope.cubeId)
           : path === "/product/search" ? searchResponse(scope.userId, scope.cubeId)
-            : path === "/product/get_memory" ? searchResponse(scope.userId, scope.cubeId, { total: 1 })
+            : path === "/product/get_memory" ? (() => {
+                const response = searchResponse(scope.userId, scope.cubeId, { total: deleted ? 0 : 1 });
+                if (deleted) response.data.text_mem[0].memories = [];
+                return response;
+              })()
               : path === "/product/scheduler/status" ? { code: 200, message: "Memory get status successfully", data: [{ task_id: taskId, status: "waiting" }] }
                 : deleteResponse;
       res.writeHead(200, { "content-type": "application/json" });
@@ -83,7 +91,6 @@ test("real adapter serialization and normalization satisfy the observed MemOS co
   assert.equal((await client.export("contract-account", options)).complete, true);
   assert.equal((await client.getTaskStatus("contract-account", added.records[0].taskId, options)).status, "waiting");
   await client.deleteRecord("contract-account", "memory-one", options);
-  await client.deleteUser("contract-account", accountCreatedAt);
   assert.equal(requestFailure, undefined);
   assert.deepEqual(new Set(calls), new Set(Object.keys(openapi.paths)));
 });

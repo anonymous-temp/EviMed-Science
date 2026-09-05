@@ -1,5 +1,5 @@
 export const releaseManifestFixture = Object.freeze({
-  schemaVersion: 2,
+  schemaVersion: 3,
   app: {
     name: "evimed-science",
     version: "0.1.3",
@@ -27,6 +27,12 @@ export const releaseManifestFixture = Object.freeze({
     imageId: `sha256:${"e".repeat(64)}`,
     caddyVersion: "2.11.4-alpine",
   },
+  services: [
+    { name: "document-parser", image: "evimed-document-parser:3.4.5", imageId: `sha256:${"1".repeat(64)}` },
+    { name: "memos-engine", image: "evimed-memos-engine:2.0.30", imageId: `sha256:${"2".repeat(64)}` },
+    { name: "ollama", image: `ollama/ollama:0.33.3@sha256:${"3".repeat(64)}`, imageId: `sha256:${"4".repeat(64)}` },
+    { name: "openlist", image: `openlistteam/openlist:v4.2.6@sha256:${"5".repeat(64)}`, imageId: `sha256:${"6".repeat(64)}` },
+  ],
   skills: [
     {
       name: "core",

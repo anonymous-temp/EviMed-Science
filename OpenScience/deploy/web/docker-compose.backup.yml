@@ -79,4 +79,7 @@ secrets:
   open-science-backup-passphrase:
     file: ${OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-./secrets/backup-passphrase.txt}
   open-science-object-backup-credentials:
-    file: ${OPEN_SCIENCE_OBJECT_BACKUP_CREDENTIALS_FILE:-./secrets/object-backup-credentials.ini}
+    # Docker Compose file-backed secrets are not optional even when the service
+    # never uses them. An empty URI means local-only backup, so mount the empty
+    # device instead of requiring an invented cloud credential file.
+    file: ${OPEN_SCIENCE_OBJECT_BACKUP_CREDENTIALS_FILE:-/dev/null}

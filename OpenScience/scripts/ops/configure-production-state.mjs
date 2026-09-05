@@ -22,6 +22,15 @@ const memosDsnFile = path.resolve(
 const memosAdminPasswordFile = path.resolve(
   process.env.OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE ?? path.join(secretsDir, "memos-admin-password.txt"),
 );
+const memosEngineProviderConfigFile = path.resolve(
+  process.env.OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE ?? path.join(secretsDir, "memos-engine-providers.json"),
+);
+const memosNeo4jAuthFile = path.resolve(
+  process.env.OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE ?? path.join(secretsDir, "memos-neo4j-auth.txt"),
+);
+const openListAdminPasswordFile = path.resolve(
+  process.env.OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE ?? path.join(secretsDir, "openlist-admin-password.txt"),
+);
 
 function failure(code, message) {
   const error = new Error(message);
@@ -123,9 +132,88 @@ async function ensureDsn(file, label, expected) {
   return value;
 }
 
+function expectedMemosProviderConfig(password) {
+  return {
+    OPENAI_API_KEY: "local-only",
+    OPENAI_API_BASE: "http://evimed-memos-ollama:11434/v1",
+    MOS_CHAT_MODEL: "unused-in-sync-fast",
+    MEMRADER_API_KEY: "local-only",
+    MEMRADER_API_BASE: "http://evimed-memos-ollama:11434/v1",
+    MEMRADER_MODEL: "unused-in-sync-fast",
+    MOS_EMBEDDER_BACKEND: "ollama",
+    MOS_EMBEDDER_MODEL: "bge-m3:latest",
+    EMBEDDING_DIMENSION: "1024",
+    NEO4J_PASSWORD: password,
+  };
+}
+
+async function exists(file) {
+  return fsp.lstat(file).then(() => true).catch((error) => {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  });
+}
+
+async function readMemosProviderPassword() {
+  if (!(await exists(memosEngineProviderConfigFile))) return null;
+  const raw = await readOwnerOnly(memosEngineProviderConfigFile, "MemOS provider configuration", { maxBytes: 16_384 });
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw failure("production_state_memos_provider_invalid", "MemOS provider configuration is not valid JSON.");
+  }
+  const password = parsed?.NEO4J_PASSWORD;
+  if (typeof password !== "string") {
+    throw failure("production_state_memos_provider_invalid", "MemOS provider configuration has no Neo4j password.");
+  }
+  validateSecretValue(password, "MemOS Neo4j password");
+  const expected = expectedMemosProviderConfig(password);
+  if (Object.keys(parsed).length !== Object.keys(expected).length ||
+      Object.entries(expected).some(([key, value]) => parsed[key] !== value)) {
+    throw failure("production_state_memos_provider_mismatch", "MemOS provider configuration does not match the private local-provider profile.");
+  }
+  return password;
+}
+
+async function readMemosNeo4jPassword() {
+  if (!(await exists(memosNeo4jAuthFile))) return null;
+  const value = await readOwnerOnly(memosNeo4jAuthFile, "MemOS Neo4j authentication");
+  if (!value.startsWith("neo4j/")) {
+    throw failure("production_state_memos_neo4j_auth_invalid", "MemOS Neo4j authentication must use the neo4j account.");
+  }
+  const password = value.slice("neo4j/".length);
+  validateSecretValue(password, "MemOS Neo4j password");
+  return password;
+}
+
+async function ensureMemosEngineSecrets() {
+  const providerPassword = await readMemosProviderPassword();
+  const authPassword = await readMemosNeo4jPassword();
+  if (providerPassword && authPassword && providerPassword !== authPassword) {
+    throw failure("production_state_memos_password_mismatch", "MemOS provider and Neo4j credentials disagree.");
+  }
+  const password = providerPassword ?? authPassword ?? randomBytes(36).toString("base64url");
+  if (!providerPassword) {
+    if (checkOnly) throw failure("production_state_secret_missing", "MemOS provider configuration is missing.");
+    await createOwnerOnly(memosEngineProviderConfigFile, JSON.stringify(expectedMemosProviderConfig(password)));
+  }
+  if (!authPassword) {
+    if (checkOnly) throw failure("production_state_secret_missing", "MemOS Neo4j authentication is missing.");
+    await createOwnerOnly(memosNeo4jAuthFile, `neo4j/${password}`);
+  }
+  const verifiedProviderPassword = await readMemosProviderPassword();
+  const verifiedAuthPassword = await readMemosNeo4jPassword();
+  if (verifiedProviderPassword !== verifiedAuthPassword) {
+    throw failure("production_state_memos_password_mismatch", "MemOS provider and Neo4j credentials disagree.");
+  }
+}
+
 async function main() {
   const postgresPassword = await ensureSecret(postgresPasswordFile, "PostgreSQL password");
   await ensureSecret(memosAdminPasswordFile, "Memos administrator password");
+  await ensureSecret(openListAdminPasswordFile, "OpenList administrator password");
+  await ensureMemosEngineSecrets();
   const dsn = expectedDatabaseUrl(postgresPassword);
   await ensureDsn(databaseUrlFile, "EviMed database URL", dsn);
   await ensureDsn(memosDsnFile, "Memos database DSN", dsn);

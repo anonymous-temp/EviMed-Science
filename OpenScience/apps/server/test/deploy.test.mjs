@@ -220,6 +220,7 @@ test("web Dockerfile embeds immutable OCI release metadata", async () => {
   assert.match(dockerfile, /ENV OPEN_SCIENCE_RELEASE_ID=\$\{RELEASE_ID\}/);
   assert.match(dockerfile, /pnpm --filter @ai4s\/server deploy --prod \/server/);
   assert.match(dockerfile, /COPY --from=build \/server \.\/apps\/server/);
+  assert.match(dockerfile, /COPY --from=build \/app\/capabilities \.\/capabilities/);
 });
 
 test("web Dockerfile applies the configured npm registry before Corepack downloads pnpm", async () => {
@@ -522,6 +523,7 @@ test("backup compose overlay runs an unexposed least-privilege encrypted schedul
   assert.match(backupService, /read_only:\s+true/);
   assert.doesNotMatch(backupService, /^\s+ports:/m);
   assert.match(compose, /OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:-\.\/secrets\/backup-passphrase\.txt/);
+  assert.match(compose, /OPEN_SCIENCE_OBJECT_BACKUP_CREDENTIALS_FILE:-\/dev\/null/);
 });
 
 test("OIDC compose overlay mounts separate file-backed client and flow secrets", async () => {
@@ -1929,8 +1931,14 @@ test("document ingestion isolates parser bytes and OpenList state from the SaaS 
   assert.match(parser, /networks:\n\s+- ingestion-internal/);
   assert.match(compose, /ingestion-internal:\n\s+internal: true/);
   assert.doesNotMatch(openList, /open-science-data/);
-  assert.match(openList, /PUID: "1000"/);
+  assert.match(compose, /evimed-openlist-init:[\s\S]*?chown -R 1001:1001 \/opt\/openlist\/data/);
+  assert.match(compose, /evimed-openlist-bootstrap:[\s\S]*?network_mode: none/);
+  assert.match(compose, /OPEN_SCIENCE_OPENLIST_TOKEN_FILE: \/run\/openlist-secrets\/openlist\.token/);
+  assert.match(openList, /user: "1001:1001"/);
   assert.match(parserDockerfile, /mineru-models-download -s modelscope -m pipeline/);
+  assert.match(parserDockerfile, /torch==2\.8\.0 torchvision==0\.23\.0 --index-url/);
+  assert.match(parserDockerfile, /assert torch\.version\.cuda is None/);
+  assert.match(parserDockerfile, /docker\.m\.daocloud\.io\/library\/python:3\.12\.11-slim-bookworm@sha256:[a-f0-9]{64}/);
   assert.match(parserDockerfile, /^USER evimed$/m);
 });
 

@@ -175,6 +175,7 @@ export function validateDeepSeekReleaseReceipt(receipt, {
   receiptId,
   sourceRevision,
   configRevision,
+  model = REQUIRED_MODEL,
 } = {}) {
   if (
     receipt == null || typeof receipt !== "object" || Array.isArray(receipt) ||
@@ -188,7 +189,9 @@ export function validateDeepSeekReleaseReceipt(receipt, {
     typeof receipt.productionEligible !== "boolean" ||
     !Number.isFinite(Date.parse(receipt.createdAt)) ||
     receipt.dshVersion !== REQUIRED_DSH_VERSION ||
-    receipt.model !== REQUIRED_MODEL ||
+    typeof model !== "string" ||
+    !supportedDeepSeekModels.has(model) ||
+    receipt.model !== model ||
     typeof receipt.sourceRevision !== "string" || !receipt.sourceRevision ||
     typeof receipt.configRevision !== "string" || !receipt.configRevision ||
     receipt.signatureAlgorithm !== RECEIPT_SIGNATURE_ALGORITHM ||
@@ -481,6 +484,36 @@ export function releaseTelemetryEvidence({ gateway, streamedEventCount }) {
   return { gatewayOnly, streaming };
 }
 
+/** A release-gate-only ledger that exercises every production gateway hook
+ * without creating a fake customer account or writing probe spend into the
+ * production ledger. Every reservation must still reach one terminal state,
+ * and the caller refuses a receipt unless every successful probe was settled.
+ * @param {Record<string, number>} state */
+export function createReleaseGateUsageLedger(state) {
+  const active = new Map();
+  const terminal = (userId, id, outcome) => {
+    if (active.get(id) !== userId) throw failure("deepseek_release_usage_accounting_invalid");
+    active.delete(id);
+    state.usageActive = active.size;
+    state.usageTerminals += 1;
+    state[outcome] += 1;
+  };
+  return {
+    async reserveModel(input) {
+      if (typeof input?.id !== "string" || typeof input?.userId !== "string" || active.has(input.id)) {
+        throw failure("deepseek_release_usage_accounting_invalid");
+      }
+      active.set(input.id, input.userId);
+      state.usageReservations += 1;
+      state.usageActive = active.size;
+      return { id: input.id };
+    },
+    async settleModel(userId, id) { terminal(userId, id, "usageSettled"); },
+    async markUncertain(userId, id) { terminal(userId, id, "usageUncertain"); },
+    async release(userId, id) { terminal(userId, id, "usageReleased"); },
+  };
+}
+
 /**
  * The model gateway of this process, counting what passes through it.
  *
@@ -491,8 +524,19 @@ export function releaseTelemetryEvidence({ gateway, streamedEventCount }) {
  * @param {import("../../apps/server/src/runtimeManager.mjs").RuntimeManager} manager
  */
 async function startCountingGateway(config, manager) {
-  const handler = createModelGatewayHandler(config, manager);
-  const state = { requests: 0, sseResponses: 0 };
+  const state = {
+    requests: 0,
+    sseResponses: 0,
+    usageReservations: 0,
+    usageTerminals: 0,
+    usageSettled: 0,
+    usageUncertain: 0,
+    usageReleased: 0,
+    usageActive: 0,
+  };
+  const handler = createModelGatewayHandler(config, manager, {
+    usageLedger: createReleaseGateUsageLedger(state),
+  });
   const server = http.createServer((req, res) => {
     state.requests += 1;
     const writeHead = res.writeHead.bind(res);
@@ -607,7 +651,7 @@ async function runDshChain({ config: supplied, timeoutMs }) {
 
   /** @type {import("../../apps/server/src/runtimeManager.mjs").RuntimeManager | null} */
   let manager = null;
-  /** @type {{ port: number, state: { requests: number, sseResponses: number }, close: () => Promise<unknown> } | null} */
+  /** @type {{ port: number, state: { requests:number,sseResponses:number,usageReservations:number,usageTerminals:number,usageSettled:number,usageUncertain:number,usageReleased:number,usageActive:number }, close: () => Promise<unknown> } | null} */
   let gateway = null;
   try {
     // Anything a previous mint left behind, before this one adds to it. The
@@ -735,6 +779,16 @@ async function runDshChain({ config: supplied, timeoutMs }) {
     if (!gatewayOnly) throw failure("deepseek_release_gateway_bypass_detected");
     if (!streaming) {
       const error = failure("deepseek_release_streaming_evidence_missing");
+      error.diagnostic = JSON.stringify(gateway.state);
+      throw error;
+    }
+    if (
+      gateway.state.usageReservations !== gateway.state.requests ||
+      gateway.state.usageTerminals !== gateway.state.usageReservations ||
+      gateway.state.usageSettled !== gateway.state.usageReservations ||
+      gateway.state.usageActive !== 0
+    ) {
+      const error = failure("deepseek_release_usage_accounting_missing");
       error.diagnostic = JSON.stringify(gateway.state);
       throw error;
     }

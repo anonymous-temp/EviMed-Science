@@ -8,6 +8,7 @@ import test from "node:test";
 import { mcpToolName } from "@evimed/domain";
 import {
   RELEASE_GATE_ARTIFACT,
+  createReleaseGateUsageLedger,
   mcpBaseName,
   dshTranscriptEvidence,
   releaseTelemetryEvidence,
@@ -85,6 +86,27 @@ test("the release gate refuses to mint a receipt it did not measure", async (t) 
     );
     await assert.rejects(() => stat(receiptPath), { code: "ENOENT" }, "a refused gate must leave no receipt behind");
   }
+});
+
+test("the release probe ledger requires one scoped terminal transition per reservation", async () => {
+  const state = {
+    usageReservations: 0, usageTerminals: 0, usageSettled: 0,
+    usageUncertain: 0, usageReleased: 0, usageActive: 0,
+  };
+  const ledger = createReleaseGateUsageLedger(state);
+  assert.deepEqual(await ledger.reserveModel({ id: "r1", userId: "release-gate" }), { id: "r1" });
+  assert.equal(state.usageActive, 1);
+  await ledger.settleModel("release-gate", "r1", {});
+  assert.deepEqual(state, {
+    usageReservations: 1, usageTerminals: 1, usageSettled: 1,
+    usageUncertain: 0, usageReleased: 0, usageActive: 0,
+  });
+  await ledger.reserveModel({ id: "r2", userId: "release-gate" });
+  await assert.rejects(ledger.release("other-user", "r2", "test"), { code: "deepseek_release_usage_accounting_invalid" });
+  assert.equal(state.usageActive, 1);
+  await ledger.markUncertain("release-gate", "r2", "test", {});
+  assert.equal(state.usageUncertain, 1);
+  assert.equal(state.usageActive, 0);
 });
 
 

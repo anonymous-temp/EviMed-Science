@@ -1182,12 +1182,13 @@ export class PostgresStore extends InMemoryStore {
     return project;
   }
 
-  /** @param {any} user @param {{beforeDelete?: ((userId: string, client: any) => Promise<void>) | null}} options */
-  async deleteUser(user, { beforeDelete = null } = {}) {
+  /** @param {any} user @param {{beforeLock?: ((userId: string, client: any) => Promise<void>) | null,beforeDelete?: ((userId: string, client: any) => Promise<void>) | null}} options */
+  async deleteUser(user, { beforeLock = null, beforeDelete = null } = {}) {
     const id = safeId(user.id, "user id");
     const root = usersRoot(this.config);
     const userRoot = path.join(root, id);
     const deleted = await this.database.transaction(async (client) => {
+      if (beforeLock) await beforeLock(id, client);
       await lockUserIdentity(client, id);
       const locked = await client.query(
         `SELECT id FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1 FOR UPDATE`,

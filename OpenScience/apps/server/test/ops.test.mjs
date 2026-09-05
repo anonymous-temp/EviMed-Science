@@ -92,6 +92,36 @@ test("local auth secret tooling creates and validates an owner-only password fil
   }
 });
 
+test("local auth secret tooling accepts the configured six-byte minimum and rejects five bytes", async () => {
+  const tmp = await realpath(await mkdtemp(path.join(os.tmpdir(), "open-science-local-auth-minimum-")));
+  const secretFile = path.join(tmp, "bootstrap-password.txt");
+  const env = { ...process.env, OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE: secretFile };
+  try {
+    await writeFile(secretFile, "six-ok\n", { mode: 0o600 });
+    await runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env });
+    await writeFile(secretFile, "short\n", { mode: 0o600 });
+    await assert.rejects(
+      runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env }),
+      error => {
+        assert.match(error.stderr, /local_auth_secret_size/);
+        return true;
+      },
+    );
+    await writeFile(secretFile, `${"x".repeat(8192)}\n`, { mode: 0o600 });
+    await runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env });
+    await writeFile(secretFile, "x".repeat(8193), { mode: 0o600 });
+    await assert.rejects(
+      runCommand(process.execPath, [configureLocalAuthScript, "--check"], { env }),
+      error => {
+        assert.match(error.stderr, /local_auth_secret_size/);
+        return true;
+      },
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("local auth secret tooling rejects permissive files and symbolic links", async () => {
   const tmp = await realpath(await mkdtemp(path.join(os.tmpdir(), "open-science-local-auth-policy-")));
   const secretFile = path.join(tmp, "bootstrap-password.txt");

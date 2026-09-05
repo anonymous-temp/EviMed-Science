@@ -108,22 +108,23 @@ test("export is paginated and never labels a partial page complete", async t => 
   assert.deepEqual(calls[0].body,{mem_cube_id:scope.cubeId,user_id:scope.userId,include_preference:false,include_tool_memory:false,include_skill_memory:false,page:1,page_size:1});
 });
 
-test("deleteRecord uses a scoped filter, never upstream unscoped memory_ids", async t => {
-  const {client,calls}=await harness(t,()=>deleteResponse);
-  assert.deepEqual(await client.deleteRecord("account-one","memory-one",scoped({projectId:"project-one"})),{status:"deleted",verified:false});
-  assert.equal(calls[0].path,"/product/delete_memory");
-  assert.deepEqual(calls[0].body,{user_id:scope.userId,writable_cube_ids:[scope.cubeId],filter:{and:[{id:"memory-one"},{user_name:scope.cubeId}]}});
+test("deleteRecord proves scope before explicit deletion and verifies absence", async t => {
+  const empty=searchResponse(scope.userId,scope.cubeId,{total:0});empty.data.text_mem[0].memories=[];
+  const {client,calls}=await harness(t,(_,n)=>n===1?searchResponse(scope.userId,scope.cubeId,{total:1}):n===2?deleteResponse:empty);
+  assert.deepEqual(await client.deleteRecord("account-one","memory-one",scoped({projectId:"project-one"})),{status:"deleted",verified:true});
+  assert.deepEqual(calls.map(call=>call.path),["/product/get_memory","/product/delete_memory","/product/get_memory"]);
+  assert.deepEqual(calls[1].body,{memory_ids:["memory-one"],auto_cleanup_working:true});
 });
 
-test("deleteUser selects only the account across its project cubes", async t => {
-  const {client,calls}=await harness(t,()=>deleteResponse);
-  await client.deleteUser("account-one",generation);
-  assert.deepEqual(calls[0].body,{user_id:scope.userId});
+test("deleteRecord cannot turn a foreign identifier into an unscoped engine deletion", async t => {
+  const {client,calls}=await harness(t,()=>searchResponse(scope.userId,scope.cubeId,{total:1}));
+  assert.deepEqual(await client.deleteRecord("account-one","foreign-memory",scoped({projectId:"project-one"})),{status:"absent",verified:true});
+  assert.equal(calls.length,1);
 });
 
 test("HTTP 200 with deletion failure or empty add is not success", async t => {
-  const {client}=await harness(t,()=>({code:200,message:"ignored",data:{status:"failure"}}));
-  await assert.rejects(client.deleteUser("account-one",generation),{code:"mem_os_operation_failed"});
+  const {client}=await harness(t,call=>call.path==="/product/get_memory"?searchResponse(scope.userId,scope.cubeId,{total:1}):({code:200,message:"ignored",data:{status:"failure"}}));
+  await assert.rejects(client.deleteRecord("account-one","memory-one",scoped({projectId:"project-one"})),{code:"mem_os_operation_failed"});
   const {client:empty}=await harness(t,()=>({code:200,message:"ignored",data:[]}));
   await assert.rejects(empty.add("account-one",[exampleRecord],scoped()),{code:"mem_os_response_invalid"});
 });
@@ -192,20 +193,21 @@ test("capsule namespaces are explicit and cannot alias project or account scopes
 test("scoped deletion and readback keep the capsule and indexed revision explicit",async t=>{
   const capsule=memOsNamespace("account-one",generation,undefined,"capsule-one");
   const response=searchResponse(capsule.userId,capsule.cubeId,{total:1});response.data.text_mem[0].memories[0].metadata.info.evimed_entry_revision=4;
-  const {client,calls}=await harness(t,call=>call.path==="/product/delete_memory"?deleteResponse:response);
-  await client.deleteScope("account-one",scoped({capsuleId:"capsule-one"}));
-  assert.deepEqual(calls[0].body,{user_id:capsule.userId,writable_cube_ids:[capsule.cubeId],filter:{user_name:capsule.cubeId}});
-  assert.equal((await client.export("account-one",scoped({capsuleId:"capsule-one"}))).records[0].revision,4);
+  const empty=searchResponse(capsule.userId,capsule.cubeId,{total:0});empty.data.text_mem[0].memories=[];
+  const {client,calls}=await harness(t,(_,n)=>n===1?response:n===2?deleteResponse:empty);
+  assert.deepEqual(await client.deleteScope("account-one",scoped({capsuleId:"capsule-one"})),{status:"deleted",verified:true});
+  assert.equal(calls[0].body.mem_cube_id,capsule.cubeId);
+  assert.deepEqual(calls[1].body,{memory_ids:["memory-one"],auto_cleanup_working:true});
 });
 
 test("an empty scope deletion is idempotent only after a bounded empty readback",async t=>{
   const capsule=memOsNamespace("account-one",generation,undefined,"capsule-empty");
   const empty=searchResponse(capsule.userId,capsule.cubeId,{total:0});
   empty.data.text_mem[0].memories=[];
-  const {client,calls}=await harness(t,call=>call.path==="/product/delete_memory"
-    ? {code:200,message:"Failed to delete memories",data:{status:"failure"}} : empty);
+  const {client,calls}=await harness(t,()=>empty);
   assert.deepEqual(await client.deleteScope("account-one",scoped({capsuleId:"capsule-empty"})),{status:"absent",verified:true});
-  assert.equal(calls[1].path,"/product/get_memory");
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].path,"/product/get_memory");
 });
 
 test("2.0.30 flattened metadata retains canonical entry identity",async t=>{
