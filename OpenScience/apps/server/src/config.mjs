@@ -926,20 +926,9 @@ export function loadConfig(overrides = {}) {
     // operator's decision rather than a deployment default.
     runtimeUiProxyEnabled: overrides.runtimeUiProxyEnabled
       ?? boolEnv("OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED", false),
-    // The application is served on a listener of its own, and that is not a
-    // deployment preference — it is what the application requires. It builds
-    // every URL it fetches from `location.origin`: the plugin bundles it boots
-    // from are `/plugins/??...`, its method calls are `/api/<method>`. Behind a
-    // path prefix those resolve against this control plane instead, which
-    // answers them with its own single-page document, and the page dies at
-    // boot with "bootstrap facade is missing" while every individual request
-    // reads 200. Rewriting the document does not reach them: most are built at
-    // run time, not written in the HTML. So it gets an origin.
-    //
-    // Same host, different port, which makes it a different origin (the iframe
-    // is cross-origin, as it should be) while staying the same *site* — ports
-    // are not part of a site — so the session cookie is still sent and the
-    // person is still the person who logged in.
+    // A separate origin prevents the native application from reading the shell.
+    // Per-frame prefixes and the official transport hook keep project identity
+    // on every resource and API request while cookies remain same-site.
     runtimeUiPort: Number(overrides.runtimeUiPort ?? process.env.OPEN_SCIENCE_RUNTIME_UI_PORT ?? 0),
     // What to put in the iframe. The listener's own port is not it: a browser
     // reaches this deployment through whatever terminates TLS in front of it,
