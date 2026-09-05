@@ -14,7 +14,8 @@
     "src/memos/api/handlers/memory_handler.py",
     "src/memos/multi_mem_cube/single_cube.py",
     "src/memos/api/handlers/formatters_handler.py",
-    "src/memos/graph_dbs/neo4j.py"
+    "src/memos/graph_dbs/neo4j.py",
+    "src/memos/api/handlers/scheduler_handler.py"
   ],
   "runtimeLimitations": [
     "Running image is locally built memos-dev-memos, not a verified memtensor/memos:2.0.30 image.",
@@ -24,6 +25,21 @@
     "Add invokes embedding and schedules further processing even in sync/fast mode; paid-model live tests were not run.",
     "Upstream add logs full request bodies; remove/redact that logging before production use.",
     "Deletion response reports success/failure but no deletion count.",
-    "get_memory exports text memories and optional types, not complete database/user/cube administrative state."
-  ]
+    "get_memory exports text memories and optional types, not complete database/user/cube administrative state.",
+    "The adapter uses async add to preserve the supplied task_id; task status is checked separately. A missing task is an error, not proof of completion."
+  ],
+  "runtimeSourceHashes": {
+    "src/memos/api/handlers/memory_handler.py": "5a4449f0cd647715824e3b1881636abc294784a3ca0e82d6e0a48b0bf04072c4",
+    "src/memos/api/product_models.py": "2c52d881402182650e72bec6c8d64132ae49bf886390dc20eadd1769e3c12ee4"
+  },
+  "runtimeSourceHashEvidence": "These two SHA-256 values matched the checked-out upstream source and the running container; this is not image attestation.",
+  "deploymentAcceptance": [
+    "Deploy a dedicated engine from an attested 2.0.30 source/image, with immutable source and no reload flag.",
+    "Use a private network reachable only by the EviMed control plane, excluding all DSH runtime containers. The raw API has no authentication.",
+    "Provision persistent graph/vector stores, scheduler Redis, writable local file storage, and model endpoints; validate actual selected backends and dimensions against src/memos/api/config.py.",
+    "Remove full request-body logging in upstream AddHandler and SingleCubeView before processing user memory.",
+    "Run the opt-in disposable live contract only after authorization for embedding/model calls. It verifies storage, task completion, provenance, cross-account/project isolation, scoped deletion, account-wide deletion, and cleanup.",
+    "Before migrating retained product documents, reconcile every product entryId/provenanceId with engine IDs, including failures and partial writes; verify restart persistence and backup/restore separately."
+  ],
+  "liveContractCommand": "EVIMED_MEMOS_LIVE_CONTRACT=disposable EVIMED_MEMOS_LIVE_ALLOW_MODEL_CALLS=yes EVIMED_MEMOS_LIVE_BASE_URL=<private-engine-origin> node --test packages/contracts/memos/live.test.mjs"
 }
