@@ -37,6 +37,10 @@ produces:
     required: true
   - path: research-topic-run.json
     required: true
+  - path: research-portfolio.json
+    required: false
+  - path: evidence-records.json
+    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -45,6 +49,10 @@ inputs:
   required:
   - researchDirection
   optional:
+  - availableData
+  - population
+  - studySetting
+  - resourceConstraints
   - outputLanguage
   - uploadedFiles
 autopilot:

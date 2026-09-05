@@ -17,11 +17,11 @@ from a direction and never touches data.
 
 ## The specialist job is an input, not the report
 
-`research_topic_selection` runs the topic agent, and that agent searches
-**PubMed and nothing else**. Transcribing its output is how this skill produced
-directions that were plausible, unranked against the field, and unpublishable:
-nothing in them said what was already known, so nothing in them could say what
-was new.
+`mcp__evimed__research_topic_selection` runs the topic agent. Its retrieval starts
+with the internal evidence service and also queries PubMed for public identifiers
+and metadata. Inspect the returned source records and diagnostics: availability,
+coverage and failures are response-dependent. The specialist result is a first
+map for the wider novelty and feasibility assessment below.
 
 The job gives you a first map. The evidence expansion below is what turns it
 into a judgment, and where the two disagree, say so — a candidate the job ranked
@@ -32,8 +32,15 @@ highly that the wider search shows was answered in 2024 is a finding.
 1. Preserve the user's disease, population, intervention or exposure, outcomes,
    available data, methods, and feasibility constraints. State only assumptions
    that do not materially change the direction.
-2. Call `research_topic_selection` with `action=capabilities`, start the
+2. Call `mcp__evimed__research_topic_selection` with `action=capabilities`, start the
    job, record the job id, and poll with `waitSeconds=45` until terminal.
+   Keep `researchDirection` as the original retrieval direction. Pass supplied
+   context separately as `availableData` (string, at most 4000 characters),
+   `population` and `studySetting` (strings, at most 1000 characters each), and
+   `resourceConstraints` (at most 20 nonempty strings, at most 200 characters
+   each). Omit unspecified fields; do not stringify arrays/objects, silently
+   shorten a brief, or place infrastructure settings into these fields. A data
+   description is not permission or confirmation of data access.
 3. Run the evidence expansion below **while the job runs** — it is long, and the
    two do not depend on each other.
 4. Keep the evidence landscape, contradictions, candidate gaps, proposed study
@@ -41,7 +48,7 @@ highly that the wider search shows was answered in 2024 is a finding.
    is not high priority merely because it sounds novel.
 5. Do not fabricate search counts, citations, data availability, sample sizes,
    effect assumptions, or publication probability.
-6. Use `pharmacy_reference_search` only when configured private
+6. Use `mcp__evimed__pharmacy_reference_search` only when configured private
    terminology or rule coverage materially informs feasibility, phenotype or
    exposure definition, or data-readiness questions. Private rows are
    institution-specific discovery context, not proof of novelty, prevalence,
@@ -50,66 +57,42 @@ highly that the wider search shows was answered in 2024 is a finding.
 
 ## Evidence expansion
 
-There is no open-web search and no browser. Everything outside the workspace
-arrives through the MCP tools — and they reach considerably more than PubMed.
-Verified against the deployed host:
+Use the configured MCP tools for evidence expansion. Consult
+`mcp__evimed__data_source_catalog` and each response for supported operations,
+limits, source provenance and availability. The channels below serve different
+questions; use those relevant to the candidate rather than a fixed channel quota.
 
 | Channel | Tool call | What only this one gives you |
 |---|---|---|
-| PubMed | `literature_search`, or `biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
+| PubMed | `mcp__evimed__literature_search`, or `mcp__evimed__biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
 | Europe PMC | `sourceId: europe-pmc` | **Full-text** search — a method or a limitation stated only in a Discussion section |
 | OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
 | Semantic Scholar | `sourceId: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
 | Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
-| Preprints | `biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
-| Full text | `open_access_full_text` | The actual Methods and Limitations paragraphs |
-| Guidelines | `guideline_search`, `official_page_fetch` | What practice already recommends, and on what evidence grade |
+| Preprints | `mcp__evimed__biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
+| Full text | `mcp__evimed__open_access_full_text` | The actual Methods and Limitations paragraphs |
+| Ongoing studies | `mcp__evimed__clinical_trial_search` | Registered questions, recruitment state and planned outcomes; a registration is not a completed finding |
+| Guidelines | `mcp__evimed__guideline_search`, `mcp__evimed__official_page_fetch` | What practice already recommends, and on what evidence grade |
 | Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
-| Trend analysis | `bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
-| Open web | `web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
+| Trend analysis | `mcp__evimed__bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
+| Open web | `mcp__evimed__web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
 
-`clinicaltrials.gov` and `arxiv.org` do not resolve from the deployed host. Do
-not spend the run retrying them.
+Do not infer a permanent outage from an old host probe. Inspect current tool
+responses; use bounded retries for transient errors and record unavailable
+channels as limitations. An unavailable source is not an empty literature.
 
-**`literature_search` returns titles and nothing else.** Its own warning
-says a title does not establish study design, evidence level, outcome, or effect
-size — so any statement about what a paper *found*, built on that call alone, is
-invented. Use it to find candidates; use `biomedical_source_search`,
-which returns abstracts, to read them; use `open_access_full_text` for
-the ones a design actually depends on. This is the mechanism behind a report
-that cites papers and says nothing about any of them.
+Check the material actually returned. A title alone cannot support study design,
+evidence level, outcomes or effect size. Abstracts support only what they state;
+retrieve full text for Methods or Limitations on which the proposed design rests.
+Respect limits advertised by the current tool schema rather than assuming a
+universal maximum.
 
-Ask for more than the default ten per call. The limit goes to 50 on most
-sources and 123 on the biomedical source search.
-
-**Open-web results are unreviewed pages.** They widen a direction; they do not
-support a claim. Anything you take from one has to be followed to its primary
-record — and if it is published literature, re-found through
-`biomedical_source_search` so it carries an identifier. A page cited as
-though it were evidence is worse than no page.
-
-Two categories behave differently and both are worth a call:
-
-- `categories: ["science"]` reaches **arXiv** and PubMed reliably, and OpenAIRE
-  publications and datasets intermittently — it answered 15 records on one probe
-  and timed out on the next, so treat a miss as a miss and retry rather than as
-  an absence. arXiv is the reason to bother: `export.arxiv.org` does not resolve
-  through the source gateway at all, so this is the **only** channel here that
-  reaches it. OpenAIRE, when it answers, carries EU project, funding and dataset
-  records nothing else here does — which is where "who is already working on
-  this, and on whose grant" shows up. PubMed through this route duplicates
-  `biomedical_source_search`; prefer that one, which returns abstracts.
-- `categories: ["general"]` reaches 360search and Baidu, and nothing else:
-  Google, DuckDuckGo, Brave and Wikipedia do not resolve from this host, and
-  Bing answers it but serves markup the aggregator cannot parse. **The general
-  channel is Chinese-language-skewed**, so run the Chinese phrasing too — an
-  English-only query under-samples what these two indexes hold.
-
-The tool reports which engines answered. **A thin result set means few engines
-answered, not that little exists** — never write "nothing found on the open web"
-as a novelty argument. If the tool reports that open-web search is not configured, say so
-and carry on with the bibliographic channels; an unavailable search is not an
-empty field.
+Open-web results are discovery leads. Follow material claims to the primary
+record and preserve its identifier and URL when available. Official registry,
+funder or society pages can document their own records; an unreviewed summary
+cannot substitute for the underlying study. Engine coverage varies by response
+and language. Record which searches answered and which failed, including both
+Chinese and English queries when relevant to the user's population or setting.
 
 Search every candidate direction four ways. A missing axis is what makes an
 agenda thin:
@@ -128,8 +111,9 @@ Every candidate question gets: **what already answers it, at what n, in which
 population, published where and when — and what precisely is left.** Three
 outcomes, all legitimate, each stated out loud:
 
-- **Unoccupied** — nothing addresses it. Say what makes that credible given the
-  searches actually run, and name the closest neighbours you did find.
+- **No direct answer identified in this search** — state the bounded search
+  scope, unresolved coverage gaps and closest neighbours. Do not assert that the
+  question is unoccupied across the whole field.
 - **Occupied, but not in this population, setting, or era** — name the closest
   work and the exact axis of difference. Most real papers live here.
 - **Answered** — drop it and say so. A direction removed because the field has
@@ -138,17 +122,23 @@ outcomes, all legitimate, each stated out loud:
 "Clinically important" is not a novelty statement. The field agreeing that a
 topic matters is the reason it may already be answered.
 
-## Floors
+Check the closest completed work and relevant ongoing or registered studies.
+State which endpoints and settings they already cover before proposing a new
+question. Separate a proposed hypothesis or method from an established finding;
+a registry entry or protocol establishes a planned study, not an observed effect.
+If the relevant registry is unavailable, record the unresolved overlap check.
 
-Floors, not targets:
+## Proportional evidence coverage
 
-- **≥ 30 distinct works** across the deliverables, each with an identifier and a
-  URL a reader can open.
-- **≥ 5 distinct channels** from the table above.
-- **≥ 5 full texts** actually retrieved and read.
-- **≥ 2 methodological citations** for every question that reaches the agenda.
-
-Do not pad. A work is cited because a sentence depends on it.
+Evidence count is a coverage diagnostic, not proof of novelty or a universal
+completion threshold. Match search breadth and full-text depth to the claim and
+candidate. A rare topic may have few records; a mature topic may require broader
+comparison to show that its proposed question has not already been answered.
+Record source availability, search scope, closest prior work and unresolved
+gaps. Retrieve methods evidence for designs you recommend. Do not pad citations
+to meet a count, invent scores or sample sizes, or promote sparse retrieval into
+a claim of novelty. Explain feasibility against the supplied resources; mark
+missing information and incompatible conditions explicitly.
 
 ## Deliverables
 
@@ -169,16 +159,57 @@ Write `evidence-map.md`, one row per work:
 sentence depends on it should not be in the table.
 
 Write `research-topic-run.json` with the terminal job state and exact returned
-artifacts.
+artifacts. When the job returns `research-portfolio.json`, preserve it as an
+optional structured companion and copy the actual returned `evidence-records.json`
+beside it in the final deliverable. Do not recreate its IDs from report prose.
+Keep each candidate linked to its source
+opportunity and evidence IDs, with the supplied researcher context, hypothesis,
+study design/estimand, data requirements, falsification, feasibility and novelty
+basis. Null fields and `gaps` mean information was not supplied; they are not
+permission to invent it. Reconcile the companion with any candidate removed or
+reframed after evidence expansion, keeping the original lineage and documenting
+the reason. This optional companion adds no new required output or blocker.
 
 ## Before claiming completion
 
-Run the preflight and fix what it reports, then run it again until it returns
-`ok`:
+Run this capability's preflight to verify required paths and mapped citations,
+and inspect proportional coverage diagnostics. Review novelty and feasibility
+as evidence-based judgments; numeric counts cannot establish them.
 
 ```bash
 python3 "scripts/preflight.py" --workspace .
 ```
 
-It checks the one thing a reader cannot: how much of the field was read before
-the agenda was written.
+It is this capability's tooling, not a second delivery gate: fix what it reports
+as an issue, assess its advisory warnings,
+then submit the package.
+
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+The submission answers with the delivery verdict in place. A first submission
+that comes back with issues is the normal case, not a failure: fix everything it
+lists as 必修 and submit again until it answers `ok`.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.

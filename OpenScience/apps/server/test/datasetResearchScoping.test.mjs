@@ -463,7 +463,7 @@ test("both research-planning skills carry the same evidence floor", async () => 
   assert.equal(topic, scoping, "evidence_floor.py has drifted between the two skill packages");
 });
 
-test("the topic preflight holds an agenda to the same floors", { skip: !hasPython3 }, async () => {
+test("the topic preflight reports proportional coverage without fixed count blockers", { skip: !hasPython3 }, async () => {
   const root = await mkdtemp(path.join(tmpdir(), "topic-selection-"));
   const topicPreflight = path.join(topicSkillRoot, "scripts/preflight.py");
   const run = async () => {
@@ -484,10 +484,12 @@ test("the topic preflight holds an agenda to the same floors", { skip: !hasPytho
     await writeFile(path.join(root, "evidence-map.md"), evidenceMap(12), "utf8");
 
     const thin = await run();
-    assert.equal(thin.ok, false, "an agenda written off twelve works must not pass");
-    assert.ok(thin.issues.some((issue) => /cite 12 distinct works; the floor is 30/.test(issue)));
-    assert.ok(thin.issues.some((issue) => /0 full texts were retrieved/.test(issue)));
-    assert.ok(thin.issues.some((issue) => /0 novelty statements for 1 surviving questions/.test(issue)));
+    assert.equal(thin.ok, true, "a sparse agenda must retain coverage diagnostics without a fixed quota");
+    assert.deepEqual(thin.issues, []);
+    assert.equal(thin.metrics.worksCited, 12);
+    assert.equal(thin.metrics.fullTextsRetrieved, 0);
+    assert.ok(thin.warnings.some((warning) => warning.includes("counts do not establish novelty")));
+    assert.ok(thin.warnings.some((warning) => /0 novelty statements for 1 surviving questions/.test(warning)));
 
     await writeFile(path.join(root, "evidence-map.md"), evidenceMap(), "utf8");
     for (let index = 0; index < 5; index += 1) {

@@ -661,6 +661,11 @@ TOOL_DEFINITIONS = [
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
                 "researchDirection": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "availableData": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "population": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "studySetting": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "resourceConstraints": {"type": "array", "maxItems": 20,
+                                        "items": {"type": "string", "minLength": 1, "maxLength": 200}},
                 "jobId": {"type": "string", "pattern": r"^topic-[a-z0-9-]{8,80}$"},
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},

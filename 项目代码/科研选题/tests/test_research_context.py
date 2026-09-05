@@ -105,7 +105,7 @@ def test_portfolio_retains_supplied_design_and_explicit_gaps():
 
 
 def test_runner_passes_context_and_returns_portfolio(tmp_path):
-    from evimed_runner import _analyze_with_service
+    from evimed_runner import _analyze_with_service, revalidate_existing
 
     report = SimpleNamespace(content="Evidence-limited research agenda. " * 10)
     completed = SimpleNamespace(status=TaskStatus.COMPLETED, report=report, module_outputs={},
@@ -117,6 +117,9 @@ def test_runner_passes_context_and_returns_portfolio(tmp_path):
     assert "research-portfolio.json" in receipt["artifacts"]
     portfolio = json.loads((tmp_path / "research-portfolio.json").read_text())
     assert portfolio["researchContext"] == CONTEXT
+    assert json.loads((tmp_path / "research-topic-run.json").read_text())["researchContext"] == CONTEXT
+    assert CONTEXT["availableData"] in (tmp_path / "research-topic-report.md").read_text()
+    revalidate_existing(tmp_path, "Dialysis")
     assert CONTEXT["availableData"] in (tmp_path / "research-topic-report.md").read_text()
 
 
@@ -126,3 +129,40 @@ def test_fallback_opportunities_do_not_manufacture_scores():
     opportunities = M5_BreakthroughOpportunityModule._fallback_opportunities([record], "Dialysis")
     assert opportunities
     assert all(not any(key.endswith("_score") for key in item) for item in opportunities)
+
+
+def test_context_defaults_boundaries_and_escaped_report_values():
+    from core.research_context import context_prompt, render_research_context, validate_research_context
+
+    assert validate_research_context(None) == {}
+    assert context_prompt("") == ""
+    assert render_research_context({}) == ""
+    assert validate_research_context({"resourceConstraints": []}) == {"resourceConstraints": []}
+    boundary = {"availableData": "a" * 4000, "population": "b" * 1000,
+                "studySetting": "c" * 1000, "resourceConstraints": ["d" * 200] * 20}
+    assert validate_research_context(boundary) == boundary
+    rendered = render_research_context({"availableData": "Records\n## Embedded heading"})
+    assert "\\n## Embedded heading" in rendered
+    assert "\n## Embedded heading" not in rendered
+
+
+def test_portfolio_rejects_unreconciled_lineage_and_preserves_json_descriptions():
+    from core.research_portfolio import _description, build_research_portfolio
+
+    assert _description(" ") is None
+    assert _description([]) is None
+    assert _description(50) is None
+    assert _description({"basis": float("nan")}) is None
+    assert _description({"basis": object()}) is None
+    assert _description(["Attendance", "Transport"]) == ["Attendance", "Transport"]
+    topic = {"source_opportunity_id": "BOM1", "source_evidence_pmids": ["420001"], "support_level": "indirect"}
+    source = {"opportunity_id": "BOM1", "evidence_pmids": ["420001"], "support_level": "indirect"}
+    evidence = [LiteratureRecord(id="internal_retained", pmid="420001", doi="10.1000/example", title="Prior study")]
+    with pytest.raises(ValueError, match="unknown source"):
+        build_research_portfolio("Dialysis", {}, [topic], [], evidence)
+    with pytest.raises(ValueError, match="unknown evidence"):
+        build_research_portfolio("Dialysis", {}, [topic], [source], [])
+    with pytest.raises(ValueError, match="inherit"):
+        build_research_portfolio("Dialysis", {}, [{**topic, "source_evidence_pmids": []}], [source], evidence)
+    result = build_research_portfolio("Dialysis", {}, [topic], [source], evidence)
+    assert result["candidates"][0]["sourceEvidenceIds"] == ["internal_retained"]

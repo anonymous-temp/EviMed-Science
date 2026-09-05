@@ -70,7 +70,7 @@ SPECS = {
         "marker": "services/task_service.py",
         "directory": "research-topic-runs",
         "required": ("researchDirection",),
-        "inputs": ("researchDirection", "outputLanguage"),
+        "inputs": ("researchDirection", "outputLanguage", "availableData", "population", "studySetting", "resourceConstraints"),
     },
     "peer_review": {
         "id": "peer-review",
@@ -375,6 +375,18 @@ def capabilities(tool_name):
 
 def start_job(tool_name, arguments):
     spec = SPECS[tool_name]
+    if tool_name == "research_topic_selection":
+        if set(arguments) - {"action", *spec["inputs"]}:
+            raise SpecialistJobError("specialist_input_invalid", "request contains unsupported fields")
+        for key, limit in (("researchDirection", 4000), ("availableData", 4000), ("population", 1000), ("studySetting", 1000)):
+            if key in arguments and (not isinstance(arguments[key], str) or not arguments[key].strip() or len(arguments[key]) > limit):
+                raise SpecialistJobError("specialist_input_invalid", f"{key} must be a nonempty string of at most {limit} characters")
+        if "resourceConstraints" in arguments:
+            value = arguments["resourceConstraints"]
+            if not isinstance(value, list) or len(value) > 20 or any(
+                not isinstance(item, str) or not item.strip() or len(item) > 200 for item in value
+            ):
+                raise SpecialistJobError("specialist_input_invalid", "resourceConstraints must be at most 20 nonempty strings of at most 200 characters")
     for required in spec["required"]:
         if not str(arguments.get(required) or "").strip():
             raise SpecialistJobError("specialist_input_required", "%s requires %s." % (spec["label"], required))

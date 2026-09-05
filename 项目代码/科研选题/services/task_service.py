@@ -16,6 +16,7 @@ from models.schemas import (
     ChartInfo, SearchDiagnostics
 )
 from core.input_processor import InputPreprocessor, InputValidationError
+from core.research_context import validate_research_context
 from core.new_planner import AnalysisPlanner
 from core.new_analysis_engine import AnalysisEngine
 from core.new_report_generator import ReportGenerator
@@ -107,12 +108,14 @@ class TaskService:
 
     async def create_task(self, input_text: str, options: Dict = None) -> AnalysisTask:
         """创建新任务"""
+        context = validate_research_context(options)
         task_id = f"TASK_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
         task = AnalysisTask(
             task_id=task_id,
             status=TaskStatus.PENDING,
             input_text=input_text,
+            options=context,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             phase=AnalysisPhase.RETRIEVAL
@@ -194,7 +197,7 @@ class TaskService:
             task.evidence_stats = evidence_stats
 
             # 构建标准化输入
-            standardized = self._build_standardized_input(preprocessed, query_structure)
+            standardized = self._build_standardized_input(preprocessed, query_structure, task.options)
             # 兜底：LLM 可能返回不在枚举内的值
             _valid_intents = {"exploration", "gap_hunting", "idea_validation", "feasibility_check", "design_help", "publication_strategy"}
             if standardized.get("research_stage_intent") not in _valid_intents:
@@ -237,7 +240,7 @@ class TaskService:
     async def _multi_source_search(
         self,
         input_text: str,
-        query_structure: Dict
+        query_structure: Dict,
     ) -> tuple:
         """
         优先使用内部数据库检索，无结果或异常时降级到 PubMed。
@@ -476,7 +479,8 @@ class TaskService:
     def _build_standardized_input(
         self,
         preprocessed: Any,
-        query_structure: Dict
+        query_structure: Dict,
+        options: Dict = None,
     ) -> Dict:
         """构建标准化输入"""
         pico = query_structure.get('pico_entities', {})
@@ -515,7 +519,7 @@ class TaskService:
             "pico_entities": pico,
             "logical_structure": query_structure.get('logical_structure', ''),
             "confidence": query_structure.get('confidence', 0.7),
-            "research_context": ""
+            "research_context": json.dumps(validate_research_context(options), ensure_ascii=False) if options else ""
         }
 
     # ==================== V5.0: 阶段二 - 逐步分析 ====================

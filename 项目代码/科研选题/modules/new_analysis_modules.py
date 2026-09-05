@@ -17,6 +17,8 @@ import networkx as nx
 _MATPLOTLIB_LOCK = threading.Lock()
 
 from utils import safe_parse_json
+from core.research_context import context_prompt
+from core.research_portfolio import DESIGN_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -1518,7 +1520,8 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
 
         # BOM深度挖掘
         bom_analysis = await self._mine_breakthrough_opportunities(
-            evidence_records, evidence_stats, m4_data, m3_data, query_context,
+            evidence_records, evidence_stats, m4_data, m3_data,
+            query_context + context_prompt(standardized_input.research_context),
             stream_callback=stream_callback,
         )
 
@@ -1782,10 +1785,7 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
             for score_name in (
                 "priority_score", "feasibility_score", "novelty_score", "clinical_impact_score"
             ):
-                try:
-                    item[score_name] = max(0.0, min(1.0, float(item.get(score_name, 0.5))))
-                except (TypeError, ValueError):
-                    item[score_name] = 0.5
+                item.pop(score_name, None)
             validated.append(item)
         return validated[:3]
 
@@ -1844,10 +1844,6 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
                     "预注册、多中心且以患者重要结局为终点的验证仍是待检验的方法学扩展。"
                 ),
                 "missing_evidence_concepts": ["preregistered_multicenter_outcome_validation"],
-                "priority_score": 0.75,
-                "feasibility_score": 0.65,
-                "novelty_score": 0.55,
-                "clinical_impact_score": 0.80,
             },
             {
                 "opportunity_id": "BOM-F2",
@@ -1862,10 +1858,6 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
                     "目标试验模拟是待预注册和外部验证的分析扩展，不是已证实的因果结论。"
                 ),
                 "missing_evidence_concepts": ["preregistered_target_trial_emulation"],
-                "priority_score": 0.78,
-                "feasibility_score": 0.75,
-                "novelty_score": 0.62,
-                "clinical_impact_score": 0.76,
             },
         ]
 
@@ -1996,7 +1988,8 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
         # 生成研究议程
         logger.info(f"[M6] 开始生成研究议程...")
         agenda = await self._generate_research_agenda(
-            opportunities, m4_data, evidence_stats, query_context,
+            opportunities, m4_data, evidence_stats,
+            query_context + context_prompt(standardized_input.research_context),
             stream_callback=stream_callback,
         )
         logger.info(f"[M6] 研究议程生成完成")
@@ -2065,6 +2058,7 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
             seen.add(source_id)
             item = M5_BreakthroughOpportunityModule._sanitize_generated_value(dict(raw))
             item["source_opportunity_title"] = source.get("title", "")
+            item["design_gaps"] = [field for field in DESIGN_FIELDS.values() if not raw.get(field)]
             item["source_evidence_pmids"] = list(source.get("evidence_pmids", []))
             item["support_level"] = source.get("support_level", "indirect")
             item["support_rationale"] = source.get("support_rationale", "")
@@ -2095,10 +2089,8 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
             if item.get("timeline"):
                 item["timeline"] = "规划性草案（需按伦理、入组能力和实际资源校准）：" + str(item["timeline"])
             for score_name in ("priority_score", "feasibility_score", "novelty_score"):
-                try:
-                    item[score_name] = max(0.0, min(1.0, float(item.get(score_name, 0.5))))
-                except (TypeError, ValueError):
-                    item[score_name] = 0.5
+                # Uncalibrated model scores are not measured feasibility or novelty.
+                item.pop(score_name, None)
             validated.append(item)
 
         # Preserve the one-opportunity/one-topic contract even when the model
@@ -2126,9 +2118,7 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
                 "publication_strategy": {
                     "expected_impact_factor": "不预设；投稿前核对期刊范围、最新指标与稿件匹配度",
                 },
-                "priority_score": float(source.get("priority_score", 0.5)),
-                "feasibility_score": float(source.get("feasibility_score", 0.5)),
-                "novelty_score": float(source.get("novelty_score", 0.5)),
+                "design_gaps": list(DESIGN_FIELDS.values()),
             })
         return validated
 
