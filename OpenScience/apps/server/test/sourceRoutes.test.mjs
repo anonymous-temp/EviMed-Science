@@ -8,7 +8,7 @@ async function fixture(t) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
-    get: async (userId, id) => { calls.push({ method: "get", userId, id }); return { id, revision: 2 }; },
+    get: async (userId, id) => { calls.push({ method: "get", userId, id }); return { id, projectId: "owned-project", revision: 2 }; },
     override: async (userId, id, body) => { calls.push({ method: "override", userId, id, body }); return { id, payload: body }; },
     retry: async (userId, id, body) => { calls.push({ method: "retry", userId, id, body }); return { id, status: "queued" }; },
     cancel: async (userId, id, body) => { calls.push({ method: "cancel", userId, id, body }); return { id, status: "canceled" }; },
@@ -60,12 +60,12 @@ test("source mutations require CSRF and reject browser-supplied ownership", asyn
     body: JSON.stringify({ expectedRevision: 2, docType: "lecture-slides", depth: "deep", reason: "mine" }) })).status, 403);
   assert.equal((await fetch(url, { method: "PATCH", headers,
     body: JSON.stringify({ expectedRevision: 2, docType: "lecture-slides", depth: "deep", reason: "mine", userId: "other" }) })).status, 400);
-  assert.equal(calls.length, 0);
+  assert.equal(calls.some((call) => call.method === "override"), false);
 
   const response = await fetch(url, { method: "PATCH", headers,
     body: JSON.stringify({ expectedRevision: 2, docType: "lecture-slides", depth: "deep", reason: "mine" }) });
   assert.equal(response.status, 200);
-  assert.equal(calls[0].userId, "owner");
+  assert.equal(calls.find((call) => call.method === "override").userId, "owner");
 });
 
 test("retry, cancel and delete are explicit revision-guarded operations", async (t) => {
@@ -79,5 +79,5 @@ test("retry, cancel and delete are explicit revision-guarded operations", async 
   assert.equal((await fetch(`${base}/api/sources/source-one`, {
     method: "DELETE", headers, body: JSON.stringify({ expectedRevision: 2 }),
   })).status, 200);
-  assert.deepEqual(calls.map((call) => call.method), ["retry", "cancel", "remove"]);
+  assert.deepEqual(calls.filter((call) => call.method !== "get").map((call) => call.method), ["retry", "cancel", "remove"]);
 });

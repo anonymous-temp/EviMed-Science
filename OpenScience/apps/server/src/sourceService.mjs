@@ -256,6 +256,58 @@ export class SourceService {
     }, { expectedRevision: current.revision, projectId: current.projectId });
   }
 
+  /** @param {string} userId @param {{projectId:string,status?:string|null,limit?:number,cursor?:string|null}} options */
+  async list(userId, { projectId, status = null, limit = 50, cursor = null }) {
+    const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
+    return this.documents.list(userId, "source", {
+      projectId: text(projectId, "project id", 160), limit, cursor,
+      filter: selectedStatus ? { status: selectedStatus } : {},
+    });
+  }
+
+  /** @param {string} userId @param {string} sourceId */
+  async get(userId, sourceId) { return this.requireSource(userId, sourceId); }
+
+  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number}} input */
+  async cancel(userId, sourceId, input) {
+    const current = await this.requireSource(userId, sourceId);
+    if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before canceling it.");
+    if (["complete", "missing", "canceled"].includes(current.payload.status)) {
+      if (current.payload.status === "canceled") return current;
+      throw new HttpError(409, "source_state_conflict", "This source is no longer processing.");
+    }
+    return this.documents.put(userId, "source", sourceId, {
+      ...current.payload, status: "canceled", updatedAt: this.now().toISOString(),
+    }, { expectedRevision: current.revision, projectId: current.projectId });
+  }
+
+  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number}} input */
+  async retry(userId, sourceId, input) {
+    const current = await this.requireSource(userId, sourceId);
+    if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before retrying it.");
+    if (!["canceled", "failed", "needs_attention", "complete"].includes(current.payload.status)) {
+      throw new HttpError(409, "source_state_conflict", "This source is already processing.");
+    }
+    const updated = await this.documents.put(userId, "source", sourceId, {
+      ...current.payload, status: "queued", error: null, updatedAt: this.now().toISOString(),
+    }, { expectedRevision: current.revision, projectId: current.projectId });
+    await this.jobs.enqueue(userId, "ingest", {
+      sourceId, sourceRevision: updated.revision, extractorVersion: this.extractorVersion, reason: "retry",
+    }, { idempotencyKey: `ingest:${sourceId}:retry:${updated.revision}`, projectId: current.projectId, rearmFailed: true });
+    return updated;
+  }
+
+  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number}} input */
+  async remove(userId, sourceId, input) {
+    const current = await this.requireSource(userId, sourceId);
+    if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "The source changed; reload before deleting it.");
+    const removed = await this.documents.remove(userId, "source", sourceId, current.revision);
+    await this.jobs.enqueue(userId, "consolidate", { action: "source-delete", sourceId }, {
+      idempotencyKey: `source-delete:${sourceId}:${removed.revision}`, projectId: current.projectId,
+    });
+    return removed;
+  }
+
   /** @param {string} userId @param {string} sourceId */
   async requireSource(userId, sourceId) {
     const source = await this.documents.get(userId, "source", text(sourceId, "source id", 160));
