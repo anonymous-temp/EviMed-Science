@@ -82,6 +82,8 @@ test("released, uncertain and settled calls are distinguished in durable summari
   assert.ok(summary.uncertainCalls >= 1);
   assert.ok(summary.reservedCost >= 0.75);
   assert.equal(summary.currency, "CNY");
+  assert.ok(summary.byModel.some((item) => item.model === "deepseek-v4-flash"));
+  assert.deepEqual(summary.priceVersions, ["evimed-reference-2026-09-05"]);
   assert.equal((await ledger.summary(other, { since: new Date("2020-01-01T00:00:00Z") })).totalCalls, 0);
 });
 

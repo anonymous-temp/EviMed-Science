@@ -33,6 +33,7 @@ export function readinessSaasProfile(config, checks) {
     targetAudience: "individual-researchers",
     organizationCollaboration: false,
     billingIntegrated: false,
+    commercialModel: "nonpaid-first-release",
   };
   if (profile === "controlled-pilot") {
     return { ...common, technicalSaas: false };

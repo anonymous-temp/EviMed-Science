@@ -72,7 +72,7 @@ test("provider usage is read only from the response envelope, never assistant pr
 });
 
 test("the tail keeps the end of a large body without holding the body", () => {
-  const tail = createUsageTail(256);
+  const tail = createUsageTail(256, { stream: true });
   const filler = "x".repeat(64 * 1024);
   tail.observe(Buffer.from(filler));
   tail.observe(Buffer.from('\ndata: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'));
@@ -82,6 +82,19 @@ test("the tail keeps the end of a large body without holding the body", () => {
     cacheHitTokens: 0,
     cacheMissTokens: 7,
   });
+});
+
+test("a large non-stream response incrementally retains top-level id and usage", () => {
+  const body = JSON.stringify({
+    id: "provider-large-response",
+    choices: [{ message: { content: "x".repeat(32 * 1024) } }],
+    usage: { prompt_tokens: 17, completion_tokens: 5, prompt_cache_hit_tokens: 7, prompt_cache_miss_tokens: 10 },
+  });
+  const observer = createUsageTail(1024);
+  for (let offset = 0; offset < body.length; offset += 137) observer.observe(body.slice(offset, offset + 137));
+  assert.equal(observer.providerRequestId(), "provider-large-response");
+  assert.deepEqual(observer.usage(), { promptTokens: 17, completionTokens: 5, cacheHitTokens: 7, cacheMissTokens: 10 });
+  assert.ok(observer.retainedBytes() <= 2048, `observer retained ${observer.retainedBytes()} bytes`);
 });
 
 test("an event names who it bills, and costs half off peak", async () => {

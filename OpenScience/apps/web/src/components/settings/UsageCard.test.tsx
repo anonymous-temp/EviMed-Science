@@ -30,6 +30,14 @@ describe("UsageCard", () => {
     expect(await screen.findByText("12")).toBeInTheDocument();
     expect(screen.getByText("3.46")).toBeInTheDocument();
     expect(screen.getByText(/deepseek-v4-pro/)).toBeInTheDocument();
+    expect(screen.getByText(/不是账单，也不会触发收款/)).toBeInTheDocument();
+  });
+
+  it("distinguishes active reservations from calls awaiting reconciliation", async () => {
+    mocks.fetchWebAccountUsage.mockResolvedValue({ ...summary, reservedCalls: 2, uncertainCalls: 1, reservedCost: 0.75 });
+    render(<UsageCard />);
+    expect(await screen.findByText(/2 次调用已预留额度/)).toBeInTheDocument();
+    expect(screen.getByText(/1 次调用等待供应商用量核对/)).toBeInTheDocument();
   });
 
   // A zero cost that means "free" and one that means "we have no price for

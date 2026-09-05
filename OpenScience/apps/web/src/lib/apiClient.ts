@@ -893,6 +893,10 @@ export interface WebUsageSummary {
   /** Calls whose model the price list did not know — counted, not priced. */
   unpricedCalls: number;
   byModel: { model: string; calls: number; cost: number }[];
+  reservedCalls?: number;
+  uncertainCalls?: number;
+  reservedCost?: number;
+  priceVersions?: string[];
 }
 
 export async function fetchWebAccountUsage(): Promise<WebUsageSummary> {

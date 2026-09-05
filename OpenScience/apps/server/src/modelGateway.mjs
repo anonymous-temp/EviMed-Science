@@ -4,6 +4,8 @@
 // to launch with any other. Adding a model here is a commitment to certify it —
 // the gate will run against whichever of these is configured, so a model that
 // cannot drive the chain fails the release rather than reaching a reader.
+import { createHash, randomUUID } from "node:crypto";
+import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
 
 export const supportedDeepSeekModels = Object.freeze(new Set([
@@ -229,19 +231,41 @@ function normalizedRequest(body, config) {
   if (body.parallel_tool_calls != null && typeof body.parallel_tool_calls !== "boolean") {
     throw gatewayError(400, "model_gateway_field_invalid", "parallel_tool_calls must be a boolean.");
   }
+  if (body.max_tokens != null && (!Number.isSafeInteger(body.max_tokens) || body.max_tokens < 1 || body.max_tokens > 384_000)) {
+    throw gatewayError(400, "model_gateway_field_invalid", "max_tokens must be an integer between 1 and 384000.");
+  }
+  if (body.max_completion_tokens != null && (!Number.isSafeInteger(body.max_completion_tokens) || body.max_completion_tokens < 1 || body.max_completion_tokens > 384_000)) {
+    throw gatewayError(400, "model_gateway_field_invalid", "max_completion_tokens must be an integer between 1 and 384000.");
+  }
+  if (body.max_tokens != null && body.max_completion_tokens != null) {
+    throw gatewayError(400, "model_gateway_field_invalid", "Use one output token limit.");
+  }
   if (body.stream_options != null) {
     const options = assertPlainObject(body.stream_options, "model_gateway_field_invalid", "stream_options must be an object.");
     if (Object.keys(options).some((key) => key !== "include_usage") || (options.include_usage != null && typeof options.include_usage !== "boolean")) {
       throw gatewayError(400, "model_gateway_field_invalid", "stream_options contains an unsupported field.");
     }
   }
+  const stream = body.stream === true;
   return {
     ...body,
     model: config.deepseekModel,
     thinking: { type: "enabled" },
     reasoning_effort: "high",
-    stream: body.stream === true,
+    stream,
+    ...(stream ? { stream_options: { ...(body.stream_options ?? {}), include_usage: true } } : {}),
   };
+}
+
+/** Reserve a conservative request ceiling before a provider call starts. */
+export function estimateModelReservation(body, config, at = new Date()) {
+  const promptTokens = Math.min(1_000_000, Buffer.byteLength(JSON.stringify(body.messages ?? []), "utf8"));
+  const configured = Number(config.modelGatewayReservationMaxOutputTokens ?? 65_536);
+  const fallback = Number.isSafeInteger(configured) ? configured : 65_536;
+  const requested = Number(body.max_completion_tokens ?? body.max_tokens ?? fallback);
+  const outputTokens = Math.max(1, Math.min(384_000, requested));
+  const price = priceUsage({ resourceType: "model", model: body.model, cacheMiss: promptTokens, output: outputTokens, peak: isPeak(at) });
+  return { promptTokens, outputTokens, ...price };
 }
 
 function upstreamUrl(base, production = false) {
@@ -315,13 +339,19 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
   }
 }
 
-export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
+export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = fetch, usageLedger = null } = {}) {
   return async function modelGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
       return;
     }
     const abortController = new AbortController();
+    let reservation = null;
+    let reservationUserId = null;
+    let providerDisposition = "not-dispatched";
+    let usageTerminal = false;
+    let providerRequestId = null;
+    const requestStartedAt = new Date();
     const timeoutMs = Math.max(1, Number(config.modelGatewayTimeoutMs) || 300_000);
     // The limit is now idle time, not total time. It was total, and set before
     // the request: a reasoning model that streamed an answer for longer than
@@ -360,9 +390,25 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
       }
       const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
       const normalized = normalizedRequest(body, config);
+      if (config.requireDurableUsageLedger === true && !usageLedger) {
+        throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
+      }
+      if (usageLedger) {
+        const estimate = estimateModelReservation(normalized, config, requestStartedAt);
+        const fingerprint = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+        reservationUserId = caller.userId;
+        reservation = await usageLedger.reserveModel({
+          id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
+          priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
+          estimatedCost: estimate.cost, dailyLimit: Number(config.userDailySpendLimit) || 0,
+          weeklyLimit: Number(config.userWeeklySpendLimit) || 0, now: requestStartedAt,
+        });
+      }
       let upstream;
       try {
-        upstream = await fetchImpl(upstreamUrl(config.deepseekBaseUrl, config.production), {
+        const providerUrl = upstreamUrl(config.deepseekBaseUrl, config.production);
+        providerDisposition = "dispatched";
+        upstream = await fetchImpl(providerUrl, {
           method: "POST",
           headers: {
             authorization: `Bearer ${config.deepseekApiKey}`,
@@ -382,6 +428,7 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         throw gatewayError(502, "model_gateway_upstream_unavailable", "The model provider is temporarily unavailable.");
       }
       if (!upstream.ok) {
+        providerDisposition = "rejected";
         await upstream.body?.cancel().catch(() => {});
         throw gatewayError(
           mappedUpstreamStatus(upstream.status),
@@ -391,6 +438,7 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
             : "The model provider rejected the request.",
         );
       }
+      providerDisposition = "accepted";
       const contentType = String(upstream.headers.get("content-type") ?? "").toLowerCase();
       const expectedType = normalized.stream ? "text/event-stream" : "application/json";
       if (!contentType.startsWith(expectedType) || !upstream.body) {
@@ -412,22 +460,50 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
       // this is the one place they pass through. The tail is kept rather than
       // the body: `usage` is last in both shapes, and holding a whole response
       // would undo the reason this is a stream.
-      const usageTail = createUsageTail();
+      const usageTail = createUsageTail(16 * 1024, { stream: normalized.stream });
       await pipeModelGatewayBody(upstream.body, res, abortController.signal, responseLimit, (chunk) => {
         armIdleDeadline();
         usageTail.observe(chunk);
       });
+      providerRequestId = usageTail.providerRequestId();
+      const exactUsage = usageTail.usage();
       // After the body, never before: a call that failed halfway is not a call
       // to bill, and awaiting a ledger write before the last byte would put
       // the accounting in the answer's way.
-      await recordModelUsage({
-        config,
-        userId: caller.userId,
-        projectId: caller.projectId,
-        model: normalized.model,
-        usage: usageTail.usage(),
-      });
+      if (usageLedger && reservation) {
+        if (exactUsage) {
+          const actual = priceUsage({
+            resourceType: "model", model: normalized.model, cacheHit: exactUsage.cacheHitTokens,
+            cacheMiss: exactUsage.cacheMissTokens, output: exactUsage.completionTokens, peak: isPeak(requestStartedAt),
+          });
+          const settledUsage = {
+            cacheHitTokens: exactUsage.cacheHitTokens,
+            cacheMissTokens: exactUsage.cacheMissTokens,
+            completionTokens: exactUsage.completionTokens,
+          };
+          await usageLedger.settleModel(caller.userId, reservation.id, {
+            usage: settledUsage, actualCost: actual.cost, priced: actual.priced, providerRequestId,
+          });
+        } else {
+          await usageLedger.markUncertain(caller.userId, reservation.id, "response_usage_missing", { providerRequestId });
+        }
+        usageTerminal = true;
+      } else {
+        await recordModelUsage({ config, userId: caller.userId, projectId: caller.projectId,
+          model: normalized.model, usage: exactUsage, at: requestStartedAt });
+      }
     } catch (error) {
+      if (usageLedger && reservation && reservationUserId && !usageTerminal) {
+        try {
+          if (["dispatched", "accepted"].includes(providerDisposition)) {
+            await usageLedger.markUncertain(reservationUserId, reservation.id, "provider_response_incomplete", { providerRequestId });
+          }
+          else await usageLedger.release(reservationUserId, reservation.id, "provider_not_accepted");
+          usageTerminal = true;
+        } catch {
+          process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
+        }
+      }
       const abortReason = abortController.signal.reason;
       const clientDisconnected = abortController.signal.aborted && abortReason?.name === "AbortError";
       // Once the stream has started, sendError can no longer set a status: the
