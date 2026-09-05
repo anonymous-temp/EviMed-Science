@@ -16,6 +16,8 @@ const productionReadinessReady = {
   restoreDrillAck: true,
   operatorMetricsToken: "metrics-token-for-production-readiness-tests",
   trustProxy: true,
+  requireDurableUsageLedger: false,
+  requireInbox: false,
   ...productionReleaseConfig,
 };
 
@@ -1706,6 +1708,8 @@ test("readiness validates local production backup settings without exposing path
         backupPassphraseConfigured: true,
         restoreDrillAck: true,
         trustProxy: true,
+        requireDurableUsageLedger: false,
+        requireInbox: false,
         ...productionReleaseConfig,
       },
     );
@@ -5948,12 +5952,13 @@ test("runtime_status marks interrupted starting runtime state as stale", async (
 
 test("docker runtime startup reports container cleanup failures", async () => {
   const tmp = await mkdtemp(path.join(tmpdir(), "os-web-runtime-cleanup-"));
+  const runtimeDataDir = await mkdtemp(path.join(await realpath("/tmp"), "rt-"));
   try {
     const dockerBin = await fakeRuntimeCleanupFailDockerBin(tmp);
     await withApp(
       async ({ base }) => {
         const out = await command(base, "start_runtime");
-        assert.equal(out.res.status, 502);
+        assert.equal(out.res.status, 502, JSON.stringify(out.json));
         assert.equal(out.json.code, "runtime_cleanup_failed");
 
         const status = await command(base, "runtime_status");
@@ -5968,6 +5973,7 @@ test("docker runtime startup reports container cleanup failures", async () => {
         assert.match(row.error, /permission denied/);
       },
       {
+        dataDir: runtimeDataDir,
         runtimeMode: "kernel",
         runtimeSandboxMode: "docker",
         runtimeContainerBin: dockerBin,
@@ -5976,6 +5982,7 @@ test("docker runtime startup reports container cleanup failures", async () => {
     );
   } finally {
     await rm(tmp, { recursive: true, force: true });
+    await rm(runtimeDataDir, { recursive: true, force: true });
   }
 });
 
