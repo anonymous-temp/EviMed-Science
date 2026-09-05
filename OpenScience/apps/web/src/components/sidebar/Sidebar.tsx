@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import {
   Bot,
+  Bell,
   Brain,
   Layers,
   FlaskConical,
@@ -41,6 +42,7 @@ const NAV: NavItem[] = [
   { to: "/app/notebooks", label: "科研笔记本", icon: <NotebookPen size={16} /> },
   { to: "/app/memory", label: "科研记忆", icon: <Brain size={16} /> },
   { to: "/app/capsules", label: "记忆胶囊", icon: <Layers size={16} /> },
+  { to: "/app/inbox", label: "收件箱", icon: <Bell size={16} /> },
   { to: "/app/capabilities", label: "能力模板", icon: <Bot size={16} /> },
 ];
 

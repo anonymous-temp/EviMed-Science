@@ -36,6 +36,20 @@ test("inbox ordering puts reviews and questions before informational notices", o
   assert.ok(page.nextCursor);
   assert.equal((await service.list(owner, { limit: 2, cursor: page.nextCursor })).items.length, 1);
   assert.equal((await service.list(other)).items.length, 0);
+  const once = await service.create(owner, { noticeType: "notify", title: "One result", body: "This event is idempotent.",
+    source: { type: "run", id: "run-one" }, idempotencyKey: "run-one" });
+  const retried = await service.create(owner, { noticeType: "notify", title: "One result", body: "This event is idempotent.",
+    source: { type: "run", id: "run-one" }, idempotencyKey: "run-one" });
+  assert.equal(retried.id, once.id);
+  assert.equal(retried.count, 1);
+  await assert.rejects(service.create(owner, { noticeType: "notify", title: "One result", body: "This event is idempotent.",
+    actions: [{ id: "different", label: "Different" }], idempotencyKey: "run-one" }), { code: "notification_idempotency_conflict" });
+  const grouped = await service.create(owner, { noticeType: "notify", title: "Grouped once", body: "One event.",
+    groupKey: "idempotent-group", idempotencyKey: "grouped-run" });
+  const groupedRetry = await service.create(owner, { noticeType: "notify", title: "Grouped once", body: "One event.",
+    groupKey: "idempotent-group", idempotencyKey: "grouped-run" });
+  assert.equal(groupedRetry.id, grouped.id);
+  assert.equal(groupedRetry.count, 1);
 });
 
 test("read and resolution updates are revision guarded and account scoped", options, async () => {
@@ -49,6 +63,7 @@ test("read and resolution updates are revision guarded and account scoped", opti
   assert.equal(resolved.resolution.actionId, "approve");
   assert.ok(resolved.resolvedAt);
   await assert.rejects(service.resolve(owner, notice.id, { actionId: "unknown", expectedRevision: resolved.revision }), { code: "notification_action_invalid" });
+  await assert.rejects(service.resolve(owner, notice.id, { actionId: "retire", expectedRevision: resolved.revision }), { code: "notification_already_resolved" });
 });
 
 test("same-group notices aggregate for five minutes without swallowing blocking items", options, async () => {
@@ -64,9 +79,19 @@ test("same-group notices aggregate for five minutes without swallowing blocking 
   const secondReview = await service.create(owner, { noticeType: "review", title: "Do not aggregate", body: "Decision two.", groupKey: "thread-one",
     actions: [{ id: "ok", label: "OK" }] }, { now: new Date(now.getTime() + 60_000) });
   assert.notEqual(review.id, secondReview.id);
+  await assert.rejects(service.create(owner, { noticeType: "notify", title: "Index update", body: "Wrong project.",
+    groupKey: "thread-one", projectId: "missing-project" }, { now: new Date(now.getTime() + 2 * 60_000) }), { code: "23503" });
+  const concurrent = await Promise.all([
+    service.create(other, { noticeType: "notify", title: "Concurrent", body: "First.", groupKey: "same-group", projectId: "default" }, { now }),
+    service.create(other, { noticeType: "notify", title: "Concurrent", body: "Second.", groupKey: "same-group", projectId: "default" }, { now }),
+  ]);
+  assert.equal(new Set(concurrent.map((item) => item.id)).size, 1);
+  assert.equal((await service.list(other)).items.find((item) => item.id === concurrent[0].id).count, 2);
 });
 
 test("due defaults settle once and preferences preserve quiet hours and in-app delivery", options, async () => {
+  await assert.rejects(service.create(owner, { noticeType: "question", title: "Missing due time", body: "This default cannot run.",
+    actions: [{ id: "pause", label: "Pause" }], defaultAction: "pause" }), { code: "notification_payload_invalid" });
   const due = await service.create(owner, { noticeType: "question", title: "Timed choice", body: "Keep the task queued?",
     actions: [{ id: "pause", label: "Pause" }, { id: "continue", label: "Continue" }], defaultAction: "pause",
     dueAt: "2026-09-06T01:00:00Z" });
