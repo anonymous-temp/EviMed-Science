@@ -4,6 +4,7 @@
 // attribute is the ESM way to say "this file is data", and it keeps the rules
 // exactly one file rather than one file plus a loader.
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
+import { REVIEW_METHOD_CHECK_IDS, reviewMethodsFindings } from "./reviewMethods.mjs";
 
 const claimFields = Object.freeze([
   "claimId",
@@ -329,6 +330,7 @@ class IssueLog {
  * @type {readonly string[]}
  */
 export const clinicalEvidenceCheckIds = Object.freeze([
+  ...REVIEW_METHOD_CHECK_IDS,
   "emergency-trigger-conditioned",
   "appraisal-declaration",
   "screening-ledger",
@@ -4980,19 +4982,25 @@ export function validateClinicalEvidencePackage({
     }
   }
 
-  const reported = collapseClaimFieldIssues(issues.all());
+  const existing = collapseClaimFieldIssues(issues.all());
+  const reviewCoverage = reviewMethodsFindings(parseJsonObject(searchLogText));
+  // Method accounting is observable before it can become a blocking rule.
+  // Both delivery entrypoints receive these same findings; the original
+  // blocking set remains unchanged, including when the extension is malformed.
+  const reported = [...existing, ...reviewCoverage.issues];
   const reportedTexts = reported.map((entry) => entry.text);
 
   return Object.freeze({
     valid: reported.length === 0,
     issues: Object.freeze(reportedTexts),
-    blockingIssues: Object.freeze(reportedTexts.filter((issue) => !degradableIssue(issue))),
+    blockingIssues: Object.freeze(existing.map((entry) => entry.text).filter((issue) => !degradableIssue(issue))),
     // The same findings in the same order, each naming the check that raised
     // it. `issues` stays the strings the repair loop is fed, byte for byte;
     // this is what makes a per-check false-positive rate computable at all.
     issueChecks: Object.freeze(reported.map((entry) => Object.freeze({ check: entry.check, text: entry.text }))),
     claimIds: Object.freeze(claimIds),
     sourceDomains: Object.freeze([...sourceDomains].sort()),
+    reviewCoverage: Object.freeze(reviewCoverage.metrics),
     // Not an issue: nothing here is the run's fault and nothing here is
     // repairable by it, so it must not send a finished package back round the
     // repair loop. It rides on the delivery as a notice instead — the one thing

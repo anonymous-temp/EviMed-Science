@@ -309,6 +309,7 @@ function validateClinicalEvidenceReport(input) {
       // A measurement, not a rule: which section serves which question is not
       // decidable here, so the run is handed the shares and applies the rule.
       sectionShares: reportSectionShares(text(input, 'clinical-evidence-report.md')),
+      reviewCoverage: 'reviewCoverage' in result ? result.reviewCoverage : { present: false },
     },
     errorCode: required.length ? (errorCode ?? 'deliverable_rejected') : null,
   }

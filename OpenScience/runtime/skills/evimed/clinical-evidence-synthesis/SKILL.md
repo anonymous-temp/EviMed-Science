@@ -27,6 +27,67 @@ Do not claim completion if any required skill fails to load.
 5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
 6. **The request is an input, not a template.** Take the clinical question out of it and leave the rest behind — its headings, its checklists, its metrics, its expected answer, its vocabulary. A request written as an acceptance specification is still answered with a manuscript; see "Register: what a manuscript never says".
 
+### Declare the review design and the evidence it can support
+
+Record the requested `reviewType` as `narrative`, `systematic`, `scoping`, or
+`rapid`. Default to a narrative evidence synthesis only when no review design
+was requested. A systematic review needs an explicit eligibility protocol,
+reproducible searching and study-level screening; a scoping review maps a field;
+a rapid review names its deliberate shortcuts. None of these names licenses a
+quantitative meta-analysis without the appropriate deterministic specialist.
+
+Keep one optional `reviewMethods` object in `clinical-evidence-search.json`.
+This extends the existing ledger rather than creating another set of searches:
+
+```json
+{
+  "schemaVersion": 1,
+  "reviewType": "systematic",
+  "eligibility": {
+    "inclusionCriteria": ["Specify the population, designs and outcomes for this question."],
+    "exclusionCriteria": ["Specify the actual exclusions; do not copy another review's rules."]
+  },
+  "protocol": {"status": "unregistered", "deviations": []},
+  "searchCoverage": [
+    {"domain": "intervention effects", "status": "searched", "queryIndexes": [0]},
+    {"domain": "ongoing trials", "status": "unavailable", "queryIndexes": [], "reason": "Record the actual failed source response."}
+  ],
+  "studyGroups": [
+    {"studyId": "NCT00000001", "evidenceType": "primary", "referenceNumbers": [1, 2]},
+    {"studyId": null, "evidenceType": "guideline", "referenceNumbers": [3]}
+  ]
+}
+```
+
+The example identifiers and domains illustrate the shape only; replace every
+one with this review's actual records. Query indexes are zero-based positions
+in the existing `queries` array, never an invented parallel query list.
+`searchCoverage.status` is `searched`, `unavailable`, or `not_applicable` (the
+last two need reasons). Protocol status is `registered` with its real identifier,
+`unregistered`, or `not_applicable` with a reason. Never invent registration.
+
+Assign every included reference to exactly one group. `evidenceType` is
+`primary`, `review`, `guideline`, `registry`, or `other`. Use an explicit,
+source-supported study identifier to group a primary report and its follow-up;
+if their common identity cannot be established, use null and explain the
+uncertainty. Similar titles or overlapping author lists are not sufficient.
+A guideline, registry protocol and existing systematic review are not extra
+independent outcome studies. Different papers sharing a study identifier remain
+separate reports and one study; do not combine their participants or outcomes
+as independent observations.
+
+Submission returns `metrics.reviewCoverage`, separating included reports,
+known primary studies, unassigned primary reports and unavailable search
+domains. An uncertain independent-study total is null, never a guessed integer.
+These counts summarize declared relationships, not automatic scientific
+adjudication. Review their advisory findings and repair the named ledger
+entries; preserve accepted claims, quotes, report sections and files.
+
+Report search coverage and evidence limitations in the manuscript's methods
+and limitations. Do not display gate IDs or artifact names in reader-facing
+prose. A missing source channel is an access limitation, not proof that a field
+has no evidence; a fixed count of papers or databases is not completeness.
+
 ### Never carry a record number out of the data
 
 When the analysis is over a dataset the user supplied, subjects are referred to
@@ -292,8 +353,11 @@ guidance, and any named medicine's indication, efficacy, safety, and regulatory
 scope. Combine or split concepts according to the results rather than following
 a fixed query list.
 
-**A query that returns nothing has failed; it has not answered anything.** Long
-conjunctive queries are the usual cause — seven concepts joined together match no
+**A successful zero-hit query and an unavailable source are different observations.**
+Record a successful zero-hit query with `resultsRetrieved: 0`; it does not by
+itself establish absence of evidence. Failed requests belong in failed-source
+and coverage records, never as successful zero-hit searches. Long
+conjunctive queries are one possible cause of an empty result — seven concepts joined together match no
 record even when the literature on the question is substantial. Before writing
 that evidence on a point is absent:
 
@@ -312,9 +376,9 @@ nitroglycerin. One exists, it is the central study on the question, and a
 seven-concept query had returned zero records; two shorter queries return it as
 the first hit.
 
-Use `literature_search`, `guideline_search`, and selected audited sources from `data_source_catalog` or `biomedical_source_search`. Deduplicate candidate records with `evidence_deduplicate`.
+Use `mcp__evimed__literature_search`, `mcp__evimed__guideline_search`, and selected audited sources from `mcp__evimed__data_source_catalog` or `mcp__evimed__biomedical_source_search`. Deduplicate candidate records with `mcp__evimed__evidence_deduplicate`.
 
-When calling `evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
+When calling `mcp__evimed__evidence_deduplicate`, omit absent identifier keys instead of sending empty `doi`, `pmid`, `pmcid`, or URL strings. If input validation fails, correct the full batch and obtain a successful deduplication result before continuing.
 
 Screen the returned records, deduplicate them, and inspect enough relevant sources to support every material conclusion and important counterpoint. Prefer:
 
@@ -345,7 +409,7 @@ quote, you read.
 
 ### Full-text and source preservation
 
-Use `official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
+Use `mcp__evimed__official_page_fetch` for approved professional-society, guideline, evidence-review, public-health, or regulatory pages. Use `mcp__evimed__open_access_full_text` for key PMID, PMCID, or DOI records with accessible full text.
 
 Prefer a PMCID or a search record explicitly marked open access before calling
 the full-text tool. For official pages, use stable URLs returned by the search
@@ -1075,9 +1139,9 @@ Every claim also carries `pico`, `picoMatch`, `denominatorKind`, and `requiredCa
 
 Quote contiguously by default. You may elide a passage you do not need by marking the gap with `…`, as any scholarly quotation does; each side of the gap is then checked on its own and must appear in the source in the order you wrote it. Never join two passages without marking the gap, and never elide across a qualification — a quote reading "the effect was significant … in the subgroup analysis" that hides "not" is a misquotation whether or not the words are all in the document. Copy sentences as they read: an inline citation marker the extractor left mid-sentence ("…in coronary spasm patients.23 Li Jin et al…") is not part of the sentence and may be left out.
 
-**`artifactPath` is copied from a tool result — never typed by hand.** Three tools preserve an artifact you may cite: `open_access_full_text` (papers, by DOI or PMCID), `official_page_fetch` (labels, regulatory and institutional pages), and `guideline_search`, which preserves a guideline's own text when the record carries it. Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
+**`artifactPath` is copied from a tool result — never typed by hand.** Three tools preserve an artifact you may cite: `mcp__evimed__open_access_full_text` (papers, by DOI or PMCID), `mcp__evimed__official_page_fetch` (labels, regulatory and institutional pages), and `mcp__evimed__guideline_search`, which preserves a guideline's own text when the record carries it. Each returns the workspace path it wrote under `.evimed-sources/`; that exact string is the `artifactPath`. A search hit is not an artifact — search tells you what exists, preservation is a second call.
 
-So when you want to cite something you have only seen in search results, **preserve it first**: fetch the full text by its DOI or PMCID, or fetch its official page by URL. A guideline retrieved through `guideline_search` may already carry its own preserved text — check the result for an `artifactPath` before assuming you must fetch it elsewhere. If neither preserves it — no open-access copy, no reachable official page — then you have not read that source and it cannot carry a claim. Cite the sources you did preserve instead, and if that leaves the point unsupported, say in the report that the evidence was not obtainable. Do not describe the gap in the path field: a string like `abstract-only PMID:15940087` or `regulatory-record NMPA速效救心丸` is not a path, and writing one asserts a verification that never happened.
+So when you want to cite something you have only seen in search results, **preserve it first**: fetch the full text by its DOI or PMCID, or fetch its official page by URL. A guideline retrieved through `mcp__evimed__guideline_search` may already carry its own preserved text — check the result for an `artifactPath` before assuming you must fetch it elsewhere. If neither preserves it — no open-access copy, no reachable official page — then you have not read that source and it cannot carry a claim. Cite the sources you did preserve instead, and if that leaves the point unsupported, say in the report that the evidence was not obtainable. Do not describe the gap in the path field: a string like `abstract-only PMID:15940087` or `regulatory-record NMPA速效救心丸` is not a path, and writing one asserts a verification that never happened.
 
 `accessLevel` is exactly one of `full_text`, `official_page`, `abstract`, `structured_record` — no other value is accepted. It records how much of the source the preserved artifact actually contains, so `abstract` and `structured_record` still require a preserved artifact to quote from; they mark a partial document, not a missing one.
 
@@ -1721,17 +1785,21 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
-There is no local self-check tool on this line — finish the turn once every
-file above is written. The server validates the package after the session goes
-idle, against the same rules `@evimed/domain` applies everywhere else; there is
-one implementation of them now, so what it accepts here is what it accepts
-under every other line. A first delivery that comes back with issues is the
-normal case, not a failure: the run is resumed with exactly what is listed as
-必修, the fix happens in place — never a wholesale rewrite — and the turn
-finishes again. Repeat until nothing comes back.
+Then submit the package:
 
-The payload also carries `notes`: advice that does not decide `"ok"`, because it
-cannot be settled mechanically. Read it and act where it applies. Today it
+```
+evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
+```
+
+It answers with the verdict, in place. A first submission that comes back with
+issues is the normal case, not a failure: fix everything it lists as 必修,
+submit again, and repeat until it answers `ok`. The rules it applies are the
+same ones the server applies afterwards — there is one implementation of them
+now, so a package this accepts is a package the server accepts.
+
+The verdict also carries advisory issues, which do not decide the outcome
+because they cannot be settled mechanically. Read them and act where they apply.
+One of them
 reports one arm appraised with the language of clinical tradition while another's
 certainty is graded — see "One ruler for every arm", where the asymmetry is
 almost always accidental and is a methodological defect all the same.
@@ -1773,7 +1841,7 @@ evidence report does.
 ### Finishing: check the prose mechanically, do not rewrite it
 
 The report was written under "Prose: written once, not repaired afterwards", so
-by the time the delivery is accepted the prose is finished, not a draft awaiting a
+by the time the submission is accepted the prose is finished, not a draft awaiting a
 rewrite. **The closing step is a self-check, not a reread**, and the point of
 having written the rules into the drafting stage is that this step usually
 changes nothing.
@@ -1847,7 +1915,7 @@ python "manuscript-humanize/scripts/verify_preserved.py" \
    `.pre-edit.md` copy once the check is clean — it is not a deliverable and
    must not survive into the delivered set.
 
-5. Finish once more if you edited anything, because prose edits can
+5. Submit once more if you edited anything, because prose edits can
    still break a section-level rule.
 
 `manuscript-humanize` stays loaded and keeps two jobs: it defines the protected
@@ -1858,3 +1926,25 @@ line it is no longer the default finishing step, because prose written correctly
 does not need rewriting, and rewriting it is where content gets lost.
 
 If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.
+
+## Before delivering: two fixed steps
+
+Both run on the finished deliverable, in this order, every time. They are steps
+of this capability, not options the run weighs — a pass that happens only when
+the model remembers it is a pass that happens on the easy runs and not the hard
+ones.
+
+1. **`traceability-review`** — every citation resolves, no number appears in
+   prose without a source in the artifacts, and every figure or table matches
+   the code that produced it. Findings are repaired before the next step, not
+   after: humanizing prose around a citation that does not resolve only makes
+   the defect read better.
+2. **`manuscript-humanize`** — register cleanup over the prose, with every
+   quotation, number, citation index and claim marker byte-identical. Load the
+   language-matched upstream rules it names. It is the last thing that touches
+   the document.
+
+Write what changed and why to `revision-notes.md` in this deliverable's
+directory. That file is the designated home for revision notes, replies to a
+rejection, and process description; the report itself carries none of them, and
+no check reads the notes as report prose.

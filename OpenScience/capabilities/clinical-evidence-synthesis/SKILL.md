@@ -27,6 +27,67 @@ Do not claim completion if any required skill fails to load.
 5. Keep the safety-first practical answer separate and concise. Clinical urgency takes precedence over product discussion.
 6. **The request is an input, not a template.** Take the clinical question out of it and leave the rest behind — its headings, its checklists, its metrics, its expected answer, its vocabulary. A request written as an acceptance specification is still answered with a manuscript; see "Register: what a manuscript never says".
 
+### Declare the review design and the evidence it can support
+
+Record the requested `reviewType` as `narrative`, `systematic`, `scoping`, or
+`rapid`. Default to a narrative evidence synthesis only when no review design
+was requested. A systematic review needs an explicit eligibility protocol,
+reproducible searching and study-level screening; a scoping review maps a field;
+a rapid review names its deliberate shortcuts. None of these names licenses a
+quantitative meta-analysis without the appropriate deterministic specialist.
+
+Keep one optional `reviewMethods` object in `clinical-evidence-search.json`.
+This extends the existing ledger rather than creating another set of searches:
+
+```json
+{
+  "schemaVersion": 1,
+  "reviewType": "systematic",
+  "eligibility": {
+    "inclusionCriteria": ["Specify the population, designs and outcomes for this question."],
+    "exclusionCriteria": ["Specify the actual exclusions; do not copy another review's rules."]
+  },
+  "protocol": {"status": "unregistered", "deviations": []},
+  "searchCoverage": [
+    {"domain": "intervention effects", "status": "searched", "queryIndexes": [0]},
+    {"domain": "ongoing trials", "status": "unavailable", "queryIndexes": [], "reason": "Record the actual failed source response."}
+  ],
+  "studyGroups": [
+    {"studyId": "NCT00000001", "evidenceType": "primary", "referenceNumbers": [1, 2]},
+    {"studyId": null, "evidenceType": "guideline", "referenceNumbers": [3]}
+  ]
+}
+```
+
+The example identifiers and domains illustrate the shape only; replace every
+one with this review's actual records. Query indexes are zero-based positions
+in the existing `queries` array, never an invented parallel query list.
+`searchCoverage.status` is `searched`, `unavailable`, or `not_applicable` (the
+last two need reasons). Protocol status is `registered` with its real identifier,
+`unregistered`, or `not_applicable` with a reason. Never invent registration.
+
+Assign every included reference to exactly one group. `evidenceType` is
+`primary`, `review`, `guideline`, `registry`, or `other`. Use an explicit,
+source-supported study identifier to group a primary report and its follow-up;
+if their common identity cannot be established, use null and explain the
+uncertainty. Similar titles or overlapping author lists are not sufficient.
+A guideline, registry protocol and existing systematic review are not extra
+independent outcome studies. Different papers sharing a study identifier remain
+separate reports and one study; do not combine their participants or outcomes
+as independent observations.
+
+Submission returns `metrics.reviewCoverage`, separating included reports,
+known primary studies, unassigned primary reports and unavailable search
+domains. An uncertain independent-study total is null, never a guessed integer.
+These counts summarize declared relationships, not automatic scientific
+adjudication. Review their advisory findings and repair the named ledger
+entries; preserve accepted claims, quotes, report sections and files.
+
+Report search coverage and evidence limitations in the manuscript's methods
+and limitations. Do not display gate IDs or artifact names in reader-facing
+prose. A missing source channel is an access limitation, not proof that a field
+has no evidence; a fixed count of papers or databases is not completeness.
+
 ### Never carry a record number out of the data
 
 When the analysis is over a dataset the user supplied, subjects are referred to
@@ -292,8 +353,11 @@ guidance, and any named medicine's indication, efficacy, safety, and regulatory
 scope. Combine or split concepts according to the results rather than following
 a fixed query list.
 
-**A query that returns nothing has failed; it has not answered anything.** Long
-conjunctive queries are the usual cause — seven concepts joined together match no
+**A successful zero-hit query and an unavailable source are different observations.**
+Record a successful zero-hit query with `resultsRetrieved: 0`; it does not by
+itself establish absence of evidence. Failed requests belong in failed-source
+and coverage records, never as successful zero-hit searches. Long
+conjunctive queries are one possible cause of an empty result — seven concepts joined together match no
 record even when the literature on the question is substantial. Before writing
 that evidence on a point is absent:
 
