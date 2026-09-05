@@ -49,8 +49,10 @@ test("topic portfolio reconciles recorded evidence and researcher constraints", 
   assert.equal(result.ok, true);
   assert.equal(result.metrics.topicPortfolio?.candidates, 1);
   assert.equal(result.metrics.topicPortfolio?.structurallyCompleteCandidates, 1);
-  assert.equal(result.metrics.topicPortfolio?.evidenceReconciled, true);
-  assert.equal(result.metrics.topicPortfolio?.contextMatchesReceipt, true);
+  assert.equal(result.metrics.topicPortfolio?.evidenceFilesConsistent, true);
+  assert.equal(result.metrics.topicPortfolio?.contextFilesConsistent, true);
+  assert.equal(result.metrics.topicPortfolio?.evidenceReconciled, undefined);
+  assert.equal(result.metrics.topicPortfolio?.contextMatchesReceipt, undefined);
 });
 
 test("unknown source lineage is reported without adding a blocking gate", () => {
@@ -58,7 +60,7 @@ test("unknown source lineage is reported without adding a blocking gate", () => 
   changePortfolio(files, (value) => { value.candidates[0].sourceEvidenceIds = ["invented"]; });
   const result = run(files);
   assert.equal(result.ok, true);
-  assert.equal(result.metrics.topicPortfolio?.evidenceReconciled, false);
+  assert.equal(result.metrics.topicPortfolio?.evidenceFilesConsistent, false);
   assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage" && item.severity === "advisory"));
 });
 
@@ -67,7 +69,7 @@ test("portfolio PMIDs must match the preserved records behind their source ids",
   changePortfolio(files, (value) => { value.candidates[0].sourceEvidencePmids = ["999999"]; });
   const result = run(files);
   assert.equal(result.ok, true);
-  assert.equal(result.metrics.topicPortfolio?.evidenceReconciled, false);
+  assert.equal(result.metrics.topicPortfolio?.evidenceFilesConsistent, false);
   assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage"));
 });
 
@@ -75,7 +77,7 @@ test("a missing source artifact is unreconciled, not verified by omission", () =
   const files = packageFiles();
   files.delete("evidence-records.json");
   const result = run(files);
-  assert.equal(result.metrics.topicPortfolio?.evidenceReconciled, false);
+  assert.equal(result.metrics.topicPortfolio?.evidenceFilesConsistent, false);
   assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage"));
 });
 
@@ -109,7 +111,38 @@ test("constraints cannot disappear between the engine receipt and portfolio unno
   const files = packageFiles();
   changePortfolio(files, (value) => { value.researchContext.resourceConstraints = []; });
   const result = run(files);
-  assert.equal(result.metrics.topicPortfolio?.contextMatchesReceipt, false);
+  assert.equal(result.metrics.topicPortfolio?.contextFilesConsistent, false);
+  assert.ok(result.issues.some((item) => item.check === "topic-research-context"));
+});
+
+test("candidate identifiers must be strings and duplicate candidate ids stay visible", () => {
+  const malformed = packageFiles();
+  changePortfolio(malformed, (value) => { value.candidates[0].candidateId = {}; });
+  let result = run(malformed);
+  assert.equal(result.metrics.topicPortfolio?.schemaValid, false);
+  assert.ok(result.issues.some((item) => item.check === "topic-portfolio-schema"));
+
+  const duplicated = packageFiles();
+  changePortfolio(duplicated, (value) => { value.candidates.push({ ...value.candidates[0] }); });
+  result = run(duplicated);
+  assert.equal(result.metrics.topicPortfolio?.structurallyCompleteCandidates, 1);
+  assert.ok(result.issues.some((item) => item.check === "topic-portfolio-schema" && item.message.includes("duplicate")));
+});
+
+test("deep optional context cannot escape the topic advisory validator", () => {
+  const deep = '{"nested":'.repeat(5000) + 'null' + '}'.repeat(5000);
+  const portfolio = '{"schemaVersion":"1.0.0","researchDirection":"Topic","researchContext":'
+    + deep + ',"candidates":[]}';
+  const files = new Map(Object.entries({
+    "research-topic-report.md": "# Topic\nA bounded agenda.",
+    "research-topic-run.json": '{"researchContext":' + deep + '}',
+    "research-portfolio.json": portfolio,
+    "evidence-records.json": "[]",
+  }));
+  let result;
+  assert.doesNotThrow(() => { result = run(files); });
+  assert.equal(result.ok, true);
+  assert.equal(result.metrics.topicPortfolio?.contextFilesConsistent, false);
   assert.ok(result.issues.some((item) => item.check === "topic-research-context"));
 });
 

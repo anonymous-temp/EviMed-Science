@@ -137,7 +137,7 @@ test("official specialist packages preserve domain-specific evidence and release
     ["off-label-analysis", "2.2.1"],
     ["open-domain-answer", "1.0.0"],
     ["peer-review", "1.0.1"],
-    ["research-topic-selection", "1.1.0"],
+    ["research-topic-selection", "1.2.0"],
   ]);
   const evidenceSnapshotAgents = new Set(["comprehensive-drug-evaluation", "drug-selection", "off-label-analysis"]);
   for (const agent of registry.list()) {

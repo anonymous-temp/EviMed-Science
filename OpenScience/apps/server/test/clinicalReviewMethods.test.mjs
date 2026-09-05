@@ -120,6 +120,22 @@ test("malformed reference objects cannot throw out of either delivery entrypoint
   let result;
   assert.doesNotThrow(() => { result = verdictFor(input, log); });
   assert.deepEqual(result.direct.blockingIssues, baseline.direct.blockingIssues);
+  assert.equal(result.direct.valid, baseline.direct.valid);
   assert.equal(result.runtime.ok, baseline.runtime.ok);
   assert.ok(result.direct.issueChecks.some((item) => item.check === "review-study-accounting"));
+});
+
+test("study identities are case-insensitive when counting independent studies", () => {
+  const { input, log } = reviewPackage();
+  log.reviewMethods.studyGroups = [
+    { studyId: "NCT03594110", evidenceType: "primary", referenceNumbers: [1] },
+    { studyId: "nct03594110", evidenceType: "primary", referenceNumbers: [2] },
+    ...log.sourceRecords.slice(2).map((row) => ({
+      studyId: null, evidenceType: "guideline", referenceNumbers: [row.referenceNumber],
+    })),
+  ];
+  const { direct } = verdictFor(input, log);
+  assert.equal(direct.reviewCoverage?.primaryReports, 2);
+  assert.equal(direct.reviewCoverage?.knownPrimaryStudies, 1);
+  assert.equal(direct.reviewCoverage?.independentPrimaryStudies, 1);
 });
