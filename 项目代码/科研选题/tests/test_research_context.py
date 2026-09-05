@@ -118,3 +118,11 @@ def test_runner_passes_context_and_returns_portfolio(tmp_path):
     portfolio = json.loads((tmp_path / "research-portfolio.json").read_text())
     assert portfolio["researchContext"] == CONTEXT
     assert CONTEXT["availableData"] in (tmp_path / "research-topic-report.md").read_text()
+
+
+def test_fallback_opportunities_do_not_manufacture_scores():
+    record = LiteratureRecord(id="pubmed_420001", pmid="420001", title="Dialysis adherence",
+                              abstract="Observational data on adherence.")
+    opportunities = M5_BreakthroughOpportunityModule._fallback_opportunities([record], "Dialysis")
+    assert opportunities
+    assert all(not any(key.endswith("_score") for key in item) for item in opportunities)
