@@ -160,3 +160,21 @@ test("an exhausted job locked by another worker does not block independent claim
     await jobs.cancel(owner, ready.id);
   }
 });
+
+
+test("batch creation commits documents and revisions together or rolls back everything", options, async () => {
+  const id = randomUUID();
+  const capsule = { kind: "capsule", id, payload: { title: "Imported methods" } };
+  const entry = { kind: "fact", id: randomUUID(), payload: { capsuleId: id, content: "Method" } };
+  const saved = await documents.createBatch(owner, [capsule, entry]);
+  assert.equal(saved.length, 2);
+  assert.equal((await documents.history(owner, "fact", entry.id)).length, 1);
+  const fresh = { ...entry, id: randomUUID() };
+  await assert.rejects(documents.createBatch(owner, [fresh, capsule]), { code: "product_revision_conflict" });
+  assert.equal(await documents.get(owner, "fact", fresh.id), null);
+  assert.deepEqual(await documents.history(owner, "fact", fresh.id), []);
+  await assert.rejects(documents.createBatch(owner, [fresh, { ...entry, id: randomUUID(), projectId: "not-owned" }]), { code: "23503" });
+  assert.equal(await documents.get(owner, "fact", fresh.id), null);
+  assert.equal(await documents.get(other, "capsule", id), null);
+  await assert.rejects(documents.createBatch(owner, [fresh, fresh]), { code: "product_batch_invalid" });
+});
