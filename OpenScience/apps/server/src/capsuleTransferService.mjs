@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { packCapsule, openCapsule } from "./capsuleContainer.mjs";
-import { protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile } from "./capsuleIdentityStore.mjs";
+import { capsuleAccountHash, protectedCapsuleDirectory, readProtectedCapsuleFile, writeProtectedCapsuleFile, unlinkCapsuleFile } from "./capsuleIdentityStore.mjs";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
@@ -81,8 +81,9 @@ export class CapsuleTransferService {
     this.documents = documents; this.capsules = capsules; this.identities = identities; this.dataDir = dataDir;
   }
 
-  async export(userId, capsuleId, input) {
+  async export(userId, capsuleId, input, options = {}) {
     fields(input, ["password", "scopes", "supersedes"]); checkedText(input.password, 1024);
+    const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
     if (input.supersedes != null) await this.snapshot(userId, capsuleId, input.supersedes);
     const scopes = scopesOf(input.scopes); const kinds = kindsFor(scopes);
     await this.capsules.get(userId, capsuleId);
@@ -101,7 +102,7 @@ export class CapsuleTransferService {
       return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md` };
     });
     const files = renderedFiles(snapshotId, entries);
-    const identity = await this.identities.forUser(userId);
+    const identity = await this.withAccount(userId, accountCreatedAt, () => this.identities.forUser(userId, { accountCreatedAt }));
     const container = await packCapsule({ capsuleId: snapshotId, version: source.revision, createdAt: new Date().toISOString(),
       issuer: { userId: identity.issuerId, signingKeyId: identity.signing.keyId, signingPrivateKey: identity.signing.privateKey },
       scope: scopes, layers: [...new Set([...entries.map(entry => entry.layer), "methods"])], password: input.password,
@@ -113,14 +114,15 @@ export class CapsuleTransferService {
       passwordWrap: container.passwordWrap.toString("base64"), payload: Object.fromEntries(Object.entries(container.payload).map(([file, bytes]) => [file, bytes.toString("base64")])) });
     if (Buffer.byteLength(archive) > CAPSULE_TRANSFER_MAX_BYTES) throw new HttpError(413, "capsule_transfer_too_large", "This encrypted snapshot exceeds 2 MiB.");
     const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
-    await writeProtectedCapsuleFile(directory, `${snapshotId}.evimedcap`, archive);
+    const filename = `${capsuleAccountHash(userId)}-${snapshotId}.evimedcap`;
+    await this.withAccount(userId, accountCreatedAt, () => writeProtectedCapsuleFile(directory, filename, archive));
     let record;
-    try { record = await this.documents.put(userId, "preferences", snapshotId, {
+    try { [record] = await this.documents.createBatch(userId, [{ kind: "preferences", id: snapshotId, payload: {
       recordType: "capsule-snapshot", capsuleId, issuerId: identity.issuerId, status: "active", scopes, supersedes: input.supersedes ?? null,
       archiveSha256: digest(archive), manifestSha256: digest(JSON.stringify(container.manifest)), capsuleRevision: source.revision,
       entryCount: entries.length, sourceEntries: source.facts.map((fact, index) => ({ id: fact.id, revision: fact.revision, sha256: entries[index].sha256 })),
-    }, { expectedRevision: 0 }); } catch (error) {
-      await fs.unlink(path.join(directory, `${snapshotId}.evimedcap`));
+    } }], { accountCreatedAt }); } catch (error) {
+      await unlinkCapsuleFile(directory, filename);
       throw error;
     }
     return { filename: `capsule-${snapshotId}.evimedcap`, archive, snapshot: snapshotView(record) };
@@ -143,7 +145,8 @@ export class CapsuleTransferService {
     const record = await this.snapshot(userId, capsuleId, snapshotId);
     if (record.payload.status === "revoked") throw new HttpError(409, "capsule_snapshot_revoked", "This hosted snapshot has been revoked.");
     const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
-    const archive = await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
+    const archive = await readProtectedCapsuleFile(directory, `${capsuleAccountHash(userId)}-${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES)
+      ?? await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
     if (!archive || digest(archive) !== record.payload.archiveSha256) throw new HttpError(503, "capsule_snapshot_unavailable", "The snapshot file is unavailable.");
     return { archive, filename: `capsule-${record.id}.evimedcap` };
   }
@@ -153,7 +156,10 @@ export class CapsuleTransferService {
     return snapshotView(await this.documents.put(userId, "preferences", record.id, { ...record.payload, status: "revoked", revokedAt: new Date().toISOString() }, { expectedRevision }));
   }
 
-  async preview(userId, input) {
+  async preview(userId, input, options = {}) { return (await this.inspect(userId, input, options)).preview; }
+
+  async inspect(userId, input, options = {}) {
+    const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
     productId(userId); fields(input, ["archive", "password"]); checkedText(input.password, 1024);
     const { envelope, container, passwordWrap } = parseArchive(input.archive);
     const manifest = envelope.manifest;
@@ -177,24 +183,30 @@ export class CapsuleTransferService {
     const canonicalFiles = renderedFiles(metadata.snapshotId, metadata.entries);
     if (Object.keys(opened.entries).length !== Object.keys(canonicalFiles).length || Object.entries(canonicalFiles).some(([file, content]) => opened.entries[file] !== content)) throw invalid();
     const archiveSha256 = digest(input.archive);
-    const hosted = known ? await this.documents.get(known.ownerId, "preferences", metadata.snapshotId) : null;
+    const hosted = known && !known.revoked ? await this.documents.get(known.ownerId, "preferences", metadata.snapshotId) : null;
+    const sourceAccountPresent = known && !known.revoked ? (await this.documents.database.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [known.ownerId])).rowCount === 1 : false;
     if (hosted && (hosted.payload.recordType !== "capsule-snapshot" || hosted.payload.archiveSha256 !== archiveSha256)) throw invalid();
     const replacements = hosted ? await this.documents.list(known.ownerId, "preferences", { limit: 1, filter: { recordType: "capsule-snapshot", supersedes: metadata.snapshotId } }) : { items: [] };
-    return { archiveSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null,
+    const preview = { archiveSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
-      hostedStatus: hosted?.payload.status ?? "unknown", canImport: hosted?.payload.status !== "revoked", offlineRevocable: false };
+      hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? "unknown",
+      canImport: (!known || (!known.revoked && sourceAccountPresent)) && hosted?.payload.status !== "revoked", offlineRevocable: false };
+    if (!preview.canImport) preview.entries = [];
+    const guards = hosted ? [{ userId: known.ownerId, kind: "preferences", id: metadata.snapshotId, filter: { status: "active", archiveSha256 } }] : [];
+    return { preview, guards, accountCreatedAt };
   }
 
-  async import(userId, input) {
+  async import(userId, input, options = {}) {
     fields(input, ["archive", "password", "expectedDigest", "confirmed", "title"]);
     if (input.confirmed !== true) throw new HttpError(400, "capsule_import_confirmation_required", "Preview and explicitly confirm the capsule before importing.");
     if (input.expectedDigest !== digest(checkedText(input.archive, CAPSULE_TRANSFER_MAX_BYTES))) throw new HttpError(409, "capsule_preview_changed", "The archive changed after preview.");
-    const preview = await this.preview(userId, { archive: input.archive, password: input.password });
+    const { preview, guards, accountCreatedAt } = await this.inspect(userId, { archive: input.archive, password: input.password }, options);
     if (!preview.canImport) throw new HttpError(409, "capsule_snapshot_revoked", "This hosted snapshot has been revoked.");
     const capsuleId = randomUUID();
     // The only transaction starts after KDF and parsing have finished. All rows
     // are new, owned by this account, candidates and context-only.
-    const records = await this.documents.createBatch(userId, [
+    let records;
+    try { records = await this.documents.createBatch(userId, [
       { kind: "capsule", id: capsuleId, payload: { title: checkedText(input.title ?? "Imported research capsule", 150), description: "Imported entries require explicit approval.", imported: true, activationMode: "guest",
         transfer: { snapshotId: preview.snapshotId, archiveSha256: preview.archiveSha256, issuerTrust: preview.issuerTrust } } },
       ...preview.entries.map(entry => ({ kind: "fact", id: randomUUID(), payload: {
@@ -202,7 +214,66 @@ export class CapsuleTransferService {
         provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }],
         transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },
       } })),
-    ]);
+    ], { guards, accountCreatedAt }); } catch (error) {
+      if (error.code === "product_guard_conflict") throw new HttpError(409, "capsule_snapshot_revoked", "The hosted snapshot was revoked or changed before import.");
+      throw error;
+    }
     return records[0];
   }
+
+  /** File publication only holds the same short lock as account deletion; never perform KDF inside it. */
+  async withAccount(userId, expectedCreatedAt = null, operation = null) {
+    return this.documents.database.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-user:${productId(userId)}`]);
+      const row = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
+      if (!row || (expectedCreatedAt !== null && row.generation !== expectedCreatedAt)) throw new HttpError(409, "product_account_changed", "The account changed before this operation completed.");
+      await this.identities.assertAccountActive(userId, row.generation);
+      return operation ? operation() : row.generation;
+    });
+  }
+
+  /** Runs inside PostgresStore.deleteUser's account lock before its DELETE commits. */
+  async prepareAccountDeletion(userId, client) {
+    const row = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
+    if (!row) return;
+    const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
+    // Adopt old flat filenames before their ownership rows are cascaded away.
+    const snapshots = await client.query("SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType'='capsule-snapshot'", [userId]);
+    for (const snapshot of snapshots.rows) {
+      if (!UUID.test(snapshot.id)) throw invalid();
+      await fs.rename(path.join(directory, `${snapshot.id}.evimedcap`), path.join(directory, `${capsuleAccountHash(userId)}-${snapshot.id}.evimedcap`)).catch(error => { if (error.code !== "ENOENT") throw error; });
+    }
+    await this.identities.prepareDeletion(userId, row.generation);
+  }
+
+  async finishAccountDeletion(userId) {
+    try {
+      return await this.documents.database.transaction(async client => {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-user:${productId(userId)}`]);
+        const state = await this.identities.deletionState(userId);
+        if (!state || state.phase === "completed") return { completed: true };
+        const live = (await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId])).rows[0];
+        // DB rollback leaves the original live account and its private keys intact.
+        if (live?.generation === state.accountCreatedAt) return { completed: false, awaitingAccountDeletion: true };
+        const directory = await protectedCapsuleDirectory(this.dataDir, "capsule-snapshots");
+        const files = await fs.opendir(directory);
+        for await (const file of files) {
+          if (file.name.startsWith(`${capsuleAccountHash(userId)}-`) && file.name.endsWith(".evimedcap")) await unlinkCapsuleFile(directory, file.name);
+        }
+        await this.identities.finishDeletion(userId, state);
+        return { completed: true };
+      });
+    } catch { throw new HttpError(503, "capsule_cleanup_pending", "The account is removed, but protected capsule cleanup must be retried."); }
+  }
+
+  /** Durable post-commit cleanup resumes after restart; failures remain pending for the next attempt. */
+  async recoverPendingDeletions() {
+    const results = { completed: 0, pending: 0 };
+    for (const userId of await this.identities.pendingDeletions()) {
+      try { const result = await this.finishAccountDeletion(userId); results[result.completed ? "completed" : "pending"]++; }
+      catch { results.pending++; }
+    }
+    return results;
+  }
+
 }

@@ -31,6 +31,11 @@ test("actual hosted APIs download, preview, import and revoke a portable snapsho
     assert.equal((await request(`/${capsule.id}/exports/${result.snapshot.id}`,owner,undefined,"GET")).status,409);
     const revoked=await request("/transfers/preview",recipient,{archive:result.archive,password});assert.equal((await revoked.json()).data.hostedStatus,"revoked");
     assert.equal((await request("/transfers/import",recipient,{archive:result.archive,password,confirmed:true,expectedDigest:inspection.archiveSha256})).status,409);
+    const secondExport=await request(`/${capsule.id}/exports`,owner,{password});const second=(await secondExport.json()).data;
+    const deleted=await fetch(`${base}/api/account`,{method:"DELETE",headers:owner,body:JSON.stringify({confirm:users[0],password:"test-only-login-password"})});
+    assert.equal(deleted.status,200);
+    const deletedPreview=await request("/transfers/preview",recipient,{archive:second.archive,password});assert.equal((await deletedPreview.json()).data.hostedStatus,"revoked");
+    assert.equal((await request(`/${importedCapsule.id}/entries`,recipient,undefined,"GET")).status,200);
     assert.equal((await request("/transfers/preview",{"content-type":"application/json"},{archive:result.archive,password})).status,401);
     assert.equal((await request("/transfers/preview",{...recipient,"x-open-science-csrf":""},{archive:result.archive,password})).status,403);
   }finally{await app.store.database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])",[users]);await app.close();await rm(dataDir,{recursive:true,force:true});}
