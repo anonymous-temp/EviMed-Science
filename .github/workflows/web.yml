@@ -3,33 +3,54 @@ name: web
 on:
   pull_request:
   push:
-    branches: ["main", "master"]
+    branches: ["main", "master", "codex/**"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: OpenScience
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   web:
     runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16.14-bookworm
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: evimed_test_auth
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["127.0.0.1:5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies
+      - name: Install test system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl \
-            wget file libxdo-dev libssl-dev libayatana-appindicator3-dev \
-            librsvg2-dev
+          sudo apt-get install -y python3 python3-pip python3-venv postgresql-client
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
 
       - name: Install Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.22.0
           cache: pnpm
+          cache-dependency-path: OpenScience/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -37,10 +58,6 @@ jobs:
       - name: Fetch bundled ai4s-skills pack
         shell: bash
         run: bash scripts/dev/fetch-skills.sh
-
-      - name: Fetch bundled uv sidecar
-        shell: bash
-        run: bash scripts/dev/fetch-uv.sh x86_64-unknown-linux-gnu
 
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages
@@ -75,6 +92,18 @@ jobs:
           CI=true pnpm test:mcp
           CI=true pnpm --filter @ai4s/server test
 
+      - name: Test shared authentication state
+        env:
+          OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_auth
+        run: node --test apps/server/test/postgresStore.integration.test.mjs
+
+      - name: Test durable product state
+        env:
+          OPEN_SCIENCE_TEST_POSTGRES_URL: postgresql://postgres@127.0.0.1:5432/evimed_test_product
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE evimed_test_product'
+          node scripts/ops/test-product-state.mjs
+
       - name: Test DeepSeek compatibility and release gates
         run: >-
           CI=true pnpm --filter @ai4s/server exec node --test
@@ -102,6 +131,7 @@ jobs:
   docker-hosted:
     runs-on: ubuntu-22.04
     needs: web
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -109,11 +139,18 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
 
       - name: Install Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.22.0
+
+      - name: Install dependencies and pinned skills for this job
+        run: |
+          pnpm install --frozen-lockfile
+          bash scripts/dev/fetch-skills.sh
 
       - name: Define immutable CI release
         shell: bash
@@ -130,23 +167,23 @@ jobs:
           # image that no longer exists while the DSH image sat under the other
           # name, verified by a later step and then never launched.
           echo "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=open-science-runtime:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DSH_VERSION=$(node -p "require('./OpenScience/deps-version.json').dsh.version")" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DSH_VERSION=$(node -p "require('./deps-version.json').dsh.version")" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_CADDY_VERSION=2.11.4-alpine" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=ci-metrics-token-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789abcdef" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD=ci-grafana-password-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-0123456789" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_ALERT_WEBHOOK_URL=https://alerts.example.test/open-science-ci" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/bootstrap-password.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/backup-passphrase.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${GITHUB_WORKSPACE}/deploy/web/secrets" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/evimed-workload-signing-key.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE=${GITHUB_WORKSPACE}/deploy/web/secrets/deepseek-release-receipt.json" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_BOOTSTRAP_PASSWORD_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/bootstrap-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/backup-passphrase.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/evimed-workload-signing-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-release-receipt.json" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DOCKER_SOCKET_GID=$(stat -c '%g' /var/run/docker.sock)" >> "$GITHUB_ENV"
 
       - name: Write CI Compose environment
@@ -244,7 +281,7 @@ jobs:
       # otherwise only surface as a container that starts and answers nothing.
       - name: Verify runtime binaries and preserved licenses
         run: >-
-          docker run --rm --network none
+          docker run --rm --network none -e OPEN_SCIENCE_DSH_VERSION
           "${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE}"
           sh -ec 'test -x /usr/local/bin/uv &&
           test -x /usr/local/bin/open-science-dsh-serve &&
@@ -401,11 +438,13 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
 
       - name: Install Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.22.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

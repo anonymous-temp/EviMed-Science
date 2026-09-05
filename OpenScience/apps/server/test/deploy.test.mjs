@@ -138,7 +138,7 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
   // is what drifted: the point is that adding a gate to `ci:web` and forgetting
   // CI has to fail here.
   const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
 
   /** Expand a script into the leaf scripts it runs. */
   const leaves = (name, seen = new Set()) => {
@@ -962,7 +962,7 @@ test("release workflows enforce source credential and quality gates before packa
   // before the secret scan and the quality gates have run, and CI must be
   // where that ordering is expressed rather than a person's habit.
   const packageJson = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
 
   assert.equal(packageJson.scripts["audit:source-secrets"], "node scripts/ops/audit-source-secrets.mjs");
   assert.match(packageJson.scripts["ci:web"], /audit:source-secrets/);
@@ -974,7 +974,7 @@ test("release workflows enforce source credential and quality gates before packa
 test("Hosted E2E targets a real deployed release while the mock flow is labeled as a contract test", async () => {
   const rootPackage = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
   const serverPackage = JSON.parse(await readFile(path.join(repoRoot, "apps/server/package.json"), "utf8"));
-  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
   const script = await readFile(path.join(repoRoot, "scripts/ops/hosted-production-e2e.mjs"), "utf8");
   assert.match(serverPackage.scripts["test:contract"], /hosted-web\.e2e\.test\.mjs/);
   assert.match(serverPackage.scripts["test:e2e"], /hosted-production-e2e\.mjs/);
@@ -1016,7 +1016,7 @@ test("Hosted E2E targets a real deployed release while the mock flow is labeled 
 });
 
 test("Web CI includes a Linux Docker Compose release and real runtime smoke job", async () => {
-  const workflow = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
   assert.match(workflow, /docker-hosted:/);
   assert.match(workflow, /runs-on:\s+ubuntu-22\.04/);
   assert.match(workflow, /run:\s+pnpm audit:dependencies/);
@@ -1050,7 +1050,7 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   // One image name, and it is the one the server reads: `config.mjs` resolves
   // `runtimeContainerImage` from OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE and
   // nothing else. A second name meant CI proved one image and started another.
-  assert.match(workflow, /docker run --rm --network none\s+"\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE\}"/);
+  assert.match(workflow, /docker run --rm --network none -e OPEN_SCIENCE_DSH_VERSION\s+"\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE\}"/);
   assert.equal(
     workflow.includes("OPEN_SCIENCE_DSH_RUNTIME_CONTAINER_IMAGE"),
     false,

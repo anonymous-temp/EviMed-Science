@@ -1,4 +1,4 @@
-ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
+ARG NODE_BASE_IMAGE=docker.m.daocloud.io/library/node:22.22.0-alpine
 FROM ${NODE_BASE_IMAGE} AS build
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
@@ -11,6 +11,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/domain/package.json packages/domain/package.json
+COPY packages/harness-port/package.json packages/harness-port/package.json
+COPY packages/socket/package.json packages/socket/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
 
 RUN pnpm install --frozen-lockfile
 

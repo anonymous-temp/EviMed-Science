@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fetch the pinned external skill packs into runtime/skills/external/
-# (git-ignored; bundled into the installer as Tauri resources).
+# (git-ignored; bundled into the hosted runtime image).
 # Runs locally and in CI so the skills never live in this repo's git history.
 set -euo pipefail
 
@@ -10,10 +10,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 AI4S_SKILLS_COMMIT="${AI4S_SKILLS_COMMIT:-8fa2ab0523082c135598909b227ed8feb48263ad}"
 OUT_DIR="$ROOT/runtime/skills/external/ai4s-skills"
 
-URL="https://github.com/ai4s-research/ai4s-skills/archive/${AI4S_SKILLS_COMMIT}.tar.gz"
+URL="https://codeload.github.com/ai4s-research/ai4s-skills/tar.gz/${AI4S_SKILLS_COMMIT}"
 TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
 echo "Downloading $URL"
-curl -fsSL "$URL" -o "$TMP/skills.tar.gz"
+curl -4 --retry 2 --connect-timeout 15 --max-time 120 -fsSL "$URL" -o "$TMP/skills.tar.gz"
 tar -xzf "$TMP/skills.tar.gz" -C "$TMP"
 
 SRC="$(find "$TMP" -maxdepth 1 -type d -name 'ai4s-skills-*' | head -1)"
