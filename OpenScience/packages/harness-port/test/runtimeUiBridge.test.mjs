@@ -90,3 +90,42 @@ test('a generation replaced during refresh becomes ready and restores the chosen
   assert.equal(f.calls.filter(row => row[0] === 'draft').length, 1);
   f.ctx.dispose();
 });
+
+test('navigation to an existing session during delayed reconnect is retained until the generation is ready', async () => {
+  const f = fixture(); const known = new Set(['session-a', 'session-b']);
+  f.ctx.sessions.open = (/** @type {string} */ id) => { assert.ok(known.has(id)); f.calls.push(['open', id]); };
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
+  /** @type {any} */ let release;
+  let refreshes = 0;
+  f.ctx.sessions.refresh = () => ++refreshes === 1 ? new Promise(resolve => { release = resolve; }) : Promise.resolve();
+  f.replaceGeneration();
+  f.navigate({ requestId: 'request-b', seq: 2, intent: { kind: 'open', sessionId: 'session-b' } });
+  assert.ok(!f.calls.some(row => row[0] === 'open' && row[1] === 'session-b'));
+  release(); await settle();
+  assert.ok(f.calls.some(row => row[0] === 'open' && row[1] === 'session-b'));
+  assert.ok(f.sent.some(row => row.message.requestId === 'request-b' && row.message.ok));
+  f.ctx.dispose();
+});
+
+test('the latest reconnect create intent is idempotent across ready-triggered retransmission', async () => {
+  const f = fixture(); const created = new Set();
+  f.ctx.sessions.create = async (/** @type {{sessionId:string}} */ { sessionId }) => {
+    assert.ok(!created.has(sessionId), 'the bridge executed one native create more than once');
+    created.add(sessionId); f.calls.push(['create', sessionId]); return sessionId;
+  };
+  apply(f.ctx, {}, f.target); await settle();
+  /** @type {any} */ let release;
+  f.ctx.sessions.refresh = () => new Promise(resolve => { release = resolve; });
+  f.replaceGeneration();
+  f.navigate({ requestId: 'superseded', seq: 1, intent: { kind: 'open', sessionId: 'session-a' } });
+  const intent = { kind: 'create', sessionId: 'session-new', draft: 'Review this evidence' };
+  f.navigate({ requestId: 'retained', seq: 2, intent });
+  release(); await settle();
+  f.navigate({ requestId: 'retained', seq: 3, intent }); await settle();
+  assert.deepEqual([...created], ['session-new']);
+  assert.equal(f.calls.filter(row => row[0] === 'draft').length, 1);
+  assert.equal(f.calls.filter(row => row[0] === 'open' && row[1] === 'session-a').length, 0);
+  assert.equal(f.sent.filter(row => row.message.requestId === 'retained' && row.message.ok).length, 2);
+  f.ctx.dispose();
+});
