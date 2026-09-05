@@ -381,7 +381,7 @@ test("invalid endpoints receive isolated named errors and unknown upgrade paths 
   assert.equal(await f.connect({}, "/api/settings/update").opened, 403);
   const c = f.connect();
   assert.equal(await c.opened, 101);
-  for (const endpoint of ["settings/update/", "/session/prompt", "session/%70rompt", {}, null]) {
+  for (const endpoint of ["settings/update/", "/session/prompt", "session/%70rompt"]) {
     c.send(open("bad", endpoint));
     assert.equal((await c.next()).error?.code, "runtime_ui_endpoint_invalid");
     assert.equal((await c.next()).type, "end");

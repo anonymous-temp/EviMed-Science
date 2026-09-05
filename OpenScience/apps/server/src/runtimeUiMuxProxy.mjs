@@ -6,6 +6,28 @@ import { HttpError } from "./security.mjs";
 const MAX_STREAMS = 256;
 const REVALIDATE_MS = 1000;
 
+// Exact rc.1 native key sets. Validate the whole message before touching a
+// stream registry; a malformed error must not terminate someone else's ID.
+const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const exactKeys = (value, keys) => record(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+const validId = (value) => typeof value === "string" && value.length > 0 && value.length <= 128;
+function nativeClientFrame(frame) {
+  return validId(frame?.streamId) && (
+    (frame.type === "cancel" && exactKeys(frame, ["type", "streamId"]))
+    || (frame.type === "open" && exactKeys(frame, ["type", "streamId", "endpoint", "payload"])
+      && typeof frame.endpoint === "string" && frame.endpoint.length > 0)
+  );
+}
+function nativeServerFrame(frame) {
+  return validId(frame?.streamId) && (
+    (frame.type === "item" && (exactKeys(frame, ["type", "streamId"]) || exactKeys(frame, ["type", "streamId", "value"])))
+    || (frame.type === "end" && exactKeys(frame, ["type", "streamId"]))
+    || (frame.type === "error" && exactKeys(frame, ["type", "streamId", "error"])
+      && exactKeys(frame.error, ["code", "message", "details"])
+      && typeof frame.error.code === "string" && typeof frame.error.message === "string" && record(frame.error.details))
+  );
+}
+
 /** @param {WebSocket} peer @param {string | Buffer} data */
 function send(peer, data) {
   return new Promise((resolve, reject) => {
@@ -116,8 +138,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (closed) return;
     let frame;
     try { frame = binary ? null : JSON.parse(raw.toString()); } catch { frame = null; }
-    if (!frame || !["open", "cancel"].includes(frame.type)
-      || typeof frame.streamId !== "string" || !frame.streamId || frame.streamId.length > 128) {
+    if (!nativeClientFrame(frame)) {
       shutdown(1008, "runtime_ui_frame_invalid");
       return;
     }
@@ -167,6 +188,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     if (binary) { shutdown(1003, "runtime_ui_frame_invalid"); return; }
     try {
       const frame = JSON.parse(raw.toString());
+      if (!nativeServerFrame(frame)) { shutdown(1008, "runtime_ui_frame_invalid"); return; }
       if (frame.type === "end" || frame.type === "error") streams.delete(frame.streamId);
     } catch { shutdown(1008, "runtime_ui_frame_invalid"); return; }
     if (client.bufferedAmount > maxPayload * 2) { shutdown(1009, "runtime_ui_queue_limit"); return; }
