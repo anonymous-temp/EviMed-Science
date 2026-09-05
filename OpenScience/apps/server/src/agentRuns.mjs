@@ -2549,12 +2549,23 @@ export class AgentRunStore {
       (item) => item.sessionId === sessionId && item.status === "running",
     );
     if (!run) return null;
-    this.monitors.get(run.id)?.cancel();
-    return this.finishInternal(project, run.id, {
-      status: "canceled",
-      errorCode: "runtime_canceled",
-      artifacts: [],
-    });
+    const monitor = this.monitors.get(run.id);
+    monitor?.cancel();
+    let finished;
+    try {
+      finished = await this.finishInternal(project, run.id, {
+        status: "canceled",
+        errorCode: "runtime_canceled",
+        artifacts: [],
+      });
+    } finally {
+      // Cancellation is complete only after the observer has left every read
+      // and storage mutation. Keep this in finally: even a failed terminal
+      // ledger write must not return control while the observer can still
+      // recreate paths in a project the caller is about to remove.
+      await monitor?.promise?.catch(() => {});
+    }
+    return finished;
   }
 
   async reconcileSession(project, sessionId) {
@@ -3083,7 +3094,11 @@ export class AgentRunStore {
         // nothing has happened for long enough that nothing will.
         // Three outcomes, not two: it moved, it did not move, or we could not
         // tell. Only the middle one is evidence of a stall.
-        const moved = await this.recordProgress(project, run).catch(() => null);
+        // Reconciliation may have appended progress. Compare against the
+        // record it just returned, not the stale pre-reconciliation snapshot;
+        // otherwise the same counters look new on every poll and a dead run
+        // reaches the global timeout instead of the stall threshold.
+        const moved = await this.recordProgress(project, reconciled).catch(() => null);
         if (moved === true) idlePolls = 0;
         else if (moved === false) idlePolls += 1;
         if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls) {
