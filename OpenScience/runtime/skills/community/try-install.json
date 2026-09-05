@@ -4,7 +4,7 @@
     {
       "name": "dsh-cite",
       "repo": "STARDUSTLC666/dsh-cite",
-      "version": "0.2.0",
+      "version": "0.3.2",
       "registers": ["cite"],
       "why": "DOI/Crossref verification plus GB/T 7714 / APA / MLA / Chicago / BibTeX. GB/T 7714 is the format Chinese journals require and nothing we ship produces it."
     },
@@ -35,12 +35,12 @@
     "kernel": "@deepseek-ai/dsh@0.1.2-rc.1",
     "image": "evimed-runtime-dsh:evimed-20260904-93d15caf",
     "results": {
-      "dsh-cite@0.2.0": "booted",
+      "dsh-cite@0.3.2": "booted",
       "dsh-plugin-academic-writing@0.2.0": "rejected: peer dependency does not admit the current DSH packages",
       "dsh-plugin-translation@0.2.0": "rejected: peer dependency does not admit the current DSH packages",
       "dsh-plugin-writing-guard@2.0.1": "rejected: dependency build scripts require an unreviewed pnpm approval"
     }
   },
-  "installed": ["dsh-cite@0.2.0"],
+  "installed": ["dsh-cite@0.3.2"],
   "notInstalledYet": "The three rejected bundles remain outside the runtime image. dsh-cite is installed at its exact tested version and must pass the image dump-config and boot smoke before release."
 }

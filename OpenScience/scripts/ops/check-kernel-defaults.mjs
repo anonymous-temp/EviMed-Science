@@ -99,17 +99,14 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.2-rc.1",
-  sha256: "929c5cfd776c907a18aefd18d64cd637f20f88ff86f04db56a744e77c00539cf",
+  sha256: "89e9fd996e89650b8e09e0892f92f795b78d26f4e9880c7e70599bda5dd28b7f",
   recordedBy: "deploy/runtime-dsh/Dockerfile - `dsh --profile evimed-runtime --dump-config` on the seeded profile",
-  // The digest is unchanged from the 0.1.2-alpha.5 recording, and that is a
-  // measurement rather than a shortcut: the image was rebuilt at rc.1 on the
-  // production host (2026-09-04, `evimed-runtime-dsh:rc1-20260904`), its own
-  // build step diffed the fresh dump against the committed baseline and found
-  // no difference, and the dump was then copied out of the built image and
-  // hashed independently to the value above. rc.1 is alpha.5 retagged --
-  // every `@deepseek-ai/*` package in both closures is byte-identical bar one
-  // version string -- so an unchanged composition is the expected result here,
-  // not a sign that the recording was skipped.
+  // The EviMed native-client row was recorded by the actual rc.1 native UI
+  // acceptance image. The dsh-cite row was recorded on 2026-09-06 by adding
+  // dsh-cite@0.3.2 to an isolated rc.1 profile on the production host and
+  // copying that profile's --dump-config output out of the disposable
+  // container. The release image build still diffs its fresh combined dump
+  // against this file before it can be published.
 };
 
 /**

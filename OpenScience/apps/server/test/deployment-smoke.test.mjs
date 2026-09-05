@@ -181,6 +181,9 @@ test("deployment smoke requires the scrape token when production observability i
     backupExternalAck: true,
     restoreDrillAck: true,
     trustProxy: true,
+    requireDurableUsageLedger: false,
+    requireInbox: false,
+    requireDocumentParser: false,
     ...productionReleaseConfig,
   });
   const address = await app.listen(0, "127.0.0.1");

@@ -73,7 +73,7 @@ test("every setting the runtime depends on still holds in the composition the im
   // rows read out of them is fixed too, and a parser that thinned out silently
   // is the way a checker starts reporting nothing wrong. Re-recording the image
   // moves BASELINE_PROVENANCE and this number in the same edit.
-  assert.equal(report.counts.baselineRows, 147, "the image's recorded composition, all of it");
+  assert.equal(report.counts.baselineRows, 149, "the image's recorded composition, including the native client and citation bundle");
   assert.equal(report.counts.presetRows, 23, "the preset's rows, counting the eight our groups mount");
   assert.ok(report.invariants.length >= 20, `only ${report.invariants.length} invariants were derived`);
 
