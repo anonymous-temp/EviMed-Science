@@ -2142,7 +2142,7 @@ test("a framed prompt is refused when the account is over its cap, and reading i
 
   const prompted = await fetch(`${uiBase}/api/session/prompt`, {
     method: "POST",
-    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    headers: { Cookie: cookie, Origin: "https://science.example:8443", "Content-Type": "application/json" },
     body: JSON.stringify({ type: "client-request", rpcId: "1", method: "session/prompt", payload: { args: {} } }),
   });
   assert.equal(prompted.status, 402);
@@ -2151,7 +2151,7 @@ test("a framed prompt is refused when the account is over its cap, and reading i
   // else the mock runtime answers, it is not a refusal about money.
   const read = await fetch(`${uiBase}/api/session/page`, {
     method: "POST",
-    headers: { Cookie: cookie, "Content-Type": "application/json" },
+    headers: { Cookie: cookie, Origin: "https://science.example:8443", "Content-Type": "application/json" },
     body: JSON.stringify({ type: "client-request", rpcId: "2", method: "session/page", payload: { request: {} } }),
   });
   assert.notEqual(read.status, 402);
@@ -2182,7 +2182,7 @@ test("the hosted browser application cannot reach the methods that change the de
   for (const method of denied) {
     const response = await fetch(`${uiBase}/api/${method}`, {
       method: "POST",
-      headers: { cookie, "content-type": "application/json" },
+      headers: { cookie, Origin: "https://science.example:8443", "content-type": "application/json" },
       body: "{}",
     });
     assert.equal(response.status, 403, `${method} must be refused`);
@@ -2195,7 +2195,7 @@ test("the hosted browser application cannot reach the methods that change the de
   // answers, it is not this surface refusing the call.
   const allowed = await fetch(`${uiBase}/api/session/create`, {
     method: "POST",
-    headers: { cookie, "content-type": "application/json" },
+    headers: { cookie, Origin: "https://science.example:8443", "content-type": "application/json" },
     body: "{}",
   });
   const body = await allowed.json().catch(() => ({}));

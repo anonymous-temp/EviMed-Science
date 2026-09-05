@@ -34,15 +34,14 @@ import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError } from "./security.mjs";
 
-/** The cookie naming the project this origin is showing. */
-export /**
+/**
  * The methods that make the deployment spend money.
  *
  * Only prompting does: everything else the application calls reads state,
  * navigates or renders. Refusing those on a spend cap would lock someone out
  * of work they have already paid for.
  */
-const RUNTIME_UI_SPENDING_METHODS = new Set(["session/prompt"]);
+export const RUNTIME_UI_SPENDING_METHODS = new Set(["session/prompt"]);
 
 const RUNTIME_UI_PROJECT_COOKIE = "evimed_ui_project";
 
@@ -51,7 +50,9 @@ function cookieValue(req, name) {
   const header = String(req.headers?.cookie ?? "");
   for (const pair of header.split(";")) {
     const trimmed = pair.trim();
-    if (trimmed.startsWith(`${name}=`)) return decodeURIComponent(trimmed.slice(name.length + 1));
+    if (trimmed.startsWith(`${name}=`)) {
+      try { return decodeURIComponent(trimmed.slice(name.length + 1)); } catch { return ""; }
+    }
   }
   return "";
 }
@@ -59,6 +60,32 @@ function cookieValue(req, name) {
 /** @param {any} req @param {Record<string, any>} config */
 function hasSessionCookie(req, config) {
   return Boolean(cookieValue(req, String(config.sessionCookieName ?? "")));
+}
+
+/** Browser cookies are accepted only from these explicit deployment origins.
+ * Origin-less automation must use the control plane's authenticated API; this
+ * browser surface deliberately has no implicit internal-client exception.
+ * @param {any} req @param {Record<string, any>} config
+ */
+function assertBrowserOrigin(req, config) {
+  const origin = req.headers.origin;
+  const allowed = [config.runtimeUiPublicOrigin, config.publicUrl].some((value) => {
+    try {
+      const url = new URL(value);
+      return ["https:", "http:"].includes(url.protocol) && url.origin === origin;
+    } catch { return false; }
+  });
+  if (typeof origin !== "string" || !allowed) {
+    throw new HttpError(403, "runtime_ui_origin_denied", "The runtime UI requires an allowed browser Origin.");
+  }
+}
+
+/** @param {Record<string, any>} config @param {any} project @param {string} method */
+async function authorizeMethod(config, project, method) {
+  if (isDeniedRuntimeUiMethod(method)) {
+    throw new HttpError(403, "runtime_ui_method_denied", `${method} is not available in the hosted surface.`);
+  }
+  if (RUNTIME_UI_SPENDING_METHODS.has(method)) await assertSpendWithinLimits(config, project.userId);
 }
 
 /**
@@ -112,12 +139,13 @@ function destroyUpgrade(socket, status, code) {
  * @returns {{ server: import('node:http').Server, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager }) {
+  const upgradeSockets = new Set();
   /**
    * @param {any} req @param {any} res
    * @returns {Promise<Record<string, any>>} the project this request addresses
    */
   async function resolveProject(req, res) {
-    const user = await store.ensureUser(req, res);
+    const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     const { requested, remembered } = projectSelection(req);
     if (requested) return { user, project: await store.requireProject(user, requested), pinned: true };
     if (remembered) return { user, project: await store.requireProject(user, remembered), pinned: false };
@@ -140,7 +168,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
       return;
     }
 
+    if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
     const method = runtimeUiMethodFromPath(pathname);
+    const { project, pinned } = await resolveProject(req, res);
     if (isDeniedRuntimeUiMethod(method)) {
       // Named in the body so the page's own error surface says which one, and
       // named in the audit row by the proxy's target — the panels that call
@@ -157,17 +187,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
       return;
     }
 
-    const { project, pinned } = await resolveProject(req, res);
-
     // Where a turn begins on this surface. A run started inside the kernel's
     // application never passes through `/api/agent-runs/dispatch`, so a spend
     // cap that only guarded dispatch would be one the primary surface walks
     // around. It is this method and not the runtime's start, because starting
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
-    if (RUNTIME_UI_SPENDING_METHODS.has(method)) {
-      await assertSpendWithinLimits(config, project.userId);
-    }
+    await authorizeMethod(config, project, method);
     // Pinning is a redirect rather than a rewrite so the application never
     // sees the query parameter: it would carry it into its own history and
     // into the URLs it builds, and a stale `?project=` in a bookmark would
@@ -205,13 +231,32 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
   });
 
   server.on("upgrade", (req, socket, head) => {
+    upgradeSockets.add(socket);
+    socket.once("close", () => upgradeSockets.delete(socket));
     void (async () => {
       try {
         if (!config.runtimeUiProxyEnabled) return destroyUpgrade(socket, 404, "not_found");
         if (!hasSessionCookie(req, config)) return destroyUpgrade(socket, 401, "unauthorized");
+        assertBrowserOrigin(req, config);
         const url = new URL(req.url ?? "/", "http://evimed-runtime-ui.local");
-        const { project } = await resolveProject(req, null);
-        await runtimeManager.proxyUpgrade(req, socket, head, project, `${url.pathname}${url.search}`);
+        const { user, project } = await resolveProject(req, null);
+        // Capture the session cookie and project once. Another frame may
+        // change the shared project cookie; it cannot retarget this socket.
+        const sessionRequest = { headers: { cookie: req.headers.cookie } };
+        const projectId = project.id;
+        const userId = user.id;
+        const revalidate = async () => {
+          const current = await store.ensureSessionUser(sessionRequest, null, { allowDevAuth: false });
+          if (current.user.id !== userId) throw new HttpError(401, "unauthorized", "Authentication required.");
+          await store.requireProject(current.user, projectId);
+        };
+        const authorize = async (endpoint) => {
+          if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
+            throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
+          }
+          await authorizeMethod(config, project, endpoint);
+        };
+        await runtimeManager.proxyUpgrade(req, socket, head, project, `${url.pathname}${url.search}`, { revalidate, authorize });
       } catch (error) {
         destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
       }
@@ -238,6 +283,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
       return server.listening ? server.address() : null;
     },
     async close() {
+      for (const socket of upgradeSockets) socket.destroy();
       if (!server.listening) return;
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
