@@ -108,3 +108,29 @@ test("the authenticated external bootstrap installs the real browser hook withou
   assert.equal(requests[0][1].body, "native");
   assert.equal(starts, 0);
 });
+
+test("frame release requires login and CSRF, and clears only the named frame cookie path", async (t) => {
+  const f = await frameApi(t);
+  const headers = { cookie: f.cookie, "content-type": "application/json", "x-open-science-csrf": f.csrfToken };
+  const create = async () => {
+    const response = await fetch(`${f.base}/api/runtime-ui/frames`, { method: "POST", headers, body: JSON.stringify({ projectId: "default" }) });
+    return { ...(await response.json()).data, cookie: response.headers.get("set-cookie").split(";")[0] };
+  };
+  const a = await create();
+  const b = await create();
+  const release = (id, requestHeaders) => fetch(`${f.base}/api/runtime-ui/frames/${id}`, { method: "DELETE", headers: requestHeaders });
+  assert.equal((await release(a.frameId, {})).status, 401);
+  assert.equal((await release(a.frameId, { cookie: f.cookie })).status, 403);
+  assert.equal((await release("bad-frame", headers)).status, 400);
+  const response = await release(a.frameId, headers);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { data: true });
+  const cleared = response.headers.getSetCookie();
+  assert.equal(cleared.length, 1);
+  assert.match(cleared[0], new RegExp(`^evimed_ui_frame=; Path=/__evimed/f/${a.frameId}/;`));
+  assert.match(cleared[0], /Max-Age=0/);
+  assert.ok(!cleared[0].includes(b.frameId));
+  assert.equal((await release(a.frameId, headers)).status, 200, "cookie release is idempotent");
+  const live = await fetch(`http://127.0.0.1:${f.app.runtimeUi.address().port}${new URL(b.frameUrl).pathname}__evimed_bootstrap.js`, { headers: { cookie: `${f.cookie}; ${b.cookie}` } });
+  assert.equal(live.status, 200, "releasing A must not disturb B");
+});
