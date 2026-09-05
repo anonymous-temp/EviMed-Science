@@ -56,16 +56,16 @@ test("concurrent reservations cannot oversubscribe one account budget", options,
 test("settlement is idempotent and retains exact provider counts and price version", options, async () => {
   const reserved = await ledger.reserveModel(reservation());
   const usage = { cacheHitTokens: 11, cacheMissTokens: 23, completionTokens: 37 };
-  const settled = await ledger.settleModel(reserved.id, {
+  const settled = await ledger.settleModel(owner, reserved.id, {
     usage, actualCost: 0.0004, priced: true, providerRequestId: "provider-fixture-one",
   });
   assert.equal(settled.status, "settled");
   assert.equal(settled.priceVersion, "evimed-reference-2026-09-05");
   assert.deepEqual(settled.usage, usage);
-  assert.equal((await ledger.settleModel(reserved.id, {
+  assert.equal((await ledger.settleModel(owner, reserved.id, {
     usage, actualCost: 0.0004, priced: true, providerRequestId: "provider-fixture-one",
   })).revision, settled.revision);
-  await assert.rejects(ledger.settleModel(reserved.id, {
+  await assert.rejects(ledger.settleModel(owner, reserved.id, {
     usage: { ...usage, completionTokens: 38 }, actualCost: 0.0004, priced: true,
     providerRequestId: "provider-fixture-one",
   }), { code: "usage_settlement_conflict" });
@@ -73,9 +73,9 @@ test("settlement is idempotent and retains exact provider counts and price versi
 
 test("released, uncertain and settled calls are distinguished in durable summaries", options, async () => {
   const released = await ledger.reserveModel(reservation());
-  await ledger.release(released.id, "provider_refused");
+  await ledger.release(owner, released.id, "provider_refused");
   const uncertain = await ledger.reserveModel(reservation());
-  await ledger.markUncertain(uncertain.id, "response_usage_missing", { providerRequestId: "provider-unknown" });
+  await ledger.markUncertain(owner, uncertain.id, "response_usage_missing", { providerRequestId: "provider-unknown" });
   const summary = await ledger.summary(owner, { since: new Date("2020-01-01T00:00:00Z") });
   assert.ok(summary.settledCalls >= 1);
   assert.ok(summary.releasedCalls >= 1);
@@ -86,6 +86,38 @@ test("released, uncertain and settled calls are distinguished in durable summari
 });
 
 test("a project foreign to the account cannot receive a reservation", options, async () => {
+  const before = await ledger.summary(owner, { since: new Date("2020-01-01T00:00:00Z") });
   await assert.rejects(ledger.reserveModel(reservation(owner, { projectId: "missing" })), { code: "23503" });
-  assert.equal((await ledger.summary(owner, { since: new Date("2020-01-01T00:00:00Z") })).reservedCalls, 0);
+  assert.equal((await ledger.summary(owner, { since: new Date("2020-01-01T00:00:00Z") })).reservedCalls, before.reservedCalls);
+});
+
+test("settlement authority remains account scoped even when a request id is known", options, async () => {
+  const reserved = await ledger.reserveModel(reservation());
+  const usage = { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 };
+  await assert.rejects(ledger.settleModel(other, reserved.id, { usage, actualCost: 0.1, priced: true }), { code: "usage_request_not_found" });
+  await assert.rejects(ledger.release(other, reserved.id, "foreign_release"), { code: "usage_request_not_found" });
+  await assert.rejects(ledger.markUncertain(other, reserved.id, "foreign_uncertain"), { code: "usage_request_not_found" });
+  assert.equal((await ledger.summary(owner, { since: new Date("2020-01-01T00:00:00Z") })).reservedCalls >= 1, true);
+});
+
+test("monetary fields require finite numeric values and one currency", options, async () => {
+  for (const value of [null, false, "", [], "0.5"]) {
+    await assert.rejects(ledger.reserveModel(reservation(owner, { estimatedCost: value })), { code: "usage_payload_invalid" });
+  }
+  await assert.rejects(ledger.reserveModel(reservation(owner, { currency: "USD" })), { code: "usage_payload_invalid" });
+  const reserved = await ledger.reserveModel(reservation());
+  await assert.rejects(ledger.settleModel(owner, reserved.id, {
+    usage: { cacheHitTokens: 0, cacheMissTokens: 1, completionTokens: 1 }, actualCost: null, priced: true,
+  }), { code: "usage_payload_invalid" });
+});
+
+test("reservation retries cannot silently reuse another price or an expired request", options, async () => {
+  const now = new Date();
+  const input = reservation(owner, { now, ttlMs: 60_000 });
+  const first = await ledger.reserveModel(input);
+  assert.equal((await ledger.reserveModel({ ...input })).id, first.id);
+  await assert.rejects(ledger.reserveModel({ ...input, priceVersion: "another-price" }), { code: "usage_reservation_conflict" });
+  await assert.rejects(ledger.reserveModel({ ...input, estimatedCost: input.estimatedCost + 0.01 }), { code: "usage_reservation_conflict" });
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 second' WHERE id=$1", [first.id]);
+  await assert.rejects(ledger.reserveModel({ ...input }), { code: "usage_reservation_conflict" });
 });
