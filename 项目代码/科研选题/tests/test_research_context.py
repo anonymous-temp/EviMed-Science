@@ -1,6 +1,7 @@
 """Resource constraints and actionable, evidence-linked portfolio contracts."""
 
 import asyncio
+from collections import OrderedDict
 from copy import deepcopy
 import json
 from types import SimpleNamespace
@@ -231,3 +232,107 @@ def test_portfolio_rejects_unreconciled_lineage_and_preserves_json_descriptions(
         build_research_portfolio("Dialysis", {}, [{**topic, "source_evidence_pmids": []}], [source], evidence)
     result = build_research_portfolio("Dialysis", {}, [topic], [source], evidence)
     assert result["candidates"][0]["sourceEvidenceIds"] == ["internal_retained"]
+
+
+def test_report_prompts_cannot_reintroduce_removed_topic_scores():
+    from config.prompts import M5_BREAKTHROUGH_OPPORTUNITY_PROMPT, M6_RESEARCH_AGENDA_PROMPT
+    from core.new_report_generator import ReportGenerator
+
+    generator = ReportGenerator()
+    material = {
+        "opportunities": [{
+            "opportunity_id": "BOM1",
+            "title": "Bounded opportunity",
+            "priority_score": 0.93,
+            "feasibility_score": 0.72,
+            "novelty_score": 0.81,
+            "clinical_impact_score": 0.88,
+            "support_level": "indirect",
+            "evidence_pmids": ["420001"],
+        }],
+        "research_topics": [{
+            "topic_id": "R1",
+            "title": "Bounded topic",
+            "priority_score": 0.91,
+            "feasibility_score": 0.69,
+            "novelty_score": 0.80,
+            "support_level": "indirect",
+            "source_evidence_pmids": ["420001"],
+        }],
+    }
+    summary = generator._summarize_module_data(material)
+    prompt = generator._build_chapter_prompt(
+        chapter_num=7,
+        module_id="M6_RESEARCH_AGENDA",
+        module_name="Research agenda",
+        module_data=material,
+        key_insights=[],
+        supporting_evidence=[],
+        charts=[],
+        chapter_outline={},
+        query_context="Dialysis",
+        citation_pool=OrderedDict(),
+        m5_opportunities=material["opportunities"],
+    )
+    methodology = generator._render_methodology(EvidenceStats(evidence_count=0), "Dialysis")
+    for output in (summary, prompt, methodology, M5_BREAKTHROUGH_OPPORTUNITY_PROMPT, M6_RESEARCH_AGENDA_PROMPT):
+        assert "priority_score" not in output
+        assert "feasibility_score" not in output
+        assert "novelty_score" not in output
+    assert "优先级评分" not in prompt
+    assert "优先级综合评分（第6–7章）" not in methodology
+    assert "支持层级=indirect" in summary
+    assert "PMID=420001" in summary
+
+
+def test_duplicate_opportunity_and_candidate_ids_are_rejected():
+    from core.research_portfolio import build_research_portfolio
+
+    records = [
+        LiteratureRecord(id="pubmed_420001", pmid="420001", title="First evidence", abstract="Observed association."),
+        LiteratureRecord(id="pubmed_430001", pmid="430001", title="Second evidence", abstract="Independent result."),
+    ]
+    raw = [
+        {"opportunity_id": "BOM1", "title": "First", "evidence_pmids": ["420001"]},
+        {"opportunity_id": "BOM1", "title": "Second", "evidence_pmids": ["430001"]},
+    ]
+    with pytest.raises(ValueError, match="duplicate opportunity"):
+        M5_BreakthroughOpportunityModule._validate_opportunities(raw, records)
+    with pytest.raises(ValueError, match="duplicate opportunity"):
+        build_research_portfolio("Dialysis", {}, [], raw, records)
+
+    sources = [
+        {"opportunity_id": "BOM1", "title": "First", "evidence_pmids": ["420001"], "support_level": "indirect"},
+        {"opportunity_id": "BOM2", "title": "Second", "evidence_pmids": ["430001"], "support_level": "indirect"},
+    ]
+    topics = M6_ResearchAgendaModule._validate_topics([
+        {"topic_id": "R1", "source_opportunity_id": "BOM1"},
+        {"topic_id": "R1", "source_opportunity_id": "BOM2"},
+    ], sources)
+    with pytest.raises(ValueError, match="duplicate candidate"):
+        build_research_portfolio("Dialysis", {}, topics, sources, records)
+
+
+def test_malformed_design_values_remain_explicit_portfolio_gaps():
+    from core.research_portfolio import build_research_portfolio
+
+    source = {
+        "opportunity_id": "BOM1",
+        "title": "Bounded opportunity",
+        "evidence_pmids": ["420001"],
+        "support_level": "indirect",
+    }
+    raw = {
+        "topic_id": "R1",
+        "source_opportunity_id": "BOM1",
+        "hypothesis": ["not", "a", "scientific statement"],
+        "study_design": [],
+        "estimand": {},
+    }
+    validated = M6_ResearchAgendaModule._validate_topics([raw], [source])
+    evidence = [LiteratureRecord(id="pubmed_420001", pmid="420001", title="Evidence")]
+    candidate = build_research_portfolio("Dialysis", {}, validated, [source], evidence)["candidates"][0]
+    assert candidate["hypothesis"] is None
+    assert candidate["studyDesign"] is None
+    assert candidate["estimand"] is None
+    assert {"hypothesis", "studyDesign", "estimand"}.issubset(candidate["gaps"])
