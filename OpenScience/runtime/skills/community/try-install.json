@@ -25,10 +25,22 @@
     {
       "name": "dsh-plugin-writing-guard",
       "repo": "xmutfyh/dsh-plugin-writing-guard",
-      "version": "1.7.0",
+      "version": "2.0.1",
       "registers": ["writing_audit", "writing_journal_profile"],
-      "why": "Deterministic, zero-network. Protects numbers, citations, claim strength, negation and scope from being changed by language polishing, and detects working-context residue leaking into deliverables — the same family as our own leakage bans, from the other side. Reclassified here from the skills lane: its SKILL.md calls its own tools, so the prose cannot be taken alone."
+      "why": "Deterministic, zero-network. Protects numbers, citations, claim strength, negation and scope from being changed by language polishing, and detects working-context residue leaking into deliverables — the same family as our own leakage bans, from the other side. Version 1.7.0 was never published; 2.0.1 is the first currently published candidate tested here. Reclassified from the skills lane because its SKILL.md calls its own tools, so the prose cannot be taken alone."
     }
   ],
-  "notInstalledYet": "None of these are in the runtime image. Moving one there is a Dockerfile edit with an exact version, a --dump-config diff, and the build smoke."
+  "lastCompatibilityTest": {
+    "testedAt": "2026-09-06",
+    "kernel": "@deepseek-ai/dsh@0.1.2-rc.1",
+    "image": "evimed-runtime-dsh:evimed-20260904-93d15caf",
+    "results": {
+      "dsh-cite@0.2.0": "booted",
+      "dsh-plugin-academic-writing@0.2.0": "rejected: peer dependency does not admit the current DSH packages",
+      "dsh-plugin-translation@0.2.0": "rejected: peer dependency does not admit the current DSH packages",
+      "dsh-plugin-writing-guard@2.0.1": "rejected: dependency build scripts require an unreviewed pnpm approval"
+    }
+  },
+  "installed": ["dsh-cite@0.2.0"],
+  "notInstalledYet": "The three rejected bundles remain outside the runtime image. dsh-cite is installed at its exact tested version and must pass the image dump-config and boot smoke before release."
 }
