@@ -1576,7 +1576,6 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
                 "opportunities": opportunities,
                 "cross_domain_map": bom_analysis.get("cross_domain_map", {}),
                 "transfer_types": bom_analysis.get("transfer_types", {}),
-                "priority_ranking": bom_analysis.get("ranking", []),
                 "llm_deep_analysis": bom_analysis.get("deep_analysis", ""),
                 "action_roadmap": bom_analysis.get("roadmap", [])
             },

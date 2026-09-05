@@ -755,7 +755,9 @@ class ReportGenerator:
             summary_parts.append("\n".join(lines))
 
         # 提取其他关键数值和列表
-        skip_keys = {"llm_deep_analysis", "opportunities", "research_topics"}
+        # `priority_ranking` is a legacy unvalidated model payload. New runs no
+        # longer retain it; old module artifacts must not reintroduce scores.
+        skip_keys = {"llm_deep_analysis", "opportunities", "research_topics", "priority_ranking"}
         for key, value in data.items():
             if key in skip_keys:
                 continue
