@@ -280,8 +280,7 @@ test("a header whose scrypt parameters are not a usable set is refused before th
 });
 
 test("a replaced password wrap is refused before its cost is processed", async () => {
-  // These are different facts and a reader acts on them differently; collapsing
-  // them sends someone looking for a key problem that does not exist.
+  // The wrapping envelope is authenticated before its KDF parameters are used.
   const container = await packForBob({ password: "correct horse battery staple" });
   const opened = await openCapsule(container, {
     issuer: { signingPublicKey: alice.signing.publicKey },
@@ -444,4 +443,26 @@ test("legacy recipient encryption remains readable without password metadata", a
   container.manifest.signature.value = sign(null, Buffer.from(signablePayload(container.manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64");
   const opened = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey }, recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey } });
   assert.equal(opened.ok, true);
+});
+
+
+test("legacy recipient archives reject unsigned password wraps but still open with their recipient key", async () => {
+  const container = await packForBob({ password: "test-only-legacy-placeholder" });
+  delete container.manifest.encryption.passwordWrapSha256;
+  container.manifest.formatVersion = "1.0";
+  container.manifest.signature.value = sign(null, Buffer.from(signablePayload(container.manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64");
+  const untrustedPassword = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey }, passwordWrap: container.passwordWrap, password: "test-only-legacy-placeholder" });
+  assert.equal(untrustedPassword.ok, false);
+  assert.equal(untrustedPassword.issues[0].code, "capsule_password_wrap_unauthenticated");
+  const recipient = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey }, recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey } });
+  assert.equal(recipient.ok, true);
+});
+
+test("caller identity claims are not promoted to trusted authorship", async () => {
+  const container = await packForBob({ issuer: { userId: "unverified-claim", signingKeyId: alice.signing.keyId, signingPrivateKey: alice.signing.privateKey } });
+  // This only proves that this key signed the claim. A service must bind the
+  // public key to a user through its own registry before labeling authorship.
+  assert.equal(verifyCapsule(container, { signingPublicKey: alice.signing.publicKey }).ok, true);
+  await assert.rejects(packForBob({ recipients: [{ encKeyId: "incorrect-test-only-id", publicKey: bob.encryption.publicKey }] }), error => error.code === "capsule_key_invalid");
+  await assert.rejects(packForBob({ password: "" }), error => error.code === "capsule_password_wrap_invalid");
 });

@@ -24,7 +24,7 @@
  */
 
 /** Container format version. Readers accept N and N-1. */
-export const CAPSULE_FORMAT_VERSION = '1.0'
+export const CAPSULE_FORMAT_VERSION = '1.1'
 
 /** The five layers a capsule holds. */
 export const CAPSULE_LAYERS = Object.freeze(['sources', 'knowledge', 'profile', 'methods', 'episodes'])
@@ -130,7 +130,7 @@ export const CAPSULE_SIGNATURE_ALG = 'ed25519'
  * @property {readonly CapsuleEntry[]} entries
  * @property {string} merkleRoot
  * @property {string | null} prevManifestSha256
- * @property {{ scheme: string, recipients: readonly { encKeyId: string, ephemeralPub: string, wrappedPackKey: string }[] }} [encryption]
+ * @property {{ scheme: string, recipients: readonly { encKeyId: string, ephemeralPub: string, wrappedPackKey: string }[], passwordWrapSha256?: string }} [encryption]
  * @property {{ alg: string, keyId: string, value: string }} [signature]
  */
 
@@ -156,11 +156,8 @@ export function validateCapsuleManifest(value) {
   }
   const raw = /** @type {Record<string, any>} */ (value)
   const formatVersion = String(raw.formatVersion ?? '')
-  const major = Number(formatVersion.split('.')[0])
-  const currentMajor = Number(CAPSULE_FORMAT_VERSION.split('.')[0])
-  // Readers accept N and N-1 so a sender on a newer build can still reach a
-  // receiver who has not updated; anything older gets a migrator, not silence.
-  if (!Number.isFinite(major) || major > currentMajor || major < currentMajor - 1) {
+  // 1.1 adds authenticated password wrapping; the 1.0 recipient format remains readable.
+  if (!['1.0', CAPSULE_FORMAT_VERSION].includes(formatVersion)) {
     issues.push({ code: 'capsule_format_unsupported', message: `unsupported container formatVersion "${formatVersion}".` })
   }
   if (!String(raw.capsuleId ?? '').trim()) {
@@ -186,25 +183,40 @@ export function validateCapsuleManifest(value) {
     })
   }
   const entries = Array.isArray(raw.entries) ? raw.entries : []
-  if (!entries.length) {
-    issues.push({ code: 'capsule_manifest_invalid', message: 'a container with no entries carries nothing.' })
+  if (!entries.length || entries.length > 256) {
+    issues.push({ code: 'capsule_manifest_invalid', message: 'a container must carry between 1 and 256 entries.' })
   }
   // Two entries naming the same path is not merely untidy: whichever one the
   // unpacker keeps is an implementation detail, so a signature covering both
   // does not say which content the recipient actually receives — the exact
   // ambiguity a duplicate ZIP entry has been used to smuggle content past a
   // verifier that checked a different entry than the one that landed on disk.
+  const declaredLayers = Array.isArray(raw.layers) ? raw.layers : []
+  if (!declaredLayers.length || declaredLayers.some(layer => !CAPSULE_LAYERS.includes(layer))) {
+    issues.push({ code: 'capsule_manifest_invalid', message: 'layers must contain known capsule layers.' })
+  }
+  const allowedPaths = Object.entries(SHARE_SCOPE_ENTRIES).filter(([name]) => scope.includes(name)).flatMap(([, paths]) => paths)
+  let totalBytes = 0
   const seenPaths = new Set()
   for (const entry of entries) {
     const record = entry && typeof entry === 'object' ? entry : {}
     const path = String(record.path ?? '')
-    if (!path || path.includes('..') || path.startsWith('/')) {
+    if (typeof record.path !== 'string' || !path || path.length > 512 || path.includes('..') || path.startsWith('/') || path.includes('\\') || path.includes(':') || path.split('/').some(part => !part || part === '.') || [...path].some(char => char.charCodeAt(0) < 32)) {
       issues.push({ code: 'capsule_manifest_invalid', message: `entry path "${path}" must be relative and inside the container.` })
     } else if (seenPaths.has(path)) {
       issues.push({ code: 'capsule_manifest_invalid', message: `entry path "${path}" is listed more than once.` })
     } else {
       seenPaths.add(path)
     }
+    if (!allowedPaths.some(allowed => allowed.endsWith('/') ? path.startsWith(allowed) : path === allowed)) {
+      issues.push({ code: 'capsule_scope_violation', message: `entry "${path}" is outside the declared share scope.` })
+    }
+    if (!CAPSULE_LAYERS.includes(record.layer) || !declaredLayers.includes(record.layer)) {
+      issues.push({ code: 'capsule_manifest_invalid', message: `entry "${path}" has an undeclared or unknown layer.` })
+    }
+    if (!Number.isSafeInteger(record.bytes) || record.bytes < 0 || record.bytes > 8 * 1024 * 1024) {
+      issues.push({ code: 'capsule_size_invalid', message: `entry "${path}" exceeds the supported plaintext size.` })
+    } else totalBytes += record.bytes
     if (!SHA256_PATTERN.test(String(record.sha256 ?? ''))) {
       issues.push({ code: 'capsule_manifest_invalid', message: `entry "${path}" has no plaintext digest.` })
     }
@@ -212,6 +224,7 @@ export function validateCapsuleManifest(value) {
       issues.push({ code: 'capsule_restricted_content', message: `entry "${path}" is from the ${record.layer} layer, which never leaves.` })
     }
   }
+  if (totalBytes > 16 * 1024 * 1024) issues.push({ code: 'capsule_size_invalid', message: 'the container exceeds 16 MiB of plaintext.' })
   if (!SHA256_PATTERN.test(String(raw.merkleRoot ?? ''))) {
     issues.push({
       code: 'capsule_manifest_invalid',
@@ -223,15 +236,22 @@ export function validateCapsuleManifest(value) {
   }
   if (raw.encryption != null) {
     const encryption = raw.encryption && typeof raw.encryption === 'object' ? raw.encryption : {}
-    if (encryption.scheme !== CAPSULE_ENCRYPTION_SCHEME) {
+    const passwordOnly = encryption.scheme === 'scrypt+aes-256-gcm'
+    if (encryption.scheme !== CAPSULE_ENCRYPTION_SCHEME && !passwordOnly) {
       issues.push({ code: 'capsule_manifest_invalid', message: `unsupported encryption scheme "${encryption.scheme}".` })
     }
     const recipients = Array.isArray(encryption.recipients) ? encryption.recipients : []
-    if (!recipients.length) {
-      issues.push({ code: 'capsule_manifest_invalid', message: 'an encrypted container must list at least one recipient.' })
+    if ((!passwordOnly && !recipients.length) || recipients.length > 32 || (passwordOnly && recipients.length)) {
+      issues.push({ code: 'capsule_manifest_invalid', message: 'recipient encryption requires 1 to 32 recipients; password-only encryption requires none.' })
     }
+    if ((passwordOnly || encryption.passwordWrapSha256 !== undefined) && (formatVersion !== '1.1' || !SHA256_PATTERN.test(encryption.passwordWrapSha256 ?? ''))) {
+      issues.push({ code: 'capsule_manifest_invalid', message: 'password encryption requires a signed wrapping digest in format 1.1.' })
+    }
+    const recipientIds = new Set()
     for (const recipient of recipients) {
       const record = recipient && typeof recipient === 'object' ? recipient : {}
+      if (recipientIds.has(record.encKeyId)) issues.push({ code: 'capsule_manifest_invalid', message: 'recipient key IDs must be unique.' })
+      recipientIds.add(record.encKeyId)
       if (
         !String(record.encKeyId ?? '').trim()
         || !BASE64_PATTERN.test(String(record.ephemeralPub ?? ''))
