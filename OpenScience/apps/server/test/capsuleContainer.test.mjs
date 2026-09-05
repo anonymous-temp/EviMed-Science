@@ -466,3 +466,22 @@ test("caller identity claims are not promoted to trusted authorship", async () =
   await assert.rejects(packForBob({ recipients: [{ encKeyId: "incorrect-test-only-id", publicKey: bob.encryption.publicKey }] }), error => error.code === "capsule_key_invalid");
   await assert.rejects(packForBob({ password: "" }), error => error.code === "capsule_password_wrap_invalid");
 });
+
+test("import supports only explicit UTF-8 text formats and matching MIME types", async () => {
+  for (const [path, mime] of [
+    ["exemplars/start.cjs", "application/javascript"], ["exemplars/run.ps1", "text/plain"],
+    ["exemplars/run.bat", "text/plain"], ["exemplars/safe.txt", "application/javascript"],
+    ["documents/report.pdf", "application/pdf"], ["methods/tool/SKILL.md", "application/javascript"],
+  ]) {
+    const hostile = signedPlainContainer({ scope: ["workstyle", "+documents"], entries: [{ path, mime, layer: "methods", content: "Synthetic unsupported content." }] });
+    assert.equal(checkImportSafety(hostile.manifest).ok, false, path);
+    const opened = await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } });
+    assert.equal(opened.ok, false, path);
+    assert.ok(opened.issues.some(issue => issue.code === "capsule_executable_content"));
+  }
+  for (const [path, mime] of [["exemplars/method.md", "text/markdown"], ["documents/table.csv", "text/csv"], ["documents/note.txt", "text/plain"]]) {
+    const allowed = signedPlainContainer({ scope: ["workstyle", "+documents"], entries: [{ path, mime, layer: "knowledge", content: "Synthetic supported text." }] });
+    assert.ok(checkImportSafety(allowed.manifest).ok);
+    assert.ok((await openCapsule(allowed, { issuer: { signingPublicKey: alice.signing.publicKey } })).ok);
+  }
+});
