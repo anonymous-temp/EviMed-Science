@@ -234,10 +234,17 @@ def _validate_release(completed, content: str, direction: str = "", module_artif
         raise RuntimeError("research-topic report contains unsupported certainty class: novelty-first")
     if guideline_claim:
         raise RuntimeError("research-topic report contains unsupported certainty class: guideline-promotion")
-    if re.search(r"(?:优先级评分|priority score)[^\n]{0,80}\d+(?:\.\d+)?", content, flags=re.IGNORECASE):
+    uncalibrated_score = re.compile(
+        r"(?:优先级评分|(?:priority|feasibility|novelty|clinical_impact)[_ ]score)"
+        r"[^\n]{0,80}\d+(?:\.\d+)?",
+        flags=re.IGNORECASE,
+    )
+    if uncalibrated_score.search(content):
         raise RuntimeError("research-topic report contains an uncalibrated priority score")
     if module_artifacts is not None:
         module_text = json.dumps(module_artifacts, ensure_ascii=False)
+        if uncalibrated_score.search(module_text):
+            raise RuntimeError("research-topic module artifact contains an uncalibrated priority score")
         if re.search(
             r"颠覆|彻底改变|真正的?因果效应|坚实的因果基础|可直接提升|"
             r"(?:尚无|没有)应用先例|零延迟|符合伦理要求",
