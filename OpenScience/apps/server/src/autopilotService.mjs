@@ -96,6 +96,33 @@ export class AutopilotService {
     return digest;
   }
 
+  /** @param {string} userId @param {string} episodeId */
+  async getEpisode(userId, episodeId) {
+    const episode = await this.documents.get(userId, "episode", text(episodeId, "episode id", 160));
+    if (!episode) throw new HttpError(404, "autopilot_episode_not_found", "Research episode is unavailable.");
+    return episode;
+  }
+
+  /** @param {string} userId @param {string} episodeId @param {{runId:string,sessionId:string}} input */
+  async markEpisodeDispatched(userId, episodeId, input) {
+    const episode = await this.getEpisode(userId, episodeId);
+    if (episode.payload.status === "running" && episode.payload.runId === input.runId) return episode;
+    if (episode.payload.status !== "queued") throw new HttpError(409, "autopilot_episode_state_conflict", "Research episode is no longer queued.");
+    return this.documents.put(userId, "episode", episode.id, {
+      ...episode.payload, status: "running", runId: text(input.runId, "run id", 160),
+      sessionId: text(input.sessionId, "session id", 160), updatedAt: this.now().toISOString(),
+    }, { expectedRevision: episode.revision, projectId: episode.projectId });
+  }
+
+  /** @param {string} userId @param {string} episodeId @param {{code:string}} input */
+  async markEpisodeFailed(userId, episodeId, input) {
+    const episode = await this.getEpisode(userId, episodeId);
+    if (["merged", "canceled"].includes(episode.payload.status)) return episode;
+    return this.documents.put(userId, "episode", episode.id, {
+      ...episode.payload, status: "failed", error: { code: text(input.code, "episode error", 100) }, updatedAt: this.now().toISOString(),
+    }, { expectedRevision: episode.revision, projectId: episode.projectId });
+  }
+
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
   async start(userId, agendaId, input) {
     const agenda = await this.get(userId, agendaId);
