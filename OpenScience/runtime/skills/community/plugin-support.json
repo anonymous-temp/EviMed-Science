@@ -19,7 +19,7 @@
   "communityToolBundles": [
     {
       "name": "dsh-cite",
-      "version": "0.2.0",
+      "version": "0.3.2",
       "status": "installed",
       "tools": ["cite"],
       "testedOn": "2026-09-06"

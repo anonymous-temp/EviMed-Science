@@ -539,3 +539,8 @@
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store
   name: '@evimed/dsh-socket/plugins/evidence-store'
+# == dsh-cite
+- id: cite
+  name: dsh-cite
+  config:
+    timeoutMs: 15000

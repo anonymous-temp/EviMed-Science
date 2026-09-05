@@ -600,6 +600,10 @@ async function checkConfiguredSkills() {
 
   for (const dir of configured) {
     const rel = repoRel(dir);
+    if (isInside(dir, restrictedRoot) && !allowRestrictedSkills) {
+      fail("restricted_skill_directory", "Configured runtime skills include Anthropic restricted materials.", { directory: rel });
+      continue;
+    }
     if (!existsSync(dir)) {
       fail("runtime_skill_dir_missing", "Configured runtime skill directory does not exist.", { directory: rel });
       continue;
@@ -609,11 +613,6 @@ async function checkConfiguredSkills() {
       fail("runtime_skill_dir_symlink", "Configured runtime skill directory must not be a symbolic link.", { directory: rel });
       continue;
     }
-    if (isInside(dir, restrictedRoot) && !allowRestrictedSkills) {
-      fail("restricted_skill_directory", "Configured runtime skills include Anthropic restricted materials.", { directory: rel });
-      continue;
-    }
-
     const licenseFiles = await restrictiveLicenseFiles(dir);
     if (licenseFiles.length > 0 && !allowRestrictedSkills) {
       fail("restrictive_skill_license", "Configured runtime skills include restrictive license files.", {
