@@ -62,6 +62,15 @@ test("unknown source lineage is reported without adding a blocking gate", () => 
   assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage" && item.severity === "advisory"));
 });
 
+test("portfolio PMIDs must match the preserved records behind their source ids", () => {
+  const files = packageFiles();
+  changePortfolio(files, (value) => { value.candidates[0].sourceEvidencePmids = ["999999"]; });
+  const result = run(files);
+  assert.equal(result.ok, true);
+  assert.equal(result.metrics.topicPortfolio?.evidenceReconciled, false);
+  assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage"));
+});
+
 test("a missing source artifact is unreconciled, not verified by omission", () => {
   const files = packageFiles();
   files.delete("evidence-records.json");
@@ -82,6 +91,18 @@ test("missing study plans remain explicit gaps, not actionable recommendations b
   assert.equal(result.metrics.topicPortfolio?.structurallyCompleteCandidates, 0);
   assert.equal(result.metrics.topicPortfolio?.unresolvedDesignFields, 2);
   assert.ok(result.issues.some((item) => item.check === "topic-study-plan" && item.severity === "advisory"));
+});
+
+test("unknown and false design gaps cannot make an incomplete candidate look reconciled", () => {
+  const files = packageFiles();
+  changePortfolio(files, (value) => {
+    value.candidates[0].estimand = null;
+    value.candidates[0].gaps = ["madeUpGap"];
+  });
+  const result = run(files);
+  assert.equal(result.ok, true);
+  assert.equal(result.metrics.topicPortfolio?.structurallyCompleteCandidates, 0);
+  assert.ok(result.issues.some((item) => item.check === "topic-study-plan"));
 });
 
 test("constraints cannot disappear between the engine receipt and portfolio unnoticed", () => {
@@ -108,4 +129,3 @@ test("old topic packages do not gain a required portfolio artifact", () => {
   assert.equal(result.ok, true);
   assert.ok(!result.issues.some((item) => item.check?.startsWith("topic-")));
 });
-
