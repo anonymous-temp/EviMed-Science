@@ -34,6 +34,8 @@ import { MemosClient } from "./memosClient.mjs";
 import { ProductDocuments } from "./productStore.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
+import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
+import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
@@ -423,7 +425,8 @@ export function createWebApiApp(overrides = {}) {
   const productDatabase = "database" in store ? store.database : null;
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const capsuleService = productDocuments ? new CapsuleService(productDocuments) : null;
-  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, maxJsonBytes: config.maxJsonBytes });
+  const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
+  const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
   const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });

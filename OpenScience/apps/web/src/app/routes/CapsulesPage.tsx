@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brain, Plus, RotateCcw } from "lucide-react";
+import { CapsuleTransferPanel } from "./CapsuleTransferPanel";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input, Textarea, inputClasses } from "@/components/ui/Input";
@@ -32,6 +33,7 @@ export function CapsulesPage() {
   const [entryCursor, setEntryCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
@@ -115,12 +117,13 @@ export function CapsulesPage() {
       <main className="mx-auto w-full max-w-content-full space-y-5 px-6 py-8">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div><h1 className="font-serif text-title text-text">记忆胶囊</h1><p className="mt-2 text-ui text-muted">保存研究方法、偏好与经验，在后续研究中继续使用。</p></div>
-          <Button disabled={busy} onClick={() => setCreating((value) => !value)}><Plus size={15} />新建胶囊</Button>
+          <div className="flex gap-2"><Button variant="ghost" disabled={busy} onClick={() => setTransferring(value => !value)}>分享与导入</Button><Button disabled={busy} onClick={() => setCreating((value) => !value)}><Plus size={15} />新建胶囊</Button></div>
         </header>
         <fieldset disabled={busy}><SegmentedControl value={view} onChange={(value) => { setView(value); setSelected(null); }} aria-label="胶囊列表"
           options={[{ value: "active", label: "我的胶囊" }, { value: "trash", label: "回收站" }]} /></fieldset>
         {error && <div role="alert" className="flex items-center gap-3 rounded-card border border-error/30 bg-surface p-3 text-ui text-error">{error}<Button variant="ghost" size="sm" onClick={() => void reload()}>重试</Button></div>}
         {notice && <p role="status" className="text-ui text-ok">{notice}</p>}
+        {transferring && <CapsuleTransferPanel capsule={current} onImported={saved => { listGeneration.current++; setLoading(false); setView("active"); setCapsules(items => [saved, ...items]); setSelected(saved.id); }} />}
         {creating && <Card title="新建胶囊"><form onSubmit={create} className="space-y-3">
           <Input label="胶囊名称" disabled={busy} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={150} required />
           <Textarea label="用途说明" disabled={busy} value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={2} />

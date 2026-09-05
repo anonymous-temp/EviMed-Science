@@ -70,3 +70,40 @@ export function trashCapsule(id: string, expectedRevision: number) {
 export function restoreCapsule(id: string, expectedRevision: number) {
   return productRequest<CapsuleRecord>(`/capsules/${encodeURIComponent(id)}/restore`, "POST", { expectedRevision });
 }
+
+export interface CapsuleExportSnapshot {
+  id: string; revision: number; createdAt: string; status: string; scopes: string[];
+  capsuleRevision: number; entryCount: number; archiveSha256: string; supersedes: string | null;
+  entryVersions: Array<{version: number; sha256: string}>;
+}
+export interface CapsuleTransferPreview {
+  archiveSha256: string; snapshotId: string; scopes: string[]; issuerTrust: string; issuerId: string;
+  hostedStatus: string; canImport: boolean; offlineRevocable: boolean; newerSnapshotId: string | null;
+  entries: Array<{ id: string; version: number; factKind: string; layer: string; content: string; path: string; sha256: string }>;
+}
+export function listCapsuleExports(id: string, cursor?: string | null) {
+  return productRequest<ProductPage<CapsuleExportSnapshot>>(`/capsules/${encodeURIComponent(id)}/exports${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+}
+export function exportCapsule(id: string, input: { password: string; scopes: string[]; supersedes?: string }) {
+  return productRequest<{ archive: string; filename: string; snapshot: CapsuleExportSnapshot }>(`/capsules/${encodeURIComponent(id)}/exports`, "POST", input);
+}
+export function revokeCapsuleExport(id: string, snapshot: CapsuleExportSnapshot) {
+  return productRequest<CapsuleExportSnapshot>(`/capsules/${encodeURIComponent(id)}/exports/${encodeURIComponent(snapshot.id)}`, "DELETE", { expectedRevision: snapshot.revision });
+}
+export function previewCapsuleImport(input: { archive: string; password: string }) {
+  return productRequest<CapsuleTransferPreview>("/capsules/transfers/preview", "POST", input);
+}
+export function importCapsule(input: { archive: string; password: string; expectedDigest: string; confirmed: true; title?: string }) {
+  return productRequest<CapsuleRecord>("/capsules/transfers/import", "POST", input);
+}
+export function saveCapsuleDownload(archive: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([archive], { type: "application/vnd.evimed.capsule+json" }));
+  const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename;
+  anchor.click(); URL.revokeObjectURL(url);
+}
+export async function downloadCapsuleExport(id: string, snapshotId: string) {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${root}/capsules/${encodeURIComponent(id)}/exports/${encodeURIComponent(snapshotId)}`);
+  if (!response.ok) throw new WebApiError("Snapshot download failed.", { status: response.status });
+  saveCapsuleDownload(await response.text(), `capsule-${snapshotId}.evimedcap`);
+}
