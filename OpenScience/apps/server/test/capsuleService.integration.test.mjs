@@ -73,6 +73,7 @@ test("capsule lifecycle is versioned and deleted capsules never supply context",
   await service.activate(owner, capsule.id, { mode: "own" });
   const removed = await service.remove(owner, capsule.id, 1);
   assert.equal((await service.recall(owner, { query: "Temporary" })).items.length, 0);
+  assert.ok((await service.list(owner, { deleted: true })).items.some((item) => item.id === capsule.id));
   await service.restore(owner, capsule.id, removed.revision);
   assert.equal((await service.recall(owner, { query: "Temporary" })).items.length, 1);
   await assert.rejects(service.create(owner, { title: "" }), { code: "capsule_payload_invalid" });
