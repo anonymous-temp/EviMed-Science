@@ -129,6 +129,27 @@ test("candidate identifiers must be strings and duplicate candidate ids stay vis
   assert.ok(result.issues.some((item) => item.check === "topic-portfolio-schema" && item.message.includes("duplicate")));
 });
 
+test("trim variants and duplicate evidence rows cannot evade unique topic counts", () => {
+  const files = packageFiles();
+  const portfolio = JSON.parse(files.get("research-portfolio.json"));
+  portfolio.candidates.push({
+    ...portfolio.candidates[0],
+    candidateId: " R1 ",
+    sourceOpportunityId: " opportunity-with-spaces ",
+  });
+  files.set("research-portfolio.json", JSON.stringify(portfolio));
+  const evidence = JSON.parse(files.get("evidence-records.json"));
+  evidence.push({ ...evidence[0] });
+  files.set("evidence-records.json", JSON.stringify(evidence));
+  const result = run(files);
+  assert.equal(result.ok, true);
+  assert.equal(result.metrics.topicPortfolio?.schemaValid, false);
+  assert.equal(result.metrics.topicPortfolio?.evidenceFilesConsistent, false);
+  assert.equal(result.metrics.topicPortfolio?.candidates, 1);
+  assert.equal(result.metrics.topicPortfolio?.structurallyCompleteCandidates, 1);
+  assert.ok(result.issues.some((item) => item.message.includes("duplicate evidence record id")));
+});
+
 test("deep optional context cannot escape the topic advisory validator", () => {
   const deep = '{"nested":'.repeat(5000) + 'null' + '}'.repeat(5000);
   const portfolio = '{"schemaVersion":"1.0.0","researchDirection":"Topic","researchContext":'
