@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { RuntimeManager, issueEviMedWorkloadToken } from "../src/runtimeManager.mjs";
@@ -23,8 +23,10 @@ async function fixture(t) {
     note: async (userId, projectId, input) => { calls.push({ action: "note", userId, projectId, input }); return { status: "candidate" }; },
   };
   let exists = true;
+  let authorize;
+  const authorized = new Promise((resolve) => { authorize = resolve; });
   const store = { userById: async () => exists ? { id: project.userId } : null,
-    requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); return project; } };
+    requireProject: async (user, id) => { assert.equal(user.id, project.userId); assert.equal(id, project.id); authorize(); return project; } };
   const handler = createCapsuleGatewayHandler({ runtimeManager: manager, store, service });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -33,7 +35,7 @@ async function fixture(t) {
   const request = (action, body, credential = token) => fetch(`${base}/${action}`, {
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${credential}` }, body: JSON.stringify(body),
   });
-  return { manager, project, runtime, tokenFile, token, issue, calls, request, removeUser: () => { exists = false; } };
+  return { base, authorized, manager, project, runtime, tokenFile, token, issue, calls, request, removeUser: () => { exists = false; } };
 }
 
 test("runtime capsule gateway derives identity only from an active signed workload", async (t) => {
@@ -69,4 +71,21 @@ test("runtime notes are review candidates and reject authority fields and oversi
   assert.equal((await f.request("note", { factKind: "preference", content: "x", status: "approved" })).status, 400);
   assert.equal((await f.request("note", { content: "x".repeat(70000) })).status, 413);
   assert.equal((await f.request("delete", {})).status, 404);
+});
+
+
+test("an authorized slow request is revoked before memory mutation after runtime stop", async (t) => {
+  const f = await fixture(t);
+  let request;
+  const response = new Promise((resolve, reject) => {
+    request = httpRequest(`${f.base}/note`, { method: "POST", headers: { authorization: `Bearer ${f.token}`, "content-type": "application/json" } }, (res) => { res.resume(); resolve(res.statusCode); });
+    request.on("error", reject);
+    request.setTimeout(2000, () => request.destroy(new Error("Request timed out")));
+    request.flushHeaders();
+  });
+  await f.authorized;
+  f.manager.runtimes.clear();
+  request.end(JSON.stringify({ factKind: "preference", content: "Late unauthorized note" }));
+  assert.equal(await response, 401);
+  assert.equal(f.calls.length, 0);
 });
