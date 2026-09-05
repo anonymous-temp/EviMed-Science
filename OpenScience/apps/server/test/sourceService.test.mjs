@@ -25,6 +25,12 @@ class MemoryDocuments {
     this.rows.set(key, row);
     return row;
   }
+  async remove(userId, kind, id, expectedRevision) {
+    const current = await this.get(userId, kind, id);
+    if (!current || current.revision !== expectedRevision) throw new Error("revision conflict");
+    this.rows.delete(this.key(userId, kind, id));
+    return { ...current, revision: expectedRevision + 1, deletedAt: "2026-09-06T01:00:00.000Z" };
+  }
 }
 
 class MemoryJobs {
@@ -162,4 +168,20 @@ test("a disappeared upstream source retains its derived understanding", async ()
   assert.equal(missing.payload.status, "missing");
   assert.equal(missing.payload.outputs.summary, "Preserved derived summary.");
   assert.ok(missing.payload.missingAt);
+});
+
+test("cancel, retry and delete preserve explicit lifecycle and idempotent work", async () => {
+  const { service, jobs } = fixture();
+  const { source } = await service.register("user-one", upload());
+  const canceled = await service.cancel("user-one", source.id, { expectedRevision: source.revision });
+  assert.equal(canceled.payload.status, "canceled");
+
+  const retried = await service.retry("user-one", source.id, { expectedRevision: canceled.revision });
+  assert.equal(retried.payload.status, "queued");
+  assert.equal(jobs.enqueued.at(-1).options.rearmFailed, true);
+
+  const removed = await service.remove("user-one", source.id, { expectedRevision: retried.revision });
+  assert.ok(removed.deletedAt);
+  assert.equal(jobs.enqueued.at(-1).kind, "consolidate");
+  assert.equal(jobs.enqueued.at(-1).payload.action, "source-delete");
 });
