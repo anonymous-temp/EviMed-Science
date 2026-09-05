@@ -43,6 +43,8 @@ import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
+import { SourceService } from "./sourceService.mjs";
+import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
@@ -458,6 +460,8 @@ export function createWebApiApp(overrides = {}) {
   const capsuleService = productDocuments ? new CapsuleService(productDocuments, { indexing: memoryIndexing }) : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
+  const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
+  const sourceRoutes = createSourceRoutes({ store, service: sourceService, maxJsonBytes: config.maxJsonBytes });
   let capsuleCleanupTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
@@ -839,6 +843,7 @@ export function createWebApiApp(overrides = {}) {
       await store.assertCsrf(req, pathname);
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
+      if (await sourceRoutes(req, res)) return;
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -1791,7 +1796,23 @@ export function createWebApiApp(overrides = {}) {
           target: root === "base" ? `${root}:${rel}` : rel,
           bytes: buffer.length,
         });
-        sendJson(res, 200, { data: { path: rel } });
+        let registered = null;
+        if (sourceService && root === "base" && (rel === "knowledge-base" || rel.startsWith("knowledge-base/"))) {
+          registered = await sourceService.register(ctx.user.id, {
+            projectId: ctx.project.id,
+            connector: { type: "upload", id: `${ctx.project.id}-library` },
+            path: rel,
+            size: buffer.length,
+            mtime: new Date().toISOString(),
+            mimeType: mimeFor(rel),
+            sha256: createHash("sha256").update(buffer).digest("hex"),
+          });
+          await audit(ctx, "source.register", "completed", {
+            target: registered.source.id,
+            duplicate: registered.duplicate,
+          });
+        }
+        sendJson(res, 200, { data: { path: rel, ...(registered ?? {}) } });
         return;
       }
 
