@@ -147,7 +147,7 @@ test("timeout bounds the whole response and request sizes are checked before sen
 });
 
 test("URL, config and limits validation fails before network access", async () => {
-  for(const url of ["file:///tmp/memory","http://user:password@localhost","http://localhost/a","http://localhost?secret=x","http://localhost/#x"]) {
+  for(const url of ["file:///tmp/memory","http://test-only-user:test-only-placeholder@localhost","http://localhost/a","http://localhost?secret=x","http://localhost/#x"]) {
     assert.throws(()=>new MemOsClient({memOsBaseUrl:url}),{code:"mem_os_config_invalid"});
   }
   assert.throws(()=>new MemOsClient({memOsBaseUrl:"http://localhost",memOsTimeoutMs:0}),{code:"mem_os_config_invalid"});
