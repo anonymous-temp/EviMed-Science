@@ -188,6 +188,69 @@
           }
         }
       }
+    },
+    "/product/scheduler/status": {
+      "get": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Get scheduler running status",
+        "description": "Get scheduler running status.",
+        "operationId": "scheduler_status_product_scheduler_status_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "User ID",
+              "title": "User Id"
+            },
+            "description": "User ID"
+          },
+          {
+            "name": "task_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional Task ID to query a specific task",
+              "title": "Task Id"
+            },
+            "description": "Optional Task ID to query a specific task"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1693,6 +1756,67 @@
           "name"
         ],
         "title": "Function"
+      },
+      "StatusResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "Response status code",
+            "default": 200
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Memory get status successfully"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StatusResponseItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Response data"
+          }
+        },
+        "type": "object",
+        "title": "StatusResponse",
+        "description": "Response model for scheduler status operations."
+      },
+      "StatusResponseItem": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "The ID of the task"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "in_progress",
+              "completed",
+              "waiting",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "description": "The current status of the task"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status"
+        ],
+        "title": "StatusResponseItem",
+        "description": "Individual task status item."
       }
     }
   }

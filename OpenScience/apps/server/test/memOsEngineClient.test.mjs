@@ -43,12 +43,13 @@ test("add stores one record per request with server scope and provenance", async
   const {client,calls} = await harness(t, () => addResponse(scope.cubeId));
   const receipt = await client.add("account-one", [exampleRecord], {projectId:"project-one"});
   assert.deepEqual(calls[0].body, {
-    user_id: scope.userId, writable_cube_ids: [scope.cubeId], async_mode: "sync", mode: "fast",
+    user_id: scope.userId, writable_cube_ids: [scope.cubeId], async_mode: "async", task_id: calls[0].body.task_id,
     messages: [{role:"user",content:exampleRecord.content}], chat_history: [],
     info: {evimed_entry_id:exampleRecord.entryId, evimed_provenance_ids:exampleRecord.provenanceIds},
   });
   assert.equal(calls[0].path, "/product/add");
-  assert.deepEqual(receipt, {status:"stored",processingStatus:"unverified",records:[{entryId:"entry-one",memoryIds:["memory-one"]}]});
+  assert.match(receipt.records[0].taskId, /^evimed-task-/);
+  assert.deepEqual(receipt, {status:"stored",processingStatus:"unverified",records:[{entryId:"entry-one",memoryIds:["memory-one"],taskId:calls[0].body.task_id}]});
 });
 
 test("add validates the whole batch before writing and refuses tenant payload fields", async t => {
@@ -65,7 +66,7 @@ test("partial write failure retains successful identifiers without retrying", as
   const {client,calls} = await harness(t, (_, n) => n === 1 ? addResponse(scope.cubeId) : {httpStatus:503,json:{message:"private upstream body"}});
   await assert.rejects(client.add("account-one",[exampleRecord,{...exampleRecord,entryId:"entry-two"}],{projectId:"project-one"}), error => {
     assert.equal(error.code,"mem_os_partial_write");
-    assert.deepEqual(error.completed,[{entryId:"entry-one",memoryIds:["memory-one"]}]);
+    assert.deepEqual(error.completed,[{entryId:"entry-one",memoryIds:["memory-one"],taskId:calls[0].body.task_id}]);
     assert.equal(error.failedEntryId,"entry-two");
     assert.equal(error.causeCode,"mem_os_unavailable");
     assert.doesNotMatch(error.message,/private/);
@@ -153,4 +154,20 @@ test("URL, config and limits validation fails before network access", async () =
   const client=new MemOsClient({memOsBaseUrl:"http://127.0.0.1:1"});
   await assert.rejects(client.search("account-one","x",{limit:0}),{code:"mem_os_payload_invalid"});
   await assert.rejects(client.health(),{code:"mem_os_unavailable"});
+});
+
+
+test("scheduler status is scoped and missing task remains unverified", async t => {
+  let savedTaskId;
+  const {client,calls}=await harness(t,call=> {
+    if(call.path === "/product/add") { savedTaskId=call.body.task_id; return addResponse(scope.cubeId); }
+    return {code:200,message:"Memory get status successfully",data:[{task_id:savedTaskId,status:"completed"}]};
+  });
+  const added=await client.add("account-one",[exampleRecord],{projectId:"project-one"});
+  const taskId=added.records[0].taskId;
+  assert.deepEqual(await client.getTaskStatus("account-one",taskId,{projectId:"project-one"}),{taskId,status:"completed"});
+  assert.equal(new URL(calls[1].path,"http://localhost").searchParams.get("user_id"),scope.userId);
+  await assert.rejects(client.getTaskStatus("another-account",taskId,{projectId:"project-one"}),{code:"mem_os_payload_invalid"});
+  const {client:missing}=await harness(t,()=>({httpStatus:404,json:{detail:"not found"}}));
+  await assert.rejects(missing.getTaskStatus("account-one",taskId,{projectId:"project-one"}),{code:"mem_os_not_found"});
 });
