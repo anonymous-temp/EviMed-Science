@@ -178,3 +178,18 @@ test("batch creation commits documents and revisions together or rolls back ever
   assert.equal(await documents.get(other, "capsule", id), null);
   await assert.rejects(documents.createBatch(owner, [fresh, fresh]), { code: "product_batch_invalid" });
 });
+
+
+test("batch imports enforce source status and recipient generation before any write", options, async () => {
+  const snapshot = await documents.put(owner, "preferences", randomUUID(), { status: "active", archiveSha256: "fixture-digest" }, { expectedRevision: 0 });
+  const guards = [{ userId: owner, kind: "preferences", id: snapshot.id, filter: { status: "active", archiveSha256: "fixture-digest" } }];
+  const generation = (await database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [other])).rows[0].generation;
+  const first = { kind: "capsule", id: randomUUID(), payload: { title: "Verified import" } };
+  assert.equal((await documents.createBatch(other, [first], { guards, accountCreatedAt: generation })).length, 1);
+  const afterRevocation = { ...first, id: randomUUID() };
+  await documents.put(owner, "preferences", snapshot.id, { ...snapshot.payload, status: "revoked" }, { expectedRevision: 1 });
+  await assert.rejects(documents.createBatch(other, [afterRevocation], { guards, accountCreatedAt: generation }), { code: "product_guard_conflict" });
+  assert.equal(await documents.get(other, "capsule", afterRevocation.id), null);
+  await assert.rejects(documents.createBatch(other, [afterRevocation], { accountCreatedAt: "1990-01-01 00:00:00+00" }), { code: "product_account_changed" });
+  assert.equal(await documents.get(other, "capsule", afterRevocation.id), null);
+});
