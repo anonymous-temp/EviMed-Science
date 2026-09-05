@@ -12,7 +12,9 @@
 
 The user approved implementation and production publication of the full reviewed scope. Do not repeat design or release permission prompts. Ask only for missing operator resources that cannot be discovered, and continue independent work. The original July/Gitee worktree is preserved; implementation occurs in the clean GitHub checkout on `codex/full-saas-delivery-20260905`.
 
-The full requirement register is the September 5 production review, with IDs BASE01–QA02. Its 48 rows remain open until their actual acceptance evidence exists. This file tracks implementation batches; the existing August design supplies detailed feature contracts. Production configuration, customer data and credentials must be preserved.
+The full requirement register is the September 5 production review, with IDs BASE01–QA02. Its rows remain open until their actual acceptance evidence exists, except the user's explicit first-release exclusions below. This file tracks implementation batches; the existing August design supplies detailed feature contracts. Production configuration, customer data and credentials must be preserved.
+
+**First-release exclusions, explicitly confirmed by the user on September 5:** retain the public IP address; do not require a domain, off-host backup or an actual payment channel. Keep local encrypted backup/restore and durable usage/budget controls in scope. Do not enable payment collection or introduce external-storage requirements as blockers for this release.
 
 ## Batch 1: native UI policy parity (UI02, part of UI05/ECO04/BILL02)
 
