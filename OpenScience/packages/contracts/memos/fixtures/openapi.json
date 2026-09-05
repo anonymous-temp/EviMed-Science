@@ -1,0 +1,1699 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MemOS Server REST APIs",
+    "description": "A REST API for managing multiple users with MemOS Server.",
+    "version": "1.0.1"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Container and load balancer health endpoint.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/product/add": {
+      "post": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Add memories",
+        "description": "Add memories for a specific user.\n\nThis endpoint uses the class-based AddHandler for better code organization.",
+        "operationId": "add_memories_product_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APIADDRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/product/search": {
+      "post": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Search memories",
+        "description": "Search memories for a specific user.\n\nThis endpoint uses the class-based SearchHandler for better code organization.",
+        "operationId": "search_memories_product_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APISearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/product/get_memory": {
+      "post": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Get memories for user",
+        "operationId": "get_memories_product_get_memory_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetMemoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetMemoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/product/delete_memory": {
+      "post": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Delete memories for user",
+        "operationId": "delete_memories_product_delete_memory_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteMemoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteMemoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "APIADDRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "User ID"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Session ID. If not provided, a default session will be used."
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id",
+            "description": "Task ID for monitoring async tasks"
+          },
+          "manager_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager User Id",
+            "description": "Manager User ID"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id",
+            "description": "Project ID"
+          },
+          "writable_cube_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Writable Cube Ids",
+            "description": "List of cube IDs user can write for multi-cube add"
+          },
+          "async_mode": {
+            "type": "string",
+            "enum": [
+              "async",
+              "sync"
+            ],
+            "title": "Async Mode",
+            "description": "Whether to add memory in async mode. Use 'async' to enqueue background add (non-blocking), or 'sync' to add memories in the current call. Default: 'async'.",
+            "default": "async"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "fast",
+                  "fine"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode",
+            "description": "(Internal) Add mode used only when async_mode='sync'. If set to 'fast', the handler will use a fast add pipeline. Ignored when async_mode='async'."
+          },
+          "custom_tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Tags",
+            "description": "Custom tags for this add request, e.g. ['Travel', 'family']. These tags can be used as filters in search."
+          },
+          "info": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Info",
+            "description": "Additional metadata for the add request. All keys can be used as filters in search. Example: {'agent_id': 'xxxxxx', 'app_id': 'xxxx', 'source_type': 'web', 'source_url': 'https://www.baidu.com', 'source_content': '\u897f\u6e56\u662f\u676d\u5dde\u6700\u8457\u540d\u7684\u666f\u70b9'}."
+          },
+          "messages": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionSystemMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionUserMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionAssistantMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionToolMessageParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/File"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messages",
+            "description": "List of messages to store. Supports: - system / user / assistant messages with 'content' and 'chat_time'; - tool messages including:   * tool_description (name, description, parameters),   * tool_input (call_id, name, argument),   * raw tool messages where content is str or list[str],   * tool_output with structured output items     (input_text / input_image / input_file, etc.). Also supports pure input items when there is no dialog."
+          },
+          "chat_history": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionSystemMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionUserMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionAssistantMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionToolMessageParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat History",
+            "description": "Historical chat messages used internally by algorithms. If None, internal stored history will be used; if provided (even an empty list), this value will be used as-is."
+          },
+          "is_feedback": {
+            "type": "boolean",
+            "title": "Is Feedback",
+            "description": "Whether this request represents user feedback. Default: False.",
+            "default": false
+          },
+          "is_upload_skill": {
+            "type": "boolean",
+            "title": "Is Upload Skill",
+            "description": "Whether this request is an upload skill request. When True, the messages field should contain file items with zip file download URLs for pre-built skill packages. Default: False.",
+            "default": false
+          },
+          "mem_cube_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mem Cube Id",
+            "description": "(Deprecated) Target cube ID for this add request (optional for developer API)."
+          },
+          "memory_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Content",
+            "description": "(Deprecated) Plain memory content to store. Prefer using `messages`."
+          },
+          "doc_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Path",
+            "description": "(Deprecated / internal) Path to document to store."
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "(Deprecated) Simple source tag of the memory. Prefer using `info.source_type` / `info.source_url`."
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PermissionDict"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation",
+            "description": "(Internal) Operation definitions for multi-cube write permissions."
+          }
+        },
+        "type": "object",
+        "title": "APIADDRequest",
+        "description": "Request model for creating memories.",
+        "example": {
+          "async_mode": "async",
+          "messages": [
+            {
+              "content": "I am learning ggplot2 in R.",
+              "role": "user"
+            }
+          ],
+          "user_id": "8736b16e-1d20-4163-980b-a5063c3facdc",
+          "writable_cube_ids": [
+            "b32d0977-435d-4828-a86f-4f47f8b55bca"
+          ]
+        }
+      },
+      "APISearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "User search query"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "User ID"
+          },
+          "readable_cube_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readable Cube Ids",
+            "description": "List of cube IDs that are readable for this request. Required for algorithm-facing API; optional for developer-facing API."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/SearchMode",
+            "description": "Search mode: fast, fine, or mixture.",
+            "default": "fast"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Session ID used as a soft signal to prioritize more relevant memories. Only used for weighting, not as a hard filter."
+          },
+          "top_k": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Top K",
+            "description": "Number of textual memories to retrieve (top-K). Default: 10.",
+            "default": 10
+          },
+          "relativity": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Relativity",
+            "description": "Relevance threshold for recalled memories. Only memories with metadata.relativity >= relativity will be returned. Use 0 to disable threshold filtering. Default: 0.45.",
+            "default": 0.45
+          },
+          "dedup": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "no",
+                  "sim",
+                  "mmr"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dedup",
+            "description": "Optional dedup option for textual memories. Use 'no' for no dedup, 'sim' for similarity dedup, 'mmr' for MMR-based dedup. If None, default exact-text dedup is applied.",
+            "default": "mmr"
+          },
+          "rerank": {
+            "type": "boolean",
+            "title": "Rerank",
+            "description": "Whether to apply the textual memory reranker during search. Set false to return retrieval-order candidates before post-search dedup/formatting.",
+            "default": true
+          },
+          "pref_top_k": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Pref Top K",
+            "description": "Number of preference memories to retrieve (top-K). Default: 6.",
+            "default": 6
+          },
+          "include_preference": {
+            "type": "boolean",
+            "title": "Include Preference",
+            "description": "Whether to retrieve preference memories along with general memories. If enabled, the system will automatically recall user preferences relevant to the query. Default: True.",
+            "default": true
+          },
+          "search_tool_memory": {
+            "type": "boolean",
+            "title": "Search Tool Memory",
+            "description": "Whether to retrieve tool memories along with general memories. If enabled, the system will automatically recall tool memories relevant to the query. Default: True.",
+            "default": true
+          },
+          "tool_mem_top_k": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tool Mem Top K",
+            "description": "Number of tool memories to retrieve (top-K). Default: 6.",
+            "default": 6
+          },
+          "include_skill_memory": {
+            "type": "boolean",
+            "title": "Include Skill Memory",
+            "description": "Whether to retrieve skill memories along with general memories. If enabled, the system will automatically recall skill memories relevant to the query. Default: True.",
+            "default": true
+          },
+          "skill_mem_top_k": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Skill Mem Top K",
+            "description": "Number of skill memories to retrieve (top-K). Default: 3.",
+            "default": 3
+          },
+          "context_format": {
+            "type": "string",
+            "title": "Context Format",
+            "description": "Optional search context format passed through to installed plugins.",
+            "default": "memory"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter",
+            "description": "Optional metadata filter applied to memory search results. Supports nested \"and\" / \"or\" conditions and comparison operators such as \"gt\" for fields like \"id\", \"created_at\", or other indexed metadata. Example: {\"and\": [{\"id\": \"uuid-xxx\"}, {\"created_at\": {\"gt\": \"2024-01-01\"}}]}"
+          },
+          "internet_search": {
+            "type": "boolean",
+            "title": "Internet Search",
+            "description": "Whether to enable internet search in addition to memory search. Primarily used by internal algorithms. Default: False.",
+            "default": false
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold",
+            "description": "Internal similarity threshold for searching plaintext memories. If None, default thresholds will be applied."
+          },
+          "search_memory_type": {
+            "type": "string",
+            "title": "Search Memory Type",
+            "description": "Memory category to search. Supported values include All, WorkingMemory, LongTermMemory, UserMemory, OuterMemory, ToolSchemaMemory, ToolTrajectoryMemory, RawFileMemory, AllSummaryMemory, SkillMemory, and PreferenceMemory. Default: All.",
+            "default": "All"
+          },
+          "reference_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Time",
+            "description": "Optional reference time for time-sensitive search parsing. If omitted, search uses the current server time."
+          },
+          "chat_history": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionSystemMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionUserMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionAssistantMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionToolMessageParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat History",
+            "description": "Historical chat messages used internally by algorithms. If None, internal stored history may be used; if provided (even an empty list), this value will be used as-is."
+          },
+          "mem_cube_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mem Cube Id",
+            "description": "(Deprecated) Single cube ID to search in. Prefer `readable_cube_ids` for multi-cube search."
+          },
+          "moscube": {
+            "type": "boolean",
+            "title": "Moscube",
+            "description": "(Deprecated / internal) Whether to use legacy MemOSCube path.",
+            "default": false
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PermissionDict"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation",
+            "description": "(Internal) Operation definitions for multi-cube read permissions."
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Origin of the search request. Plugin callers can use this value to route different search behavior without changing the query payload."
+          },
+          "neighbor_discovery": {
+            "type": "boolean",
+            "title": "Neighbor Discovery",
+            "description": "Whether to enable neighbor discovery. If enabled, the system will automatically recall neighbor chunks relevant to the query. Default: False.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "user_id"
+        ],
+        "title": "APISearchRequest",
+        "description": "Request model for searching memories."
+      },
+      "GetMemoryRequest": {
+        "properties": {
+          "mem_cube_id": {
+            "type": "string",
+            "title": "Mem Cube Id",
+            "description": "Cube ID"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "User ID"
+          },
+          "include_preference": {
+            "type": "boolean",
+            "title": "Include Preference",
+            "description": "Whether to return preference memory",
+            "default": true
+          },
+          "include_tool_memory": {
+            "type": "boolean",
+            "title": "Include Tool Memory",
+            "description": "Whether to return tool memory",
+            "default": true
+          },
+          "include_skill_memory": {
+            "type": "boolean",
+            "title": "Include Skill Memory",
+            "description": "Whether to return skill memory",
+            "default": true
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter",
+            "description": "Optional metadata filter applied when retrieving memories."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "Page number (starts from 1). If None, exports all data without pagination."
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Size",
+            "description": "Number of items per page. If None, exports all data without pagination."
+          }
+        },
+        "type": "object",
+        "required": [
+          "mem_cube_id"
+        ],
+        "title": "GetMemoryRequest",
+        "description": "Request model for getting memories."
+      },
+      "DeleteMemoryRequest": {
+        "properties": {
+          "writable_cube_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Writable Cube Ids",
+            "description": "Writable cube IDs"
+          },
+          "memory_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Ids",
+            "description": "Memory IDs"
+          },
+          "file_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Ids",
+            "description": "File IDs"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter",
+            "description": "Optional metadata filter applied when selecting memories for deletion."
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "Quick delete condition: remove memories for this user_id."
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Quick delete condition: remove memories for this session_id."
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "Alias of session_id for backward compatibility."
+          },
+          "auto_cleanup_working": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Cleanup Working",
+            "description": "(Internal) Whether to automatically delete related WorkingMemory nodes based on working_binding metadata when deleting by memory_ids.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "DeleteMemoryRequest",
+        "description": "Request model for deleting memories."
+      },
+      "MemoryResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "Response status code",
+            "default": 200
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Response message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Response data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MemoryResponse",
+        "description": "Response model for memory operations."
+      },
+      "SearchResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "Response status code",
+            "default": 200
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Response message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Response data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SearchResponse",
+        "description": "Response model for search operations."
+      },
+      "GetMemoryResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "Response status code",
+            "default": 200
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Response message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Response data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "GetMemoryResponse",
+        "description": "Response model for getting memories."
+      },
+      "DeleteMemoryResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "Response status code",
+            "default": 200
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Response message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "Response data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "DeleteMemoryResponse",
+        "description": "Response model for deleting memories."
+      },
+      "SearchMode": {
+        "type": "string",
+        "enum": [
+          "fast",
+          "fine",
+          "mixture"
+        ],
+        "title": "SearchMode",
+        "description": "Enumeration for search modes."
+      },
+      "ChatCompletionSystemMessageParam": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+              }
+            ],
+            "title": "Content"
+          },
+          "role": {
+            "type": "string",
+            "const": "system",
+            "title": "Role"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "chat_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Time"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "role"
+        ],
+        "title": "ChatCompletionSystemMessageParam"
+      },
+      "ChatCompletionUserMessageParam": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartImageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartInputAudioParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/File"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartImageParam"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartInputAudioParam"
+              },
+              {
+                "$ref": "#/components/schemas/File"
+              }
+            ],
+            "title": "Content"
+          },
+          "role": {
+            "type": "string",
+            "const": "user",
+            "title": "Role"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "chat_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Time"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "role"
+        ],
+        "title": "ChatCompletionUserMessageParam"
+      },
+      "ChatCompletionAssistantMessageParam": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "const": "assistant",
+            "title": "Role"
+          },
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Audio"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartRefusalParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartRefusalParam"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionMessageFunctionToolCallParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionMessageCustomToolCallParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionMessageFunctionToolCallParam"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionMessageCustomToolCallParam"
+              }
+            ],
+            "title": "Tool Calls"
+          },
+          "chat_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Time"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "ChatCompletionAssistantMessageParam"
+      },
+      "ChatCompletionToolMessageParam": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartImageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionContentPartInputAudioParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/File"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartTextParam"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartImageParam"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionContentPartInputAudioParam"
+              },
+              {
+                "$ref": "#/components/schemas/File"
+              }
+            ],
+            "title": "Content"
+          },
+          "role": {
+            "type": "string",
+            "const": "tool",
+            "title": "Role"
+          },
+          "tool_call_id": {
+            "type": "string",
+            "title": "Tool Call Id"
+          },
+          "chat_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Time"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "role",
+          "tool_call_id"
+        ],
+        "title": "ChatCompletionToolMessageParam"
+      },
+      "PermissionDict": {
+        "properties": {
+          "permissions": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "read",
+                "write",
+                "delete",
+                "execute"
+              ]
+            },
+            "type": "array",
+            "title": "Permissions"
+          },
+          "mem_cube_id": {
+            "type": "string",
+            "title": "Mem Cube Id"
+          }
+        },
+        "type": "object",
+        "title": "PermissionDict",
+        "description": "Typed dictionary for chat message dictionaries."
+      },
+      "ChatCompletionContentPartTextParam": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "type": {
+            "type": "string",
+            "const": "text",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "type"
+        ],
+        "title": "ChatCompletionContentPartTextParam"
+      },
+      "ChatCompletionContentPartImageParam": {
+        "properties": {
+          "image_url": {
+            "$ref": "#/components/schemas/ImageURL"
+          },
+          "type": {
+            "type": "string",
+            "const": "image_url",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_url",
+          "type"
+        ],
+        "title": "ChatCompletionContentPartImageParam"
+      },
+      "ChatCompletionContentPartInputAudioParam": {
+        "properties": {
+          "input_audio": {
+            "$ref": "#/components/schemas/InputAudio"
+          },
+          "type": {
+            "type": "string",
+            "const": "input_audio",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_audio",
+          "type"
+        ],
+        "title": "ChatCompletionContentPartInputAudioParam"
+      },
+      "File": {
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/FileFile"
+          },
+          "type": {
+            "type": "string",
+            "const": "file",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "type"
+        ],
+        "title": "File"
+      },
+      "FileFile": {
+        "properties": {
+          "file_data": {
+            "type": "string",
+            "title": "File Data"
+          },
+          "file_id": {
+            "type": "string",
+            "title": "File Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          }
+        },
+        "type": "object",
+        "title": "FileFile"
+      },
+      "InputAudio": {
+        "properties": {
+          "data": {
+            "type": "string",
+            "title": "Data"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "wav",
+              "mp3"
+            ],
+            "title": "Format"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "format"
+        ],
+        "title": "InputAudio"
+      },
+      "ImageURL": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "high"
+            ],
+            "title": "Detail"
+          },
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ImageURL"
+      },
+      "Audio": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "Audio"
+      },
+      "ChatCompletionContentPartRefusalParam": {
+        "properties": {
+          "refusal": {
+            "type": "string",
+            "title": "Refusal"
+          },
+          "type": {
+            "type": "string",
+            "const": "refusal",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refusal",
+          "type"
+        ],
+        "title": "ChatCompletionContentPartRefusalParam"
+      },
+      "ChatCompletionMessageFunctionToolCallParam": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "function": {
+            "$ref": "#/components/schemas/Function"
+          },
+          "type": {
+            "type": "string",
+            "const": "function",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "function",
+          "type"
+        ],
+        "title": "ChatCompletionMessageFunctionToolCallParam"
+      },
+      "ChatCompletionMessageCustomToolCallParam": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "custom": {
+            "$ref": "#/components/schemas/Custom"
+          },
+          "type": {
+            "type": "string",
+            "const": "custom",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "custom",
+          "type"
+        ],
+        "title": "ChatCompletionMessageCustomToolCallParam"
+      },
+      "Custom": {
+        "properties": {
+          "input": {
+            "type": "string",
+            "title": "Input"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input",
+          "name"
+        ],
+        "title": "Custom"
+      },
+      "Function": {
+        "properties": {
+          "arguments": {
+            "type": "string",
+            "title": "Arguments"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "arguments",
+          "name"
+        ],
+        "title": "Function"
+      }
+    }
+  }
+}
