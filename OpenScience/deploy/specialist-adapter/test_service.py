@@ -165,6 +165,21 @@ def test_request_contract_rejects_unknown_fields(tmp_path, monkeypatch) -> None:
     assert ignored_job.status_code == 422
 
 
+def test_topic_request_preserves_context_and_rejects_invalid_types(tmp_path, monkeypatch) -> None:
+    module, _, _, _ = _load_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("EVIMED_SPECIALIST_KIND", "research-topic-selection")
+    request = {"action": "start", "researchDirection": "Dialysis adherence",
+               "availableData": "Existing records", "population": "Adults", "studySetting": "One hospital",
+               "resourceConstraints": ["Six months"]}
+    assert module._validated_arguments(request) == request
+    import pytest
+    for invalid in ({"resourceConstraints": "six months"}, {"availableData": {}},
+                    {"resourceConstraints": ["x"] * 21}, {"studySetting": "x" * 1001},
+                    {"resourceConstraints": ["x" * 201]}, {"population": None}):
+        with pytest.raises(ValueError):
+            module._validated_arguments({**request, **invalid})
+
+
 def test_bibliometric_record_limit_is_rejected_before_queue(tmp_path, monkeypatch) -> None:
     _, client, secret, workspace = _load_service(tmp_path, monkeypatch)
     response = client.post(
