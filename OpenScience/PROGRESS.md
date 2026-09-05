@@ -1,3 +1,5 @@
+2026-09-05 20:03 · Added independently reviewed PostgreSQL product documents and leased jobs with tenant ownership, revision history, bounded pagination and post-lock lease authority; production rollout remains pending.
+2026-09-05 20:02 · Verified native HTTP/mux authorization parity, bounded relay, strict error envelopes and browser liveness; public native UI rollout remains pending.
 2026-09-04 18:55 · `evimed-20260904-93d15caf` 上线（18/18、冒烟 17 项、内核 0.1.2-rc.1）：CSP 放开探测后 `/app/chat` 控制台零错误，账户页出现本月用量，`usage.jsonl` 里已有真实行——`deepseek-v4-flash` 三次调用的缓存命中 0 → 23040 → 23296，谷时五折，计量这条路是被跑通的而不是被推断的。运行时镜像因发布身份 ARG 后移，这次不到一分钟就出来了
 2026-09-04 15:50 · 每账号项目数上限补齐（默认 20）：每项目的存储配额与每用户的运行时上限各自都管不住总量，账号在任一上限处再建一个项目就又有一份。运行时镜像的三个发布身份 ARG 移到 Dockerfile 末尾——它们原本让每次换发布号都从第 64 行往下全部重建，改一行服务端代码要付一次四十分钟
 2026-09-04 15:10 · 用量上限接上，`evimed-20260904-217539de` 上线（18/18，内核 0.1.2-rc.1）。上限按天/周滚动窗口在派发处判定，默认不限；拒绝时说明是哪个窗口、花了多少、什么时候解除，并给出可等待秒数。上线的是「产品壳 + 删桌面形态」这一版；注册与计量已合入 main 但按计划（额度先于开放注册）留到下一版

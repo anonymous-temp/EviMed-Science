@@ -3,6 +3,7 @@ import { AppShell } from "./layout/AppShell";
 import { SessionRoute } from "./routes/SessionRoute";
 import { FilesPage } from "./routes/FilesPage";
 import { CapabilitiesPage } from "./routes/CapabilitiesPage";
+import { CapsulesPage } from "./routes/CapsulesPage";
 import { MemoryPage } from "./routes/MemoryPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { LoginPage } from "./routes/LoginPage";
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: "files", element: <FilesPage /> },
       { path: "notebooks", element: <NotebooksPage /> },
       { path: "memory", element: <MemoryPage /> },
+      { path: "capsules", element: <CapsulesPage /> },
       { path: "capabilities", element: <CapabilitiesPage /> },
       { path: "account", element: <AccountPage /> },
       { path: "settings", element: <SettingsPage /> },

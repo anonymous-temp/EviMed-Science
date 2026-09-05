@@ -25,7 +25,7 @@ The full requirement register is the September 5 production review, with IDs BAS
 - Create `OpenScience/apps/server/test/runtimeUiSecurity.test.mjs` for real local HTTP/WebSocket fixtures; extend existing UI proxy tests where needed.
 - Modify server dependencies and lockfile only if a supported WebSocket package is required.
 
-- [ ] Write and execute failing integration tests before production changes. The tests must exercise real sockets and show: unauthenticated upgrade refused; foreign/missing Origin refused in production; `settings/describe` and every forbidden namespace denied inside `open` frames; `session/prompt` refused when spend admission fails; allowed read and cancel frames still work; logout revokes an established socket; excessive message size and connection count are bounded.
+- [x] Write and execute failing integration tests before production changes. The tests must exercise real sockets and show: unauthenticated upgrade refused; foreign/missing Origin refused in production; `settings/describe` and every forbidden namespace denied inside `open` frames; `session/prompt` refused when spend admission fails; allowed read and cancel frames still work; logout revokes an established socket; excessive message size and connection count are bounded.
 
 Representative assertion pattern (fixture identity is local test data):
 
@@ -36,10 +36,10 @@ assert.equal((await nextFrame(socket)).error.code, 'runtime_ui_method_denied');
 assert.equal(upstreamCalls.includes('settings/describe'), false);
 ```
 
-- [ ] Commit the executed RED reproducer on the active branch.
-- [ ] Implement a single endpoint policy used by HTTP and WebSocket, retaining native DSH frame envelopes and named per-stream errors. The relay must preserve independent cancel/end streams, reject malformed frames, close on failed session revalidation, retain the project resolved at upgrade, apply bounded payload/connection/backpressure controls and clean up both peers on every close/failure. Do not expose raw upstream cookies or provider keys.
-- [ ] Run `node --test apps/server/test/runtimeUiSecurity.test.mjs` and the existing runtime proxy tests; run server lint and checkJs typecheck. Commit GREEN.
-- [ ] Perform independent specification review, then code/security quality review; resolve findings and retain evidence.
+- [x] Commit the executed RED reproducer on the active branch.
+- [x] Implement a single endpoint policy used by HTTP and WebSocket, retaining native DSH frame envelopes and named per-stream errors. The relay must preserve independent cancel/end streams, reject malformed frames, close on failed session revalidation, retain the project resolved at upgrade, apply bounded payload/connection/backpressure controls and clean up both peers on every close/failure. Do not expose raw upstream cookies or provider keys.
+- [x] Run `node --test apps/server/test/runtimeUiSecurity.test.mjs` and the existing runtime proxy tests; run server lint and checkJs typecheck. Commit GREEN.
+- [x] Perform independent specification review, then code/security quality review; resolve findings and retain evidence.
 
 ## Batch 2: primary UI identity and delivery flow (UI01, UI03–UI06)
 
@@ -56,7 +56,7 @@ assert.equal(upstreamCalls.includes('settings/describe'), false);
 - [ ] **Batch 5 — memory and capsules:** MEM01–MEM06. Integrate MemOS through real endpoint contracts; persist capsules and versions; connect runtime recall/note, methods and portable import/export; implement evidence-based feedback and user controls.
 - [ ] **Batch 6 — proactive research:** AUTO01–AUTO05. Implement persistent agenda/episode scheduling and bounded allocation, reuse ordinary research runs and gates, connect independent verification, digest and decision feedback, and test every stopping condition.
 - [ ] **Batch 7 — capability and ecosystem delivery:** ECO01–ECO05 and CAP01–CAP06. Unify capability discovery, complete genuine bundle/client lifecycle, establish native plugin compatibility tests and execute full scientific positive/negative/combined tasks.
-- [ ] **Batch 8 — production readiness and release:** BILL03, OPS01–OPS04, QA01/02. Complete operator-dependent service channels, off-host restoration, alert delivery, resource acceptance, clean CI and full customer journeys. Build immutable images and manifests, back up before migrations, stage the candidate, verify, publish, and verify again through public customer routes.
+- [ ] **Batch 8 — production readiness and release:** BILL03, OPS01–OPS04, QA01/02. Complete the explicitly nonpaid first-release contract, local encrypted restoration, alert delivery, resource acceptance, clean CI and full customer journeys. Build immutable images and manifests, back up before migrations, stage the candidate, verify, publish, and verify again through public customer routes.
 
 Each remaining batch receives its concrete file/API/test plan immediately before implementation, using the approved feature contracts and the state delivered by preceding batches. Do not invent successful external integration evidence while waiting for an operator account, endpoint or credential.
 
@@ -64,7 +64,14 @@ Each remaining batch receives its concrete file/API/test plan immediately before
 
 - [x] Production source and current GitHub main inspected; base revision `8ce276f2c4ea820d9edc6b15b8f84f885cbfdaa7`.
 - [x] Clean implementation branch created; original local edits preserved.
-- [x] Operator-resource question issued for domain, off-host storage and payment channel; dependent configuration remains pending an answer or discovery.
+- [x] User confirmed public IP, local backup and nonpaid first release; domain, off-host storage and payment integrations are deferred.
 - [ ] All 48 acceptance rows linked to implemented code and fresh evidence.
 - [ ] Full reviewed release committed and pushed.
 - [ ] Immutable production release deployed and public full-path acceptance retained.
+
+## Verified implementation checkpoints
+
+- Transport policy passed independent specification and code review at `98e98dc`; native envelope hardening followed at `4fc862a`. Production publication and live acceptance remain open.
+- Durable product document/job foundation passed PostgreSQL integration, ownership/CAS/history/lease regressions, specification, database and code reviews (`f2de593`, `50a6937`, `6cfaef1`). This is infrastructure for the remaining product services, not completion of Batch 3.
+- Capsule CRUD/approval/activation and lexical recall are in implementation review. MemOS adapter contract implementation is awaiting integration; semantic recall and live engine acceptance remain open.
+- Research delivery review also identified missing root CI wiring and insufficient typed scientific engine-receipt validation. Both remain Batch 7/8 release requirements.

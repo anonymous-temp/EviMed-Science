@@ -32,9 +32,12 @@ export class ProductDocuments {
   }
 
   /** @param {string} userId @param {string} kind
-   * @param {{ limit?: number, cursor?: string|null, projectId?: string|null }} options */
-  async list(userId, kind, { limit = 50, cursor = null, projectId = undefined } = {}) {
+   * @param {{ limit?: number, cursor?: string|null, projectId?: string|null, filter?: Record<string,any>, deleted?: boolean }} options */
+  async list(userId, kind, { limit = 50, cursor = null, projectId = undefined, filter = {}, deleted = false } = {}) {
     productInteger(limit, 1, 100);
+    if (typeof deleted !== "boolean") throw new HttpError(400, "product_filter_invalid", "Invalid deletion filter.");
+    const filterJson = productPayload(filter);
+    if (Buffer.byteLength(filterJson) > 8192) throw new HttpError(400, "product_filter_invalid", "The record filter is too large.");
     let after = null;
     if (cursor) {
       try {
@@ -47,15 +50,32 @@ export class ProductDocuments {
     if (projectId != null) productId(projectId, "project");
     await migrateProductStore(this.database);
     const result = await this.database.query(`SELECT * FROM evimed_product.documents
-      WHERE user_id=$1 AND kind=$2 AND deleted_at IS NULL
+      WHERE user_id=$1 AND kind=$2 AND (deleted_at IS NOT NULL)=$9::boolean
       AND (NOT $3::boolean OR project_id IS NOT DISTINCT FROM $4::text)
-      AND ($5::timestamptz IS NULL OR (created_at,id)<($5::timestamptz,$6::text))
+      AND ($5::timestamptz IS NULL OR (created_at,id)<($5::timestamptz,$6::text)) AND payload @> $8::jsonb
       ORDER BY created_at DESC,id DESC LIMIT $7`,
-    [productId(userId, "user"), productKind(kind), projectId !== undefined, projectId ?? null, after?.[0] ?? null, after?.[1] ?? null, limit + 1]);
+    [productId(userId, "user"), productKind(kind), projectId !== undefined, projectId ?? null, after?.[0] ?? null, after?.[1] ?? null, limit + 1, filterJson, deleted]);
     const items = result.rows.slice(0, limit).map(record);
     const last = items.at(-1);
     return { items, nextCursor: result.rows.length > limit && last
       ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") : null };
+  }
+
+  /** Bounded lexical fallback; semantic retrieval can enrich it without weakening ownership.
+   * @param {string} userId @param {string} kind @param {string} query
+   * @param {{ limit?: number, filter?: Record<string,any> }} options */
+  async search(userId, kind, query, { limit = 20, filter = {} } = {}) {
+    productInteger(limit, 1, 100);
+    if (typeof query !== "string" || query.length > 2000) throw new HttpError(400, "product_query_invalid", "Invalid record query.");
+    const filterJson = productPayload(filter);
+    if (Buffer.byteLength(filterJson) > 8192) throw new HttpError(400, "product_filter_invalid", "The record filter is too large.");
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`SELECT * FROM evimed_product.documents
+      WHERE user_id=$1 AND kind=$2 AND deleted_at IS NULL AND payload @> $3::jsonb
+      AND strpos(lower(coalesce(payload->>'content','')),lower($4))>0
+      ORDER BY updated_at DESC,id DESC LIMIT $5`,
+    [productId(userId, "user"), productKind(kind), filterJson, query, limit]);
+    return result.rows.map(record);
   }
 
   /** expectedRevision=0 creates; every update names the version the caller read.
