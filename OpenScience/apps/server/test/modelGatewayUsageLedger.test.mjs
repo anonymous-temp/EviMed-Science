@@ -35,9 +35,9 @@ function ledger(events, { reject = false } = {}) {
       if (reject) throw Object.assign(new Error("budget"), { status: 402, code: "usage_budget_exceeded" });
       return { id: input.id };
     },
-    async settleModel(id, input) { events.push({ type: "settle", id, input }); },
-    async markUncertain(id, code, input) { events.push({ type: "uncertain", id, code, input }); },
-    async release(id, code) { events.push({ type: "release", id, code }); },
+    async settleModel(userId, id, input) { events.push({ type: "settle", userId, id, input }); },
+    async markUncertain(userId, id, code, input) { events.push({ type: "uncertain", userId, id, code, input }); },
+    async release(userId, id, code) { events.push({ type: "release", userId, id, code }); },
   };
 }
 
@@ -110,4 +110,15 @@ test("provider refusal releases the reservation and budget refusal never calls u
   assert.equal(denied.status, 402);
   assert.equal(upstreamCalls, 0);
   assert.deepEqual(deniedEvents.map((event) => event.type), ["reserve"]);
+});
+
+test("an ambiguous connection loss after dispatch stays uncertain for reconciliation", async (t) => {
+  const events = [];
+  const response = await call(t, async (req) => {
+    for await (const _chunk of req) { /* consume before losing the connection */ }
+    req.socket.destroy();
+  }, ledger(events), { messages: [{ role: "user", content: "Connection outcome is unknown." }] });
+  assert.equal(response.status, 502);
+  assert.deepEqual(events.map((event) => event.type), ["reserve", "uncertain"]);
+  assert.equal(events[1].code, "provider_response_incomplete");
 });
