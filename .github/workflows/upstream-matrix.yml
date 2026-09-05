@@ -19,22 +19,33 @@ on:
 
 permissions:
   contents: read
-  issues: write
+
+defaults:
+  run:
+    working-directory: OpenScience
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   matrix:
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: OpenScience/package.json
 
       - name: Install Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.22.0
           cache: pnpm
+          cache-dependency-path: OpenScience/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

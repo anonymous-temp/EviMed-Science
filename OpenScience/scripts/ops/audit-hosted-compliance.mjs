@@ -162,7 +162,7 @@ async function checkRuntimePins() {
   // that outlives it: a source audit that pattern-matches a Dockerfile nothing
   // ships reports coverage it does not have, which is worse than no check.
   const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const compose = await read("deploy/web/docker-compose.yml");
 
   // Every version this image resolves, named exactly. The kernel pin is the
@@ -357,7 +357,7 @@ async function checkDeepSeekCompatibilityPreflight() {
   const pkg = JSON.parse(await read("package.json"));
   const script = await read("scripts/ops/deepseek-compatibility-preflight.mjs");
   const releaseGate = await read("scripts/ops/deepseek-kernel-release-gate.mjs");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
   const server = await read("apps/server/src/server.mjs");
   const modelGateway = await read("apps/server/src/modelGateway.mjs");
@@ -430,7 +430,7 @@ async function checkDeepSeekCompatibilityPreflight() {
 async function checkRuntimeContainerTopology() {
   const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const compose = await read("deploy/web/docker-compose.yml");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const envExample = await read("deploy/web/.env.example");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
   const mounts = await read("apps/server/src/dockerMounts.mjs");
@@ -733,7 +733,7 @@ async function checkScientificCapabilityDelivery() {
   const connectorTests = await read("runtime/mcp/evimed-research/test/test_science_connectors.py");
   const publicGateway = await read("apps/server/src/publicSourceGateway.mjs");
   const compose = await read("deploy/web/docker-compose.yml");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const gatewayHosts = [
     "api.crossref.org",
     "eutils.ncbi.nlm.nih.gov",
@@ -895,7 +895,7 @@ async function checkLocalAuthSecretBoundary() {
   const configure = await read("scripts/ops/configure-local-auth.mjs");
   const releaseGenerator = await read("scripts/ops/generate-release-manifest.mjs");
   const preflight = await read("scripts/ops/host-preflight.mjs");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const serverTests = await read("apps/server/test/server.test.mjs");
 
   if (
@@ -925,7 +925,7 @@ async function checkLocalAuthSecretBoundary() {
 
 async function checkDependencySecurity() {
   const pkg = JSON.parse(await read("package.json"));
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const overrides = pkg.pnpm?.overrides ?? {};
   if (
     overrides["pptx-preview>echarts"] === "6.1.0" &&
@@ -1126,7 +1126,7 @@ async function checkWorkspaceIoBoundary() {
   const store = await read("apps/server/src/store.mjs");
   const securityTests = await read("apps/server/test/security.test.mjs");
   const serverTests = await read("apps/server/test/server.test.mjs");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
 
   if (
     /\/proc\/self\/fd\//.test(security) &&
@@ -1162,7 +1162,7 @@ async function checkHostedNotebookKernel() {
   const editorTests = await read("apps/web/src/components/notebook/NotebookEditor.web.test.tsx");
   const pageTests = await read("apps/web/src/app/routes/NotebooksPage.web.test.tsx");
   const deploymentSmoke = await read("scripts/ops/deployment-smoke.mjs");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
 
   if (
     /resolveKernelTarget/.test(commands) &&
@@ -1429,7 +1429,7 @@ async function checkReleaseProvenance() {
   const releaseGenerator = await read("scripts/ops/generate-release-manifest.mjs");
   const hostPreflight = await read("scripts/ops/host-preflight.mjs");
   const server = await read("apps/server/src/server.mjs");
-  const workflow = await read(".github/workflows/web.yml");
+  const workflow = await read("../.github/workflows/web.yml");
   const envExample = await read("deploy/web/.env.example");
   const caddyfile = await read("deploy/web/Caddyfile");
   const deployment = await read("docs/WEB_DEPLOYMENT.md");

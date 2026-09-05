@@ -31,3 +31,7 @@ deploy/web/release-manifest.json
 evals/capability-audit/results/tool-probe-workspace
 evals/capability-audit/tool-probe-workspace
 evals/**/results/runs
+
+# Disposable acceptance runtimes may contain signed workload credentials.
+.evimed-local
+**/.evimed-local

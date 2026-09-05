@@ -1,3 +1,5 @@
+2026-09-05 21:22 · Verified root GitHub workflow syntax with actionlint, isolated PostgreSQL authentication tests, 28 product integration tests and zero-finding hosted compliance; remote CI execution and publication remain pending.
+2026-09-05 21:22 · Delivered reviewed capsule curation, activation and signed-workload recall/note APIs; delayed-request revocation and candidate-only runtime notes passed regression tests.
 2026-09-05 20:03 · Added independently reviewed PostgreSQL product documents and leased jobs with tenant ownership, revision history, bounded pagination and post-lock lease authority; production rollout remains pending.
 2026-09-05 20:02 · Verified native HTTP/mux authorization parity, bounded relay, strict error envelopes and browser liveness; public native UI rollout remains pending.
 2026-09-04 18:55 · `evimed-20260904-93d15caf` 上线（18/18、冒烟 17 项、内核 0.1.2-rc.1）：CSP 放开探测后 `/app/chat` 控制台零错误，账户页出现本月用量，`usage.jsonl` 里已有真实行——`deepseek-v4-flash` 三次调用的缓存命中 0 → 23040 → 23296，谷时五折，计量这条路是被跑通的而不是被推断的。运行时镜像因发布身份 ARG 后移，这次不到一分钟就出来了
