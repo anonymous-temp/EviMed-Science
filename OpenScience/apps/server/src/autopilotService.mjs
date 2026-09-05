@@ -86,6 +86,16 @@ export class AutopilotService {
   /** @param {string} userId @param {{projectId:string}} options */
   async list(userId, { projectId }) { return this.documents.list(userId, "agenda", { projectId, limit: 100 }); }
 
+  /** @param {string} userId @param {{projectId:string}} options */
+  async listDigests(userId, { projectId }) { return this.documents.list(userId, "digest", { projectId, limit: 100 }); }
+
+  /** @param {string} userId @param {string} digestId */
+  async getDigest(userId, digestId) {
+    const digest = await this.documents.get(userId, "digest", text(digestId, "digest id", 160));
+    if (!digest) throw new HttpError(404, "autopilot_digest_not_found", "Research digest is unavailable.");
+    return digest;
+  }
+
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
   async start(userId, agendaId, input) {
     const agenda = await this.get(userId, agendaId);
@@ -194,8 +204,7 @@ export class AutopilotService {
 
   /** @param {string} userId @param {string} digestId @param {{action:string,claimId:string,note?:string}} input */
   async decide(userId, digestId, input) {
-    const digest = await this.documents.get(userId, "digest", text(digestId, "digest id", 160));
-    if (!digest) throw new HttpError(404, "autopilot_digest_not_found", "Research digest is unavailable.");
+    const digest = await this.getDigest(userId, digestId);
     const action = text(input.action, "decision action", 32);
     if (!["adopt", "reject", "question"].includes(action)) throw new HttpError(400, "autopilot_payload_invalid", "Digest action is invalid.");
     const claimId = text(input.claimId, "claim id", 160);
