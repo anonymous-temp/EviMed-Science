@@ -120,16 +120,24 @@ export function researchTopicPortfolioFindings(input) {
   }
 
   const evidenceValue = parsed(input.files, EVIDENCE_FILE)
-  const evidenceById = new Map(
-    Array.isArray(evidenceValue)
-      ? evidenceValue
-        .filter((item) => record(item) && typeof item.id === 'string' && item.id.trim())
-        .map((item) => [item.id, item])
-      : [],
-  )
+  const evidenceById = new Map()
   let evidenceFilesConsistent = Array.isArray(evidenceValue)
   if (!Array.isArray(evidenceValue)) {
     notice(issues, 'topic-evidence-lineage', `${EVIDENCE_FILE} is missing or invalid, so candidate source lineage cannot be reconciled.`, EVIDENCE_FILE)
+  } else {
+    for (const [index, item] of evidenceValue.entries()) {
+      if (!record(item) || !nonEmpty(item.id) || item.id !== item.id.trim()) {
+        notice(issues, 'topic-evidence-lineage', `${EVIDENCE_FILE}[${index}] needs a trimmed string id.`, EVIDENCE_FILE)
+        evidenceFilesConsistent = false
+        continue
+      }
+      if (evidenceById.has(item.id)) {
+        notice(issues, 'topic-evidence-lineage', `${EVIDENCE_FILE} contains duplicate evidence record id ${item.id}.`, EVIDENCE_FILE)
+        evidenceFilesConsistent = false
+        continue
+      }
+      evidenceById.set(item.id, item)
+    }
   }
 
   let structurallyCompleteCandidates = 0
@@ -138,12 +146,14 @@ export function researchTopicPortfolioFindings(input) {
   const opportunityIds = new Set()
   for (const [index, candidate] of candidates.entries()) {
     const label = `candidates[${index}]`
-    if (!record(candidate) || !nonEmpty(candidate.candidateId) || !nonEmpty(candidate.title)
-      || !nonEmpty(candidate.sourceOpportunityId) || !['direct', 'indirect', 'speculative'].includes(candidate.supportLevel)
+    if (!record(candidate) || !nonEmpty(candidate.candidateId) || candidate.candidateId !== candidate.candidateId.trim()
+      || !nonEmpty(candidate.title) || !nonEmpty(candidate.sourceOpportunityId)
+      || candidate.sourceOpportunityId !== candidate.sourceOpportunityId.trim()
+      || !['direct', 'indirect', 'speculative'].includes(candidate.supportLevel)
       || !Array.isArray(candidate.sourceEvidenceIds) || candidate.sourceEvidenceIds.length === 0
-      || candidate.sourceEvidenceIds.some((id) => typeof id !== 'string' || !id.trim())
+      || candidate.sourceEvidenceIds.some((id) => !nonEmpty(id) || id !== id.trim())
       || !Array.isArray(candidate.sourceEvidencePmids)
-      || candidate.sourceEvidencePmids.some((id) => typeof id !== 'string' || !id.trim())
+      || candidate.sourceEvidencePmids.some((id) => !nonEmpty(id) || id !== id.trim())
       || !Array.isArray(candidate.gaps) || candidate.gaps.some((gap) => typeof gap !== 'string')) {
       notice(issues, 'topic-portfolio-schema', `${label} is missing its candidate identity, opportunity lineage, support level, evidence ids, or gaps array.`)
       evidenceFilesConsistent = false
@@ -201,7 +211,7 @@ export function researchTopicPortfolioFindings(input) {
       topicPortfolio: {
         present: true,
         schemaValid: !issues.some((item) => item.check === 'topic-portfolio-schema'),
-        candidates: candidates.length,
+        candidates: candidateIds.size,
         structurallyCompleteCandidates,
         unresolvedDesignFields,
         evidenceFilesConsistent,
