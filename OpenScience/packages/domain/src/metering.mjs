@@ -105,6 +105,8 @@ export function isPeak(at) {
  *
  * @typedef {object} PriceList
  * @property {string} currency
+ * @property {string} [version]
+ * @property {string} [modelSource]
  * @property {Record<string, { cacheHit: number, cacheMiss: number, output: number }>} model  price per 1M tokens
  * @property {number} asrPerMinute
  * @property {number} embeddingPerMillion
@@ -119,9 +121,11 @@ export function isPeak(at) {
  */
 export const REFERENCE_PRICE_LIST = Object.freeze({
   currency: 'CNY',
+  version: 'evimed-reference-2026-09-05',
+  modelSource: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
   model: Object.freeze({
-    'deepseek-v4-pro': Object.freeze({ cacheHit: 0.5, cacheMiss: 4, output: 12 }),
-    'deepseek-v4-flash': Object.freeze({ cacheHit: 0.1, cacheMiss: 1, output: 2 }),
+    'deepseek-v4-pro': Object.freeze({ cacheHit: 0.3, cacheMiss: 9, output: 27 }),
+    'deepseek-v4-flash': Object.freeze({ cacheHit: 0.1, cacheMiss: 3, output: 9 }),
   }),
   asrPerMinute: 0.05,
   embeddingPerMillion: 0.5,
@@ -161,13 +165,13 @@ export function priceUsage(usage, prices = REFERENCE_PRICE_LIST) {
       return { cost: round(cost * multiplier), priced: true, currency }
     }
     case 'asr':
-      return { cost: round((Number(usage.minutes) || 0) * prices.asrPerMinute * multiplier), priced: true, currency }
+      return { cost: round((Number(usage.minutes) || 0) * prices.asrPerMinute), priced: true, currency }
     case 'embedding':
-      return { cost: round(((Number(usage.tokens) || 0) / 1_000_000) * prices.embeddingPerMillion * multiplier), priced: true, currency }
+      return { cost: round(((Number(usage.tokens) || 0) / 1_000_000) * prices.embeddingPerMillion), priced: true, currency }
     case 'specialist-job': {
       const rate = prices.specialistJob[String(usage.jobType ?? '')]
       if (rate == null) return { cost: 0, priced: false, currency }
-      return { cost: round(rate * multiplier), priced: true, currency }
+      return { cost: round(rate), priced: true, currency }
     }
     case 'storage':
       // Storage is not a request and has no peak window; applying one would
@@ -180,7 +184,7 @@ export function priceUsage(usage, prices = REFERENCE_PRICE_LIST) {
 
 /** @param {number} value @returns {number} */
 function round(value) {
-  return Math.round(value * 10_000) / 10_000
+  return Math.round(value * 100_000_000) / 100_000_000
 }
 
 /**

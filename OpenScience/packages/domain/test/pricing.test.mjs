@@ -5,7 +5,9 @@ import { priceUsage, REFERENCE_PRICE_LIST } from '../index.mjs'
 // Verified against https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ on 2026-09-05.
 test('the versioned model reference prices match the current CNY table', () => {
   assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-09-05')
-  for (const [model, peak, off] of [['deepseek-v4-flash', 12, 6], ['deepseek-v4-pro', 36, 18]]) {
+  /** @type {[string, number, number][]} */
+  const cases = [['deepseek-v4-flash', 12, 6], ['deepseek-v4-pro', 36, 18]]
+  for (const [model, peak, off] of cases) {
     assert.equal(priceUsage({ resourceType: 'model', model, cacheMiss: 1_000_000, output: 1_000_000, peak: true }).cost, peak)
     assert.equal(priceUsage({ resourceType: 'model', model, cacheMiss: 1_000_000, output: 1_000_000, peak: false }).cost, off)
   }
