@@ -4,6 +4,7 @@
 """
 import asyncio
 import json
+import math
 import os
 import re
 import logging
@@ -1994,12 +1995,18 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
         )
         logger.info(f"[M6] 研究议程生成完成")
 
-        # V5.0: 生成选题散点图
+        # Validate first. The raw model response may contain plausible-looking
+        # numeric scores that have no calibration data behind them.
+        topics_list = self._validate_topics(
+            agenda.get("research_topics", agenda.get("topics", [])), opportunities
+        )
+
+        # Generate a quantitative chart only from validated, measured scores.
         charts = []
         logger.info(f"[M6] 开始生成选题散点图...")
         topic_chart = await self._create_chart_safe(
             self._create_topic_scatter_chart,
-            agenda.get("topics", [])
+            topics_list
         )
         if topic_chart:
             charts.append(topic_chart)
@@ -2009,10 +2016,6 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
 
         logger.info(f"[M6] ========== M6_RESEARCH_AGENDA 模块执行完成 ==========")
 
-        # 兼容 LLM 返回 research_topics 或 topics 两种 key
-        topics_list = self._validate_topics(
-            agenda.get("research_topics", agenda.get("topics", [])), opportunities
-        )
         # 为执行摘要提供可用的 key_insights（只保留标题，不含R前缀）
         topic_key_insights = [
             t.get('title', '')
@@ -2130,16 +2133,27 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
         if not MATPLOTLIB_AVAILABLE or len(topics) < 2:
             return None
 
+        score_fields = ("feasibility_score", "novelty_score", "priority_score")
+        if any(
+            type(topic.get(field)) not in (int, float)
+            or not math.isfinite(topic[field])
+            or not 0 <= topic[field] <= 1
+            for topic in topics
+            for field in score_fields
+        ):
+            logger.info("选题散点图跳过：候选题没有完整、可核验的量化评分")
+            return None
+
         try:
             fig, ax = plt.subplots(figsize=(10, 8))
 
             # 提取数据
-            feasibilities = [t.get("feasibility_score", 0.5) for t in topics]
-            novelties = [t.get("novelty_score", 0.5) for t in topics]
+            feasibilities = [t["feasibility_score"] for t in topics]
+            novelties = [t["novelty_score"] for t in topics]
             titles = [t.get("title", f"选题{i+1}")[:25] for i, t in enumerate(topics)]
 
             # 根据优先级着色
-            priorities = [t.get("priority_score", 0.5) for t in topics]
+            priorities = [t["priority_score"] for t in topics]
             colors = plt.cm.plasma(priorities)
 
             scatter = ax.scatter(feasibilities, novelties, s=200, c=colors,
