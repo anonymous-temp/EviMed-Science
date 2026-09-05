@@ -533,6 +533,8 @@
   config:
     default: standard
 # == @evimed/dsh-socket
+- id: evimed-runtime-ui
+  name: '@evimed/dsh-socket'
 - id: evimed-seam-probe
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store

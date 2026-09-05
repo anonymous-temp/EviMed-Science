@@ -1220,16 +1220,15 @@ test("the profile is pre-initialized outside the path the runtime volume mounts 
   assert.match(dockerfile, /DSH_HOME="\$\{DSH_HOME_SEED\}" dsh plugin --profile evimed-runtime add/);
   assert.match(dockerfile, /DSH_HOME="\$\{DSH_HOME_SEED\}" dsh --profile evimed-runtime --dump-config/);
 
-  // And the entrypoint has to actually move it into place before dsh starts:
-  // pre-initializing a profile nothing ever copies out of the seed is the same
-  // failure by a different route.
+  // Existing projects must observe the new image too. User state remains in
+  // place while only the image-owned package roots and manifest are reconciled.
   const entrypoint = await readFile(path.join(repoRoot, "deploy/runtime-dsh/open-science-dsh-serve.sh"), "utf8");
-  assert.match(entrypoint, /DSH_HOME_SEED/);
-  assert.match(entrypoint, /cp -a "\$\{DSH_HOME_SEED\}\/\." "\$\{DSH_HOME\}\/"/);
-  // Idempotent: a restarted or resumed project must not re-copy over a profile
-  // it (or a prior boot) already wrote to, which could silently discard
-  // whatever the control plane's own profile patch had already laid down.
-  assert.match(entrypoint, /\[ ! -d "\$\{DSH_HOME\}\/profiles\/\$\{profile\}" \]/);
+  assert.match(entrypoint, /flock -x .*evimed-profile-seed\.mjs sync/);
+  assert.doesNotMatch(entrypoint, /cp -a .*DSH_HOME_SEED/);
+  assert.doesNotMatch(entrypoint, /\[ ! -d .*profiles/);
+  assert.match(dockerfile, /evimed-profile-seed\.mjs seal/);
+  const smoke = await readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke.sh"), "utf8");
+  assert.match(smoke, /evimed-profile-seed\.mjs sync/);
 });
 
 // Confirmed against a real installed `dsh` binary: `--patch` is a *launcher*

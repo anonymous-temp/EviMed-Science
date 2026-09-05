@@ -22,8 +22,7 @@ home="$(mktemp -d)"
 log="$(mktemp)"
 trap 'rm -rf "${home}" "${log}" "${unusable_cache:-}" "${workspace:-}"' EXIT
 
-cp -a "${DSH_HOME_SEED}/." "${home}/"
-chmod -R u+w "${home}"
+node /usr/local/bin/evimed-profile-seed.mjs sync "${DSH_HOME_SEED}" "${home}" "${profile}"
 
 # Not a credential: the boot must reach the plugin tree, and the credentials
 # provider refuses to load a file it cannot parse. Nothing here is ever used to
