@@ -85,9 +85,9 @@ test("an event names who it bills, and costs half off peak", async () => {
     assert.equal(peak.projectId, "paper1");
     assert.equal(peak.peak, true);
     assert.equal(off.peak, false);
-    // 1M cache-miss prompt at 4 + 1M output at 12 = 16, halved off peak.
-    assert.equal(peak.cost, 16);
-    assert.equal(off.cost, 8);
+    // 1M cache-miss prompt at 9 + 1M output at 27 = 36, halved off peak.
+    assert.equal(peak.cost, 36);
+    assert.equal(off.cost, 18);
     assert.equal(peak.priced, true);
 
     const written = await readFile(path.join(dataDir, ".openscience", "usage.jsonl"), "utf8");
