@@ -551,17 +551,6 @@ class ReportGenerator:
                     if isinstance(sub, dict):
                         outline_info += f"- {sub.get('title', '')}: {sub.get('key_argument', '')}\n"
 
-        # M5专项：要求在正文中展示每个突破机会的优先级评分
-        m5_score_note = ""
-        if module_id == "M5_BREAKTHROUGH_OPPORTUNITY":
-            m5_score_note = """
-## 优先级评分展示要求
-每个突破机会子章节末尾必须包含以下格式的评分说明：
-> **优先级评分**：综合X.XX（科学创新性X.X / 临床转化价值X.X / 研究可行性X.X）
-
-评分来源于分析素材中各突破机会的 priority_score、feasibility_score、novelty_score、clinical_impact_score 字段，请如实填入，不要编造。
-"""
-
         # M6专项：注入M5突破机会列表，强制要求选题与突破机会对应
         m5_linkage_note = ""
         if m5_opportunities:
@@ -581,7 +570,7 @@ class ReportGenerator:
 2. 选题数量与上方突破机会数量完全一致（{n_opps}个突破机会对应{n_opps}个选题）
 3. 每个子章节标题格式为"### {chapter_num}.N 选题标题（来源：对应突破机会标题）"
 4. 每个选题正文开头注明"**来源突破机会**：BOM编号 — 突破机会标题"
-5. 每个选题末尾注明"**优先级评分**：综合X.XX（科学创新性X.X / 临床转化价值X.X / 研究可行性X.X）"
+5. 每个选题末尾分别说明证据基础、资源可行性、新颖性依据和未解决缺口；不输出未经校准的数字评分
 """
 
         return f"""你是一位世界级的循证医学研究战略专家，正在撰写一份专业的科研选题分析报告的第{chapter_num}章。
@@ -593,7 +582,6 @@ class ReportGenerator:
 第{chapter_num}章: {module_name}
 
 {outline_info}
-{m5_score_note}
 {m5_linkage_note}
 ## 分析素材
 {data_summary}
@@ -736,39 +724,32 @@ class ReportGenerator:
         if deep_analysis:
             summary_parts.append(f"### 深度分析\n{deep_analysis[:1500]}")
 
-        # M5 突破机会：专项处理，保留评分字段
+        # M5 突破机会：保留证据与可行性依据，不转述模型评分。
         opportunities = data.get("opportunities", [])
         if opportunities:
-            lines = ["### 突破机会列表（含优先级评分）"]
+            lines = ["### 突破机会列表"]
             for i, o in enumerate(opportunities):
                 title = o.get("title", o.get("name", f"机会{i+1}"))
-                priority = o.get("priority_score", "N/A")
-                feasibility = o.get("feasibility_score", "N/A")
-                novelty = o.get("novelty_score", "N/A")
-                impact = o.get("clinical_impact_score", "N/A")
                 desc = o.get("description", "")[:100]
                 lines.append(
-                    f"- {title}｜优先级={priority}｜可行性={feasibility}｜新颖性={novelty}｜临床影响={impact}"
-                    f"｜支持层级={o.get('support_level', 'indirect')}"
+                    f"- {title}｜支持层级={o.get('support_level', 'indirect')}"
                     f"｜PMID={','.join(o.get('evidence_pmids', [])) or 'N/A'}"
+                    f"｜支持理由={o.get('support_rationale', '未提供')}"
                     + (f"｜{desc}" if desc else "")
                 )
             summary_parts.append("\n".join(lines))
 
-        # M6 研究选题：专项处理，保留评分字段
+        # M6 研究选题：保留来源与设计缺口，不转述模型评分。
         research_topics = data.get("research_topics", [])
         if research_topics:
-            lines = ["### 推荐研究选题列表（含优先级评分）"]
+            lines = ["### 推荐研究选题列表"]
             for i, t in enumerate(research_topics):
                 title = t.get("title", f"选题{i+1}")
-                priority = t.get("priority_score", "N/A")
-                feasibility = t.get("feasibility_score", "N/A")
-                novelty = t.get("novelty_score", "N/A")
                 rationale = t.get("rationale", t.get("description", ""))[:100]
                 lines.append(
-                    f"- {title}｜优先级={priority}｜可行性={feasibility}｜新颖性={novelty}"
-                    f"｜支持层级={t.get('support_level', 'indirect')}"
+                    f"- {title}｜支持层级={t.get('support_level', 'indirect')}"
                     f"｜PMID={','.join(t.get('source_evidence_pmids', [])) or 'N/A'}"
+                    f"｜设计缺口={','.join(t.get('design_gaps', [])) or '无已声明缺口'}"
                     + (f"｜{rationale}" if rationale else "")
                 )
             summary_parts.append("\n".join(lines))
@@ -1244,7 +1225,7 @@ class ReportGenerator:
 
 ### 1.4 计算方法
 
-本报告各章节量化指标均由大语言模型（LLM）基于逐篇文献证据自动评分，评分过程依据预设的分级标准（rubric）进行。
+发文量、研究设计分布与证据数量由结构化记录计算。第5章的科学矛盾强度是基于本次证据集的描述性模型判断，用于组织讨论，不是测量效应、概率或跨项目可比的量表。
 
 #### 1.4.1 科学矛盾强度评分（intensity，第5章）
 
@@ -1257,47 +1238,12 @@ LLM 对每组科学矛盾依据以下分级标准赋予 0–1 分值，该得分
 | 0.2 – 0.5 | 间接冲突 | 证据量有限或冲突为间接推断，尚无直接对照研究 |
 | 0.0 – 0.2 | 弱冲突 | 仅理论层面的张力，缺乏实证支撑 |
 
-#### 1.4.2 优先级综合评分（第6–7章）
+#### 1.4.2 第6–7章的定性排序
 
-突破机会与研究选题的优先级得分由 LLM 综合以下三个维度评估，各维度均以 0–1 计分，综合后取值同为 0–1。{self._build_priority_chart_desc(module_outputs)}
-
-| 子维度 | 评分要点 |
-|-------|---------|
-| 科学创新性 | 是否填补知识空白、引入新机制或新范式 |
-| 临床转化价值 | 结果是否可直接或间接改善患者预后、影响指南 |
-| 研究可行性 | 样本量可及性、技术平台获取难度、伦理与资助壁垒 |
-
-> 注：LLM 不使用固定权重公式，而是基于当前领域实际情境对三个维度进行语境感知加权，属于专家判断型评分（expert-in-the-loop scoring），与传统数值公式有本质区别。
+突破机会与研究选题按证据支持层级、最近既有工作、可证伪性、所需数据、资源限制与未解决风险分别说明。报告不把模型判断转写为0–1分值，也不把相对排序表述为成功概率。读者可据这些可核对条件调整优先顺序。
 
 ---
 """
-
-    def _build_priority_chart_desc(self, module_outputs: Dict = None) -> str:
-        """根据实际生成的图表动态描述 1.4.2 优先级得分的可视化位置"""
-        if not module_outputs:
-            return "该得分体现为各章节图表中的颜色深浅——颜色越深表示综合优先级越高。"
-
-        import os
-        m5_has_chart = any(
-            os.path.exists(c.path)
-            for c in module_outputs.get("M5_BREAKTHROUGH_OPPORTUNITY", ModuleOutput(module_id="", status="")).charts
-        ) if "M5_BREAKTHROUGH_OPPORTUNITY" in module_outputs else False
-
-        m6_has_chart = any(
-            os.path.exists(c.path)
-            for c in module_outputs.get("M6_RESEARCH_AGENDA", ModuleOutput(module_id="", status="")).charts
-        ) if "M6_RESEARCH_AGENDA" in module_outputs else False
-
-        parts = []
-        if m5_has_chart:
-            parts.append("**第6章突破机会气泡图**中体现为气泡颜色深浅")
-        if m6_has_chart:
-            parts.append("**第7章推荐选题散点图**中体现为散点颜色深浅")
-
-        if parts:
-            return "该得分在" + "，在".join(parts) + "——颜色越深表示综合优先级越高。"
-        else:
-            return "该得分供各章节分析时参考排序，本次检索数据量有限，相关可视化图表未生成。"
 
     def _render_limitations(self) -> str:
         """生成局限性说明段落（置于综合结论末尾）"""

@@ -234,6 +234,8 @@ def _validate_release(completed, content: str, direction: str = "", module_artif
         raise RuntimeError("research-topic report contains unsupported certainty class: novelty-first")
     if guideline_claim:
         raise RuntimeError("research-topic report contains unsupported certainty class: guideline-promotion")
+    if re.search(r"(?:优先级评分|priority score)[^\n]{0,80}\d+(?:\.\d+)?", content, flags=re.IGNORECASE):
+        raise RuntimeError("research-topic report contains an uncalibrated priority score")
     if module_artifacts is not None:
         module_text = json.dumps(module_artifacts, ensure_ascii=False)
         if re.search(
@@ -284,7 +286,10 @@ def _validate_release(completed, content: str, direction: str = "", module_artif
             raise RuntimeError("research-topic opportunity omitted its support rationale")
         if level == "speculative" and "待验证" not in str(opportunity.get("title") or ""):
             raise RuntimeError("speculative research-topic opportunity is not visibly labeled")
-        opportunity_by_id[str(opportunity.get("opportunity_id"))] = opportunity
+        opportunity_id = str(opportunity.get("opportunity_id"))
+        if opportunity_id in opportunity_by_id:
+            raise RuntimeError("research-topic opportunity ids are duplicated")
+        opportunity_by_id[opportunity_id] = opportunity
 
     topics = (m6.data.get("research_topics", []) if m6 else [])
     structured = json.dumps([*opportunities, *topics], ensure_ascii=False)
@@ -309,7 +314,12 @@ def _validate_release(completed, content: str, direction: str = "", module_artif
         )
     if m6 and len(topics) != len(opportunity_by_id):
         raise RuntimeError("research-topic agenda is not one-to-one with breakthrough opportunities")
+    topic_ids = set()
     for topic in topics:
+        topic_id = str(topic.get("topic_id") or "")
+        if topic_id in topic_ids:
+            raise RuntimeError("research-topic candidate ids are duplicated")
+        topic_ids.add(topic_id)
         source = opportunity_by_id.get(str(topic.get("source_opportunity_id")))
         if not source:
             raise RuntimeError("research topic has no valid source opportunity")
