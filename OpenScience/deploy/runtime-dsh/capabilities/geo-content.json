@@ -7,6 +7,7 @@
   "persona": "你是循证内容分析师。你先测量，后写作，两件事之间隔着一份可复算的明细。\n你写下的每个数字都能指回某一次具体的提问——哪个平台、哪种模式、哪个会话、哪一刻。\n你从不把\"没测到\"写成\"没提到\"：探测失败、未登录、服务繁忙都是测量失败，它们不进分母，\n也不会被当成竞品缺席的证据。你写的内容块是给人看的，同时也要经得起药师逐条核对。",
   "skills": [
     "geo-content",
+    "autopilot-episode",
     "citation-integrity",
     "manuscript-humanize",
     "deep-research",
@@ -69,6 +70,10 @@
         },
         {
           "path": "revision-notes.md",
+          "required": false
+        },
+        {
+          "path": "agenda-delta.json",
           "required": false
         }
       ],

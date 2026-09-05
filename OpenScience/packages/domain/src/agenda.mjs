@@ -125,7 +125,10 @@ export function digestPlacement(claim) {
 export function validateAgendaClaim(claim) {
   /** @type {{ code: string, message: string }[]} */
   const issues = []
-  if (!String(claim?.statement ?? '').trim()) {
+  if (!String(claim?.id ?? '').trim() || String(claim?.id ?? '').length > 160) {
+    issues.push({ code: 'agenda_claim_invalid', message: 'a claim needs a bounded id.' })
+  }
+  if (!String(claim?.statement ?? '').trim() || String(claim?.statement ?? '').length > 8000) {
     issues.push({ code: 'agenda_claim_invalid', message: 'a claim needs a statement.' })
   }
   if (!['direct', 'synthesized', 'derived'].includes(String(claim?.type))) {
@@ -137,10 +140,12 @@ export function validateAgendaClaim(claim) {
       message: 'a new claim enters as "unverified"; only a verification episode raises a tier.',
     })
   }
-  if (!Array.isArray(claim?.sources) || !claim.sources.length) {
+  if (!Array.isArray(claim?.sources) || !claim.sources.length || claim.sources.length > 100
+    || claim.sources.some((source) => typeof source !== 'string' || !source.trim() || source.length > 1000)) {
     issues.push({ code: 'agenda_claim_invalid', message: 'a claim needs sources[].' })
   }
-  if (!claim?.provenance || typeof claim.provenance !== 'object') {
+  if (!claim?.provenance || typeof claim.provenance !== 'object' || Array.isArray(claim.provenance)
+    || !String(claim.provenance.episodeId ?? '').trim() || !String(claim.provenance.artifact ?? '').trim()) {
     issues.push({ code: 'agenda_claim_invalid', message: 'a claim needs provenance pointing at the episode that produced it.' })
   }
   if (claim?.type !== 'direct' && !String(claim?.what_would_change ?? '').trim()) {
@@ -148,6 +153,10 @@ export function validateAgendaClaim(claim) {
       code: 'agenda_claim_unfalsifiable',
       message: 'a synthesized or derived claim must state what evidence would overturn it.',
     })
+  }
+  if (['synthesized', 'derived'].includes(String(claim?.type))
+    && !['high', 'moderate', 'low'].includes(String(claim?.confidence))) {
+    issues.push({ code: 'agenda_claim_invalid', message: 'a synthesized or derived claim needs high, moderate, or low confidence.' })
   }
   const effect = claim?.effect
   if (effect && !ALLOWED_EFFECT_MEASURES.includes(String(effect.measure))) {

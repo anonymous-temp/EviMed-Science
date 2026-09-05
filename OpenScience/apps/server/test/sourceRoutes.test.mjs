@@ -4,7 +4,7 @@ import test from "node:test";
 import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 
-async function fixture(t) {
+async function fixture(t, { withOpenList = false } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -13,6 +13,7 @@ async function fixture(t) {
     retry: async (userId, id, body) => { calls.push({ method: "retry", userId, id, body }); return { id, status: "queued" }; },
     cancel: async (userId, id, body) => { calls.push({ method: "cancel", userId, id, body }); return { id, status: "canceled" }; },
     remove: async (userId, id, body) => { calls.push({ method: "remove", userId, id, body }); return { id, deletedAt: "now" }; },
+    register: async (userId, input) => { calls.push({ method: "register", userId, input }); return { source: { id: "source-openlist" }, job: { id: "job-openlist" } }; },
   };
   const store = {
     ensureSessionUser: async (req) => {
@@ -29,7 +30,12 @@ async function fixture(t) {
       return { id };
     },
   };
-  const route = createSourceRoutes({ store, service, maxJsonBytes: 64 * 1024 });
+  const openList = withOpenList ? {
+    list: async (userId, selected, options) => { calls.push({ method: "openList", userId, selected, options }); return { entries: [], nextCursor: null }; },
+    stat: async () => ({ path: "/paper.pdf", name: "paper.pdf", entryType: "file", size: 7,
+      mtime: "2026-09-06T00:00:00.000Z", providerHash: `sha256:${"a".repeat(64)}` }),
+  } : null;
+  const route = createSourceRoutes({ store, service, openList, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
   });
@@ -80,4 +86,18 @@ test("retry, cancel and delete are explicit revision-guarded operations", async 
     method: "DELETE", headers, body: JSON.stringify({ expectedRevision: 2 }),
   })).status, 200);
   assert.deepEqual(calls.filter((call) => call.method !== "get").map((call) => call.method), ["retry", "cancel", "remove"]);
+});
+
+test("OpenList browse and import stay account and project scoped", async (t) => {
+  const { base, headers, calls } = await fixture(t, { withOpenList: true });
+  const browse = await fetch(`${base}/api/sources/openlist?projectId=owned-project&path=%2Fpapers`, { headers });
+  assert.equal(browse.status, 200);
+  assert.equal(calls.find((call) => call.method === "openList").userId, "owner");
+  const imported = await fetch(`${base}/api/sources/openlist/import`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", path: "/paper.pdf" }) });
+  assert.equal(imported.status, 201);
+  const registered = calls.find((call) => call.method === "register");
+  assert.equal(registered.userId, "owner");
+  assert.deepEqual(registered.input.connector, { type: "openlist", id: "/paper.pdf" });
+  assert.equal(registered.input.sha256, "a".repeat(64));
 });

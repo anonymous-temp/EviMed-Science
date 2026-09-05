@@ -117,7 +117,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
   ) THEN
     ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -125,7 +125,15 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)%'
   ) THEN
     ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_project_fk
-      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE NOT VALID;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='revisions' AND c.contype='f'
+      AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id, kind, id) REFERENCES evimed_product.documents(user_id, kind, id)%'
+  ) THEN
+    ALTER TABLE evimed_product.revisions ADD CONSTRAINT product_revisions_document_fk
+      FOREIGN KEY (user_id,kind,id) REFERENCES evimed_product.documents(user_id,kind,id) ON DELETE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -133,7 +141,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
   ) THEN
     ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -141,7 +149,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)%'
   ) THEN
     ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_project_fk
-      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE NOT VALID;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
@@ -149,7 +157,7 @@ BEGIN
       AND pg_get_constraintdef(c.oid) LIKE 'FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)%'
   ) THEN
     ALTER TABLE evimed_product.memory_index_state ADD CONSTRAINT memory_index_state_user_fk
-      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE;
+      FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
 END $foreign_keys$;
 ALTER TABLE evimed_product.memory_index_state ADD COLUMN IF NOT EXISTS verified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp();

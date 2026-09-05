@@ -1917,6 +1917,23 @@ test("the hosted e2e accepts any certified model, not one written into it", asyn
   );
 });
 
+test("document ingestion isolates parser bytes and OpenList state from the SaaS data volume", async () => {
+  const [compose, parserDockerfile] = await Promise.all([
+    readFile(path.join(repoRoot, "deploy/web/docker-compose.ingestion.yml"), "utf8"),
+    readFile(path.join(repoRoot, "deploy/document-parser/Dockerfile"), "utf8"),
+  ]);
+  const parser = compose.match(/\n  evimed-document-parser:\n([\s\S]*?)\n  evimed-openlist:/)?.[1] ?? "";
+  const openList = compose.match(/\n  evimed-openlist:\n([\s\S]*?)\nvolumes:/)?.[1] ?? "";
+  assert.match(parser, /evimed-parser-staging:\/data:ro/);
+  assert.doesNotMatch(parser, /open-science-data/);
+  assert.match(parser, /networks:\n\s+- ingestion-internal/);
+  assert.match(compose, /ingestion-internal:\n\s+internal: true/);
+  assert.doesNotMatch(openList, /open-science-data/);
+  assert.match(openList, /PUID: "1000"/);
+  assert.match(parserDockerfile, /mineru-models-download -s modelscope -m pipeline/);
+  assert.match(parserDockerfile, /^USER evimed$/m);
+});
+
 test("every optional-channel lever the server reads is forwarded by compose", async () => {
   // Compose forwards environment item by item, so a variable the server reads
   // and this file does not list simply does not exist in the container: setting

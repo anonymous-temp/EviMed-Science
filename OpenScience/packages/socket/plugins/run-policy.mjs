@@ -752,7 +752,9 @@ async function injectBrief(ctx, agent, sessionState, config) {
   // normal and the control plane's whole view of it was empty. Proven by
   // experiment: identical boots differing only in whether the brief existed
   // before the session, one writes the medium and one does not.
-  const rawIndex = await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile)
+  const sessionBriefDir = `${workspaceLayout.briefDir}/sessions/${sessionId}`
+  const rawIndex = await readFileAt(ctx, cwd, `${sessionBriefDir}/index.json`)
+    ?? await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile)
   if (rawIndex == null) return
   entry.contextInjected = true
   const index = parseJson(rawIndex)
@@ -763,7 +765,8 @@ async function injectBrief(ctx, agent, sessionState, config) {
     maxChildren: Number(index?.budget?.maxChildren ?? config.maxParallelChildren) || 0,
   }
   const brief = await readFileAt(ctx, cwd, workspaceLayout.briefFile)
-  const context = await readFileAt(ctx, cwd, workspaceLayout.briefContextFile)
+  const context = await readFileAt(ctx, cwd, `${sessionBriefDir}/context.md`)
+    ?? await readFileAt(ctx, cwd, workspaceLayout.briefContextFile)
   const capsule = await readFileAt(ctx, cwd, workspaceLayout.capsuleProfileFile)
   const agenda = await readFileAt(ctx, cwd, workspaceLayout.agendaFile)
   entry.briefText = brief

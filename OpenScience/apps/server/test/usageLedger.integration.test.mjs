@@ -148,3 +148,21 @@ test("settlement and the next reservation serialize on the same account budget",
   assert.equal((await settlement).status, "settled");
   await assert.rejects(next, { code: "usage_budget_exceeded" });
 });
+
+test("one proactive run has an independent hard ceiling and exact summary", options, async () => {
+  const runId = `run-${randomUUID()}`;
+  const first = await ledger.reserveModel(reservation(owner, {
+    runId, estimatedCost: 0.4, runLimit: 0.7, dailyLimit: 0, weeklyLimit: 0,
+  }));
+  await ledger.settleModel(owner, first.id, {
+    usage: { cacheHitTokens: 2, cacheMissTokens: 3, completionTokens: 5 },
+    actualCost: 0.5, priced: true,
+  });
+  await assert.rejects(ledger.reserveModel(reservation(owner, {
+    runId, estimatedCost: 0.3, runLimit: 0.7, dailyLimit: 0, weeklyLimit: 0,
+  })), { code: "usage_budget_exceeded" });
+  const summary = await ledger.summaryRun(owner, runId);
+  assert.equal(summary.calls, 1);
+  assert.equal(summary.actualCost, 0.5);
+  assert.equal(summary.openCost, 0);
+});

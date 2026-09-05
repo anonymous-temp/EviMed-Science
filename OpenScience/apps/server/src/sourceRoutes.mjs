@@ -11,8 +11,8 @@ async function bodyOf(req, limit, allowed) {
 }
 
 /** Account-authenticated source inventory and user corrections.
- * @param {{store:any,service:any,maxJsonBytes:number}} dependencies */
-export function createSourceRoutes({ store, service, maxJsonBytes }) {
+ * @param {{store:any,service:any,openList?:any,maxJsonBytes:number}} dependencies */
+export function createSourceRoutes({ store, service, openList = null, maxJsonBytes }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -22,6 +22,36 @@ export function createSourceRoutes({ store, service, maxJsonBytes }) {
     if (!service) throw new HttpError(503, "product_state_unavailable", "Source analysis storage is temporarily unavailable.");
     const method = req.method ?? "GET";
     const reply = (value, status = 200) => { sendJson(res, status, { data: value }); return true; };
+    if (url.pathname === "/api/sources/openlist" && method === "GET") {
+      if (!openList) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      await store.requireProject(user, projectId);
+      const cursor = url.searchParams.get("cursor");
+      const page = cursor == null ? 1 : Number(cursor);
+      return reply(await openList.list(user.id, url.searchParams.get("path") ?? "/", { page, perPage: 100 }));
+    }
+    if (url.pathname === "/api/sources/openlist/import" && method === "POST") {
+      if (!openList) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
+      const input = await bodyOf(req, maxJsonBytes, ["projectId", "path"]);
+      const projectId = typeof input.projectId === "string" ? input.projectId : "";
+      const selected = typeof input.path === "string" ? input.path : "";
+      await store.requireProject(user, projectId);
+      const item = await openList.stat(user.id, selected);
+      if (item.entryType !== "file") throw new HttpError(400, "openlist_file_required", "Select a file to import.");
+      const match = /^sha256:([a-f0-9]{64})$/i.exec(String(item.providerHash ?? ""));
+      if (!match) throw new HttpError(409, "openlist_sha256_required", "This OpenList storage must expose a SHA-256 hash; use platform upload or the local agent for this file.");
+      return reply(await service.register(user.id, {
+        projectId,
+        connector: { type: "openlist", id: selected },
+        path: `openlist/${selected.replace(/^\/+/, "")}`,
+        size: item.size,
+        mtime: item.mtime ?? new Date().toISOString(),
+        mimeType: "application/octet-stream",
+        sha256: match[1].toLowerCase(),
+        providerHash: item.providerHash,
+      }), 201);
+    }
     let parts;
     try { parts = url.pathname.slice("/api/sources".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "source_path_invalid", "Invalid source path."); }

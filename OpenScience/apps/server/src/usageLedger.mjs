@@ -42,6 +42,7 @@ function record(row) {
     id: row.id,
     userId: row.user_id,
     projectId: row.project_id,
+    runId: row.run_id,
     model: row.model,
     priceVersion: row.price_version,
     currency: row.currency,
@@ -75,16 +76,18 @@ export class UsageLedger {
     return { connected: true, uncertain: Number(result.rows[0]?.uncertain ?? 0) };
   }
 
-  /** @param {{id:string,userId:string,projectId:string,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,now?:Date,ttlMs?:number}} input */
+  /** @param {{id:string,userId:string,projectId:string,runId?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
   async reserveModel(input) {
     const now = input.now ?? new Date();
     const ttlMs = input.ttlMs ?? 30 * 60_000;
     productInteger(ttlMs, 60_000, 24 * 60 * 60_000);
     const values = {
       id: productId(input.id), userId: productId(input.userId, "user"), projectId: productId(input.projectId, "project"),
+      runId: input.runId == null ? null : productId(input.runId, "run"),
       model: text(input.model, "model"), priceVersion: text(input.priceVersion, "price version"), currency: text(input.currency, "currency", 12),
       requestFingerprint: text(input.requestFingerprint, "request fingerprint", 64), estimatedCost: money(input.estimatedCost, "estimated cost"),
       dailyLimit: money(input.dailyLimit ?? 0, "daily limit"), weeklyLimit: money(input.weeklyLimit ?? 0, "weekly limit"),
+      runLimit: money(input.runLimit ?? 0, "run limit"),
       now: instant(now, "reservation time"), expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
     };
     if (values.currency !== "CNY") throw new HttpError(400, "usage_payload_invalid", "Unsupported usage currency.");
@@ -96,6 +99,7 @@ export class UsageLedger {
       if (existing.rowCount) {
         const same = existing.rows[0].user_id === values.userId && existing.rows[0].project_id === values.projectId
           && existing.rows[0].model === values.model && existing.rows[0].request_fingerprint === values.requestFingerprint
+          && existing.rows[0].run_id === values.runId
           && existing.rows[0].price_version === values.priceVersion && existing.rows[0].currency === values.currency
           && Number(existing.rows[0].reserved_cost) === values.estimatedCost
           && existing.rows[0].status === "reserved"
@@ -107,22 +111,28 @@ export class UsageLedger {
       const totals = await client.query(`SELECT
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '24 hours' THEN actual_cost ELSE 0 END),0) AS day_settled,
         coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '7 days' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN status IN ('reserved','uncertain') AND (status='uncertain' OR reservation_expires_at > $2::timestamptz) THEN reserved_cost ELSE 0 END),0) AS open_cost
-        FROM evimed_usage.model_requests WHERE user_id=$1`, [values.userId, values.now]);
+        coalesce(sum(CASE WHEN status IN ('reserved','uncertain') AND (status='uncertain' OR reservation_expires_at > $2::timestamptz) THEN reserved_cost ELSE 0 END),0) AS open_cost,
+        coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
+          WHEN run_id=$3 AND status IN ('reserved','uncertain') AND (status='uncertain' OR reservation_expires_at > $2::timestamptz) THEN reserved_cost ELSE 0 END),0) AS run_committed
+        FROM evimed_usage.model_requests WHERE user_id=$1`, [values.userId, values.now, values.runId]);
       const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].open_cost);
       const week = Number(totals.rows[0].week_settled) + Number(totals.rows[0].open_cost);
       const overDay = values.dailyLimit > 0 && day + values.estimatedCost > values.dailyLimit;
       const overWeek = values.weeklyLimit > 0 && week + values.estimatedCost > values.weeklyLimit;
-      if (overDay || overWeek) {
+      const runCommitted = Number(totals.rows[0].run_committed);
+      const overRun = values.runLimit > 0 && values.runId != null && runCommitted + values.estimatedCost > values.runLimit;
+      if (overRun || overDay || overWeek) {
         throw new HttpError(402, "usage_budget_exceeded", "This request exceeds the account spending limit.", {
-          window: overDay ? "day" : "week", limit: overDay ? values.dailyLimit : values.weeklyLimit,
-          committed: overDay ? day : week, requested: values.estimatedCost, currency: values.currency,
+          window: overRun ? "run" : overDay ? "day" : "week",
+          limit: overRun ? values.runLimit : overDay ? values.dailyLimit : values.weeklyLimit,
+          committed: overRun ? runCommitted : overDay ? day : week,
+          requested: values.estimatedCost, currency: values.currency,
         });
       }
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
-        (id,user_id,project_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,'reserved',$8,$9,$10) RETURNING *`,
-      [values.id, values.userId, values.projectId, values.model, values.priceVersion, values.currency,
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11) RETURNING *`,
+      [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
         values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now]);
       return record(inserted.rows[0]);
     });
@@ -217,6 +227,18 @@ export class UsageLedger {
       byModel: row.by_model.map((item) => ({ model: item.model, calls: item.calls, cost: Number(item.cost) })),
       priceVersions: row.price_versions,
     };
+  }
+
+  async summaryRun(userId, runId) {
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT count(*)::integer AS calls,
+      coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS actual_cost,
+      coalesce(sum(reserved_cost) FILTER (WHERE status IN ('reserved','uncertain')),0) AS open_cost,
+      count(*) FILTER (WHERE status='uncertain')::integer AS uncertain
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=$2`,
+    [productId(userId, "user"), productId(runId, "run")]);
+    return { calls: result.rows[0].calls, actualCost: Number(result.rows[0].actual_cost),
+      openCost: Number(result.rows[0].open_cost), uncertain: result.rows[0].uncertain, currency: "CNY" };
   }
 
   /** Refuse a new interactive entry point that is already at its configured limit. */

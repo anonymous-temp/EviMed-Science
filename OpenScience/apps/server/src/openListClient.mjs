@@ -49,17 +49,39 @@ function providerHash(hashInfo) {
   return null;
 }
 
+function entry(row, parent, { exactPath = null } = {}) {
+  if (!row || typeof row !== "object" || Array.isArray(row)) throw failure("openlist_response_invalid", "OpenList returned an invalid entry.");
+  const name = safeName(row.name);
+  const size = Number(row.size ?? 0);
+  if (!Number.isSafeInteger(size) || size < 0) throw failure("openlist_response_invalid", "OpenList returned an invalid file size.");
+  const modified = typeof row.modified === "string" && Number.isFinite(Date.parse(row.modified)) ? new Date(row.modified).toISOString() : null;
+  return {
+    path: exactPath ?? `${parent === "/" ? "" : parent}/${name}`,
+    name,
+    size,
+    mtime: modified,
+    entryType: row.is_dir === true ? "dir" : "file",
+    providerHash: providerHash(row.hash_info),
+  };
+}
+
+function proxyPath(remotePath) {
+  return openListPath(remotePath).split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+
 /** Narrow OpenList v4 client: three configured API calls, no dynamic endpoints. */
 export class OpenListClient {
-  /** @param {{baseUrl:string,token?:string,fetchImpl?:typeof fetch,timeoutMs?:number,maxResponseBytes?:number}} config */
-  constructor({ baseUrl, token = "", fetchImpl = globalThis.fetch, timeoutMs = 30_000, maxResponseBytes = 8 * 1024 * 1024 }) {
+  /** @param {{baseUrl:string,token?:string,fetchImpl?:typeof fetch,timeoutMs?:number,maxResponseBytes?:number,maxDownloadBytes?:number}} config */
+  constructor({ baseUrl, token = "", fetchImpl = globalThis.fetch, timeoutMs = 30_000, maxResponseBytes = 8 * 1024 * 1024,
+    maxDownloadBytes = 64 * 1024 * 1024 }) {
     let parsed;
     try { parsed = new URL(String(baseUrl)); } catch { throw new TypeError("OpenList URL is invalid."); }
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== "/") {
       throw new TypeError("OpenList URL must be an HTTP origin.");
     }
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 300_000
-      || !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1024 || maxResponseBytes > 64 * 1024 * 1024) {
+      || !Number.isSafeInteger(maxResponseBytes) || maxResponseBytes < 1024 || maxResponseBytes > 64 * 1024 * 1024
+      || !Number.isSafeInteger(maxDownloadBytes) || maxDownloadBytes < 1024 || maxDownloadBytes > 2 * 1024 * 1024 * 1024) {
       throw new TypeError("OpenList limits are invalid.");
     }
     this.baseUrl = parsed.origin;
@@ -67,6 +89,7 @@ export class OpenListClient {
     this.fetch = fetchImpl;
     this.timeoutMs = timeoutMs;
     this.maxResponseBytes = maxResponseBytes;
+    this.maxDownloadBytes = maxDownloadBytes;
   }
 
   /** @param {string} remotePath @param {{page?:number,perPage?:number,refresh?:boolean}} options */
@@ -78,21 +101,7 @@ export class OpenListClient {
     const data = await this.request("/api/fs/list", { path: parent, page, per_page: perPage, refresh: Boolean(refresh) });
     const rows = data?.content;
     if (!Array.isArray(rows) || rows.length > perPage) throw failure("openlist_response_invalid", "OpenList returned an invalid directory listing.");
-    const entries = rows.map((row) => {
-      if (!row || typeof row !== "object" || Array.isArray(row)) throw failure("openlist_response_invalid", "OpenList returned an invalid entry.");
-      const name = safeName(row.name);
-      const size = Number(row.size ?? 0);
-      if (!Number.isSafeInteger(size) || size < 0) throw failure("openlist_response_invalid", "OpenList returned an invalid file size.");
-      const modified = typeof row.modified === "string" && Number.isFinite(Date.parse(row.modified)) ? new Date(row.modified).toISOString() : null;
-      return {
-        path: `${parent === "/" ? "" : parent}/${name}`,
-        name,
-        size,
-        mtime: modified,
-        entryType: row.is_dir === true ? "dir" : "file",
-        providerHash: providerHash(row.hash_info),
-      };
-    });
+    const entries = rows.map((row) => entry(row, parent));
     const total = Number(data?.total ?? entries.length);
     return { entries, nextCursor: Number.isFinite(total) && page * perPage < total ? String(page + 1) : null };
   }
@@ -101,12 +110,57 @@ export class OpenListClient {
   async get(remotePath) { return this.request("/api/fs/get", { path: openListPath(remotePath) }); }
 
   /** @param {string} remotePath */
+  async stat(remotePath) {
+    const selected = openListPath(remotePath);
+    const raw = await this.get(selected);
+    return entry(raw, "/", { exactPath: selected });
+  }
+
+  /** @param {string} remotePath */
   async link(remotePath) {
     const data = await this.request("/api/fs/link", { path: openListPath(remotePath) });
     if (!data || typeof data.url !== "string" || !data.url.startsWith("http") || data.url.length > 8192) {
       throw failure("openlist_response_invalid", "OpenList returned an invalid link.");
     }
     return { url: data.url, header: data.header && typeof data.header === "object" && !Array.isArray(data.header) ? data.header : {} };
+  }
+
+  /** Read through OpenList's same-origin proxy. The server never follows a
+   * provider-controlled redirect and the upstream credential never enters the
+   * EviMed runtime container. @param {string} remotePath */
+  async read(remotePath) {
+    const selected = openListPath(remotePath);
+    await this.link(selected);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    timer.unref?.();
+    let response;
+    try {
+      response = await this.fetch(`${this.baseUrl}/p${proxyPath(selected)}`, {
+        method: "GET", redirect: "error", signal: controller.signal,
+        headers: this.token ? { authorization: this.token } : {},
+      });
+      if (!response.ok) throw failure("openlist_download_failed", `OpenList proxy returned HTTP ${response.status}.`);
+      return await body(response, this.maxDownloadBytes);
+    } catch (error) {
+      if (error?.code) throw error;
+      throw failure(error?.name === "AbortError" ? "openlist_timeout" : "openlist_download_failed", "OpenList could not proxy this file.", 503);
+    } finally { clearTimeout(timer); }
+  }
+
+  async health() {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(this.timeoutMs, 5_000));
+    timer.unref?.();
+    try {
+      const response = await this.fetch(`${this.baseUrl}/ping`, { method: "GET", redirect: "error", signal: controller.signal });
+      if (!response.ok) throw failure("openlist_unavailable", `OpenList health returned HTTP ${response.status}.`, 503);
+      await body(response, 1024);
+      return { connected: true };
+    } catch (error) {
+      if (error?.code) throw error;
+      throw failure("openlist_unavailable", "OpenList is unavailable.", 503);
+    } finally { clearTimeout(timer); }
   }
 
   /** @param {string} endpoint @param {Record<string,any>} payload */

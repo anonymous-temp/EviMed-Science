@@ -4,7 +4,7 @@
 // to launch with any other. Adding a model here is a commitment to certify it —
 // the gate will run against whichever of these is configured, so a model that
 // cannot drive the chain fails the release rather than reaching a reader.
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
 
@@ -33,6 +33,8 @@ export function certifiedDeepSeekModel(env = process.env) {
 }
 
 const gatewayPath = "/internal/model/v1/chat/completions";
+const budgetMarkerPattern = /<evimed-budget-scope>([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)<\/evimed-budget-scope>/g;
+const autopilotIntentPattern = /<evimed-autopilot-episode>[a-zA-Z0-9_-]{1,160}<\/evimed-autopilot-episode>/g;
 const allowedRequestFields = new Set([
   "model",
   "messages",
@@ -53,6 +55,75 @@ const allowedRequestFields = new Set([
   "thinking",
   "reasoning_effort",
 ]);
+
+/** Issue a per-run budget claim that rides only in that session's context. */
+export function issueModelGatewayBudgetMarker({ secret, userId, projectId, runId, dailyLimit, weeklyLimit, runLimit,
+  expiresAt = Math.floor(Date.now() / 1000) + 5 * 60 * 60 }) {
+  if (typeof secret !== "string" || secret.length < 32) throw new TypeError("Model gateway budget marker secret is invalid.");
+  const payload = { v: 1, userId: String(userId), projectId: String(projectId), runId: String(runId),
+    dailyLimit: Number(dailyLimit), weeklyLimit: Number(weeklyLimit), runLimit: Number(runLimit), exp: Number(expiresAt) };
+  if ([payload.userId, payload.projectId, payload.runId].some((value) => !value || value.length > 200 || /[\0\r\n]/.test(value))
+    || [payload.dailyLimit, payload.weeklyLimit, payload.runLimit].some((value) => !Number.isFinite(value) || value <= 0)
+    || !Number.isSafeInteger(payload.exp)) throw new TypeError("Model gateway budget marker payload is invalid.");
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
+  return `<evimed-budget-scope>${encoded}.${signature}</evimed-budget-scope>`;
+}
+
+function verifiedBudgetScope(encoded, signature, caller, config) {
+  const secret = String(config.modelGatewaySigningSecret ?? "");
+  if (secret.length < 32) throw gatewayError(401, "model_gateway_budget_scope_invalid", "Model budget scope authentication failed.");
+  const expected = createHmac("sha256", secret).update(encoded).digest();
+  let supplied;
+  try { supplied = Buffer.from(signature, "base64url"); } catch { supplied = Buffer.alloc(0); }
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    throw gatewayError(401, "model_gateway_budget_scope_invalid", "Model budget scope authentication failed.");
+  }
+  let payload;
+  try { payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")); } catch { payload = null; }
+  if (!payload || payload.v !== 1 || payload.userId !== caller.userId || payload.projectId !== caller.projectId
+    || (caller.runId != null && payload.runId !== caller.runId)
+    || typeof payload.runId !== "string" || !payload.runId || payload.runId.length > 200
+    || !Number.isSafeInteger(payload.exp) || payload.exp < Math.floor(Date.now() / 1000)
+    || [payload.dailyLimit, payload.weeklyLimit, payload.runLimit].some((value) => !Number.isFinite(value) || value <= 0)) {
+    throw gatewayError(401, "model_gateway_budget_scope_invalid", "Model budget scope authentication failed.");
+  }
+  return { runId: payload.runId, dailyLimit: payload.dailyLimit, weeklyLimit: payload.weeklyLimit, runLimit: payload.runLimit };
+}
+
+function consumeBudgetScope(request, caller, config) {
+  const scopes = [];
+  let requiresScope = false;
+  const scrub = (value) => {
+    if (typeof value !== "string") return value;
+    if (autopilotIntentPattern.test(value)) requiresScope = true;
+    autopilotIntentPattern.lastIndex = 0;
+    return value.replace(autopilotIntentPattern, "").replace(budgetMarkerPattern, (_match, encoded, signature) => {
+      scopes.push(verifiedBudgetScope(encoded, signature, caller, config));
+      return "";
+    });
+  };
+  const messages = request.messages.map((message) => ({ ...message, content: typeof message.content === "string"
+    ? scrub(message.content)
+    : Array.isArray(message.content) ? message.content.map((part) => ({ ...part, ...(typeof part.text === "string" ? { text: scrub(part.text) } : {}) })) : message.content }));
+  if (scopes.length > 1 && scopes.some((scope) => JSON.stringify(scope) !== JSON.stringify(scopes[0]))) {
+    throw gatewayError(400, "model_gateway_budget_scope_conflict", "Model request contains conflicting budget scopes.");
+  }
+  if (requiresScope && scopes.length === 0) {
+    throw gatewayError(401, "model_gateway_budget_scope_required", "Autopilot model requests require a signed budget scope.");
+  }
+  if (scopes[0]) {
+    if (caller.runId == null || ["runId", "dailyLimit", "weeklyLimit", "runLimit"].some((field) => caller[field] !== scopes[0][field])) {
+      throw gatewayError(401, "model_gateway_budget_scope_invalid", "Model budget marker does not match the bounded runtime token.");
+    }
+  }
+  return { request: { ...request, messages }, scope: scopes[0] ?? null };
+}
+
+function minimumPositive(...values) {
+  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return positive.length ? Math.min(...positive) : 0;
+}
 const allowedMessageFields = new Set([
   "role",
   "content",
@@ -395,7 +466,9 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         throw gatewayError(401, "model_gateway_token_invalid", "Model gateway authentication failed.");
       }
       const body = await readJsonBody(req, Math.max(1024, Number(config.modelGatewayMaxBodyBytes) || 1024 * 1024));
-      const normalized = normalizedRequest(body, config);
+      let normalized = normalizedRequest(body, config);
+      const scoped = consumeBudgetScope(normalized, caller, config);
+      normalized = scoped.request;
       if (config.requireDurableUsageLedger === true && !usageLedger) {
         throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
       }
@@ -405,9 +478,13 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
         reservationUserId = caller.userId;
         reservation = await usageLedger.reserveModel({
           id: randomUUID(), userId: caller.userId, projectId: caller.projectId, model: normalized.model,
+          runId: caller.runId ?? null,
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
-          estimatedCost: estimate.cost, dailyLimit: Number(config.userDailySpendLimit) || 0,
-          weeklyLimit: Number(config.userWeeklySpendLimit) || 0, now: requestStartedAt,
+          estimatedCost: estimate.cost,
+          dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+          weeklyLimit: minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+          runLimit: Number(caller.runLimit) || 0,
+          now: requestStartedAt,
         });
       }
       let upstream;

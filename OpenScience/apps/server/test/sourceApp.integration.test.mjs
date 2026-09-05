@@ -21,10 +21,12 @@ test("the actual upload path creates one durable source manifest and ingest job"
     sourceIngestionEnabled: true, sourceIngestionPollMs: 100, sourceIngestionLeaseMs: 1000 });
   const username = `source${randomUUID().slice(0, 8)}`;
   let user;
+  let listening = false;
   try {
     user = await app.store.createUser(username, "test-only-source-password", "Source fixture");
     const project = await app.store.defaultProject(await app.store.userById(user.id));
     const address = await app.listen(0, "127.0.0.1");
+    listening = true;
     const base = `http://127.0.0.1:${address.port}`;
     const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ username, password: "test-only-source-password" }) });
@@ -63,7 +65,42 @@ test("the actual upload path creates one durable source manifest and ingest job"
     assert.equal(jobs.rows[0].status, "succeeded");
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
-    await app.close();
+    if (listening) await app.close();
+    else await app.store.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("concurrent source registration preserves every path and assigns unique family versions", {
+  skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
+}, async () => {
+  const dataDir = await mkdtemp(path.join("/tmp", "evimed-source-concurrency-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,
+    databasePoolMax: 1, sourceIngestionEnabled: false });
+  const username = `source${randomUUID().slice(0, 8)}`;
+  let user;
+  try {
+    user = await app.store.createUser(username, "test-only-source-password", "Source concurrency fixture");
+    const project = await app.store.defaultProject(await app.store.userById(user.id));
+    const manifest = (values = {}) => ({ projectId: project.id, connector: { type: "upload", id: "library" },
+      path: "knowledge-base/paper.txt", size: 7, mtime: "2026-09-06T00:00:00.000Z", mimeType: "text/plain",
+      sha256: "a".repeat(64), ...values });
+    const same = await Promise.all([
+      app.sourceService.register(user.id, manifest()),
+      app.sourceService.register(user.id, manifest({ path: "knowledge-base/paper-copy.txt" })),
+    ]);
+    const exact = await app.sourceService.get(user.id, same[0].source.id);
+    assert.deepEqual(exact.payload.paths.sort(), ["knowledge-base/paper-copy.txt", "knowledge-base/paper.txt"]);
+
+    const versions = await Promise.all([
+      app.sourceService.register(user.id, manifest({ path: "knowledge-base/family.txt", sha256: "b".repeat(64) })),
+      app.sourceService.register(user.id, manifest({ path: "knowledge-base/family.txt", sha256: "c".repeat(64) })),
+    ]);
+    assert.deepEqual(versions.map((item) => item.source.payload.version).sort((a, b) => a - b), [1, 2]);
+  } finally {
+    if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
+    await app.store.close();
     await rm(dataDir, { recursive: true, force: true });
   }
 });

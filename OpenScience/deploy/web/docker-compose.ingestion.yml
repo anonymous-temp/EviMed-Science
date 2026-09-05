@@ -6,6 +6,14 @@ services:
       OPEN_SCIENCE_DOCUMENT_PARSER_URL: http://evimed-document-parser:8090
       OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
       OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS: ${OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS:-900000}
+      OPEN_SCIENCE_DOCUMENT_PARSER_STAGING_DIR: /var/lib/evimed-parser-staging
+      OPEN_SCIENCE_DOCUMENT_PARSER_UID: "1000"
+      OPEN_SCIENCE_DOCUMENT_PARSER_GID: "1000"
+      OPEN_SCIENCE_OPENLIST_URL: http://evimed-openlist:5244
+      OPEN_SCIENCE_OPENLIST_TOKEN_FILE: /run/secrets/openlist-token
+      OPEN_SCIENCE_OPENLIST_TENANT_ROOT: ${OPEN_SCIENCE_OPENLIST_TENANT_ROOT:-/tenants}
+      OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES: ${OPEN_SCIENCE_OPENLIST_MAX_DOWNLOAD_BYTES:-67108864}
+      OPEN_SCIENCE_REQUIRE_OPENLIST: "true"
       OPEN_SCIENCE_AUTOPILOT_ENABLED: "true"
       OPEN_SCIENCE_AUTOPILOT_POLL_MS: ${OPEN_SCIENCE_AUTOPILOT_POLL_MS:-1000}
       OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ${OPEN_SCIENCE_AUTOPILOT_LEASE_MS:-300000}
@@ -15,12 +23,23 @@ services:
         source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
         target: /run/secrets/document-parser-token
         read_only: true
+      - evimed-parser-staging:/var/lib/evimed-parser-staging
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENLIST_TOKEN_HOST_FILE:?set OPEN_SCIENCE_OPENLIST_TOKEN_HOST_FILE}
+        target: /run/secrets/openlist-token
+        read_only: true
     depends_on:
       evimed-document-parser:
         condition: service_healthy
+      evimed-openlist:
+        condition: service_healthy
+    networks:
+      - default
+      - ingestion-internal
 
   evimed-document-parser:
     image: ${OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE:-evimed-document-parser:3.4.5}
+    user: "1000:1000"
     build:
       context: ../..
       dockerfile: deploy/document-parser/Dockerfile
@@ -28,7 +47,7 @@ services:
       EVIMED_PARSER_DATA_ROOT: /data
       EVIMED_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
     volumes:
-      - open-science-data:/data:ro
+      - evimed-parser-staging:/data:ro
       - type: bind
         source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
         target: /run/secrets/document-parser-token
@@ -49,17 +68,18 @@ services:
     mem_limit: ${OPEN_SCIENCE_DOCUMENT_PARSER_MEMORY_LIMIT:-6g}
     cpus: ${OPEN_SCIENCE_DOCUMENT_PARSER_CPU_LIMIT:-4}
     pids_limit: 512
+    networks:
+      - ingestion-internal
     restart: unless-stopped
 
   evimed-openlist:
-    image: openlistteam/openlist:v4.2.5
+    image: openlistteam/openlist:v4.2.6
     environment:
-      PUID: "0"
-      PGID: "0"
+      PUID: "1000"
+      PGID: "1000"
       UMASK: "077"
     volumes:
       - evimed-openlist-data:/opt/openlist/data
-      - open-science-data:/sources:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5244/ping"]
       interval: 15s
@@ -68,7 +88,15 @@ services:
       start_period: 30s
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
     restart: unless-stopped
 
 volumes:
   evimed-openlist-data:
+  evimed-parser-staging:
+
+networks:
+  ingestion-internal:
+    internal: true

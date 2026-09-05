@@ -38,6 +38,7 @@
     "check:local-auth": "node scripts/ops/configure-local-auth.mjs --check",
     "configure:production-state": "node scripts/ops/configure-production-state.mjs",
     "check:production-state": "node scripts/ops/configure-production-state.mjs --check",
+    "check:relational-integrity": "node scripts/ops/check-relational-integrity.mjs --validate",
     "configure:oidc": "node scripts/ops/configure-oidc.mjs",
     "check:oidc": "node scripts/ops/configure-oidc.mjs --check",
     "release:manifest": "node scripts/ops/generate-release-manifest.mjs",

@@ -10,12 +10,18 @@ test("OpenList calls only the pinned list, get and link contracts", async (t) =>
     for await (const chunk of req) chunks.push(chunk);
     calls.push({ method: req.method, url: req.url, authorization: req.headers.authorization,
       body: chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : null });
+    if (req.url === "/p/research/%E8%AE%BA%E6%96%87.pdf") {
+      res.writeHead(200, { "content-type": "application/pdf", "content-length": "7" });
+      res.end("pdfdata");
+      return;
+    }
     res.writeHead(200, { "content-type": "application/json" });
     if (req.url === "/api/fs/list") res.end(JSON.stringify({ code: 200, data: { content: [
       { name: "论文.pdf", size: 1200, is_dir: false, modified: "2026-09-06T00:00:00Z", hash_info: { sha256: "a".repeat(64) } },
       { name: "资料", size: 0, is_dir: true, modified: "2026-09-06T00:00:00Z" },
     ], total: 2 } }));
-    else if (req.url === "/api/fs/get") res.end(JSON.stringify({ code: 200, data: { name: "论文.pdf", size: 1200, raw_url: "https://storage.example/file" } }));
+    else if (req.url === "/api/fs/get") res.end(JSON.stringify({ code: 200, data: { name: "论文.pdf", size: 1200,
+      modified: "2026-09-06T00:00:00Z", hash_info: { sha256: "a".repeat(64) }, raw_url: "https://storage.example/file" } }));
     else res.end(JSON.stringify({ code: 200, data: { url: "https://storage.example/file", header: { Referer: "https://storage.example" } } }));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -29,7 +35,9 @@ test("OpenList calls only the pinned list, get and link contracts", async (t) =>
   assert.equal(listed.nextCursor, null);
   assert.equal((await client.get("/research/论文.pdf")).name, "论文.pdf");
   assert.equal((await client.link("/research/论文.pdf")).url, "https://storage.example/file");
-  assert.deepEqual(calls.map((call) => call.url), ["/api/fs/list", "/api/fs/get", "/api/fs/link"]);
+  assert.equal((await client.stat("/research/论文.pdf")).providerHash, "sha256:" + "a".repeat(64));
+  assert.equal((await client.read("/research/论文.pdf")).toString(), "pdfdata");
+  assert.deepEqual(calls.map((call) => call.url), ["/api/fs/list", "/api/fs/get", "/api/fs/link", "/api/fs/get", "/api/fs/link", "/p/research/%E8%AE%BA%E6%96%87.pdf"]);
   assert.equal(calls.every((call) => call.authorization === "test-only-openlist-token"), true);
 });
 

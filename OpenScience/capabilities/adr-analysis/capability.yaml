@@ -16,6 +16,7 @@ persona: 你是药物警戒分析师。不成比例统计由确定性引擎计�
 safetyClass: clinical
 skills:
 - adr-analysis
+- autopilot-episode
 tools:
 - mcp__evimed__drug_safety_analysis
 - mcp__evimed__data_source_catalog
@@ -33,6 +34,8 @@ produces:
     required: true
   - path: signals.csv
     required: true
+  - path: agenda-delta.json
+    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable

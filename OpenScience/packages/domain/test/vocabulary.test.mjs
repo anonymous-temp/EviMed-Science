@@ -378,6 +378,11 @@ test("a claim cannot grade itself, and only a reproduced or refuter-tested direc
   const invented = validateAgendaClaim({ statement: "x", type: "direct", tier: "unverified", sources: ["a"], provenance: {}, effect: { measure: "composite-benefit-index" } });
   assert.ok(invented.issues.some((issue) => issue.code === "agenda_effect_measure_unknown"));
 
+  const valid = validateAgendaClaim({ id: "claim-one", statement: "x", type: "synthesized", tier: "unverified",
+    sources: ["doi:10.1000/example"], provenance: { episodeId: "episode-one", artifact: "report.md" },
+    confidence: "moderate", what_would_change: "A larger trial" });
+  assert.equal(valid.ok, true);
+
   assert.equal(digestPlacement({ tier: "reproduced", type: "derived" }).headline, true);
   assert.equal(digestPlacement({ tier: "gated", type: "direct", refutation: "stands" }).headline, true);
   assert.equal(digestPlacement({ tier: "gated", type: "synthesized", refutation: "stands" }).headline, false);

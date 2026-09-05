@@ -16,6 +16,7 @@ persona: 你是科研选题分析师。你把一个方向拆成可做的问题�
 safetyClass: general
 skills:
 - research-topic-selection
+- autopilot-episode
 tools:
 - mcp__evimed__research_topic_selection
 - mcp__evimed__biomedical_source_search
@@ -40,6 +41,8 @@ produces:
   - path: research-portfolio.json
     required: false
   - path: evidence-records.json
+    required: false
+  - path: agenda-delta.json
     required: false
   checks:
   - requiredOutputsExist

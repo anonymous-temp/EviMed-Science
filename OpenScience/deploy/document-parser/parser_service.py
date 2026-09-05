@@ -7,6 +7,7 @@ import secrets
 import stat
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,6 +21,7 @@ TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".tsv", ".json", ".yaml", ".yml", ".xm
 STRUCTURED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".docx", ".pptx", ".xlsx"}
 MAX_INPUT_BYTES = 2 * 1024 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
+MAX_UNITS = 100_000
 
 
 class ParseRequest(BaseModel):
@@ -139,7 +141,7 @@ def mineru_result(output: Path, file: Path, source_id: str) -> dict[str, Any]:
         if isinstance(parsed, list):
             content.extend(item for item in parsed if isinstance(item, dict))
     extension = file.suffix.lower()
-    unit_type = "page" if extension in {".pdf", ".docx"} else "slide" if extension == ".pptx" else "column" if extension == ".xlsx" else "chunk"
+    unit_type = "page" if extension == ".pdf" else "slide" if extension == ".pptx" else "column" if extension == ".xlsx" else "chunk"
     grouped: dict[int, list[dict[str, Any]]] = {}
     for item in content:
         raw_index = item.get("page_idx", item.get("pageIndex", 0))
@@ -147,12 +149,19 @@ def mineru_result(output: Path, file: Path, source_id: str) -> dict[str, Any]:
             index = max(0, int(raw_index))
         except (TypeError, ValueError):
             index = 0
+        if index >= MAX_UNITS:
+            raise RuntimeError("MinerU returned an out-of-range physical unit index.")
         grouped.setdefault(index, []).append(item)
-    if not grouped:
-        grouped[0] = []
+    expected = physical_unit_count(file)
+    if grouped:
+        expected = max(expected, max(grouped) + 1)
+    expected = max(1, expected)
+    if expected > MAX_UNITS:
+        raise RuntimeError("Document physical unit count exceeded its limit.")
     units = []
     facts = []
-    for position, items in sorted(grouped.items()):
+    for position in range(expected):
+        items = grouped.get(position, [])
         unit_id = f"{unit_type}-{position + 1}"
         item_ids = []
         for item_index, item in enumerate(items, start=1):
@@ -162,7 +171,7 @@ def mineru_result(output: Path, file: Path, source_id: str) -> dict[str, Any]:
             item_id = f"item-{hashlib.sha256(f'{source_id}:{unit_id}:{item_index}'.encode()).hexdigest()[:24]}"
             item_ids.append(item_id)
             facts.append({"id": item_id, "content": item_text[:4000], "provenance": {"unitId": unit_id, "span": str(item.get("bbox") or item.get("type") or "block")[:500]}})
-        units.append({"id": unit_id, "unitType": unit_type, "status": "extracted" if extracted_text else "no_content", "itemIds": item_ids})
+        units.append({"id": unit_id, "unitType": unit_type, "status": "extracted" if item_ids else "failed", "itemIds": item_ids})
     return {
         "protocolVersion": PROTOCOL_VERSION,
         "extractor": {"name": "mineru", "version": MINERU_VERSION, "parser": "mineru"},
@@ -172,6 +181,25 @@ def mineru_result(output: Path, file: Path, source_id: str) -> dict[str, Any]:
         "methods": [],
         "text": extracted_text or "No extractable text.",
     }
+
+
+def physical_unit_count(file: Path) -> int:
+    extension = file.suffix.lower()
+    if extension == ".pdf":
+        from pypdf import PdfReader
+        return len(PdfReader(str(file), strict=False).pages)
+    if extension in {".pptx", ".xlsx", ".docx"}:
+        with zipfile.ZipFile(file) as archive:
+            names = archive.namelist()
+            if extension == ".pptx":
+                return sum(1 for name in names if name.startswith("ppt/slides/slide") and name.endswith(".xml"))
+            if extension == ".xlsx":
+                return sum(1 for name in names if name.startswith("xl/worksheets/sheet") and name.endswith(".xml"))
+            # DOCX has no stable physical pages until a layout engine renders
+            # it. MinerU's emitted positions are therefore treated as chunks,
+            # rather than inventing page coverage from optional XML hints.
+            return 1
+    return 1
 
 
 def parse_document(request: ParseRequest, *, data_root: Path, chunk_chars: int = 8000, timeout: int = 900) -> dict[str, Any]:

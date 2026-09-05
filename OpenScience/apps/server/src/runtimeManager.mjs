@@ -33,6 +33,7 @@ import {
   assertProjectUsageWithinQuota,
   ensureDir,
   randomId,
+  safeId,
   readBody,
   readTextFileNoFollow,
   sendJson,
@@ -1215,6 +1216,7 @@ export function issueModelGatewayRuntimeToken({
   secret,
   userId,
   projectId,
+  budgetScope = null,
   nowSeconds = Math.floor(Date.now() / 1000),
   jti = randomId("mgw_"),
 }) {
@@ -1235,7 +1237,16 @@ export function issueModelGatewayRuntimeToken({
     projectId,
     iat: issuedAt,
     jti,
+    ...(budgetScope ? {
+      runId: safeId(budgetScope.runId, "bounded run id"),
+      dailyLimit: Number(budgetScope.dailyLimit),
+      weeklyLimit: Number(budgetScope.weeklyLimit),
+      runLimit: Number(budgetScope.runLimit),
+    } : {}),
   };
+  if (budgetScope && [payload.dailyLimit, payload.weeklyLimit, payload.runLimit].some((value) => !Number.isFinite(value) || value <= 0)) {
+    throw new HttpError(500, "runtime_model_gateway_scope_invalid", "Model gateway budget scope is invalid.");
+  }
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signed = `${header}.${body}`;
   return `${signed}.${workloadSignature(signed, signingSecret)}`;
@@ -1271,7 +1282,8 @@ export function verifyModelGatewayRuntimeToken(token, {
       payload == null ||
       typeof payload !== "object" ||
       Array.isArray(payload) ||
-      Object.keys(payload).sort().join(",") !== "aud,iat,jti,projectId,userId,v" ||
+      !["aud,iat,jti,projectId,userId,v", "aud,dailyLimit,iat,jti,projectId,runId,runLimit,userId,v,weeklyLimit"]
+        .includes(Object.keys(payload).sort().join(",")) ||
       payload.v !== 1 ||
       payload.aud !== modelGatewayAudience ||
       (userId != null && payload.userId !== userId) ||
@@ -1284,6 +1296,10 @@ export function verifyModelGatewayRuntimeToken(token, {
       typeof payload.jti !== "string" ||
       !/^[A-Za-z0-9_-]{3,256}$/.test(payload.jti)
     ) throw modelGatewayTokenError();
+    if (payload.runId != null && (typeof payload.runId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(payload.runId)
+      || [payload.dailyLimit, payload.weeklyLimit, payload.runLimit].some((value) => !Number.isFinite(value) || value <= 0))) {
+      throw modelGatewayTokenError();
+    }
     const now = Math.floor(Number(nowSeconds));
     if (!Number.isSafeInteger(now) || payload.iat > now + 30) throw modelGatewayTokenError();
     return payload;
@@ -1705,14 +1721,14 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
  * @param {any} config
  * @param {any} project
  * @param {any} plan
- * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow }} [options]
+ * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow, budgetScope?: Record<string, any>|null }} [options]
  * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null, browserSessionSecret?: string | null }>}
  */
 export async function syncRuntimeDshProfile(
   config,
   project,
   plan,
-  { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow } = {},
+  { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow, budgetScope = null } = {},
 ) {
   if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null, token: null, payload: null, browserSessionSecret: null };
   if (!plan.dshHomeDir || !plan.proxyWorkspaceDir) {
@@ -1736,6 +1752,7 @@ export async function syncRuntimeDshProfile(
     projectId: String(project.id),
     nowSeconds,
     jti,
+    budgetScope,
   });
   // Verified here because the caller needs the payload to register the token as
   // active, and the gateway rejects any token whose jti it has not been told
@@ -2228,6 +2245,7 @@ export class RuntimeManager {
     this.runtimeQuotaStops = new Map();
     this.evimedWorkloadRefreshTimers = new Map();
     this.activeModelGatewayTokens = new Map();
+    this.pendingModelGatewayScopes = new Map();
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
@@ -2443,6 +2461,48 @@ export class RuntimeManager {
     return `${project.userId}:${project.id}`;
   }
 
+  boundedRuntimeScope(project) {
+    const key = this.key(project);
+    return this.runtimes.get(key)?.modelGatewayScope ?? this.pendingModelGatewayScopes.get(key) ?? null;
+  }
+
+  assertInteractiveRuntimeAvailable(project) {
+    if (this.boundedRuntimeScope(project)) {
+      throw new HttpError(423, "runtime_reserved_for_autopilot", "This project runtime is completing bounded proactive research.");
+    }
+  }
+
+  async reserveBoundedRuntimeSession(project, budgetScope) {
+    const key = this.key(project);
+    if (this.runtimes.has(key) || this.starts.has(key) || this.pendingModelGatewayScopes.has(key)) {
+      throw new HttpError(409, "runtime_busy", "The project runtime is already in use; proactive research will retry later.");
+    }
+    const scope = {
+      runId: safeId(budgetScope?.runId, "bounded run id"),
+      dailyLimit: Number(budgetScope?.dailyLimit), weeklyLimit: Number(budgetScope?.weeklyLimit), runLimit: Number(budgetScope?.runLimit),
+    };
+    if ([scope.dailyLimit, scope.weeklyLimit, scope.runLimit].some((value) => !Number.isFinite(value) || value <= 0)) {
+      throw new HttpError(400, "runtime_model_gateway_scope_invalid", "A bounded runtime needs positive spending limits.");
+    }
+    this.pendingModelGatewayScopes.set(key, scope);
+    try {
+      const runtime = await this.start(project);
+      if (runtime.modelGatewayScope?.runId !== scope.runId) throw new HttpError(500, "runtime_model_gateway_scope_invalid", "Bounded runtime scope was not applied.");
+      return { id: randomId("session_"), kernel: RUNTIME_KERNEL_NAME };
+    } catch (error) {
+      this.pendingModelGatewayScopes.delete(key);
+      throw error;
+    }
+  }
+
+  async endBoundedRuntime(project, runId) {
+    const scope = this.boundedRuntimeScope(project);
+    if (scope?.runId !== runId) return false;
+    this.pendingModelGatewayScopes.delete(this.key(project));
+    await this.stop(project);
+    return true;
+  }
+
   async start(project) {
     const key = this.key(project);
     await this.runtimeQuotaStops.get(key);
@@ -2461,9 +2521,11 @@ export class RuntimeManager {
     this.enforceRuntimeCapacity(project);
 
     const started = (async () => {
+      const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
-        const runtime = await this.startKernel(project);
+        const runtime = await this.startKernel(project, modelGatewayScope);
         this.runtimes.set(key, runtime);
+        this.pendingModelGatewayScopes.delete(key);
         this.scheduleEviMedWorkloadRefresh(project, runtime);
         this.scheduleIdleStop(project);
         this.scheduleQuotaMonitor(project);
@@ -2496,8 +2558,10 @@ export class RuntimeManager {
         pid: null,
         exitedAt: null,
         project,
+        modelGatewayScope,
       };
       this.runtimes.set(key, runtime);
+      this.pendingModelGatewayScopes.delete(key);
       this.scheduleIdleStop(project);
       await appendRuntimeEvent(project, "started", {
         kind: "mock",
@@ -2533,7 +2597,7 @@ export class RuntimeManager {
     }
   }
 
-  async startKernel(project) {
+  async startKernel(project, modelGatewayScope = null) {
     const key = this.key(project);
     const port = await freePort();
     // Only the controller protocol still carries this: its `startRuntime` field
@@ -2622,7 +2686,7 @@ export class RuntimeManager {
       // (read-only, shared across every project), so there is nothing to copy
       // here. The retired kernel needed three copying passes at this point;
       // they are gone with it.
-      const dshSync = await syncRuntimeDshProfile(this.config, project, plan);
+      const dshSync = await syncRuntimeDshProfile(this.config, project, plan, { budgetScope: modelGatewayScope });
       mcpSync = {
         copied: 0,
         configured: dshSync.configured ? 1 : 0,
@@ -2762,6 +2826,12 @@ export class RuntimeManager {
       workloadTokenRefreshMs: mcpSync.workloadTokenRefreshMs,
       modelGatewayToken: modelGatewaySync.token,
       modelGatewayTokenJti: modelGatewaySync.payload?.jti ?? null,
+      modelGatewayScope: modelGatewaySync.payload?.runId ? {
+        runId: modelGatewaySync.payload.runId,
+        dailyLimit: modelGatewaySync.payload.dailyLimit,
+        weeklyLimit: modelGatewaySync.payload.weeklyLimit,
+        runLimit: modelGatewaySync.payload.runLimit,
+      } : null,
       exitedAt: null,
       spawnError: null,
       project,
@@ -3203,6 +3273,23 @@ export class RuntimeManager {
     }
   }
 
+  /** Cancel one DSH session without stopping other interactive work in the project. */
+  async cancelRuntimeSession(project, sessionId) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return false;
+    this.beginProxy(project);
+    try {
+      await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session/cancel", { request: { sessionId: safeId(sessionId, "session id") } }, signal),
+        "runtime_cancel_unavailable",
+        "Runtime session cancellation did not answer in time.",
+      );
+      return true;
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
   /**
    * Sends a prompt to a session, creating it if the kernel has not seen it yet.
    *
@@ -3213,21 +3300,22 @@ export class RuntimeManager {
    * session start, where it becomes a first-class logged message.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null }} input
+   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, strictContext?: boolean, allowBounded?: boolean }} input
    * @returns {Promise<void>}
    */
-  async dispatchPrompt(project, sessionId, { text, system = null, runId = null }) {
+  async dispatchPrompt(project, sessionId, { text, system = null, runId = null, strictContext = false, allowBounded = false }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
       error.definitivelyRejected = true;
       throw error;
     }
+    if (runtime.modelGatewayScope && !allowBounded) this.assertInteractiveRuntimeAvailable(project);
     if (typeof system === "string" && system.trim()) {
-      await this.writeRunContextFile(project, system);
+      await this.writeRunContextFile(project, system, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
     if (typeof runId === "string" && runId) {
-      await this.writeRunBriefIndex(project, runId);
+      await this.writeRunBriefIndex(project, runId, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
     await this.enforceProjectQuota(project);
     this.beginProxy(project);
@@ -3273,15 +3361,17 @@ export class RuntimeManager {
    * @param {Record<string, any>} project @param {string} context
    * @returns {Promise<void>}
    */
-  async writeRunContextFile(project, context) {
+  async writeRunContextFile(project, context, { sessionId = null, required = false } = {}) {
+    const write = async () => {
+      const session = sessionId == null ? null : safeId(sessionId, "session id");
+      const relative = session ? `.evimed-brief/sessions/${session}/context.md` : ".evimed-brief/context.md";
+      const file = path.join(project.workspaceDir, relative);
+      await writeFileAtomicNoFollow(project.workspaceDir, file, context, { encoding: "utf8", mode: 0o444 });
+    };
+    if (required) return write();
     // isolated: evimed_run_context_write_failures_total
     try {
-      const briefDir = path.join(project.workspaceDir, ".evimed-brief");
-      await fs.mkdir(briefDir, { recursive: true, mode: 0o700 });
-      await writeFileAtomicNoFollow(project.workspaceDir, path.join(briefDir, "context.md"), context, {
-        encoding: "utf8",
-        mode: 0o444,
-      });
+      await write();
     } catch { /* isolated: evimed_run_context_write_failures_total */ }
   }
 
@@ -3301,16 +3391,26 @@ export class RuntimeManager {
    * @param {Record<string, any>} project @param {string} runId
    * @returns {Promise<void>}
    */
-  async writeRunBriefIndex(project, runId) {
+  async writeRunBriefIndex(project, runId, { sessionId = null, required = false } = {}) {
+    const write = async () => {
+      const session = sessionId == null ? null : safeId(sessionId, "session id");
+      const relative = session ? `.evimed-brief/sessions/${session}/index.json` : workspaceLayout.briefIndexFile;
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), `${JSON.stringify({ runId }, null, 2)}\n`, {
+        encoding: "utf8", mode: 0o444,
+      });
+    };
+    if (required) return write();
     // isolated: evimed_run_brief_index_write_failures_total
     try {
-      const briefDir = path.join(project.workspaceDir, workspaceLayout.briefDir);
-      await fs.mkdir(briefDir, { recursive: true, mode: 0o700 });
-      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.briefIndexFile), `${JSON.stringify({ runId }, null, 2)}\n`, {
-        encoding: "utf8",
-        mode: 0o444,
-      });
+      await write();
     } catch { /* isolated: evimed_run_brief_index_write_failures_total */ }
+  }
+
+  /** Reserve a control-plane session id without starting it in DSH. The caller
+   * can then place session-bound context before the first session/create. */
+  async reserveRuntimeSession(project) {
+    await this.start(project);
+    return { id: randomId("session_"), kernel: RUNTIME_KERNEL_NAME };
   }
 
   notifyRuntimeStop(project, runtime, status) {
@@ -3550,7 +3650,9 @@ export class RuntimeManager {
    * @returns {Promise<{ id: string, kernel: string }>}
    */
   async createRuntimeSession(project) {
+    this.assertInteractiveRuntimeAvailable(project);
     const runtime = await this.start(project);
+    if (runtime.modelGatewayScope) this.assertInteractiveRuntimeAvailable(project);
     this.beginProxy(project);
     try {
       const value = await this.withRuntimeDeadline(

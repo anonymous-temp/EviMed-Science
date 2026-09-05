@@ -32,11 +32,14 @@ class MemoryJobs {
   }
 }
 
-function fixture() {
+function fixture({ notificationCreate = null } = {}) {
   const documents = new MemoryDocuments();
   const jobs = new MemoryJobs();
   const usage = { assertWithinLimits: async () => ({ allowed: true }) };
-  const notifications = { created: [], create: async (userId, input) => { notifications.created.push({ userId, input }); } };
+  const notifications = { created: [], create: async (userId, input) => {
+    if (notificationCreate) return notificationCreate(userId, input, notifications);
+    notifications.created.push({ userId, input });
+  } };
   const service = new AutopilotService({ documents, jobs, usage, notifications,
     now: () => new Date("2026-09-06T01:00:00.000Z"), id: (() => { let i = 0; return (prefix) => `${prefix}${++i}`; })() });
   return { documents, jobs, usage, notifications, service };
@@ -70,6 +73,7 @@ test("starting and scheduling creates one idempotent bounded episode per day", a
   assert.equal(first.episode.payload.budgetCny <= active.payload.maxEpisodeCny, true);
   assert.equal(first.episode.payload.status, "queued");
   assert.ok(first.episode.payload.prompt.includes("heart failure"));
+  assert.ok(first.episode.payload.prompt.includes(`Episode ID: ${first.episode.id}.`));
 });
 
 test("inactivity, repeated failure and the stop switch prevent further spending", async () => {
@@ -112,4 +116,83 @@ test("a digest separates headlines from leads and records user decisions", async
   const decision = await service.decide("user-one", digest.id, { action: "reject", claimId: "claim-two", note: "Out of scope" });
   assert.equal(decision.payload.decisions[0].action, "reject");
   assert.equal(decision.payload.decisions[0].claimId, "claim-two");
+});
+
+test("a completed episode admits only contract-valid claims tied to accepted run artifacts", async () => {
+  const { service } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const scheduled = await service.schedule("user-one", active.id, { date: "2026-09-06" });
+  await service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: "run-one", sessionId: "session-one" });
+  const report = "reports/evidence.md";
+  const digest = await service.completeRun("user-one", {
+    projectId: "project-one", runId: "run-one", status: "succeeded", deltaSchemaVersion: 1,
+    artifacts: [report, "agenda-delta.json"], costCny: 1.25,
+    claims: [
+      { id: "accepted", statement: "The cited trial reported the endpoint.", type: "direct", tier: "unverified",
+        sources: ["doi:10.1000/example"], provenance: { episodeId: scheduled.episode.id, artifact: report } },
+      { id: "self-graded", statement: "This claim graded itself.", type: "direct", tier: "reproduced",
+        sources: ["doi:10.1000/example"], provenance: { episodeId: scheduled.episode.id, artifact: report } },
+      { id: "foreign-artifact", statement: "This points outside the accepted receipt.", type: "direct", tier: "unverified",
+        sources: ["doi:10.1000/example"], provenance: { episodeId: scheduled.episode.id, artifact: "scratch.txt" } },
+    ],
+  });
+  assert.equal(digest.payload.headlines.length, 0);
+  assert.equal(digest.payload.leads.length, 1);
+  assert.equal(digest.payload.leads[0].tier, "gated");
+  const episode = await service.getEpisode("user-one", scheduled.episode.id);
+  assert.equal(episode.payload.rejectedClaims.length, 2);
+  assert.equal(episode.payload.costCny, 1.25);
+});
+
+test("stopping an agenda durably cancels its running sessions without replacing work", async () => {
+  const { service, jobs } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const scheduled = await service.schedule("user-one", active.id, { date: "2026-09-06" });
+  await service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: "run-stop", sessionId: "session-stop" });
+  const currentAgenda = await service.get("user-one", active.id);
+  await service.stop("user-one", currentAgenda.id, { expectedRevision: currentAgenda.revision });
+  const episode = await service.getEpisode("user-one", scheduled.episode.id);
+  assert.equal(episode.payload.status, "canceled");
+  assert.equal(episode.payload.cancellation.status, "queued");
+  const cancellation = jobs.items.find((job) => job.payload.action === "cancel");
+  assert.equal(cancellation.payload.sessionId, "session-stop");
+});
+
+test("completion resumes after digest notification fails without duplicating the outcome", async () => {
+  let attempts = 0;
+  const { service, documents } = fixture({ notificationCreate: async (userId, input, notifications) => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("inbox offline");
+    notifications.created.push({ userId, input });
+  } });
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const scheduled = await service.schedule("user-one", active.id, { date: "2026-09-06" });
+  await service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: "run-recover", sessionId: "session-recover" });
+  const input = { projectId: "project-one", runId: "run-recover", status: "succeeded", deltaSchemaVersion: 1,
+    artifacts: ["report.md"], costCny: 2, claims: [] };
+  await assert.rejects(() => service.completeRun("user-one", input), /inbox offline/);
+  assert.equal((await service.getEpisode("user-one", scheduled.episode.id)).payload.status, "verifying");
+  const digest = await service.completeRun("user-one", input);
+  assert.ok(digest.id.startsWith("digest-"));
+  assert.equal((await service.getEpisode("user-one", scheduled.episode.id)).payload.status, "merged");
+  const agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.outcomes.filter((outcome) => outcome.episodeId === scheduled.episode.id).length, 1);
+  assert.equal((await documents.list("user-one", "digest", { projectId: "project-one" })).items.length, 1);
+});
+
+test("a failed episode with terminal completion evidence cannot be rebound as running", async () => {
+  const { service, documents } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const scheduled = await service.schedule("user-one", active.id, { date: "2026-09-06" });
+  const failed = await documents.put("user-one", "episode", scheduled.episode.id, {
+    ...scheduled.episode.payload, status: "failed", runId: "run-terminal", digestId: "digest-terminal",
+  }, { expectedRevision: scheduled.episode.revision, projectId: "project-one" });
+  assert.equal(failed.payload.status, "failed");
+  await assert.rejects(() => service.markEpisodeDispatched("user-one", failed.id, {
+    runId: "run-terminal", sessionId: "session-terminal",
+  }), { code: "autopilot_episode_state_conflict" });
 });

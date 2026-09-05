@@ -29,6 +29,7 @@ persona: |
 safetyClass: clinical
 skills:
 - manuscript-support
+- autopilot-episode
 - citation-integrity
 - manuscript-humanize
 - biomedical-database-search
@@ -74,6 +75,8 @@ produces:
     required: false
   - path: delivery-summary.md
     required: true
+  - path: agenda-delta.json
+    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable

@@ -490,6 +490,7 @@ test("a capability that writes files declares its skills, its tools and every ou
   const clinicalEvidence = catalogue.find((entry) => entry.id === "clinical-evidence-synthesis").manifest;
   assert.deepEqual(clinicalEvidence.skills, [
     "clinical-evidence-synthesis",
+    "autopilot-episode",
     "deep-research",
     "biomedical-database-search",
     "citation-integrity",

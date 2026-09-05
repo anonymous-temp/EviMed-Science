@@ -5,6 +5,7 @@ import { SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
   listSources: vi.fn(), overrideSource: vi.fn(), retrySource: vi.fn(), cancelSource: vi.fn(), removeSource: vi.fn(),
+  browseOpenList: vi.fn(), importOpenListSource: vi.fn(),
 }));
 
 vi.mock("@/lib/sourceClient", () => mocks);
@@ -19,7 +20,7 @@ const source = {
     paths: ["knowledge-base/研究方案.docx"], status: "needs_attention", docType: "research-protocol", depth: "deep",
     version: 2, reasons: ["The file name identifies a protocol, SOP or checklist."],
     valueVector: { profileValue: 0.7, methodValue: 0.9, knowledgeValue: 0.6, evidenceValue: 0.4, dataValue: 0.1 },
-    coverage: { total: 20, accounted: 20, extracted: 18, indexedOnly: 0, noContent: 0, failed: 2, percent: 100, omissionRate: 0.1 },
+    coverage: { total: 20, accounted: 20, accountedPercent: 100, extracted: 18, indexedOnly: 0, noContent: 0, failed: 2, percent: 90, omissionRate: 0.1 },
     outputs: { summary: "A randomized research protocol.", facts: 8, methods: 2, artifactPath: "knowledge-base/.evimed-derived/source-one/index.md" },
   },
 };
@@ -38,7 +39,7 @@ describe("SourcesPage", () => {
     render(<SourcesPage />);
     expect(await screen.findByRole("heading", { name: "资料整理台" })).toBeInTheDocument();
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
-    expect(screen.getByText("覆盖 100% · 遗漏 10%")).toBeInTheDocument();
+    expect(screen.getByText("处理成功 90% · 已逐单元核对 100% · 遗漏 10%")).toBeInTheDocument();
     expect(screen.getByText("事实 8 · 方法线索 2")).toBeInTheDocument();
     expect(screen.getByText(/protocol, SOP or checklist/)).toBeInTheDocument();
     expect(screen.getByText(/需要你看一下/)).toBeInTheDocument();

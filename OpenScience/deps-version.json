@@ -19,10 +19,10 @@
     "sourceRevision": "b41c8996a8dcb9df81998cced68d11457ce950c3"
   },
   "openlist": {
-    "version": "4.2.5",
+    "version": "4.2.6",
     "image": "openlistteam/openlist",
     "contractDir": "packages/contracts/openlist",
-    "notes": "Self-hosted drive aggregator; latest release v4.2.5 (2026-08-07). We call exactly three endpoints. The contract test asserts the pin's discipline only — the service is not deployed here yet, so the endpoint assertions land alongside the deployment, in the shape the dsh test already uses.",
+    "notes": "Self-hosted drive aggregator; v4.2.6 (2026-09-01), including access-control and authentication fixes from the current stable release. EviMed uses the pinned list, get and link contracts, then reads bytes through OpenList's same-origin proxy without following a provider-controlled redirect. The service runs with an isolated data volume and tenant-prefixed paths.",
     "githubRepo": "OpenListTeam/OpenList"
   },
   "mineru": {

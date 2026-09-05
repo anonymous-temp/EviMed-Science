@@ -1753,6 +1753,39 @@ test("dispatchPrompt materializes the research context beside the run id", async
   assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "context.md"), "utf8"), "# Brief\n");
 });
 
+test("a reserved session receives strict context before its first DSH create", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  const session = await manager.reserveRuntimeSession(project);
+  assert.equal(await manager.sessionStatus(project, session.id), "idle");
+  await manager.dispatchPrompt(project, session.id, {
+    text: "bounded episode", system: "# Session context\n", runId: "run_strict_1", strictContext: true,
+  });
+  const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
+  assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), { runId: "run_strict_1" });
+  assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Session context\n");
+});
+
+test("a bounded runtime excludes interactive prompts until its episode releases the runtime", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  const session = await manager.reserveBoundedRuntimeSession(project, {
+    runId: "episode_bound", dailyLimit: 20, weeklyLimit: 80, runLimit: 8,
+  });
+  assert.equal(manager.boundedRuntimeScope(project).runId, "episode_bound");
+  await assert.rejects(() => manager.createRuntimeSession(project), { code: "runtime_reserved_for_autopilot" });
+  await assert.rejects(() => manager.dispatchPrompt(project, session.id, { text: "interactive" }), { code: "runtime_reserved_for_autopilot" });
+  await manager.dispatchPrompt(project, session.id, { text: "autopilot", allowBounded: true });
+  assert.equal(await manager.endBoundedRuntime(project, "episode_bound"), true);
+  assert.equal(manager.boundedRuntimeScope(project), null);
+});
+
 test("the kernel spills onto the project volume, not into the 64 MiB tmpfs", async () => {
   // `--tmpfs /tmp:...size=64m` is a security bound. Both spill writers resolve
   // their directory from `os.tmpdir()` — `dsh-spill-local` writes the FULL text
