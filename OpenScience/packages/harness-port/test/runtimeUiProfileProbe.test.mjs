@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -25,7 +25,7 @@ test('the profile probe reports real installed client metadata as JSON without o
     await writeFile(path.join(packageDir, 'package.json'), JSON.stringify(pkg));
     await writeFile(path.join(packageDir, 'dist/client.js'), await readFile(new URL('dist/client.js', socketRoot)));
     assert.deepEqual(run(), {
-      discovered: true, clientPath: path.join(packageDir, 'dist/client.js'), bootGraphIncludesClient: true,
+      discovered: true, clientPath: await realpath(path.join(packageDir, 'dist/client.js')), bootGraphIncludesClient: true,
     });
   } finally { await rm(profileDir, { recursive: true, force: true }); }
 });
