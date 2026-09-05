@@ -195,3 +195,27 @@ describe("native frame identity and readiness", () => {
   });
 
 });
+
+it("a new valid navigation recovers automatically after an unknown-session error", async () => {
+  const nextBinding = { ...binding, frameId: "frame-b", frameUrl: "https://host.example:8443/__evimed/f/frame-b/" };
+  mocks.create.mockResolvedValueOnce(binding).mockResolvedValueOnce(nextBinding);
+  const { container } = mount(null, "/app/chat/session-missing");
+  await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+  const oldFrame = container.querySelector("iframe")!;
+  const sent = vi.spyOn(oldFrame.contentWindow!, "postMessage");
+  emit(oldFrame, { type: "evimed.runtime-ui.ready" });
+  await waitFor(() => expect(sent).toHaveBeenCalled());
+  emit(oldFrame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: sent.mock.calls[0][0].requestId, ok: false });
+  expect(await screen.findByRole("alert")).toHaveTextContent("研究任务暂时无法打开");
+  await userEvent.click(screen.getByRole("button", { name: "Open B" }));
+  await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(container.querySelector("iframe")?.src).toBe(nextBinding.frameUrl));
+  const nextFrame = container.querySelector("iframe")!;
+  const nextSent = vi.spyOn(nextFrame.contentWindow!, "postMessage");
+  emit(nextFrame, { type: "evimed.runtime-ui.ready", frameId: "frame-b" });
+  await waitFor(() => expect(nextSent).toHaveBeenCalled());
+  const command = nextSent.mock.calls[0][0];
+  expect(command.intent).toMatchObject({ kind: "open", sessionId: "session-b" });
+  emit(nextFrame, { type: "evimed.runtime-ui.ack", frameId: "frame-b", seq: 2, requestId: command.requestId, ok: true, sessionId: "session-b" });
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+});
