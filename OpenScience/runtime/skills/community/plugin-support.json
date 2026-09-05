@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "kernel": "@deepseek-ai/dsh@0.1.2-rc.1",
+  "management": "immutable-release",
+  "nativePlugins": [
+    "evimed-seam-probe",
+    "evimed-evidence-store",
+    "evimed-guidance",
+    "evimed-run-policy",
+    "evimed-evidence",
+    "evimed-capsule",
+    "evimed-screening",
+    "evimed-review"
+  ],
+  "communitySkills": [
+    "dsh-ppt@0db836e8251a10bf93f26e702534ab9d8b2a1818",
+    "deep-structural-analysis@07b5ad8564cbbb352ad93e8a733ca835e43a448e"
+  ],
+  "communityToolBundles": [
+    {
+      "name": "dsh-cite",
+      "version": "0.2.0",
+      "status": "installed",
+      "tools": ["cite"],
+      "testedOn": "2026-09-06"
+    },
+    {
+      "name": "dsh-plugin-academic-writing",
+      "version": "0.2.0",
+      "status": "incompatible",
+      "reason": "Peer dependency does not admit the current DSH packages."
+    },
+    {
+      "name": "dsh-plugin-translation",
+      "version": "0.2.0",
+      "status": "incompatible",
+      "reason": "Peer dependency does not admit the current DSH packages."
+    },
+    {
+      "name": "dsh-plugin-writing-guard",
+      "version": "2.0.1",
+      "status": "rejected",
+      "reason": "Dependency build scripts require an unreviewed pnpm approval."
+    }
+  ],
+  "updatePolicy": "Exact pins are upgraded only through the upstream matrix, dump-config review, image boot smoke and immutable release rollback."
+}

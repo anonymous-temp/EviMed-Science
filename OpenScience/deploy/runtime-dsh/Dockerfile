@@ -440,7 +440,7 @@ COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-con
 RUN set -eux; \
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
   cp /opt/evimed/profile-pnpm-workspace.yaml "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" file:/opt/evimed/socket; \
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "dsh-cite@0.2.0" file:/opt/evimed/socket; \
   test -n "$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -name "*.node" -path "*node-pty*" -print -quit)"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
   test -s /opt/evimed/dump-config.baseline.json; \

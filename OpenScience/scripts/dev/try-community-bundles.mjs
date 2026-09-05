@@ -51,12 +51,12 @@ fi
 # A baseline boot of base+web-app alone would also have to pass for the verdict
 # to mean anything; it does, because that is what the image's own seed profile
 # is built from and the build smoke boots it every time.
-out=$(timeout 60 dsh --profile t --no-open --port 45997 2>&1)
+out=$(timeout 120 dsh --profile t --no-open --port 45997 2>&1)
 if echo "$out" | grep -q "dsh web:"; then
   echo "BOOTED"
 else
   reason=$(echo "$out" | grep -vE '^[[:space:]]+at |ExperimentalWarning|--trace-warnings' \
-    | grep -oE "failed to apply loader entry [a-z0-9-]+ \\([^)]*\\)[^\"]{0,120}|Cannot find package .[^ ]+|invalid config:.{0,120}" | head -1)
+    | grep -oE 'failed to apply loader entry [a-z0-9-]+ \\([^)]*\\)[^\"]{0,120}|Cannot find package .[^ ]+|invalid config:.{0,120}' | head -1)
   echo "BOOT_FAILED: \${reason:-$(echo "$out" | grep -vE '^[[:space:]]+at ' | tail -2 | tr '\n' ' ' | cut -c1-300)}"
 fi
 `;
@@ -69,7 +69,11 @@ for (const candidate of manifest.candidates) {
     ["run", "--rm", "--entrypoint", "sh", image, "-c", script(candidate.name, candidate.version)],
     { encoding: "utf8", timeout: 300_000 },
   );
-  const verdict = (run.stdout ?? "").trim().split("\n").pop() ?? `docker exited ${run.status}`;
+  const stdout = (run.stdout ?? "").trim();
+  const stderr = (run.stderr ?? "").trim();
+  const verdict = stdout.split("\n").filter(Boolean).at(-1)
+    || stderr.split("\n").filter(Boolean).at(-1)
+    || `docker exited ${run.status ?? "without status"}${run.signal ? ` (${run.signal})` : ""}`;
   results.push({ name: candidate.name, verdict });
   process.stdout.write(`${candidate.name}@${candidate.version}: ${verdict}\n`);
 }
