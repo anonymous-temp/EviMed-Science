@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CapsulesPage } from "./CapsulesPage";
@@ -46,4 +46,28 @@ it("loads recoverable trash and restores a capsule after a new visit", async () 
   await userEvent.click(screen.getByRole("radio", { name: "回收站" }));
   await userEvent.click(await screen.findByRole("button", { name: "恢复胶囊" }));
   await waitFor(() => expect(api.restoreCapsule).toHaveBeenCalledWith(capsule.id, 2));
+});
+
+it("keeps an edited draft visible when a revision save fails", async () => {
+  vi.mocked(api.updateCapsuleEntry).mockRejectedValue(new Error("Revision conflict"));
+  render(<CapsulesPage />);
+  await userEvent.click(await screen.findByRole("button", { name: "修订" }));
+  await userEvent.clear(screen.getByLabelText("修订条目"));
+  await userEvent.type(screen.getByLabelText("修订条目"), "保留尚未保存的修订");
+  await userEvent.click(screen.getByRole("button", { name: "保存修订" }));
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByLabelText("修订条目")).toHaveValue("保留尚未保存的修订");
+});
+
+it("does not replace trash with a late response for the previous view", async () => {
+  let complete!: (value: api.ProductPage<api.CapsuleRecord>) => void;
+  vi.mocked(api.listCapsules).mockImplementation(async ({ deleted } = {}) => deleted
+    ? { items: [{ ...capsule, payload: { ...capsule.payload, title: "待恢复的方法" }, deletedAt: capsule.updatedAt }], nextCursor: null }
+    : new Promise((resolve) => { complete = resolve; }));
+  render(<CapsulesPage />);
+  await userEvent.click(screen.getByRole("radio", { name: "回收站" }));
+  expect(await screen.findByRole("button", { name: "待恢复的方法" })).toBeInTheDocument();
+  await act(async () => { complete({ items: [{ ...capsule, payload: { ...capsule.payload, title: "陈旧的方法" } }], nextCursor: null }); });
+  expect(screen.queryByRole("button", { name: "陈旧的方法" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "待恢复的方法" })).toBeInTheDocument();
 });
