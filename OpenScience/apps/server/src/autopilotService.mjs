@@ -123,6 +123,28 @@ export class AutopilotService {
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
   }
 
+  /** Fold an ordinary AgentRun terminal result back into the proactive ledger.
+   * @param {string} userId @param {{projectId:string,runId:string,status:string,claims?:any[],costCny?:number}} input */
+  async completeRun(userId, input) {
+    const page = await this.documents.list(userId, "episode", { projectId: input.projectId, filter: { runId: input.runId }, limit: 2 });
+    const episode = page.items[0];
+    if (!episode || ["merged", "failed", "canceled"].includes(episode.payload.status)) return null;
+    const succeeded = input.status === "succeeded";
+    const completed = await this.documents.put(userId, "episode", episode.id, {
+      ...episode.payload, status: succeeded ? "merged" : input.status === "canceled" ? "canceled" : "failed",
+      claims: Array.isArray(input.claims) ? input.claims.slice(0, 500) : [], updatedAt: this.now().toISOString(),
+    }, { expectedRevision: episode.revision, projectId: episode.projectId });
+    const agenda = await this.get(userId, episode.payload.agendaId);
+    await this.recordOutcome(userId, agenda.id, {
+      expectedRevision: agenda.revision, episodeId: episode.id, status: succeeded ? "succeeded" : input.status === "canceled" ? "canceled" : "failed",
+      gatedClaims: succeeded ? completed.payload.claims.length : 0,
+    });
+    return this.createDigest(userId, agenda.id, {
+      date: this.now().toISOString().slice(0, 10), episodeIds: [episode.id], costCny: Number(input.costCny) || 0,
+      claims: completed.payload.claims,
+    });
+  }
+
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
   async start(userId, agendaId, input) {
     const agenda = await this.get(userId, agendaId);
