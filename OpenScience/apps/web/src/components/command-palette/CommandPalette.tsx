@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router";
 import {
@@ -6,6 +6,7 @@ import {
   Brain,
   FlaskConical,
   FolderTree,
+  ListFilter,
   Moon,
   NotebookPen,
   Settings,
@@ -37,6 +38,7 @@ export function CommandPalette() {
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,6 +57,12 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, [setOpen]);
 
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
   const close = () => setOpen(false);
   const go = (to: string) => {
     navigate(to);
@@ -65,6 +73,7 @@ export function CommandPalette() {
     { id: "new", label: "新任务", icon: <SquarePen size={16} />, run: () => { navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }); close(); } },
     { id: "runs", label: "运行记录", icon: <FlaskConical size={16} />, run: () => go("/app/runs") },
     { id: "files", label: "知识库", icon: <FolderTree size={16} />, run: () => go("/app/files") },
+    { id: "sources", label: "资料整理", icon: <ListFilter size={16} />, run: () => go("/app/sources") },
     { id: "notebooks", label: "科研笔记本", icon: <NotebookPen size={16} />, run: () => go("/app/notebooks") },
     { id: "memory", label: "科研记忆", icon: <Brain size={16} />, run: () => go("/app/memory") },
     { id: "capabilities", label: "能力模板", icon: <Bot size={16} />, run: () => go("/app/capabilities") },
@@ -92,7 +101,7 @@ export function CommandPalette() {
           className="overflow-hidden rounded-card border border-border bg-surface shadow-pop"
         >
           <Command.Input
-            autoFocus
+            ref={inputRef}
             placeholder="搜索操作…"
             className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-text outline-none placeholder:text-muted"
           />

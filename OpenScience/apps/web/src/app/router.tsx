@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, useParams, type RouteObject } from "reac
 import { AppShell } from "./layout/AppShell";
 import { SessionRoute } from "./routes/SessionRoute";
 import { FilesPage } from "./routes/FilesPage";
+import { SourcesPage } from "./routes/SourcesPage";
 import { CapabilitiesPage } from "./routes/CapabilitiesPage";
 import { CapsulesPage } from "./routes/CapsulesPage";
 import { InboxPage } from "./routes/InboxPage";
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: "chat/:sessionId", element: <SessionRoute /> },
       { path: "runs", element: <RunsPage /> },
       { path: "files", element: <FilesPage /> },
+      { path: "sources", element: <SourcesPage /> },
       { path: "notebooks", element: <NotebooksPage /> },
       { path: "memory", element: <MemoryPage /> },
       { path: "capsules", element: <CapsulesPage /> },
@@ -52,6 +54,7 @@ export const routes: RouteObject[] = [
   { path: "/live/:sessionId", element: <ChatRedirect /> },
   { path: "/runs", element: <Navigate to="/app/runs" replace /> },
   { path: "/files", element: <Navigate to="/app/files" replace /> },
+  { path: "/sources", element: <Navigate to="/app/sources" replace /> },
   { path: "/notebooks", element: <Navigate to="/app/notebooks" replace /> },
   { path: "/memory", element: <Navigate to="/app/memory" replace /> },
   { path: "/agents", element: <Navigate to="/app/capabilities" replace /> },

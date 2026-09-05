@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/sourceClient", () => mocks);
-vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-one" }));
+vi.mock("@/lib/apiClient", () => ({
+  getWebProjectId: () => "project-one",
+  WebApiError: class WebApiError extends Error {},
+}));
 
 const source = {
   id: "source-one", projectId: "project-one", revision: 3,
@@ -38,7 +41,7 @@ describe("SourcesPage", () => {
     expect(screen.getByText("覆盖 100% · 遗漏 10%")).toBeInTheDocument();
     expect(screen.getByText("事实 8 · 方法线索 2")).toBeInTheDocument();
     expect(screen.getByText(/protocol, SOP or checklist/)).toBeInTheDocument();
-    expect(screen.getByText("需要你看一下")).toBeInTheDocument();
+    expect(screen.getByText(/需要你看一下/)).toBeInTheDocument();
   });
 
   it("lets the researcher override type and depth with a reason", async () => {
@@ -56,7 +59,7 @@ describe("SourcesPage", () => {
   it("filters attention items and exposes retry and cancel actions", async () => {
     render(<SourcesPage />);
     await screen.findByText("研究方案.docx");
-    await userEvent.click(screen.getByRole("button", { name: "需要处理" }));
+    await userEvent.click(screen.getByRole("radio", { name: "需要处理" }));
     await waitFor(() => expect(mocks.listSources).toHaveBeenLastCalledWith("project-one", { status: "needs_attention" }));
     await userEvent.click(screen.getByRole("button", { name: "重新分析" }));
     await waitFor(() => expect(mocks.retrySource).toHaveBeenCalledWith("source-one", 3));
