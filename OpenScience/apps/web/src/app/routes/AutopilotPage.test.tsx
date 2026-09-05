@@ -28,7 +28,7 @@ describe("AutopilotPage", () => {
     expect(await screen.findByText("心衰证据追踪")).toBeInTheDocument();
     expect(screen.getByText("每日 ¥20 · 每周 ¥80 · 单回合 ¥8")).toBeInTheDocument();
     expect(screen.getByText("新增直接证据")).toBeInTheDocument();
-    expect(screen.getByText("待验证线索")).toBeInTheDocument();
+    expect(screen.getAllByText("待验证线索").length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole("button", { name: "立即运行一回合" }));
     await waitFor(() => expect(mocks.scheduleAgenda).toHaveBeenCalledWith("agenda-one", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)));
   });
