@@ -25,6 +25,8 @@ import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
+import { NotificationService } from "./notificationService.mjs";
+import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -236,6 +238,8 @@ function routePattern(pathname) {
   if (pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)) return `${CAPSULE_GATEWAY_PATH}/:action`;
   if (pathname === "/api/capsules") return pathname;
   if (pathname.startsWith("/api/capsules/")) return "/api/capsules/:id/:action";
+  if (pathname === "/api/inbox") return pathname;
+  if (pathname.startsWith("/api/inbox/")) return "/api/inbox/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
   if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage") return pathname;
   if (pathname === "/api/ops/metrics") return pathname;
@@ -430,6 +434,19 @@ export function createWebApiApp(overrides = {}) {
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
   const usageLedger = productDatabase ? new UsageLedger(productDatabase) : null;
+  const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
+  const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
+  let notificationTimer = null;
+  let notificationRun = null;
+  const applyNotificationDefaults = () => {
+    if (!notificationService) return Promise.resolve([]);
+    if (notificationRun) return notificationRun;
+    notificationRun = notificationService.applyDueDefaults().catch((error) => {
+      process.stderr.write(`inbox default processing failed: ${typeof error?.code === "string" ? error.code : "notification_unavailable"}\n`);
+      return [];
+    }).finally(() => { notificationRun = null; });
+    return notificationRun;
+  };
   const memOsEngine = config.memOsEngineUrl
     ? overrides.memOsEngineClient ?? new MemOsClient({ memOsBaseUrl: config.memOsEngineUrl, memOsWriteMode: "sync-fast" })
     : null;
@@ -562,6 +579,23 @@ export function createWebApiApp(overrides = {}) {
         attempts: run.attempts ?? 0,
       });
       runtimeEventPump.noteRun(project, run);
+      if (notificationService) {
+        try {
+          await notificationService.create(project.userId, {
+            noticeType: "notify",
+            title: run.status === "succeeded" ? "研究已完成" : "研究运行已结束",
+            body: run.status === "succeeded" ? "研究结果已准备好，可以查看运行记录和交付物。" : "研究运行已结束，请查看运行记录了解状态。",
+            projectId: project.id,
+            source: { type: "run", id: run.id },
+            idempotencyKey: `run-finished:${run.id}`,
+          });
+        } catch (error) {
+          await securityAudit(config, "notification.agent_run.create", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "notification_unavailable",
+          });
+        }
+      }
       if (!memosClient.configured) {
         if (config.requireMemos) {
           /** @type {Error & Record<string, any>} */
@@ -804,6 +838,7 @@ export function createWebApiApp(overrides = {}) {
       enforceRequestRateLimits(req, pathname);
       await store.assertCsrf(req, pathname);
       if (await capsuleRoutes(req, res)) return;
+      if (await notificationRoutes(req, res)) return;
 
       if (pathname === "/api/health") {
         sendJson(res, 200, {
@@ -818,7 +853,7 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname === "/api/ready") {
-        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger);
+        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -833,6 +868,7 @@ export function createWebApiApp(overrides = {}) {
           memOsEngine,
           memoryIndexWorker,
           usageLedger,
+          notificationService,
           operationalMetrics,
           activeCommands,
         });
@@ -1867,6 +1903,7 @@ export function createWebApiApp(overrides = {}) {
     memoryIndexing,
     memoryIndexWorker,
     usageLedger,
+    notificationService,
     capsuleService,
     commands,
     taskManager,
@@ -1890,12 +1927,19 @@ export function createWebApiApp(overrides = {}) {
       await runtimeUi.listen();
       if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
       memoryIndexWorker?.start();
+      await applyNotificationDefaults();
+      if (notificationService) {
+        notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
+        notificationTimer.unref();
+      }
       return address;
     },
     async close() {
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       await memoryIndexWorker?.close();
+      if (notificationTimer) clearInterval(notificationTimer);
+      await notificationRun;
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
@@ -2596,8 +2640,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, operationalMetrics, activeCommands }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, operationalMetrics, activeCommands }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -2893,7 +2937,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null) {
+async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -2909,6 +2953,7 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     memory: await readinessCheck(async () => readinessMemory(config, memosClient)),
     memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memOsEngine, memoryIndexWorker)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
+    inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     security: await readinessCheck(() => readinessSecurity(config)),
     observability: await readinessCheck(() => readinessObservability(config)),
     evimedAdapters: await readinessCheck(() => readinessEviMedAdapters(config)),
@@ -2931,6 +2976,14 @@ async function readinessUsageLedger(config, ledger) {
   if (!config.requireDurableUsageLedger) return { required: false, configured: Boolean(ledger) };
   if (!ledger) throw readinessFailure("usage_ledger_unconfigured");
   return { required: true, ...(await ledger.health()) };
+}
+
+async function readinessInbox(config, service) {
+  if (!service) {
+    if (config.production) throw readinessFailure("notification_unconfigured");
+    return { required: false, configured: false };
+  }
+  return { required: Boolean(config.production), ...(await service.health()) };
 }
 
 async function readinessStateStore(config, store) {
