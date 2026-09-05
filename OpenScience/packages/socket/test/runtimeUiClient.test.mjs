@@ -17,7 +17,7 @@ test('the packaged native client registers a browser-safe synchronous plugin', a
   vm.runInNewContext(source, { __ModuleLoader__: { load: (/** @type {any} */ value) => { registration = value; } } });
   assert.equal(registration.id, '@evimed/dsh-socket');
   const plugin = registration.factory();
-  assert.deepEqual(Array.from(plugin.inject), ['sessions', 'conversation', 'connection']);
+  assert.deepEqual(Array.from(plugin.inject), ['sessions', 'conversation', 'connection', 'workspaces']);
   assert.equal(plugin.apply.constructor.name, 'Function');
   assert.equal(plugin.apply({}, {}, {}), undefined);
   assert.doesNotMatch(source, /(?:import|require)\s*\(?['"](?:node:|@deepseek-ai\/)/);
