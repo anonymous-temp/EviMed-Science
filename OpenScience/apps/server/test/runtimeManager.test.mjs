@@ -2315,3 +2315,20 @@ test("HTTP frame authentication is revalidated after runtime startup before send
   assert.equal(response.status, 401);
   assert.equal(requests, 0);
 });
+
+test("frame policy inspection preserves the exact native workspace request body through the real proxy", async (t) => {
+  const f = await uiSurfaceFixture(t);
+  let received = "";
+  const upstream = createServer((req, res) => {
+    req.on("data", chunk => { received += chunk; });
+    req.on("end", () => { res.writeHead(200, { "content-type": "application/json" }); res.end('{"ok":true}'); });
+  });
+  await new Promise(resolve => upstream.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => upstream.close(resolve)));
+  f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
+  f.app.runtimeManager.runtimeWorkspaceRoot = () => "/workspace";
+  const body = JSON.stringify({ type: "client-request", rpcId: "bind", method: "workspace/create", payload: { args: { request: { path: "/workspace" } } } });
+  const response = await fetch(`${f.uiBase}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: "https://science.example:8443", "content-type": "application/json" }, body });
+  assert.equal(response.status, 200);
+  assert.equal(received, body);
+});
