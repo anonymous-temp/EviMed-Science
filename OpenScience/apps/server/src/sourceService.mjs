@@ -142,6 +142,7 @@ export class SourceService {
       fingerprint: { sha256, size, mtime, providerHash, mimeType },
       familyId,
       version: Math.max(0, ...family.items.map((item) => Number(item.payload.version) || 0)) + 1,
+      generation: 1,
       docType,
       depth,
       valueVector: defaultValueVector(docType),
@@ -163,7 +164,7 @@ export class SourceService {
       return { source: exact, duplicate: true, job: null };
     }
     const job = await this.jobs.enqueue(userId, "ingest", {
-      sourceId, sourceRevision: exact.revision, extractorVersion: this.extractorVersion,
+      sourceId, sourceRevision: exact.revision, sourceGeneration: exact.payload.generation, extractorVersion: this.extractorVersion,
     }, { idempotencyKey: `ingest:${sourceId}:${this.extractorVersion}`, projectId });
     return { source: exact, duplicate: false, job };
   }
@@ -219,6 +220,7 @@ export class SourceService {
         summary: text(input.summary, "source summary", 16_000),
         facts: this.count(input.facts, "facts"),
         methods: this.count(input.methods, "methods"),
+        ...(input.artifactPath == null ? {} : { artifactPath: sourcePath(input.artifactPath) }),
       },
       error: null,
       updatedAt: this.now().toISOString(),
@@ -235,13 +237,13 @@ export class SourceService {
     if (!SOURCE_TYPES.includes(docType) || !SOURCE_DEPTHS.includes(depth)) throw new HttpError(400, "source_override_invalid", "Source type or depth is invalid.");
     const reason = text(input.reason, "override reason", 1000);
     const updated = await this.documents.put(userId, "source", sourceId, {
-      ...current.payload, docType, depth, status: "queued",
+      ...current.payload, docType, depth, status: "queued", generation: (Number(current.payload.generation) || 1) + 1,
       reasons: [`User override: ${reason}`, ...current.payload.reasons].slice(0, 20),
       override: { docType, depth, reason, at: this.now().toISOString() },
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
     await this.jobs.enqueue(userId, "ingest", {
-      sourceId, sourceRevision: updated.revision, extractorVersion: this.extractorVersion, reason: "override",
+      sourceId, sourceRevision: updated.revision, sourceGeneration: updated.payload.generation, extractorVersion: this.extractorVersion, reason: "override",
     }, { idempotencyKey: `ingest:${sourceId}:override:${updated.revision}`, projectId: current.projectId });
     return updated;
   }
@@ -253,6 +255,29 @@ export class SourceService {
     const at = this.now().toISOString();
     return this.documents.put(userId, "source", sourceId, {
       ...current.payload, status: "missing", missingAt: at, updatedAt: at,
+    }, { expectedRevision: current.revision, projectId: current.projectId });
+  }
+
+  /** Worker transition guarded by the user-visible processing generation.
+   * @param {string} userId @param {string} sourceId @param {{generation:number}} input */
+  async beginIngestion(userId, sourceId, input) {
+    const current = await this.requireSource(userId, sourceId);
+    if (input.generation !== current.payload.generation) throw new HttpError(409, "source_generation_stale", "A newer source analysis superseded this job.");
+    if (!["queued", "failed"].includes(current.payload.status)) throw new HttpError(409, "source_state_conflict", "This source is not ready for processing.");
+    return this.documents.put(userId, "source", sourceId, {
+      ...current.payload, status: "parsing", error: null, updatedAt: this.now().toISOString(),
+    }, { expectedRevision: current.revision, projectId: current.projectId });
+  }
+
+  /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number,code:string,message?:string}} input */
+  async recordFailure(userId, sourceId, input) {
+    const current = await this.requireSource(userId, sourceId);
+    if (input.expectedRevision !== current.revision) throw new HttpError(409, "source_revision_conflict", "A newer source analysis superseded this failure.");
+    return this.documents.put(userId, "source", sourceId, {
+      ...current.payload,
+      status: "failed",
+      error: { code: text(input.code, "source error code", 100), message: String(input.message ?? "Source analysis failed.").slice(0, 500) },
+      updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
   }
 
@@ -289,10 +314,12 @@ export class SourceService {
       throw new HttpError(409, "source_state_conflict", "This source is already processing.");
     }
     const updated = await this.documents.put(userId, "source", sourceId, {
-      ...current.payload, status: "queued", error: null, updatedAt: this.now().toISOString(),
+      ...current.payload, status: "queued", error: null,
+      generation: (Number(current.payload.generation) || 1) + 1,
+      updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
     await this.jobs.enqueue(userId, "ingest", {
-      sourceId, sourceRevision: updated.revision, extractorVersion: this.extractorVersion, reason: "retry",
+      sourceId, sourceRevision: updated.revision, sourceGeneration: updated.payload.generation, extractorVersion: this.extractorVersion, reason: "retry",
     }, { idempotencyKey: `ingest:${sourceId}:retry:${updated.revision}`, projectId: current.projectId, rearmFailed: true });
     return updated;
   }

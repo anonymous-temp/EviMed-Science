@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 
-function fixture({ sourceStatus = "queued", sourceRevision = 1, parseError = null } = {}) {
+function fixture({ sourceStatus = "queued", sourceRevision = 1, jobRevision = sourceRevision, parseError = null } = {}) {
   const calls = [];
   const job = { id: "job-one", userId: "user-one", projectId: "project-one", kind: "ingest",
-    payload: { sourceId: "source-one", sourceRevision, extractorVersion: "evimed-analysis-1.0.0" },
+    payload: { sourceId: "source-one", sourceRevision: jobRevision, extractorVersion: "evimed-analysis-1.0.0" },
     leaseToken: "lease-one", attempts: 1 };
   const source = { id: "source-one", revision: sourceRevision, projectId: "project-one", payload: {
     status: sourceStatus, paths: ["knowledge-base/paper.txt"], fingerprint: { sha256: "a".repeat(64), mimeType: "text/plain" },
@@ -18,6 +18,7 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, parseError = nul
   };
   const sources = {
     get: async () => source,
+    beginIngestion: async (...args) => { calls.push({ method: "beginIngestion", args }); return { ...source, revision: source.revision + 1, payload: { ...source.payload, status: "parsing" } }; },
     recordExtraction: async (...args) => { calls.push({ method: "recordExtraction", args }); return { ...source, revision: source.revision + 1 }; },
     recordFailure: async (...args) => { calls.push({ method: "recordFailure", args }); return { ...source, revision: source.revision + 1 }; },
   };
@@ -42,7 +43,7 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, parseError = nul
 test("an ingest lease parses, accounts, materializes and finishes exactly once", async () => {
   const { calls, worker } = fixture();
   await worker.tick();
-  assert.deepEqual(calls.map((call) => call.method), ["resolve", "parse", "materialize", "recordExtraction", "finish"]);
+  assert.deepEqual(calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "materialize", "recordExtraction", "finish"]);
   const extraction = calls.find((call) => call.method === "recordExtraction").args[2];
   assert.equal(extraction.facts, 1);
   assert.equal(extraction.methods, 0);
@@ -52,7 +53,7 @@ test("an ingest lease parses, accounts, materializes and finishes exactly once",
 });
 
 test("a canceled or stale manifest is skipped without reading source bytes", async () => {
-  for (const options of [{ sourceStatus: "canceled" }, { sourceRevision: 2 }]) {
+  for (const options of [{ sourceStatus: "canceled" }, { sourceRevision: 2, jobRevision: 1 }]) {
     const { calls, worker } = fixture(options);
     await worker.tick();
     assert.equal(calls.some((call) => call.method === "parse"), false);
