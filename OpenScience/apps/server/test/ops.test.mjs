@@ -229,6 +229,7 @@ test("backup scheduler creates an encrypted archive, runs a restore drill, and r
     OPEN_SCIENCE_BACKUP_RETRY_SECONDS: "10",
     OPEN_SCIENCE_BACKUP_RESTORE_DRILL_EVERY: "1",
     OPEN_SCIENCE_BACKUP_RETENTION_DAYS: "7",
+    OPEN_SCIENCE_RESTORE_DRILL_DIR: tmp,
   };
   try {
     const scheduled = await runCommand(process.execPath, [backupSchedulerScript, "run"], { env });
@@ -273,6 +274,7 @@ test("backup scheduler records object-upload failures and fails health closed", 
     OPEN_SCIENCE_BACKUP_MAX_FAILURES: "1",
     OPEN_SCIENCE_OBJECT_BACKUP_URI: "s3://research-backups/open-science/prod",
     OPEN_SCIENCE_OBJECT_BACKUP_CLI: "/bin/false",
+    OPEN_SCIENCE_RESTORE_DRILL_DIR: tmp,
   };
   try {
     await assert.rejects(
@@ -336,6 +338,7 @@ process.exit(count === 1 ? 1 : 0);
     OPEN_SCIENCE_BACKUP_MAX_FAILURES: "3",
     OPEN_SCIENCE_OBJECT_BACKUP_URI: "s3://research-backups/open-science/prod",
     OPEN_SCIENCE_OBJECT_BACKUP_CLI: objectCli,
+    OPEN_SCIENCE_RESTORE_DRILL_DIR: tmp,
   };
   try {
     const result = await runCommand(process.execPath, [backupSchedulerScript, "run"], { env });
@@ -706,7 +709,9 @@ test("a file changing under a running backup is a note, and a real tar failure i
     await assert.rejects(
       () => run(backupScript, [dataDir, path.join(tmp, "backups")]),
       (err) => {
-        assert.match(err.stderr, /Backup archive failed \(tar exit 2\)/, "a fatal tar error must still fail the backup");
+        // GNU tar uses 2 for this fatal error; BSD tar uses 1. The invariant is
+        // that the backup fails and preserves tar's permission diagnostic.
+        assert.match(err.stderr, /Backup archive failed \(tar exit [12]\)/, "a fatal tar error must still fail the backup");
         assert.match(err.stderr, /Permission denied/, "and must say what tar said");
         return true;
       },
