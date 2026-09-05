@@ -9,6 +9,7 @@ import { before, after, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
+import { generateCapsuleIdentity } from "../src/capsuleContainer.mjs";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 const run=promisify(execFile);
@@ -29,14 +30,21 @@ test("account deletion removes private keys and ciphertext, revokes old envelope
   const otherCapsule=await source(other);const otherExport=await transfers.export(other,otherCapsule.id,{password});
   const preview=await transfers.preview(recipient,{archive:exported.archive,password});const imported=await transfers.import(recipient,{archive:exported.archive,password,confirmed:true,expectedDigest:preview.archiveSha256});
   const entry=(await capsules.entries(recipient,imported.id)).items[0];await capsules.updateEntry(recipient,imported.id,entry.id,{status:"approved",expectedRevision:entry.revision});await capsules.activate(recipient,imported.id);
-  const issuer=JSON.parse(exported.archive).manifest.issuer;await deleteOwner(owner);
+  const issuer=JSON.parse(exported.archive).manifest.issuer;
+  const historical=generateCapsuleIdentity();await fs.writeFile(path.join(root,"capsule-keys",`issuer-${historical.signing.keyId}.json`),JSON.stringify({ownerId:owner,issuerId:`issuer-${randomUUID()}`,keyId:historical.signing.keyId,publicKey:historical.signing.publicKey}),{mode:0o600});
+  await deleteOwner(owner);
   const keyFiles=await fs.readdir(path.join(root,"capsule-keys"));const hash=createHash("sha256").update(owner).digest("hex");
-  assert.ok(!keyFiles.includes(`account-${hash}.json`));assert.ok(!keyFiles.includes(`issuer-${issuer.signingKeyId}.json`));
+  assert.ok(!keyFiles.includes(`account-${hash}.json`));assert.ok(!keyFiles.includes(`issuer-${issuer.signingKeyId}.json`));assert.ok(!keyFiles.includes(`issuer-${historical.signing.keyId}.json`));
   assert.ok(!(await fs.readdir(path.join(root,"capsule-snapshots"))).some(name=>name.includes(exported.snapshot.id)));
-  const after=await transfers.preview(recipient,{archive:exported.archive,password});assert.equal(after.hostedStatus,"revoked");assert.equal(after.canImport,false);
+  const after=await transfers.preview(recipient,{archive:exported.archive,password});assert.equal(after.hostedStatus,"revoked");assert.equal(after.canImport,false);assert.deepEqual(after.entries,[]);
   assert.equal((await capsules.recall(recipient,{query:"uncertainty"})).items.length,1);
   assert.equal((await transfers.download(other,otherCapsule.id,otherExport.snapshot.id)).archive,otherExport.archive);
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Fresh account identity','development')",[owner]);
+  const freshCapsule=await source(owner);const fresh=await transfers.export(owner,freshCapsule.id,{password});
+  assert.notEqual(JSON.parse(fresh.archive).manifest.issuer.signingKeyId,issuer.signingKeyId);
   await transfers.finishAccountDeletion(owner);
+  assert.equal((await transfers.download(owner,freshCapsule.id,fresh.snapshot.id)).archive,fresh.archive);
+  assert.equal((await transfers.preview(recipient,{archive:exported.archive,password})).hostedStatus,"revoked");
 });
 
 test("failed post-commit filesystem cleanup resumes at startup without a live account losing its keys",options,async()=>{
@@ -82,15 +90,25 @@ test("delete and recreate the same account ID does not admit an old in-flight im
 
 test("encrypted local backup restores signing identities and ciphertext snapshots with protected modes",options,async()=>{
   const owner=await account(),recipient=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});
+  const deletedOwner=await account();const deletedCapsule=await source(deletedOwner);const revoked=await transfers.export(deletedOwner,deletedCapsule.id,{password});await deleteOwner(deletedOwner);
   const storage=await fs.realpath(await fs.mkdtemp("/tmp/evimed-capsule-backup-"));
   try{const passFile=path.join(storage,"backup-passphrase");await fs.writeFile(passFile,"test-only-encrypted-backup-passphrase",{mode:0o600});
     const env={...process.env,OPEN_SCIENCE_BACKUP_PASSPHRASE:"",OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE:passFile,OPEN_SCIENCE_OBJECT_BACKUP_URI:"",OPEN_SCIENCE_BACKUP_RETENTION_DAYS:"",OPEN_SCIENCE_RESTORE_REPLACE:"false"};
-    const backup=await run("bash",["scripts/ops/backup-data.sh",root,path.join(storage,"backups")],{cwd:process.cwd(),env});const archive=backup.stdout.trim().split("\n").at(-1);assert.match(archive,/\.tar\.gz\.enc$/);
+    const backup=await run("bash",["scripts/ops/backup-data.sh",root,path.join(storage,"backups")],{cwd:process.cwd(),env});const archive=backup.stdout.trim().split("\n").at(-1);assert.match(archive,/\.tar\.gz\.enc$/);assert.ok((await fs.readFile(archive)).subarray(0,64).toString().startsWith("OPEN_SCIENCE_BACKUP_ENCRYPTED_V1"));
     const restored=path.join(storage,"restored");await run("bash",["scripts/ops/restore-data.sh",archive,restored],{cwd:process.cwd(),env});
     const restoredService=new CapsuleTransferService({documents,capsules,identities:new CapsuleIdentityStore(restored),dataDir:restored});
     const download=await restoredService.download(owner,capsule.id,exported.snapshot.id);assert.equal(download.archive,exported.archive);
     const preview=await restoredService.preview(recipient,{archive:download.archive,password});assert.equal(preview.issuerTrust,"verified");assert.equal(preview.entries.length,1);
+    assert.equal((await restoredService.preview(recipient,{archive:revoked.archive,password})).hostedStatus,"revoked");
     assert.equal((await fs.stat(path.join(restored,"capsule-keys"))).mode&0o777,0o700);
     for(const file of await fs.readdir(path.join(restored,"capsule-keys")))assert.equal((await fs.stat(path.join(restored,"capsule-keys",file))).mode&0o777,0o600);
   }finally{await fs.rm(storage,{recursive:true,force:true});}
+});
+
+test("an authenticated old account epoch is not refreshed after request-body delay and recreation",options,async()=>{
+  const owner=await account(),recipient=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});
+  const accountCreatedAt=(await db.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1",[recipient])).rows[0].generation;
+  await deleteOwner(recipient);await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Recreated delayed request','development')",[recipient]);
+  await assert.rejects(transfers.import(recipient,{archive:exported.archive,password,confirmed:true,expectedDigest:exported.snapshot.archiveSha256},{accountCreatedAt}),{code:"product_account_changed"});
+  assert.equal((await capsules.list(recipient)).items.length,0);
 });
