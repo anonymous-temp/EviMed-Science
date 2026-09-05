@@ -47,7 +47,7 @@ import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
 import { createRuntimeUiServer } from "./runtimeUiServer.mjs";
-import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame } from "./runtimeUiFrames.mjs";
+import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame, releaseRuntimeUiFrameCookie } from "./runtimeUiFrames.mjs";
 import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
   HttpError,
@@ -944,6 +944,17 @@ export function createWebApiApp(overrides = {}) {
         const frame = issueRuntimeUiFrame({ config, req, user, session, project });
         res.setHeader("Set-Cookie", frame.cookie);
         sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt } });
+        return;
+      }
+
+      if (pathname.startsWith("/api/runtime-ui/frames/") && req.method === "DELETE") {
+        const { session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+        if (req.headers["x-open-science-csrf"] !== session.csrfToken) throw new HttpError(403, "csrf_required", "A valid CSRF token is required.");
+        const frameId = pathname.slice("/api/runtime-ui/frames/".length);
+        // This expires the browser's exact Path cookie, not the signed ticket.
+        // Existing connections and other frame cookies remain untouched.
+        res.setHeader("Set-Cookie", releaseRuntimeUiFrameCookie(config, frameId));
+        sendJson(res, 200, { data: true });
         return;
       }
 

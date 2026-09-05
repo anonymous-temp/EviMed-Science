@@ -102,3 +102,10 @@ export function validateRuntimeUiFrame({ config, req, user, session, frameId, no
   if (claims.expiresAt <= now) throw invalid("runtime_ui_frame_expired");
   return claims;
 }
+
+/** Release a browser cookie only. Login revocation remains the authority boundary. */
+export function releaseRuntimeUiFrameCookie(config, frameId) {
+  if (!FRAME_ID.test(frameId)) throw invalid("runtime_ui_frame_id_invalid", 400);
+  const secure = String(config.publicUrl ?? "").startsWith("https:") || config.production;
+  return `${RUNTIME_UI_FRAME_COOKIE}=; Path=/__evimed/f/${frameId}/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}; Max-Age=0`;
+}
