@@ -17,6 +17,10 @@ function fixture() {
   /** @type {any} */ const ctx = {
     loader: { await: async () => {} },
     connection: { generation: { getSnapshot: () => generation, subscribe: (/** @type {() => void} */ listener) => { generationListener = listener; return () => {}; } } },
+    workspaces: {
+      create: async () => ({ workspaceId: 'workspace-a', path: '/workspace/project-a', sessionIds: ['session-new', 'session-canonical'] }),
+      list: { getSnapshot: () => ({ items: [] }) },
+    },
     sessions: {
       refresh: async () => {}, create: async (/** @type {{sessionId:string}} */ { sessionId }) => { calls.push(['create', sessionId]); return sessionId; },
       open: (/** @type {string} */ id) => { current = id; calls.push(['open', id]); }, scope: (/** @type {string} */ id) => ({ id }),
@@ -160,7 +164,7 @@ test('create uses the server-bound working directory and ignores command-provide
   apply(f.ctx, {}, f.target); await settle();
   f.navigate({ intent: { kind: 'create', sessionId: 'session-new', cwd: '/untrusted/path', draft: 'Review this evidence' } });
   await settle();
-  assert.deepEqual(requests, [{ sessionId: 'session-new', cwd: '/workspace/project-a' }]);
+  assert.deepEqual(requests, [{ sessionId: 'session-new', workspaceId: 'workspace-a' }]);
   assert.ok(f.calls.some(row => row[0] === 'open' && row[1] === 'session-canonical'));
   assert.ok(f.calls.some(row => row[0] === 'draft' && row[1] === 'session-canonical'));
   assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-canonical'));
@@ -188,16 +192,40 @@ test('opening an existing native session does not require or overwrite its works
 });
 
 test('new sessions join the native workspace registry before composer readiness is acknowledged', async () => {
-  const f = fixture(); const registrations = []; const requests = []; let attached = false;
+  const f = fixture();
+  /** @type {any[]} */ const registrations = [];
+  /** @type {any[]} */ const requests = [];
+  let attached = false;
   f.ctx.workspaces = {
-    create: async input => { registrations.push(input); return { workspaceId: 'workspace-a', path: '/workspace/project-a', title: 'Project A', sessionIds: attached ? ['session-new'] : [] }; },
+    create: async (/** @type {any} */ input) => { registrations.push(input); return { workspaceId: 'workspace-a', path: '/workspace/project-a', title: 'Project A', sessionIds: attached ? ['session-new'] : [] }; },
     list: { getSnapshot: () => ({ items: [] }) },
   };
-  f.ctx.sessions.create = async request => { requests.push(request); attached = request.workspaceId === 'workspace-a'; return request.sessionId; };
+  f.ctx.sessions.create = async (/** @type {any} */ request) => { requests.push(request); attached = request.workspaceId === 'workspace-a'; return request.sessionId; };
   apply(f.ctx, {}, f.target); await settle(); f.navigate(); await settle();
   assert.deepEqual(requests, [{ sessionId: 'session-new', workspaceId: 'workspace-a' }]);
   assert.ok(registrations.every(value => value.path === '/workspace/project-a'));
   assert.ok(attached);
   assert.ok(f.sent.some(row => row.message.ok === true));
+  f.ctx.dispose();
+});
+
+
+test('missing registry membership cannot produce a successful native readiness ack', async () => {
+  const f = fixture();
+  f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', sessionIds: [] });
+  apply(f.ctx, {}, f.target); await settle(); f.navigate(); await settle();
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false));
+  assert.ok(!f.calls.some(row => row[0] === 'open' || row[0] === 'draft'));
+  f.ctx.dispose();
+});
+
+test('a known legacy blank session is attached in place instead of creating another identity', async () => {
+  const f = fixture();
+  f.ctx.sessions.list.getSnapshot = () => ({ current: 'session-a', byId: { 'session-a': { blank: true, cwd: '/workspace/project-a' } } });
+  f.ctx.workspaces.create = async () => ({ workspaceId: 'workspace-a', sessionIds: ['session-a'] });
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
+  assert.deepEqual(f.calls, [['create', 'session-a'], ['open', 'session-a']]);
+  assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-a'));
   f.ctx.dispose();
 });

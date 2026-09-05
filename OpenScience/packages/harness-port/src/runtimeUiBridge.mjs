@@ -1,5 +1,5 @@
 /** Native client services, injected only in the kernel's browser application. */
-export const inject = ['sessions', 'conversation', 'connection'];
+export const inject = ['sessions', 'conversation', 'connection', 'workspaces'];
 
 /**
  * Native navigation bridge. The body is self-contained for browser bundling.
@@ -39,6 +39,25 @@ export function apply(ctx, _config, target = globalThis) {
   function retain(command) {
     if (!pendingNavigation || command.seq >= pendingNavigation.seq) pendingNavigation = command;
   }
+  /** @param {any} workspace @param {string} sessionId */
+  const workspaceContains = (workspace, sessionId) => Array.isArray(workspace?.sessionIds) && workspace.sessionIds.includes(sessionId);
+  /** @param {string} requestedId */
+  async function createBoundSession(requestedId) {
+    if (typeof boundCwd !== 'string' || !boundCwd.startsWith('/') || boundCwd.startsWith('//')
+      || boundCwd.length > 4096 || boundCwd.includes('\\')
+      || [...boundCwd].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+      || boundCwd.split('/').some(part => part === '.' || part === '..')) throw new Error('Native frame workspace unavailable');
+    const workspace = await ctx.workspaces.create({ path: boundCwd });
+    if (typeof workspace?.workspaceId !== 'string' || !workspace.workspaceId) throw new Error('Native workspace unavailable');
+    const sessionId = await ctx.sessions.create({ sessionId: requestedId, workspaceId: workspace.workspaceId });
+    // create(path) idempotently resolves and publishes the authoritative row.
+    // The public facade has no refresh verb; resolve again if its follow stream
+    // has not yet published the session attachment, before claiming readiness.
+    const listed = ctx.workspaces.list.getSnapshot().items.find((/** @type {any} */ item) => item.workspaceId === workspace.workspaceId);
+    const attached = workspaceContains(listed, sessionId) ? listed : await ctx.workspaces.create({ path: boundCwd });
+    if (attached.workspaceId !== workspace.workspaceId || !workspaceContains(attached, sessionId)) throw new Error('Native workspace attachment unavailable');
+    return sessionId;
+  }
   /** @param {any} command */
   function schedule(command) {
     const { requestId, intent, request } = command;
@@ -50,17 +69,17 @@ export function apply(ctx, _config, target = globalThis) {
       if (!ready) { request.queued = false; retain(command); return; }
       try {
         let sessionId = intent.sessionId;
-        if (intent.kind === 'create') {
-          // Only the server-authored frame can select the workspace. Native
-          // create does not infer cwd from the Host's current directory.
-          if (typeof boundCwd !== 'string' || !boundCwd.startsWith('/') || boundCwd.startsWith('//')
-            || boundCwd.length > 4096 || boundCwd.includes('\\')
-            || [...boundCwd].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
-            || boundCwd.split('/').some(part => part === '.' || part === '..')) {
-            throw new Error('Native frame workspace unavailable');
+        if (intent.kind === 'create') sessionId = await createBoundSession(sessionId);
+        else {
+          await ctx.sessions.refresh();
+          const known = ctx.sessions.list.getSnapshot().byId?.[sessionId];
+          // Older blank sessions have a cwd but no Workspace Registry account.
+          // Only a known, same-directory blank session may be adopted in place.
+          if (known?.blank === true && known.cwd === boundCwd
+            && !ctx.workspaces.list.getSnapshot().items.some((/** @type {any} */ item) => workspaceContains(item, sessionId))) {
+            sessionId = await createBoundSession(sessionId);
           }
-          sessionId = await ctx.sessions.create({ sessionId, cwd: boundCwd });
-        } else await ctx.sessions.refresh();
+        }
         if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('Invalid native session identity');
         if (disposed) return;
         ctx.sessions.open(sessionId);

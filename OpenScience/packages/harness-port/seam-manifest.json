@@ -285,7 +285,8 @@
     "clientServices": [
       "sessions",
       "conversation",
-      "connection"
+      "connection",
+      "workspaces"
     ],
     "sessionMethods": [
       "create",
@@ -295,6 +296,10 @@
     ],
     "inputMethod": "conversation.input.for(scope).setDraft",
     "generation": "connection.generation",
-    "failureMarker": "dshRemoteStreamFailure"
+    "failureMarker": "dshRemoteStreamFailure",
+    "workspaceMethods": [
+      "create"
+    ],
+    "frameWorkspace": "cwd"
   }
 }
