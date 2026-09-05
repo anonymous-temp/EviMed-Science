@@ -16,6 +16,7 @@ import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contra
 import { matchedClinicalTriggers } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
+import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 
 /**
@@ -38,6 +39,10 @@ export const GATE_CHECK_IDS = Object.freeze([
   'required-output',
   'deliverable-json-parse',
   'coverage-degraded',
+  'topic-portfolio-schema',
+  'topic-evidence-lineage',
+  'topic-study-plan',
+  'topic-research-context',
 ])
 
 /**
@@ -415,7 +420,10 @@ const VALIDATORS = Object.freeze({
   'bibliometric-analysis-report': (input) => validateReportShaped(input, proseFilesOf(input)),
   'peer-review-report': (input) => validateReportShaped(input, proseFilesOf(input)),
   'adr-analysis-report': (input) => validateReportShaped(input, proseFilesOf(input)),
-  'research-topic-report': (input) => validateReportShaped(input, proseFilesOf(input)),
+  'research-topic-report': (input) => withFindings(
+    validateReportShaped(input, proseFilesOf(input)),
+    researchTopicPortfolioFindings(input),
+  ),
   'dataset-scoping-package': (input) => validateReportShaped(input, proseFilesOf(input)),
   'research-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   // Both compose rather than replace: the shared required-output pass and prose
