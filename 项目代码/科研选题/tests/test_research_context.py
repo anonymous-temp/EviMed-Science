@@ -131,6 +131,71 @@ def test_fallback_opportunities_do_not_manufacture_scores():
     assert all(not any(key.endswith("_score") for key in item) for item in opportunities)
 
 
+def test_topic_scatter_does_not_plot_missing_scores_as_half(monkeypatch):
+    import modules.new_analysis_modules as analysis_modules
+
+    calls = []
+    monkeypatch.setattr(analysis_modules, "MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        analysis_modules,
+        "plt",
+        SimpleNamespace(subplots=lambda *args, **kwargs: calls.append((args, kwargs))),
+        raising=False,
+    )
+    result = M6_ResearchAgendaModule()._create_topic_scatter_chart([
+        {"title": "Candidate A"},
+        {"title": "Candidate B"},
+    ])
+    assert result is None
+    assert calls == []
+
+
+@pytest.mark.parametrize("agenda_key", ["topics", "research_topics"])
+def test_m6_validates_topics_before_any_quantitative_chart(monkeypatch, agenda_key):
+    module = M6_ResearchAgendaModule()
+    source = {
+        "opportunity_id": "BOM1",
+        "title": "Bounded validation opportunity",
+        "evidence_pmids": ["420001"],
+        "support_level": "indirect",
+    }
+    raw = {
+        "source_opportunity_id": "BOM1",
+        "title": "Candidate",
+        "feasibility_score": 0.5,
+        "novelty_score": 0.5,
+        "priority_score": 0.5,
+    }
+    monkeypatch.setattr(
+        module,
+        "_generate_research_agenda",
+        AsyncMock(return_value={agenda_key: [raw]}),
+    )
+    chart = AsyncMock(return_value=None)
+    monkeypatch.setattr(module, "_create_chart_safe", chart)
+    standardized = StandardizedInput(
+        core_entities={},
+        query_terms={"en": ["Dialysis"]},
+        research_context="",
+    )
+    dependencies = {
+        "M5_BREAKTHROUGH_OPPORTUNITY": ModuleOutput(
+            module_id="M5_BREAKTHROUGH_OPPORTUNITY",
+            status="success",
+            data={"opportunities": [source]},
+        )
+    }
+    output = asyncio.run(module.execute(
+        standardized,
+        [],
+        EvidenceStats(evidence_count=0),
+        dependencies,
+    ))
+    plotted = chart.await_args.args[1]
+    assert plotted == output.data["research_topics"]
+    assert all(not any(key.endswith("_score") for key in item) for item in plotted)
+
+
 def test_context_defaults_boundaries_and_escaped_report_values():
     from core.research_context import context_prompt, render_research_context, validate_research_context
 
