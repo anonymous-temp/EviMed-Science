@@ -87,6 +87,9 @@ jobs:
           pnpm check:community-skills
           pnpm audit:saas-alignment
 
+      - name: Test private memory engine logging boundary
+        run: python3 -m unittest discover -s deploy/memos-engine -p 'test_*.py'
+
       - name: Test Hosted Web API
         run: |
           CI=true pnpm test:mcp

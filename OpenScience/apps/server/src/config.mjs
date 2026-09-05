@@ -638,6 +638,13 @@ export function loadConfig(overrides = {}) {
     userWeeklySpendLimit: Number(
       overrides.userWeeklySpendLimit ?? process.env.OPEN_SCIENCE_USER_WEEKLY_SPEND_LIMIT ?? 0,
     ) || 0,
+    requireDurableUsageLedger:
+      overrides.requireDurableUsageLedger ?? boolEnv("OPEN_SCIENCE_REQUIRE_DURABLE_USAGE_LEDGER", production),
+    modelGatewayReservationMaxOutputTokens: Number(
+      overrides.modelGatewayReservationMaxOutputTokens
+      ?? process.env.OPEN_SCIENCE_MODEL_GATEWAY_RESERVATION_MAX_OUTPUT_TOKENS
+      ?? 65_536,
+    ),
     maxRunningRuntimesPerUser: Number(
       overrides.maxRunningRuntimesPerUser ?? process.env.OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER ?? 4,
     ),
