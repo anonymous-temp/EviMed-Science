@@ -84,6 +84,7 @@ test("the authenticated external bootstrap installs the real browser hook withou
   const f = await frameApi(t);
   let starts = 0;
   f.app.runtimeManager.start = async () => { starts++; throw new Error("bootstrap must not wake runtime"); };
+  f.app.runtimeManager.runtimeWorkspaceRoot = () => "/workspace";
   const response = await fetch(`${f.base}/api/runtime-ui/frames`, { method: "POST", headers: { cookie: f.cookie, "content-type": "application/json", "x-open-science-csrf": f.csrfToken }, body: JSON.stringify({ projectId: "default" }) });
   const frame = (await response.json()).data;
   const cookie = `${f.cookie}; ${response.headers.get("set-cookie").split(";")[0]}`;
@@ -99,6 +100,7 @@ test("the authenticated external bootstrap installs the real browser hook withou
   assert.equal(sandbox.fetch, nativeFetch);
   assert.equal(sandbox.__EVIMED_FRAME__.frameId, frame.frameId);
   assert.equal(sandbox.__EVIMED_FRAME__.shellOrigin, shellOrigin);
+  assert.equal(sandbox.__EVIMED_FRAME__.cwd, "/workspace", "native create must use the bound runtime workspace");
   assert.ok(Object.isFrozen(sandbox.__EVIMED_FRAME__));
   assert.ok(Object.isFrozen(sandbox.__DSH_TRANSPORT__));
   assert.notEqual(sandbox.__DSH_TRANSPORT__.ownsHost, true);
