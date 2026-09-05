@@ -9,10 +9,11 @@
 // what they legitimately decrypted, and the tests say so rather than implying
 // otherwise.
 import assert from "node:assert/strict";
-import { createCipheriv, randomBytes, scryptSync } from "node:crypto";
+import crypto, { createCipheriv, createHash, createPrivateKey, randomBytes, scryptSync, sign } from "node:crypto";
 import test from "node:test";
+import { syncBuiltinESMExports } from "node:module";
 
-import { CAPSULE_FORMAT_VERSION, validateCapsuleManifest } from "@evimed/domain";
+import { CAPSULE_FORMAT_VERSION, merkleRoot, signablePayload, validateCapsuleManifest } from "@evimed/domain";
 
 import {
   checkImportSafety,
@@ -50,8 +51,8 @@ function packForBob(overrides = {}) {
   });
 }
 
-test("a packed container has a well-formed, signed manifest", () => {
-  const container = packForBob();
+test("a packed container has a well-formed, signed manifest", async () => {
+  const container = await packForBob();
   const shape = validateCapsuleManifest(container.manifest);
   assert.ok(shape.ok, JSON.stringify(shape.issues));
   assert.equal(container.manifest.formatVersion, CAPSULE_FORMAT_VERSION);
@@ -62,13 +63,13 @@ test("a packed container has a well-formed, signed manifest", () => {
   assert.match(container.readme, /methods\/ 目录本身就是一个合法的技能根/);
 });
 
-test("a manifest listing the same entry path twice is rejected", () => {
+test("a manifest listing the same entry path twice is rejected", async () => {
   // Which of the two an unpacker keeps is an implementation detail; a
   // signature covering both says nothing about which content a recipient
   // actually receives. Built by hand rather than through `packCapsule`
   // (which only ever emits one manifest entry per path) — the manifest
   // shape a receiving `validateCapsuleManifest` call must still refuse.
-  const container = packForBob();
+  const container = await packForBob();
   const duplicated = {
     ...container.manifest,
     entries: [...container.manifest.entries, container.manifest.entries[0]],
@@ -78,8 +79,8 @@ test("a manifest listing the same entry path twice is rejected", () => {
   assert.ok(shape.issues.some((issue) => /listed more than once/.test(issue.message)), JSON.stringify(shape.issues));
 });
 
-test("the payload is ciphertext, and the plaintext is not recoverable from the container alone", () => {
-  const container = packForBob();
+test("the payload is ciphertext, and the plaintext is not recoverable from the container alone", async () => {
+  const container = await packForBob();
   for (const entry of entries) {
     const sealed = container.payload[entry.path];
     assert.ok(Buffer.isBuffer(sealed));
@@ -89,9 +90,9 @@ test("the payload is ciphertext, and the plaintext is not recoverable from the c
   }
 });
 
-test("the addressed recipient opens it and gets exactly what was packed", () => {
-  const container = packForBob();
-  const opened = openCapsule(container, {
+test("the addressed recipient opens it and gets exactly what was packed", async () => {
+  const container = await packForBob();
+  const opened = await openCapsule(container, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey },
   });
@@ -100,9 +101,9 @@ test("the addressed recipient opens it and gets exactly what was packed", () => 
   assert.equal(opened.manifest.issuer.userId, "alice");
 });
 
-test("someone the container was not addressed to cannot open it", () => {
-  const container = packForBob();
-  const opened = openCapsule(container, {
+test("someone the container was not addressed to cannot open it", async () => {
+  const container = await packForBob();
+  const opened = await openCapsule(container, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     recipient: { encKeyId: mallory.encryption.keyId, privateKey: mallory.encryption.privateKey, publicKey: mallory.encryption.publicKey },
   });
@@ -110,11 +111,11 @@ test("someone the container was not addressed to cannot open it", () => {
   assert.equal(opened.issues[0].code, "capsule_key_invalid");
 });
 
-test("the right key id with the wrong private key still fails", () => {
+test("the right key id with the wrong private key still fails", async () => {
   // The failure has to come from the cryptography, not from a name check: an
   // attacker chooses the id they present.
-  const container = packForBob();
-  const opened = openCapsule(container, {
+  const container = await packForBob();
+  const opened = await openCapsule(container, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     recipient: { encKeyId: bob.encryption.keyId, privateKey: mallory.encryption.privateKey, publicKey: bob.encryption.publicKey },
   });
@@ -122,13 +123,13 @@ test("the right key id with the wrong private key still fails", () => {
   assert.equal(opened.issues[0].code, "capsule_key_invalid");
 });
 
-test("one changed byte fails verification", () => {
-  const container = packForBob();
+test("one changed byte fails verification", async () => {
+  const container = await packForBob();
   const tampered = { ...container, payload: { ...container.payload } };
   const target = Buffer.from(tampered.payload["lessons.jsonl"]);
   target[target.length - 20] ^= 0x01;
   tampered.payload["lessons.jsonl"] = target;
-  const opened = openCapsule(tampered, {
+  const opened = await openCapsule(tampered, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey },
   });
@@ -136,8 +137,8 @@ test("one changed byte fails verification", () => {
   assert.equal(opened.issues[0].code, "capsule_tampered");
 });
 
-test("a rewritten manifest fails the signature, whatever else it says", () => {
-  const container = packForBob();
+test("a rewritten manifest fails the signature, whatever else it says", async () => {
+  const container = await packForBob();
   const forged = {
     ...container,
     manifest: { ...container.manifest, issuer: { userId: "mallory", signingKeyId: container.manifest.issuer.signingKeyId } },
@@ -147,8 +148,8 @@ test("a rewritten manifest fails the signature, whatever else it says", () => {
   assert.ok(verified.issues.some((issue) => issue.code === "capsule_signature_invalid"));
 });
 
-test("a container signed by someone else does not pass as the issuer's", () => {
-  const impostor = packCapsule({
+test("a container signed by someone else does not pass as the issuer's", async () => {
+  const impostor = await packCapsule({
     capsuleId: "cap_alice",
     version: 7,
     createdAt: "2026-08-23T00:00:00Z",
@@ -163,15 +164,15 @@ test("a container signed by someone else does not pass as the issuer's", () => {
   assert.ok(verified.issues.some((issue) => issue.code === "capsule_signature_invalid"));
 });
 
-test("an entry moved to another path inside the same container fails", () => {
+test("an entry moved to another path inside the same container fails", async () => {
   // The path is bound into the ciphertext, so a valid entry cannot be presented
   // as a different one.
-  const container = packForBob();
+  const container = await packForBob();
   const moved = {
     manifest: container.manifest,
     payload: { ...container.payload, "lessons.jsonl": container.payload["standards.jsonl"] },
   };
-  const opened = openCapsule(moved, {
+  const opened = await openCapsule(moved, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey },
   });
@@ -179,28 +180,28 @@ test("an entry moved to another path inside the same container fails", () => {
   assert.equal(opened.issues[0].code, "capsule_tampered");
 });
 
-test("content nobody signed cannot ride along unnoticed", () => {
-  const container = packForBob();
+test("content nobody signed cannot ride along unnoticed", async () => {
+  const container = await packForBob();
   const smuggled = { manifest: container.manifest, payload: { ...container.payload, "extra.md": Buffer.from("未登记内容") } };
   const verified = verifyCapsule(smuggled, { signingPublicKey: alice.signing.publicKey });
   assert.equal(verified.ok, false);
   assert.ok(verified.issues.some((issue) => issue.code === "capsule_unlisted_entry"));
 });
 
-test("a password copy opens the same container offline, and a wrong password does not", () => {
-  const container = packForBob({ password: "correct horse battery staple" });
+test("a password copy opens the same container offline, and a wrong password does not", async () => {
+  const container = await packForBob({ password: "correct horse battery staple" });
   assert.ok(container.passwordWrap);
-  const opened = openCapsule(container, {
+  const opened = await openCapsule(container, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     passwordWrap: container.passwordWrap,
     password: "correct horse battery staple",
   });
   assert.ok(opened.ok, JSON.stringify(opened.issues ?? []));
   assert.equal(opened.entries["lessons.jsonl"], entries[2].content);
-  assert.throws(() => unwrapWithPassword(container.passwordWrap, "wrong"), /unable to authenticate|bad decrypt|Unsupported/i);
+  await assert.rejects(async () => unwrapWithPassword(container.passwordWrap, "wrong"), /unable to authenticate|bad decrypt|Unsupported/i);
 });
 
-test("unwrapping honors the cost a container was actually wrapped with, not today's default", () => {
+test("unwrapping honors the cost a container was actually wrapped with, not today's default", async () => {
   // `wrapWithPassword` writes its own `maxmem` into the header next to N/r/p so
   // a build whose default has since moved can still open an older container.
   // Hand-built rather than packed, because the point is a header whose cost
@@ -225,11 +226,11 @@ test("unwrapping honors the cost a container was actually wrapped with, not toda
   headerLength.writeUInt16BE(header.length);
   const wrapped = Buffer.concat([headerLength, header, nonce, body, cipher.getAuthTag()]);
 
-  assert.deepEqual(unwrapWithPassword(wrapped, password), packKey);
+  assert.deepEqual(await unwrapWithPassword(wrapped, password), packKey);
 });
 
-test("a password wrap records the cost it used, so a later build can reproduce it", () => {
-  const container = packForBob({ password: "correct horse battery staple" });
+test("a password wrap records the cost it used, so a later build can reproduce it", async () => {
+  const container = await packForBob({ password: "correct horse battery staple" });
   const headerLength = container.passwordWrap.readUInt16BE(0);
   const header = JSON.parse(container.passwordWrap.subarray(2, 2 + headerLength).toString("utf8"));
   // Without this field on the wire, the read side has nothing to honor and the
@@ -248,51 +249,51 @@ function wrapWithHeader(overrides) {
   return Buffer.concat([headerLength, header, randomBytes(12 + 32 + 16)]);
 }
 
-test("a header naming more memory than we will spend is refused, by its own name", () => {
+test("a header naming more memory than we will spend is refused, by its own name", async () => {
   // The header travels with the container, so N is the sender's choice and
   // scrypt allocates 128·N·r for it. Honoring N=2^30 faithfully is an
   // instruction to allocate 128 GiB — "someone sent me a file" becoming an
   // out-of-memory kill. The same rule as a model-supplied path: derive from
   // what arrived, then bound it.
-  assert.throws(
-    () => unwrapWithPassword(wrapWithHeader({ N: 2 ** 30 }), "correct horse battery staple"),
+  await assert.rejects(
+    async () => unwrapWithPassword(wrapWithHeader({ N: 2 ** 30 }), "correct horse battery staple"),
     (error) => error.code === "capsule_password_params_unsupported" && /ceiling/.test(error.message),
   );
   // The ceiling applies to the recorded number too, not only to what N implies.
-  assert.throws(
-    () => unwrapWithPassword(wrapWithHeader({ maxmem: 128 * 1024 * 1024 * 1024 }), "correct horse battery staple"),
+  await assert.rejects(
+    async () => unwrapWithPassword(wrapWithHeader({ maxmem: 128 * 1024 * 1024 * 1024 }), "correct horse battery staple"),
     (error) => error.code === "capsule_password_params_unsupported",
   );
 });
 
-test("a header whose scrypt parameters are not a usable set is refused before the primitive sees them", () => {
+test("a header whose scrypt parameters are not a usable set is refused before the primitive sees them", async () => {
   // scrypt needs N a power of two above one. Checked here so a malformed
   // header is refused by its own name rather than surfacing as an opaque
   // OpenSSL string a reader cannot act on.
   for (const bad of [{ N: 32769 }, { N: 0 }, { N: -1 }, { r: 0 }, { p: -4 }, { N: 1.5 }]) {
-    assert.throws(
-      () => unwrapWithPassword(wrapWithHeader(bad), "correct horse battery staple"),
+    await assert.rejects(
+      async () => unwrapWithPassword(wrapWithHeader(bad), "correct horse battery staple"),
       (error) => error.code === "capsule_password_params_unsupported",
       JSON.stringify(bad),
     );
   }
 });
 
-test("a refused cost reaches the caller as a cost problem, not as a wrong key", () => {
+test("a replaced password wrap is refused before its cost is processed", async () => {
   // These are different facts and a reader acts on them differently; collapsing
   // them sends someone looking for a key problem that does not exist.
-  const container = packForBob({ password: "correct horse battery staple" });
-  const opened = openCapsule(container, {
+  const container = await packForBob({ password: "correct horse battery staple" });
+  const opened = await openCapsule(container, {
     issuer: { signingPublicKey: alice.signing.publicKey },
     passwordWrap: wrapWithHeader({ N: 2 ** 30 }),
     password: "correct horse battery staple",
   });
   assert.equal(opened.ok, false);
-  assert.equal(opened.issues[0].code, "capsule_password_params_unsupported");
+  assert.equal(opened.issues[0].code, "capsule_password_wrap_invalid");
 });
 
-test("a plaintext export is still signed, because authorship is separate from secrecy", () => {
-  const container = packCapsule({
+test("a plaintext export is still signed, because authorship is separate from secrecy", async () => {
+  const container = await packCapsule({
     capsuleId: "cap_alice",
     version: 8,
     createdAt: "2026-08-23T00:00:00Z",
@@ -303,28 +304,28 @@ test("a plaintext export is still signed, because authorship is separate from se
   });
   assert.equal(container.manifest.encryption, undefined);
   assert.ok(container.manifest.signature);
-  const opened = openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey } });
+  const opened = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey } });
   assert.ok(opened.ok, JSON.stringify(opened.issues ?? []));
   assert.equal(opened.entries["methods/systematic-review/SKILL.md"], entries[1].content);
 });
 
-test("the version chain is carried, so a v8 can prove it came from a v7", () => {
-  const seven = packForBob();
+test("the version chain is carried, so a v8 can prove it came from a v7", async () => {
+  const seven = await packForBob();
   const previous = seven.manifest;
-  const eight = packForBob({ version: 8, prevManifestSha256: "a".repeat(64) });
+  const eight = await packForBob({ version: 8, prevManifestSha256: "a".repeat(64) });
   assert.equal(eight.manifest.prevManifestSha256, "a".repeat(64));
   assert.notEqual(eight.manifest.merkleRoot, undefined);
   assert.equal(previous.version, 7);
 });
 
-test("executable content is refused at the boundary, not handled carefully later", () => {
-  const hostile = packCapsule({
+test("executable content is refused at the boundary, not handled carefully later", async () => {
+  const hostile = signedPlainContainer({
     capsuleId: "cap_mallory",
     version: 1,
     createdAt: "2026-08-23T00:00:00Z",
     issuer: { userId: "mallory", signingKeyId: mallory.signing.keyId, signingPrivateKey: mallory.signing.privateKey },
     scope: ["workstyle"],
-    layers: ["methods"],
+    layers: ["methods", "knowledge"],
     entries: [
       { path: "memos/activation_memory.pickle", content: "pickled", mime: "application/octet-stream", layer: "knowledge" },
       { path: "methods/run.py", content: "import os", mime: "text/x-python", layer: "methods" },
@@ -336,21 +337,111 @@ test("executable content is refused at the boundary, not handled carefully later
   assert.ok(safety.issues.some((issue) => issue.code === "capsule_executable_content"));
   assert.ok(safety.issues.some((issue) => issue.code === "capsule_method_shape_invalid"));
 
-  const clean = checkImportSafety(packForBob().manifest);
+  const clean = checkImportSafety((await packForBob()).manifest);
   assert.equal(clean.ok, true, JSON.stringify(clean.issues));
 });
 
-test("a share that never includes the workstyle pack is not a share", () => {
-  const result = validateCapsuleManifest({ ...packForBob().manifest, scope: ["+profile"] });
+test("a share that never includes the workstyle pack is not a share", async () => {
+  const result = validateCapsuleManifest({ ...(await packForBob()).manifest, scope: ["+profile"] });
   assert.equal(result.ok, false);
   assert.ok(result.issues.some((issue) => /workstyle/.test(issue.message)));
 });
 
-test("the source layer never leaves, whatever the scope says", () => {
+test("the source layer never leaves, whatever the scope says", async () => {
   const result = validateCapsuleManifest({
-    ...packForBob().manifest,
+    ...(await packForBob()).manifest,
     entries: [{ path: "documents/patient-notes.pdf", sha256: "b".repeat(64), bytes: 10, mime: "application/pdf", layer: "sources" }],
   });
   assert.equal(result.ok, false);
   assert.ok(result.issues.some((issue) => issue.code === "capsule_restricted_content"));
+});
+
+
+// Deliberately bypass the packer to represent correctly signed hostile imports.
+function signedPlainContainer({ entries: contentEntries, ...overrides }) {
+  const hash = value => createHash("sha256").update(value).digest("hex");
+  const manifestEntries = contentEntries.map(entry => ({ ...entry, content: undefined, bytes: Buffer.byteLength(entry.content), sha256: hash(entry.content) }));
+  const manifest = {
+    formatVersion: "1.0", capsuleId: "test-only-adversarial", version: 1, createdAt: "2026-09-05T00:00:00Z",
+    issuer: { userId: "alice", signingKeyId: alice.signing.keyId }, scope: ["workstyle"],
+    layers: ["profile", "methods", "episodes", "knowledge"], prevManifestSha256: null,
+    ...overrides, entries: manifestEntries, merkleRoot: merkleRoot(manifestEntries, hash),
+  };
+  // An attacker can sign their own claims; the test key has no trusted identity.
+  manifest.issuer = { userId: overrides.issuer?.userId ?? "alice", signingKeyId: alice.signing.keyId };
+  manifest.signature = { alg: "ed25519", keyId: alice.signing.keyId, value: sign(null, Buffer.from(signablePayload(manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64") };
+  return { manifest, payload: Object.fromEntries(contentEntries.map(entry => [entry.path, Buffer.from(entry.content)])) };
+}
+
+test("password-only containers authenticate their wrapping metadata and roundtrip", async () => {
+  const container = await packForBob({ recipients: [], password: "test-only-offline-placeholder" });
+  assert.equal(container.manifest.encryption.scheme, "scrypt+aes-256-gcm");
+  assert.match(container.manifest.encryption.passwordWrapSha256, /^[0-9a-f]{64}$/);
+  assert.ok(validateCapsuleManifest(container.manifest).ok);
+  const opened = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey }, password: "test-only-offline-placeholder", passwordWrap: container.passwordWrap });
+  assert.equal(opened.ok, true);
+  assert.equal(opened.entries["lessons.jsonl"], entries[2].content);
+});
+
+test("password KDF rejects unbounded work and malformed framing before derivation", async () => {
+  // Intercept both primitives: a regression must fail without running hostile costs.
+  const originalSync = crypto.scryptSync;
+  const originalAsync = crypto.scrypt;
+  try {
+    crypto.scryptSync = () => { throw new Error("Hostile cost reached primitive"); };
+    crypto.scrypt = () => { throw new Error("Hostile cost reached primitive"); };
+    syncBuiltinESMExports();
+    for (const bad of [{ p: 1024 }, { N: 262144, r: 8, p: 4 }, { kdf: "unknown" }, { salt: "" }]) {
+      await assert.rejects(async () => unwrapWithPassword(wrapWithHeader(bad), "test-only-placeholder"), error => error.code === "capsule_password_params_unsupported");
+    }
+    await assert.rejects(async () => unwrapWithPassword(Buffer.alloc(1), "test-only-placeholder"), error => error.code === "capsule_password_wrap_invalid");
+  } finally {
+    crypto.scryptSync = originalSync; crypto.scrypt = originalAsync; syncBuiltinESMExports();
+  }
+});
+
+test("password derivation is asynchronous and excess concurrent work is refused", async () => {
+  let yielded = false;
+  setImmediate(() => { yielded = true; });
+  const first = packForBob({ password: "test-only-async-placeholder" });
+  assert.ok(first instanceof Promise);
+  await assert.rejects(packForBob({ password: "test-only-concurrent-placeholder" }), error => error.code === "capsule_password_busy");
+  await first;
+  assert.equal(yielded, true);
+});
+
+test("workstyle scope cannot smuggle optional profile and knowledge entries", async () => {
+  for (const [path, layer] of [["profile.md", "profile"], ["knowledge/chunks.jsonl", "knowledge"], ["documents/private.txt", "knowledge"]]) {
+    const contentEntries = [{ path, layer, mime: "text/plain", content: "test-only-private-content" }];
+    const hostile = signedPlainContainer({ entries: contentEntries });
+    assert.equal(validateCapsuleManifest(hostile.manifest).ok, false);
+    assert.equal((await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } })).ok, false);
+    await assert.rejects(packForBob({ entries: contentEntries, layers: [layer] }), error => error.code === "capsule_scope_violation");
+  }
+  const allowed = await packForBob({ scope: ["workstyle", "+profile"], entries: [{ path: "profile.md", layer: "profile", mime: "text/markdown", content: "Permitted profile." }] });
+  assert.ok(validateCapsuleManifest(allowed.manifest).ok);
+});
+
+test("opening enforces content safety even for a correctly signed payload", async () => {
+  const hostile = signedPlainContainer({ entries: [{ path: "methods/run.py", layer: "methods", mime: "text/x-python", content: "pass" }] });
+  const opened = await openCapsule(hostile, { issuer: { signingPublicKey: alice.signing.publicKey } });
+  assert.equal(opened.ok, false);
+  assert.ok(opened.issues.some(issue => issue.code === "capsule_executable_content"));
+});
+
+test("manifest key claims must match the actual Ed25519 fingerprint", async () => {
+  const hostile = signedPlainContainer({ entries });
+  hostile.manifest.issuer.signingKeyId = mallory.signing.keyId;
+  hostile.manifest.signature.value = sign(null, Buffer.from(signablePayload(hostile.manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64");
+  assert.equal(verifyCapsule(hostile, { signingPublicKey: alice.signing.publicKey }).ok, false);
+  await assert.rejects(packForBob({ issuer: { userId: "alice", signingKeyId: mallory.signing.keyId, signingPrivateKey: alice.signing.privateKey } }), error => error.code === "capsule_signature_invalid");
+  assert.doesNotThrow(() => verifyCapsule(signedPlainContainer({ entries }), { signingPublicKey: "invalid-test-only-key" }));
+});
+
+test("legacy recipient encryption remains readable without password metadata", async () => {
+  const container = await packForBob();
+  container.manifest.formatVersion = "1.0";
+  container.manifest.signature.value = sign(null, Buffer.from(signablePayload(container.manifest)), createPrivateKey({ key: Buffer.from(alice.signing.privateKey, "base64"), type: "pkcs8", format: "der" })).toString("base64");
+  const opened = await openCapsule(container, { issuer: { signingPublicKey: alice.signing.publicKey }, recipient: { encKeyId: bob.encryption.keyId, privateKey: bob.encryption.privateKey, publicKey: bob.encryption.publicKey } });
+  assert.equal(opened.ok, true);
 });
