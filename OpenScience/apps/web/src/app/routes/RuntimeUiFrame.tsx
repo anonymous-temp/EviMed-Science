@@ -40,6 +40,16 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       sessionId: sessionId ?? crypto.randomUUID() } satisfies RuntimeUiIntent;
   }, [location.state, projectId, sessionId, attempt]);
 
+  const navigationKey = `${location.pathname}:${runtimeUiIntentFromState(location.state, projectId)?.requestId ?? ""}`;
+  const previousNavigation = useRef(navigationKey);
+  useEffect(() => {
+    const changed = previousNavigation.current !== navigationKey;
+    previousNavigation.current = navigationKey;
+    // Errors release the old cookie and document. A different target is a new
+    // navigation, so recreate its binding rather than leaving the prior error sticky.
+    if (changed && error) setAttempt(value => value + 1);
+  }, [navigationKey, error]);
+
   useEffect(() => {
     let active = true;
     let frameId: string | null = null;
