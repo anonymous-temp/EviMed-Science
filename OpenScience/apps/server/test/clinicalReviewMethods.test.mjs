@@ -112,3 +112,14 @@ test("legacy search logs retain their existing verdict without a mandatory metho
   assert.equal(runtime.ok, baseline.blockingIssues.length === 0);
 });
 
+
+test("malformed reference objects cannot throw out of either delivery entrypoint", () => {
+  const { input, log } = reviewPackage();
+  const baseline = verdictFor(input, log);
+  log.reviewMethods.studyGroups[0].referenceNumbers = [{ toString: null }];
+  let result;
+  assert.doesNotThrow(() => { result = verdictFor(input, log); });
+  assert.deepEqual(result.direct.blockingIssues, baseline.direct.blockingIssues);
+  assert.equal(result.runtime.ok, baseline.runtime.ok);
+  assert.ok(result.direct.issueChecks.some((item) => item.check === "review-study-accounting"));
+});
