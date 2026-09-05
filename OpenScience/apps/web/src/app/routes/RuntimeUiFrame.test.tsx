@@ -169,4 +169,29 @@ describe("native frame identity and readiness", () => {
     expect(container.querySelector("iframe")).toBe(frame);
   });
 
+  it("retains navigation during reconnect and retransmits the same identity after ready", async () => {
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+    emit(frame, { type: "evimed.runtime-ui.connecting", seq: 3 });
+    await userEvent.click(screen.getByText("Open B"));
+    expect(post).toHaveBeenCalledTimes(1);
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 4 });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    const request = post.mock.calls[1][0];
+    expect(request.intent).toEqual({ kind: "open", sessionId: "session-b" });
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 5 });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
+    expect(post.mock.calls[2][0]).toMatchObject({ requestId: request.requestId, intent: request.intent });
+    expect(post.mock.calls[2][0].seq).toBeGreaterThan(request.seq);
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 6, requestId: request.requestId, ok: true, sessionId: "session-b" });
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b");
+    expect(container.querySelector("iframe")).toBe(frame);
+  });
+
 });
