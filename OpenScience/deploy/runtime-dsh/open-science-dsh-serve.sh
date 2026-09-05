@@ -22,22 +22,15 @@ authority="${OPEN_SCIENCE_RUNTIME_AUTHORITY:-dsh.runtime}"
 mkdir -p "$(dirname "${socket}")"
 rm -f "${socket}"
 
-# `$DSH_HOME` is on the project's runtime volume, which starts empty. The
-# profile the image spent build time pre-installing lives at `$DSH_HOME_SEED`
-# instead, precisely so this bind mount does not shadow it — copy it in once,
-# the first time this project's volume has never seen a profile. Every later
-# boot of the same project (a restart, a resume) finds the profile already
-# there and skips the copy, which is what keeps this idempotent rather than
-# merely safe-to-run-once.
-if [ -n "${DSH_HOME:-}" ] && [ -n "${DSH_HOME_SEED:-}" ] && [ ! -d "${DSH_HOME}/profiles/${profile}" ]; then
+# A profile keeps user state on the runtime volume. Its image-managed package
+# roots point into the immutable seed and are reconciled by digest on every
+# image change. The helper journals only package links/manifest/default settings;
+# it never copies the home, credentials, sessions, or user patch files.
+if [ -n "${DSH_HOME:-}" ] && [ -n "${DSH_HOME_SEED:-}" ]; then
+  [ ! -L "${DSH_HOME}" ] || { echo "DSH_HOME must not be a symlink" >&2; exit 1; }
   mkdir -p "${DSH_HOME}"
-  cp -a "${DSH_HOME_SEED}/." "${DSH_HOME}/"
-  # The seed is read-only in the image so nothing can mutate the template, and
-  # `cp -a` carries those bits onto the volume — where they are wrong, because
-  # composing a profile writes `cordis.yml` into it. Root can ignore a read-only
-  # bit while it still holds CAP_DAC_OVERRIDE, so this failure appears only once
-  # the container drops capabilities, which is to say only in production.
-  chmod -R u+w "${DSH_HOME}"
+  [ ! -L "${DSH_HOME}/.evimed-seed.lock" ] || { echo "Invalid profile migration lock" >&2; exit 1; }
+  flock -x "${DSH_HOME}/.evimed-seed.lock" node /usr/local/bin/evimed-profile-seed.mjs sync "${DSH_HOME_SEED}" "${DSH_HOME}" "${profile}"
 fi
 
 # Telemetry off, the sandbox mode fixed, and the loader's native binding kept

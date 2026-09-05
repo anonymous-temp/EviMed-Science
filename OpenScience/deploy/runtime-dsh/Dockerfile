@@ -89,6 +89,7 @@ RUN sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}
     ripgrep \
     socat \
     tar \
+    util-linux \
     xz-utils \
   && rm -rf /var/lib/apt/lists/*
 
@@ -392,10 +393,9 @@ RUN set -eux; \
 # volume instead of inside the image layer; a bind mount replaces everything
 # under its target, which means a profile built at `/runtime/dsh-home` would
 # be baked into the image and then be invisible to every container that ever
-# actually starts. `open-science-dsh-serve.sh` copies this seed into the real,
-# volume-backed `$DSH_HOME` once, the first time a project's runtime volume is
-# empty — the container still never writes to its own *image*, only to the
-# volume that was always its own to write to.
+# actually starts. The boot helper projects managed package roots from this
+# immutable seed into each volume-backed profile and reconciles them by digest
+# on an image change, without replacing user profile or session state.
 # Every bundle carries the same exact version as the harness. Most DSH
 # sub-packages still publish a `latest` dist-tag pointing at 0.0.1-rc.1, so an
 # unpinned `add` resolves the first release ever cut and then fails on a
@@ -407,6 +407,7 @@ ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 # cannot be spliced into a backslash-continued RUN, and keeping it beside the
 # Dockerfile makes the decision reviewable on its own.
 COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml
+COPY deploy/runtime-dsh/profile-seed.mjs /usr/local/bin/evimed-profile-seed.mjs
 
 # The committed composition snapshot, brought in so the build can compare it to
 # the one this image actually produces.
@@ -448,6 +449,7 @@ RUN set -eux; \
   cp -a "${DSH_HOME_SEED}/." "${relocated}/"; \
   DSH_HOME="${relocated}" dsh --profile evimed-runtime --dump-config > /dev/null; \
   rm -rf "${relocated}"; \
+  node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
   chmod -R a-w "${DSH_HOME_SEED}"
 
 # Load the loader's native binding from the package it is installed in, rather
@@ -469,9 +471,9 @@ RUN set -eux; \
 ENV NARB_DISABLE_NATIVE_CACHE=1
 
 # The boot proof. Separate RUN so its failure names itself in the build log, and
-# after the seed is sealed read-only, because the boot script copies the seed
-# exactly the way the runtime entrypoint does — including the copy's read-only
-# bits, which is the failure that only appears once capabilities are dropped.
+# after the seed is sealed read-only: the smoke uses the same managed-package
+# migration as startup and proves the native loader can import that immutable
+# closure while profile/session state stays on its writable runtime volume.
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
 RUN set -eux; \

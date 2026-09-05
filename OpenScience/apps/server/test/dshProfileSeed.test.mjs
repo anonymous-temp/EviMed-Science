@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import test from "node:test";
@@ -14,10 +14,15 @@ const publishedSocket = JSON.parse(readFileSync(new URL("../../../packages/socke
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), "profile-seed-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync(process.execPath, [new URL("../../../packages/socket/scripts/build-client.mjs", import.meta.url).pathname], { stdio: "pipe" });
   const pkg = (dir, name, client) => {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "0.1.0", exports: { "./package.json": "./package.json" }, dsh: client ? publishedSocket.dsh : { bundle: { patch: "./cordis.patch.yml" } } }));
+    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "0.1.0", exports: { "./package.json": "./package.json", ...(client ? { "./client": "./dist/client.js" } : {}) }, dsh: client ? publishedSocket.dsh : { bundle: { patch: "./cordis.patch.yml" } } }));
     writeFileSync(path.join(dir, "cordis.patch.yml"), "[]\n");
+    if (client) {
+      mkdirSync(path.join(dir, "dist"));
+      copyFileSync(new URL("../../../packages/socket/dist/client.js", import.meta.url), path.join(dir, "dist/client.js"));
+    }
   };
   pkg(path.join(root, "old-socket"), "@evimed/dsh-socket", false);
   pkg(path.join(root, "new-socket"), "@evimed/dsh-socket", true);
@@ -52,10 +57,14 @@ test("an actual existing pnpm file profile receives the new client face without 
   const { sealProfileSeed, migrateProfileSeed } = await import(helperUrl);
   const protectedFiles = ["cordis.patch.yml", "pnpm-workspace.yaml", "pnpm-lock.yaml", "session-state.json"].map(name => [name, readFileSync(path.join(f.profile, name))]);
   const userLink = readlinkSync(path.join(f.profile, "node_modules/user-plugin"));
+  const probe = () => JSON.parse(execFileSync(process.execPath, [new URL("../../../packages/harness-port/test/helpers/runtimeUiProfileProbe.mjs", import.meta.url).pathname, f.profile], { encoding: "utf8" }));
+  assert.equal(probe().discovered, false, "published scanner must observe the old persistent package");
   const seal = sealProfileSeed(f.seed, profileName);
   assert.match(seal.digest, /^[a-f0-9]{64}$/);
   assert.equal(migrateProfileSeed(f.seed, f.home, profileName).changed, true);
   assert.deepEqual(readMeta(f.profile).dsh.client, publishedSocket.dsh.client);
+  assert.equal(probe().discovered, true);
+  assert.equal(probe().bootGraphIncludesClient, true);
   for (const [name, bytes] of protectedFiles) assert.deepEqual(readFileSync(path.join(f.profile, name)), bytes);
   assert.equal(readlinkSync(path.join(f.profile, "node_modules/user-plugin")), userLink);
   assert.equal(readFileSync(path.join(f.home, ".credentials.yaml"), "utf8"), "private-runtime-placeholder");
@@ -101,6 +110,7 @@ test("dirty or escaping migration journals fail closed without touching credenti
   sealProfileSeed(f.seed, profileName);
   const journal = path.join(f.profile, ".evimed-seed-journal");
   mkdirSync(journal);
+  mkdirSync(path.join(journal, "backup")); mkdirSync(path.join(journal, "stage"));
   writeFileSync(path.join(journal, "journal.json"), JSON.stringify({ version: 1, operations: [{ target: "../../.credentials.yaml" }] }));
   assert.throws(() => migrateProfileSeed(f.seed, f.home, profileName), /journal/i);
   assert.equal(readFileSync(path.join(f.home, ".credentials.yaml"), "utf8"), "private-runtime-placeholder");
@@ -116,4 +126,81 @@ test("managed package parent symlinks cannot redirect profile migration into ano
   mkdirSync(outside); rmSync(scope, { recursive: true }); symlinkSync(outside, scope);
   assert.throws(() => migrateProfileSeed(f.seed, f.home, profileName), /symlink|directory/i);
   assert.deepEqual(readdirSync(outside), []);
+});
+
+test("pre-publication interruptions discard only staged files and dirty installed links refuse recovery", async (t) => {
+  const f = fixture(t);
+  const { sealProfileSeed, migrateProfileSeed } = await import(helperUrl);
+  sealProfileSeed(f.seed, profileName);
+  assert.throws(() => migrateProfileSeed(f.seed, f.home, profileName, { checkpoint(step) { if (step === "prepared") throw new Error("interrupted preparation"); } }), /interrupted/);
+  assert.equal(readMeta(f.profile).dsh.client, undefined);
+  migrateProfileSeed(f.seed, f.home, profileName);
+  assert.equal(existsSync(path.join(f.profile, ".evimed-seed-staging")), false);
+  // Force a new generation and interrupt after installation but before commit.
+  writeFileSync(path.join(f.seedProfile, "extra-unmanaged-file"), "not part of the digest");
+  writeFileSync(path.join(f.seedProfile, "node_modules/.fixture-generation"), "next");
+  sealProfileSeed(f.seed, profileName);
+  assert.throws(() => migrateProfileSeed(f.seed, f.home, profileName, { checkpoint(step) { if (step === "installed:0") throw new Error("interrupted installation"); } }), /interrupted/);
+  const link = path.join(f.profile, "node_modules/@evimed/dsh-socket");
+  assert.ok(lstatSync(link).isSymbolicLink());
+  unlinkSync(link); symlinkSync(path.join(f.root, "unrelated"), link);
+  assert.throws(() => migrateProfileSeed(f.seed, f.home, profileName), /dirty journal/);
+  assert.equal(readlinkSync(link), path.join(f.root, "unrelated"));
+  assert.equal(readFileSync(path.join(f.home, ".credentials.yaml"), "utf8"), "private-runtime-placeholder");
+});
+
+test("the actual runtime entrypoint invokes digest migration for existing and fresh profiles", async (t) => {
+  const f = fixture(t);
+  const { sealProfileSeed } = await import(helperUrl);
+  sealProfileSeed(f.seed, profileName);
+  const entrypoint = readFileSync(new URL("../../../deploy/runtime-dsh/open-science-dsh-serve.sh", import.meta.url), "utf8").split("# Telemetry off")[0];
+  // flock is supplied by util-linux in the Linux image. This host fixture runs
+  // the real pre-boot script sequentially while preserving its helper call.
+  const boot = `flock() { shift; shift; "$@"; };\n${entrypoint.replace("/usr/local/bin/evimed-profile-seed.mjs", helperUrl.pathname)}`;
+  for (const home of [f.home, path.join(f.root, "fresh-boot")]) {
+    execFileSync("bash", ["-c", boot], { env: { ...process.env, DSH_HOME: home, DSH_HOME_SEED: f.seed, OPEN_SCIENCE_RUNTIME_SOCKET: path.join(f.root, "control/dsh.sock") }, stdio: "pipe" });
+    assert.ok(readMeta(path.join(home, "profiles", profileName)).dsh.client);
+    assert.notEqual(existsSync(path.join(home, ".credentials.yaml")) && readFileSync(path.join(home, ".credentials.yaml"), "utf8"), "never-copy-seed-credentials");
+  }
+});
+
+
+test("a killed migration process recovers its journal on the next boot", async (t) => {
+  const f = fixture(t);
+  const { sealProfileSeed, migrateProfileSeed } = await import(helperUrl);
+  sealProfileSeed(f.seed, profileName);
+  const script = `import {migrateProfileSeed} from ${JSON.stringify(helperUrl.href)}; migrateProfileSeed(${JSON.stringify(f.seed)}, ${JSON.stringify(f.home)}, ${JSON.stringify(profileName)}, {checkpoint(step) {if (step === "backed-up:0") process.kill(process.pid, "SIGKILL");}});`;
+  assert.throws(() => execFileSync(process.execPath, ["--input-type=module", "-e", script], { stdio: "pipe" }), error => error.signal === "SIGKILL");
+  assert.equal(migrateProfileSeed(f.seed, f.home, profileName).changed, true);
+  assert.ok(readMeta(f.profile).dsh.client);
+  assert.equal(readFileSync(path.join(f.profile, "cordis.patch.yml"), "utf8"), f.userPatch);
+  assert.equal(existsSync(path.join(f.profile, ".evimed-seed-journal")), false);
+});
+
+test("Linux flock serializes the real helper against a read-only image seed", { skip: !process.env.EVIMED_PROFILE_MIGRATION_DOCKER_IMAGE, timeout: 30000 }, async (t) => {
+  const f = fixture(t);
+  const { sealProfileSeed } = await import(helperUrl);
+  sealProfileSeed(f.seed, profileName);
+  const script = `
+    import {execFileSync, spawn} from 'node:child_process';
+    import {readFileSync, statSync} from 'node:fs';
+    const args=['-x','/project/.evimed-seed.lock','node','/migration.mjs','sync','/image-seed','/project','evimed-runtime'];
+    execFileSync('flock', args);
+    const marker='/project/profiles/evimed-runtime/.evimed-seed.json';
+    const before=statSync(marker).mtimeMs;
+    await Promise.all([1,2].map(()=>new Promise((resolve,reject)=>{
+      const child=spawn('flock',args,{stdio:'inherit'});
+      child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(new Error('migration failed')));
+    })));
+    const pkg=JSON.parse(readFileSync('/project/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json','utf8'));
+    process.stdout.write(JSON.stringify({nativeClient:Boolean(pkg.dsh.client),unchanged:statSync(marker).mtimeMs===before}));
+  `;
+  const result = execFileSync("docker", ["run", "--rm", "--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
+    "--user", `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`,
+    "--mount", `type=bind,src=${f.seed},dst=/image-seed,readonly`,
+    "--mount", `type=bind,src=${f.home},dst=/project`,
+    "--mount", `type=bind,src=${helperUrl.pathname},dst=/migration.mjs,readonly`,
+    "--entrypoint", "node", process.env.EVIMED_PROFILE_MIGRATION_DOCKER_IMAGE, "--input-type=module", "-e", script], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  assert.deepEqual(JSON.parse(result), { nativeClient: true, unchanged: true });
+  assert.equal(readFileSync(path.join(f.profile, "cordis.patch.yml"), "utf8"), f.userPatch);
 });
