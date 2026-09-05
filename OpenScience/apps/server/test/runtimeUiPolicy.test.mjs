@@ -662,3 +662,18 @@ test("the relay rejects malformed upstream native frames instead of forwarding c
     assert.deepEqual(received, []);
   }
 });
+
+test("native workspace registration is limited to the bound project's exact runtime directory", async (t) => {
+  const f = await fixture(t);
+  f.manager.runtimeWorkspaceRoot = () => "/workspace";
+  const request = { type: "client-request", rpcId: "workspace-bind", method: "workspace/create", payload: { args: { request: { path: "/workspace" } } } };
+  const post = body => fetch(`${f.base}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(body) });
+  assert.equal((await post(request)).status, 200);
+  for (const change of [{ path: "/other" }, { path: "/workspace", extra: true }, { path: "/workspace/../other" }]) {
+    assert.equal((await post({ ...request, payload: { args: { request: change } } })).status, 403);
+  }
+  assert.equal((await post({ ...request, method: "workspace/delete" })).status, 403);
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open("workspace", "workspace/create", { request: { path: "/workspace" } }));
+  assertNativeError(await c.next(), "workspace", "runtime_ui_method_denied");
+});
