@@ -194,7 +194,7 @@ function studyAccounting(methods, sourceRecords, issues) {
       complete = false;
       continue;
     }
-    const id = nonEmpty(group.studyId) ? group.studyId.trim() : null;
+    const id = nonEmpty(group.studyId) ? group.studyId.trim().toLowerCase() : null;
     if (group.studyId != null && !nonEmpty(group.studyId)) {
       note(issues, "review-study-accounting", label + ".studyId must be a non-empty string or null for unknown identity.");
       complete = false;

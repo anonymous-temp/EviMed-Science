@@ -4991,7 +4991,7 @@ export function validateClinicalEvidencePackage({
   const reportedTexts = reported.map((entry) => entry.text);
 
   return Object.freeze({
-    valid: reported.length === 0,
+    valid: existing.length === 0,
     issues: Object.freeze(reportedTexts),
     blockingIssues: Object.freeze(existing.map((entry) => entry.text).filter((issue) => !degradableIssue(issue))),
     // The same findings in the same order, each naming the check that raised

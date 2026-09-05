@@ -173,43 +173,13 @@ the reason. This optional companion adds no new required output or blocker.
 ## Before claiming completion
 
 Run this capability's preflight to verify required paths and mapped citations,
-and inspect proportional coverage diagnostics. Review novelty and feasibility
-as evidence-based judgments; numeric counts cannot establish them.
+then review its proportional coverage diagnostics before finishing the turn.
+Treat novelty and feasibility as evidence-based judgments; a numeric source
+count cannot establish either one.
 
 ```bash
 python3 "scripts/preflight.py" --workspace .
 ```
 
-It is this capability's tooling, not a second delivery gate: fix what it reports
-as an issue, assess its advisory warnings,
-then submit the package.
-
-```
-evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
-```
-
-The submission answers with the delivery verdict in place. A first submission
-that comes back with issues is the normal case, not a failure: fix everything it
-lists as 必修 and submit again until it answers `ok`.
-
-## Before delivering: two fixed steps
-
-Both run on the finished deliverable, in this order, every time. They are steps
-of this capability, not options the run weighs — a pass that happens only when
-the model remembers it is a pass that happens on the easy runs and not the hard
-ones.
-
-1. **`traceability-review`** — every citation resolves, no number appears in
-   prose without a source in the artifacts, and every figure or table matches
-   the code that produced it. Findings are repaired before the next step, not
-   after: humanizing prose around a citation that does not resolve only makes
-   the defect read better.
-2. **`manuscript-humanize`** — register cleanup over the prose, with every
-   quotation, number, citation index and claim marker byte-identical. Load the
-   language-matched upstream rules it names. It is the last thing that touches
-   the document.
-
-Write what changed and why to `revision-notes.md` in this deliverable's
-directory. That file is the designated home for revision notes, replies to a
-rejection, and process description; the report itself carries none of them, and
-no check reads the notes as report prose.
+This is capability tooling, not a second delivery gate. Fix its issues, assess
+its advisory warnings, and finish the turn for server-side validation.

@@ -296,6 +296,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "meta_agent_root_invalid",
   "specialist_action_invalid",
   "specialist_input_required",
+  "specialist_input_invalid",
   "specialist_input_path_invalid",
   "specialist_job_id_invalid",
   "specialist_job_state_invalid",
