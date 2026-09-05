@@ -48,9 +48,39 @@ afterEach(() => {
   vi.restoreAllMocks();
   setWebApiBase(undefined);
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe("apiClient", () => {
+  it("keeps two tab project bindings independent while remembering the next tab default", async () => {
+    const tabA = window.sessionStorage;
+    const values = new Map<string, string>();
+    const tabB: Storage = {
+      get length() { return values.size; },
+      clear: () => values.clear(), getItem: key => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); }, removeItem: key => { values.delete(key); },
+      key: index => [...values.keys()][index] ?? null,
+    };
+    window.localStorage.setItem("openScience.projectId", "project-a");
+    const client = await loadClient("/api");
+    expect(client.getWebProjectId()).toBe("project-a");
+    const tab = vi.spyOn(window, "sessionStorage", "get").mockReturnValue(tabB);
+    client.setWebProjectId("project-b");
+    expect(client.getWebProjectId()).toBe("project-b");
+    expect(window.localStorage.getItem("openScience.projectId")).toBe("project-b");
+    tab.mockReturnValue(tabA);
+    expect(client.getWebProjectId()).toBe("project-a");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(responseJson({ ok: true }));
+    await client.fetchWithWebAuth("/api/me");
+    expect(callHeaders(fetchMock, 0).get("X-Open-Science-Project")).toBe("project-a");
+    const reloaded = await loadClient("/api");
+    expect(reloaded.getWebProjectId()).toBe("project-a");
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    await reloaded.fetchWebMe();
+    expect(tabA.getItem("openScience.projectId")).toBeNull();
+    expect(tabB.getItem("openScience.projectId")).toBe("project-b");
+  });
+
   it("reports no command backend without web API config", async () => {
     const client = await loadClient();
 
