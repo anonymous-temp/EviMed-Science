@@ -39,7 +39,7 @@ import {
   generateKeyPairSync,
   hkdfSync,
   randomBytes,
-  scryptSync,
+  scrypt,
   sign as signBytes,
   timingSafeEqual,
   verify as verifyBytes,
@@ -63,10 +63,27 @@ const HKDF_INFO = "evimedcap/v1/pack-key";
 /** scrypt parameters for a password-wrapped copy. N=2^15 is ~100ms on a laptop. */
 const SCRYPT_PARAMS = Object.freeze({ N: 32768, r: 8, p: 1, maxmem: 96 * 1024 * 1024 });
 /** The most a container's own header may ask us to allocate to open it.
- *  Generous next to the 32 MiB this build wraps with — an older or deliberately
- *  expensive container still opens — and far under what a hostile header would
- *  name. */
-const MAX_PASSWORD_KDF_BYTES = 1024 * 1024 * 1024;
+ *  Enough for the supported 256 MiB legacy cost, with a bounded work factor
+ *  and one active password derivation per process. */
+const MAX_PASSWORD_KDF_BYTES = 384 * 1024 * 1024;
+const MAX_PASSWORD_KDF_WORK = 262144 * 8;
+let passwordKdfsRunning = 0;
+
+function containerError(code, message) { return Object.assign(new Error(message), { code }); }
+
+/** Bound thread-pool work process-wide. Password requests never block the event loop. */
+async function derivePasswordKey(password, salt, params) {
+  if (typeof password !== "string" || !password || Buffer.byteLength(password) > 1024) {
+    throw containerError("capsule_password_wrap_invalid", "A password must contain between 1 and 1024 UTF-8 bytes.");
+  }
+  if (passwordKdfsRunning >= 1) throw containerError("capsule_password_busy", "Another capsule password operation is in progress.");
+  passwordKdfsRunning++;
+  try {
+    return await new Promise((resolve, reject) => {
+      scrypt(password, salt, PACK_KEY_BYTES, params, (error, key) => error ? reject(error) : resolve(key));
+    });
+  } finally { passwordKdfsRunning--; }
+}
 
 /** @param {string | Buffer | Uint8Array} input @returns {string} */
 function sha256Hex(input) {
@@ -143,9 +160,26 @@ function privateKeyFrom(base64) {
  *   attribution?: string,
  *   password?: string,
  * }} input
- * @returns {PackedContainer}
+ * @returns {Promise<PackedContainer>}
  */
-export function packCapsule(input) {
+export async function packCapsule(input) {
+  if (!Array.isArray(input.entries) || !input.entries.length || input.entries.length > 256
+    || input.entries.some(entry => !entry || typeof entry.content !== "string" || Buffer.byteLength(entry.content) > 8 * 1024 * 1024)
+    || input.entries.reduce((sum, entry) => sum + Buffer.byteLength(entry.content), 0) > 16 * 1024 * 1024) {
+    throw containerError("capsule_size_invalid", "A capsule requires 1 to 256 entries within 16 MiB total and 8 MiB each.");
+  }
+  if (input.password !== undefined && (typeof input.password !== "string" || !input.password || Buffer.byteLength(input.password) > 1024)) {
+    throw containerError("capsule_password_wrap_invalid", "A supplied password must contain between 1 and 1024 UTF-8 bytes.");
+  }
+  if (input.recipients !== undefined && (!Array.isArray(input.recipients) || input.recipients.length > 32)) {
+    throw containerError("capsule_manifest_invalid", "At most 32 recipient keys may be supplied.");
+  }
+  const signingKey = privateKeyFrom(input.issuer.signingPrivateKey);
+  const signingPublicKey = createPublicKey(signingKey.export({ type: "pkcs8", format: "pem" }));
+  const signingKeyId = sha256Hex(signingPublicKey.export({ type: "spki", format: "der" })).slice(0, 32);
+  if (signingKey.asymmetricKeyType !== "ed25519" || input.issuer.signingKeyId !== signingKeyId) {
+    throw containerError("capsule_signature_invalid", "The signing key must match the issuer's Ed25519 fingerprint.");
+  }
   const manifestEntries = input.entries.map((entry) => ({
     path: entry.path,
     sha256: sha256Hex(entry.content),
@@ -159,7 +193,7 @@ export function packCapsule(input) {
   const packKey = encrypt ? randomBytes(PACK_KEY_BYTES) : null;
 
   /** @type {Record<string, Buffer>} */
-  const payload = {};
+  const payload = Object.create(null);
   for (const entry of input.entries) {
     payload[entry.path] = packKey
       ? sealEntry(packKey, entry.path, root, Buffer.from(entry.content, "utf8"))
@@ -180,24 +214,29 @@ export function packCapsule(input) {
     entries: manifestEntries,
     merkleRoot: root,
     prevManifestSha256: input.prevManifestSha256 ?? null,
-    ...(packKey && input.recipients?.length
+    ...(packKey
       ? {
         encryption: {
-          scheme: CAPSULE_ENCRYPTION_SCHEME,
-          recipients: input.recipients.map((recipient) => wrapForRecipient(packKey, recipient)),
+          scheme: input.recipients?.length ? CAPSULE_ENCRYPTION_SCHEME : "scrypt+aes-256-gcm",
+          recipients: (input.recipients ?? []).map((recipient) => wrapForRecipient(packKey, recipient)),
+          ...(input.password ? { passwordWrapSha256: "0".repeat(64) } : {}),
         },
       }
       : {}),
   };
 
-  const signature = signBytes(null, Buffer.from(signablePayload(manifest), "utf8"), privateKeyFrom(input.issuer.signingPrivateKey));
+  const shape = validateCapsuleManifest(manifest);
+  if (!shape.ok) throw containerError(shape.issues[0].code, shape.issues[0].message);
+  const passwordWrap = packKey && input.password ? await wrapWithPassword(packKey, input.password) : null;
+  if (passwordWrap) manifest.encryption.passwordWrapSha256 = sha256Hex(passwordWrap);
+  const signature = signBytes(null, Buffer.from(signablePayload(manifest), "utf8"), signingKey);
   manifest.signature = { alg: CAPSULE_SIGNATURE_ALG, keyId: input.issuer.signingKeyId, value: signature.toString("base64") };
 
   return {
     manifest,
     payload,
     readme: containerReadme(manifest),
-    passwordWrap: packKey && input.password ? wrapWithPassword(packKey, input.password) : null,
+    passwordWrap,
   };
 }
 
@@ -264,6 +303,9 @@ function openEntry(packKey, path, root, sealed) {
 function wrapForRecipient(packKey, recipient) {
   const ephemeral = generateKeyPairSync("x25519");
   const recipientKey = publicKeyFrom(recipient.publicKey);
+  if (recipientKey.asymmetricKeyType !== "x25519" || recipient.encKeyId !== sha256Hex(Buffer.from(recipient.publicKey, "base64")).slice(0, 32)) {
+    throw containerError("capsule_key_invalid", "The recipient key must match its X25519 fingerprint.");
+  }
   const shared = diffieHellman({ privateKey: ephemeral.privateKey, publicKey: recipientKey });
   const ephemeralPub = ephemeral.publicKey.export({ type: "spki", format: "der" });
   // Both public keys go into the salt so the derived key is bound to this exact
@@ -312,11 +354,11 @@ function unwrapForRecipient(manifest, recipient) {
  * an archive becomes unopenable.
  *
  * @param {Buffer} packKey @param {string} password
- * @returns {Buffer}
+ * @returns {Promise<Buffer>}
  */
-function wrapWithPassword(packKey, password) {
+async function wrapWithPassword(packKey, password) {
   const salt = randomBytes(16);
-  const derived = scryptSync(password, salt, PACK_KEY_BYTES, SCRYPT_PARAMS);
+  const derived = await derivePasswordKey(password, salt, SCRYPT_PARAMS);
   const nonce = randomBytes(NONCE_BYTES);
   const cipher = createCipheriv("aes-256-gcm", derived, nonce);
   const body = Buffer.concat([cipher.update(packKey), cipher.final()]);
@@ -351,17 +393,20 @@ function wrapWithPassword(packKey, password) {
  * @returns {{ N: number, r: number, p: number, maxmem: number }}
  */
 function passwordKdfCost(header) {
-  const N = Number(header?.N);
-  const r = Number(header?.r);
-  const p = Number(header?.p);
+  const N = header?.N;
+  const r = header?.r;
+  const p = header?.p;
   // scrypt requires N to be a power of two greater than one; r and p positive.
   // Checked here rather than left to the primitive so a malformed header is
   // refused by its own name instead of surfacing as an opaque OpenSSL string.
   const sane = [N, r, p].every((value) => Number.isSafeInteger(value) && value > 0)
-    && N > 1 && (N & (N - 1)) === 0;
+    && N > 1 && Number.isInteger(Math.log2(N)) && p <= 4
+    && header.kdf === "scrypt" && typeof header.salt === "string" && /^[A-Za-z0-9+/]{22}==$/.test(header.salt);
   if (!sane) throw capsuleParamsUnsupported(`scrypt parameters N=${header?.N} r=${header?.r} p=${header?.p} are not a usable set.`);
-  const required = 128 * N * r;
-  const maxmem = Number.isSafeInteger(header?.maxmem) && header.maxmem > 0 ? header.maxmem : SCRYPT_PARAMS.maxmem;
+  const required = 128 * r * (N + p + 2);
+  if (!Number.isSafeInteger(N * r * p) || N * r * p > MAX_PASSWORD_KDF_WORK) throw capsuleParamsUnsupported("This container exceeds the supported scrypt work ceiling.");
+  if (header.maxmem !== undefined && (!Number.isSafeInteger(header.maxmem) || header.maxmem <= 0)) throw capsuleParamsUnsupported("The recorded scrypt memory limit is invalid.");
+  const maxmem = header.maxmem ?? SCRYPT_PARAMS.maxmem;
   if (required > MAX_PASSWORD_KDF_BYTES || maxmem > MAX_PASSWORD_KDF_BYTES) {
     throw capsuleParamsUnsupported(
       `this container asks for ${Math.round(Math.max(required, maxmem) / 1024 / 1024)} MiB to derive its key, above the ${MAX_PASSWORD_KDF_BYTES / 1024 / 1024} MiB ceiling.`,
@@ -382,13 +427,20 @@ function capsuleParamsUnsupported(message) {
 
 /**
  * @param {Buffer} wrapped @param {string} password
- * @returns {Buffer}
+ * @returns {Promise<Buffer>}
  */
-export function unwrapWithPassword(wrapped, password) {
+export async function unwrapWithPassword(wrapped, password) {
+  if (!Buffer.isBuffer(wrapped) || wrapped.length < 2) throw containerError("capsule_password_wrap_invalid", "The password wrap is truncated.");
   const headerLength = wrapped.readUInt16BE(0);
-  const header = JSON.parse(wrapped.subarray(2, 2 + headerLength).toString("utf8"));
+  if (headerLength < 2 || headerLength > 1024 || wrapped.length !== 2 + headerLength + NONCE_BYTES + PACK_KEY_BYTES + TAG_BYTES) {
+    throw containerError("capsule_password_wrap_invalid", "The password wrap has invalid framing.");
+  }
+  let header;
+  try { header = JSON.parse(wrapped.subarray(2, 2 + headerLength).toString("utf8")); }
+  catch { throw containerError("capsule_password_wrap_invalid", "The password wrap has invalid metadata."); }
   const rest = wrapped.subarray(2 + headerLength);
-  const derived = scryptSync(password, Buffer.from(header.salt, "base64"), PACK_KEY_BYTES, passwordKdfCost(header));
+  const params = passwordKdfCost(header);
+  const derived = await derivePasswordKey(password, Buffer.from(header.salt, "base64"), params);
   const nonce = rest.subarray(0, NONCE_BYTES);
   const tag = rest.subarray(rest.length - TAG_BYTES);
   const body = rest.subarray(NONCE_BYTES, rest.length - TAG_BYTES);
@@ -419,27 +471,37 @@ export function verifyCapsule(container, issuer) {
   if (!signature) {
     issues.push({ code: "capsule_unsigned", message: "the container carries no signature." });
   } else {
-    const valid = verifyBytes(
-      null,
-      Buffer.from(signablePayload(manifest), "utf8"),
-      publicKeyFrom(issuer.signingPublicKey),
-      Buffer.from(signature.value, "base64"),
-    );
-    if (!valid) issues.push({ code: "capsule_signature_invalid", message: "the signature does not match the issuer's key." });
-    const expectedKeyId = sha256Hex(Buffer.from(issuer.signingPublicKey, "base64")).slice(0, 32);
-    if (signature.keyId !== expectedKeyId) {
-      issues.push({ code: "capsule_signature_invalid", message: "the signature names a different key than the one offered." });
+    try {
+      const key = publicKeyFrom(issuer.signingPublicKey);
+      const expectedKeyId = sha256Hex(key.export({ type: "spki", format: "der" })).slice(0, 32);
+      const valid = key.asymmetricKeyType === "ed25519"
+        && signature.keyId === expectedKeyId && manifest.issuer.signingKeyId === expectedKeyId
+        && verifyBytes(null, Buffer.from(signablePayload(manifest), "utf8"), key, Buffer.from(signature.value, "base64"));
+      if (!valid) issues.push({ code: "capsule_signature_invalid", message: "The manifest signing fields do not match the offered Ed25519 key." });
+    } catch {
+      issues.push({ code: "capsule_signature_invalid", message: "The offered signing key is invalid." });
     }
   }
 
+  // A valid signature proves possession of this key, not the claimed user ID.
+  // The caller must resolve this key through a trusted user/key registry, or
+  // display authorship as unverified. Never trust a public key supplied by the archive.
+  if (issues.length) return { ok: false, issues };
+  if (!container.payload || typeof container.payload !== "object" || Array.isArray(container.payload)) {
+    return { ok: false, issues: [{ code: "capsule_manifest_invalid", message: "The capsule payload must be an entry map." }] };
+  }
   const root = merkleRoot(manifest.entries, sha256Hex);
   if (root !== manifest.merkleRoot) {
     issues.push({ code: "capsule_tampered", message: "the entry list does not hash to the declared Merkle root." });
   }
   for (const entry of manifest.entries) {
     const sealed = container.payload[entry.path];
-    if (!sealed) {
+    if (!Object.hasOwn(container.payload, entry.path) || !Buffer.isBuffer(sealed)) {
       issues.push({ code: "capsule_entry_missing", message: `payload/${entry.path} is named by the manifest and absent from the container.` });
+      continue;
+    }
+    if (sealed.length !== entry.bytes + (manifest.encryption ? NONCE_BYTES + TAG_BYTES : 0)) {
+      issues.push({ code: "capsule_tampered", message: `payload/${entry.path} has an unexpected byte count.` });
       continue;
     }
     if (!manifest.encryption) {
@@ -478,25 +540,31 @@ function safeEqualHex(left, right) {
  *   passwordWrap?: Buffer,
  *   password?: string,
  * }} keys
- * @returns {{ ok: true, manifest: import("@evimed/domain").CapsuleManifest, entries: Record<string, string> } | { ok: false, issues: { code: string, message: string }[] }}
+ * @returns {Promise<{ ok: true, manifest: import("@evimed/domain").CapsuleManifest, entries: Record<string, string> } | { ok: false, issues: { code: string, message: string }[] }>}
  */
-export function openCapsule(container, keys) {
+export async function openCapsule(container, keys) {
   const verified = verifyCapsule(container, keys.issuer);
   if (!verified.ok) return { ok: false, issues: verified.issues };
   const manifest = /** @type {import("@evimed/domain").CapsuleManifest} */ (container.manifest);
+  const safety = checkImportSafety(manifest);
+  if (!safety.ok) return { ok: false, issues: safety.issues };
 
   /** @type {Buffer | null} */
   let packKey = null;
   if (manifest.encryption) {
     try {
       if (keys.recipient) packKey = unwrapForRecipient(manifest, keys.recipient);
-      else if (keys.passwordWrap && keys.password) packKey = unwrapWithPassword(keys.passwordWrap, keys.password);
+      else if (keys.passwordWrap && keys.password) {
+        if (!manifest.encryption.passwordWrapSha256) throw containerError("capsule_password_wrap_unauthenticated", "This legacy container requires its recipient key because its password wrap is not authenticated.");
+        if (!Buffer.isBuffer(keys.passwordWrap) || !safeEqualHex(sha256Hex(keys.passwordWrap), manifest.encryption.passwordWrapSha256)) {
+          throw containerError("capsule_password_wrap_invalid", "The password wrap does not match the signed manifest.");
+        }
+        packKey = await unwrapWithPassword(keys.passwordWrap, keys.password);
+      }
       else return { ok: false, issues: [{ code: "capsule_key_missing", message: "the container is encrypted and no key was offered." }] };
     } catch (error) {
-      // A refused cost keeps its own code: "this container asks for more than
-      // we will spend" is not "your key is wrong", and collapsing the two sends
-      // the reader looking for a key problem that does not exist.
-      if (error?.code === "capsule_password_params_unsupported") {
+      // Authentication, cost and admission errors remain distinct from a wrong password.
+      if (["capsule_password_params_unsupported", "capsule_password_wrap_invalid", "capsule_password_wrap_unauthenticated", "capsule_password_busy"].includes(error?.code)) {
         return { ok: false, issues: [{ code: error.code, message: error.message }] };
       }
       return { ok: false, issues: [{ code: "capsule_key_invalid", message: `the offered key does not open this container: ${error?.message ?? error}` }] };
@@ -504,7 +572,7 @@ export function openCapsule(container, keys) {
   }
 
   /** @type {Record<string, string>} */
-  const entries = {};
+  const entries = Object.create(null);
   for (const entry of manifest.entries) {
     const sealed = container.payload[entry.path];
     try {
