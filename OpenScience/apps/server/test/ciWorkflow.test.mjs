@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parse } from "yaml";
+import { productIntegrationTests } from "../../../scripts/ops/test-product-state.mjs";
 
 const root = new URL("../../../../.github/workflows/", import.meta.url);
 async function workflow(name) { return parse(await readFile(new URL(name, root), "utf8")); }
@@ -32,6 +33,10 @@ test("PostgreSQL auth and product tests execute against different disposable dat
   assert.ok(auth && product);
   assert.notEqual(auth.env.OPEN_SCIENCE_TEST_POSTGRES_URL, product.env.OPEN_SCIENCE_TEST_POSTGRES_URL);
   assert.match(auth.run, /postgresStore\.integration/);
-  assert.match(product.run, /productStore\.integration/);
-  assert.match(product.run, /capsuleProductApp\.integration/);
+  assert.match(product.run, /scripts\/ops\/test-product-state\.mjs/);
+  const inventory = productIntegrationTests();
+  assert.ok(inventory.some((file) => file.endsWith("capsuleTransferService.integration.test.mjs")));
+  assert.ok(inventory.some((file) => file.endsWith("productStore.integration.test.mjs")));
+  assert.ok(inventory.some((file) => file.endsWith("capsuleProductApp.integration.test.mjs")));
+  assert.ok(inventory.every((file) => !file.endsWith("postgresStore.integration.test.mjs")));
 });
