@@ -607,3 +607,14 @@ test("encoded or malformed native API paths cannot bypass the HTTP method and sp
   }
   assert.equal(reached, 0);
 });
+
+test("the exact native host-event result endpoint remains available for user-question replies", async (t) => {
+  const f = await fixture(t);
+  const reached = [];
+  f.manager.proxy = async (_req, res, project, suffix) => { reached.push([project.id, suffix]); res.end("ok"); };
+  for (const [suffix, status] of [["/api/$events/result", 200], ["/api/%24events/result", 400], ["/api/$events/other", 400]]) {
+    const response = await fetch(`${f.base}${suffix}`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal(response.status, status);
+  }
+  assert.deepEqual(reached, [["default", "/api/$events/result"]]);
+});
