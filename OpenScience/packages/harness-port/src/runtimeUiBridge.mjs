@@ -22,11 +22,49 @@ export function apply(ctx, _config, target = globalThis) {
   /** @type {string | null | undefined} */ let previousSession;
   let actions = Promise.resolve();
   const requests = new Map();
+  /** @type {any} */ let pendingNavigation;
   /** @param {string} type @param {any} [fields] */
   function post(type, fields = {}) {
     if (disposed) return;
     parent.postMessage({ type: `evimed.runtime-ui.${type}`, version: 1, frameId: frame.frameId,
       projectId: frame.projectId, seq: ++outgoing, ...fields }, frame.shellOrigin);
+  }
+  function unavailable() {
+    const wasReady = ready;
+    ready = false;
+    if (wasReady) post('connecting');
+  }
+  /** @param {any} command */
+  function retain(command) {
+    if (!pendingNavigation || command.seq >= pendingNavigation.seq) pendingNavigation = command;
+  }
+  /** @param {any} command */
+  function schedule(command) {
+    const { requestId, intent, request } = command;
+    if (disposed || request.queued || request.ack) return;
+    if (!ready) { retain(command); return; }
+    request.queued = true;
+    actions = actions.then(async () => {
+      if (disposed) return;
+      if (!ready) { request.queued = false; retain(command); return; }
+      try {
+        let sessionId = intent.sessionId;
+        if (intent.kind === 'create') sessionId = await ctx.sessions.create({ sessionId });
+        else await ctx.sessions.refresh();
+        if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('Invalid native session identity');
+        if (disposed) return;
+        ctx.sessions.open(sessionId);
+        if (intent.draft !== undefined) {
+          const scope = ctx.sessions.scope(sessionId);
+          if (!scope) throw new Error('Native session scope unavailable');
+          ctx.conversation.input.for(scope).setDraft(intent.draft);
+        }
+        activated = true; selectedSession = sessionId; previousSession = sessionId;
+        request.ack = { requestId, ok: true, sessionId };
+      } catch { request.ack = { requestId, ok: false, error: 'NAVIGATION_FAILED' }; }
+      request.queued = false;
+      post('ack', request.ack); sessionChanged();
+    });
   }
   function sessionChanged() {
     if (!ready || !activated || disposed) return;
@@ -39,16 +77,21 @@ export function apply(ctx, _config, target = globalThis) {
   async function establish() {
     if (disposed || refreshing) return;
     const generation = ctx.connection.generation.getSnapshot();
-    if (!generation) { ready = false; return; }
+    if (!generation) { unavailable(); return; }
     refreshing = true;
-    ready = false;
+    unavailable();
     try {
       await ctx.sessions.refresh();
       if (disposed || ctx.connection.generation.getSnapshot() !== generation) return;
       if (activated && selectedSession) ctx.sessions.open(selectedSession);
       ready = true;
       post('ready'); sessionChanged();
-    } catch { post('error', { error: 'NATIVE_NOT_READY' }); }
+      const pending = pendingNavigation;
+      pendingNavigation = undefined;
+      if (pending) schedule(pending);
+    } catch {
+      if (ctx.connection.generation.getSnapshot() === generation) post('error', { error: 'NATIVE_NOT_READY' });
+    }
     finally {
       refreshing = false;
       if (!disposed && ctx.connection.generation.getSnapshot() && ctx.connection.generation.getSnapshot() !== generation) void establish();
@@ -56,7 +99,7 @@ export function apply(ctx, _config, target = globalThis) {
   }
   /** @param {any} event */
   function message(event) {
-    if (disposed || !ready || event.source !== parent || event.origin !== frame.shellOrigin) return;
+    if (disposed || event.source !== parent || event.origin !== frame.shellOrigin) return;
     const data = event.data;
     if (!data || data.type !== 'evimed.runtime-ui.navigate' || data.version !== 1
       || data.frameId !== frame.frameId || data.projectId !== frame.projectId
@@ -72,36 +115,18 @@ export function apply(ctx, _config, target = globalThis) {
     if (existing) {
       if (existing.signature !== signature) return;
       if (existing.ack) post('ack', existing.ack);
+      else schedule({ requestId: data.requestId, intent, request: existing, seq: data.seq });
       return;
     }
     if (requests.size >= 128) { post('ack', { requestId: data.requestId, ok: false, error: 'NAVIGATION_CAPACITY' }); return; }
-    /** @type {{ signature: string, ack: any }} */
-    const request = { signature, ack: undefined };
+    const request = { signature, ack: undefined, queued: false };
     requests.set(data.requestId, request);
-    actions = actions.then(async () => {
-      if (disposed) return;
-      try {
-        let sessionId = intent.sessionId;
-        if (intent.kind === 'create') sessionId = await ctx.sessions.create({ sessionId });
-        else await ctx.sessions.refresh();
-        if (typeof sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('Invalid native session identity');
-        if (disposed) return;
-        ctx.sessions.open(sessionId);
-        if (intent.draft !== undefined) {
-          const scope = ctx.sessions.scope(sessionId);
-          if (!scope) throw new Error('Native session scope unavailable');
-          ctx.conversation.input.for(scope).setDraft(intent.draft);
-        }
-        activated = true; selectedSession = sessionId; previousSession = sessionId;
-        request.ack = { requestId: data.requestId, ok: true, sessionId };
-      } catch { request.ack = { requestId: data.requestId, ok: false, error: 'NAVIGATION_FAILED' }; }
-      post('ack', request.ack); sessionChanged();
-    });
+    schedule({ requestId: data.requestId, intent, request, seq: data.seq });
   }
   target.addEventListener('message', message);
   const unsubscribe = ctx.sessions.list.subscribe(sessionChanged);
   const unsubscribeGeneration = ctx.connection.generation.subscribe(() => {
-    if (!ctx.connection.generation.getSnapshot()) ready = false;
+    if (!ctx.connection.generation.getSnapshot()) unavailable();
     void establish();
   });
   const boot = ctx.loader?.await?.() ?? Promise.resolve();
@@ -109,6 +134,7 @@ export function apply(ctx, _config, target = globalThis) {
   ctx.effect(() => () => {
     disposed = true; ready = false;
     target.removeEventListener('message', message); unsubscribe(); unsubscribeGeneration();
+    pendingNavigation = undefined;
     requests.clear(); target.__DSH_TRANSPORT__?.dispose?.();
   }, 'evimed.runtime-ui.bridge');
 }

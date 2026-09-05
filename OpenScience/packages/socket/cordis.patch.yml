@@ -14,6 +14,9 @@
 # row we override rather than trusting the patch to have applied.
 
 - insert:
+    # The native module registry discovers client metadata only from package roots.
+    - id: evimed-runtime-ui
+      name: '@evimed/dsh-socket'
     # Startup self-check. Gate-level seams missing, an overridden row that did
     # not take, or a sandbox that cannot enforce all crash the process here,
     # before a run can be accepted and quietly under-protected.

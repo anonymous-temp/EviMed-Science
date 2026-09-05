@@ -28,12 +28,14 @@ test('the published native scanner discovers the socket client from the fresh ho
   const graph = registry.graph();
   const client = graph.entries.find(row => row.id === '@evimed/dsh-socket');
   assert.ok(client, 'the native scanner omitted the socket client from __DSH_BOOT__');
-  assert.ok(graph.batches.some(batch => batch.ids.includes(client.id)));
-  assert.equal(registry.clientPath(client.id), new URL('dist/client.js', socketRoot).pathname);
+  assert.ok(graph.batches.some(batch => batch.entries.includes(client.id)));
+  const clientPath = registry.clientPath(client.id);
+  assert.ok(clientPath);
+  assert.equal(clientPath, new URL('dist/client.js', socketRoot).pathname);
   const injections = bootInjections(graph);
   assert.ok(injections.some(row => JSON.stringify(row).includes('@evimed/dsh-socket')));
   /** @type {any} */ let registration;
-  vm.runInNewContext(await readFile(registry.clientPath(client.id), 'utf8'), {
+  vm.runInNewContext(await readFile(clientPath, 'utf8'), {
     __ModuleLoader__: { load: (/** @type {any} */ value) => { registration = value; } },
   });
   assert.equal(registration.id, client.id);
