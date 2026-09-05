@@ -45,6 +45,19 @@ const officialPackageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../runtime/skills/evimed",
 );
+const officialCapabilityRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../capabilities",
+);
+
+test("the public registry includes every canonical capability plus the answer line", async () => {
+  const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
+  const ids = registry.list().map((agent) => agent.id);
+  assert.equal(ids.length, 16);
+  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer"]) {
+    assert.ok(ids.includes(id), `${id} is absent from the public capability catalogue`);
+  }
+});
 
 async function writePackage(root, manifest = validManifest, options = {}) {
   const directoryName = options.directoryName ?? manifest.skill;
