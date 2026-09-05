@@ -150,3 +150,17 @@ test("cleanup fsyncs deleted directories before recording completion",options,as
     for(const directory of ["capsule-keys","capsule-snapshots"]){const synced=events.lastIndexOf(path.join(root,directory));assert.ok(synced>=0&&synced<completed,`${directory} must be synced before completion`);}
   }finally{fs.open=originalOpen;fs.rename=originalRename;}
 });
+
+test("account cleanup also removes attributable interrupted-write temporaries without touching another account",options,async()=>{
+  const owner=await account(),other=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});
+  const hash=createHash("sha256").update(owner).digest("hex"),otherHash=createHash("sha256").update(other).digest("hex");
+  const ownedKey=`account-${hash}.json.${randomUUID()}.tmp`;const otherKey=`account-${otherHash}.json.${randomUUID()}.tmp`;
+  const ownedSnapshot=`${hash}-${exported.snapshot.id}.evimedcap.${randomUUID()}.tmp`;
+  await fs.writeFile(path.join(root,"capsule-keys",ownedKey),"test-only-interrupted-identity",{mode:0o600});
+  await fs.writeFile(path.join(root,"capsule-keys",otherKey),"test-only-other-identity",{mode:0o600});
+  await fs.writeFile(path.join(root,"capsule-snapshots",ownedSnapshot),"test-only-interrupted-ciphertext",{mode:0o600});
+  await deleteOwner(owner);
+  assert.ok(!(await fs.readdir(path.join(root,"capsule-keys"))).includes(ownedKey));
+  assert.ok(!(await fs.readdir(path.join(root,"capsule-snapshots"))).includes(ownedSnapshot));
+  assert.ok((await fs.readdir(path.join(root,"capsule-keys"))).includes(otherKey));
+});
