@@ -19,9 +19,11 @@ function send(peer, data) {
  * headers are copied: the kernel receives only its own authority and cookie.
  *
  * @param {{ req: any, socket: any, head: Buffer, runtime: any, maxPayload: number,
+ * heartbeat?: { intervalMs: number, timeoutMs: number },
  * revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void> }} options
  */
-export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize }) {
+export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
+  heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
   const headers = { host: runtime.authority || target.host, ...(runtime.cookie ? { cookie: runtime.cookie } : {}) };
@@ -36,12 +38,18 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   /** @type {NodeJS.Timeout | undefined} */
   let validationTimer;
   /** @type {NodeJS.Timeout | undefined} */
+  let heartbeatTimer;
+  /** @type {NodeJS.Timeout | undefined} */
+  let pongTimer;
+  /** @type {NodeJS.Timeout | undefined} */
   let closeTimer;
   const terminate = () => { browser?.terminate(); upstream.terminate(); };
   const shutdown = (code = 1001, reason = "runtime_ui_closed") => {
     if (closed) return;
     closed = true;
     clearInterval(validationTimer);
+    clearInterval(heartbeatTimer);
+    clearTimeout(pongTimer);
     // A paused receiver must read the peer's close response as well.
     for (const peer of [browser, upstream]) {
       if (peer?.readyState === WebSocket.OPEN) {
@@ -169,6 +177,25 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   });
   client.on("error", () => shutdown(1008, "runtime_ui_frame_invalid"));
   client.on("close", () => shutdown());
+  // Upstream pings stop at this bridge. Only the browser's matching pong
+  // proves that it is still reachable and may retain its proxy capacity.
+  let heartbeatSequence = 0;
+  /** @type {Buffer | undefined} */
+  let expectedPong;
+  client.on("pong", (data) => {
+    if (!expectedPong?.equals(data)) return;
+    clearTimeout(pongTimer);
+    pongTimer = undefined;
+    expectedPong = undefined;
+  });
+  heartbeatTimer = setInterval(() => {
+    if (closed || pongTimer) return;
+    expectedPong = Buffer.from(String(++heartbeatSequence));
+    pongTimer = setTimeout(() => shutdown(1001, "runtime_ui_heartbeat_timeout"), heartbeat.timeoutMs);
+    pongTimer.unref();
+    client.ping(expectedPong, (error) => { if (error) shutdown(1011, "runtime_ui_proxy_failed"); });
+  }, heartbeat.intervalMs);
+  heartbeatTimer.unref();
   validationTimer = setInterval(() => {
     if (closed || validating) return;
     validating = true;
