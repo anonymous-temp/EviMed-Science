@@ -127,6 +127,25 @@ export class DocumentParserClient {
     return validateResult(parsed);
   }
 
+  async health() {
+    if (!this.baseUrl) return { configured: false };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(this.timeoutMs, 5000));
+    timeout.unref?.();
+    try {
+      const response = await this.fetch(`${this.baseUrl}/health`, { signal: controller.signal });
+      if (!response.ok) throw parserError("source_parser_unavailable", "Document parser health check failed.", 503);
+      const parsed = JSON.parse((await boundedBody(response, 16 * 1024)).toString("utf8"));
+      if (parsed?.ok !== true || parsed?.protocolVersion !== 1 || parsed?.mineruVersion !== "3.4.5") {
+        throw parserError("source_parser_contract_mismatch", "Document parser contract is incompatible.", 503);
+      }
+      return { configured: true, protocolVersion: 1, mineruVersion: parsed.mineruVersion };
+    } catch (error) {
+      if (error?.code) throw error;
+      throw parserError("source_parser_unavailable", "Document parser is unavailable.", 503);
+    } finally { clearTimeout(timeout); }
+  }
+
   /** @param {{path:string,mimeType:string,sha256:string,sourceId:string}} input */
   async parseText(input) {
     const extension = path.extname(input.path).toLowerCase();

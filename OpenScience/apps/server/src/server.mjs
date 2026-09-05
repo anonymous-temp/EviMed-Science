@@ -1000,7 +1000,7 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname === "/api/ready") {
-        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService);
+        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -1016,6 +1016,7 @@ export function createWebApiApp(overrides = {}) {
           memoryIndexWorker,
           usageLedger,
           notificationService,
+          documentParser,
           operationalMetrics,
           activeCommands,
         });
@@ -2842,8 +2843,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, operationalMetrics, activeCommands }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, operationalMetrics, activeCommands }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -3139,7 +3140,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null) {
+async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -3156,6 +3157,7 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memOsEngine, memoryIndexWorker)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
+    documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
     security: await readinessCheck(() => readinessSecurity(config)),
     observability: await readinessCheck(() => readinessObservability(config)),
     evimedAdapters: await readinessCheck(() => readinessEviMedAdapters(config)),
@@ -3172,6 +3174,13 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     ok: Object.values(checks).every((check) => check.ok),
     checks,
   };
+}
+
+async function readinessDocumentParser(config, parser) {
+  if (!config.requireDocumentParser) return { required: false, configured: Boolean(config.documentParserUrl) };
+  if (config.documentParserTokenError) throw readinessFailure(config.documentParserTokenError);
+  if (!config.documentParserUrl || !config.documentParserToken || !parser) throw readinessFailure("document_parser_unconfigured");
+  return { required: true, ...(await parser.health()) };
 }
 
 async function readinessUsageLedger(config, ledger) {
