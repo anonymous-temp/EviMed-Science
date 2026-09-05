@@ -72,6 +72,7 @@ export class SourceIngestionWorker {
       const artifactPath = await this.materialize(job, processing, result);
       const completed = await this.sources.recordExtraction(job.userId, processing.id, {
         expectedRevision: processing.revision,
+        generation: actualGeneration,
         extractor: result.extractor,
         units: result.units,
         summary: result.summary,
@@ -90,7 +91,8 @@ export class SourceIngestionWorker {
       this.lastError = code;
       if (processing && code !== "source_generation_stale" && code !== "product_job_lease_lost") {
         await this.sources.recordFailure(job.userId, processing.id, {
-          expectedRevision: processing.revision, code, message: "Source analysis failed.",
+          expectedRevision: processing.revision, generation: processing.payload.generation,
+          code, message: "Source analysis failed.",
         }).catch(() => {});
       }
       if (!leaseLost && code !== "product_job_lease_lost") {
