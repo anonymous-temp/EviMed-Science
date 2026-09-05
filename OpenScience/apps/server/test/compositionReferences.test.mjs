@@ -14,7 +14,8 @@
 // requires registry.npmjs.org for `pnpm audit --prod`.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -30,6 +31,14 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(repoRoot, "scripts/ops/verify-composition-references.mjs");
+
+async function changedPreset(t, source, edit) {
+  const directory = await mkdtemp(path.join(tmpdir(), "evimed-composition-fixture-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = path.join(directory, "agent.cordis.yml");
+  await writeFile(file, edit(source), "utf8");
+  return file;
+}
 
 /** @param {{ file: string, line?: number, specifier: string }} match */
 function findProblem(problems, match) {
@@ -120,18 +129,13 @@ test("a row mounting a package upstream deleted is named, and only that row", as
   // row, so the instance is gone from the tree — but the registry fact is
   // permanent (that package has no build after alpha.3), which makes it the
   // one canary that cannot rot. The row goes back for the length of this test.
-  const presetPath = path.join(repoRoot, SOURCE_FILES.preset);
-  const preset = await readFile(presetPath, "utf8");
-  t.after(async () => { await writeFile(presetPath, preset, "utf8"); });
+  const preset = await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8");
   const anchor = "    - id: tool-subagent-control\n";
   assert.ok(preset.includes(anchor), "the row this test inserts beside has moved");
-  await writeFile(
-    presetPath,
-    preset.replace(anchor, "    - id: tool-subagent-report\n      name: '@deepseek-ai/dsh-tool-subagent-report'\n" + anchor),
-    "utf8",
-  );
+  const presetPath = await changedPreset(t, preset, (value) =>
+    value.replace(anchor, "    - id: tool-subagent-report\n      name: '@deepseek-ai/dsh-tool-subagent-report'\n" + anchor));
 
-  const report = await verifyCompositionReferences({});
+  const report = await verifyCompositionReferences({ overrideFiles: { preset: presetPath } });
   assert.equal(report.ok, false);
 
   // Two problems, not one, and both are right: the package is unpublished at
@@ -398,13 +402,8 @@ test("a loader built-in nobody has reviewed is reported, not waved through", asy
   // exactly the class this guard exists for, so an unrecognised built-in is a
   // problem a human closes by reviewing it, not a silence.
   const preset = await readFile(path.join(repoRoot, SOURCE_FILES.preset), "utf8");
-  t.after(async () => { await writeFile(path.join(repoRoot, SOURCE_FILES.preset), preset, "utf8"); });
-  await writeFile(
-    path.join(repoRoot, SOURCE_FILES.preset),
-    preset.replace(/name: cordis:group/g, "name: cordis:renamed-upstream"),
-    "utf8",
-  );
-  const verdict = await verifyCompositionReferences({ offline: true });
+  const presetPath = await changedPreset(t, preset, (value) => value.replace(/name: cordis:group/g, "name: cordis:renamed-upstream"));
+  const verdict = await verifyCompositionReferences({ offline: true, overrideFiles: { preset: presetPath } });
   const unreviewed = verdict.problems.filter((problem) => problem.kind === "unreviewed-kernel-builtin");
   assert.ok(unreviewed.length > 0, "a renamed built-in must be reported");
   assert.equal(unreviewed[0].specifier, "cordis:renamed-upstream");
