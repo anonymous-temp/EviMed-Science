@@ -47,6 +47,7 @@ import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
 import { createRuntimeUiServer } from "./runtimeUiServer.mjs";
+import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
   HttpError,
@@ -929,6 +930,20 @@ export function createWebApiApp(overrides = {}) {
             },
           },
         });
+        return;
+      }
+
+      if (pathname === "/api/runtime-ui/frames" && req.method === "POST") {
+        if (!config.runtimeUiProxyEnabled) throw new HttpError(404, "runtime_ui_not_enabled", "The native UI is not enabled.");
+        const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+        if (req.headers["x-open-science-csrf"] !== session.csrfToken) throw new HttpError(403, "csrf_required", "A valid CSRF token is required.");
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "runtime UI frame");
+        if (Object.keys(body).some((key) => key !== "projectId")) throw new HttpError(400, "runtime_ui_frame_payload_invalid", "Only projectId is accepted.");
+        const projectId = assertString(body.projectId, "projectId", { max: 128 });
+        const project = await store.requireProject(user, projectId);
+        const frame = issueRuntimeUiFrame({ config, req, user, session, project });
+        res.setHeader("Set-Cookie", frame.cookie);
+        sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt } });
         return;
       }
 
@@ -3556,6 +3571,7 @@ async function readinessRuntime(config, runtimeManager) {
   if (config.production && config.runtimeUiProxyEnabled) {
     if (!Number(config.runtimeUiPort)) throw readinessFailure("runtime_ui_port_required");
     if (!originFor(config.runtimeUiPublicOrigin)) throw readinessFailure("runtime_ui_public_origin_required");
+    assertRuntimeUiFrameConfiguration(config);
   }
   if (config.runtimeMode === "mock") {
     if (config.production && !config.allowMockRuntime) throw readinessFailure("runtime_mock_forbidden");

@@ -56,7 +56,7 @@ test("signed frame claims bind the login fingerprint and reject tampering, expir
     [{ now: 100000 }, "runtime_ui_frame_expired"],
     [{ frameId: "a".repeat(32) }, "runtime_ui_frame_invalid"],
     [{ user: { id: "user-two" } }, "runtime_ui_frame_invalid"],
-    [{ config: { ...config, runtimeUiPublicOrigin: "https://other.example:8443" } }, "runtime_ui_frame_invalid"],
+    [{ config: { ...config, runtimeUiPublicOrigin: "https://science.example:9443" } }, "runtime_ui_frame_invalid"],
     [{ req: { headers: { cookie: frameReq.headers.cookie.replace("login-one", "login-two") } } }, "runtime_ui_frame_invalid"],
     [{ req: { headers: { cookie: `${frameReq.headers.cookie}x` } } }, "runtime_ui_frame_invalid"],
     [{ req: { headers: { cookie: req.headers.cookie } } }, "runtime_ui_frame_required"],
