@@ -112,3 +112,41 @@ test("an authenticated old account epoch is not refreshed after request-body del
   await assert.rejects(transfers.import(recipient,{archive:exported.archive,password,confirmed:true,expectedDigest:exported.snapshot.archiveSha256},{accountCreatedAt}),{code:"product_account_changed"});
   assert.equal((await capsules.list(recipient)).items.length,0);
 });
+
+test("issuer deletion and same-name recreation during KDF cannot downgrade a local snapshot",options,async()=>{
+  const owner=await account(),recipient=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});
+  const reached=deferred();let resume;const original=crypto.scrypt;
+  try{crypto.scrypt=(...args)=>{const callback=args.pop();return original(...args,(error,key)=>{resume=()=>callback(error,key);reached.resolve();});};syncBuiltinESMExports();
+    const importing=transfers.import(recipient,{archive:exported.archive,password,confirmed:true,expectedDigest:exported.snapshot.archiveSha256});const outcome=importing.then(value=>({value}),error=>({error}));
+    await reached.promise;await deleteOwner(owner);await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Recreated issuer','development')",[owner]);resume();
+    assert.equal((await outcome).error?.code,"capsule_snapshot_revoked");assert.equal((await capsules.list(recipient)).items.length,0);
+  }finally{crypto.scrypt=original;syncBuiltinESMExports();}
+});
+
+test("a live issuer binding removed between file reads is still resolved as revoked",options,async()=>{
+  const owner=await account(),recipient=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});const issuer=JSON.parse(exported.archive).manifest.issuer;
+  const reached=deferred(),resume=deferred();const original=fs.open;let paused=false;
+  try{fs.open=async(target,...args)=>{if(!paused&&String(target)===path.join(root,"capsule-keys",`issuer-${issuer.signingKeyId}.json`)){paused=true;reached.resolve();await resume.promise;}return original(target,...args);};
+    const importing=transfers.import(recipient,{archive:exported.archive,password,confirmed:true,expectedDigest:exported.snapshot.archiveSha256});const outcome=importing.then(value=>({value}),error=>({error}));
+    await reached.promise;await deleteOwner(owner);resume.resolve();
+    assert.equal((await outcome).error?.code,"capsule_snapshot_revoked");assert.equal((await capsules.list(recipient)).items.length,0);
+  }finally{fs.open=original;}
+});
+
+test("missing local hosted metadata is never accepted as an unguarded foreign transfer",options,async()=>{
+  const owner=await account(),recipient=await account();const capsule=await source(owner);const exported=await transfers.export(owner,capsule.id,{password});
+  await db.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND kind='preferences' AND id=$2",[owner,exported.snapshot.id]);
+  const preview=await transfers.preview(recipient,{archive:exported.archive,password});assert.equal(preview.issuerTrust,"verified");assert.equal(preview.canImport,false);
+  await assert.rejects(transfers.import(recipient,{archive:exported.archive,password,confirmed:true,expectedDigest:exported.snapshot.archiveSha256}),{code:"capsule_snapshot_revoked"});
+});
+
+test("cleanup fsyncs deleted directories before recording completion",options,async()=>{
+  const owner=await account();const capsule=await source(owner);await transfers.export(owner,capsule.id,{password});
+  const events=[];const originalOpen=fs.open,originalRename=fs.rename;const hash=createHash("sha256").update(owner).digest("hex");
+  try{fs.open=async(target,...args)=>{const handle=await originalOpen(target,...args);if([path.join(root,"capsule-keys"),path.join(root,"capsule-snapshots")].includes(String(target))){const sync=handle.sync.bind(handle);handle.sync=async()=>{events.push(String(target));await sync();};}return handle;};
+    fs.rename=async(from,to)=>{if(String(to)===path.join(root,"capsule-revocations",`account-${hash}.json`)){const state=JSON.parse(await fs.readFile(from,"utf8"));if(state.phase==="completed")events.push("completed-marker");}return originalRename(from,to);};
+    await deleteOwner(owner);
+    const completed=events.indexOf("completed-marker");assert.ok(completed>=0);
+    for(const directory of ["capsule-keys","capsule-snapshots"]){const synced=events.lastIndexOf(path.join(root,directory));assert.ok(synced>=0&&synced<completed,`${directory} must be synced before completion`);}
+  }finally{fs.open=originalOpen;fs.rename=originalRename;}
+});
