@@ -78,3 +78,33 @@ test("production frame signing fails closed without stable protected material an
     { runtimeUiPublicOrigin: shellOrigin },
   ]) assert.throws(() => issueRuntimeUiFrame({ config: { ...config, ...overrides }, req, user, project, session, now: 1000 }));
 });
+
+test("the authenticated external bootstrap installs the real browser hook without changing global fetch or starting a runtime", async (t) => {
+  const { runInNewContext } = await import("node:vm");
+  const f = await frameApi(t);
+  let starts = 0;
+  f.app.runtimeManager.start = async () => { starts++; throw new Error("bootstrap must not wake runtime"); };
+  const response = await fetch(`${f.base}/api/runtime-ui/frames`, { method: "POST", headers: { cookie: f.cookie, "content-type": "application/json", "x-open-science-csrf": f.csrfToken }, body: JSON.stringify({ projectId: "default" }) });
+  const frame = (await response.json()).data;
+  const cookie = `${f.cookie}; ${response.headers.get("set-cookie").split(";")[0]}`;
+  const prefix = new URL(frame.frameUrl).pathname;
+  const source = await fetch(`http://127.0.0.1:${f.app.runtimeUi.address().port}${prefix}__evimed_bootstrap.js`, { headers: { cookie } });
+  assert.equal(source.status, 200);
+  assert.match(source.headers.get("content-type"), /text\/javascript/);
+  assert.equal(source.headers.get("cache-control"), "private, no-store");
+  const requests = [];
+  const nativeFetch = async (url, options) => { requests.push([url, options]); return new Response("ok"); };
+  const sandbox = { location: { origin: uiOrigin }, URL, fetch: nativeFetch, addEventListener() {}, setTimeout, clearTimeout };
+  runInNewContext(await source.text(), sandbox);
+  assert.equal(sandbox.fetch, nativeFetch);
+  assert.equal(sandbox.__EVIMED_FRAME__.frameId, frame.frameId);
+  assert.equal(sandbox.__EVIMED_FRAME__.shellOrigin, shellOrigin);
+  assert.ok(Object.isFrozen(sandbox.__EVIMED_FRAME__));
+  assert.ok(Object.isFrozen(sandbox.__DSH_TRANSPORT__));
+  assert.notEqual(sandbox.__DSH_TRANSPORT__.ownsHost, true);
+  const result = await sandbox.__DSH_TRANSPORT__.fetch(new URL("/api/session/page?cursor=a%2Fb", uiOrigin), { method: "POST", body: "native" });
+  assert.equal(await result.text(), "ok");
+  assert.equal(requests[0][0], `${uiOrigin}${prefix}api/session/page?cursor=a%2Fb`);
+  assert.equal(requests[0][1].body, "native");
+  assert.equal(starts, 0);
+});

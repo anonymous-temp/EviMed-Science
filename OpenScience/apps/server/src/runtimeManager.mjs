@@ -14,6 +14,7 @@ import {
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { proxyRuntimeUiMux } from "./runtimeUiMuxProxy.mjs";
+import { rebaseRuntimeUiDocument } from "./runtimeUiDocument.mjs";
 import { browserSessionCookie, generateBrowserSessionSecret } from "./dshBrowserAuth.mjs";
 import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
@@ -312,7 +313,7 @@ function connectionHeaderTokens(headers) {
  * would leak it into a log or a stored location just as effectively, so the
  * rewrite stays.
  */
-function proxiedRuntimeLocation(value, runtime, project, surface = "runtime") {
+function proxiedRuntimeLocation(value, runtime, project, surface = "runtime", uiBasePath = "/") {
   if (!value) return null;
   try {
     const runtimeOrigin = new URL(runtime.url).origin;
@@ -320,11 +321,8 @@ function proxiedRuntimeLocation(value, runtime, project, surface = "runtime") {
     if (target.origin !== runtimeOrigin) return null;
     target.searchParams.delete("directory");
     target.searchParams.delete("auth_token");
-    // On its own origin the application's own redirects are already correct
-    // relative paths -- it redirects to its clean root after taking a cookie,
-    // and prefixing that would send the browser to a path this deployment does
-    // not serve.
-    if (surface === "ui") return `${target.pathname}${target.search}${target.hash}`;
+    // Native redirects retain this document's immutable frame prefix.
+    if (surface === "ui") return `${uiBasePath}${target.pathname.slice(1)}${target.search}${target.hash}`;
     return `/api/runtime/${encodeURIComponent(project.id)}${target.pathname}${target.search}${target.hash}`;
   } catch {
     return null;
@@ -338,7 +336,7 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options 
   upstreamRes.headers.forEach((value, key) => {
     const lower = key.toLowerCase();
     if (lower === "location") {
-      const location = proxiedRuntimeLocation(value, runtime, project, surface);
+      const location = proxiedRuntimeLocation(value, runtime, project, surface, options.uiBasePath);
       if (location) responseHeaders[lower] = location;
       return;
     }
@@ -353,36 +351,14 @@ function sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, options 
     const embedder = options.frameAncestors ? String(options.frameAncestors) : "'none'";
     responseHeaders["content-security-policy"] = `frame-ancestors ${embedder}`;
     responseHeaders["x-content-type-options"] = "nosniff";
+    responseHeaders["cache-control"] = "private, no-store";
+    delete responseHeaders.etag;
+    delete responseHeaders["last-modified"];
   }
   return responseHeaders;
 }
 
-/**
- * One audit row per asset kind rather than per asset.
- *
- * The kernel's application requests hashed bundle names, so auditing the raw
- * path would make every deploy of it a new route in the metrics.
- */
-/**
- * The kernel's application document, told where it is actually being served.
- *
- * It ships `<base href="/">` because it expects the origin root, and under a
- * prefix every asset and every fetch it derives from that base resolves to this
- * control plane's own single-page app instead. The page loads and then nothing
- * on it works, which reads as the application being broken.
- *
- * Only the document is touched, only that one element, and only when the
- * upstream called it HTML. Assets and API responses pass through byte for byte.
- */
-function rebasedUiDocument(payload, responseHeaders, basePath) {
-  const contentType = String(responseHeaders["content-type"] ?? responseHeaders["Content-Type"] ?? "");
-  if (!contentType.toLowerCase().includes("text/html")) return payload;
-  const text = payload.toString("utf8");
-  const rebased = text.replace(/<base\s+href="\/"\s*\/?>/i, `<base href="${basePath}">`);
-  return rebased === text ? payload : Buffer.from(rebased, "utf8");
-}
-
-export { rebasedUiDocument as rebasedUiDocumentForTest };
+export { rebaseRuntimeUiDocument as rebasedUiDocumentForTest };
 
 /**
  * The one origin allowed to embed the kernel's application: this deployment's
@@ -3606,7 +3582,7 @@ export class RuntimeManager {
 
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project
-   * @param {string} suffix @param {{ surface?: string, uiBasePath?: string }} [options]
+   * @param {string} suffix @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void> }} [options]
    *
    * `surface: "ui"` forwards the kernel's own browser application instead of
    * the retired route vocabulary. Three things differ and nothing else does:
@@ -3617,7 +3593,7 @@ export class RuntimeManager {
    * response-header sanitising, the audit row -- is the same code, because a
    * second proxy would be a second set of those decisions to keep in step.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/" } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -3648,12 +3624,13 @@ export class RuntimeManager {
         return;
       }
       const runtime = await this.start(project);
+      if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
       const incoming = new URL(req.url ?? "/", "http://open-science.local");
       const upstream = new URL(`${runtime.url}${suffix}`);
-      for (const [key, value] of incoming.searchParams) {
-        if (surface === "ui") upstream.searchParams.append(key, value);
-        else if (key !== "directory" && key !== "auth_token") upstream.searchParams.append(key, value);
+      // UI suffix is the complete raw path and query, including native combo-bundle syntax.
+      if (surface !== "ui") for (const [key, value] of incoming.searchParams) {
+        if (key !== "directory" && key !== "auth_token") upstream.searchParams.append(key, value);
       }
       if (surface !== "ui") {
         upstream.searchParams.set("directory", runtime.proxyWorkspaceDir ?? project.workspaceDir);
@@ -3707,6 +3684,7 @@ export class RuntimeManager {
         throw new HttpError(502, "runtime_unavailable", err instanceof Error ? err.message : "runtime unavailable");
       }
 
+      if (revalidate) await revalidate();
       status = upstreamRes.status;
       if (abortedSessionId && upstreamRes.status >= 200 && upstreamRes.status < 300) {
         await this.onSessionAbort(project, abortedSessionId);
@@ -3715,6 +3693,7 @@ export class RuntimeManager {
       const responseHeaders = sanitizedRuntimeResponseHeaders(upstreamRes, runtime, project, {
         surface,
         frameAncestors: frameAncestorsFor(this.config),
+        uiBasePath,
       });
       if (!upstreamRes.body) {
         try {
@@ -3747,7 +3726,7 @@ export class RuntimeManager {
               await this.stopRuntimeIfProjectQuotaExceeded(project);
               postResponseQuotaChecked = true;
             } catch { /* a quota probe must not break a response already in flight */ }
-            const served = surface === "ui" ? rebasedUiDocument(payload, responseHeaders, uiBasePath) : payload;
+            const served = surface === "ui" ? rebaseRuntimeUiDocument(payload, responseHeaders, uiBasePath) : payload;
             if (served !== payload) responseHeaders["content-length"] = String(served.length);
             res.writeHead(upstreamRes.status, responseHeaders);
             responseEnded = true;

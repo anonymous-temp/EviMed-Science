@@ -1,38 +1,12 @@
-/**
- * The kernel's browser application, served on an origin of its own.
- *
- * Why a second listener instead of a path under the control plane: the
- * application resolves everything it fetches against `location.origin`. Its
- * plugin bundles are `/plugins/??<packages>&rev=<hash>` and its method calls
- * are `/api/<namespace>/<name>`, both absolute, most of them built at run time
- * rather than written into the document. Served under `/api/runtime-ui/<id>/`
- * those requests arrive at the control plane, which answers them with its own
- * single-page document — so every request reads 200 and the application dies
- * at boot saying its bootstrap facade is missing. Rewriting `<base href>`, or
- * even every absolute path in the HTML, cannot reach the ones it constructs.
- *
- * The port is the only thing that differs from the control plane's origin, and
- * that is exactly the right amount: a different port is a different *origin*,
- * so the embedding page cannot read into the frame and the frame cannot read
- * out; but it is the same *site* — ports are not part of a site — so the
- * session cookie is sent with every request and the person in the frame is the
- * person who logged in.
- *
- * Which project the frame shows is this origin's own state, carried in a
- * cookie it sets from `?project=<id>` on the document request and validated
- * against that user's projects every time it is read. The application cannot
- * carry it any other way: a query parameter does not survive to the absolute
- * paths, and a header cannot be set by a navigation or by a WebSocket.
- *
- * @module apps/server/runtimeUiServer
- */
-
+/** The native browser application on an isolated origin, with immutable per-frame project bindings. */
 import { createServer } from "node:http";
 
 import { isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError } from "./security.mjs";
+import { parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
+import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
 
 /**
  * The methods that make the deployment spend money.
@@ -42,25 +16,6 @@ import { HttpError } from "./security.mjs";
  * of work they have already paid for.
  */
 export const RUNTIME_UI_SPENDING_METHODS = new Set(["session/prompt"]);
-
-const RUNTIME_UI_PROJECT_COOKIE = "evimed_ui_project";
-
-/** @param {any} req @param {string} name @returns {string} */
-function cookieValue(req, name) {
-  const header = String(req.headers?.cookie ?? "");
-  for (const pair of header.split(";")) {
-    const trimmed = pair.trim();
-    if (trimmed.startsWith(`${name}=`)) {
-      try { return decodeURIComponent(trimmed.slice(name.length + 1)); } catch { return ""; }
-    }
-  }
-  return "";
-}
-
-/** @param {any} req @param {Record<string, any>} config */
-function hasSessionCookie(req, config) {
-  return Boolean(cookieValue(req, String(config.sessionCookieName ?? "")));
-}
 
 /** Browser cookies are accepted only from these explicit deployment origins.
  * Origin-less automation must use the control plane's authenticated API; this
@@ -86,23 +41,6 @@ async function authorizeMethod(config, project, method) {
     throw new HttpError(403, "runtime_ui_method_denied", `${method} is not available in the hosted surface.`);
   }
   if (RUNTIME_UI_SPENDING_METHODS.has(method)) await assertSpendWithinLimits(config, project.userId);
-}
-
-/**
- * The project the frame should show, and whether the request asked to change
- * it. A request that names a project the caller does not own is refused by
- * `requireProject` rather than silently falling back — a frame quietly showing
- * a different project than the shell asked for is worse than an error.
- *
- * @param {any} req
- * @returns {{ requested: string, remembered: string }}
- */
-function projectSelection(req) {
-  const url = new URL(req.url ?? "/", "http://evimed-runtime-ui.local");
-  return {
-    requested: String(url.searchParams.get("project") ?? "").trim(),
-    remembered: cookieValue(req, RUNTIME_UI_PROJECT_COOKIE).trim(),
-  };
 }
 
 /**
@@ -144,18 +82,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
    * @param {any} req @param {any} res
    * @returns {Promise<Record<string, any>>} the project this request addresses
    */
-  async function resolveProject(req, res) {
-    const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
-    const { requested, remembered } = projectSelection(req);
-    if (requested) return { user, project: await store.requireProject(user, requested), pinned: true };
-    if (remembered) return { user, project: await store.requireProject(user, remembered), pinned: false };
-    return { user, project: await store.requireProject(user, "default"), pinned: false };
+  async function resolveFrame(req, res) {
+    const frame = parseRuntimeUiFramePath(req.url ?? "/");
+    const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+    const claims = validateRuntimeUiFrame({ config, req, user, session, frameId: frame.frameId });
+    const project = await store.requireProject(user, claims.projectId);
+    return { user, session, project, claims, frame };
   }
 
   async function handle(req, res) {
-    const url = new URL(req.url ?? "/", "http://evimed-runtime-ui.local");
-    const pathname = url.pathname;
-
     if (!config.runtimeUiProxyEnabled) {
       sendNotice(res, 404, "未启用", "此部署没有开启内核界面。");
       return;
@@ -163,14 +98,33 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     // An unauthenticated frame must not be handed a session: the cookie it
     // would receive is this deployment's, and minting one here would make a
     // frame a way in. It is told to log in, in the surface it is displayed in.
-    if (!hasSessionCookie(req, config)) {
+    if (!runtimeUiCookie(req, config.sessionCookieName)) {
       sendNotice(res, 401, "请先登录", "请在 EviMed 中登录后重新打开。");
       return;
     }
 
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
+    const { project, frame } = await resolveFrame(req, res);
+    const pathname = new URL(frame.suffix, "http://runtime.local").pathname;
     const method = runtimeUiMethodFromPath(pathname);
-    const { project, pinned } = await resolveProject(req, res);
+    // Only canonical native API method names enter the policy. Decode solely
+    // to detect a disguised /api namespace, never to rewrite or forward it.
+    let decodedPath;
+    try { decodedPath = decodeURIComponent(pathname); } catch { throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical runtime path is required."); }
+    if ((pathname.startsWith("/api/") || decodedPath.startsWith("/api/"))
+      && (!method || pathname !== `/api/${method}` || pathname !== decodedPath)) {
+      throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical native API method is required.");
+    }
+    const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+    const revalidate = async () => { await resolveFrame(snapshot, null); };
+    if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
+      const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
+      await revalidate();
+      const source = runtimeUiBootstrapSource({ version: 1, frameId: frame.frameId, projectId: project.id, prefix: frame.prefix, shellOrigin: runtimeUiOrigins(config).shellOrigin }, installRuntimeUiTransport);
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+      res.end(req.method === "HEAD" ? undefined : source);
+      return;
+    }
     if (isDeniedRuntimeUiMethod(method)) {
       // Named in the body so the page's own error surface says which one, and
       // named in the audit row by the proxy's target — the panels that call
@@ -194,27 +148,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
     await authorizeMethod(config, project, method);
-    // Pinning is a redirect rather than a rewrite so the application never
-    // sees the query parameter: it would carry it into its own history and
-    // into the URLs it builds, and a stale `?project=` in a bookmark would
-    // silently repoint somebody's frame.
-    if (pinned) {
-      const target = new URL(url);
-      target.searchParams.delete("project");
-      res.writeHead(302, {
-        Location: `${target.pathname}${target.search}${target.hash}`,
-        "Set-Cookie": `${RUNTIME_UI_PROJECT_COOKIE}=${encodeURIComponent(project.id)}; Path=/; HttpOnly; SameSite=Lax${
-          config.production ? "; Secure" : ""
-        }`,
-        "Cache-Control": "no-store",
-      });
-      res.end();
-      return;
-    }
-
-    await runtimeManager.proxy(req, res, project, `${pathname}${url.search}`, {
+    await runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
-      uiBasePath: "/",
+      uiBasePath: frame.prefix,
+      revalidate,
     });
   }
 
@@ -236,27 +173,19 @@ export function createRuntimeUiServer({ config, store, runtimeManager }) {
     void (async () => {
       try {
         if (!config.runtimeUiProxyEnabled) return destroyUpgrade(socket, 404, "not_found");
-        if (!hasSessionCookie(req, config)) return destroyUpgrade(socket, 401, "unauthorized");
+        if (!runtimeUiCookie(req, config.sessionCookieName)) return destroyUpgrade(socket, 401, "unauthorized");
         assertBrowserOrigin(req, config);
-        const url = new URL(req.url ?? "/", "http://evimed-runtime-ui.local");
-        const { user, project } = await resolveProject(req, null);
-        // Capture the session cookie and project once. Another frame may
-        // change the shared project cookie; it cannot retarget this socket.
-        const sessionRequest = { headers: { cookie: req.headers.cookie } };
-        const projectId = project.id;
-        const userId = user.id;
-        const revalidate = async () => {
-          const current = await store.ensureSessionUser(sessionRequest, null, { allowDevAuth: false });
-          if (current.user.id !== userId) throw new HttpError(401, "unauthorized", "Authentication required.");
-          await store.requireProject(current.user, projectId);
-        };
+        const { project, frame } = await resolveFrame(req, null);
+        // Revalidation keeps the exact ticket and login snapshot from this handshake.
+        const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+        const revalidate = async () => { await resolveFrame(snapshot, null); };
         const authorize = async (endpoint) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
           await authorizeMethod(config, project, endpoint);
         };
-        await runtimeManager.proxyUpgrade(req, socket, head, project, `${url.pathname}${url.search}`, { revalidate, authorize });
+        await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize });
       } catch (error) {
         destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");
       }
