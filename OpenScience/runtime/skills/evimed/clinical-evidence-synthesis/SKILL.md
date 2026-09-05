@@ -1785,21 +1785,17 @@ Read every output back before claiming success. Do not use `grep` or another unb
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
 
-Then submit the package:
+There is no local self-check tool on this line — finish the turn once every
+file above is written. The server validates the package after the session goes
+idle, against the same rules `@evimed/domain` applies everywhere else; there is
+one implementation of them now, so what it accepts here is what it accepts
+under every other line. A first delivery that comes back with issues is the
+normal case, not a failure: the run is resumed with exactly what is listed as
+必修, the fix happens in place — never a wholesale rewrite — and the turn
+finishes again. Repeat until nothing comes back.
 
-```
-evimed_submit_deliverable{deliverableId: "<your deliverable id>"}
-```
-
-It answers with the verdict, in place. A first submission that comes back with
-issues is the normal case, not a failure: fix everything it lists as 必修,
-submit again, and repeat until it answers `ok`. The rules it applies are the
-same ones the server applies afterwards — there is one implementation of them
-now, so a package this accepts is a package the server accepts.
-
-The verdict also carries advisory issues, which do not decide the outcome
-because they cannot be settled mechanically. Read them and act where they apply.
-One of them
+The payload also carries `notes`: advice that does not decide `"ok"`, because it
+cannot be settled mechanically. Read it and act where it applies. Today it
 reports one arm appraised with the language of clinical tradition while another's
 certainty is graded — see "One ruler for every arm", where the asymmetry is
 almost always accidental and is a methodological defect all the same.
@@ -1841,7 +1837,7 @@ evidence report does.
 ### Finishing: check the prose mechanically, do not rewrite it
 
 The report was written under "Prose: written once, not repaired afterwards", so
-by the time the submission is accepted the prose is finished, not a draft awaiting a
+by the time the delivery is accepted the prose is finished, not a draft awaiting a
 rewrite. **The closing step is a self-check, not a reread**, and the point of
 having written the rules into the drafting stage is that this step usually
 changes nothing.
@@ -1915,7 +1911,7 @@ python "manuscript-humanize/scripts/verify_preserved.py" \
    `.pre-edit.md` copy once the check is clean — it is not a deliverable and
    must not survive into the delivered set.
 
-5. Submit once more if you edited anything, because prose edits can
+5. Finish once more if you edited anything, because prose edits can
    still break a section-level rule.
 
 `manuscript-humanize` stays loaded and keeps two jobs: it defines the protected
@@ -1926,25 +1922,3 @@ line it is no longer the default finishing step, because prose written correctly
 does not need rewriting, and rewriting it is where content gets lost.
 
 If these integrity requirements cannot be met, write an honest failed run receipt and do not present the report as publication-grade.
-
-## Before delivering: two fixed steps
-
-Both run on the finished deliverable, in this order, every time. They are steps
-of this capability, not options the run weighs — a pass that happens only when
-the model remembers it is a pass that happens on the easy runs and not the hard
-ones.
-
-1. **`traceability-review`** — every citation resolves, no number appears in
-   prose without a source in the artifacts, and every figure or table matches
-   the code that produced it. Findings are repaired before the next step, not
-   after: humanizing prose around a citation that does not resolve only makes
-   the defect read better.
-2. **`manuscript-humanize`** — register cleanup over the prose, with every
-   quotation, number, citation index and claim marker byte-identical. Load the
-   language-matched upstream rules it names. It is the last thing that touches
-   the document.
-
-Write what changed and why to `revision-notes.md` in this deliverable's
-directory. That file is the designated home for revision notes, replies to a
-rejection, and process description; the report itself carries none of them, and
-no check reads the notes as report prose.

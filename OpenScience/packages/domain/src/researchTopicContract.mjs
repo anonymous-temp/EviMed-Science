@@ -21,8 +21,13 @@ function record(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** @param {unknown} value @returns {value is string} */
+function nonEmpty(value) {
+  return typeof value === 'string' && Boolean(value.trim())
+}
+
 /** @param {unknown} value @returns {boolean} */
-function meaningful(value) {
+function meaningfulDescription(value) {
   if (typeof value === 'string') return Boolean(value.trim())
   if (Array.isArray(value)) return value.length > 0
   return record(value) && Object.keys(value).length > 0
@@ -39,17 +44,36 @@ function parsed(files, path) {
   }
 }
 
-/** Stable comparison for JSON values without trusting object key order.
- * @param {unknown} value @returns {unknown} */
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical)
-  if (!record(value)) return value
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]))
+/** Validate the same bounded context shape the specialist transport accepts.
+ * @param {unknown} value @returns {Record<string, any> | null} */
+function normalizedContext(value) {
+  if (!record(value)) return null
+  /** @type {Record<string, number>} */
+  const textLimits = { availableData: 4000, population: 1000, studySetting: 1000 }
+  const allowed = new Set([...Object.keys(textLimits), 'resourceConstraints'])
+  if (Object.keys(value).some((key) => !allowed.has(key))) return null
+  /** @type {Record<string, any>} */
+  const output = {}
+  for (const key of Object.keys(textLimits)) {
+    if (!Object.hasOwn(value, key)) continue
+    if (!nonEmpty(value[key]) || value[key].length > textLimits[key]) return null
+    output[key] = value[key]
+  }
+  if (Object.hasOwn(value, 'resourceConstraints')) {
+    const constraints = value.resourceConstraints
+    if (!Array.isArray(constraints) || constraints.length > 20
+      || constraints.some((item) => !nonEmpty(item) || item.length > 200)) return null
+    output.resourceConstraints = [...constraints]
+  }
+  return output
 }
 
 /** @param {unknown} left @param {unknown} right @returns {boolean} */
-function sameJson(left, right) {
-  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right))
+function sameContext(left, right) {
+  const leftContext = normalizedContext(left)
+  const rightContext = normalizedContext(right)
+  return leftContext !== null && rightContext !== null
+    && JSON.stringify(leftContext) === JSON.stringify(rightContext)
 }
 
 /** @param {GateIssue[]} issues @param {string} check @param {string} message @param {string} [path] */
@@ -76,8 +100,8 @@ export function researchTopicPortfolioFindings(input) {
       candidates: 0,
       structurallyCompleteCandidates: 0,
       unresolvedDesignFields: 0,
-      evidenceReconciled: false,
-      contextMatchesReceipt: false,
+      evidenceFilesConsistent: false,
+      contextFilesConsistent: false,
     },
   }
   if (!record(portfolio)) {
@@ -85,9 +109,13 @@ export function researchTopicPortfolioFindings(input) {
     return { issues, metrics: baseMetrics }
   }
   const candidates = Array.isArray(portfolio.candidates) ? portfolio.candidates : null
-  if (portfolio.schemaVersion !== '1.0.0' || !meaningful(portfolio.researchDirection)
-    || !record(portfolio.researchContext) || candidates === null) {
+  const portfolioContext = normalizedContext(portfolio.researchContext)
+  if (portfolio.schemaVersion !== '1.0.0' || !nonEmpty(portfolio.researchDirection) || candidates === null) {
     notice(issues, 'topic-portfolio-schema', `${PORTFOLIO_FILE} must declare schemaVersion 1.0.0, researchDirection, researchContext, and candidates[].`)
+    return { issues, metrics: baseMetrics }
+  }
+  if (portfolioContext === null) {
+    notice(issues, 'topic-research-context', `${PORTFOLIO_FILE}.researchContext must use the bounded fields accepted by the specialist transport.`)
     return { issues, metrics: baseMetrics }
   }
 
@@ -99,39 +127,52 @@ export function researchTopicPortfolioFindings(input) {
         .map((item) => [item.id, item])
       : [],
   )
-  let evidenceReconciled = Array.isArray(evidenceValue)
+  let evidenceFilesConsistent = Array.isArray(evidenceValue)
   if (!Array.isArray(evidenceValue)) {
     notice(issues, 'topic-evidence-lineage', `${EVIDENCE_FILE} is missing or invalid, so candidate source lineage cannot be reconciled.`, EVIDENCE_FILE)
   }
 
   let structurallyCompleteCandidates = 0
   let unresolvedDesignFields = 0
+  const candidateIds = new Set()
+  const opportunityIds = new Set()
   for (const [index, candidate] of candidates.entries()) {
     const label = `candidates[${index}]`
-    if (!record(candidate) || !meaningful(candidate.candidateId) || !meaningful(candidate.title)
-      || !meaningful(candidate.sourceOpportunityId) || !['direct', 'indirect', 'speculative'].includes(candidate.supportLevel)
+    if (!record(candidate) || !nonEmpty(candidate.candidateId) || !nonEmpty(candidate.title)
+      || !nonEmpty(candidate.sourceOpportunityId) || !['direct', 'indirect', 'speculative'].includes(candidate.supportLevel)
       || !Array.isArray(candidate.sourceEvidenceIds) || candidate.sourceEvidenceIds.length === 0
       || candidate.sourceEvidenceIds.some((id) => typeof id !== 'string' || !id.trim())
       || !Array.isArray(candidate.sourceEvidencePmids)
       || candidate.sourceEvidencePmids.some((id) => typeof id !== 'string' || !id.trim())
       || !Array.isArray(candidate.gaps) || candidate.gaps.some((gap) => typeof gap !== 'string')) {
       notice(issues, 'topic-portfolio-schema', `${label} is missing its candidate identity, opportunity lineage, support level, evidence ids, or gaps array.`)
-      evidenceReconciled = false
+      evidenceFilesConsistent = false
       continue
+    }
+    if (candidateIds.has(candidate.candidateId) || opportunityIds.has(candidate.sourceOpportunityId)) {
+      notice(issues, 'topic-portfolio-schema', `${label} has a duplicate candidateId or sourceOpportunityId.`)
+      evidenceFilesConsistent = false
+      continue
+    }
+    candidateIds.add(candidate.candidateId)
+    opportunityIds.add(candidate.sourceOpportunityId)
+    if (new Set(candidate.sourceEvidenceIds).size !== candidate.sourceEvidenceIds.length) {
+      notice(issues, 'topic-evidence-lineage', `${label}.sourceEvidenceIds contains duplicates.`)
+      evidenceFilesConsistent = false
     }
     const unknown = candidate.sourceEvidenceIds.filter((id) => !evidenceById.has(id))
     if (unknown.length) {
       notice(issues, 'topic-evidence-lineage', `${label} names ${unknown.length} source evidence id(s) that do not resolve to ${EVIDENCE_FILE}.`)
-      evidenceReconciled = false
+      evidenceFilesConsistent = false
     }
     const preservedPmids = candidate.sourceEvidenceIds
       .map((id) => evidenceById.get(id)?.pmid)
       .filter((pmid) => typeof pmid === 'string' && pmid.trim())
-    if (!sameJson(candidate.sourceEvidencePmids, preservedPmids)) {
+    if (JSON.stringify(candidate.sourceEvidencePmids) !== JSON.stringify(preservedPmids)) {
       notice(issues, 'topic-evidence-lineage', `${label}.sourceEvidencePmids does not match the PMID values of its preserved source evidence ids.`)
-      evidenceReconciled = false
+      evidenceFilesConsistent = false
     }
-    const missing = DESIGN_FIELDS.filter((field) => !meaningful(candidate[field]))
+    const missing = DESIGN_FIELDS.filter((field) => !meaningfulDescription(candidate[field]))
     unresolvedDesignFields += missing.length
     const declared = new Set(candidate.gaps)
     const undeclared = missing.filter((field) => !declared.has(field))
@@ -148,10 +189,10 @@ export function researchTopicPortfolioFindings(input) {
   }
 
   const runValue = parsed(input.files, RUN_FILE)
-  const contextMatchesReceipt = record(runValue) && record(runValue.researchContext)
-    && sameJson(portfolio.researchContext, runValue.researchContext)
-  if (!contextMatchesReceipt) {
-    notice(issues, 'topic-research-context', `${PORTFOLIO_FILE}.researchContext does not match the validated context in ${RUN_FILE}.`, RUN_FILE)
+  const contextFilesConsistent = record(runValue)
+    && sameContext(portfolioContext, runValue.researchContext)
+  if (!contextFilesConsistent) {
+    notice(issues, 'topic-research-context', `${PORTFOLIO_FILE}.researchContext and ${RUN_FILE}.researchContext are not internally consistent; authoritative request preservation is established by the transport receipt, not this file comparison.`, RUN_FILE)
   }
 
   return {
@@ -163,8 +204,8 @@ export function researchTopicPortfolioFindings(input) {
         candidates: candidates.length,
         structurallyCompleteCandidates,
         unresolvedDesignFields,
-        evidenceReconciled,
-        contextMatchesReceipt,
+        evidenceFilesConsistent,
+        contextFilesConsistent,
       },
     },
   }

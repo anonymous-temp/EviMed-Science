@@ -1,5 +1,5 @@
 id: research-topic-selection
-version: 1.1.0
+version: 1.2.0
 title: 科研选题
 category: 科研规划
 description: 梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。
@@ -10,6 +10,10 @@ starterPrompts:
 requiredInputs:
   - researchDirection
 optionalInputs:
+  - availableData
+  - population
+  - studySetting
+  - resourceConstraints
   - outputLanguage
   - uploadedFiles
 requiredTools:
@@ -37,6 +41,10 @@ outputs:
     required: true
   - path: research-topic-run.json
     required: true
+  - path: research-portfolio.json
+    required: false
+  - path: evidence-records.json
+    required: false
 completionChecks:
   - requiredOutputsExist
   - citationsResolvable
