@@ -44,19 +44,11 @@ RUN pnpm --filter @ai4s/server deploy --prod /server
 
 FROM ${NODE_BASE_IMAGE} AS runtime
 
-ARG APP_VERSION=0.1.3
-ARG RELEASE_ID=untracked
-ARG SOURCE_REVISION=unknown
-ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
 ARG APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
 
 LABEL org.opencontainers.image.title="EviMed Web"
 LABEL org.opencontainers.image.description="Hosted Web API and browser application for EviMed."
 LABEL org.opencontainers.image.source="https://github.com/ai4s-research/open-science"
-LABEL org.opencontainers.image.version="${RELEASE_ID}"
-LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
-LABEL org.opencontainers.image.created="${BUILD_CREATED}"
-LABEL io.open-science.app.version="${APP_VERSION}"
 
 WORKDIR /app
 RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
@@ -67,10 +59,6 @@ ENV OPEN_SCIENCE_PORT=8787
 ENV OPEN_SCIENCE_DATA_DIR=/data
 ENV OPEN_SCIENCE_STATIC_DIR=/app/apps/web/dist
 ENV OPEN_SCIENCE_EXAMPLES_DIR=/app/examples
-ENV OPEN_SCIENCE_APP_VERSION=${APP_VERSION}
-ENV OPEN_SCIENCE_RELEASE_ID=${RELEASE_ID}
-ENV OPEN_SCIENCE_SOURCE_REVISION=${SOURCE_REVISION}
-ENV OPEN_SCIENCE_BUILD_CREATED=${BUILD_CREATED}
 
 COPY --from=build /server ./apps/server
 # The single definition of every tracked upstream pin, read by `config.mjs` at
@@ -100,6 +88,20 @@ COPY --from=build /app/scripts/ops ./scripts/ops
 # A link rather than a second copy: the same directory, reachable from the
 # repository root the way it is in a checkout.
 RUN ln -s apps/server/node_modules /app/node_modules
+
+# Release metadata must not enter dependency or filesystem RUN cache keys.
+ARG APP_VERSION=0.1.3
+ARG RELEASE_ID=untracked
+ARG SOURCE_REVISION=unknown
+ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
+LABEL org.opencontainers.image.version="${RELEASE_ID}"
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED}"
+LABEL io.open-science.app.version="${APP_VERSION}"
+ENV OPEN_SCIENCE_APP_VERSION=${APP_VERSION}
+ENV OPEN_SCIENCE_RELEASE_ID=${RELEASE_ID}
+ENV OPEN_SCIENCE_SOURCE_REVISION=${SOURCE_REVISION}
+ENV OPEN_SCIENCE_BUILD_CREATED=${BUILD_CREATED}
 
 VOLUME ["/data"]
 EXPOSE 8787
