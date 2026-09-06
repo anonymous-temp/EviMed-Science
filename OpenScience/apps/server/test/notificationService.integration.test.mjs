@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
+import { AutopilotService } from "../src/autopilotService.mjs";
+import { ProductDocuments } from "../src/productStore.mjs";
+import { ProductJobs } from "../src/productJobs.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -23,6 +26,27 @@ after(async () => {
   if (!database) return;
   await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other]]);
   await database.close();
+});
+
+test("a real proactive digest persists one actionable inbox item under its owner", options, async (t) => {
+  const digestOwner = `digest_${randomUUID()}`;
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Digest owner','development')", [digestOwner]);
+  t.after(() => database.query("DELETE FROM evimed_control.users WHERE id=$1", [digestOwner]));
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Digest',1048576)", [digestOwner]);
+  const autopilot = new AutopilotService({ documents: new ProductDocuments(database),
+    jobs: new ProductJobs(database), notifications: service });
+  const agenda = await autopilot.create(digestOwner, { projectId: "default", title: "Digest integration",
+    topics: ["research updates"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 2,
+    weeklyBudgetCny: 10, maxEpisodeCny: 1, scheduleHour: 1, timeZone: "UTC" });
+  const input = { digestId: "digest-inbox-contract", date: "2026-09-06", episodeIds: ["episode-contract"], costCny: 0, claims: [] };
+  const digest = await autopilot.createDigest(digestOwner, agenda.id, input);
+  await autopilot.createDigest(digestOwner, agenda.id, input);
+  const notices = (await service.list(digestOwner)).items.filter(item => item.source?.id === digest.id);
+  assert.equal(notices.length, 1);
+  assert.deepEqual(notices[0].source, { type: "digest", id: digest.id });
+  assert.deepEqual(notices[0].actions.map(action => action.id), ["open"]);
+  assert.equal(notices[0].projectId, "default");
+  assert.equal((await service.list(other)).items.some(item => item.source?.id === digest.id), false);
 });
 
 test("inbox ordering puts reviews and questions before informational notices", options, async () => {

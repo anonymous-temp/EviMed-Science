@@ -45,7 +45,7 @@ function source(value) {
     throw new HttpError(400, "notification_payload_invalid", "Invalid source.");
   }
   const item = /** @type {Record<string, any>} */ (value);
-  if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system"].includes(item.type)) {
+  if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system", "digest"].includes(item.type)) {
     throw new HttpError(400, "notification_payload_invalid", "Invalid source.");
   }
   return { type: item.type, id: productId(item.id, "source") };
