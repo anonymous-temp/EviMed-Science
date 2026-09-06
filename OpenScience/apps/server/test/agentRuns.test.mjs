@@ -3141,6 +3141,65 @@ test("a provenance rejection is repaired rather than discarded", async () => {
   }
 });
 
+test("a new run never joins an older run's in-flight reconciliation on the same session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-reconcile-generation-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "same-session", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let enterFirst;
+    let releaseFirst;
+    const firstEntered = new Promise((resolve) => { enterFirst = resolve; });
+    const firstRelease = new Promise((resolve) => { releaseFirst = resolve; });
+    let reads = 0;
+    let blockNextRead = false;
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => {
+        reads += 1;
+        if (blockNextRead) {
+          blockNextRead = false;
+          enterFirst();
+          await firstRelease;
+        }
+        return [];
+      },
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const first = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn-first-run",
+    }, async () => ({ accepted: true }));
+    blockNextRead = true;
+    const firstReconcile = store.reconcileSession(project, binding.sessionId, first.id);
+    await firstEntered;
+    await store.finishInternal(project, first.id, { status: "succeeded", errorCode: null, artifacts: [] });
+    const second = await store.createRun(project, binding, { baselineCursor: null, dispatchId: "turn-second-run" });
+
+    const readsBeforeSecondReconcile = reads;
+    const secondReconcile = store.reconcileSession(project, binding.sessionId, second.id);
+    releaseFirst();
+    const [observedFirst, observedSecond] = await Promise.all([firstReconcile, secondReconcile]);
+
+    assert.equal(observedFirst.id, first.id);
+    assert.equal(observedSecond.id, second.id);
+    assert.equal(observedSecond.status, "running");
+    assert.ok(reads > readsBeforeSecondReconcile, "different runs require independent reconciliation reads");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 // The repair budget is for repairing content. On 2026-08-26 one JSON syntax
 // error in clinical-evidence-matrix.json came back as 24 content findings — a
 // wall of symptoms with a single cause — and the package burned its rounds on
