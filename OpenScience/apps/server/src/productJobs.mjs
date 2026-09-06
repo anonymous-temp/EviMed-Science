@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
+import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
 import { migrateProductStore, productId, productInteger, productKind, productPayload, productTime, PRODUCT_JOB_KINDS } from "./productPersistence.mjs";
 
 /** @param {any} row */
@@ -56,6 +57,7 @@ export class ProductJobs {
     productId(workerId, "worker");
     await migrateProductStore(this.database);
     return this.database.transaction(async (client) => {
+      if (!(await maintenanceAllowsClaims(client))) return null;
       await client.query(`WITH exhausted AS (
         SELECT id FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND status='running'
         AND lease_expires_at<=statement_timestamp() AND attempts>=max_attempts
