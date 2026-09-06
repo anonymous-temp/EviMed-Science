@@ -24,6 +24,11 @@ from mr_agent.models import (
     PleiotopyResult,
 )
 from mr_agent.utils import safe_float, safe_int
+from mr_agent.tools.mr_replay import (
+    DEFAULT_REPLAY_SEED,
+    complete_local_replay,
+    prepare_local_replay,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -241,8 +246,16 @@ def _execute_r_script(script: str, work_dir: Path) -> bool:
         f.write(script)
         script_path = f.name
     try:
+        return _execute_r_file(Path(script_path), work_dir)
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+
+def _execute_r_file(script_path: Path, work_dir: Path) -> bool:
+    """Execute an existing entry without rewriting or deleting its code."""
+    try:
         result = subprocess.run(
-            ["Rscript", *_R_ISOLATION_FLAGS, script_path],
+            ["Rscript", *_R_ISOLATION_FLAGS, str(script_path.resolve())],
             cwd=str(work_dir), capture_output=True,
             text=True, timeout=_R_TIMEOUT_SEC, env=_r_subprocess_env(),
         )
@@ -265,8 +278,6 @@ def _execute_r_script(script: str, work_dir: Path) -> bool:
     except FileNotFoundError:
         logger.error("Rscript not found. Install R and TwoSampleMR.")
         return False
-    finally:
-        Path(script_path).unlink(missing_ok=True)
 
 
 def run_mr_moe(
@@ -288,18 +299,32 @@ def run_mr_local(
     output_dir: Path,
     gwas_token: str = "",
     pval_thresholds: list[float] | None = None,
+    *,
+    seed: int = DEFAULT_REPLAY_SEED,
 ) -> MRAnalysisResult:
     """Execute MR with local data source(s)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     if pval_thresholds is None:
         pval_thresholds = DEFAULT_PVAL_THRESHOLDS
-    r_script = _select_local_template(
-        exposure_source, outcome_source, output_dir,
-        gwas_token, pval_thresholds,
-    )
     exp_id = exposure_source.display_id()
     out_id = outcome_source.display_id()
-    success = _execute_r_script(r_script, output_dir)
+    if (
+        exposure_source.is_local() and outcome_source.is_local()
+        and exposure_source.instruments_preclumped
+    ):
+        replay = prepare_local_replay(
+            exposure_source, outcome_source, output_dir, pval_thresholds, seed,
+            _build_local_both_script,
+        )
+        success = _execute_r_file(replay / "run.R", replay)
+        if success:
+            complete_local_replay(replay, output_dir)
+    else:
+        r_script = _select_local_template(
+            exposure_source, outcome_source, output_dir,
+            gwas_token, pval_thresholds,
+        )
+        success = _execute_r_script(r_script, output_dir)
     if not success:
         logger.error(f"Local MR failed: {exp_id} -> {out_id}")
         return _empty_local_result(exposure_source, outcome_source)

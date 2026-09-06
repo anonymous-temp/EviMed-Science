@@ -81,10 +81,16 @@ limitations, and STROBE-MR-aligned discussion. Write
 `mendelian-randomization-run.json` with the terminal job state and exact returned
 artifacts. Every number must match the managed analysis output. For local inputs, also preserve `mendelian-randomization-inputs.json` and the returned standard input CSV artifacts. The manifest binds original relative paths, byte counts, SHA-256 digests, actual mappings and supplied clumping provenance; retain it without adding repository IDs, years, or absolute host paths.
 
-The current fixed runner does not export `.R` scripts. Do not claim an exported
-analysis script or a complete reproducible code bundle unless those files are
-actually present in the returned artifacts. Input preservation alone does not
-complete code delivery.
+For paired local inputs with a declared-preclumped exposure, preserve the
+returned `analysis-data/<pair>/replay/` package in full: its complete manifest,
+exact input CSVs, options and seed, observed R/package versions, `run.R` and
+`analysis.R`. The original run uses that same entry and seed. In a clean copy,
+`Rscript --vanilla run.R` replays the local statistical analysis into `results/`
+with installed dependencies, without a model, JWT or network. Preserve the
+supplied clumping declaration; this does not independently verify LD selection.
+Remote and mixed-source runs do not deliver this replay package. Do not claim
+reproducible code delivery unless the complete package is in returned artifacts,
+or claim that the script regenerates the model-written manuscript.
 
 ## Before delivering: two fixed steps
 
