@@ -61,22 +61,73 @@ function imageInfo(output) {
   return values[0];
 }
 
+function assertIsolatedBuilderTarget(target, platform, hostName) {
+  requireValue(target && target.hostName === hostName && typeof target.engineId === "string" && target.engineId
+    && typeof target.engineName === "string" && target.engineName, "release_target_invalid", "The recorded host and engine identities are required.");
+  requireValue(platform === "darwin" && target.context === BUILDER && target.endpoint === BUILDER_ENDPOINT
+    && target.hostName !== target.servingHostName && typeof target.servingHostName === "string" && target.servingHostName,
+  "release_builder_forbidden", "Builds require the isolated colima-evimed-builder endpoint on its recorded non-serving host.");
+}
+
+function verifyCleanSource(plan, execute) {
+  requireValue(execute("git", ["--no-replace-objects", "rev-parse", "HEAD"], plan.sourceRoot) === plan.sourceRevision
+    && execute("git", ["--no-replace-objects", "rev-parse", "HEAD^{tree}"], plan.sourceRoot) === plan.sourceTree
+    && execute("git", ["--no-replace-objects", "status", "--porcelain", "--untracked-files=all", "--ignored"], plan.sourceRoot) === "",
+  "release_source_changed", "The build needs its exact clean, immutable checkout, without ignored or untracked context inputs.");
+}
+
+function inspectReleaseEngine(target, execute) {
+  const engine = JSON.parse(execute("docker", ["--host", target.endpoint, "info", "--format", "{{json .}}"]));
+  requireValue(engine.ID === target.engineId && engine.Name === target.engineName && engine.OSType === "linux"
+    && typeof engine.DockerRootDir === "string" && path.posix.isAbsolute(engine.DockerRootDir),
+  "release_engine_changed", "The live Docker engine does not match the recorded operation target.");
+  return engine;
+}
+
+function inspectBuildBase(plan, execute) {
+  const docker = ["--host", plan.target.endpoint];
+  const base = imageInfo(execute("docker", [...docker, "image", "inspect", plan.base.reference]));
+  requireValue(base.Id === plan.base.imageId && base.Os === "linux" && base.Architecture === "amd64" && base.RepoDigests?.includes(plan.base.reference) && Array.isArray(base.RootFS?.Layers) && base.RootFS.Layers.length > 0 && !base.Config?.OnBuild?.length, "release_base_unverified", "The installed base does not match its manifest, local identity or platform.");
+  requireValue(execute("docker", [...docker, "image", "ls", "--quiet", "--no-trunc", plan.image]) === "", "release_tag_exists", "The candidate tag already exists; preserve existing and rollback references and choose a new tag.");
+  const builder = JSON.parse(execute("docker", [...docker, "buildx", "inspect", BUILDER, "--format", "{{json .}}"]));
+  requireValue(builder.Driver === "docker" && builder.Nodes?.length === 1 && [BUILDER, BUILDER_ENDPOINT].includes(builder.Nodes[0].Endpoint), "release_builder_changed", "Buildx must use the verified single-node Docker driver on the isolated endpoint.");
+  return base;
+}
+
+function assertBuilderContext(execute) {
+  requireValue(execute("docker", ["context", "inspect", BUILDER, "--format", "{{.Endpoints.docker.Host}}"]) === BUILDER_ENDPOINT,
+    "release_endpoint_changed", "The isolated context no longer resolves to its recorded endpoint.");
+}
+
+function verifyBuiltImage(plan, base, result, metadata) {
+  requireValue(result.Os === "linux" && result.Architecture === "amd64"
+    && result.Config?.Labels?.["org.opencontainers.image.revision"] === plan.sourceRevision,
+  "release_result_invalid", "The resulting image does not match the release platform and source.");
+  requireValue(SHA256.test(metadata["containerimage.config.digest"]) && SHA256.test(metadata["containerimage.digest"]) && result.Id !== base.Id && result.RootFS?.Layers?.length > base.RootFS.Layers.length && base.RootFS.Layers.every((layer, index) => result.RootFS.Layers[index] === layer), "release_result_invalid", "BuildKit output must identify an actual new layer over the verified base; retag-only results are refused.");
+  const manifestDigest = metadata["containerimage.digest"];
+  const configDigest = metadata["containerimage.config.digest"];
+  const descriptor = metadata["containerimage.descriptor"];
+  requireValue((!descriptor || descriptor.digest === manifestDigest) && (result.Id === configDigest || result.Descriptor?.digest === manifestDigest || result.RepoDigests?.some((reference) => reference.endsWith(`@${manifestDigest}`))), "release_result_invalid", "The daemon result must link to the native BuildKit export descriptor or classic config ID.");
+  return { manifestDigest, configDigest };
+}
+
 // Free capacity is counted once per filesystem. Independent write footprints
 // on that filesystem are added, with one floor and one explicit growth reserve.
 export function aggregateCapacity(samples, peaks, floorBytes, growthReserveBytes, admission = true) {
+  const floorOnly = peaks === null && admission === false;
   requireValue(Array.isArray(samples) && samples.length > 0 && positive(floorBytes) && positive(growthReserveBytes), "release_budget_invalid", "A finite capacity floor and explicit growth reserve are required.");
   const seen = new Set();
   const groups = new Map();
   for (const sample of samples) {
-    requireValue(typeof sample.role === "string" && !seen.has(sample.role) && typeof sample.filesystem === "string" && sample.filesystem && Number.isSafeInteger(sample.availableBytes) && sample.availableBytes >= 0 && positive(peaks[sample.role]), "release_budget_invalid", "Every distinct storage plane requires measured peak bytes and a live filesystem sample.");
+    requireValue(typeof sample.role === "string" && !seen.has(sample.role) && typeof sample.filesystem === "string" && sample.filesystem && Number.isSafeInteger(sample.availableBytes) && sample.availableBytes >= 0 && (floorOnly || positive(peaks[sample.role])), "release_budget_invalid", "Every distinct storage plane requires measured peak bytes and a live filesystem sample.");
     seen.add(sample.role);
     const group = groups.get(sample.filesystem) ?? { filesystem: sample.filesystem, availableBytes: sample.availableBytes, peakBytes: 0, roles: [] };
     group.availableBytes = Math.min(group.availableBytes, sample.availableBytes);
-    group.peakBytes += peaks[sample.role];
+    group.peakBytes += floorOnly ? 0 : peaks[sample.role];
     group.roles.push(sample.role);
     groups.set(sample.filesystem, group);
   }
-  requireValue(Object.keys(peaks).length === seen.size && Object.keys(peaks).every((role) => seen.has(role)), "release_budget_invalid", "Measured and observed storage planes must agree exactly.");
+  requireValue(floorOnly || (Object.keys(peaks).length === seen.size && Object.keys(peaks).every((role) => seen.has(role))), "release_budget_invalid", "Measured and observed storage planes must agree exactly.");
   return [...groups.values()].map((group) => {
     const reserveBytes = Math.max(floorBytes, SERVING_FLOOR_BYTES) + growthReserveBytes;
     const requiredBytes = reserveBytes + (admission ? group.peakBytes : 0);
@@ -94,7 +145,7 @@ function validatePlan(plan, platform, hostName) {
   const target = plan.target;
   requireValue(target && typeof target.engineId === "string" && target.engineId.length > 0 && typeof target.engineName === "string" && target.engineName.length > 0 && target.hostName === hostName, "release_target_invalid", "The recorded host and engine identities are required.");
   if (plan.operation === "build") {
-    requireValue(platform === "darwin" && target.context === BUILDER && target.endpoint === BUILDER_ENDPOINT && target.hostName !== target.servingHostName && typeof target.servingHostName === "string" && target.servingHostName.length > 0, "release_builder_forbidden", "Builds require the isolated colima-evimed-builder endpoint on its recorded non-serving host.");
+    assertIsolatedBuilderTarget(target, platform, hostName);
     requireValue(PINNED_IMAGE.test(plan.base?.reference) && SHA256.test(plan.base?.imageId), "release_base_unverified", "The verified base must include a manifest digest and daemon-local image ID.");
     requireValue(REVISION.test(plan.sourceTree) && typeof plan.sourceRoot === "string" && path.isAbsolute(plan.sourceRoot) && Array.isArray(plan.inputs) && plan.inputs.length > 0, "release_source_invalid", "A clean source tree and hashed dependency inputs are required.");
     requireValue(/^[a-z0-9][a-z0-9/._-]*:[a-z0-9][a-z0-9._-]*$/.test(plan.image) && !/:(?:latest|current|rollback)$/.test(plan.image), "release_image_invalid", "Use a new explicit local release tag.");
@@ -124,7 +175,7 @@ function validatePlan(plan, platform, hostName) {
 }
 
 function verifySource(plan, execute) {
-  requireValue(execute("git", ["rev-parse", "HEAD"], plan.sourceRoot) === plan.sourceRevision && execute("git", ["rev-parse", "HEAD^{tree}"], plan.sourceRoot) === plan.sourceTree && execute("git", ["status", "--porcelain", "--untracked-files=all", "--ignored"], plan.sourceRoot) === "", "release_source_changed", "The build needs its exact clean, immutable checkout, without ignored or untracked context inputs.");
+  verifyCleanSource(plan, execute);
   const root = fs.realpathSync(plan.sourceRoot);
   const relativeInput = (file) => {
     const relative = path.relative(root, fs.realpathSync(file));
@@ -229,8 +280,8 @@ function liveSamples(plan, engine, execute) {
   return samples;
 }
 
-function defaultSpawn(args) {
-  const child = spawnChild("docker", args, { env: safeEnv(), stdio: "ignore", detached: true });
+function spawnOwnedProcess(command, args, stdio = "ignore") {
+  const child = spawnChild(command, args, { env: safeEnv(), stdio, detached: true });
   // Docker invokes the buildx plugin as a child. Signal only this owned process
   // group so cancellation reaches that plugin, never another release/container.
   return Object.assign(child, { kill: (signal = "SIGTERM") => {
@@ -238,6 +289,8 @@ function defaultSpawn(args) {
     try { process.kill(-child.pid, signal); return true; } catch { return false; }
   } });
 }
+
+function defaultSpawn(args, stdio = "ignore") { return spawnOwnedProcess("docker", args, stdio); }
 
 export async function runMonitoredOperation({ args, check, spawn = defaultSpawn, intervalMs = 1000, stopGraceMs = 5000, timeoutMs = 60 * 60 * 1000 }) {
   check();
@@ -261,6 +314,7 @@ export async function runMonitoredOperation({ args, check, spawn = defaultSpawn,
     const stop = (error) => {
       if (failure || finished) return;
       failure = error;
+      child.releaseDiscardOutput?.();
       clearTimeout(interval);
       clearTimeout(timeout);
       // A group leader may exit on TERM while its buildx descendant ignores
@@ -277,8 +331,11 @@ export async function runMonitoredOperation({ args, check, spawn = defaultSpawn,
     try { child = spawn(args); } catch { finish(fail("release_child_failed", "The image operation could not start.")); return; }
     const exited = (error) => {
       childExited = true;
-      if (!failure || escalated) finish(failure ?? error);
+      Promise.resolve(child.releaseOutputDone).then(() => {
+        if (!failure || escalated) finish(failure ?? child.releaseFailure ?? error);
+      }, () => stop(fail("release_output_failed", "The bounded output streams failed.")));
     };
+    child.once("release-failure", error => stop(error));
     child.once("error", () => exited(fail("release_child_failed", "The image operation failed to start.")));
     child.once("exit", (code) => exited(code === 0 ? undefined : fail("release_child_failed", "The image operation failed; inspect restricted operator logs separately.")));
     interval = setInterval(() => {
@@ -286,6 +343,7 @@ export async function runMonitoredOperation({ args, check, spawn = defaultSpawn,
     }, intervalMs);
     timeout = setTimeout(() => stop(fail("release_timeout", "The image operation reached its bounded time limit.")), timeoutMs);
     process.once("SIGINT", interrupted); process.once("SIGTERM", interrupted);
+    if (child.releaseFailure) stop(child.releaseFailure);
   });
 }
 
@@ -311,21 +369,16 @@ export async function runReleaseImages({ plan, checkOnly = false, execute = exec
   const docker = ["--host", plan.target.endpoint];
   if (plan.operation === "build") {
     verifySource(plan, execute);
-    requireValue(execute("docker", ["context", "inspect", BUILDER, "--format", "{{.Endpoints.docker.Host}}"]) === BUILDER_ENDPOINT, "release_endpoint_changed", "The isolated context no longer resolves to its recorded endpoint.");
+    assertBuilderContext(execute);
   }
-  const engine = JSON.parse(execute("docker", [...docker, "info", "--format", "{{json .}}"]));
-  requireValue(engine.ID === plan.target.engineId && engine.Name === plan.target.engineName && engine.OSType === "linux" && typeof engine.DockerRootDir === "string" && path.posix.isAbsolute(engine.DockerRootDir), "release_engine_changed", "The live Docker engine does not match the recorded operation target.");
+  const engine = inspectReleaseEngine(plan.target, execute);
   const check = (admission = false) => aggregateCapacity(sample(plan, engine, execute), peaks, plan.floorBytes, plan.growthReserveBytes, admission);
   const capacities = check(true);
   let args;
   let base;
   let config;
   if (plan.operation === "build") {
-    base = imageInfo(execute("docker", [...docker, "image", "inspect", plan.base.reference]));
-    requireValue(base.Id === plan.base.imageId && base.Os === "linux" && base.Architecture === "amd64" && base.RepoDigests?.includes(plan.base.reference) && Array.isArray(base.RootFS?.Layers) && base.RootFS.Layers.length > 0 && !base.Config?.OnBuild?.length, "release_base_unverified", "The installed base does not match its manifest, local identity or platform.");
-    requireValue(execute("docker", [...docker, "image", "ls", "--quiet", "--no-trunc", plan.image]) === "", "release_tag_exists", "The candidate tag already exists; preserve existing and rollback references and choose a new tag.");
-    const builder = JSON.parse(execute("docker", [...docker, "buildx", "inspect", BUILDER, "--format", "{{json .}}"]));
-    requireValue(builder.Driver === "docker" && builder.Nodes?.length === 1 && [BUILDER, BUILDER_ENDPOINT].includes(builder.Nodes[0].Endpoint), "release_builder_changed", "Buildx must use the verified single-node Docker driver on the isolated endpoint.");
+    base = inspectBuildBase(plan, execute);
     args = [...docker, "buildx", "build", "--builder", BUILDER, "--platform", plan.platform, "--network", "none", "--pull=false", "--load", "--metadata-file", plan.metadataFile, "--label", `org.opencontainers.image.revision=${plan.sourceRevision}`, "--file", plan.dockerfile.file, "--tag", plan.image, plan.sourceRoot];
   } else {
     requireValue(["amd64", "x86_64"].includes(engine.Architecture), "release_platform_invalid", "The serving engine must be linux/amd64.");
@@ -352,16 +405,20 @@ export async function runReleaseImages({ plan, checkOnly = false, execute = exec
   let configDigest = plan.configDigest;
   if (plan.operation === "build") {
     const metadata = JSON.parse(readFile(plan.metadataFile).toString("utf8"));
-    requireValue(SHA256.test(metadata["containerimage.config.digest"]) && SHA256.test(metadata["containerimage.digest"]) && result.Id !== base.Id && result.RootFS?.Layers?.length > base.RootFS.Layers.length && base.RootFS.Layers.every((layer, index) => result.RootFS.Layers[index] === layer), "release_result_invalid", "BuildKit output must identify an actual new layer over the verified base; retag-only results are refused.");
-    manifestDigest = metadata["containerimage.digest"];
-    configDigest = metadata["containerimage.config.digest"];
-    const descriptor = metadata["containerimage.descriptor"];
-    requireValue((!descriptor || descriptor.digest === manifestDigest) && (result.Id === configDigest || result.Descriptor?.digest === manifestDigest || result.RepoDigests?.some((reference) => reference.endsWith(`@${manifestDigest}`))), "release_result_invalid", "The daemon result must link to the native BuildKit export descriptor or classic config ID.");
+    ({ manifestDigest, configDigest } = verifyBuiltImage(plan, base, result, metadata));
   } else {
     requireValue(SHA256.test(result.Id) && result.RepoDigests?.includes(plan.image) && JSON.stringify(result.RootFS?.Layers) === JSON.stringify(config.rootfs.diff_ids), "release_result_invalid", "Received config, manifest and root filesystem identities differ from the candidate.");
   }
   return { checked: true, completed: true, operation: plan.operation, localImageId: result.Id, ...(plan.operation === "build" ? { exportDigest: manifestDigest } : { manifestDigest }), configDigest, requiresReleaseVerification: true };
 }
+
+// The separately reviewed full-build entry reuses these exact safety operations;
+// it does not feed invented measurements into the dependency-preserving delta.
+export const releaseImageSafety = Object.freeze({
+  BUILDER, PROFILE, BUILDER_DIR, BUILDER_ENDPOINT, BUILD_ROLES, SHA256, REVISION, PINNED_IMAGE,
+  requireValue, positive, hash, readFile, artifact, imageInfo, executeRead, liveSamples, defaultSpawn, spawnOwnedProcess,
+  assertIsolatedBuilderTarget, verifyCleanSource, inspectReleaseEngine, inspectBuildBase, assertBuilderContext, verifyBuiltImage,
+});
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, flag, file, ...extra] = process.argv.slice(2);
