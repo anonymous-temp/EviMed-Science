@@ -661,6 +661,11 @@ export function createWebApiApp(overrides = {}) {
         routeTurn: (text) => routeAdoptedInput(full, sessionId, text),
       });
     },
+    // The pump has already authenticated the runtime and attributed root and
+    // child sessions to one project-scoped run. Feed that kernel-owned
+    // sequence directly to the stall monitor; the model's workspace
+    // projection remains useful UI detail, but is not the heartbeat.
+    onRunActivity: (project, runId, activity) => agentRuns?.noteKernelActivity(project, runId, activity),
   });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {

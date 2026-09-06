@@ -459,7 +459,7 @@ export class DshRuntimeAdapter {
    * missed from here, in the same vocabulary as everything after it.
    *
    * @param {{ sessionId: string, signal: AbortSignal }} input
-   * @returns {AsyncGenerator<{ sessionId: string, event: import('@evimed/domain').RunEvent }>}
+   * @returns {AsyncGenerator<{ sessionId: string, event: import('@evimed/domain').RunEvent, replay: boolean }>}
    */
   async *watchSession({ sessionId, signal }) {
     const args = { request: { address: { kind: "session", sessionId } } };
@@ -467,12 +467,12 @@ export class DshRuntimeAdapter {
       if (frame?.type === "snapshot") {
         for (const record of Array.isArray(frame.records) ? frame.records : []) {
           const decoded = decodeSessionFrame(sessionId, record);
-          if (decoded) yield decoded;
+          if (decoded) yield { ...decoded, replay: true };
         }
         continue;
       }
       const decoded = decodeSessionFrame(sessionId, frame);
-      if (decoded) yield decoded;
+      if (decoded) yield { ...decoded, replay: false };
     }
   }
 }
