@@ -1571,16 +1571,20 @@ test("a kernel-confirmed child sequence keeps a delegated run alive", async (t) 
 
 test("a retry child's authenticated head replaces the failed child's stall signal", async (t) => {
   let retryHead = 20;
+  let calls = 0;
   const seen = [];
+  let publishRetry = async () => {};
   const { project, store, writeProjection } = await delegatingRunFixture(t, {
     stallPolls: 3,
     maxPolls: 8,
     readChildSessionActivity: async (_project, _parentSessionId, childSessionIds) => {
+      calls += 1;
       seen.push([...childSessionIds]);
       const id = childSessionIds[0];
+      if (id === "child-first" && calls === 3) await publishRetry();
       return id === "child-retry"
         ? [{ sessionId: id, asOfSeq: retryHead += 1, running: true }]
-        : [{ sessionId: "child-first", asOfSeq: 10, running: false }];
+        : [{ sessionId: "child-first", asOfSeq: 10, running: true }];
     },
   });
   await writeProjection({
@@ -1588,7 +1592,7 @@ test("a retry child's authenticated head replaces the failed child's stall signa
     evidence: {}, budget: { children: 1 },
   });
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await writeProjection({
+  publishRetry = () => writeProjection({
     subagents: [{ deliverableId: "d1", status: "running", childSessionId: "child-retry", retried: true }],
     evidence: {}, budget: { children: 2 },
   });
@@ -1596,6 +1600,36 @@ test("a retry child's authenticated head replaces the failed child's stall signa
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_timeout");
   assert.ok(seen.some((ids) => ids[0] === "child-retry"), "the monitor never switched to the retry child");
+});
+
+test("candidate and running-state churn cannot replace per-child sequence progress", async (t) => {
+  let calls = 0;
+  let mutate = async () => {};
+  const projection = (childSessionId, running) => ({
+    subagents: [{ deliverableId: "d1", status: "running", childSessionId }],
+    evidence: {}, budget: { children: 1 }, running,
+  });
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 3,
+    maxPolls: 40,
+    readChildSessionActivity: async (_project, _parentSessionId, childSessionIds) => {
+      calls += 1;
+      const id = childSessionIds[0];
+      await mutate();
+      return [{ sessionId: id, asOfSeq: 10, running: calls % 2 === 0 }];
+    },
+  });
+  let next = "child-b";
+  mutate = async () => {
+    await writeProjection(projection(next, next === "child-a"));
+    next = next === "child-a" ? "child-b" : "child-a";
+  };
+  await writeProjection(projection("child-a", true));
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await store.monitors.get(run.id)?.promise;
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_stalled");
+  assert.ok(calls >= 3, "the fixture did not exercise repeated candidate churn");
 });
 
 test("changing model-writable projection counters cannot keep a stalled run alive", async (t) => {

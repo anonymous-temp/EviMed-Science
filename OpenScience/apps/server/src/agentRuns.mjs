@@ -75,6 +75,7 @@ const maxDeliverableIssues = 40;
 const maxArtifacts = 64;
 const maxQualityNotices = 40;
 const maxQualityNoticeLength = 300;
+const maxObservedChildSessions = 64;
 
 // Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
 // or `llm:0.83`. Recording the decision without the reason makes a wrong route
@@ -2349,6 +2350,10 @@ export class AgentRunStore {
     this.projectionNoticed = new Set();
     /** Trusted DSH event-pump activity, scoped by project and run. */
     this.kernelActivities = new Map();
+    /** Kernel-confirmed child sequence baselines/high-water marks per run. */
+    this.childKernelHeads = new Map();
+    /** Changes only when a bound child's sequence exceeds its own high-water. */
+    this.childKernelActivities = new Map();
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
     // Consecutive polls with no new message and no new tool call before a run
@@ -2959,7 +2964,10 @@ export class AgentRunStore {
       this.deliverableDigests.delete(runId);
       this.projectionAdmissions.delete(runId);
       this.projectionNoticed.delete(runId);
-      this.kernelActivities.delete(`${project.userId}\0${project.id}\0${runId}`);
+      const kernelKey = `${project.userId}\0${project.id}\0${runId}`;
+      this.kernelActivities.delete(kernelKey);
+      this.childKernelHeads.delete(kernelKey);
+      this.childKernelActivities.delete(kernelKey);
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
       this.dispatchedBriefs.delete(runId);
@@ -3575,8 +3583,10 @@ export class AgentRunStore {
     if (runSide.childSessionIds.length > 0) {
       try {
         const observed = await this.readChildSessionActivity(project, run.sessionId, runSide.childSessionIds);
+        const allowed = new Set(runSide.childSessionIds);
         childActivity = (Array.isArray(observed) ? observed : []).filter((child) =>
-          typeof child?.sessionId === "string"
+          allowed.has(child?.sessionId)
+          && typeof child?.sessionId === "string"
           && child.sessionId.length > 0
           && child.sessionId.length <= 512
           && Number.isSafeInteger(child?.asOfSeq)
@@ -3593,8 +3603,40 @@ export class AgentRunStore {
       }
     }
     if (childActivityUnreadable) return null;
-    const kernelActivity = eventActivity || childActivity.length > 0
-      ? createHash("sha256").update(JSON.stringify({ eventActivity, childActivity })).digest("hex")
+    const kernelKey = `${project.userId}\0${project.id}\0${run.id}`;
+    const heads = this.childKernelHeads.get(kernelKey) ?? new Map();
+    let childAdvanced = false;
+    let runningChildBaselined = false;
+    for (const child of childActivity) {
+      const previous = heads.get(child.sessionId);
+      // First sight is the server-owned binding and baseline, not progress.
+      // Re-adding a historical child or changing its running flag therefore
+      // cannot reset the stall clock; only a later kernel sequence may.
+      if (previous === undefined && heads.size < maxObservedChildSessions) {
+        heads.set(child.sessionId, child.asOfSeq);
+        if (child.running) runningChildBaselined = true;
+      }
+      else if (child.asOfSeq > previous) {
+        heads.set(child.sessionId, child.asOfSeq);
+        childAdvanced = true;
+      }
+    }
+    this.childKernelHeads.set(kernelKey, heads);
+    // A newly authenticated running child is neither movement nor stillness:
+    // its current head is the baseline. Preserve the existing idle count for
+    // this poll so a retry that appears at N-1 does not die before its next
+    // kernel sequence, while the hard unique-child cap prevents churn from
+    // buying unbounded grace.
+    if (runningChildBaselined && !childAdvanced) return null;
+    if (childAdvanced) {
+      this.childKernelActivities.set(
+        kernelKey,
+        createHash("sha256").update(JSON.stringify([...heads].sort(([left], [right]) => left.localeCompare(right, "en")))).digest("hex"),
+      );
+    }
+    const childActivityDigest = this.childKernelActivities.get(kernelKey) ?? null;
+    const kernelActivity = eventActivity || childActivityDigest
+      ? createHash("sha256").update(JSON.stringify({ eventActivity, childActivity: childActivityDigest })).digest("hex")
       : null;
 
     const stillByHistory = messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0);
