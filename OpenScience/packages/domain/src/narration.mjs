@@ -83,6 +83,7 @@ function withCount(phrase, result) {
 const SOCKET_NARRATION = Object.freeze({
   [SOCKET_TOOL_NAMES.plan]: (args) => (args?.action === 'status' ? '查看计划进度' : '写下计划'),
   [SOCKET_TOOL_NAMES.delegate]: (args) => `分工给 ${excerpt(args?.capability, 32)}`,
+  [SOCKET_TOOL_NAMES.reviseDeliverable]: (args) => `开启交付物新修订：${excerpt(args?.deliverableId, 32)}`,
   [SOCKET_TOOL_NAMES.submitDeliverable]: (args, result) => {
     const id = excerpt(args?.deliverableId, 32)
     if (!result || typeof result !== 'object') return `提交交付物 ${id}`

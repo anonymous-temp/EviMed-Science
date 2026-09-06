@@ -51,6 +51,11 @@ def build_research_portfolio(direction, context, topics, opportunities, evidence
         pmids = source.get("evidence_pmids", [])
         if not pmids or any(pmid not in evidence for pmid in pmids):
             raise ValueError("portfolio opportunity has missing or unknown evidence")
+        retracted = [pmid for pmid in pmids if evidence[pmid].publication_status == "retracted"]
+        if retracted:
+            raise ValueError(
+                "portfolio candidate cannot use retracted evidence: " + ", ".join(retracted)
+            )
         if topic.get("source_evidence_pmids") != pmids or topic.get("support_level") != source.get("support_level"):
             raise ValueError("portfolio candidate did not inherit its source evidence and support level")
         candidate_id = topic.get("topic_id") or f"R-{source_id}"

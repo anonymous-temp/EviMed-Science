@@ -143,6 +143,7 @@ function studyAccounting(methods, sourceRecords, issues) {
   const included = rows.filter((row) => record(row) && row.included === true);
   const sources = new Map();
   const documents = new Map();
+  const reportTypes = new Map();
   let complete = true;
   let metadataOnlyIncluded = 0;
   for (const [index, row] of included.entries()) {
@@ -152,6 +153,13 @@ function studyAccounting(methods, sourceRecords, issues) {
       continue;
     }
     sources.set(row.referenceNumber, row);
+    if (!["primary", "review", "guideline", "registry", "other"].includes(row.reportType)) {
+      note(issues, "review-study-accounting", "reference " + row.referenceNumber
+        + " must declare reportType as primary, review, guideline, registry, or other.");
+      complete = false;
+    } else {
+      reportTypes.set(row.referenceNumber, row.reportType);
+    }
     const identity = documentIdentity(row);
     if (identity && documents.has(identity)) {
       note(issues, "review-study-accounting", "references " + documents.get(identity) + " and " + row.referenceNumber
@@ -182,10 +190,9 @@ function studyAccounting(methods, sourceRecords, issues) {
     return metrics;
   }
   const assigned = new Set();
-  const primaryReferences = new Set();
+  const primaryReferences = new Set([...reportTypes].filter(([, type]) => type === "primary").map(([number]) => number));
   const unknownPrimary = new Set();
   const primaryStudies = new Set();
-  const studyKinds = new Map();
   for (const [index, group] of groups.entries()) {
     const label = "studyGroups[" + index + "]";
     if (!record(group) || !Array.isArray(group.referenceNumbers) || group.referenceNumbers.length === 0
@@ -199,13 +206,8 @@ function studyAccounting(methods, sourceRecords, issues) {
       note(issues, "review-study-accounting", label + ".studyId must be a non-empty string or null for unknown identity.");
       complete = false;
     }
-    if (id && studyKinds.has(id) && studyKinds.get(id) !== group.evidenceType) {
-      note(issues, "review-study-accounting", label + " assigns incompatible evidence types to studyId " + id + ".");
-      complete = false;
-    }
-    if (id) studyKinds.set(id, group.evidenceType);
     const local = new Set();
-    let usableReferences = 0;
+    let usablePrimaryReferences = 0;
     for (const number of group.referenceNumbers) {
       if (!Number.isInteger(number) || !sources.has(number)) {
         note(issues, "review-study-accounting", label + " contains a reference that is not an included integer referenceNumber.");
@@ -219,13 +221,18 @@ function studyAccounting(methods, sourceRecords, issues) {
       }
       local.add(number);
       assigned.add(number);
-      usableReferences += 1;
-      if (group.evidenceType === "primary") {
-        primaryReferences.add(number);
+      const reportType = reportTypes.get(number);
+      if (reportType && reportType !== group.evidenceType) {
+        note(issues, "review-study-accounting", label + " evidenceType " + group.evidenceType
+          + " conflicts with sourceRecords reference " + number + " reportType " + reportType + ".");
+        complete = false;
+      }
+      if (reportType === "primary") {
+        usablePrimaryReferences += 1;
         if (!id) unknownPrimary.add(number);
       }
     }
-    if (group.evidenceType === "primary" && id && usableReferences) primaryStudies.add(id);
+    if (id && usablePrimaryReferences) primaryStudies.add(id);
   }
   const missing = [...sources.keys()].filter((number) => !assigned.has(number));
   if (missing.length) {

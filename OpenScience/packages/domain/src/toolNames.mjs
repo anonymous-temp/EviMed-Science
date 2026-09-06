@@ -105,6 +105,7 @@ export const MCP_MANAGED_JOB_BASE_NAMES = Object.freeze([
 export const SOCKET_TOOL_NAMES = Object.freeze({
   plan: 'evimed_plan',
   delegate: 'evimed_delegate',
+  reviseDeliverable: 'evimed_revise_deliverable',
   submitDeliverable: 'evimed_submit_deliverable',
   completeRun: 'evimed_complete_run',
   capsuleRecall: 'evimed_capsule_recall',

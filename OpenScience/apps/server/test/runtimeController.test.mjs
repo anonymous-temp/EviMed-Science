@@ -411,7 +411,7 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   }
 });
 
-test("capsule settings survive the manager to isolated controller startup boundary", async (t) => {
+test("capsule and revision settings survive the manager to isolated controller startup boundary", async (t) => {
   for (const scenario of [
     { name: "enabled", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "1" },
     { name: "custom gateway", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "https://trusted-gateway.example:9443/custom/model/v1/", active: "1" },
@@ -463,7 +463,9 @@ test("capsule settings survive the manager to isolated controller startup bounda
         assert.ok(args, "the assertion must inspect the controller's actual Docker spawn");
         const capsuleEnv = (argv) => argv.filter((arg) => arg.startsWith("EVIMED_CAPSULE_")).sort();
         const expectedUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/capsules/v1` : "";
+        const expectedRevisionUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/revisions/v1/authorize` : "";
         assert.ok(args.includes(`EVIMED_CAPSULE_GATEWAY_URL=${expectedUrl}`), "the final container must receive the caller's capsule endpoint");
+        assert.ok(args.includes(`EVIMED_REVISION_AUTHORIZE_URL=${expectedRevisionUrl}`), "the isolated controller must preserve the web process's revision endpoint decision");
         assert.ok(args.includes(`EVIMED_CAPSULE_ACTIVE=${scenario.active}`), "the plugin flag must agree with the endpoint");
         assert.deepEqual(capsuleEnv(args), capsuleEnv(buildRuntimeLaunchPlan(webConfig, project, 49152).args));
         const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
@@ -482,7 +484,7 @@ test("capsule settings survive the manager to isolated controller startup bounda
   }
 });
 
-test("runtime controller accepts only its trusted capsule endpoint or explicit disabled state", async () => {
+test("runtime controller accepts only its trusted internal gateway endpoints or explicit disabled state", async () => {
   const tmp = await shortTempDir("oscv-");
   const dataDir = path.join(tmp, "data");
   const socketPath = path.join(tmp, "control", "controller.sock");
@@ -508,6 +510,7 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
       port: 49152,
       password: "pw_abcdefghijklmnopqrstuvwxyz",
       capsuleGatewayUrl: "https://trusted-gateway.example:9443/internal/capsules/v1",
+      revisionGatewayUrl: "https://trusted-gateway.example:9443/internal/revisions/v1/authorize",
     };
     for (const capsuleGatewayUrl of [
       undefined, null, true, {},
@@ -523,6 +526,20 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
       await assert.rejects(
         client.request("POST", "/v1/runtime/start", { ...payload, capsuleGatewayUrl }),
         (error) => error?.status === 400 && error?.code === "runtime_controller_capsule_gateway_invalid",
+      );
+    }
+    for (const revisionGatewayUrl of [
+      undefined, null, true, {},
+      "https://attacker.example/internal/revisions/v1/authorize",
+      "http://trusted-gateway.example:9443/internal/revisions/v1/authorize",
+      "https://trusted-gateway.example:9443/internal/capsules/v1",
+      `${payload.revisionGatewayUrl}?redirect=attacker`,
+      `${payload.revisionGatewayUrl}#fragment`,
+      `${payload.revisionGatewayUrl}\nEVIMED_REVISION_AUTHORIZE_URL=https://attacker.example`,
+    ]) {
+      await assert.rejects(
+        client.request("POST", "/v1/runtime/start", { ...payload, revisionGatewayUrl }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_revision_gateway_invalid",
       );
     }
     for (const extra of [{ args: ["run", "--privileged"] }, { env: { EVIMED_CAPSULE_ACTIVE: "1" } }, { stateStore: "postgres" }, { evimedWorkloadSigningSecret: "injected" }]) {
@@ -544,7 +561,7 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
 
 test("the capsule startup protocol refuses a controller from before endpoint handoff", async () => {
   const client = new RuntimeControllerClient({});
-  client.request = async () => ({ protocolVersion: 2 });
+  client.request = async () => ({ protocolVersion: 3 });
   await assert.rejects(
     client.health(),
     (error) => error?.status === 503 && error?.code === "runtime_controller_protocol_mismatch",
@@ -674,6 +691,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
         port: 49152,
         password: "pw_abcdefghijklmnopqrstuvwxyz",
         capsuleGatewayUrl: "",
+        revisionGatewayUrl: "",
       },
       { signal: abort.signal },
     );
