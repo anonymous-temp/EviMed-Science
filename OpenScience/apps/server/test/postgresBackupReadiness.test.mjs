@@ -104,8 +104,8 @@ for (const [label, patch] of [
 test("PostgreSQL backup identity also binds the configured URL database without exposing it", async t => {
   const { file, healthy, config, database } = await fixture(t);
   await writeFile(file, JSON.stringify(healthy));
-  await assert.rejects(postgresBackupReadiness({ ...config, databaseUrl: "postgresql://user:synthetic-secret@127.0.0.1/wrong_database" }, database),
-    error => error.code === "postgres_backup_database_mismatch" && !String(error.stack).includes("synthetic-secret"));
+  await assert.rejects(postgresBackupReadiness({ ...config, databaseUrl: "postgresql://user:test-only-secret@127.0.0.1/wrong_database" }, database),
+    error => error.code === "postgres_backup_database_mismatch" && !String(error.stack).includes("test-only-secret"));
   assert.equal((await postgresBackupReadiness({ ...config, databaseUrl: "postgresql://readonly@127.0.0.1/evimed%5Ftest_backup_readiness" }, database)).sourceIdentityVerified, true);
 });
 
