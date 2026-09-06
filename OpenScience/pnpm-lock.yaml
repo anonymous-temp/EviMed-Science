@@ -332,6 +332,9 @@ importers:
       '@evimed/harness-port':
         specifier: workspace:^0.1.0
         version: link:../harness-port
+      dsh-cite:
+        specifier: 0.3.2
+        version: 0.3.2
     devDependencies:
       eslint:
         specifier: ^8.57.1
@@ -1861,6 +1864,10 @@ packages:
 
   dom-accessibility-api@0.6.3:
     resolution: {integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==}
+
+  dsh-cite@0.3.2:
+    resolution: {integrity: sha512-XQ3h4L3XA9pkupQV4AzEDMdXhVNcQC5bF9MGlwtWEuxJcgvJVlW59g/qsJk1mwYGVS2jRTT7WeQWxRtEsrXGDw==}
+    engines: {node: '>=22'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -5230,6 +5237,8 @@ snapshots:
   dom-accessibility-api@0.5.16: {}
 
   dom-accessibility-api@0.6.3: {}
+
+  dsh-cite@0.3.2: {}
 
   dunder-proto@1.0.1:
     dependencies:

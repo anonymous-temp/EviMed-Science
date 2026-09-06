@@ -109,6 +109,15 @@
   name: '@evimed/dsh-socket/plugins/review'
   disabled: !!js process.env.EVIMED_REVIEW_ENABLED !== '1'
 
+# The profile disables the upstream cite row after all bundle layers. Register
+# its unchanged public tools once here, with deployment-owned managed transport.
+- id: evimed-citation-bridge
+  name: '@evimed/dsh-socket/plugins/citation-bridge'
+  config:
+    gatewayUrl: !!js process.env.EVIMED_PUBLIC_SOURCE_GATEWAY_URL
+    tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
+    timeoutMs: 15000
+
 # --- framework tools the model needs to do the work -------------------------
 - id: tool-bash
   name: '@deepseek-ai/dsh-tool-bash'

@@ -10,7 +10,8 @@
     "evimed-evidence",
     "evimed-capsule",
     "evimed-screening",
-    "evimed-review"
+    "evimed-review",
+    "evimed-citation-bridge"
   ],
   "communitySkills": [
     "dsh-ppt@0db836e8251a10bf93f26e702534ab9d8b2a1818",
@@ -21,8 +22,17 @@
       "name": "dsh-cite",
       "version": "0.3.2",
       "status": "installed",
-      "tools": ["cite"],
-      "testedOn": "2026-09-06"
+      "tools": [
+        "cite_lookup",
+        "cite_format",
+        "cite_bibtex",
+        "cite_check",
+        "cite_health"
+      ],
+      "testedOn": "2026-09-06",
+      "transport": "public-source-gateway",
+      "registration": "upstream buildCiteTools with managed fetch; original apply replaced",
+      "readiness": "Installed is not runtime-ready: cite_health and a successful DOI lookup must pass with the current model gateway token."
     },
     {
       "name": "dsh-plugin-academic-writing",

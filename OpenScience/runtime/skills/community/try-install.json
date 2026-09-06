@@ -5,28 +5,41 @@
       "name": "dsh-cite",
       "repo": "STARDUSTLC666/dsh-cite",
       "version": "0.3.2",
-      "registers": ["cite"],
+      "registers": [
+        "cite_lookup",
+        "cite_format",
+        "cite_bibtex",
+        "cite_check",
+        "cite_health"
+      ],
       "why": "DOI/Crossref verification plus GB/T 7714 / APA / MLA / Chicago / BibTeX. GB/T 7714 is the format Chinese journals require and nothing we ship produces it."
     },
     {
       "name": "dsh-plugin-academic-writing",
       "repo": "863683348/dsh-plugin-academic-writing",
       "version": "0.2.0",
-      "registers": ["academic_writing"],
+      "registers": [
+        "academic_writing"
+      ],
       "why": "Outline, title/abstract skeletons, citation formatting, submission checklist. Overlaps manuscript-support; worth measuring against it rather than assuming."
     },
     {
       "name": "dsh-plugin-translation",
       "repo": "863683348/dsh-plugin-translation",
       "version": "0.2.0",
-      "registers": ["translation"],
+      "registers": [
+        "translation"
+      ],
       "why": "Sentence splitting, glossary, and number/unit/parenthesis consistency checks — the mechanical half of bilingual manuscript work."
     },
     {
       "name": "dsh-plugin-writing-guard",
       "repo": "xmutfyh/dsh-plugin-writing-guard",
       "version": "2.0.1",
-      "registers": ["writing_audit", "writing_journal_profile"],
+      "registers": [
+        "writing_audit",
+        "writing_journal_profile"
+      ],
       "why": "Deterministic, zero-network. Protects numbers, citations, claim strength, negation and scope from being changed by language polishing, and detects working-context residue leaking into deliverables — the same family as our own leakage bans, from the other side. Version 1.7.0 was never published; 2.0.1 is the first currently published candidate tested here. Reclassified from the skills lane because its SKILL.md calls its own tools, so the prose cannot be taken alone."
     }
   ],
@@ -41,6 +54,8 @@
       "dsh-plugin-writing-guard@2.0.1": "rejected: dependency build scripts require an unreviewed pnpm approval"
     }
   },
-  "installed": ["dsh-cite@0.3.2"],
-  "notInstalledYet": "The three rejected bundles remain outside the runtime image. dsh-cite is installed at its exact tested version and must pass the image dump-config and boot smoke before release."
+  "installed": [
+    "dsh-cite@0.3.2"
+  ],
+  "notInstalledYet": "The three rejected bundles remain outside the runtime image. dsh-cite is pinned whole; its public tool builder uses the managed source gateway. Boot compatibility does not certify runtime connectivity, which requires cite_health and a successful DOI lookup with the current model token."
 }

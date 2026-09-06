@@ -411,7 +411,7 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   }
 });
 
-test("capsule and revision settings survive the manager to isolated controller startup boundary", async (t) => {
+test("capsule, revision and citation settings survive the manager to isolated controller startup boundary", async (t) => {
   for (const scenario of [
     { name: "enabled", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "1" },
     { name: "custom gateway", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "https://trusted-gateway.example:9443/custom/model/v1/", active: "1" },
@@ -436,6 +436,7 @@ test("capsule and revision settings survive the manager to isolated controller s
         stateStore: "local",
         evimedWorkloadSigningSecret: "",
         modelGatewayInternalUrl: scenario.gateway,
+        publicSourceGatewayInternalUrl: "https://sources.example:9443/internal/sources/v1/fetch",
       });
       const webConfig = loadConfig({
         ...base,
@@ -443,6 +444,7 @@ test("capsule and revision settings survive the manager to isolated controller s
         evimedWorkloadSigningSecret: scenario.signingSecret,
         modelGatewaySigningSecret: "capsule-test-model-signing-secret-with-32-bytes",
         modelGatewayInternalUrl: scenario.gateway,
+        publicSourceGatewayInternalUrl: "https://sources.example:9443/internal/sources/v1/fetch",
         deepseekProviderEnabled: true,
         deepseekModel: "deepseek-v4-pro",
         runtimeControllerMode: "socket",
@@ -466,6 +468,8 @@ test("capsule and revision settings survive the manager to isolated controller s
         const expectedRevisionUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/revisions/v1/authorize` : "";
         assert.ok(args.includes(`EVIMED_CAPSULE_GATEWAY_URL=${expectedUrl}`), "the final container must receive the caller's capsule endpoint");
         assert.ok(args.includes(`EVIMED_REVISION_AUTHORIZE_URL=${expectedRevisionUrl}`), "the isolated controller must preserve the web process's revision endpoint decision");
+        assert.ok(args.includes("EVIMED_PUBLIC_SOURCE_GATEWAY_URL=https://sources.example:9443/internal/sources/v1/fetch"), "the citation plugin must receive the managed source endpoint");
+        assert.ok(args.includes("EVIMED_MODEL_GATEWAY_TOKEN_FILE=/runtime/dsh-home/model-gateway.token"), "citation must use the model token, not the workload token");
         assert.ok(args.includes(`EVIMED_CAPSULE_ACTIVE=${scenario.active}`), "the plugin flag must agree with the endpoint");
         assert.deepEqual(capsuleEnv(args), capsuleEnv(buildRuntimeLaunchPlan(webConfig, project, 49152).args));
         const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
@@ -497,6 +501,7 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
   const controller = createRuntimeController({
     ...controllerConfig({ dataDir, socketPath, dockerBin }),
     modelGatewayInternalUrl: "https://trusted-gateway.example:9443/internal/model/v1",
+    publicSourceGatewayInternalUrl: "https://sources.example:9443/internal/sources/v1/fetch",
     stateStore: "local",
     evimedWorkloadSigningSecret: "",
   });
@@ -511,6 +516,7 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
       password: "pw_abcdefghijklmnopqrstuvwxyz",
       capsuleGatewayUrl: "https://trusted-gateway.example:9443/internal/capsules/v1",
       revisionGatewayUrl: "https://trusted-gateway.example:9443/internal/revisions/v1/authorize",
+      publicSourceGatewayUrl: "https://sources.example:9443/internal/sources/v1/fetch",
     };
     for (const capsuleGatewayUrl of [
       undefined, null, true, {},
@@ -542,7 +548,21 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
         (error) => error?.status === 400 && error?.code === "runtime_controller_revision_gateway_invalid",
       );
     }
-    for (const extra of [{ args: ["run", "--privileged"] }, { env: { EVIMED_CAPSULE_ACTIVE: "1" } }, { stateStore: "postgres" }, { evimedWorkloadSigningSecret: "injected" }]) {
+    for (const publicSourceGatewayUrl of [
+      undefined, null, true, {},
+      "https://attacker.example/internal/sources/v1/fetch",
+      "http://sources.example:9443/internal/sources/v1/fetch",
+      "https://sources.example:9443/internal/model/v1",
+      `${payload.publicSourceGatewayUrl}?redirect=attacker`,
+      `${payload.publicSourceGatewayUrl}#fragment`,
+      `${payload.publicSourceGatewayUrl}\nEVIMED_MODEL_GATEWAY_TOKEN_FILE=/wrong/token`,
+    ]) {
+      await assert.rejects(
+        client.request("POST", "/v1/runtime/start", { ...payload, publicSourceGatewayUrl }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_source_gateway_invalid",
+      );
+    }
+    for (const extra of [{ modelGatewayTokenFile: "/arbitrary/token" }, { image: "attacker" }, { mounts: ["/:/host"] }, { args: ["run", "--privileged"] }, { env: { EVIMED_CAPSULE_ACTIVE: "1" } }, { stateStore: "postgres" }, { evimedWorkloadSigningSecret: "injected" }]) {
       await assert.rejects(
         client.request("POST", "/v1/runtime/start", { ...payload, ...extra }),
         (error) => error?.status === 400 && error?.code === "runtime_controller_payload_invalid",
@@ -561,7 +581,7 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
 
 test("the capsule startup protocol refuses a controller from before endpoint handoff", async () => {
   const client = new RuntimeControllerClient({});
-  client.request = async () => ({ protocolVersion: 3 });
+  client.request = async () => ({ protocolVersion: 4 });
   await assert.rejects(
     client.health(),
     (error) => error?.status === 503 && error?.code === "runtime_controller_protocol_mismatch",
@@ -692,6 +712,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
         password: "pw_abcdefghijklmnopqrstuvwxyz",
         capsuleGatewayUrl: "",
         revisionGatewayUrl: "",
+        publicSourceGatewayUrl: "",
       },
       { signal: abort.signal },
     );

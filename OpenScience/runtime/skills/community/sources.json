@@ -32,7 +32,7 @@
     {
       "name": "dsh-cite",
       "repo": "STARDUSTLC666/dsh-cite",
-      "reason": "Registers a model-facing tool (`cite`), not a skill. Try-install lane."
+      "reason": "Tool bundle, not a vendored skill. Installed whole at 0.3.2; public buildCiteTools registers cite_lookup, cite_format, cite_bibtex, cite_check and cite_health through the managed public-source gateway. Runtime readiness is checked separately from installation."
     },
     {
       "name": "academic-writing",
