@@ -2,7 +2,7 @@ import { HttpError } from "./security.mjs";
 
 export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
-  "agenda", "episode", "notification", "preferences", "plugin", "price-list",
+  "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
 ]);
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index"]);
 const migrations = new WeakMap();
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS evimed_product.schema_migrations (
 );
 CREATE TABLE IF NOT EXISTS evimed_product.documents (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-  kind text NOT NULL CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")})),
+  kind text NOT NULL CONSTRAINT product_documents_kind_check CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")})),
   id text NOT NULL,
   project_id text,
   payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
@@ -32,6 +32,27 @@ CREATE INDEX IF NOT EXISTS product_documents_project_idx ON evimed_product.docum
   (user_id,project_id,kind) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS product_documents_project_fk_idx ON evimed_product.documents(user_id,project_id);
 CREATE INDEX IF NOT EXISTS product_documents_payload_idx ON evimed_product.documents USING gin(payload jsonb_path_ops) WHERE deleted_at IS NULL;
+DO $document_kinds$
+DECLARE constraint_name text;
+BEGIN
+  FOR constraint_name IN
+    SELECT c.conname FROM pg_constraint c
+    WHERE c.conrelid='evimed_product.documents'::regclass AND c.contype='c'
+      AND pg_get_constraintdef(c.oid) LIKE 'CHECK ((kind = ANY%'
+      AND c.conname <> 'product_documents_kind_check'
+  LOOP
+    EXECUTE format('ALTER TABLE evimed_product.documents DROP CONSTRAINT %I', constraint_name);
+  END LOOP;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check' AND pg_get_constraintdef(c.oid) LIKE '%digest%'
+  ) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $document_kinds$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-06-product-digest-kind-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.revisions (
   user_id text NOT NULL,
   kind text NOT NULL,
