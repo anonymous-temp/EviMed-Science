@@ -15,6 +15,7 @@ import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
   buildRuntimeLaunchPlan,
+  capsuleGatewayEndpointUrl,
   cleanupDockerContainer,
   runtimeContainerName,
 } from "./runtimeManager.mjs";
@@ -480,7 +481,17 @@ export function createRuntimeController(overrides = {}) {
     if (!/^pw_[A-Za-z0-9_-]{16,}$/.test(password)) {
       throw controllerFailure(400, "runtime_controller_password_invalid", "Runtime controller credential is invalid.");
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port);
+    // Activation belongs to the caller that owns the database and signing key.
+    // This privileged process accepts only its trusted gateway's fixed capsule
+    // endpoint, never caller-provided environment or arbitrary network targets.
+    const capsuleGatewayUrl = payload.capsuleGatewayUrl;
+    if (
+      typeof capsuleGatewayUrl !== "string" ||
+      (capsuleGatewayUrl !== "" && capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config))
+    ) {
+      throw controllerFailure(400, "runtime_controller_capsule_gateway_invalid", "Runtime controller capsule gateway must match its configured gateway endpoint or be empty.");
+    }
+    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl });
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;
@@ -675,7 +686,7 @@ export function createRuntimeController(overrides = {}) {
         }
         const payload = await readJson(req, config.maxJsonBytes);
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl"]
           : url.pathname === "/v1/kernel/run"
             ? ["userId", "projectId", "activeWorkspace", "language", "code"]
             : ["userId", "projectId", "activeWorkspace"];

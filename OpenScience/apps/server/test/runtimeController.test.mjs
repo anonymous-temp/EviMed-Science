@@ -6,7 +6,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, requestRuntime } from "../src/runtimeManager.mjs";
+import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, requestRuntime } from "../src/runtimeManager.mjs";
+import { loadConfig } from "../src/config.mjs";
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION } from "../src/runtimeControllerClient.mjs";
 import { RuntimeControllerClient } from "../src/runtimeControllerClient.mjs";
 import { createRuntimeController } from "../src/runtimeControllerServer.mjs";
@@ -409,6 +410,148 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   }
 });
 
+test("capsule settings survive the manager to isolated controller startup boundary", async (t) => {
+  for (const scenario of [
+    { name: "enabled", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "1" },
+    { name: "custom gateway", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "https://trusted-gateway.example:9443/custom/model/v1/", active: "1" },
+    { name: "local state", stateStore: "local", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "0" },
+    { name: "no signing secret", stateStore: "postgres", signingSecret: "", gateway: "http://open-science-web:8787/internal/model/v1", active: "0" },
+  ]) {
+    await t.test(scenario.name, async () => {
+      const tmp = await shortTempDir("oscap-");
+      const dataDir = path.join(tmp, "data");
+      const socketPath = path.join(tmp, "control", "controller.sock");
+      const dockerLog = path.join(tmp, "docker.log");
+      const dockerBin = await fakeDocker(tmp);
+      const project = await projectTree(dataDir);
+      const savedEnv = { ...process.env };
+      process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+      process.env.FAKE_VOLUME_ROOT = dataDir;
+      process.env.FAKE_DOCKER_LOG = dockerLog;
+      const base = controllerConfig({ dataDir, socketPath, dockerBin });
+      // The privileged controller has no database or workload signing key.
+      const controller = createRuntimeController({
+        ...base,
+        stateStore: "local",
+        evimedWorkloadSigningSecret: "",
+        modelGatewayInternalUrl: scenario.gateway,
+      });
+      const webConfig = loadConfig({
+        ...base,
+        stateStore: scenario.stateStore,
+        evimedWorkloadSigningSecret: scenario.signingSecret,
+        modelGatewaySigningSecret: "capsule-test-model-signing-secret-with-32-bytes",
+        modelGatewayInternalUrl: scenario.gateway,
+        deepseekProviderEnabled: true,
+        deepseekModel: "deepseek-v4-pro",
+        runtimeControllerMode: "socket",
+        runtimeControllerTimeoutMs: 2_000,
+        runtimeControllerPollMs: 100,
+        allowDirectDockerControl: false,
+        runtimeProxyConnectTimeoutMs: 3_000,
+        runtimeSkillDirs: [],
+        runtimeIdleTimeoutMs: 0,
+        runtimeQuotaCheckIntervalMs: 0,
+      });
+      const manager = new RuntimeManager(webConfig);
+      try {
+        await controller.listen();
+        await manager.start(project);
+        const invocations = (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+        const args = invocations.find((argv) => argv[0] === "run" && argv.includes("open-science.web.runtime=true"));
+        assert.ok(args, "the assertion must inspect the controller's actual Docker spawn");
+        const capsuleEnv = (argv) => argv.filter((arg) => arg.startsWith("EVIMED_CAPSULE_")).sort();
+        const expectedUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/capsules/v1` : "";
+        assert.ok(args.includes(`EVIMED_CAPSULE_GATEWAY_URL=${expectedUrl}`), "the final container must receive the caller's capsule endpoint");
+        assert.ok(args.includes(`EVIMED_CAPSULE_ACTIVE=${scenario.active}`), "the plugin flag must agree with the endpoint");
+        assert.deepEqual(capsuleEnv(args), capsuleEnv(buildRuntimeLaunchPlan(webConfig, project, 49152).args));
+        const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
+        assert.ok(patch.includes(scenario.gateway.replace(/\/$/, "")), "the profile must use the same trusted gateway origin");
+        assert.ok(!args.some((arg) => arg.includes("signing-secret")), "only the endpoint, never a signing secret, belongs in the launch arguments");
+      } finally {
+        await manager.closeAll().catch(() => {});
+        await controller.close().catch(() => {});
+        for (const key of ["FAKE_DOCKER_STATE", "FAKE_VOLUME_ROOT", "FAKE_DOCKER_LOG"]) {
+          if (savedEnv[key] == null) delete process.env[key];
+          else process.env[key] = savedEnv[key];
+        }
+        await removeTree(tmp);
+      }
+    });
+  }
+});
+
+test("runtime controller accepts only its trusted capsule endpoint or explicit disabled state", async () => {
+  const tmp = await shortTempDir("oscv-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerLog = path.join(tmp, "docker.log");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir);
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  process.env.FAKE_DOCKER_LOG = dockerLog;
+  const controller = createRuntimeController({
+    ...controllerConfig({ dataDir, socketPath, dockerBin }),
+    modelGatewayInternalUrl: "https://trusted-gateway.example:9443/internal/model/v1",
+    stateStore: "local",
+    evimedWorkloadSigningSecret: "",
+  });
+  try {
+    await controller.listen();
+    const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath });
+    const payload = {
+      userId: project.userId,
+      projectId: project.id,
+      activeWorkspace: "",
+      port: 49152,
+      password: "pw_abcdefghijklmnopqrstuvwxyz",
+      capsuleGatewayUrl: "https://trusted-gateway.example:9443/internal/capsules/v1",
+    };
+    for (const capsuleGatewayUrl of [
+      undefined, null, true, {},
+      "https://attacker.example/internal/capsules/v1",
+      "http://trusted-gateway.example:9443/internal/capsules/v1",
+      "https://trusted-gateway.example/internal/capsules/v1",
+      "https://trusted-gateway.example:9443/internal/model/v1",
+      `${payload.capsuleGatewayUrl}?redirect=attacker`,
+      `${payload.capsuleGatewayUrl}#fragment`,
+      "https://user:password@trusted-gateway.example:9443/internal/capsules/v1",
+      `${payload.capsuleGatewayUrl}\nEVIMED_CAPSULE_ACTIVE=1`,
+    ]) {
+      await assert.rejects(
+        client.request("POST", "/v1/runtime/start", { ...payload, capsuleGatewayUrl }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_capsule_gateway_invalid",
+      );
+    }
+    for (const extra of [{ args: ["run", "--privileged"] }, { env: { EVIMED_CAPSULE_ACTIVE: "1" } }, { stateStore: "postgres" }, { evimedWorkloadSigningSecret: "injected" }]) {
+      await assert.rejects(
+        client.request("POST", "/v1/runtime/start", { ...payload, ...extra }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_payload_invalid",
+      );
+    }
+    const invocations = (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.ok(!invocations.some((args) => args[0] === "run" || args[0] === "rm"), "invalid requests must be rejected before Docker mutation");
+  } finally {
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    delete process.env.FAKE_DOCKER_LOG;
+    await removeTree(tmp);
+  }
+});
+
+test("the capsule startup protocol refuses a controller from before endpoint handoff", async () => {
+  const client = new RuntimeControllerClient({});
+  client.request = async () => ({ protocolVersion: 2 });
+  await assert.rejects(
+    client.health(),
+    (error) => error?.status === 503 && error?.code === "runtime_controller_protocol_mismatch",
+  );
+  client.request = async () => ({ protocolVersion: RUNTIME_CONTROLLER_PROTOCOL_VERSION });
+  await assert.doesNotReject(client.health());
+});
+
 test("runtime controller shutdown ends even while a client holds a connection open", async () => {
   // `server.close` resolves only once every open connection has ended, and a
   // connection that has never sent a request does not end on its own: with no
@@ -486,7 +629,7 @@ test("runtime controller cannot replace an active controller socket", async () =
       runtimeControllerTimeoutMs: 2_000,
     });
     const health = await client.health();
-    assert.equal(health.protocolVersion, 2);
+    assert.equal(health.protocolVersion, RUNTIME_CONTROLLER_PROTOCOL_VERSION);
   } finally {
     await second.close().catch(() => {});
     await first.close().catch(() => {});
@@ -529,6 +672,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
         activeWorkspace: project.activeWorkspace,
         port: 49152,
         password: "pw_abcdefghijklmnopqrstuvwxyz",
+        capsuleGatewayUrl: "",
       },
       { signal: abort.signal },
     );
