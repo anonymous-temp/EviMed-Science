@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   HttpError,
@@ -594,6 +594,7 @@ function actualUserMessage(message) {
 function nativeWorkflowEvidence(run, history) {
   let plan = null;
   let completion = null;
+  let kernelRunId = null;
   const submissions = new Map();
   const delegates = new Set();
   for (const message of history) for (const part of message.parts ?? []) {
@@ -611,6 +612,9 @@ function nativeWorkflowEvidence(run, history) {
       const definitions = items.filter((item) => typeof item?.id === "string" && isContractKind(item.contractKind))
         .map((item) => ({ id: item.id, contractKind: item.contractKind, capability: String(item.capability ?? "") }));
       if (args.action === "write" && !definitions.every((item) => args.deliverables?.some((input) => input.id === item.id && input.contractKind === item.contractKind && input.capability === item.capability))) continue;
+      if (typeof result.data?.runId !== "string" || !result.data.runId || result.data.runId.length > 256) continue;
+      if (kernelRunId && kernelRunId !== result.data.runId) return null;
+      kernelRunId = result.data.runId;
       plan = { revision: result.data.revision, written: args.action === "write", items: definitions, ...span };
     }
     if (part.tool === "evimed_submit_deliverable" && typeof args.deliverableId === "string") {
@@ -634,6 +638,7 @@ function nativeWorkflowEvidence(run, history) {
     (message.parts ?? []).reduce((seq, part) => Math.max(seq, Number(part.state?.completedSeq) || 0), 0),
   ), run.nativeTurn.startSeq);
   return { turnStartSeq: run.nativeTurn.startSeq, throughSeq, throughMessage: messageId(history.at(-1)), endTime: history.at(-1)?.info?.turnEnd?.time ?? null,
+    ...(kernelRunId ? { kernelRunId } : {}),
     plan, submissions: [...submissions.values()], delegates: [...delegates], completion };
 }
 
@@ -648,6 +653,7 @@ function nativeWorkflowNotices(proof) {
 function scopeNativeProjection(projection, run) {
   const proof = run.nativeWorkflow;
   if (!proof || projection.sessionId !== run.sessionId || !projection.runId) return null;
+  if (proof.kernelRunId && projection.runId !== proof.kernelRunId) return null;
   const rawItems = Array.isArray(projection.plan?.items) ? projection.plan.items : [];
   const invoked = new Set([...(proof.submissions ?? []).map((item) => item.id), ...(proof.delegates ?? [])]);
   const definitions = (proof.plan?.written ? proof.plan.items : (proof.plan?.items ?? []).filter((item) => invoked.has(item.id))).map((item) => ({ ...item }));
@@ -720,6 +726,48 @@ function parsedToolResult(part) {
 function parsedToolResultStatus(part) {
   const value = parsedToolResult(part);
   return typeof value?.status === "string" ? value.status : null;
+}
+
+/** Child session ids witnessed in successful delegation tool receipts. */
+function delegatedChildSessionIds(messages) {
+  const ids = [];
+  for (const message of messages) {
+    for (const part of message?.parts ?? []) {
+      if (part?.type !== "tool" || part?.tool !== "evimed_delegate" || part?.state?.status !== "completed") continue;
+      const result = parsedToolResult(part);
+      const raw = result?.ok === true ? result?.data?.childSessionId : null;
+      try {
+        const id = storedKernelRequestId(raw);
+        if (!ids.includes(id)) ids.push(id);
+      } catch { /* malformed or absent child identities prove nothing */ }
+    }
+  }
+  return ids.slice(0, 32);
+}
+
+/** Read authenticated kernel histories for delegated children, including nested children. */
+async function readDelegatedAssistantMessages(project, parentMessages, readSessionHistory) {
+  const queue = delegatedChildSessionIds(parentMessages);
+  const seen = new Set();
+  const assistants = [];
+  while (queue.length && seen.size < 32) {
+    const sessionId = queue.shift();
+    if (!sessionId || seen.has(sessionId)) continue;
+    seen.add(sessionId);
+    let history;
+    try {
+      history = await readSessionHistory(project, sessionId, { wake: false });
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(history)) continue;
+    const completed = history.filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
+    assistants.push(...completed);
+    for (const child of delegatedChildSessionIds(completed)) {
+      if (!seen.has(child) && !queue.includes(child) && seen.size + queue.length < 32) queue.push(child);
+    }
+  }
+  return assistants;
 }
 
 // Tools whose job is to go and fetch from outside. Whether one succeeds depends
@@ -933,8 +981,8 @@ function terminalFromMessages(messages) {
   return { status: "succeeded", errorCode: null };
 }
 
-/** @param {any} issues @param {any} shrinkage */
-function clinicalEvidenceRepairPrompt(issues, shrinkage = null) {
+/** @param {any} issues @param {any} shrinkage @param {boolean} revisionRequired */
+function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired = true) {
   const bounded = issues
     .filter((issue) => typeof issue === "string" && issue.trim())
     .slice(0, 40)
@@ -946,6 +994,8 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null) {
   return [
     "The server-side clinical evidence gate rejected the current package.",
     ...measured,
+    ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
+    "The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. It preserves the accepted bytes in protected kernel storage and opens a new revision; then repair and resubmit the new bytes.",
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
     "Patch clinical-evidence-report.md with the edit tool, changing only the lines the issues name. Do not rewrite it with the write tool: replacing the whole file regenerates it from what you still hold in context, which after a long run is a compressed recollection, so the report comes back shorter and you cannot tell that it did. Measured across four production repairs, every whole-file rewrite lost content — one shed 1,863 characters and the next 4,125 — while targeted edits held the report steady and ended slightly longer.",
     "The same applies to the other deliverables: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
@@ -1774,10 +1824,10 @@ async function specialistCompletionOutcome(
  * Hidden knowledge: what the control plane may and may not learn about a run in
  * flight, and why this file rather than the kernel's storage. DSH's storage
  * format carries no compatibility promise — rc.8 changed it with no migration —
- * so the socket projects its four durable tables into `.evimed-run/state.json`
- * and that is what is read here. The path guard makes the file unwritable by
- * the model, so it is a projection of what happened rather than a claim about
- * it.
+ * so the socket projects its durable tables into `.evimed-run/state.json`
+ * and that is what is read here for progress. It is scoped against observed
+ * workflow receipts and is never used as final source-SHA authority; that
+ * authority comes from authenticated kernel histories.
  *
  * Three outcomes, deliberately, because collapsing them is the bug this whole
  * area keeps producing:
@@ -1880,6 +1930,41 @@ async function verifiedReceiptArtifacts(project, receipt) {
     entries.push({ ...entry, files });
   }
   return { artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(), mismatched: [...new Set(mismatched)], receipt: { ...receipt, entries } };
+}
+
+/** Preserve locally accepted bytes in control-plane-only project metadata before repair. */
+async function snapshotAcceptedPackageForRepair(project, run) {
+  const receipt = await readDeliveryReceipt(project, run);
+  if (!receipt) return { revisionRequired: false, snapshotPath: null };
+  const verified = await verifiedReceiptArtifacts(project, receipt);
+  if (verified.mismatched.length > 0) {
+    throw new Error(`accepted receipt drifted before repair: ${verified.mismatched.slice(0, 6).join(", ")}`);
+  }
+  const metadata = new Map(verified.receipt.entries.flatMap((entry) => entry.files.map((file) => [file.path, file])));
+  const files = [];
+  for (const relative of verified.artifacts) {
+    const value = await readRequiredFile(project, relative);
+    const recorded = metadata.get(relative);
+    if (!value || !recorded) throw new Error(`accepted repair source disappeared: ${relative}`);
+    const digest = createHash("sha256").update(value.text, "utf8").digest("hex");
+    if (digest !== recorded.sha256 || Buffer.byteLength(value.text) !== recorded.bytes) {
+      throw new Error(`accepted repair source changed during snapshot: ${relative}`);
+    }
+    files.push({ path: relative, sha256: digest, bytes: recorded.bytes, text: value.text });
+  }
+  const acceptedDigest = createHash("sha256").update(JSON.stringify(verified.receipt)).digest("hex");
+  const directory = path.join(project.metaDir, "repair-revisions");
+  const snapshotPath = path.join(directory, `${safeId(run.id, "run id")}-${acceptedDigest}.json`);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await writeFileAtomicNoFollow(project.rootDir, snapshotPath, `${JSON.stringify({
+    formatVersion: 1,
+    controlPlaneRunId: run.id,
+    acceptedDigest,
+    acceptedReceipt: verified.receipt,
+    files,
+    preservedAt: new Date().toISOString(),
+  }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  return { revisionRequired: true, snapshotPath };
 }
 
 async function readRunStateProjection(project, workspaceRoot, run = null) {
@@ -2843,6 +2928,8 @@ export class AgentRunStore {
     const allAssistants = history
       .slice(baselineIndex + 1)
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
+    const delegatedAssistants = await readDelegatedAssistantMessages(project, allAssistants, this.readSessionHistory);
+    const allRunAssistants = [...allAssistants, ...delegatedAssistants];
     const repairBaselineCursor = this.clinicalRepairBaselineCursors.get(run.id) ?? null;
     const repairBaselineIndex = repairBaselineCursor == null
       ? baselineIndex
@@ -2874,19 +2961,19 @@ export class AgentRunStore {
       runtimeWorkspaceRoot = project.workspaceDir;
     }
     const candidates = [...new Set(
-      allAssistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
+      allRunAssistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
     )].slice(0, maxArtifacts).sort();
     let artifacts = await existingArtifacts(project, candidates, run, ownEnd?.time);
     if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
-        const sourceArtifactProvenance = successfulEvidenceSourceArtifacts(allAssistants, runtimeWorkspaceRoot);
+        const sourceArtifactProvenance = successfulEvidenceSourceArtifacts(allRunAssistants, runtimeWorkspaceRoot);
         completion = await requiredSpecialistArtifacts(
           project,
           run.nativeTurn ? { ...run, nativeTurn: { ...run.nativeTurn, endTime: ownEnd?.time } } : run,
           this.agentRegistry,
           sourceArtifactProvenance,
-          allAssistants,
+          allRunAssistants,
           // Only what this process dispatched. A run recovered from the ledger
           // after a restart has no brief here, and the gate is told so rather
           // than reading the copy in the workspace.
@@ -2925,9 +3012,19 @@ export class AgentRunStore {
           && (structuralRound || repairAttempts < this.maxClinicalRepairAttempts)
           && typeof repairSender === "function";
         if (canRepair) {
-          if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
-          else this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
-          this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
+          let revision;
+          try {
+            revision = await snapshotAcceptedPackageForRepair(project, run);
+          } catch {
+            revision = null;
+            terminal.status = "failed";
+            terminal.errorCode = "specialist_evidence_repair_snapshot_failed";
+            terminal.qualityNotices = ["The accepted package could not be preserved outside the runtime workspace before repair, so no revision was authorized."];
+          }
+          if (revision) {
+            if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
+            else this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+            this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
           // Record the report's size on the way into each repair. A repair that
           // answers with a whole-file write regenerates the report from what is
           // still in context — a compressed recollection after a long run — and
@@ -2938,19 +3035,20 @@ export class AgentRunStore {
           // The notice has to survive the repair being accepted: this branch
           // returns early on success, so anything written to `terminal` here is
           // discarded. Keep it on the run and attach it when the run finishes.
-          const beforeRepair = (await readRequiredFile(project, "clinical-evidence-report.md"))?.text?.length ?? 0;
-          const sizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
-          if (beforeRepair > 0) this.clinicalRepairReportSizes.set(run.id, [...sizes, beforeRepair]);
-          try {
-            const previous = sizes.length > 0 && beforeRepair > 0 && beforeRepair < sizes[0]
-              ? { startSize: sizes[0], currentSize: beforeRepair, lost: sizes[0] - beforeRepair }
-              : null;
-            const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues, previous));
-            if (repair?.accepted !== false) return run;
-          } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
-          terminal.status = "failed";
-          terminal.errorCode = "specialist_evidence_repair_failed";
-          terminal.qualityNotices = completion.qualityIssues;
+            const beforeRepair = (await readRequiredFile(project, "clinical-evidence-report.md"))?.text?.length ?? 0;
+            const sizes = this.clinicalRepairReportSizes.get(run.id) ?? [];
+            if (beforeRepair > 0) this.clinicalRepairReportSizes.set(run.id, [...sizes, beforeRepair]);
+            try {
+              const previous = sizes.length > 0 && beforeRepair > 0 && beforeRepair < sizes[0]
+                ? { startSize: sizes[0], currentSize: beforeRepair, lost: sizes[0] - beforeRepair }
+                : null;
+              const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired));
+              if (repair?.accepted !== false) return run;
+            } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
+            terminal.status = "failed";
+            terminal.errorCode = "specialist_evidence_repair_failed";
+            terminal.qualityNotices = completion.qualityIssues;
+          }
         } else if (completion.qualityDegradable) {
           // Repairs are exhausted or unavailable and only process-documentation
           // or presentation gaps remain (no integrity or structural violation).
@@ -3746,6 +3844,23 @@ export class AgentRunStore {
  *  @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>} */
 export function loadedOrInjectedSkillsForTest(project, assistantMessages) {
   return loadedOrInjectedSkills(project, assistantMessages);
+}
+
+/** Test seam: the authenticated tool transcript binds one projection to one native run.
+ * @param {Record<string, any>} projection @param {Record<string, any>} run */
+export function scopeNativeProjectionForTest(projection, run) {
+  return scopeNativeProjection(projection, run);
+}
+
+/** Test seam: child histories are the source-provenance boundary, not workspace projection JSON.
+ * @param {Record<string, any>} project @param {Record<string, any>[]} messages @param {Function} reader */
+export function readDelegatedAssistantMessagesForTest(project, messages, reader) {
+  return readDelegatedAssistantMessages(project, messages, reader);
+}
+
+/** Test seam: repair snapshots live in control-plane-private project metadata. */
+export function snapshotAcceptedPackageForRepairForTest(project, run) {
+  return snapshotAcceptedPackageForRepair(project, run);
 }
 
 /** Test seam: which files a message claims to have written, without a run

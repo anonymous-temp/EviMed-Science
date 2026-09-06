@@ -14,6 +14,9 @@ import {
   delegatedDocumentReadsForTest,
   ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
+  readDelegatedAssistantMessagesForTest,
+  scopeNativeProjectionForTest,
+  snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runPhaseHistory,
@@ -5022,7 +5025,7 @@ test("the run's own projection is read from the host, not from the container's v
   // Negative control: the two call sites that DO need the container root must
   // keep it, or fixing this would break the paths the model actually wrote.
   assert.match(code, /artifactCandidates\(message, runtimeWorkspaceRoot\)/);
-  assert.match(code, /successfulEvidenceSourceArtifacts\(allAssistants, runtimeWorkspaceRoot\)/);
+  assert.match(code, /successfulEvidenceSourceArtifacts\(allRunAssistants, runtimeWorkspaceRoot\)/);
 });
 
 test("a repair instruction names a check the run can actually run", () => {
@@ -5040,6 +5043,7 @@ test("a repair instruction names a check the run can actually run", () => {
   ]);
 
   assert.match(prompt, /evimed_submit_deliverable/, "the repair must name the check that exists");
+  assert.match(prompt, /evimed_revise_deliverable/, "an accepted package needs an explicit new revision before its files can change");
   assert.equal(/preflight\.py/.test(prompt), false, "no run can execute a script that is not shipped");
   assert.equal(/opencode/i.test(prompt), false, "and the path named must not belong to the other kernel");
   // The issue itself has to travel, or the run is told to fix something without
@@ -5055,6 +5059,50 @@ test("a repair instruction names a check the run can actually run", () => {
   const stale = "Run python $XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py first.";
   assert.equal(/preflight\.py/.test(stale), true);
   assert.equal(/evimed_submit_deliverable/.test(stale), false);
+});
+
+test("server repair preserves accepted bytes outside the runtime workspace", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-repair-revision-"));
+  try {
+    const project = {
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const relative = "deliverables/review/clinical-evidence-report.md";
+    const accepted = "# Accepted review\nOriginal accepted bytes.\n";
+    await mkdir(path.dirname(path.join(project.workspaceDir, relative)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), accepted);
+    const receipt = {
+      formatVersion: 1,
+      runId: "kernel-run-1",
+      bundleVersion: "1.0.0",
+      domainVersion: "1.0.0",
+      entries: [{
+        deliverableId: "review",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        acceptedAt: "2026-09-06T00:00:00Z",
+        attempt: 1,
+        notices: [],
+        files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+      }],
+    };
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify(receipt));
+
+    const result = await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null });
+
+    assert.equal(result.revisionRequired, true);
+    assert.ok(result.snapshotPath.startsWith(project.metaDir + path.sep));
+    await writeFile(path.join(project.workspaceDir, relative), "changed workspace bytes");
+    const snapshot = JSON.parse(await readFile(result.snapshotPath, "utf8"));
+    assert.equal(snapshot.files[0].text, accepted);
+    assert.equal(snapshot.acceptedReceipt.entries[0].files[0].sha256, createHash("sha256").update(accepted).digest("hex"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("a delegation that read evidence is recognised under both kernels and both argument keys", () => {
@@ -5586,4 +5634,55 @@ test("an adopted run is marked unchecked and a dispatch may take its session ove
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+test("delegated evidence comes from kernel-owned child histories named by completed tool receipts", async () => {
+  const toolMessage = (childSessionId, ok = true) => ({
+    info: { id: `m-${childSessionId}`, role: "assistant", time: { created: 1, completed: 2 } },
+    parts: [{
+      type: "tool",
+      tool: "evimed_delegate",
+      state: { status: "completed", output: JSON.stringify({ ok, data: { deliverableId: "d1", childSessionId } }) },
+    }],
+  });
+  const childEvidence = {
+    info: { id: "child-evidence", role: "assistant", time: { created: 3, completed: 4 } },
+    parts: [{ type: "tool", tool: "mcp__evimed__open_access_full_text", state: { status: "completed", output: "{}" } }],
+  };
+  const reads = [];
+  const messages = await readDelegatedAssistantMessagesForTest(
+    {},
+    [toolMessage("child-session-1"), toolMessage("failed-child", false), {
+      info: { id: "forged", role: "assistant", time: { created: 1, completed: 2 } },
+      parts: [{ type: "text", text: "childSessionId: forged-child" }],
+    }],
+    async (_project, sessionId) => {
+      reads.push(sessionId);
+      return sessionId === "child-session-1" ? [childEvidence] : [];
+    },
+  );
+
+  assert.deepEqual(reads, ["child-session-1"]);
+  assert.deepEqual(messages, [childEvidence]);
+});
+
+test("a prior run projection in the same session cannot prove current-run sources", () => {
+  const item = { id: "review", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  const run = {
+    sessionId: "same-session",
+    nativeWorkflow: {
+      kernelRunId: "current-run",
+      plan: { revision: 1, written: true, items: [item] },
+      submissions: [],
+      delegates: ["review"],
+    },
+  };
+  const projection = {
+    sessionId: "same-session",
+    runId: "prior-run",
+    plan: { revision: 1, items: [{ ...item, status: "accepted" }] },
+    evidence: { preservedSources: [{ artifactPath: ".evimed-sources/old/fulltext.md", digest: "a".repeat(64) }] },
+  };
+
+  assert.equal(scopeNativeProjectionForTest(projection, run), null);
+  assert.equal(scopeNativeProjectionForTest({ ...projection, runId: "current-run" }, run)?.runId, "current-run");
 });

@@ -748,7 +748,7 @@ services:
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
     healthcheck:
-      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); raise SystemExit(0 if value.get('ready') else 1)"]
+      test: ["CMD", "python", "-c", "import json,urllib.request; value=json.load(urllib.request.urlopen('http://127.0.0.1:8025/health', timeout=3)); expected=['researchDirection','outputLanguage','availableData','population','studySetting','resourceConstraints','jobId']; raise SystemExit(0 if value.get('ready') and value.get('acceptedStartInputs') == expected else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3

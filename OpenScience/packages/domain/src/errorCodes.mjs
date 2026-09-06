@@ -96,6 +96,10 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "adapter_circuit_open",
   "adapter_unconfigured",
   "adapter_workload_token_unavailable",
+  // A caller-selected id already exists in this project. The request is safe
+  // and the job did not start; choosing a fresh id is sufficient, so this must
+  // not fail a run that completes its evidence work through another path.
+  "specialist_job_id_conflict",
   // "This deployment does not offer that tool", which is the deployment's
   // shape and not the run's mistake — the same class as an unconfigured
   // adapter, and recoverable for the same reason: the run notes the capability

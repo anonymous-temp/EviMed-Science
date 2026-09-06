@@ -77,7 +77,8 @@ test("EviMed tool names cover both worlds", () => {
   assert.ok(isEviMedToolName("mcp__evimed__official_page_fetch"));
   assert.ok(isEviMedToolName("evimed_submit_deliverable"));
   assert.ok(!isEviMedToolName("bash"));
-  assert.equal(SOCKET_TOOL_NAME_LIST.length, 8);
+  assert.equal(SOCKET_TOOL_NAME_LIST.length, 9);
+  assert.ok(SOCKET_TOOL_NAME_LIST.includes("evimed_revise_deliverable"));
 });
 
 test("the path guard refuses the question, the receipt and the state projection", () => {
