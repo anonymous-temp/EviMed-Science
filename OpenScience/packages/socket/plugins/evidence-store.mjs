@@ -6,8 +6,8 @@
  * carries no compatibility promise — rc.8 changed the SQLite format with no
  * migration path — so the four tables are projected into one workspace file,
  * `.evimed-run/state.json`, which is what the control plane and the browser
- * read. The path guard makes that file unwritable by the model, so it is a
- * projection of what happened rather than a claim about it.
+ * read for progress. The control plane scopes it against observed workflow
+ * receipts, but never treats it as final source provenance.
  *
  * @module @evimed/dsh-socket/plugins/evidence-store
  */

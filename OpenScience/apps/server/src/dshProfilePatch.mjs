@@ -66,6 +66,7 @@ export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
  * @property {string} capabilitySkillsDir
  * @property {string} capsuleMethodsDir
  * @property {string} capsuleGatewayUrl
+ * @property {string} [revisionGatewayUrl]
  * @property {string} workloadTokenFile
  * @property {string} bundleVersion
  * @property {string} dshVersion
@@ -394,7 +395,7 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -413,6 +414,7 @@ export function runtimeEnvironment(input) {
     EVIMED_CAPABILITY_SKILLS_DIR: input.capabilitySkillsDir,
     EVIMED_CAPSULE_METHODS_DIR: input.capsuleMethodsDir,
     EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
+    EVIMED_REVISION_AUTHORIZE_URL: input.revisionGatewayUrl ?? "",
     EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
     EVIMED_BUNDLE_VERSION: input.bundleVersion,
     EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",

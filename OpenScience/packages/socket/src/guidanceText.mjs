@@ -89,7 +89,7 @@ export function buildGuidanceText(capabilities, options) {
       ? '## 追问\n\n可以用 `ask_user_question` 追问，但只在答案会改变计划时追问；否则把假设写进计划的澄清里。'
       : '## 追问\n\n本部署不接受运行中追问。把你所做的假设写进 `evimed_plan` 的澄清里——一个没写下来的假设，等于没有假设。',
     '',
-    options.reviewEnabled ? '## 审查\n\n综合完成后可调用 `evimed_review_run` 做跨交付物冲突审查。它给建议，不作裁定。' : null,
+    options.reviewEnabled ? '## 审查\n\n交付物写完后、首次提交前调用 `evimed_review_run` 做跨交付物冲突与科研事实审查；按适用意见修改后再提交。提交成功会冻结文件，审查不得拖到冻结之后。它提供有依据的建议，不替代确定性门禁。' : null,
     '',
     // The one place a deployment path is stated to a run. Skill bodies carry
     // relative references, which is what makes them portable; without this

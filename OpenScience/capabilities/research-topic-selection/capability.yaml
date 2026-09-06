@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: research-topic-selection
-version: 1.2.0
+version: 1.3.0
 title: 科研选题
 category: 科研规划
 description: 梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。
@@ -27,7 +27,6 @@ tools:
 - mcp__evimed__guideline_search
 - mcp__evimed__bibliometric_analysis
 - mcp__evimed__clinical_trial_search
-- mcp__evimed__patent_search
 - mcp__evimed__pharmacy_reference_search
 produces:
 - contractKind: research-topic-report
@@ -39,9 +38,9 @@ produces:
   - path: research-topic-run.json
     required: true
   - path: research-portfolio.json
-    required: false
+    required: true
   - path: evidence-records.json
-    required: false
+    required: true
   - path: agenda-delta.json
     required: false
   checks:

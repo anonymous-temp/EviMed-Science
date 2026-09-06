@@ -35,6 +35,7 @@ class ToolContractTests(unittest.TestCase):
                    "availableData": "x" * 4000, "population": "x" * 1000,
                    "studySetting": "x" * 1000, "resourceConstraints": ["x" * 200] * 20}
         self.server._validate(request, schema, "request")
+        self.server._validate({**request, "jobId": "topic-dialysis-followup-001"}, schema, "request")
         for invalid in ({"availableData": {}}, {"population": "x" * 1001},
                         {"resourceConstraints": "six months"}, {"resourceConstraints": ["x"] * 21},
                         {"resourceConstraints": ["x" * 201]}, {"command": "unsupported"}):
@@ -408,6 +409,39 @@ class AdapterTests(unittest.TestCase):
             httpd.shutdown()
             thread.join()
             httpd.server_close()
+
+    def test_nonretryable_adapter_error_preserves_bounded_safe_detail(self):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                return
+
+            def do_POST(self):
+                length = int(self.headers.get("content-length", "0"))
+                self.rfile.read(length)
+                payload = json.dumps({"detail": "jobId conflicts with an existing scoped job"}).encode()
+                self.send_response(422)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            os.environ["EVIMED_RESEARCH_TOPIC_SELECTION_URL"] = (
+                f"http://127.0.0.1:{httpd.server_port}/topic"
+            )
+            result = self.server.call_tool("research_topic_selection", {
+                "action": "start", "researchDirection": "Dialysis adherence",
+            })
+        finally:
+            httpd.shutdown()
+            thread.join()
+            httpd.server_close()
+
+        self.assertEqual(result["error"]["code"], "adapter_http_error")
+        self.assertIn("jobId conflicts with an existing scoped job", result["error"]["message"])
 
     def assert_contract_rejection(self, result):
         self.assertEqual(result["status"], "error")

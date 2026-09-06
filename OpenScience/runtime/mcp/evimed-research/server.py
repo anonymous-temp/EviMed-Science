@@ -1332,9 +1332,25 @@ def _adapter_call(name, arguments):
         retryable = error.code >= 500 or error.code == 429
         if retryable:
             _circuit_failure(name, url)
+        detail = ""
+        if not retryable and error.headers.get_content_type() == "application/json":
+            try:
+                raw_error = error.read(8193)
+                if len(raw_error) <= 8192:
+                    parsed_error = json.loads(raw_error.decode("utf-8"))
+                    candidate = parsed_error.get("detail") if isinstance(parsed_error, dict) else None
+                    if (
+                        isinstance(candidate, str)
+                        and 0 < len(candidate) <= 512
+                        and all(ord(char) >= 32 or char in "\t\n" for char in candidate)
+                        and not re.search(r"(?:bearer|token|secret|password|api.?key)", candidate, re.I)
+                    ):
+                        detail = " " + candidate.strip()
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                pass
         return failure(
             "adapter_http_error",
-            "%s returned HTTP %d." % (name, error.code),
+            "%s returned HTTP %d.%s" % (name, error.code, detail),
             retryable,
             "Stop after one retry if the upstream returns the same HTTP status.",
             ["Retry once after checking upstream readiness."] if retryable else ["Correct the request or adapter configuration before retrying."],

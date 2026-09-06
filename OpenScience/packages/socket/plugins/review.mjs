@@ -72,7 +72,8 @@ export async function apply(ctx, config) {
     name: 'evimed_review_run',
     description: [
       '对本次运行的全部交付物做一次跨产物审查：同一实体的结论是否互相矛盾、抽样事实是否核得住。',
-      '它给建议，不作裁定——收到的意见值得看，但不通过它也能交付。',
+      '在首次提交前调用，按适用意见修改并复审；提交后文件被冻结，届时意见不能再修进交付版。',
+      '它给建议，不替代确定性门禁。',
     ].join(' '),
     parameters: {
       focus: { type: 'string', description: '想重点审查的实体或问题；留空则全篇。' },

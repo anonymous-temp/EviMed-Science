@@ -159,16 +159,23 @@ Write `evidence-map.md`, one row per work:
 sentence depends on it should not be in the table.
 
 Write `research-topic-run.json` with the terminal job state and exact returned
-artifacts. When the job returns `research-portfolio.json`, preserve it as an
-optional structured companion and copy the actual returned `evidence-records.json`
-beside it in the final deliverable. Do not recreate its IDs from report prose.
+artifacts. `research-portfolio.json` and `evidence-records.json` are required:
+preserve the specialist job's actual files and IDs. If the managed job fails,
+build fallback records only from identifiers returned by evidence tools, record
+the failed job in the run receipt, and never recreate IDs from report prose.
 Keep each candidate linked to its source
 opportunity and evidence IDs, with the supplied researcher context, hypothesis,
 study design/estimand, data requirements, falsification, feasibility and novelty
 basis. Null fields and `gaps` mean information was not supplied; they are not
 permission to invent it. Reconcile the companion with any candidate removed or
 reframed after evidence expansion, keeping the original lineage and documenting
-the reason. This optional companion adds no new required output or blocker.
+the reason.
+
+An evidence record used by a candidate must carry the publication status
+returned by the current bibliographic lookup: `publicationStatus` is
+`active`, `corrected`, `retracted`, or `unknown`, with
+`statusCheckedAt` and `statusSource`. A retracted or unchecked record may be
+discussed as excluded context, but cannot support a recommended candidate.
 
 ## Before claiming completion
 
@@ -181,8 +188,17 @@ python3 "scripts/preflight.py" --workspace .
 ```
 
 It is this capability's tooling, not a second delivery gate: fix what it reports
-as an issue, assess its advisory warnings,
-then submit the package.
+as an issue and assess its advisory warnings. Then run scientific review while
+the files are still editable:
+
+```
+evimed_review_run{focus: "candidate novelty, source status, estimands, required data, calculations, and inferential decision rules"}
+```
+
+Repair every `weakened` or `contradicted` finding that applies. Re-run the
+review after changes; record a reason in `revision-notes.md` for a finding that
+does not apply. Only then submit the package. Submission freezes the accepted
+bytes, so review after submission cannot repair the delivered version.
 
 ```
 evimed_submit_deliverable{deliverableId: "<your deliverable id>"}

@@ -7,6 +7,9 @@ import { deepResearchPackage } from "./fixtures/clinicalEvidencePackage.mjs";
 function reviewPackage() {
   const input = deepResearchPackage();
   const log = JSON.parse(input.searchLogText);
+  for (const [index, row] of log.sourceRecords.entries()) {
+    row.reportType = index < 2 ? "primary" : "guideline";
+  }
   log.reviewMethods = {
     schemaVersion: 1,
     reviewType: "systematic",
@@ -58,6 +61,7 @@ test("two publications of one trial are counted as one primary study on both ent
 
 test("unknown study identity is not counted as a new independent study", () => {
   const { input, log } = reviewPackage();
+  log.sourceRecords[2].reportType = "primary";
   log.reviewMethods.studyGroups[1] = { studyId: null, evidenceType: "primary", referenceNumbers: [3] };
   const { direct } = verdictFor(input, log);
   assert.equal(direct.reviewCoverage?.knownPrimaryStudies, 1);

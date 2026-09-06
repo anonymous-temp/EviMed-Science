@@ -1,6 +1,6 @@
 {
   "id": "research-topic-selection",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "title": "科研选题",
   "description": "梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。",
   "whenToUse": "交付物是一份科研选题分析（问题图景、证据缺口、可行议题）时，委派给我。",
@@ -19,7 +19,6 @@
     "mcp__evimed__guideline_search",
     "mcp__evimed__bibliometric_analysis",
     "mcp__evimed__clinical_trial_search",
-    "mcp__evimed__patent_search",
     "mcp__evimed__pharmacy_reference_search"
   ],
   "produces": [
@@ -40,11 +39,11 @@
         },
         {
           "path": "research-portfolio.json",
-          "required": false
+          "required": true
         },
         {
           "path": "evidence-records.json",
-          "required": false
+          "required": true
         },
         {
           "path": "agenda-delta.json",

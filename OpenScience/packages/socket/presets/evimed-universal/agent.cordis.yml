@@ -73,6 +73,9 @@
         capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
         skillsDir: !!js process.env.EVIMED_CAPABILITY_SKILLS_DIR
         bundleVersion: !!js process.env.EVIMED_BUNDLE_VERSION
+        revisionAuthorizeUrl: !!js process.env.EVIMED_REVISION_AUTHORIZE_URL
+        tokenFile: !!js process.env.EVIMED_WORKLOAD_TOKEN_FILE
+        revisionAuthorizeTimeoutMs: 3000
       name: '@evimed/dsh-socket/plugins/run-policy'
 
     # Evidence ingestion. An observer on the tool pipeline: it can never change what

@@ -1641,6 +1641,19 @@ export function capsuleGatewayProviderUrl(config) {
   return capsuleGatewayEndpointUrl(config);
 }
 
+/** @param {any} config */
+export function revisionGatewayEndpointUrl(config) {
+  const url = new URL(modelGatewayProviderUrl(config));
+  url.pathname = "/internal/revisions/v1/authorize";
+  return url.toString().replace(/\/$/, "");
+}
+
+/** @param {any} config */
+export function revisionGatewayProviderUrl(config) {
+  if (config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+  return revisionGatewayEndpointUrl(config);
+}
+
 /**
  * The one description of a runtime's deployment settings.
  *
@@ -1676,6 +1689,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     capabilitySkillsDir: "/opt/evimed/capability-skills",
     capsuleMethodsDir: "",
     capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
+    revisionGatewayUrl: revisionGatewayProviderUrl(config),
     workloadTokenFile: workloadTokenPath,
     bundleVersion: String(config.socketBundleVersion ?? ""),
     dshVersion: String(config.dshVersion ?? ""),
@@ -1851,7 +1865,10 @@ function dshWorkloadTokenRuntimePath(plan) {
     : dshWorkloadTokenHostPath(plan);
 }
 
-export function buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl = capsuleGatewayProviderUrl(config) } = {}) {
+export function buildRuntimeLaunchPlan(config, project, port, {
+  capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
+  revisionGatewayUrl = revisionGatewayProviderUrl(config),
+} = {}) {
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
     // Unix only. The kernel's web host binds loopback inside the container, so
@@ -2030,6 +2047,7 @@ export function buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUr
           capabilitySkillsDir: "/opt/evimed/capability-skills",
           capsuleMethodsDir: "",
           capsuleGatewayUrl,
+          revisionGatewayUrl,
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
           flags: {
@@ -2333,7 +2351,10 @@ export class RuntimeManager {
       const expected = Buffer.from(current);
       if (expected.length !== actual.length || !timingSafeEqual(expected, actual)
         || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
-      return payload;
+      return {
+        ...payload,
+        runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
+      };
     } catch { throw workloadTokenError(); }
   }
 
@@ -2464,6 +2485,13 @@ export class RuntimeManager {
 
   key(project) {
     return `${project.userId}:${project.id}`;
+  }
+
+  runtimeGeneration(project) {
+    const runtime = this.runtimes.get(this.key(project));
+    return runtime && !runtime.closedByManager && !runtime.exitedAt && typeof runtime.modelGatewayTokenJti === "string"
+      ? runtime.modelGatewayTokenJti
+      : null;
   }
 
   boundedRuntimeScope(project) {
@@ -2771,7 +2799,13 @@ export class RuntimeManager {
     });
     let child;
     if (plan.sandboxMode === "docker" && this.runtimeController) {
-      await this.runtimeController.startRuntime(project, port, password, capsuleGatewayProviderUrl(this.config));
+      await this.runtimeController.startRuntime(
+        project,
+        port,
+        password,
+        capsuleGatewayProviderUrl(this.config),
+        revisionGatewayProviderUrl(this.config),
+      );
       child = new RemoteRuntimeProcess(
         this.runtimeController,
         project,

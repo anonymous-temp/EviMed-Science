@@ -158,6 +158,11 @@ class LiteratureRecord(BaseModel):
     is_clinical: bool = False
     language: str = "en"
     citations: int = 0
+    publication_types: List[str] = Field(default_factory=list)
+    publication_status: str = "unknown"
+    status_checked_at: Optional[str] = None
+    status_source: Optional[str] = None
+    status_note: Optional[str] = None
 
 
 class EvidenceStats(BaseModel):

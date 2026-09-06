@@ -87,6 +87,29 @@ class SpecialistJobContractTests(unittest.TestCase):
         state = json.loads(state_path.read_text())
         self.assertEqual(state["request"], {"researchDirection": "Dialysis adherence", **context})
 
+    def test_topic_start_accepts_a_scoped_caller_job_id_and_refuses_reuse(self):
+        self.install_fake_specialist("research_topic_selection")
+        request = {
+            "action": "start",
+            "jobId": "topic-dialysis-followup-001",
+            "researchDirection": "Dialysis adherence",
+            "availableData": "Existing dialysis records",
+        }
+        with mock.patch.object(self.jobs.subprocess, "Popen", return_value=mock.Mock()):
+            first = self.jobs.call("research_topic_selection", request)
+            second = self.jobs.call("research_topic_selection", request)
+        self.assertEqual(first["data"]["jobId"], request["jobId"])
+        self.assertEqual(second["status"], "error")
+        self.assertEqual(second["error"]["code"], "specialist_job_id_conflict")
+
+    def test_topic_capabilities_publish_the_exact_start_contract(self):
+        self.install_fake_specialist("research_topic_selection")
+        result = self.jobs.call("research_topic_selection", {"action": "capabilities"})
+        self.assertEqual(
+            result["data"]["acceptedStartInputs"],
+            ["researchDirection", "outputLanguage", "availableData", "population", "studySetting", "resourceConstraints", "jobId"],
+        )
+
     def test_topic_job_rejects_invalid_context_before_start(self):
         self.install_fake_specialist("research_topic_selection")
         for invalid in ({"resourceConstraints": "six months"}, {"availableData": {}},

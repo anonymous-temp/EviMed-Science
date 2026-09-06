@@ -22,7 +22,10 @@ function packageFiles() {
     "research-topic-report.md": "# Research topic\nAn explicitly provisional research agenda.",
     "research-topic-run.json": JSON.stringify({ researchContext: context }),
     "research-portfolio.json": JSON.stringify(portfolio),
-    "evidence-records.json": JSON.stringify([{ id: "pubmed_100001", pmid: "100001" }]),
+    "evidence-records.json": JSON.stringify([{
+      id: "pubmed_100001", pmid: "100001", publicationStatus: "active",
+      statusCheckedAt: "2026-09-06T00:00:00Z", statusSource: "PubMed",
+    }]),
   }));
 }
 
@@ -32,8 +35,8 @@ function run(files) {
     expectedOutputs: [
       { path: "research-topic-report.md", required: true },
       { path: "research-topic-run.json", required: true },
-      { path: "research-portfolio.json", required: false },
-      { path: "evidence-records.json", required: false },
+      { path: "research-portfolio.json", required: true },
+      { path: "evidence-records.json", required: true },
     ],
   });
 }
@@ -71,6 +74,22 @@ test("portfolio PMIDs must match the preserved records behind their source ids",
   assert.equal(result.ok, true);
   assert.equal(result.metrics.topicPortfolio?.evidenceFilesConsistent, false);
   assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage"));
+});
+
+test("retracted and unchecked evidence cannot silently support a recommended topic", () => {
+  for (const update of [
+    (row) => { row.publicationStatus = "retracted"; row.statusNote = "Retracted by the publisher."; },
+    (row) => { delete row.statusCheckedAt; },
+    (row) => { row.publicationStatus = "unknown"; },
+  ]) {
+    const files = packageFiles();
+    const evidence = JSON.parse(files.get("evidence-records.json"));
+    update(evidence[0]);
+    files.set("evidence-records.json", JSON.stringify(evidence));
+    const result = run(files);
+    assert.equal(result.ok, false);
+    assert.ok(result.issues.some((item) => item.check === "topic-publication-status" && item.severity === "required"));
+  }
 });
 
 test("a missing source artifact is unreconciled, not verified by omission", () => {
@@ -175,11 +194,11 @@ test("a malformed optional portfolio has a specific repair notice", () => {
   assert.ok(result.issues.some((item) => item.check === "topic-portfolio-schema"));
 });
 
-test("old topic packages do not gain a required portfolio artifact", () => {
+test("a topic package without its structured evidence and portfolio cannot be delivered as verified", () => {
   const files = packageFiles();
   files.delete("research-portfolio.json");
   files.delete("evidence-records.json");
   const result = run(files);
-  assert.equal(result.ok, true);
-  assert.ok(!result.issues.some((item) => item.check?.startsWith("topic-")));
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((item) => item.check === "required-output"));
 });
