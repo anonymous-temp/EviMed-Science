@@ -21,7 +21,10 @@ for name in ['src', 'docker', 'LICENSE']:
     (root / name).rename(Path('/build') / name)
 Path('/build/upstream-pin.json').write_text(json.dumps({'name': 'MemTensor/MemOS', 'version': pin['version'], 'revision': revision}))
 PY
-RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ libffi-dev \
+ARG APT_MIRROR=http://deb.debian.org/debian
+ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
+RUN sed -ri "s|https?://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g; s|https?://deb.debian.org/debian|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends gcc g++ libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 ARG PIP_INDEX_URL=https://pypi.org/simple
 RUN pip install --no-cache-dir --prefix=/install -r /build/docker/requirements.txt

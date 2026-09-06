@@ -17,6 +17,8 @@ services:
       context: ../..
       dockerfile: deploy/memos-engine/Dockerfile
       args:
+        APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
+        DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
         PIP_INDEX_URL: ${OPEN_SCIENCE_PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
       EVIMED_MEMOS_PROVIDER_CONFIG: /run/secrets/memos-engine-providers.json
