@@ -995,7 +995,6 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     "The server-side clinical evidence gate rejected the current package.",
     ...measured,
     ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
-    "The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. It preserves the accepted bytes in protected kernel storage and opens a new revision; then repair and resubmit the new bytes.",
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
     "Patch clinical-evidence-report.md with the edit tool, changing only the lines the issues name. Do not rewrite it with the write tool: replacing the whole file regenerates it from what you still hold in context, which after a long run is a compressed recollection, so the report comes back shorter and you cannot tell that it did. Measured across four production repairs, every whole-file rewrite lost content — one shed 1,863 characters and the next 4,125 — while targeted edits held the report steady and ended slightly longer.",
     "The same applies to the other deliverables: change what an issue names and leave the rest alone, preserving already valid evidence and source metadata. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
@@ -1964,7 +1963,61 @@ async function snapshotAcceptedPackageForRepair(project, run) {
     files,
     preservedAt: new Date().toISOString(),
   }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  return { revisionRequired: true, snapshotPath };
+  const authorizationDirectory = path.join(project.metaDir, "repair-authorizations");
+  await mkdir(authorizationDirectory, { recursive: true, mode: 0o700 });
+  const authorizations = [];
+  for (const entry of verified.receipt.entries) {
+    const authorization = {
+      formatVersion: 1,
+      controlPlaneRunId: run.id,
+      runId: verified.receipt.runId,
+      deliverableId: entry.deliverableId,
+      acceptedDigest: createHash("sha256").update(JSON.stringify(entry)).digest("hex"),
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      consumedAt: null,
+    };
+    const key = createHash("sha256").update(JSON.stringify([
+      authorization.runId, authorization.deliverableId, authorization.acceptedDigest,
+    ])).digest("hex");
+    await writeFileAtomicNoFollow(project.rootDir, path.join(authorizationDirectory, `${key}.json`), `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    authorizations.push({
+      runId: authorization.runId,
+      deliverableId: authorization.deliverableId,
+      acceptedDigest: authorization.acceptedDigest,
+    });
+  }
+  return { revisionRequired: true, snapshotPath, authorizations };
+}
+
+/** Consume one repair authorization whose accepted bytes already have a private snapshot. */
+async function consumeRepairAuthorization(project, input) {
+  const runId = typeof input?.runId === "string" ? input.runId : "";
+  const deliverableId = typeof input?.deliverableId === "string" ? input.deliverableId : "";
+  const acceptedDigest = typeof input?.acceptedDigest === "string" ? input.acceptedDigest : "";
+  if (!runId || runId.length > 256 || !deliverableId || deliverableId.length > 128 || !/^[0-9a-f]{64}$/.test(acceptedDigest)) {
+    return { authorized: false };
+  }
+  const key = createHash("sha256").update(JSON.stringify([runId, deliverableId, acceptedDigest])).digest("hex");
+  const target = path.join(project.metaDir, "repair-authorizations", `${key}.json`);
+  return withProjectStorageMutation(project, async () => {
+    const text = await readTextFileNoFollow(project.rootDir, target, "").catch(() => "");
+    if (!text) return { authorized: false };
+    let authorization;
+    try { authorization = JSON.parse(text); } catch { return { authorized: false }; }
+    if (
+      authorization?.formatVersion !== 1
+      || authorization.runId !== runId
+      || authorization.deliverableId !== deliverableId
+      || authorization.acceptedDigest !== acceptedDigest
+      || authorization.consumedAt !== null
+      || !Number.isFinite(Date.parse(authorization.expiresAt))
+      || Date.parse(authorization.expiresAt) <= Date.now()
+    ) return { authorized: false };
+    authorization.consumedAt = new Date().toISOString();
+    await writeFileAtomicNoFollow(project.rootDir, target, `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    return { authorized: true };
+  });
 }
 
 async function readRunStateProjection(project, workspaceRoot, run = null) {
@@ -3817,6 +3870,10 @@ export class AgentRunStore {
     }
   }
 
+  async consumeRepairAuthorization(project, input) {
+    return consumeRepairAuthorization(project, input);
+  }
+
   async closeAll() {
     for (const project of this.projects.values()) {
       try {
@@ -3863,6 +3920,11 @@ export function snapshotAcceptedPackageForRepairForTest(project, run) {
   return snapshotAcceptedPackageForRepair(project, run);
 }
 
+/** Test seam: one accepted digest authorizes exactly one revision transition. */
+export function consumeRepairAuthorizationForTest(project, input) {
+  return consumeRepairAuthorization(project, input);
+}
+
 /** Test seam: which files a message claims to have written, without a run
  *  around it. The spelling of one argument decided whether any DSH run was
  *  ever seen to produce an artifact.
@@ -3882,7 +3944,7 @@ export function delegatedDocumentReadsForTest(messages) {
 /** Test seam: the instruction a rejected clinical package is sent back with.
  *  It used to open by ordering the run to execute a script this repository no
  *  longer contains, spending one bounded attempt on finding that out.
- *  @param {any[]} issues @param {any} [shrinkage] @returns {string} */
-export function clinicalEvidenceRepairPromptForTest(issues, shrinkage = null) {
-  return clinicalEvidenceRepairPrompt(issues, shrinkage);
+ *  @param {any[]} issues @param {any} [shrinkage] @param {boolean} [revisionRequired] @returns {string} */
+export function clinicalEvidenceRepairPromptForTest(issues, shrinkage = null, revisionRequired = true) {
+  return clinicalEvidenceRepairPrompt(issues, shrinkage, revisionRequired);
 }

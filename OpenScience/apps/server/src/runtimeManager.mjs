@@ -1641,6 +1641,14 @@ export function capsuleGatewayProviderUrl(config) {
   return capsuleGatewayEndpointUrl(config);
 }
 
+/** @param {any} config */
+export function revisionGatewayProviderUrl(config) {
+  if (config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+  const url = new URL(modelGatewayProviderUrl(config));
+  url.pathname = "/internal/revisions/v1/authorize";
+  return url.toString().replace(/\/$/, "");
+}
+
 /**
  * The one description of a runtime's deployment settings.
  *
@@ -1676,6 +1684,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     capabilitySkillsDir: "/opt/evimed/capability-skills",
     capsuleMethodsDir: "",
     capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
+    revisionGatewayUrl: revisionGatewayProviderUrl(config),
     workloadTokenFile: workloadTokenPath,
     bundleVersion: String(config.socketBundleVersion ?? ""),
     dshVersion: String(config.dshVersion ?? ""),
@@ -2030,6 +2039,7 @@ export function buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUr
           capabilitySkillsDir: "/opt/evimed/capability-skills",
           capsuleMethodsDir: "",
           capsuleGatewayUrl,
+          revisionGatewayUrl: revisionGatewayProviderUrl(config),
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
           flags: {

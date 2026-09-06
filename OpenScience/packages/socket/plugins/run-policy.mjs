@@ -84,6 +84,9 @@ export const inject = ['tools', 'agents', 'sessions', 'subagents']
  * @property {string} capabilitiesDir
  * @property {string} skillsDir
  * @property {string} bundleVersion
+ * @property {string} [revisionAuthorizeUrl]
+ * @property {string} [tokenFile]
+ * @property {number} [revisionAuthorizeTimeoutMs]
  */
 
 export const Config = Schema.object({
@@ -106,6 +109,12 @@ export const Config = Schema.object({
     .description('Read-only directory of capability skill bodies, pre-injected on delegation.'),
   bundleVersion: Schema.string().default('0.0.0')
     .description('Version stamped into every receipt; the image build sets it and the server-side gate compares it.'),
+  revisionAuthorizeUrl: Schema.string().default('')
+    .description('Control-plane endpoint that consumes one private-snapshot-backed revision authorization.'),
+  tokenFile: Schema.string().default('')
+    .description('Path to the current workload token used only for the internal revision authorization call.'),
+  revisionAuthorizeTimeoutMs: Schema.number().default(3000)
+    .description('Bound for the internal revision authorization call.'),
 })
 
 /**
@@ -651,7 +660,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           recorded.path === file.path && recorded.sha256 === file.sha256 && recorded.bytes === file.bytes
         )))
         if (!priorReceipt || !matches) return { ok: false, code: 'accepted_deliverable_drifted', issues: [issue('accepted_deliverable_drifted', '当前文件已经不再匹配已接受回执，不能把它登记为原始版本；请保留现场并让控制面重判。')] }
-        const revisionId = `${entry.runId}:${item.id}:${await sha256Hex(JSON.stringify(priorReceipt))}`
+        const acceptedDigest = await sha256Hex(JSON.stringify(priorReceipt))
+        const authorized = await requestRevisionAuthorization(ctx, config, {
+          runId: entry.runId,
+          deliverableId: item.id,
+          acceptedDigest,
+        })
+        if (!authorized) return { ok: false, code: 'deliverable_revision_unauthorized', issues: [issue('deliverable_revision_unauthorized', '控制面尚未为当前已接受字节创建可消费的修订授权，原版本继续冻结。')] }
+        const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
         Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
         entry.completed = false
         await putPlanIndex(runStore, entry)
@@ -704,6 +720,32 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 }
 
 /* ------------------------------------------------------------ small parts */
+
+/** Ask the control plane to consume the authorization created after its private snapshot.
+ * @param {any} ctx @param {Config} config
+ * @param {{ runId: string, deliverableId: string, acceptedDigest: string }} body
+ * @returns {Promise<boolean>} */
+async function requestRevisionAuthorization(ctx, config, body) {
+  if (!config.revisionAuthorizeUrl || !config.tokenFile) return false
+  const token = await readFileAt(ctx, '/', config.tokenFile.replace(/^\/+/, ''))
+  if (!token) return false
+  try {
+    const response = await fetch(config.revisionAuthorizeUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token.trim()}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(config.revisionAuthorizeTimeoutMs ?? 3000),
+    })
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {})
+      return false
+    }
+    const result = /** @type {any} */ (await response.json())
+    return result?.authorized === true
+  } catch {
+    return false
+  }
+}
 
 /** @param {any} agent @returns {boolean} */
 function isSubagentSession(agent) {
