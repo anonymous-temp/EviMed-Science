@@ -1720,7 +1720,8 @@ test("dispatching a DSH prompt writes the run's own id into the workspace brief"
   await manager.start(project);
   await manager.dispatchPrompt(project, "ses_brief", { text: "hello", runId: "run_brief_1" });
   const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
-  assert.deepEqual(written, { runId: "run_brief_1" });
+  assert.equal(written.runId, "run_brief_1");
+  assert.match(written.contextRevision, /^req_/);
 });
 
 test("dispatching a DSH prompt without a run id leaves the brief index unwritten", async (t) => {
@@ -1749,7 +1750,8 @@ test("dispatchPrompt materializes the research context beside the run id", async
   await manager.start(project);
   await manager.dispatchPrompt(project, "ses_general", { text: "hello", system: "# Brief\n", runId: "run_brief_2" });
   const written = JSON.parse(await readFile(path.join(project.workspaceDir, ".evimed-brief", "index.json"), "utf8"));
-  assert.deepEqual(written, { runId: "run_brief_2" });
+  assert.equal(written.runId, "run_brief_2");
+  assert.match(written.contextRevision, /^req_/);
   assert.equal(await readFile(path.join(project.workspaceDir, ".evimed-brief", "context.md"), "utf8"), "# Brief\n");
 });
 
@@ -1762,11 +1764,36 @@ test("a reserved session receives strict context before its first DSH create", a
   const session = await manager.reserveRuntimeSession(project);
   assert.equal(await manager.sessionStatus(project, session.id), "idle");
   await manager.dispatchPrompt(project, session.id, {
-    text: "bounded episode", system: "# Session context\n", runId: "run_strict_1", strictContext: true,
+    text: "bounded episode", system: "# Session context\n", runId: "run_strict_1", requestId: "req_strict_1", strictContext: true,
   });
   const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", session.id);
-  assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), { runId: "run_strict_1" });
+  assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
+    runId: "run_strict_1",
+    contextRevision: "req_strict_1",
+  });
   assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Session context\n");
+});
+
+test("a follow-up and repair commit distinct session context revisions", async (t) => {
+  const { rootDir, project, manager } = await dshDispatchFixture();
+  t.after(async () => {
+    await manager.closeAll();
+    await rm(rootDir, { recursive: true, force: true });
+  });
+  await manager.start(project);
+  const sessionId = "ses_revisions";
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "first", system: "# First context\n", runId: "run_same", requestId: "req_first", strictContext: true,
+  });
+  await manager.dispatchPrompt(project, sessionId, {
+    text: "repair", system: "# Repair context\n", runId: "run_same", requestId: "req_repair", strictContext: true,
+  });
+  const root = path.join(project.workspaceDir, ".evimed-brief", "sessions", sessionId);
+  assert.deepEqual(JSON.parse(await readFile(path.join(root, "index.json"), "utf8")), {
+    runId: "run_same",
+    contextRevision: "req_repair",
+  });
+  assert.equal(await readFile(path.join(root, "context.md"), "utf8"), "# Repair context\n");
 });
 
 test("a bounded runtime excludes interactive prompts until its episode releases the runtime", async (t) => {

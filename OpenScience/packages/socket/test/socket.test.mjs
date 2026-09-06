@@ -373,11 +373,11 @@ test("the sources a quote is checked against come from the ledger, not from the 
     ".evimed-sources/y/page.md",
   ], "distinct, in first-seen order, and only this run's");
 
-  // A row written before the mirror latched a runId still belongs to the table
-  // it is in. Dropping it would be the same empty-map failure, narrower.
+  // A row written before the mirror latched a runId has unknown ownership and
+  // cannot satisfy a named run's gate.
   assert.deepEqual(
     sourceArtifactPaths([{ artifactPath: ".evimed-sources/x/fulltext.md" }], "run_a"),
-    [".evimed-sources/x/fulltext.md"],
+    [],
   );
 
   // Negative controls: the shapes that used to produce an empty map must stay

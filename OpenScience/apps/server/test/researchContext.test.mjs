@@ -105,6 +105,25 @@ test("injects the live specialist registry into open-domain routing without forc
   });
 });
 
+test("a direct specialist route names every skill its completion gate requires", async () => {
+  await withProject(async (project) => {
+    const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
+      routedSpecialist: {
+        agentId: "clinical-evidence-synthesis",
+        runtimeAgent: "evimed-clinical-evidence-synthesis",
+        skill: "clinical-evidence-synthesis",
+        companionSkills: ["deep-research", "biomedical-database-search", "citation-integrity", "manuscript-humanize"],
+      },
+    });
+    assert.match(
+      prepared.system,
+      /clinical-evidence-synthesis、deep-research、biomedical-database-search、citation-integrity、manuscript-humanize/,
+    );
+    assert.match(prepared.system, /逐个调用 skill 工具并成功加载/);
+    assert.match(prepared.system, /任一项未成功加载/);
+  });
+});
+
 test("escapes knowledge and memory markup so untrusted records cannot close context blocks", async () => {
   await withProject(async (project) => {
     await writeFile(

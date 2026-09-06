@@ -101,7 +101,7 @@ export async function apply(ctx, config) {
         return { ok: false, code: 'review_unavailable', issues: [{ code: 'review_unavailable', severity: 'advisory', message: `审查未完成：${outcome.diagnostic || outcome.stopReason}` }] }
       }
       const verdicts = Array.isArray(outcome.structured?.verdicts) ? outcome.structured.verdicts : []
-      const diagnostics = ctx.get('evimedDiagnostics')
+      const diagnostics = ctx.get('evimedDiagnostics')?.forSession?.(call.sessionId) ?? ctx.get('evimedDiagnostics')
       for (const verdict of verdicts) {
         if (verdict?.verdict === 'stands') continue
         diagnostics?.notice?.(`review ${verdict?.verdict}: ${verdict?.claimId} — ${verdict?.grounds}`)

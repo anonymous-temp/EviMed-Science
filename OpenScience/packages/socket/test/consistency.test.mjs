@@ -570,12 +570,21 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   const ctx = harness();
   const rows = new Map();
   const childRows = new Map();
+  const sessionRuns = new Map();
   const files = new Map();
   /** @type {any[]} */
   const injected = [];
   const agent = { id: "native-agent", session: { id: "native-session", header: { cwd: "/workspace", ...(child ? { origin: "subagent" } : {}) } }, inject: (/** @type {any} */ message) => injected.push(message) };
   ctx.provide("agents", { get: () => agent });
-  ctx.provide("evimedRun", { runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) }, planIndex: { put: async () => {} }, gateRuns: { put: async () => {} }, evidence: { entries: () => [] }, subagents: childRows });
+  ctx.provide("evimedRun", {
+    runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) },
+    planIndex: { put: async () => {} },
+    gateRuns: { put: async () => {} },
+    evidence: { entries: () => [] },
+    subagents: childRows,
+    sessionRuns,
+    runIdForSession: (/** @type {string} */ sessionId) => sessionRuns.get(sessionId) ?? "",
+  });
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
@@ -591,6 +600,52 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   const execute = (/** @type {string} */ name, /** @type {any} */ args) => ctx.tools.execute({ agent, name, callId: `call-${name}`, arguments: args, signal: AbortSignal.timeout(2000) });
   return { ctx, rows, childRows, files, injected, agent, step, execute };
 }
+
+test("each session-scoped dispatch revision is logged once before its model step", async () => {
+  const f = await nativePolicyFixture();
+  const briefRoot = "/workspace/.evimed-brief/sessions/native-session";
+  /** @param {string} runId @param {string} contextRevision @param {string} context */
+  const setRevision = (runId, contextRevision, context) => {
+    f.files.set(`${briefRoot}/index.json`, JSON.stringify({ runId, contextRevision }));
+    f.files.set(`${briefRoot}/context.md`, context);
+  };
+
+  setRevision("run_first", "req_first", "<required-skills>clinical-evidence-synthesis</required-skills>");
+  await f.step(1);
+  assert.equal(f.injected.length, 1);
+  assert.equal(f.injected[0].source.kind, "plugin");
+  assert.equal(f.injected[0].source.plugin, "evimed-run-policy");
+  assert.match(f.injected[0].content[0].text, /clinical-evidence-synthesis/);
+
+  // More steps in the same request must not repeat the trusted context.
+  await f.step(1);
+  assert.equal(f.injected.length, 1);
+
+  // A repair keeps the run id but receives its own committed context revision.
+  setRevision("run_first", "req_repair", "<required-skills>citation-integrity</required-skills>");
+  await f.step(2);
+  assert.equal(f.injected.length, 2);
+  assert.match(f.injected[1].content[0].text, /citation-integrity/);
+
+  // A later run on the same conversation receives new context and new state.
+  setRevision("run_followup", "req_followup", "<required-skills>research-topic-strategy</required-skills>");
+  await f.step(3);
+  assert.equal(f.injected.length, 3);
+  assert.match(f.injected[2].content[0].text, /research-topic-strategy/);
+  assert.ok(f.rows.has("run_followup"), "the follow-up must project under its own run id");
+
+  const child = { session: { id: "child-session", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } } };
+  for (const handler of f.ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent: child, source: "subagent" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(f.ctx.get("evimedRun").runIdForSession("child-session"), "run_followup", "child evidence must inherit the parent run");
+  const rootMirror = { ...f.rows.get("run_followup") };
+  for (const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
+    handler(child.session, { type: "assistant/message", seq: 4, data: { usage: { completionTokens: 99 } } });
+    handler(child.session, { type: "turn/end", seq: 5, data: { reason: { kind: "completed" } } });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(f.rows.get("run_followup"), rootMirror, "child activity must not replace the root mirror row");
+});
 
 test("a delegation constructor failure leaves the item retriable and records no running child", async () => {
   const f = await nativePolicyFixture({
@@ -911,6 +966,37 @@ test("a mirror write produces the workspace projection the control plane reads",
   assert.ok(target.startsWith("/workspace/"), `the projection must land in the run's own workspace, got ${target}`);
   const projection = JSON.parse(written.get(target));
   assert.equal(projection.runId ?? projection.run?.runId, "run_test");
+
+  // Two sessions may run in one project. Each projection must select its own
+  // plan and injected skills rather than the first durable row in the domain.
+  (/** @type {any} */ (store)).activeRuns.set("s1", "run_test");
+  (/** @type {any} */ (ctx.get("evimedDiagnostics"))).forRun("run_test").notice("old notice");
+  (/** @type {any} */ (store)).subagents.set("run_test:d1", {
+    runId: "run_test", deliverableId: "d1", skills: ["old-skill"], status: "completed",
+  });
+  await (/** @type {any} */ (store)).planIndex.put("run_test", { runId: "run_test", revision: 1, items: [{ id: "d1" }] });
+  (/** @type {any} */ (store)).activeRuns.set("s2", "run_next");
+  (/** @type {any} */ (ctx.get("evimedDiagnostics"))).forRun("run_next").notice("new notice");
+  (/** @type {any} */ (store)).subagents.set("run_next:d2", {
+    runId: "run_next", deliverableId: "d2", skills: ["new-skill"], status: "completed",
+  });
+  await (/** @type {any} */ (store)).runMirror.put("run_next", {
+    runId: "run_next", sessionId: "s2", cwd: "/workspace", startedAt: "2026-01-01T00:01:00Z",
+  });
+  await (/** @type {any} */ (store)).planIndex.put("run_next", { runId: "run_next", revision: 2, items: [{ id: "d2" }] });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  const firstRun = JSON.parse(written.get("/workspace/.evimed-run/runs/run_test/state.json"));
+  const nextRun = JSON.parse(written.get("/workspace/.evimed-run/runs/run_next/state.json"));
+  assert.equal(firstRun.runId, "run_test");
+  assert.deepEqual(firstRun.plan.items, [{ id: "d1" }]);
+  assert.deepEqual(firstRun.subagents.map((/** @type {any} */ item) => item.skills), [["old-skill"]]);
+  assert.deepEqual(firstRun.qualityNotices, ["old notice"]);
+  assert.equal(nextRun.runId, "run_next");
+  assert.deepEqual(nextRun.plan.items, [{ id: "d2" }]);
+  assert.deepEqual(nextRun.subagents.map((/** @type {any} */ item) => item.skills), [["new-skill"]]);
+  assert.deepEqual(nextRun.qualityNotices, ["new notice"]);
+  assert.equal(JSON.parse(written.get("/workspace/.evimed-run/state.json")).runId, "run_next");
 });
 
 test("an evidence row is stamped with the run, so the join that resolves quotes can find it", async () => {
@@ -918,11 +1004,10 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
   // given rows stamped `run_a` it returns their paths, and given `run_zzz` it
   // returns none. Production only ever produced the second case. Ingest stamped
   // each row with `ctx.get('evimedRunId')?.(call.sessionId) ?? call.sessionId`,
-  // and no plugin provides `evimedRunId` — so the left side was always undefined
-  // and the fallback was the only branch there was. Every row of every run
-  // carried a session id in a field named runId; the join matched none of them
-  // and returned an empty map; the validator reported an empty map as every
-  // quote being "not found in its preserved source artifact".
+  // and no plugin originally provided `evimedRunId` — so the left side was
+  // always undefined and a session-id fallback stamped every row incorrectly.
+  // The current fallback is allowed only when exactly one run is active; two
+  // concurrent roots must never assign a child's source by insertion order.
   //
   // So this pins the round trip, not either half: whatever ingest writes, the
   // join must find for the same run. Two green unit tests either side of a seam
@@ -991,6 +1076,7 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
 
   const stamped = await build();
   await (/** @type {any} */ (stamped.store)).runMirror.put("run_real", { runId: "run_real", cwd: "/workspace" });
+  (/** @type {any} */ (stamped.store)).activeRuns.set("sess_root", "run_real");
   observe(stamped.ctx);
   const rows = (/** @type {any} */ (stamped.store)).evidence.entries().map((/** @type {[string, any]} */ [, value]) => value);
   assert.equal(rows.length, 1, "the observation produced no evidence row at all");
@@ -1011,9 +1097,18 @@ test("an evidence row is stamped with the run, so the join that resolves quotes 
   assert.notEqual(earlyRows[0].runId, "sess_child");
   assert.deepEqual(
     sourceArtifactPaths(earlyRows, "run_real"),
-    [".evimed-sources/PMC4548722/fulltext.md"],
-    "a row written before the mirror latched still belongs to the table it is in",
+    [],
+    "a row written before the mirror latched cannot satisfy a named run's gate",
   );
+
+  const ambiguous = await build();
+  (/** @type {any} */ (ambiguous.store)).activeRuns.set("root-a", "run_a");
+  (/** @type {any} */ (ambiguous.store)).activeRuns.set("root-b", "run_b");
+  observe(ambiguous.ctx);
+  const ambiguousRows = (/** @type {any} */ (ambiguous.store)).evidence.entries().map((/** @type {[string, any]} */ [, value]) => value);
+  assert.equal(ambiguousRows[0].runId, "", "concurrent roots must not assign child evidence by insertion order");
+  assert.deepEqual(sourceArtifactPaths(ambiguousRows, "run_a"), []);
+  assert.deepEqual(sourceArtifactPaths(ambiguousRows, "run_b"), []);
 });
 
 test("learning the contract does not spend the budget for doing the work", async () => {

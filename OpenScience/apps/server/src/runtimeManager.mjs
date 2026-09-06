@@ -3354,8 +3354,9 @@ export class RuntimeManager {
    * The research context does not travel with the prompt: this protocol has no
    * `system` field, and inventing a side channel for it would have broken the
    * runtime's own invariant that everything the model sees is in the log. It is
-   * written into the workspace before dispatch and injected by the socket at
-   * session start, where it becomes a first-class logged message.
+   * written into the session-scoped workspace before dispatch. The brief index
+   * commits that write with this request's id, and the socket injects every new
+   * revision as a first-class logged message before the corresponding step.
    *
    * @param {Record<string, any>} project @param {string} sessionId
    * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean }} input
@@ -3383,7 +3384,11 @@ export class RuntimeManager {
       await this.writeRunContextFile(project, system, { sessionId: strictContext ? sessionId : null, required: strictContext });
     }
     if (typeof runId === "string" && runId) {
-      await this.writeRunBriefIndex(project, runId, { sessionId: strictContext ? sessionId : null, required: strictContext });
+      await this.writeRunBriefIndex(project, runId, {
+        sessionId: strictContext ? sessionId : null,
+        required: strictContext,
+        contextRevision: requestId,
+      });
     }
     await this.enforceProjectQuota(project);
     this.beginProxy(project);
@@ -3459,11 +3464,15 @@ export class RuntimeManager {
    * @param {Record<string, any>} project @param {string} runId
    * @returns {Promise<void>}
    */
-  async writeRunBriefIndex(project, runId, { sessionId = null, required = false } = {}) {
+  async writeRunBriefIndex(project, runId, { sessionId = null, required = false, contextRevision = null } = {}) {
     const write = async () => {
       const session = sessionId == null ? null : safeId(sessionId, "session id");
       const relative = session ? `.evimed-brief/sessions/${session}/index.json` : workspaceLayout.briefIndexFile;
-      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), `${JSON.stringify({ runId }, null, 2)}\n`, {
+      const index = {
+        runId,
+        ...(typeof contextRevision === "string" && contextRevision ? { contextRevision } : {}),
+      };
+      await writeFileAtomicNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative), `${JSON.stringify(index, null, 2)}\n`, {
         encoding: "utf8", mode: 0o444,
       });
     };

@@ -24,7 +24,7 @@ import {
   runPhaseHistory,
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
-import { workspaceLayout } from "@evimed/domain";
+import { runStateFileFor, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 
@@ -241,7 +241,7 @@ test("starts immutable open-domain and specialist run identities from research-s
 });
 
 test("open-domain clinical evidence questions record and dispatch the selected specialist identity", async () => {
-  await withApp(async ({ base }) => {
+  await withApp(async ({ base, dataDir }) => {
     assert.equal((await bind(base, "ses_routed_clinical", { mode: "open-domain" })).status, 200);
     const result = await dispatchRun(
       base,
@@ -265,6 +265,22 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       effectiveAgentVersion: "2.10.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
+    const workspace = path.join(dataDir, "users", "dev", "projects", "default", "workspace");
+    const routedContext = await readFile(
+      path.join(workspace, ".evimed-brief", "sessions", "ses_routed_clinical", "context.md"),
+      "utf8",
+    );
+    assert.match(
+      routedContext,
+      /clinical-evidence-synthesis、autopilot-episode、deep-research、biomedical-database-search、citation-integrity、manuscript-humanize/,
+      "the exact completion-gate skill set must reach this dispatched session",
+    );
+    const routedIndex = JSON.parse(await readFile(
+      path.join(workspace, ".evimed-brief", "sessions", "ses_routed_clinical", "index.json"),
+      "utf8",
+    ));
+    assert.equal(routedIndex.runId, result.body.data.id);
+    assert.match(routedIndex.contextRevision, /^req_/);
 
     // The same chest-pain question WITHOUT an explicit report request stays on
     // the default answer agent instead of being dragged into the report line.
@@ -278,6 +294,15 @@ test("open-domain clinical evidence questions record and dispatch the selected s
     assert.equal(plain.response.status, 202);
     assert.equal(plain.body.data.effectiveAgentId, "open-domain-answer");
     assert.equal(plain.body.data.effectiveRuntimeAgent, "evimed-open-domain-answer");
+    assert.match(
+      await readFile(path.join(workspace, ".evimed-brief", "sessions", "ses_unrouted_clinical", "context.md"), "utf8"),
+      /保持开放域回答/,
+    );
+    await assert.rejects(
+      () => readFile(path.join(workspace, ".evimed-brief", "context.md"), "utf8"),
+      { code: "ENOENT" },
+      "interactive sessions must not share one mutable project context",
+    );
   });
 });
 
@@ -807,7 +832,6 @@ test("a deliverable no gate accepted is not a success, receipt or no receipt", a
     await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
     await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
       formatVersion: 1,
-      runId: "run_unaccepted",
       plan: { revision: 1, items: [{ id: "d1", status: "submitted", attempts: 7 }] },
       budget: { steps: 57, tokens: 1, children: 1, limits: {} },
       evidence: { total: 0, byStatus: {} },
@@ -4972,6 +4996,38 @@ test("a pre-injected skill counts as loaded, because the model is never asked to
   }
 });
 
+test("one run's injected skills cannot satisfy a later run's completion gate", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-skill-scope-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_a",
+      subagents: [{ runId: "run_a", skills: ["clinical-evidence-synthesis"] }],
+    }), "utf8");
+
+    // Missing per-run state falls back to the legacy file only to reject its
+    // foreign run id; it must not inherit Run A's receipt.
+    const absent = await loadedOrInjectedSkillsForTest(project, [], { id: "run_b" });
+    assert.equal(absent.has("clinical-evidence-synthesis"), false);
+
+    const runBFile = path.join(project.workspaceDir, runStateFileFor("run_b"));
+    await mkdir(path.dirname(runBFile), { recursive: true });
+    await writeFile(runBFile, JSON.stringify({ formatVersion: 1, runId: "run_b", subagents: [] }), "utf8");
+    const isolated = await loadedOrInjectedSkillsForTest(project, [], { id: "run_b" });
+    assert.equal(isolated.has("clinical-evidence-synthesis"), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("the container exiting judges from the durable record too, not just a later reconcile", async () => {
   // The timing regression. The container exit and the unreadable transcript are
   // one event with two exits from it: `notifyRuntimeStop(..., "failed")` →
@@ -5079,7 +5135,6 @@ test("a container that exits with nothing durable still says what the run last k
     await monitor?.promise?.catch(() => {});
     await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
       formatVersion: 1,
-      runId: "run_x",
       degraded: [admitted, fresh],
       qualityNotices: [],
     }), "utf8");
@@ -5390,7 +5445,7 @@ test("a package written and never submitted is not reported as a stopped runtime
     await writeFile(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1", "clinical-evidence-report.md"), "# report\n", "utf8");
     const writeState = (items) => writeFile(
       path.join(project.workspaceDir, workspaceLayout.runStateFile),
-      JSON.stringify({ formatVersion: 1, runId: "run_x", plan: { revision: 1, items }, degraded: [] }),
+      JSON.stringify({ formatVersion: 1, plan: { revision: 1, items }, degraded: [] }),
       "utf8",
     );
     const finish = async () => {
