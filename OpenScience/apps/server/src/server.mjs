@@ -46,6 +46,7 @@ import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemOsClient } from "./memOsEngineClient.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
+import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
@@ -364,6 +365,12 @@ function metricErrorCode(value) {
   return typeof value === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value) ? value : "unknown_error";
 }
 
+function requestStartsMutation(req, pathname) {
+  const method = String(req.method ?? "GET").toUpperCase();
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(method)
+    || (method === "GET" && ["/api/auth/oidc/start", "/api/auth/oidc/callback"].includes(pathname));
+}
+
 class OperationalMetrics {
   constructor() {
     this.activeRequests = 0;
@@ -458,6 +465,8 @@ export function createWebApiApp(overrides = {}) {
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
   const productDatabase = "database" in store ? store.database : null;
+  let maintenanceService = null;
+  const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
@@ -470,7 +479,8 @@ export function createWebApiApp(overrides = {}) {
   const applyNotificationDefaults = () => {
     if (!notificationService) return Promise.resolve([]);
     if (notificationRun) return notificationRun;
-    notificationRun = notificationService.applyDueDefaults().catch((error) => {
+    notificationRun = maintenanceMutation(() => notificationService.applyDueDefaults()).catch((error) => {
+      if (error?.code === "maintenance_active") return [];
       process.stderr.write(`inbox default processing failed: ${typeof error?.code === "string" ? error.code : "notification_unavailable"}\n`);
       return [];
     }).finally(() => { notificationRun = null; });
@@ -626,9 +636,11 @@ export function createWebApiApp(overrides = {}) {
   const retryCapsuleCleanup = () => {
     if (!capsuleTransferService) return Promise.resolve();
     if (capsuleCleanupRun) return capsuleCleanupRun;
-    capsuleCleanupRun = capsuleTransferService.recoverPendingDeletions()
+    capsuleCleanupRun = maintenanceMutation(() => capsuleTransferService.recoverPendingDeletions())
       .then(async result => { if (result.pending) await securityAudit(config, "capsule.cleanup", "pending", result); })
-      .catch(() => { console.error("Capsule cleanup retry failed; protected pending state was retained."); })
+      .catch((error) => {
+        if (error?.code !== "maintenance_active") console.error("Capsule cleanup retry failed; protected pending state was retained.");
+      })
       .finally(() => { capsuleCleanupRun = null; });
     return capsuleCleanupRun;
   };
@@ -1097,13 +1109,70 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.geoProbeFetch ?? globalThis.fetch,
   });
   const commands = createCommandRegistry({ config, runtimeManager });
-  const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx));
+  const taskManager = new TaskManager(config, (command, args, ctx) => commands.invoke(command, args, ctx), {
+    claimAllowed: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
+  });
   const rateLimiter = new FixedWindowRateLimiter();
   const authRateLimiter = new FixedWindowRateLimiter();
   const commandRateLimiter = new FixedWindowRateLimiter();
   const operationalMetrics = new OperationalMetrics();
   let activeCommands = 0;
   let startupRuntimeCleanup = null;
+  let backgroundReady = false;
+  let recurringWorkStarted = false;
+  if (productDatabase) {
+    maintenanceService = new MaintenanceService(productDatabase, {
+      inspectActivity: async () => {
+        const projects = await store.listStoredProjects();
+        const runtimeStats = runtimeManager.statsAll();
+        let runningAgentRuns = 0;
+        let busy = 0;
+        let idle = 0;
+        let unknown = Number(runtimeStats.starting) || 0;
+        const observations = await Promise.all(projects.map(async (project) => {
+          const running = (await agentRuns.list(project)).filter((run) => run.status === "running").length;
+          if (!runtimeManager.runtimeGeneration(project)) return { running, busy: 0, idle: 0, unknown: 0 };
+          try {
+            const runtimeBusy = await runtimeManager.pluginRuntimeBusy(project);
+            return { running, busy: runtimeBusy ? 1 : 0, idle: runtimeBusy ? 0 : 1, unknown: 0 };
+          } catch { return { running, busy: 0, idle: 0, unknown: 1 }; }
+        }));
+        for (const observation of observations) {
+          runningAgentRuns += observation.running;
+          busy += observation.busy;
+          idle += observation.idle;
+          unknown += observation.unknown;
+        }
+        const classified = busy + idle + Math.max(0, unknown - (Number(runtimeStats.starting) || 0));
+        unknown += Math.max(0, (Number(runtimeStats.running) || 0) - classified);
+        const backgroundOperations = [
+          notificationRun,
+          capsuleCleanupRun,
+          autopilotScheduleRun,
+          pluginApplyWorker?.running,
+          memoryIndexWorker?.status?.().running,
+          memoryIndexWorker?.reconciling,
+          sourceWorker?.status?.().running,
+          autopilotWorker?.status?.().running,
+        ].filter(Boolean).length;
+        return {
+          activeCommands,
+          activeTasks: taskManager.statsAll().active,
+          backgroundOperations,
+          runningAgentRuns,
+          runtimes: { busy, idle, unknown },
+        };
+      },
+    });
+    maintenanceService.subscribe((state) => {
+      if (state === "open") {
+        taskManager.resumeClaims();
+        if (backgroundReady) {
+          void startRecurringWork().catch(() => { process.stderr.write("background work did not resume after maintenance\n"); });
+        }
+      } else pauseRecurringWork();
+    });
+  }
 
   /**
    * The contract an adopted session should be graded against.
@@ -1170,6 +1239,7 @@ export function createWebApiApp(overrides = {}) {
     const operation = operationalMetrics.start(req, pathname);
     let operationErrorCode = null;
     let operationFinished = false;
+    let releaseMutation = null;
     const finishOperation = (disconnected = false) => {
       if (operationFinished) return;
       operationFinished = true;
@@ -1235,7 +1305,30 @@ export function createWebApiApp(overrides = {}) {
     }
     try {
       enforceRequestRateLimits(req, pathname);
+      if (pathname === "/api/ops/maintenance" && ["GET", "POST"].includes(req.method)) {
+        if (!maintenanceService) throw new HttpError(404, "not_found", "Route not found.");
+        assertMaintenanceAccess(req, config);
+        if (req.method === "GET") {
+          sendJson(res, 200, { data: await maintenanceService.status() });
+          return;
+        }
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "maintenance request");
+        const action = assertString(body.action, "maintenance action", { max: 16 });
+        let data;
+        if (action === "request") {
+          data = await maintenanceService.request({ requestId: body.requestId, ttlSeconds: body.ttlSeconds });
+        } else if (action === "release") {
+          data = await maintenanceService.release({ requestId: body.requestId });
+        } else {
+          throw new HttpError(400, "maintenance_request_invalid", "Maintenance action must be request or release.");
+        }
+        sendJson(res, 200, { data });
+        return;
+      }
       await store.assertCsrf(req, pathname);
+      if (maintenanceService && requestStartsMutation(req, pathname)) {
+        releaseMutation = await maintenanceService.admitMutation();
+      }
       if (await pluginRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
@@ -1255,6 +1348,9 @@ export function createWebApiApp(overrides = {}) {
       }
 
       if (pathname === "/api/ready") {
+        if (maintenanceService && (await maintenanceService.status()).state !== "open") {
+          throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
+        }
         const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
@@ -2271,6 +2367,8 @@ export function createWebApiApp(overrides = {}) {
       }
       await errorAudit(config, req, pathname, err, { requestId });
       sendError(res, err, { requestId });
+    } finally {
+      releaseMutation?.();
     }
   }
 
@@ -2319,7 +2417,14 @@ export function createWebApiApp(overrides = {}) {
   // The kernel's browser application, on an origin of its own. It is a
   // listener rather than a route because the application builds every URL it
   // fetches from `location.origin`; see `runtimeUiServer.mjs`.
-  const runtimeUi = createRuntimeUiServer({ config, store, runtimeManager, usageLedger, authorizePrompt: assertPublicSessionPrompt });
+  const runtimeUi = createRuntimeUiServer({
+    config,
+    store,
+    runtimeManager,
+    usageLedger,
+    authorizePrompt: assertPublicSessionPrompt,
+    authorizeMutation: maintenanceService ? (operation) => maintenanceService.withMutation(operation) : null,
+  });
 
   // No `upgrade` handler here on purpose. The only WebSocket this deployment
   // serves belongs to the kernel's browser application, and that application
@@ -2358,7 +2463,7 @@ export function createWebApiApp(overrides = {}) {
 
   const scheduleAutopilot = async () => {
     if (!autopilotService || !productDatabase || autopilotScheduleRun) return autopilotScheduleRun;
-    autopilotScheduleRun = (async () => {
+    const schedule = async () => {
       const result = await productDatabase.query(`SELECT user_id,id,payload FROM evimed_product.documents
         WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active' AND payload->>'enabled'='true'
         ORDER BY updated_at,id LIMIT 100`);
@@ -2379,8 +2484,64 @@ export function createWebApiApp(overrides = {}) {
           });
         }
       }
-    })().finally(() => { autopilotScheduleRun = null; });
+    };
+    autopilotScheduleRun = maintenanceMutation(schedule)
+      .catch((error) => {
+        if (error?.code === "maintenance_active") return null;
+        throw error;
+      })
+      .finally(() => { autopilotScheduleRun = null; });
     return autopilotScheduleRun;
+  };
+
+  const pauseRecurringWork = () => {
+    recurringWorkStarted = false;
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker]) {
+      if (worker?.timer) clearInterval(worker.timer);
+      if (worker) worker.timer = null;
+    }
+    for (const worker of [memoryIndexWorker, sourceWorker, autopilotWorker]) {
+      if (worker?.reconcileTimer) clearInterval(worker.reconcileTimer);
+      if (worker) worker.reconcileTimer = null;
+    }
+    if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
+    if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
+    if (notificationTimer) clearInterval(notificationTimer);
+    capsuleCleanupTimer = null;
+    autopilotScheduleTimer = null;
+    notificationTimer = null;
+  };
+
+  const startRecurringWork = async () => {
+    if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
+    recurringWorkStarted = true;
+    try {
+      pluginApplyWorker?.start();
+      memoryIndexWorker?.start();
+      sourceWorker?.start();
+      autopilotWorker?.start();
+      await retryCapsuleCleanup();
+      if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
+      if (capsuleTransferService && !capsuleCleanupTimer) {
+        capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000);
+        capsuleCleanupTimer.unref();
+      }
+      await scheduleAutopilot();
+      if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
+      if (autopilotService && !autopilotScheduleTimer) {
+        autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000);
+        autopilotScheduleTimer.unref();
+      }
+      await applyNotificationDefaults();
+      if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
+      if (notificationService && !notificationTimer) {
+        notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
+        notificationTimer.unref();
+      }
+    } catch (error) {
+      recurringWorkStarted = false;
+      throw error;
+    }
   };
 
   return {
@@ -2403,6 +2564,7 @@ export function createWebApiApp(overrides = {}) {
     pluginApplyWorker,
     commands,
     taskManager,
+    maintenanceService,
     operationalMetrics,
     agentRegistry,
     researchSessions,
@@ -2412,6 +2574,7 @@ export function createWebApiApp(overrides = {}) {
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      await maintenanceService?.initialize();
       await retryCapsuleCleanup();
       await runStartupRuntimeCleanup();
       const address = await new Promise((resolve, reject) => {
@@ -2422,18 +2585,8 @@ export function createWebApiApp(overrides = {}) {
       // survived a failed main listen would hold the port open and make the
       // restart look like a port conflict.
       await runtimeUi.listen();
-      if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
-      pluginApplyWorker?.start();
-      memoryIndexWorker?.start();
-      sourceWorker?.start();
-      autopilotWorker?.start();
-      await scheduleAutopilot();
-      if (autopilotService) { autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000); autopilotScheduleTimer.unref(); }
-      await applyNotificationDefaults();
-      if (notificationService) {
-        notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
-        notificationTimer.unref();
-      }
+      backgroundReady = true;
+      await startRecurringWork();
       return address;
     },
     async close() {
@@ -2454,6 +2607,7 @@ export function createWebApiApp(overrides = {}) {
       await runtimeEventPump.closeAll();
       await agentRuns.closeAll();
       await runtimeManager.closeAll();
+      await maintenanceService?.close();
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
@@ -3133,6 +3287,14 @@ function assertOperatorMetricsAccess(req, config) {
   }
   if (!tokenMatches(config.operatorMetricsToken, operatorTokenFromRequest(req))) {
     throw new HttpError(401, "operator_metrics_unauthorized", "Operator metrics token is required.");
+  }
+}
+
+function assertMaintenanceAccess(req, config) {
+  assertOperatorMetricsAccess(req, config);
+  const direct = normalizeClientAddress(req.socket?.remoteAddress);
+  if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(direct)) {
+    throw new HttpError(403, "maintenance_operator_forbidden", "Maintenance control is available only on loopback.");
   }
 }
 

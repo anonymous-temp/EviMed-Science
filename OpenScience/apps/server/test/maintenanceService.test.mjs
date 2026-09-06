@@ -20,6 +20,8 @@ class FakeDatabase {
     this.now = now;
     this.lease = null;
     this.runningJobs = 0;
+    this.pendingPrompts = 0;
+    this.activeDatabaseSessions = 0;
     this.trace = [];
   }
 
@@ -60,7 +62,11 @@ class FakeDatabase {
     if (/FROM evimed_product\.maintenance_lease/.test(sql)) {
       return { rows: this.lease && this.lease.expiresAt > this.now() ? [this.row()] : [] };
     }
-    if (/FROM evimed_product\.jobs/.test(sql)) return { rows: [{ count: String(this.runningJobs) }] };
+    if (/FROM evimed_product\.jobs/.test(sql)) return { rows: [{
+      running_jobs: String(this.runningJobs),
+      pending_prompts: String(this.pendingPrompts),
+      active_sessions: String(this.activeDatabaseSessions),
+    }] };
     throw new Error(`Unexpected query: ${sql}`);
   }
 
@@ -81,11 +87,12 @@ function fixture(activity = async () => EMPTY_ACTIVITY) {
     inspectActivity: activity,
     now: () => new Date(now),
     setTimer: (callback, delay) => {
-      const timer = { callback, delay, unref() {} };
+      const timer = { callback, delay, canceled: false, unref() {} };
       timers.push(timer);
       return timer;
     },
-    clearTimer: () => {},
+    clearTimer: (timer) => { timer.canceled = true; },
+    migrate: async () => {},
   });
   return { database, service, timers, advance(ms) { now += ms; } };
 }
@@ -142,10 +149,11 @@ test("lease expiry automatically reopens admission without a release request", a
   await service.initialize();
   await service.request({ requestId: "expiring-owner", ttlSeconds: 30 });
   assert.equal(service.claimingAllowed(), false);
-  assert.equal(timers.length, 1);
-  assert.ok(timers[0].delay > 0 && timers[0].delay <= 30_000);
+  const activeTimers = timers.filter((timer) => !timer.canceled);
+  assert.equal(activeTimers.length, 1);
+  assert.ok(activeTimers[0].delay > 0 && activeTimers[0].delay <= 30_000);
   advance(30_001);
-  await timers[0].callback();
+  await activeTimers[0].callback();
   assert.equal(service.claimingAllowed(), true);
   assert.equal((await service.status()).state, "open");
 });
@@ -160,6 +168,8 @@ test("running jobs, tasks, background work and runtime unknowns all prevent idle
   });
   const { database, service } = fixture(activity);
   database.runningJobs = 8;
+  database.pendingPrompts = 9;
+  database.activeDatabaseSessions = 10;
   await service.initialize();
   const result = await service.request({ requestId: "busy-owner", ttlSeconds: 30 });
   assert.equal(result.state, "draining");
@@ -170,6 +180,8 @@ test("running jobs, tasks, background work and runtime unknowns all prevent idle
     backgroundOperations: 3,
     runningAgentRuns: 4,
     runningProductJobs: 8,
+    pendingPromptAdmissions: 9,
+    activeDatabaseSessions: 10,
     busyRuntimes: 5,
     unknownRuntimes: 7,
     unknown: 0,
@@ -178,7 +190,6 @@ test("running jobs, tasks, background work and runtime unknowns all prevent idle
 
 test("TaskManager keeps already queued work intact while maintenance pauses claims", async (t) => {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), "maintenance-task-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
   const metaDir = path.join(root, "meta");
   await mkdir(metaDir);
   let allowed = false;
@@ -191,7 +202,10 @@ test("TaskManager keeps already queued work intact while maintenance pauses clai
     maxQueuedTasks: 10,
     maxQueuedTasksPerProject: 10,
   }, async () => { invoked += 1; }, { claimAllowed: () => allowed });
-  t.after(() => manager.close());
+  t.after(async () => {
+    await manager.close();
+    await rm(root, { recursive: true, force: true });
+  });
   const project = { id: "project", userId: "user", rootDir: root, metaDir };
   const ctx = { config: {}, store: {}, runtimeManager: {}, commands: {}, req: { url: "/api/tasks", headers: {}, socket: {} },
     res: null, user: { id: "user" }, project };

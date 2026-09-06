@@ -93,10 +93,10 @@ function destroyUpgrade(socket, status, code) {
 }
 
 /**
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void> }} deps
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null }} deps
  * @returns {{ server: import('node:http').Server, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null, authorizePrompt = null }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null, authorizePrompt = null, authorizeMutation = null }) {
   async function authorizePromptSession(project, payload) {
     if (!authorizePrompt) return;
     // The existing native wire uses payload.args.request on both HTTP RPC and
@@ -219,14 +219,21 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
     await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager);
-    if (method === "session/prompt") await authorizePromptSession(project, promptBody?.payload);
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
       revalidate,
     });
-    if (method === "session/prompt" && runtimeManager.pluginService) await runtimeManager.pluginService.withAdmission(project, forward, { prompt: true });
-    else await forward();
+    const forwardPrompt = async () => {
+      await authorizePromptSession(project, promptBody?.payload);
+      return runtimeManager.pluginService
+        ? runtimeManager.pluginService.withAdmission(project, forward, { prompt: true })
+        : forward();
+    };
+    if (method === "session/prompt") {
+      if (authorizeMutation) await authorizeMutation(forwardPrompt);
+      else await forwardPrompt();
+    } else await forward();
   }
 
   const server = createServer((req, res) => {
@@ -267,7 +274,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
-          if (endpoint === "session/prompt") await authorizePromptSession(project, payload);
+          if (endpoint === "session/prompt") {
+            // The mux's plugin admission owns the full upstream operation. This
+            // short maintenance admission serializes its start with an expiring
+            // drain request; the run ledger then keeps accepted work visible.
+            const check = async () => authorizePromptSession(project, payload);
+            if (authorizeMutation) await authorizeMutation(check);
+            else await check();
+          }
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize });
       } catch (error) {

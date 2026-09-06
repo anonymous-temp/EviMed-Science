@@ -131,9 +131,11 @@ function queueFull(scope, limit) {
 }
 
 export class TaskManager {
-  constructor(config, invokeCommand) {
+  constructor(config, invokeCommand, { claimAllowed = () => true } = {}) {
+    if (typeof claimAllowed !== "function") throw new TypeError("Task claim admission must be a function.");
     this.config = config;
     this.invokeCommand = invokeCommand;
+    this.claimAllowed = claimAllowed;
     this.tasks = new Map();
     this.queue = [];
     this.active = 0;
@@ -330,6 +332,7 @@ export class TaskManager {
     this.queue = [];
     await Promise.all([...changedProjects.values()].map((project) => this.persistProject(project).catch(() => {})));
     await Promise.race([Promise.allSettled(running), delay(2_000)]);
+    await Promise.allSettled([...this.projectStateWrites.values()]);
   }
 
   async hydrateProject(project) {
@@ -408,6 +411,7 @@ export class TaskManager {
   }
 
   drain() {
+    if (!this.claimAllowed()) return;
     while (this.active < this.config.maxConcurrentTasks && this.queue.length > 0) {
       const index = this.queue.findIndex((id) => {
         const task = this.tasks.get(id);
@@ -419,6 +423,10 @@ export class TaskManager {
       if (!task || task.status !== "queued") continue;
       task.runPromise = this.run(task);
     }
+  }
+
+  resumeClaims() {
+    this.drain();
   }
 
   hasProjectCapacity(task) {
