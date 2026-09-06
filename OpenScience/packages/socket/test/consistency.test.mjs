@@ -664,8 +664,10 @@ test("a completed native workflow may plan again and its receipt names actual wo
 });
 
 test("an accepted deliverable needs one control-plane authorization before a fresh receipt", async () => {
+  /** @type {{ authorization: string|undefined, body: Record<string, string> }[]} */
   const requests = [];
   const server = createServer((req, res) => {
+    /** @type {Buffer[]} */
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
@@ -674,7 +676,7 @@ test("an accepted deliverable needs one control-plane authorization before a fre
       res.end(JSON.stringify({ authorized: true }));
     });
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
   const address = server.address();
   const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
   const f = await nativePolicyFixture({ briefId: "revision-owner", revisionAuthorizeUrl });
@@ -709,7 +711,7 @@ test("an accepted deliverable needs one control-plane authorization before a fre
   const firstDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(firstBytes)).then((value) => [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
   assert.notEqual(current.entries[0].files[0].sha256, firstDigest);
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
   }
 });
 
