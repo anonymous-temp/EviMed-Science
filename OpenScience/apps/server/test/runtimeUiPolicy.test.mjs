@@ -11,7 +11,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { loadConfig } from "../src/config.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
-import { issueRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
+import { issueRuntimeUiFrame, renewRuntimeUiFrame } from "../src/runtimeUiFrames.mjs";
 import { InMemoryStore, PostgresStore } from "../src/store.mjs";
 import { RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 
@@ -307,6 +307,95 @@ test("idle session expiration closes both peers without waiting for another brow
   assert.equal((await browserClosed)[0], 1008);
   await upstreamClosed;
   await eventually(() => f.manager.activeProxyCount() === 0);
+});
+
+test("renewing a frame keeps its existing mux alive beyond the original expiry and still honors logout", { timeout: 5000 }, async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const f = await fixture(t, { runtimeUiFrameTtlMs: 5000, sessionTtlMs: 60000 });
+  const c = f.connect();
+  assert.equal(await c.opened, 101);
+  const other = issueRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session,
+    project: await f.store.requireProject(f.user, "default") });
+  const unrenewed = f.connect({ Cookie: `${f.loginCookie}; ${other.cookie.split(";")[0]}` }, `${other.prefix}api/remote.mux`);
+  assert.equal(await unrenewed.opened, 101);
+  c.send(open("active-work", "session/follow", { request: { address: { kind: "session", sessionId: "s1" } } }));
+  await c.next();
+  now += 4000;
+  const renewed = renewRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session,
+    frameId: f.frame.frameId, renewalToken: f.frame.renewalToken });
+  assert.equal(f.ui.refreshFrameBinding(renewed), 1);
+  now += 2000;
+  c.send(open("after-old-expiry", "session/page"));
+  assert.equal((await c.next()).value.reached, "session/page");
+  assert.equal(c.ws.readyState, WebSocket.OPEN);
+  assert.equal(f.handshakes.length, 2, "renewal must not cancel work or replace either mux");
+  assert.equal(f.received.filter((item) => item.type === "cancel").length, 0);
+  const otherClosed = once(unrenewed.ws, "close");
+  unrenewed.send(open("still-expired", "session/page"));
+  assertNativeError(await unrenewed.next(), "still-expired", "runtime_ui_frame_expired");
+  assert.equal((await otherClosed)[0], 1008, "renewing one frame must not extend a different frame");
+  assert.equal((await fetch(`${f.base}/api/session/page`, { headers: { cookie: f.cookie } })).status, 401, "the expired original cookie must remain expired");
+  const freshCookie = `${f.loginCookie}; ${renewed.cookie.split(";")[0]}`;
+  assert.equal((await fetch(`${f.base}/api/session/page`, { headers: { cookie: freshCookie } })).status, 200);
+  const closed = once(c.ws, "close");
+  await f.store.logout({ headers: { cookie: f.loginCookie } });
+  assert.equal((await closed)[0], 1008);
+  await eventually(() => f.manager.activeProxyCount() === 0);
+  assert.equal(f.ui.refreshFrameBinding(renewed), 0, "closed sockets must leave the renewal registry");
+});
+
+test("a suspended frame can reconnect with a renewed cookie while project deletion still revokes it", { timeout: 5000 }, async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const f = await fixture(t, { runtimeUiFrameTtlMs: 5000, sessionTtlMs: 60000 });
+  await f.store.createProject(f.user, "resumable", "Resumable");
+  const project = await f.store.requireProject(f.user, "resumable");
+  const issued = issueRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session, project });
+  now += 6000;
+  const renewed = renewRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session,
+    frameId: issued.frameId, renewalToken: issued.renewalToken });
+  const c = f.connect({ Cookie: `${f.loginCookie}; ${renewed.cookie.split(";")[0]}` }, `${issued.prefix}api/remote.mux`);
+  assert.equal(await c.opened, 101);
+  const closed = once(c.ws, "close");
+  await f.store.deleteProject(f.user, "resumable");
+  assert.equal((await closed)[0], 1008);
+  await eventually(() => f.manager.activeProxyCount() === 0);
+});
+
+test("renewal preserves an admitted unary prompt response across the old expiry without replay", { timeout: 5000 }, async (t) => {
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const f = await fixture(t, { runtimeUiFrameTtlMs: 5000, sessionTtlMs: 60000 });
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  let respond;
+  let entered;
+  const admitted = new Promise((resolve) => { entered = resolve; });
+  const requests = [];
+  f.upstream.on("request", async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    requests.push(Buffer.concat(chunks).toString());
+    respond = () => { res.writeHead(200, { "content-type": "application/json" }); res.end('{"accepted":true}'); };
+    entered();
+  });
+  const payload = JSON.stringify({ type: "client-request", rpcId: "original-prompt", method: "session/prompt", payload: { args: { input: "native draft" } } });
+  const response = fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" }, body: payload });
+  await admitted;
+  now += 4000;
+  const renewed = renewRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session,
+    frameId: f.frame.frameId, renewalToken: f.frame.renewalToken });
+  f.ui.refreshFrameBinding(renewed);
+  now += 2000;
+  respond();
+  const result = await response;
+  assert.equal(result.status, 200, "an accepted response must validate the renewed ticket");
+  assert.deepEqual(await result.json(), { accepted: true });
+  assert.deepEqual(requests, [payload]);
+  await eventually(() => f.manager.activeProxyCount() === 0);
+  const next = renewRuntimeUiFrame({ config: f.config, req: { headers: { cookie: f.loginCookie } }, user: f.user, session: f.session,
+    frameId: f.frame.frameId, renewalToken: f.frame.renewalToken });
+  assert.equal(f.ui.refreshFrameBinding(next), 0, "finished responses must leave the renewal registry");
 });
 
 test("interleaved frame assets, unary calls and reconnects retain independent project bindings", { timeout: 5000 }, async (t) => {

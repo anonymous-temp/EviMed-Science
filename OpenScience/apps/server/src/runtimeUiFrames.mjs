@@ -6,6 +6,7 @@ export const RUNTIME_UI_FRAME_COOKIE = "evimed_ui_frame";
 const FRAME_ID = /^[A-Za-z0-9_-]{32}$/;
 const DEVELOPMENT_KEYS = new WeakMap();
 const SIGNING_DOMAIN = "evimed/runtime-ui/frame-cookie/v1";
+const RENEWAL_DOMAIN = "evimed/runtime-ui/frame-renewal/v1";
 
 function invalid(code = "runtime_ui_frame_invalid", status = 401) {
   return new HttpError(status, code, "A valid login-bound runtime UI frame is required.");
@@ -34,17 +35,18 @@ export function runtimeUiOrigins(config) {
 }
 
 /** Domain-separated from the protected gateway secret, stable across replicas and releases. */
-function signingKey(config) {
+function signingKey(config, domain = SIGNING_DOMAIN) {
   if (config.modelGatewaySigningSecretError) throw invalid("runtime_ui_signing_secret_invalid", 503);
   const material = String(config.modelGatewaySigningSecret ?? "");
   if (!material && !config.production) {
     if (!DEVELOPMENT_KEYS.has(config)) DEVELOPMENT_KEYS.set(config, randomBytes(32));
-    return DEVELOPMENT_KEYS.get(config);
+    return domain === SIGNING_DOMAIN ? DEVELOPMENT_KEYS.get(config)
+      : Buffer.from(hkdfSync("sha256", DEVELOPMENT_KEYS.get(config), "evimed/frame-signing", domain, 32));
   }
   if (material !== material.trim() || Buffer.byteLength(material) < 32 || /[\r\n\0]/.test(material)) {
     throw invalid("runtime_ui_signing_secret_required", 503);
   }
-  return Buffer.from(hkdfSync("sha256", material, "evimed/frame-signing", SIGNING_DOMAIN, 32));
+  return Buffer.from(hkdfSync("sha256", material, "evimed/frame-signing", domain, 32));
 }
 
 export function assertRuntimeUiFrameConfiguration(config) {
@@ -72,35 +74,66 @@ export function parseRuntimeUiFramePath(target) {
 export function issueRuntimeUiFrame({ config, req, user, session, project, now = Date.now() }) {
   const { uiOrigin } = runtimeUiOrigins(config);
   const frameId = randomBytes(24).toString("base64url");
-  const ttl = Number(config.runtimeUiFrameTtlMs ?? config.sessionTtlMs);
-  const expiresAt = Math.min(Number(session.expiresAt), now + ttl);
-  if (!Number.isSafeInteger(now) || !Number.isSafeInteger(expiresAt) || expiresAt <= now || !user.id || !project.id || project.userId !== user.id) throw invalid();
-  const prefix = `/__evimed/f/${frameId}/`;
-  const claims = { version: 1, frameId, projectId: project.id, userId: user.id, authSessionHash: sessionFingerprint(req, config), audience: uiOrigin, issuedAt: now, expiresAt };
-  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
-  const signature = createHmac("sha256", signingKey(config)).update(payload).digest("base64url");
-  const cookie = `${RUNTIME_UI_FRAME_COOKIE}=${payload}.${signature}; Path=${prefix}; HttpOnly; SameSite=Lax${uiOrigin.startsWith("https:") ? "; Secure" : ""}; Max-Age=${Math.max(1, Math.floor((expiresAt - now) / 1000))}`;
-  return { frameId, prefix, frameUrl: `${uiOrigin}${prefix}`, expiresAt, cookie };
+  if (!user.id || !project.id || project.userId !== user.id) throw invalid();
+  const binding = { version: 1, frameId, projectId: project.id, userId: user.id, authSessionHash: sessionFingerprint(req, config), audience: uiOrigin };
+  const renewalToken = signedToken(config, { ...binding, purpose: "renew-frame", issuedAt: now, expiresAt: Number(session.expiresAt) }, RENEWAL_DOMAIN);
+  return mintFrame(config, binding, session, renewalToken, now);
 }
 
-export function validateRuntimeUiFrame({ config, req, user, session, frameId, now = Date.now() }) {
-  const ticket = runtimeUiCookie(req, RUNTIME_UI_FRAME_COOKIE);
-  if (!ticket) throw invalid("runtime_ui_frame_required");
-  if (ticket.length > 4096) throw invalid();
+function signedToken(config, claims, domain) {
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = createHmac("sha256", signingKey(config, domain)).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function mintFrame(config, binding, session, renewalToken, now) {
+  const ttl = Number(config.runtimeUiFrameTtlMs ?? config.sessionTtlMs);
+  const expiresAt = Math.min(Number(session.expiresAt), now + ttl);
+  if (!Number.isSafeInteger(now) || !Number.isSafeInteger(expiresAt) || expiresAt <= now) throw invalid();
+  const { frameId, audience: uiOrigin } = binding;
+  const prefix = `/__evimed/f/${frameId}/`;
+  const claims = { ...binding, issuedAt: now, expiresAt };
+  const cookie = `${RUNTIME_UI_FRAME_COOKIE}=${signedToken(config, claims, SIGNING_DOMAIN)}; Path=${prefix}; HttpOnly; SameSite=Lax${uiOrigin.startsWith("https:") ? "; Secure" : ""}; Max-Age=${Math.max(1, Math.floor((expiresAt - now) / 1000))}`;
+  return { frameId, prefix, frameUrl: `${uiOrigin}${prefix}`, expiresAt, cookie, renewalToken, claims };
+}
+
+function tokenClaims(config, ticket, domain) {
+  if (typeof ticket !== "string" || ticket.length > 4096) throw invalid();
   const parts = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(ticket);
   if (!parts) throw invalid();
   const actual = Buffer.from(parts[2], "base64url");
-  const expected = createHmac("sha256", signingKey(config)).update(parts[1]).digest();
+  const expected = createHmac("sha256", signingKey(config, domain)).update(parts[1]).digest();
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected) || actual.toString("base64url") !== parts[2]) throw invalid();
   let claims;
   try { claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")); } catch { throw invalid(); }
+  return claims;
+}
+
+function assertBinding({ claims, config, req, user, session, frameId, now }) {
   if (!claims || claims.version !== 1 || !FRAME_ID.test(frameId) || claims.frameId !== frameId
     || claims.userId !== user.id || typeof claims.projectId !== "string" || !claims.projectId
     || claims.authSessionHash !== sessionFingerprint(req, config) || claims.audience !== runtimeUiOrigins(config).uiOrigin
     || !Number.isSafeInteger(claims.issuedAt) || !Number.isSafeInteger(claims.expiresAt)
     || claims.issuedAt > now || claims.expiresAt <= claims.issuedAt || claims.expiresAt > session.expiresAt) throw invalid();
   if (claims.expiresAt <= now) throw invalid("runtime_ui_frame_expired");
+}
+
+export function validateRuntimeUiFrame({ config, req, user, session, frameId, now = Date.now() }) {
+  const ticket = runtimeUiCookie(req, RUNTIME_UI_FRAME_COOKIE);
+  if (!ticket) throw invalid("runtime_ui_frame_required");
+  const claims = tokenClaims(config, ticket, SIGNING_DOMAIN);
+  assertBinding({ claims, config, req, user, session, frameId, now });
   return claims;
+}
+
+/** The shell proof renews only its original binding, and never authenticates native API calls. */
+export function renewRuntimeUiFrame({ config, req, user, session, frameId, renewalToken, now = Date.now() }) {
+  const claims = tokenClaims(config, renewalToken, RENEWAL_DOMAIN);
+  assertBinding({ claims, config, req, user, session, frameId, now });
+  if (claims.purpose !== "renew-frame") throw invalid();
+  const binding = { version: 1, frameId: claims.frameId, projectId: claims.projectId, userId: claims.userId,
+    authSessionHash: claims.authSessionHash, audience: claims.audience };
+  return mintFrame(config, binding, session, renewalToken, now);
 }
 
 /** Release a browser cookie only. Login revocation remains the authority boundary. */

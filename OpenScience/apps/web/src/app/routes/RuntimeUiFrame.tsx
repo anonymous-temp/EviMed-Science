@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { createWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { Button } from "@/components/ui/Button";
 
@@ -24,12 +24,20 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leaseError, setLeaseError] = useState<string | null>(null);
+  const [renewing, setRenewing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const incoming = useRef(0);
   const outgoing = useRef(0);
   const currentRequest = useRef<RuntimeUiIntent | null>(null);
   const lastSent = useRef("");
   const releaseBinding = useRef<(() => void) | null>(null);
+  const currentBinding = useRef<WebRuntimeUiFrame | null>(null);
+  const renewBinding = useRef<(() => void) | null>(null);
+  const recoveryAttempted = useRef(false);
+  const nativeReady = useRef(false);
+  currentBinding.current = binding;
+  const frameId = binding?.frameId;
   const intent = useMemo(() => {
     const explicit = runtimeUiIntentFromState(location.state, projectId);
     if (explicit) return explicit;
@@ -62,7 +70,9 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         // Cookie cleanup is best effort; login expiry and revocation remain authoritative.
       });
     };
-    setBinding(null); setReady(false); setPending(false); setNavigated(false); setError(null);
+    setBinding(null); setReady(false); setPending(false); setNavigated(false); setError(null); setLeaseError(null); setRenewing(false);
+    recoveryAttempted.current = false;
+    nativeReady.current = false;
     incoming.current = 0; outgoing.current = 0; lastSent.current = ""; currentRequest.current = null;
     void createWebRuntimeUiFrame(projectId).then(value => {
       if (!active) { release(value.frameId); return; }
@@ -70,11 +80,63 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       releaseBinding.current = () => release(value.frameId);
       const url = new URL(value.frameUrl);
       if (url.origin !== origin || url.pathname !== `/__evimed/f/${value.frameId}/` || url.search || url.hash
-        || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()) throw new Error("Invalid frame binding");
+        || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
+        || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid frame binding");
       setBinding(value);
     }).catch(() => { if (active) setError("研究会话暂时无法连接"); });
     return () => { active = false; if (frameId) release(frameId); };
   }, [projectId, origin, attempt]);
+
+  useEffect(() => {
+    if (!frameId) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let inFlight: Promise<void> | null = null;
+    const schedule = (expiresAt: number) => {
+      clearTimeout(timer);
+      // Renew with enough margin for a background browser's throttled timers.
+      timer = setTimeout(() => { void renew(); }, Math.max(1000, Math.min(120_000, (expiresAt - Date.now()) * 0.6)));
+    };
+    const renew = (): Promise<void> => {
+      if (inFlight) return inFlight;
+      const prior = currentBinding.current;
+      if (!active || !prior || prior.frameId !== frameId) return Promise.resolve();
+      clearTimeout(timer);
+      setRenewing(true);
+      inFlight = renewWebRuntimeUiFrame(prior).then(value => {
+        if (!active) { void releaseWebRuntimeUiFrame(prior.frameId).catch(() => {}); return; }
+        if (value.frameId !== prior.frameId || value.frameUrl !== prior.frameUrl
+          || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
+          || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid renewed binding");
+        currentBinding.current = value;
+        setBinding(value);
+        setLeaseError(null);
+        schedule(value.expiresAt);
+        if (!nativeReady.current) iframe.current?.contentWindow?.postMessage({
+          type: "evimed.runtime-ui.resume", version: 1, frameId, projectId, seq: ++outgoing.current,
+        }, origin);
+      }).catch(() => {
+        if (active) setLeaseError("研究连接暂时无法续期，请重试");
+      }).finally(() => {
+        inFlight = null;
+        if (active) setRenewing(false);
+      });
+      return inFlight;
+    };
+    const resume = () => { void renew(); };
+    const foreground = () => { if (document.visibilityState === "visible") resume(); };
+    renewBinding.current = resume;
+    schedule(currentBinding.current?.expiresAt ?? Date.now());
+    document.addEventListener("visibilitychange", foreground);
+    window.addEventListener("online", resume);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", foreground);
+      window.removeEventListener("online", resume);
+      if (renewBinding.current === resume) renewBinding.current = null;
+    };
+  }, [frameId, origin, projectId]);
 
   useEffect(() => {
     if (error) releaseBinding.current?.();
@@ -94,12 +156,23 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
       if (!message || message.version !== 1 || message.frameId !== binding.frameId || message.projectId !== projectId
         || !Number.isSafeInteger(message.seq) || message.seq <= incoming.current) return;
       if (message.type === "evimed.runtime-ui.ready") {
+        nativeReady.current = true;
+        recoveryAttempted.current = false;
+        setLeaseError(null);
         incoming.current = message.seq; lastSent.current = ""; setReady(true);
         setReadyGeneration(value => value + 1);
       } else if (message.type === "evimed.runtime-ui.connecting") {
+        nativeReady.current = false;
         incoming.current = message.seq; setReady(false);
+        if (navigated && !recoveryAttempted.current) { recoveryAttempted.current = true; renewBinding.current?.(); }
       } else if (message.type === "evimed.runtime-ui.error") {
-        incoming.current = message.seq; setError("研究会话暂时无法连接");
+        nativeReady.current = false;
+        incoming.current = message.seq;
+        if (navigated) {
+          setReady(false);
+          if (!recoveryAttempted.current) { recoveryAttempted.current = true; renewBinding.current?.(); }
+          else setLeaseError("研究连接暂时无法恢复，请重试");
+        } else setError("研究会话暂时无法连接");
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
@@ -156,6 +229,12 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         </div>
       ) : (
         <>
+          {navigated && (leaseError || !ready || (renewing && binding && binding.expiresAt <= Date.now())) && (
+            <div role={leaseError ? "alert" : "status"} className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-bg/90 text-ui-sm text-muted">
+              <p>{leaseError ?? "正在恢复研究连接…"}</p>
+              {leaseError && <Button variant="ghost" onClick={() => renewBinding.current?.()} disabled={renewing}>重新连接</Button>}
+            </div>
+          )}
           {(!navigated || pending) && <div role="status" className="absolute inset-0 z-10 flex items-center justify-center bg-bg/90 text-ui-sm text-muted">
             {pending ? "正在打开研究任务…" : "正在启动研究运行时…"}
           </div>}

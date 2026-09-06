@@ -130,6 +130,16 @@ describe("apiClient", () => {
     expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
   });
 
+  it("renews a frame using only its original proof over the authenticated CSRF transport", async () => {
+    const frame = { frameId: "frame-a", frameUrl: "https://science.example:8443/__evimed/f/frame-a/", expiresAt: 12345, renewalToken: "bound-renewal-proof" };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(csrfMeResponse()).mockResolvedValueOnce(responseJson({ ...frame, expiresAt: 23456 }));
+    const client = await loadClient("https://science.example/api");
+    expect((await client.renewWebRuntimeUiFrame(frame)).frameId).toBe(frame.frameId);
+    expect(fetchMock.mock.calls[1][0]).toBe("https://science.example/api/runtime-ui/frames/frame-a/renew");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST", credentials: "include", body: JSON.stringify({ renewalToken: frame.renewalToken }) });
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  });
+
   it("posts browser commands to the configured web API", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(csrfMeResponse())

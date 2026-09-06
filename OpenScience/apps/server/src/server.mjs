@@ -70,7 +70,7 @@ import { TaskManager } from "./taskManager.mjs";
 import { RunEventHub, attachRunStream, resumePosition } from "./runEventStream.mjs";
 import { RuntimeEventPump } from "./dshEventPump.mjs";
 import { createRuntimeUiServer } from "./runtimeUiServer.mjs";
-import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame, releaseRuntimeUiFrameCookie } from "./runtimeUiFrames.mjs";
+import { assertRuntimeUiFrameConfiguration, issueRuntimeUiFrame, releaseRuntimeUiFrameCookie, renewRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { DEEPSEEK_RECEIPT_RENEWAL_COMMAND, deepSeekReleaseReceiptFreshness, readDeepSeekReleaseReceiptFile } from "../../../scripts/ops/deepseek-kernel-release-gate.mjs";
 import {
   HttpError,
@@ -1363,7 +1363,25 @@ export function createWebApiApp(overrides = {}) {
         const project = await store.requireProject(user, projectId);
         const frame = issueRuntimeUiFrame({ config, req, user, session, project });
         res.setHeader("Set-Cookie", frame.cookie);
-        sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt } });
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 201, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt, renewalToken: frame.renewalToken } });
+        return;
+      }
+
+      if (pathname.startsWith("/api/runtime-ui/frames/") && pathname.endsWith("/renew") && req.method === "POST") {
+        if (!config.runtimeUiProxyEnabled) throw new HttpError(404, "runtime_ui_not_enabled", "The native UI is not enabled.");
+        const { user, session } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
+        if (req.headers["x-open-science-csrf"] !== session.csrfToken) throw new HttpError(403, "csrf_required", "A valid CSRF token is required.");
+        const body = assertObject(await readJson(req, 8192), "runtime UI frame renewal");
+        if (Object.keys(body).some((key) => key !== "renewalToken")) throw new HttpError(400, "runtime_ui_frame_payload_invalid", "Only the original renewal proof is accepted.");
+        const frameId = pathname.slice("/api/runtime-ui/frames/".length, -"/renew".length);
+        const renewalToken = assertString(body.renewalToken, "renewalToken", { max: 4096 });
+        const frame = renewRuntimeUiFrame({ config, req, user, session, frameId, renewalToken });
+        await store.requireProject(user, frame.claims.projectId);
+        runtimeUi.refreshFrameBinding(frame);
+        res.setHeader("Set-Cookie", frame.cookie);
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: { frameId: frame.frameId, frameUrl: frame.frameUrl, expiresAt: frame.expiresAt, renewalToken: frame.renewalToken } });
         return;
       }
 

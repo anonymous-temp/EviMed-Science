@@ -96,6 +96,30 @@ test('a generation replaced during refresh becomes ready and restores the chosen
   f.ctx.dispose();
 });
 
+test('a bound resume retries failed readiness on the same generation without recreating a session or its draft', async () => {
+  const f = fixture(); apply(f.ctx, {}, f.target); await settle();
+  f.navigate(); await settle();
+  let refreshes = 0;
+  f.ctx.sessions.refresh = async () => { if (++refreshes === 1) throw new Error('temporary HTTP failure'); };
+  f.replaceGeneration(); await settle();
+  assert.equal(f.sent.at(-1).message.error, 'NATIVE_NOT_READY');
+  const resume = { type: 'evimed.runtime-ui.resume', requestId: undefined, intent: undefined, seq: 2 };
+  f.navigate(resume, { origin: 'https://foreign.example' });
+  f.navigate(resume, { source: {} });
+  f.navigate({ ...resume, frameId: 'different-frame' });
+  f.navigate({ ...resume, projectId: 'different-project' });
+  f.navigate({ ...resume, seq: 1 });
+  await settle(); assert.equal(refreshes, 1);
+  f.navigate(resume); await settle();
+  assert.equal(refreshes, 2);
+  assert.equal(f.sent.at(-1).message.type, 'evimed.runtime-ui.ready');
+  f.navigate({ ...resume, seq: 3 }); await settle();
+  assert.equal(refreshes, 2, 'an already ready bridge needs no refresh');
+  assert.equal(f.calls.filter(row => row[0] === 'create').length, 1);
+  assert.equal(f.calls.filter(row => row[0] === 'draft').length, 1);
+  f.ctx.dispose();
+});
+
 test('navigation to an existing session during delayed reconnect is retained until the generation is ready', async () => {
   const f = fixture(); const known = new Set(['session-a', 'session-b']);
   f.ctx.sessions.open = (/** @type {string} */ id) => { assert.ok(known.has(id)); f.calls.push(['open', id]); };

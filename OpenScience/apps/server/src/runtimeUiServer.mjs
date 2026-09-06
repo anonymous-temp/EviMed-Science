@@ -6,7 +6,7 @@ import { isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
-import { parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
+import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
 
 /**
@@ -94,10 +94,27 @@ function destroyUpgrade(socket, status, code) {
 
 /**
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any }} deps
- * @returns {{ server: import('node:http').Server, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
+ * @returns {{ server: import('node:http').Server, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null }) {
   const upgradeSockets = new Set();
+  /** Only live transports are indexed. Renewal updates their short ticket, never their login. */
+  const frameConnections = new Map();
+  function trackFrame(snapshot, claims, transport) {
+    const connections = frameConnections.get(claims.frameId) ?? new Set();
+    const connection = { snapshot, claims };
+    connections.add(connection);
+    frameConnections.set(claims.frameId, connections);
+    const remove = () => {
+      connections.delete(connection);
+      if (!connections.size && frameConnections.get(claims.frameId) === connections) frameConnections.delete(claims.frameId);
+      transport.removeListener("close", remove);
+      transport.removeListener("finish", remove);
+    };
+    transport.once("close", remove);
+    transport.once("finish", remove);
+    if (transport.destroyed || transport.writableFinished) remove();
+  }
   /**
    * @param {any} req @param {any} res
    * @returns {Promise<Record<string, any>>} the project this request addresses
@@ -124,7 +141,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     }
 
     if (!["GET", "HEAD", "OPTIONS"].includes(String(req.method).toUpperCase())) assertBrowserOrigin(req, config);
-    const { project, frame } = await resolveFrame(req, res);
+    const { project, frame, claims } = await resolveFrame(req, res);
     const pathname = new URL(frame.suffix, "http://runtime.local").pathname;
     const hostResult = SEAMS.wire.gatewayEndpoints.hostInteractionResult;
     const method = pathname === `/api/${hostResult}` ? hostResult : runtimeUiMethodFromPath(pathname);
@@ -145,6 +162,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     const boundWorkspace = method === "workspace/create"
       && isBoundWorkspaceRegistration(workspaceBody, runtimeManager.runtimeWorkspaceRoot(project));
     const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+    trackFrame(snapshot, claims, res);
     const revalidate = async () => {
       await resolveFrame(snapshot, null);
       if (boundWorkspace && !isBoundWorkspaceRegistration(workspaceBody, runtimeManager.runtimeWorkspaceRoot(project))) {
@@ -209,9 +227,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
         if (!config.runtimeUiProxyEnabled) return destroyUpgrade(socket, 404, "not_found");
         if (!runtimeUiCookie(req, config.sessionCookieName)) return destroyUpgrade(socket, 401, "unauthorized");
         assertBrowserOrigin(req, config);
-        const { project, frame } = await resolveFrame(req, null);
-        // Revalidation keeps the exact ticket and login snapshot from this handshake.
+        const { project, frame, claims } = await resolveFrame(req, null);
+        // Revalidation keeps the handshake login; only a validated renewal may replace its ticket.
         const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
+        trackFrame(snapshot, claims, socket);
         const revalidate = async () => { await resolveFrame(snapshot, null); };
         const authorize = async (endpoint) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
@@ -228,6 +247,20 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
 
   return {
     server,
+    /** Called only after renewal proof, live login, CSRF and project access are validated. */
+    refreshFrameBinding(renewed) {
+      let updated = 0;
+      for (const connection of frameConnections.get(renewed.frameId) ?? []) {
+        if (!["frameId", "userId", "projectId", "authSessionHash", "audience"].every((key) => connection.claims[key] === renewed.claims[key])) continue;
+        if (renewed.expiresAt <= connection.claims.expiresAt) continue;
+        const name = `${RUNTIME_UI_FRAME_COOKIE}=`;
+        const preserved = String(connection.snapshot.headers.cookie ?? "").split(";").map((value) => value.trim()).filter((value) => !value.startsWith(name));
+        connection.snapshot.headers.cookie = [...preserved, renewed.cookie.split(";")[0]].join("; ");
+        connection.claims = renewed.claims;
+        updated++;
+      }
+      return updated;
+    },
     /**
      * Bound when the deployment serves this surface, and not otherwise. The
      * switch decides, not the port: a port of 0 means "any free one", which is
@@ -247,6 +280,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     },
     async close() {
       for (const socket of upgradeSockets) socket.destroy();
+      frameConnections.clear();
       if (!server.listening) return;
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
