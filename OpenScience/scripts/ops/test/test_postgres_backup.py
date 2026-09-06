@@ -104,9 +104,12 @@ class PostgresBackupTests(unittest.TestCase):
             identity = {"database": "evimed", "databaseOid": "16384", "systemIdentifier": "12345"}
             archive.with_name(archive.name + ".capture.json").write_text(json.dumps({
                 "schemaVersion": 1,
+                "status": "captured",
                 "archive": archive.name,
                 "archiveSha256": MODULE.digest(archive),
                 "database": "evimed",
+                "encryption": "aes-256-cbc-pbkdf2-sha256-250000",
+                "snapshotId": "0001-0001-1",
                 "sourceIdentity": identity,
                 "tables": expected,
                 "tablesSha256": MODULE.table_digest(expected),

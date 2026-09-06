@@ -16,7 +16,8 @@ function validateEntry(entry) {
   const parts = String(entry?.path ?? "").split("/");
   if (!entry || !["file", "directory"].includes(entry.type) || !entry.path || entry.path.includes("\0")
     || path.isAbsolute(entry.path) || (entry.path !== "." && parts.some(part => !part || part === "." || part === ".."))
-    || ![entry.dev, entry.ino, entry.size].every(value => typeof value === "string" && /^\d+$/.test(value))) {
+    || ![entry.dev, entry.ino, entry.size, entry.mtimeNs, entry.mode, entry.uid, entry.gid]
+      .every(value => typeof value === "string" && /^\d+$/.test(value))) {
     throw new Error("Invalid backup inventory entry.");
   }
 }
@@ -28,6 +29,7 @@ async function openEntry(entry) {
   try {
     const metadata = await opened.handle.stat({ bigint: true });
     if (String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino
+      || String(metadata.mode) !== entry.mode || String(metadata.uid) !== entry.uid || String(metadata.gid) !== entry.gid
       || (entry.type === "directory" ? !metadata.isDirectory() : !metadata.isFile())) {
       throw new Error("Backup source identity changed after inventory.");
     }
@@ -49,12 +51,12 @@ function octalField(header, offset, length, value) {
   stringField(header, offset, length - 1, value.toString(8).padStart(length - 1, "0"));
 }
 
-function tarHeader(name, { mode = 0o600, mtime = 0, size = 0, type = "0" }) {
+function tarHeader(name, { gid = 0, mode = 0o600, mtime = 0, size = 0, type = "0", uid = 0 }) {
   const header = Buffer.alloc(512);
   stringField(header, 0, 100, name);
   octalField(header, 100, 8, mode);
-  octalField(header, 108, 8, 0);
-  octalField(header, 116, 8, 0);
+  octalField(header, 108, 8, uid);
+  octalField(header, 116, 8, gid);
   octalField(header, 124, 12, size);
   octalField(header, 136, 12, mtime);
   header.fill(0x20, 148, 156);
@@ -81,11 +83,16 @@ function* headers(entry, metadata, index) {
   const name = entry.type === "directory" && entry.path !== "." ? `${entry.path}/` : entry.path;
   const size = entry.type === "file" ? Number(metadata.size) : 0;
   const mtime = Number(metadata.mtimeNs / 1_000_000_000n);
+  const uid = Number(metadata.uid);
+  const gid = Number(metadata.gid);
   if (!Number.isSafeInteger(size) || size < 0) throw new Error("Backup source is too large for an exact size.");
+  if (![uid, gid].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error("Invalid backup owner metadata.");
   const extended = [];
   if (Buffer.byteLength(name) > 100) extended.push(paxRecord("path", name));
   if (size > octalMaximum) extended.push(paxRecord("size", size));
   if (mtime < 0 || mtime > octalMaximum) extended.push(paxRecord("mtime", mtime));
+  if (uid > 0o7777777) extended.push(paxRecord("uid", uid));
+  if (gid > 0o7777777) extended.push(paxRecord("gid", gid));
   if (extended.length) {
     const data = Buffer.concat(extended);
     yield tarHeader(`PaxHeaders/${index}`, { size: data.length, type: "x" });
@@ -93,8 +100,10 @@ function* headers(entry, metadata, index) {
     yield padding(data.length);
   }
   yield tarHeader(Buffer.byteLength(name) <= 100 ? name : `entry-${index}`, {
-    mode: Number(metadata.mode & 0o777n), mtime: mtime >= 0 && mtime <= octalMaximum ? mtime : 0,
+    gid: gid <= 0o7777777 ? gid : 0, mode: Number(metadata.mode & 0o7777n),
+    mtime: mtime >= 0 && mtime <= octalMaximum ? mtime : 0,
     size: size <= octalMaximum ? size : 0, type: entry.type === "directory" ? "5" : "0",
+    uid: uid <= 0o7777777 ? uid : 0,
   });
 }
 
