@@ -319,6 +319,7 @@ function foldEvents(events) {
         observedMessages: 0,
         observedToolCalls: 0,
         observedRunSideActivity: null,
+        observedKernelActivity: null,
         lastProgressAt: null,
       }));
       continue;
@@ -369,6 +370,9 @@ function foldEvents(events) {
         // a default would read as "we observed zero activity", which is a
         // different claim from "we have not been told".
         ...(typeof event.runSideActivity === "string" ? { observedRunSideActivity: event.runSideActivity } : {}),
+        ...(typeof event.kernelActivity === "string" && /^[a-f0-9]{64}$/.test(event.kernelActivity)
+          ? { observedKernelActivity: event.kernelActivity }
+          : {}),
         lastProgressAt: storedTimestamp(event.at, "at"),
       }));
       continue;
@@ -2329,6 +2333,8 @@ export class AgentRunStore {
     this.deliverableDigests = new Map();
     this.projectionAdmissions = new Map();
     this.projectionNoticed = new Set();
+    /** Trusted DSH event-pump activity, scoped by project and run. */
+    this.kernelActivities = new Map();
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
     // Consecutive polls with no new message and no new tool call before a run
@@ -2939,6 +2945,7 @@ export class AgentRunStore {
       this.deliverableDigests.delete(runId);
       this.projectionAdmissions.delete(runId);
       this.projectionNoticed.delete(runId);
+      this.kernelActivities.delete(`${project.userId}\0${project.id}\0${runId}`);
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
       this.dispatchedBriefs.delete(runId);
@@ -3370,9 +3377,11 @@ export class AgentRunStore {
    * control plane needs from it.
    *
    * One read, three consumers, on the monitor's existing cycle: the stall
-   * signal, the browser's evidence and budget frames, and the run's own
-   * quality notices. They are together because they come from one file and
-   * splitting them would mean reading it three times on three schedules.
+   * change record, the browser's evidence and budget frames, and the run's
+   * own quality notices. The change record is diagnostic only: this file lives
+   * in the model's workspace, so authenticated kernel events own the stall
+   * signal. They stay together because they come from one file and splitting
+   * them would mean reading it three times on three schedules.
    *
    * @param {any} project @param {Record<string, any>} run
    * @returns {Promise<{ signature: string | null, unreadable: boolean }>}
@@ -3492,6 +3501,25 @@ export class AgentRunStore {
     this.deliverableDigests.set(run.id, sent);
   }
 
+  /**
+   * Records one event already attributed by RuntimeEventPump's project-scoped
+   * root/child session maps. The digest, rather than a model-writable
+   * workspace counter, is what the stall monitor compares on its next poll.
+   * Replayed opening snapshots carry the same session/sequence pair and
+   * therefore do not manufacture movement.
+   * @param {{ userId: string, id: string }} project
+   * @param {string} runId
+   * @param {{ sessionId: string, seq: number }} activity
+   */
+  noteKernelActivity(project, runId, activity) {
+    if (!project?.userId || !project?.id || !runId || !activity?.sessionId || !Number.isSafeInteger(activity.seq) || activity.seq < 0) return;
+    const key = `${project.userId}\0${project.id}\0${runId}`;
+    this.kernelActivities.set(
+      key,
+      createHash("sha256").update(JSON.stringify([activity.sessionId, activity.seq])).digest("hex"),
+    );
+  }
+
   async recordProgress(project, run) {
     let history;
     try {
@@ -3517,22 +3545,22 @@ export class AgentRunStore {
       0,
     );
 
-    // The run's own projection, read on the monitor's existing cycle rather
-    // than on a loop of its own. This is what makes a delegated stretch
-    // distinguishable from a dead run: the two counts above are the root
-    // session's, and the root session is *supposed* to go quiet while its
-    // children work. Before this, a run that delegated and waited looked
-    // exactly like one that had died, and the stall threshold closed it.
+    // The run's own projection is still read on the monitor's existing cycle
+    // for UI frames and durable diagnostics. It cannot prove liveness: it is a
+    // workspace document the model can influence. Child liveness comes from
+    // RuntimeEventPump's authenticated, project/run-attributed sequence below.
     const runSide = await this.readRunSideActivity(project, run);
     const activity = runSide.signature;
+    const kernelActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
 
     const stillByHistory = messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0);
     const stillByRunSide = activity === null || activity === (run.observedRunSideActivity ?? null);
+    const stillByKernel = kernelActivity === null || kernelActivity === (run.observedKernelActivity ?? null);
     // Unreadable is neither moved nor still. Returning `false` here would make
     // a corrupt projection feed the stall counter, which is the same mistake
     // the history read already learned not to make one function up.
-    if (runSide.unreadable && stillByHistory) return null;
-    if (stillByHistory && stillByRunSide) return false;
+    if (runSide.unreadable && stillByHistory && stillByKernel) return null;
+    if (stillByHistory && stillByRunSide && stillByKernel) return false;
     await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const current = foldEvents(events).get(run.id);
@@ -3544,13 +3572,17 @@ export class AgentRunStore {
         messages,
         toolCalls,
         ...(activity === null ? {} : { runSideActivity: activity }),
+        ...(kernelActivity === null ? {} : { kernelActivity }),
       };
       // Superseded progress rows go, for every run rather than only this one:
       // `serializeNext` holds that rule now, so the terminal path drops them too.
       const text = serializeNext(events, event, this.maxBytes);
       await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
     });
-    return true;
+    // The projection is still recorded and published, but it is a workspace
+    // document the model can influence. Only root history or an authenticated
+    // DSH event may reset the stall counter.
+    return !stillByHistory || !stillByKernel;
   }
 
   scheduleMonitor(project, runId) {
