@@ -145,8 +145,9 @@ function isConflict(error) { return error?.code === "product_revision_conflict";
 
 function retiredSourceRun(payload) {
   const pending = [...(payload.pendingRunCancellations ?? [])];
-  const run = payload.analysis?.run;
-  if (run?.id && !pending.some(item => item.id === run.id)) pending.push(run);
+  const run = payload.analysis?.run?.id ? payload.analysis.run
+    : payload.analysis?.launch ? { id: null, ...payload.analysis.launch } : null;
+  if (run && !pending.some(item => item.dispatchId === run.dispatchId && item.sessionId === run.sessionId)) pending.push(run);
   return { pendingRunCancellations: pending };
 }
 
@@ -191,8 +192,8 @@ export class SourceService {
           exact = await this.documents.get(userId, "source", sourceId);
         }
       }
-      const job = ["queued", "parsing", "failed"].includes(exact.payload.status)
-        ? await this.enqueue(exact, userId, { rearmFailed: true }) : null;
+      const job = ["queued", "parsing"].includes(exact.payload.status)
+        ? await this.enqueue(exact, userId) : null;
       return { source: exact, duplicate: true, job };
     }
     const family = await this.documents.list(userId, "source", { projectId, filter: { familyId }, limit: 100 });
@@ -345,6 +346,10 @@ export class SourceService {
   /** Waiting for a bounded runtime is not a failed parse or a retry attempt. */
   async deferIngestion(job, run = null, delayMs = 5000) {
     return this.withSourceLease(job, async (source, client) => {
+      const bound = source.payload.analysis?.run;
+      if (run && (!bound || bound.id !== run.runId || bound.sessionId !== run.sessionId || bound.dispatchId !== run.dispatchId)) {
+        throw new HttpError(409, "source_run_binding_conflict", "A waiting source must already own its run binding.");
+      }
       if (run) await this.documents.put(job.userId, "source", source.id, { ...source.payload,
         analysis: { ...source.payload.analysis, phase: "understanding", run: { ...source.payload.analysis?.run, id: run.runId, sessionId: run.sessionId, dispatchId: run.dispatchId } } },
       { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
@@ -362,14 +367,39 @@ export class SourceService {
     });
   }
 
+  /** Persist reservation scope before the run ledger can append or prompt.
+   * Recovery may bind the same ledger entry; it must not infer a new scope. */
+  async bindUnderstandingLaunch(job, launch) {
+    const expected = `source-understanding-${digest(`${job.payload.sourceId}\0${job.payload.sourceGeneration ?? job.payload.sourceRevision}`).slice(0, 32)}`;
+    if (!launch || launch.dispatchId !== expected || typeof launch.sessionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(launch.sessionId)) {
+      throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding launch identity.");
+    }
+    const identity = { sessionId: launch.sessionId, dispatchId: launch.dispatchId,
+      workspaceName: launch.workspaceName === "" ? "" : text(launch.workspaceName, "workspace name", 160),
+      artifactDirectory: sourcePath(launch.artifactDirectory) };
+    return this.mutateIngestion(job.userId, job.payload.sourceId, job, current => {
+      if (current.payload.analysis?.generation !== current.payload.generation) throw new HttpError(409, "source_capture_invalid", "A source launch requires its frozen capture.");
+      const previous = current.payload.analysis.launch ?? current.payload.analysis.run;
+      if (previous && Object.keys(identity).some(key => identity[key] !== previous[key])) {
+        throw new HttpError(409, "source_run_binding_conflict", "This source generation already owns another launch scope.");
+      }
+      if (current.payload.analysis.launch) return current.payload;
+      return { ...current.payload, analysis: { ...current.payload.analysis, launch: identity } };
+    });
+  }
+
   async bindUnderstandingRun(job, run) {
     const expected = `source-understanding-${digest(`${job.payload.sourceId}\0${job.payload.sourceGeneration ?? job.payload.sourceRevision}`).slice(0, 32)}`;
-    if (!run || run.dispatchId !== expected || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.runId)
-      || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.sessionId)) throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding run binding.");
+    if (!run || run.dispatchId !== expected || typeof run.runId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.runId)
+      || typeof run.sessionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.sessionId)) throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding run binding.");
     return this.mutateIngestion(job.userId, job.payload.sourceId, job, current => {
       const bound = current.payload.analysis?.run;
       if (bound && (bound.id !== run.runId || bound.sessionId !== run.sessionId || bound.dispatchId !== run.dispatchId)) {
         throw new HttpError(409, "source_run_binding_conflict", "This source generation is already bound to a run.");
+      }
+      const launch = current.payload.analysis?.launch;
+      if ((!bound && !launch) || (launch && ["sessionId", "dispatchId", "workspaceName", "artifactDirectory"].some(key => launch[key] !== run[key]))) {
+        throw new HttpError(409, "source_run_binding_conflict", "The run must match its protected pre-dispatch launch intent.");
       }
       if (bound) return current.payload;
       return { ...current.payload, analysis: { ...current.payload.analysis, phase: "understanding",
@@ -401,6 +431,26 @@ export class SourceService {
     return matches[0];
   }
 
+  async understandingLaunchForDispatch(userId, projectId, dispatchId) {
+    const result = await this.documents.database.query(`SELECT payload,deleted_at FROM evimed_product.documents
+      WHERE user_id=$1 AND project_id=$2 AND kind='source' AND
+        (payload->'analysis'->'launch'->>'dispatchId'=$3 OR payload @> jsonb_build_object('pendingRunCancellations',jsonb_build_array(jsonb_build_object('dispatchId',$3::text))))`,
+    [userId, projectId, dispatchId]);
+    const matches = result.rows.flatMap(row => [row.payload.analysis?.launch, ...(row.payload.pendingRunCancellations ?? []).filter(item => item.id == null)]
+      .filter(launch => launch?.dispatchId === dispatchId).map(launch => ({ sessionId: launch.sessionId, dispatchId: launch.dispatchId,
+        workspaceName: launch.workspaceName, artifactDirectory: launch.artifactDirectory,
+        sourceStatus: row.payload.status, sourceDeleted: Boolean(row.deleted_at),
+        recoverable: !row.deleted_at && ["queued", "parsing", "failed"].includes(row.payload.status)
+          && row.payload.analysis?.generation === row.payload.generation && row.payload.analysis?.launch?.dispatchId === dispatchId
+          && !(row.payload.pendingRunCancellations ?? []).some(pending => pending.dispatchId === dispatchId),
+      })));
+    if (!matches.length) return null;
+    if (matches.some(launch => ["sessionId", "dispatchId", "workspaceName", "artifactDirectory"].some(key => launch[key] !== matches[0][key]))) {
+      throw new HttpError(409, "source_run_binding_conflict", "The source launch has ambiguous durable ownership.");
+    }
+    return matches[0];
+  }
+
   async enqueueRunCancellations(userId, source) {
     for (const run of source.payload.pendingRunCancellations ?? []) {
       const account = await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
@@ -408,7 +458,7 @@ export class SourceService {
       // Its queue identity cannot include the source's changing generation.
       await this.jobs.enqueue(userId, "ingest", { action: "source-run-cancel", sourceId: source.id,
         accountCreatedAt: account.rows[0]?.generation, run },
-      { projectId: source.projectId, idempotencyKey: `source-run-cancel:${source.id}:${run.id}`, rearmFailed: true });
+      { projectId: source.projectId, idempotencyKey: `source-run-cancel:${source.id}:${run.id ?? run.dispatchId}`, rearmFailed: true });
     }
   }
 
@@ -420,7 +470,7 @@ export class SourceService {
       await cancel({ userId: job.userId, projectId: job.projectId, runId: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId,
         workspaceName: run.workspaceName, artifactDirectory: run.artifactDirectory });
       await this.documents.put(job.userId, "source", source.id, { ...source.payload,
-        pendingRunCancellations: source.payload.pendingRunCancellations.filter(item => item.id !== run.id) },
+        pendingRunCancellations: source.payload.pendingRunCancellations.filter(item => item.sessionId !== run.sessionId || item.dispatchId !== run.dispatchId) },
       { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
       return { sourceId: source.id, canceled: true, runId: run.id };
     }, false, true);
@@ -666,7 +716,9 @@ export class SourceService {
       const legacy = jobs.rows.find(job => job.kind === "consolidate" && job.payload.action === "source-delete" && job.idempotency_key === key);
       const jobId = previous?.jobId ?? legacy?.id ?? randomUUID();
       const sourceGeneration = previous?.sourceGeneration ?? (Number(current.payload.generation) || 1) + 1;
-      const payload = { ...current.payload, generation: sourceGeneration, updatedAt: this.now().toISOString(), deletion: {
+      const payload = { ...current.payload,
+        ...(!current.payload.analysis?.run && current.payload.analysis?.launch ? retiredSourceRun(current.payload) : {}),
+        generation: sourceGeneration, updatedAt: this.now().toISOString(), deletion: {
         jobId, revision: deletionRevision, requestedRevision: previous?.requestedRevision ?? input.expectedRevision,
         sourceGeneration, status: "pending", requestedAt: previous?.requestedAt ?? this.now().toISOString(),
       } };
@@ -823,13 +875,13 @@ export class SourceService {
     return result;
   }
 
-  async enqueue(source, userId, { rearmFailed = false, keySuffix = "" } = {}) {
+  async enqueue(source, userId, { rearmFailed = false } = {}) {
     const account = this.documents.database ? await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]) : null;
     return this.jobs.enqueue(userId, "ingest", {
       sourceId: source.id, sourceGeneration: source.payload.generation,
       ...(account?.rows[0]?.generation ? { accountCreatedAt: account.rows[0].generation } : {}),
       extractorVersion: this.extractorVersion,
-    }, { idempotencyKey: `ingest:${source.id}:generation:${source.payload.generation}${keySuffix}`, projectId: source.projectId, rearmFailed });
+    }, { idempotencyKey: `ingest:${source.id}:generation:${source.payload.generation}`, projectId: source.projectId, rearmFailed });
   }
 
   async withRegistrationLocks(keys, operation) {
@@ -853,7 +905,8 @@ export class SourceService {
     }
   }
 
-  /** Repair the write-before-enqueue crash window and re-arm failed outbox jobs. */
+  /** Repair missing intake jobs; an exhausted generation remains stopped until
+   * explicit retry advances it. Cancellation/deletion retain their own outbox. */
   async reconcileJobs() {
     const database = this.documents.database;
     if (!database) return { scanned: 0, enqueued: 0 };
@@ -869,19 +922,47 @@ export class SourceService {
       lease_token=NULL,lease_expires_at=NULL WHERE kind='consolidate' AND payload->>'action'='source-delete' AND status IN ('queued','running')
       AND NOT EXISTS (SELECT 1 FROM evimed_product.documents d WHERE d.user_id=j.user_id AND d.kind='source' AND d.id=j.payload->>'sourceId'
         AND d.deleted_at IS NOT NULL AND (d.payload->'deletion'->>'jobId' IS NULL OR d.payload->'deletion'->>'jobId'=j.id))`);
+    const stalled = await database.query(`SELECT d.user_id,d.id,d.project_id,d.payload,d.revision,u.created_at::text AS account_created_at
+      FROM evimed_product.documents d JOIN evimed_control.users u ON u.id=d.user_id
+      WHERE d.kind='source' AND d.deleted_at IS NULL AND d.payload->>'status' IN ('queued','parsing')
+      AND EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.project_id=d.project_id
+        AND j.kind='ingest' AND j.payload->>'action' IS NULL AND j.payload->>'sourceId'=d.id
+        AND j.payload->>'sourceGeneration'=d.payload->>'generation' AND j.status='failed')
+      AND NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.project_id=d.project_id
+        AND j.kind='ingest' AND j.payload->>'action' IS NULL AND j.payload->>'sourceId'=d.id
+        AND j.payload->>'sourceGeneration'=d.payload->>'generation' AND j.status IN ('queued','running','succeeded'))
+      ORDER BY d.updated_at,d.id LIMIT 100`);
+    for (const row of stalled.rows) {
+      try {
+        await database.transaction(async client => {
+          const account = await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1 FOR SHARE", [row.user_id]);
+          if (account.rows[0]?.generation !== row.account_created_at) return;
+          // Preserve the account -> jobs -> source lock order. A still-queued
+          // retry or a concurrent user correction must not be terminalized.
+          const generationJobs = await client.query(`SELECT status,error FROM evimed_product.jobs
+            WHERE user_id=$1 AND project_id=$2 AND kind='ingest' AND payload->>'action' IS NULL
+              AND payload->>'sourceId'=$3 AND payload->>'sourceGeneration'=$4 ORDER BY updated_at DESC,id FOR SHARE`,
+          [row.user_id, row.project_id, row.id, String(row.payload.generation)]);
+          const failed = generationJobs.rows.find(job => job.status === "failed");
+          if (!failed || generationJobs.rows.some(job => ["queued", "running", "succeeded"].includes(job.status))) return;
+          await this.documents.put(row.user_id, "source", row.id, { ...row.payload, status: "failed",
+            error: { code: String(failed.error?.code ?? "product_job_attempts_exhausted").slice(0, 100),
+              message: "Source analysis stopped. Retry starts a new source generation." }, updatedAt: this.now().toISOString() },
+          { expectedRevision: row.revision, projectId: row.project_id, transactionClient: client });
+        });
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
     const result = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents d
       WHERE kind='source' AND deleted_at IS NULL AND payload->>'status'=ANY($1::text[])
       AND NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.kind='ingest'
         AND j.payload->>'action' IS NULL
-        AND j.payload->>'sourceId'=d.id AND j.payload->>'sourceGeneration'=d.payload->>'generation'
-        AND j.status IN ('queued','running','succeeded'))
-      ORDER BY updated_at,id LIMIT 100`, [["queued", "parsing", "failed"]]);
+        AND j.payload->>'sourceId'=d.id AND j.payload->>'sourceGeneration'=d.payload->>'generation')
+      ORDER BY updated_at,id LIMIT 100`, [["queued", "parsing"]]);
     let enqueued = deleted.rows.length;
     for (const row of result.rows) {
-      await this.enqueue({ id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload }, row.user_id,
-        { rearmFailed: true, keySuffix: `:reconcile:${row.revision}` });
+      await this.enqueue({ id: row.id, projectId: row.project_id, revision: row.revision, payload: row.payload }, row.user_id);
       enqueued += 1;
     }
-    return { scanned: result.rows.length + deleted.rows.length, enqueued };
+    return { scanned: result.rows.length + stalled.rows.length + deleted.rows.length, enqueued };
   }
 }

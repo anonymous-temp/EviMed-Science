@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sourceUnderstandingSchema } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { ProductJobs } from "../src/productJobs.mjs";
-import { SourceService } from "../src/sourceService.mjs";
+import { SourceService, projectSourceManifestRecord } from "../src/sourceService.mjs";
 import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "../src/sourceUnderstandingRuns.mjs";
 
@@ -30,7 +30,9 @@ async function fixture(t, depth = "structured") {
   const adapter = new SourceUnderstandingRuns({ dispatch: async request => {
     if (!state.dispatchIds.has(request.dispatchId)) { calls.dispatch++; state.dispatchIds.add(request.dispatchId); }
     state.captured = request.input;
-    state.identity = { runId: `run_${calls.dispatch}`, sessionId: `session_${calls.dispatch}`, dispatchId: request.dispatchId };
+    state.identity = { runId: `run_${calls.dispatch}`, sessionId: `session_${calls.dispatch}`, dispatchId: request.dispatchId,
+      workspaceName: "", artifactDirectory: `knowledge-base/.evimed-derived/${request.input.sourceId}/generation-${request.input.generation}-fixture-${"a".repeat(24)}` };
+    await sources.bindUnderstandingLaunch(request.job, state.identity);
     await sources.bindUnderstandingRun(request.job, state.identity);
     return state.identity;
   }, readResult: async () => {
@@ -50,6 +52,15 @@ async function fixture(t, depth = "structured") {
     cancelUnderstanding: async run => { calls.cancel++; state.cancelRequests.push(run); }, cleanupSource: async () => {}, leaseMs: 1000, pollMs: 100 });
   const due = async () => database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp() WHERE user_id=$1 AND status='queued'", [userId]);
   return { database, documents, jobs, sources, source, userId, parser, calls, state, worker, due, adapter };
+}
+
+async function prepareLaunch(f) {
+  const job = await f.jobs.claim(["ingest"], "launch-fixture", { leaseMs: 3000 });
+  const source = await f.sources.beginIngestion(f.userId, f.source.id, { generation: f.source.payload.generation, job });
+  await f.sources.freezeCapture(job, await f.parser.parse());
+  const launch = { sessionId: "session_launch", dispatchId: `source-understanding-${createHash("sha256").update(`${source.id}\0${source.payload.generation}`).digest("hex").slice(0, 32)}`,
+    workspaceName: "source-workspace", artifactDirectory: `knowledge-base/.evimed-derived/${source.id}/generation-${source.payload.generation}-${job.id}-${"b".repeat(24)}` };
+  return { job, source, launch };
 }
 
 test("real PostgreSQL recovery freezes complete input, reuses one dispatch, publishes typed records atomically and preserves history", options, async t => {
@@ -241,6 +252,131 @@ test("private run ownership remains available for cleanup while superseded runs 
     assert.equal(bound.sourceDeleted, action === "delete");
     // Each loop is an independent account; its intentionally pending jobs must
     // not be claimed by the next loop's global worker fixture.
+    await f.database.query("DELETE FROM evimed_control.users WHERE id=$1", [f.userId]);
+  }
+});
+
+test("durable launch intent survives a pre-binding crash and only binds the matching run scope", options, async t => {
+  const f = await fixture(t); const { job, source, launch } = await prepareLaunch(f);
+  await assert.rejects(f.sources.bindUnderstandingLaunch(job, { ...launch, sessionId: undefined }), { code: "source_run_binding_invalid" });
+  await assert.rejects(f.sources.bindUnderstandingRun(job, { ...launch, runId: "run_launch" }), { code: "source_run_binding_conflict" });
+  const persisted = await f.sources.bindUnderstandingLaunch(job, launch);
+  assert.deepEqual(persisted.payload.analysis.launch, launch);
+  const restarted = new SourceService(f.documents, f.jobs);
+  assert.equal((await restarted.bindUnderstandingLaunch(job, launch)).revision, persisted.revision);
+  const owner = await restarted.understandingLaunchForDispatch(f.userId, "default", launch.dispatchId);
+  assert.equal(owner.recoverable, true); assert.equal(owner.artifactDirectory, launch.artifactDirectory);
+  assert.equal(await restarted.understandingLaunchForDispatch("other", "default", launch.dispatchId), null);
+  assert.equal(projectSourceManifestRecord(persisted).payload.analysis.launch, undefined);
+  assert.equal(JSON.stringify(projectSourceManifestRecord(persisted)).includes(launch.artifactDirectory), false);
+  await assert.rejects(restarted.bindUnderstandingRun(job, { ...launch, runId: undefined }), { code: "source_run_binding_invalid" });
+  for (const changed of [{ sessionId: "other_session" }, { workspaceName: "different" }, { artifactDirectory: "different/path" }]) {
+    await assert.rejects(restarted.bindUnderstandingLaunch(job, { ...launch, ...changed }), { code: "source_run_binding_conflict" });
+    await assert.rejects(restarted.bindUnderstandingRun(job, { ...launch, ...changed, runId: "run_launch" }), { code: "source_run_binding_conflict" });
+  }
+  await assert.rejects(restarted.bindUnderstandingLaunch({ ...job, leaseToken: "stale" }, launch), { code: "product_job_lease_lost" });
+  const bound = await restarted.bindUnderstandingRun(job, { ...launch, runId: "run_launch" });
+  assert.equal(bound.payload.analysis.run.id, "run_launch");
+  assert.deepEqual(bound.payload.analysis.launch, launch);
+  const canceled = await restarted.cancel(f.userId, source.id, { expectedRevision: bound.revision });
+  await assert.rejects(restarted.bindUnderstandingLaunch(job, launch), { code: "source_generation_stale" });
+  assert.equal(canceled.payload.pendingRunCancellations[0].id, "run_launch");
+});
+
+test("cancel override and deletion clean protected launch-only scopes without a run id", options, async t => {
+  for (const action of ["cancel", "override", "delete"]) {
+    const f = await fixture(t); const { job, launch } = await prepareLaunch(f);
+    const source = await f.sources.bindUnderstandingLaunch(job, launch);
+    if (action === "cancel") await f.sources.cancel(f.userId, source.id, { expectedRevision: source.revision });
+    else if (action === "delete") await f.sources.remove(f.userId, source.id, { expectedRevision: source.revision });
+    else await f.sources.override(f.userId, source.id, { expectedRevision: source.revision, docType: "note-memo", depth: "skip", reason: "Changed before dispatch" });
+    const owner = await f.sources.understandingLaunchForDispatch(f.userId, "default", launch.dispatchId);
+    assert.equal(owner.recoverable, false); assert.equal(owner.sourceDeleted, action === "delete");
+    await f.due(); await f.worker().tick();
+    if (action === "override") await f.worker().tick();
+    assert.equal(f.calls.cancel, 1);
+    assert.deepEqual(f.state.cancelRequests[0], { userId: f.userId, projectId: "default", runId: null, ...launch });
+    assert.equal(f.calls.dispatch, 0);
+    await f.database.query("DELETE FROM evimed_control.users WHERE id=$1", [f.userId]);
+  }
+});
+
+test("terminal source failures remain stopped across reconciliation until an explicit new generation", options, async t => {
+  const f = await fixture(t); const worker = f.worker();
+  worker.understandingRuns = { execute: async () => { throw Object.assign(new Error("Terminal run failure"), { code: "source_understanding_run_failed" }); } };
+  await worker.tick();
+  const failed = await f.sources.get(f.userId, f.source.id);
+  assert.equal(failed.payload.status, "failed");
+  const duplicate = await f.sources.register(f.userId, { projectId: failed.projectId, connector: failed.payload.connector,
+    path: failed.payload.paths[0], ...failed.payload.fingerprint });
+  assert.equal(duplicate.duplicate, true); assert.equal(duplicate.job, null);
+  const originalJobs = await f.database.query("SELECT id,status,attempts FROM evimed_product.jobs WHERE user_id=$1 ORDER BY id", [f.userId]);
+  for (let i = 0; i < 4; i++) { await f.sources.reconcileJobs(); await worker.tick(); }
+  assert.deepEqual((await f.database.query("SELECT id,status,attempts FROM evimed_product.jobs WHERE user_id=$1 ORDER BY id", [f.userId])).rows, originalJobs.rows);
+  assert.equal((await f.sources.get(f.userId, f.source.id)).revision, failed.revision);
+  await f.sources.retry(f.userId, failed.id, { expectedRevision: failed.revision });
+  for (let i = 0; i < 3; i++) await f.sources.reconcileJobs();
+  const generations = await f.database.query("SELECT payload->>'sourceGeneration' AS generation,count(*)::int AS count FROM evimed_product.jobs WHERE user_id=$1 AND payload->>'action' IS NULL GROUP BY 1 ORDER BY 1", [f.userId]);
+  assert.deepEqual(generations.rows, [{ generation: "1", count: 1 }, { generation: "2", count: 1 }]);
+});
+
+test("reconciliation preserves finite retries then settles a crashed exhausted source exactly once", options, async t => {
+  const f = await fixture(t);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const job = await f.jobs.claim(["ingest"], "finite-attempts", { leaseMs: 1000 });
+    await f.sources.beginIngestion(f.userId, f.source.id, { generation: 1, job });
+    if (attempt < 3) {
+      await f.jobs.fail(f.userId, job.id, job.leaseToken, { code: "source_parser_unavailable", message: "Temporary parser outage." }, { retry: true, delayMs: 0 });
+      await f.sources.reconcileJobs();
+      assert.equal((await f.jobs.get(f.userId, job.id)).status, "queued");
+      assert.equal((await f.sources.get(f.userId, f.source.id)).payload.status, "parsing");
+    } else {
+      await f.database.query("UPDATE evimed_product.jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", [job.id]);
+      assert.equal(await f.jobs.claim(["ingest"], "reap-exhausted", { leaseMs: 1000 }), null);
+    }
+  }
+  assert.equal((await f.sources.get(f.userId, f.source.id)).payload.status, "parsing");
+  await f.sources.reconcileJobs();
+  const settled = await f.sources.get(f.userId, f.source.id);
+  assert.equal(settled.payload.status, "failed");
+  assert.equal(settled.payload.error.code, "product_job_attempts_exhausted");
+  for (let i = 0; i < 4; i++) await f.sources.reconcileJobs();
+  assert.equal((await f.sources.get(f.userId, f.source.id)).revision, settled.revision);
+  assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1", [f.userId])).rowCount, 1);
+});
+
+test("missing initial enqueue is recovered once with the original generation key", options, async t => {
+  const f = await fixture(t);
+  // This is the durable state after source creation commits but enqueue never
+  // reaches storage: a queued source with no generation job.
+  await f.database.query("DELETE FROM evimed_product.jobs WHERE user_id=$1", [f.userId]);
+  await f.sources.reconcileJobs(); await f.sources.reconcileJobs();
+  const jobs = await f.database.query("SELECT idempotency_key,status FROM evimed_product.jobs WHERE user_id=$1", [f.userId]);
+  assert.deepEqual(jobs.rows, [{ idempotency_key: `ingest:${f.source.id}:generation:1`, status: "queued" }]);
+  assert.equal((await f.sources.get(f.userId, f.source.id)).payload.status, "queued");
+});
+
+test("queued exhausted sources settle by CAS without overwriting a concurrent correction", options, async t => {
+  for (const correction of [false, true]) {
+    const f = await fixture(t);
+    const job = await f.jobs.claim(["ingest"], "queued-terminal", { leaseMs: 1000 });
+    await f.jobs.fail(f.userId, job.id, job.leaseToken, { code: "source_parser_unavailable", message: "Stopped before parsing." }, { retry: false });
+    const put = f.documents.put.bind(f.documents);
+    let corrected = false;
+    if (correction) f.documents.put = async (...args) => {
+      if (!corrected && args[1] === "source" && args[3].status === "failed" && args[4].transactionClient) {
+        corrected = true;
+        await f.sources.override(f.userId, f.source.id, { expectedRevision: f.source.revision,
+          docType: "note-memo", depth: "index_only", reason: "Concurrent user correction" });
+      }
+      return put(...args);
+    };
+    await f.sources.reconcileJobs();
+    const current = await f.sources.get(f.userId, f.source.id);
+    assert.equal(current.payload.status, correction ? "queued" : "failed");
+    assert.equal(current.payload.generation, correction ? 2 : 1);
+    assert.equal(corrected, correction);
+    assert.equal((await f.database.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1", [f.userId])).rowCount, correction ? 2 : 1);
     await f.database.query("DELETE FROM evimed_control.users WHERE id=$1", [f.userId]);
   }
 });
