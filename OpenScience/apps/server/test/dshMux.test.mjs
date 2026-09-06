@@ -86,11 +86,14 @@ function startRawMuxServer({ socketPath } = {}) {
     const sockets = new Set();
     /** @type {Record<string, any>[]} */
     const clientFrames = [];
+    /** @type {{ host: string, cookie: string, url: string }[]} */
+    const requests = [];
     const server = createServer((_req, res) => {
       res.writeHead(426, { Connection: "Upgrade", Upgrade: "websocket" });
       res.end("upgrade required");
     });
     server.on("upgrade", (req, socket) => {
+      requests.push({ host: String(req.headers.host ?? ""), cookie: String(req.headers.cookie ?? ""), url: String(req.url ?? "") });
       sockets.add(socket);
       socket.once("close", () => sockets.delete(socket));
       const acceptKey = String(req.headers["sec-websocket-key"] ?? "");
@@ -116,6 +119,7 @@ function startRawMuxServer({ socketPath } = {}) {
         url: socketPath ? "http://runtime.local" : `http://127.0.0.1:${address.port}`,
         socketPath: socketPath ?? null,
         clientFrames,
+        requests,
         onConnection: (fn) => { onConnection = fn; },
         close: () => new Promise((done) => {
           for (const socket of sockets) socket.destroy();
@@ -374,10 +378,11 @@ test("the mux dials over a unix socket the same way the unary path does", async 
   const server = await startRawMuxServer({ socketPath });
   let peer = null;
   server.onConnection((socket) => { peer = socket; });
-  const mux = new DshMux({ url: server.url, socketPath });
+  const mux = new DshMux({ url: server.url, socketPath, cookie: "dsh-auth-test=v1.test" });
   const controller = new AbortController();
   try {
     await mux.connect({ signal: controller.signal });
+    assert.deepEqual(server.requests, [{ host: "runtime.local", cookie: "dsh-auth-test=v1.test", url: "/api/remote.mux" }]);
     const collected = drain(mux.open("$events", {}, { signal: controller.signal }));
     const streamId = await streamIdFor(server, "$events");
     peer.write(serverTextFrame({ type: "item", streamId, value: { viaUnixSocket: true } }));
