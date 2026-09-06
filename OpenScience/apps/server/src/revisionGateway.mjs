@@ -25,10 +25,16 @@ export function createRevisionGatewayHandler({ runtimeManager, store, agentRuns 
       }
       try { await runtimeManager.assertActiveEviMedWorkloadToken(token); }
       catch { throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable."); }
-      const result = await agentRuns.consumeRepairAuthorization(project, {
-        ...body,
-        runtimeGeneration: identity.runtimeGeneration,
-      });
+      const result = await agentRuns.consumeRepairAuthorization(
+        project,
+        { ...body, runtimeGeneration: identity.runtimeGeneration },
+        {
+          revalidateRuntimeGeneration: async () => {
+            try { return (await runtimeManager.assertActiveEviMedWorkloadToken(token)).runtimeGeneration; }
+            catch { return null; }
+          },
+        },
+      );
       if (!result.authorized) throw new HttpError(409, "deliverable_revision_unauthorized", "No current repair authorization matches these accepted bytes.");
       sendJson(res, 200, { authorized: true });
     } catch (error) {

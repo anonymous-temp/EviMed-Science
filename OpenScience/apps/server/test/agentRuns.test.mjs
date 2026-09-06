@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
@@ -5120,12 +5121,60 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
       { runId: "kernel-run-1", deliverableId: "review" },
     );
     assert.match(authorization.acceptedDigest, /^[0-9a-f]{64}$/);
-    const lifecycle = { runtimeGeneration: "runtime-generation-1", controlRunRepairing: async () => true };
+    const lifecycle = {
+      runtimeGeneration: "runtime-generation-1",
+      controlRunRepairing: async () => true,
+      revalidateRuntimeGeneration: async () => "runtime-generation-1",
+    };
     assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, runtimeGeneration: "replacement-runtime" })).authorized, false,
       "a replacement runtime cannot consume the prior generation's grant");
     assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, controlRunRepairing: async () => false })).authorized, false,
       "a canceled or terminal control-plane run invalidates its outstanding grant");
-    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, true);
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, revalidateRuntimeGeneration: async () => "runtime-generation-2" })).authorized, false,
+      "a runtime replaced while the consume waits for storage cannot cross the claim linearization point");
+    const barrier = path.join(root, "cross-process-consume-barrier");
+    await mkdir(barrier, { recursive: true });
+    const childScript = `
+      import { readdir, writeFile } from "node:fs/promises";
+      import path from "node:path";
+      const { consumeRepairAuthorizationForTest } = await import(process.env.AGENT_RUNS_MODULE);
+      const project = JSON.parse(process.env.PROJECT);
+      const input = JSON.parse(process.env.AUTHORIZATION);
+      const result = await consumeRepairAuthorizationForTest(project, input, {
+        runtimeGeneration: "runtime-generation-1",
+        revalidateRuntimeGeneration: async () => "runtime-generation-1",
+        controlRunRepairing: async () => {
+          await writeFile(path.join(process.env.BARRIER, String(process.pid)), "ready");
+          for (let attempt = 0; attempt < 1000; attempt += 1) {
+            if ((await readdir(process.env.BARRIER)).length >= 2) return true;
+            await new Promise((resolve) => setTimeout(resolve, 2));
+          }
+          throw new Error("consume barrier timeout");
+        },
+      });
+      process.stdout.write(JSON.stringify(result));
+    `;
+    const runConsumer = () => new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ["--input-type=module", "--eval", childScript], {
+        env: {
+          ...process.env,
+          AGENT_RUNS_MODULE: new URL("../src/agentRuns.mjs", import.meta.url).href,
+          PROJECT: JSON.stringify(project),
+          AUTHORIZATION: JSON.stringify(authorization),
+          BARRIER: barrier,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += chunk; });
+      child.stderr.on("data", (chunk) => { stderr += chunk; });
+      child.once("error", reject);
+      child.once("exit", (code) => code === 0 ? resolve(JSON.parse(stdout)) : reject(new Error(stderr || `consumer exited ${code}`)));
+    });
+    const crossProcess = await Promise.all([runConsumer(), runConsumer()]);
+    assert.deepEqual(crossProcess.map((result) => result.authorized).sort(), [false, true],
+      "the filesystem claim must allow only one consumer across Node processes");
     assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, false, "the authorization must be one-time");
     assert.equal((await consumeRepairAuthorizationForTest(project, { ...authorization, acceptedDigest: "f".repeat(64) }, lifecycle)).authorized, false);
     await assert.rejects(

@@ -24,8 +24,9 @@ async function withGateway(fn) {
       async requireProject(_user, id) { assert.equal(id, "project-1"); return project; },
     },
     agentRuns: {
-      async consumeRepairAuthorization(actualProject, body) {
+      async consumeRepairAuthorization(actualProject, body, lifecycle) {
         assert.equal(actualProject, project);
+        assert.equal(await lifecycle.revalidateRuntimeGeneration(), "runtime-generation-1");
         consumed.push(body);
         return { authorized: true };
       },
@@ -51,7 +52,7 @@ test("the internal revision gateway consumes only the active workload's bound au
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { authorized: true });
     assert.deepEqual(consumed, [{ ...body, runtimeGeneration: "runtime-generation-1" }]);
-    assert.equal(tokenChecks(), 2, "runtime identity must be revalidated after the request body is read");
+    assert.equal(tokenChecks(), 3, "runtime identity must be revalidated after body read and again at the storage claim");
   });
 });
 

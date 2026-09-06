@@ -10,6 +10,7 @@ import {
   safeId,
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
+  writeFileExclusiveNoFollow,
 } from "./security.mjs";
 import {
   citationIntegrityIssues,
@@ -1985,7 +1986,11 @@ async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration 
       authorization.runId, authorization.deliverableId, authorization.acceptedDigest,
     ])).digest("hex");
     const target = path.join(authorizationDirectory, `${key}.json`);
+    const claim = path.join(authorizationDirectory, `${key}.claimed.json`);
     await withProjectStorageMutation(project, async () => {
+      if (await readTextFileNoFollow(project.rootDir, claim, "").catch(() => "")) {
+        throw new Error("repair authorization for these accepted bytes was already consumed");
+      }
       const existing = await readTextFileNoFollow(project.rootDir, target, "").catch(() => "");
       if (existing) {
         let current;
@@ -2015,10 +2020,11 @@ async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration 
 
 /** Consume one repair authorization whose accepted bytes already have a private snapshot.
  * @param {Record<string, any>} project @param {Record<string, any>} input
- * @param {{ runtimeGeneration?: string|null, controlRunRepairing?: (controlPlaneRunId: string) => Promise<boolean> }} [options] */
+ * @param {{ runtimeGeneration?: string|null, controlRunRepairing?: (controlPlaneRunId: string) => Promise<boolean>, revalidateRuntimeGeneration?: () => Promise<string|null> }} [options] */
 async function consumeRepairAuthorization(project, input, {
   runtimeGeneration = null,
   controlRunRepairing = async () => false,
+  revalidateRuntimeGeneration = async () => null,
 } = {}) {
   const runId = typeof input?.runId === "string" ? input.runId : "";
   const deliverableId = typeof input?.deliverableId === "string" ? input.deliverableId : "";
@@ -2027,7 +2033,9 @@ async function consumeRepairAuthorization(project, input, {
     return { authorized: false };
   }
   const key = createHash("sha256").update(JSON.stringify([runId, deliverableId, acceptedDigest])).digest("hex");
-  const target = path.join(project.metaDir, "repair-authorizations", `${key}.json`);
+  const directory = path.join(project.metaDir, "repair-authorizations");
+  const target = path.join(directory, `${key}.json`);
+  const claim = path.join(directory, `${key}.claimed.json`);
   return withProjectStorageMutation(project, async () => {
     const text = await readTextFileNoFollow(project.rootDir, target, "").catch(() => "");
     if (!text) return { authorized: false };
@@ -2044,6 +2052,21 @@ async function consumeRepairAuthorization(project, input, {
       || Date.parse(authorization.expiresAt) <= Date.now()
     ) return { authorized: false };
     if (!(await controlRunRepairing(authorization.controlPlaneRunId))) return { authorized: false };
+    if (await revalidateRuntimeGeneration() !== runtimeGeneration) return { authorized: false };
+    try {
+      await writeFileExclusiveNoFollow(project.rootDir, claim, `${JSON.stringify({
+        formatVersion: 1,
+        controlPlaneRunId: authorization.controlPlaneRunId,
+        runtimeGeneration,
+        runId,
+        deliverableId,
+        acceptedDigest,
+        claimedAt: new Date().toISOString(),
+      }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    } catch (error) {
+      if (error?.code === "EEXIST") return { authorized: false };
+      throw error;
+    }
     authorization.consumedAt = new Date().toISOString();
     await writeFileAtomicNoFollow(project.rootDir, target, `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     return { authorized: true };
@@ -3901,9 +3924,10 @@ export class AgentRunStore {
     }
   }
 
-  async consumeRepairAuthorization(project, input) {
+  async consumeRepairAuthorization(project, input, { revalidateRuntimeGeneration = async () => null } = {}) {
     return consumeRepairAuthorization(project, input, {
       runtimeGeneration: input?.runtimeGeneration,
+      revalidateRuntimeGeneration,
       controlRunRepairing: async (controlPlaneRunId) => {
         const current = (await this.list(project)).find((candidate) => candidate.id === controlPlaneRunId);
         return current?.status === "running"
