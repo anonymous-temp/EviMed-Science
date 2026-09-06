@@ -488,6 +488,8 @@ export function loadConfig(overrides = {}) {
       overrides.backupStateFile ??
       process.env.OPEN_SCIENCE_BACKUP_STATE_FILE ??
       (backupDir ? path.join(backupDir, ".open-science-backup-state.json") : ""),
+    postgresBackupStateFile: overrides.postgresBackupStateFile ?? process.env.OPEN_SCIENCE_POSTGRES_BACKUP_STATE_FILE ?? "",
+    postgresBackupMaxAgeSeconds: Number(overrides.postgresBackupMaxAgeSeconds ?? process.env.OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS ?? 90000),
     backupIntervalSeconds: Number(
       overrides.backupIntervalSeconds ?? process.env.OPEN_SCIENCE_BACKUP_INTERVAL_SECONDS ?? 86_400,
     ),

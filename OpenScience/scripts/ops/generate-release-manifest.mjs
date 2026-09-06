@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,17 +67,20 @@ const inputPaths = [
   "scripts/dev/patch-ai4s-integrity-auditor.py",
   "examples/climate-trends",
   "deploy/web/Dockerfile",
+  "deploy/web/postgres-backup-status",
   "deploy/memos/Dockerfile",
   "deploy/memos-engine",
   "deploy/memos-ollama",
   "deploy/document-parser",
   "deploy/openlist",
   "deploy/specialist-adapter",
+  "deploy/host",
   "scripts/ops/archive-crypto.mjs",
   "scripts/ops/backup-archive.mjs",
   "scripts/ops/backup-data.sh",
   "scripts/ops/backup-retention.mjs",
   "scripts/ops/backup-scheduler.mjs",
+  "scripts/ops/postgres-backup.py",
   "scripts/ops/configure-backup.mjs",
   "scripts/ops/configure-local-auth.mjs",
   "scripts/ops/configure-production-state.mjs",

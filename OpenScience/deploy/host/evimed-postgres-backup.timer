@@ -1,0 +1,11 @@
+[Unit]
+Description=Run EviMed PostgreSQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Asia/Shanghai
+RandomizedDelaySec=20m
+Persistent=true
+Unit=evimed-postgres-backup.service
+
+[Install]
+WantedBy=timers.target
