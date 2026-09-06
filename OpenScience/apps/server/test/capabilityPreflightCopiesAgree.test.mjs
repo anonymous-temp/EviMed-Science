@@ -126,3 +126,33 @@ test("every copy of a capability's preflight is the same file", async () => {
     + `holds. Change every copy together.\n${drifted.join("\n")}`,
   );
 });
+
+test("shipped preflight trees include every canonical sibling Python helper", async () => {
+  const missingOrChanged = [];
+  let compared = 0;
+  for (const capability of await capabilityNames("capabilities")) {
+    const sourceDir = path.join(repoRoot, "capabilities", capability, "scripts");
+    let files;
+    try { files = await readdir(sourceDir, { withFileTypes: true }); }
+    catch (error) { if (error.code === "ENOENT") continue; throw error; }
+    if (!files.some(file => file.name === "preflight.py")) continue;
+    for (const root of roots.slice(1)) {
+      const copyDir = path.join(repoRoot, root.dir, capability, "scripts");
+      let copyExists;
+      try { copyExists = (await stat(path.join(copyDir, "preflight.py"))).isFile(); }
+      catch (error) { if (error.code !== "ENOENT") throw error; copyExists = false; }
+      if (!copyExists && root.dir !== "capability-skills") continue;
+      for (const file of files.filter(file => file.isFile() && file.name.endsWith(".py"))) {
+        const expected = await readFile(path.join(sourceDir, file.name));
+        const actual = await readFile(path.join(copyDir, file.name)).catch(error => {
+          if (error.code !== "ENOENT") throw error;
+          return null;
+        });
+        compared++;
+        if (!actual?.equals(expected)) missingOrChanged.push(`${root.dir}/${capability}/scripts/${file.name}`);
+      }
+    }
+  }
+  assert.ok(compared > 0, "No Python script copies were compared.");
+  assert.deepEqual(missingOrChanged, [], "Missing or changed Python helpers make a copied preflight unexecutable.");
+});
