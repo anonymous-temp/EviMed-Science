@@ -152,6 +152,23 @@ function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
   return childSessionId
 }
 
+/** Whether a one-shot submission grant still names this exact repair.
+ * @param {Record<string, any>} entry @param {Record<string, any>|undefined} item
+ * @param {Record<string, any>|undefined} grant @returns {boolean} */
+function revisionSubmissionGrantMatches(entry, item, grant) {
+  if (
+    !grant
+    || !item
+    || grant.planRevision !== entry.plan?.revision
+    || grant.contractKind !== item.contractKind
+    || grant.capability !== item.capability
+  ) return false
+  if (grant.kind === 'accepted-revision') return grant.revisionId === item.revisionId
+  return grant.kind === 'control-plane-repair'
+    && grant.contextRevision === entry.contextRevision
+    && item.status !== 'accepted'
+}
+
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
@@ -320,11 +337,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const attempts = entry.attempts.get(id) ?? 0
     const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === id)
     const revisionGrant = entry.revisionSubmissionGrants.get(id)
-    const grantMatches = revisionGrant
-      && revisionGrant.revisionId === item?.revisionId
-      && revisionGrant.planRevision === entry.plan?.revision
-      && revisionGrant.contractKind === item?.contractKind
-      && revisionGrant.capability === item?.capability
+    const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
     if (revisionGrant && !grantMatches) entry.revisionSubmissionGrants.delete(id)
     if (attempts < config.deliveryAttemptLimit || grantMatches) return undefined
     return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。请调用 evimed_complete_run{partial:true} 交付已完成的部分。`
@@ -644,11 +657,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // An unreadable package within the separate structural allowance did
         // not spend an ordinary attempt, so it must not spend this grant.
         const revisionGrant = entry.revisionSubmissionGrants.get(item.id)
-        const grantMatches = revisionGrant
-          && revisionGrant.revisionId === item.revisionId
-          && revisionGrant.planRevision === entry.plan?.revision
-          && revisionGrant.contractKind === item.contractKind
-          && revisionGrant.capability === item.capability
+        const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
         if (!structuralAllowanceApplies && grantMatches) entry.revisionSubmissionGrants.delete(item.id)
         const charged = entry.attempts.get(item.id) ?? 0
         await recordGateRun(store(), entry, item, verdict, charged)
@@ -734,6 +743,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
         Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
         entry.revisionSubmissionGrants.set(item.id, {
+          kind: 'accepted-revision',
           revisionId,
           planRevision: entry.plan?.revision ?? 0,
           contractKind: item.contractKind,
@@ -966,6 +976,17 @@ async function injectBriefRevision(ctx, agent, entry, config) {
   // model-visible context revision while repeated steps remain de-duplicated.
   if (entry.contextInjected && (!contextRevision || contextRevision === entry.contextRevision)) return
   const indexedRunId = String(index?.runId ?? '')
+  // The control plane keeps a server-requested repair on the same run id and
+  // commits a new protected context revision after the prior turn completed.
+  // If no local receipt was accepted there is nothing to authorize through
+  // `evimed_revise_deliverable`, but the repaired bytes still need one bounded
+  // submission after the ordinary ceiling. A normal follow-up receives a new
+  // run id; an accepted package still needs the private-snapshot grant above.
+  const controlPlaneRepair = entry.contextInjected
+    && entry.completed
+    && Boolean(contextRevision)
+    && contextRevision !== entry.contextRevision
+    && indexedRunId === entry.runId
   if (contextRevision && indexedRunId && indexedRunId !== entry.runId) resetRunState(entry, indexedRunId)
   entry.contextInjected = true
   entry.contextRevision = contextRevision
@@ -973,6 +994,19 @@ async function injectBriefRevision(ctx, agent, entry, config) {
   // context. A revision-bearing index is control-plane authority for the new
   // run; a legacy index keeps the native workflow's established identity.
   if (contextRevision || !entry.runId) entry.runId = indexedRunId
+  if (controlPlaneRepair) {
+    for (const item of entry.items) {
+      if (item.status === 'accepted' || (entry.attempts.get(item.id) ?? 0) < config.deliveryAttemptLimit) continue
+      entry.revisionSubmissionGrants.set(item.id, {
+        kind: 'control-plane-repair',
+        contextRevision,
+        planRevision: entry.plan?.revision ?? 0,
+        contractKind: item.contractKind,
+        capability: item.capability,
+      })
+    }
+    entry.completed = false
+  }
   entry.limits = {
     maxSteps: Number(index?.budget?.maxSteps ?? config.maxSteps) || 0,
     maxTokens: Number(index?.budget?.maxTokens ?? config.maxTokens) || 0,

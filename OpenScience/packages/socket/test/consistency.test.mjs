@@ -564,8 +564,8 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3 } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2 } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -593,7 +593,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     readText: async (/** @type {string} */ target) => target === "//runtime/revision-token" ? "test-workload-token" : target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance: 2, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
   };
@@ -902,6 +902,35 @@ test("rewriting the plan invalidates an unused revision submission grant", async
   } finally {
     await new Promise((resolve) => server.close(() => resolve(undefined)));
   }
+});
+
+test("a same-run control-plane repair gets one submission after an unaccepted ceiling", async () => {
+  const f = await nativePolicyFixture({ deliveryAttemptLimit: 1, structuralAttemptAllowance: 0 });
+  const briefRoot = "/workspace/.evimed-brief/sessions/native-session";
+  f.files.set(`${briefRoot}/index.json`, JSON.stringify({ runId: "repair-run", contextRevision: "request-initial" }));
+  f.files.set(`${briefRoot}/context.md`, "<required-skills>research-brief</required-skills>");
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["Initial attempt"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+  });
+
+  const rejected = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(rejected.value.ok, false, "the first package is unaccepted at the ordinary ceiling");
+  assert.equal((await f.execute("evimed_complete_run", { partial: true })).value.ok, true);
+
+  f.files.set(`${briefRoot}/index.json`, JSON.stringify({ runId: "repair-run", contextRevision: "request-server-repair" }));
+  f.files.set(`${briefRoot}/context.md`, "<required-skills>research-brief</required-skills>\n<server-repair>repair the rejected package</server-repair>");
+  await f.step(2);
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nCorrected after the server repair.\n");
+
+  const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
+  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  assert.equal(receipt.entries[0].attempt, 2, "the repair keeps the total attempt count");
+  const replayed = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(replayed.error?.code, "GUARDED", "the repair context grants exactly one extra submission");
 });
 
 test("a model cannot open an accepted revision before the control plane authorizes it", async () => {
