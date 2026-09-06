@@ -202,6 +202,15 @@ test("the guidance the model reads names every mounted capability and no unmount
   assert.ok(text.includes("如实说明"), "the catalogue is the edge of what we can claim to do");
 });
 
+test("ordinary orchestration guidance excludes internal source pipelines and their contract catalogue", () => {
+  const text = buildGuidanceText([
+    { id: "public-capability", description: "Public work", whenToUse: "For public work", produces: [{ contractKind: "research-brief" }] },
+    { id: "source-understanding", visibility: "internal", description: "Background work", whenToUse: "Only a frozen source job", produces: [{ contractKind: "source-understanding" }] },
+  ], { askUserEnabled: false, capsuleActive: false, reviewEnabled: false });
+  assert.ok(text.includes("public-capability"));
+  assert.equal(text.includes("source-understanding"), false);
+});
+
 test("a deliverable is rejected as a value, and the model can act on the issues", async () => {
   const ctx = harness();
   const state = { attempts: 0 };
@@ -682,6 +691,23 @@ test("a successful delegation receipt exposes the kernel-owned child session id"
 
   assert.equal(result.value.ok, true);
   assert.equal(result.value.data.childSessionId, "child-session-1");
+});
+
+test("generic delegation cannot start an internal pipeline while direct native planning remains available", async () => {
+  let children = 0;
+  const f = await nativePolicyFixture({ capabilities: [{ id: "source-understanding", visibility: "internal", skills: [], tools: [], persona: "Source analyst",
+    produces: [{ contractKind: "source-understanding", outputs: [{ path: "source-understanding.json", required: true }] }] }],
+    subagentStart: () => { children++; return { id: "unexpected-child", result: Promise.resolve({ stopReason: "completed", output: "done" }) }; } });
+  await f.step(1);
+  const planned = await f.execute("evimed_plan", { action: "write", clarifications: ["Frozen source supplied by the ingestion job"],
+    deliverables: [{ id: "source-result", contractKind: "source-understanding", capability: "source-understanding", title: "Source understanding", dependsOn: [] }] });
+  assert.equal(planned.value.ok, true);
+  const denied = await f.execute("evimed_delegate", { deliverableId: "source-result", inputs: {} });
+  assert.equal(denied.value.code, "capability_background_only");
+  assert.equal(children, 0);
+  const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "source-result" });
+  assert.equal(submitted.value.ok, false);
+  assert.ok(submitted.value.issues.some((/** @type {any} */ issue) => issue.code === "required_output_missing"), "direct submission must still reach the source contract validator");
 });
 
 test("a native root without a brief gets one stable isolated workflow id, while a bound run keeps its id", async () => {

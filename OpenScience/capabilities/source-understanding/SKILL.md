@@ -40,10 +40,41 @@ at most 100 anchors across the output and at most 32 distinct cited units. Keep
 the complete output at or below 100,000 UTF-8 bytes (not character count). Select substantive findings within
 these limits; the complete source remains preserved separately.
 
-Preserve an identical `source-understanding-input.json` in the deliverable and
-submit both files with contract kind `source-understanding` through
-`evimed_submit_deliverable`. Fix deterministic schema or quote errors in place.
-The control plane will independently recheck against its immutable capture.
-Report semantic ambiguity through unknown reasons, never through fabricated
-confidence or a claim of zero omissions. Model and cost identity come from the
-gateway receipt, not from this document.
+## Before delivery: review anchors, then clean explanatory prose
+
+1. **`traceability-review`**: audit every known slot, claim and method against
+   the frozen input. For each anchor, locate its named unit and compare the
+   exact quote and global UTF-16 range; then inspect whether the interpretation
+   retains the source's conditions, uncertainty, quantities and dates. Repair
+   unsupported interpretations or mark the affected slot unknown with a reason.
+   This source contract resolves anchors against its preserved document, not
+   external DOI registries; do not fetch another source or claim an external
+   citation audit. There are no generated figures to certify in this package.
+   Preserve the identical input copy. Finish this review and repair the draft
+   before proceeding; do not submit yet, because acceptance freezes its bytes.
+2. **`manuscript-humanize`**: load the language-matched writing rules and apply
+   them only to the summary and the method draft's explanatory prose. First save
+   a local pre-edit copy and inventory its evidence arrays, source identifiers,
+   generation, unit identifiers, ranges, quotes, quantities and dates. Edit the
+   JSON prose fields in place; never run a whole-document prose rewrite over
+   this structured record. Leave slots, claims, unknown reasons and the audit
+   state unchanged. In method prose, preserve every number, unit, date,
+   condition and statement of uncertainty. Compare the edited fields with the
+   pre-edit copy and undo any change to that protected set. This is wording
+   cleanup, not another opportunity to infer a procedure or change a finding.
+   Run the existing `manuscript-humanize` skill's `scripts/verify_preserved.py`
+   helper with `--before` set to the pre-edit copy and `--after` set to the final
+   JSON; resolve the helper against that skill's directory. Repair any changed
+   numeric or citation tokens it reports. That helper does not understand this
+   contract's evidence-array schema: compare those arrays and the non-prose
+   fields as JSON values against the pre-edit copy as well. The final source
+   contract check resolves every preserved quote and offset against the input.
+
+Write the anchor-review findings and a concise account of wording changes to
+`revision-notes.md`, outside the customer summary and method fields. Explicitly
+record that the question-based omission audit has not run; the two steps above
+do not establish an omission rate. Submit the final JSON and identical input
+copy through `evimed_submit_deliverable` after cleanup, so the final
+receipt covers the actual delivered bytes. The control plane independently
+rechecks the output against its immutable capture. Model and cost identity come
+from the gateway receipt, never from a claim in this document.

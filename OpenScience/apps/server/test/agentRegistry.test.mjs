@@ -50,19 +50,24 @@ const officialCapabilityRoot = path.resolve(
   "../../../capabilities",
 );
 
-test("the public registry includes every canonical capability plus the answer line", async () => {
+test("the public registry excludes internal pipelines while trusted lookup retains them", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
   const ids = registry.list().map((agent) => agent.id);
-  assert.equal(ids.length, 17);
-  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "source-understanding", "open-domain-answer"]) {
+  assert.equal(ids.length, 16);
+  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer"]) {
     assert.ok(ids.includes(id), `${id} is absent from the public capability catalogue`);
   }
+  assert.equal(ids.includes("source-understanding"), false);
+  assert.equal(registry.get("source-understanding").visibility, "internal");
+  assert.ok(registry.getPackage("source-understanding"));
+  assert.equal(registry.list({ includeInternal: true }).length, 17);
 });
 
 test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
   assert.deepEqual(registry.get("source-understanding").requiredTools, []);
   const { manifest } = (await dshCapabilities()).find(item => item.id === "source-understanding");
+  assert.equal(validateCapabilityManifest({ ...manifest, visibility: "accidental" }).ok, false);
   const tools = delegationToolFilter(manifest);
   for (const required of ["read", "write", "evimed_submit_deliverable"]) assert.ok(tools.includes(required));
 });

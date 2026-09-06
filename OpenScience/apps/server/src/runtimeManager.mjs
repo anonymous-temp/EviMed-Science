@@ -2555,6 +2555,9 @@ export class RuntimeManager {
     await this.enforceProjectQuota(project);
     let existing = this.runtimes.get(key);
     if (existing && existing.workspaceDir !== project.workspaceDir) {
+      // Opening the interactive workspace is not permission to interrupt a
+      // bounded source/agenda run. Only its owning workflow releases it.
+      this.assertInteractiveRuntimeAvailable(project);
       await this.stop(project);
       existing = null;
     }

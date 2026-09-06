@@ -109,6 +109,8 @@ export function validateCapabilityManifest(value) {
   if (!whenToUse) issues.push({ code: 'capability_invalid', message: 'whenToUse is required — one sentence saying when to delegate here.', field: 'whenToUse' })
   const persona = String(raw.persona ?? '').trim()
   if (!persona) issues.push({ code: 'capability_invalid', message: 'persona is required — the delegated child runs with it.', field: 'persona' })
+  const visibility = raw.visibility ?? 'public'
+  if (typeof visibility !== 'string' || !['public', 'internal'].includes(visibility)) issues.push({ code: 'capability_invalid', message: 'visibility must be public or internal.', field: 'visibility' })
 
   const skills = toStringArray(raw.skills)
   if (!skills.length) issues.push({ code: 'capability_invalid', message: 'skills[] is required — delegation pre-injects them, which is what makes skillsLoaded true by construction.', field: 'skills' })
@@ -194,6 +196,7 @@ export function validateCapabilityManifest(value) {
     description,
     whenToUse,
     persona,
+    ...(visibility === 'internal' ? { visibility } : {}),
     skills,
     tools,
     produces: normalizedProduces,

@@ -1,4 +1,5 @@
 id: source-understanding
+visibility: internal
 version: 1.0.0
 title: Source Understanding
 category: Source Analysis
@@ -11,6 +12,7 @@ persona: |
 safetyClass: general
 skills:
 - source-understanding
+- manuscript-humanize
 tools: []
 produces:
 - contractKind: source-understanding
@@ -19,6 +21,8 @@ produces:
     required: true
   - path: source-understanding-input.json
     required: true
+  - path: revision-notes.md
+    required: false
   checks:
   - requiredOutputsExist
   - skillsLoaded

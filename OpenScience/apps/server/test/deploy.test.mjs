@@ -1579,7 +1579,10 @@ test("a capability's two skill copies never drift apart by more than their known
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 26,
     "drug-selection": 18,
-    "mendelian-randomization": 18,
+    // The hosted-input/replay changes propagated all 18 pre-delivery and
+    // revision-notes lines into the retained copy; none was removed. All three
+    // MR skill bodies now intentionally agree after the DSH-only kernel flip.
+    "mendelian-randomization": 0,
     "meta-analysis": 18,
     "off-label-analysis": 18,
     "peer-review": 18,
