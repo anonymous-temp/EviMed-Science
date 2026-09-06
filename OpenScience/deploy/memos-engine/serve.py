@@ -6,15 +6,71 @@ import asyncio
 import importlib
 import json
 import logging
+import math
 import sys
 import time
 from typing import Any, Awaitable, Callable
+import urllib.request
 
 ASGI = Callable[[dict[str, Any], Callable, Callable], Awaitable[None]]
 ROUTES = frozenset({
     "/health", "/product/add", "/product/search", "/product/get_memory",
     "/product/delete_memory", "/product/scheduler/status",
 })
+HEALTH_BODY_MAX_BYTES = 64 * 1024
+EMBEDDING_MODEL = "bge-m3:latest"
+EMBEDDING_DIMENSIONS = 1024
+
+
+def _health_json(url: str, timeout: float, payload: dict[str, Any] | None = None) -> dict:
+    """Read a bounded response from one deployment-owned health dependency."""
+    request = urllib.request.Request(
+        url, data=json.dumps(payload).encode() if payload is not None else None,
+        headers={"accept": "application/json", "content-type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        if response.status != 200:
+            raise ValueError("Health dependency did not return success")
+        body = response.read(HEALTH_BODY_MAX_BYTES + 1)
+    if len(body) > HEALTH_BODY_MAX_BYTES:
+        raise ValueError("Health response exceeded its byte limit")
+    result = json.loads(body)
+    if not isinstance(result, dict):
+        raise ValueError("Health response was not an object")
+    return result
+
+
+def check_health() -> bool:
+    """Require a working index API and a warm, finite embedding from its model.
+
+    The Ollama image has no HTTP client. This existing Python image performs
+    readiness without importing MemOS, loading provider keys, or logging vectors.
+    The caller-facing recall deadlines are independent of this startup probe.
+    """
+    stage = "engine"
+    try:
+        engine = _health_json("http://127.0.0.1:8000/health", timeout=2)
+        if any(engine.get(key) != value for key, value in {
+            "status": "healthy", "service": "memos", "version": "1.0.1",
+        }.items()):
+            raise ValueError("Memory API is not ready")
+        stage = "embedding"
+        result = _health_json("http://evimed-memos-ollama:11434/api/embed", timeout=6, payload={
+            "model": EMBEDDING_MODEL, "input": "EviMed embedding readiness", "keep_alive": -1,
+        })
+        embeddings = result.get("embeddings")
+        if result.get("model") != EMBEDDING_MODEL or not isinstance(embeddings, list) or len(embeddings) != 1:
+            raise ValueError("Embedding response does not match the configured model")
+        vector = embeddings[0]
+        if not isinstance(vector, list) or len(vector) != EMBEDDING_DIMENSIONS or not all(
+            isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            for value in vector
+        ) or not any(vector):
+            raise ValueError("Embedding vector is not usable")
+        return True
+    except (OSError, ValueError, TypeError, OverflowError):
+        print(json.dumps({"event": "memory_engine_health_failed", "stage": stage}), flush=True)
+        return False
 
 
 def silence_upstream_logging() -> None:
@@ -91,4 +147,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--health"]:
+        raise SystemExit(0 if check_health() else 1)
     main()
