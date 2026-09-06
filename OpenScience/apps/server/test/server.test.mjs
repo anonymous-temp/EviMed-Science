@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import fsp, { chmod, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -3478,6 +3478,179 @@ test("account export returns only the current user's scoped projects", async () 
     assert.equal(accountJson.includes("passwordHash"), false);
     assert.equal(accountJson.includes("csrf"), false);
     assert.equal(accountJson.includes("sess_"), false);
+  });
+});
+
+for (const scope of ["project", "account"]) {
+  test(`${scope} export preserves customer history and skips native runtime installations and credentials`, async () => {
+    await withAuthApp(async ({ app, base }) => {
+      const { auth } = await login(base);
+      const user = await app.store.userById("alice");
+      const project = await app.store.projectFor(user, "paper1", "Paper 1");
+      const historyRoot = "runtime/container-runtime/dsh-home/sessions";
+      const customerFiles = {
+        "workspace/report.md": "customer research report",
+        "workspace/artifacts/evidence.json": '{"claim":"customer evidence"}',
+        "workspace/knowledge-base/source.md": "customer knowledge source",
+        ".openscience/runs.jsonl": '{"id":"customer-run","sessionId":"native-session"}\n',
+        ".openscience/provenance.jsonl": '{"id":"customer-provenance"}\n',
+        ".openscience/provenance.jsonl.1": '{"id":"earlier-provenance"}\n',
+        ".openscience/research-sessions.json": '{"version":1,"sessions":[]}',
+        ".openscience/tasks.jsonl": '{"id":"customer-task"}\n',
+        [`${historyRoot}/native-session/session.json`]: '{"id":"native-session"}',
+        [`${historyRoot}/native-session/events.jsonl`]: '{"message":"customer first turn"}\n{"message":"customer second turn"}\n',
+      };
+      const internalFiles = [
+        "runtime/container-runtime/dsh-home/.credentials.yaml",
+        "runtime/container-runtime/dsh-home/evimed-workload.token",
+        "runtime/container-runtime/dsh-home/control-plane-patch.yml",
+        "runtime/container-runtime/dsh-home/profiles/evimed-runtime/package.json",
+        "runtime/container-runtime/dsh-home/profiles/evimed-runtime/browser-auth-seed",
+        "runtime/container-runtime/dsh-home/profiles/evimed-runtime/browser-password",
+        "runtime/container-runtime/xdg-config/provider-api-key",
+        "runtime/container-runtime/xdg-data/cache.bin",
+        "runtime/container-runtime/home/.env",
+        "runtime/container-runtime/control/dsh.sock",
+        ".openscience/runtime-state.json",
+        ".openscience/private-api-key",
+        "provider-api-key",
+      ];
+      for (const [relative, content] of Object.entries(customerFiles)) {
+        const file = path.join(project.rootDir, relative);
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, content);
+      }
+      for (const relative of internalFiles) {
+        const file = path.join(project.rootDir, relative);
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, "fake-internal-credential-do-not-export".repeat(1000));
+      }
+      // Native DSH profiles link image-owned package roots, absent on the host.
+      await symlink("/opt/evimed/dsh-seed/profiles/evimed-runtime/node_modules",
+        path.join(project.runtimeDir, "container-runtime/dsh-home/profiles/evimed-runtime/node_modules"));
+      await symlink("/opt/evimed/dsh-seed/node_modules",
+        path.join(project.runtimeDir, "container-runtime/dsh-home/node_modules"));
+      await writeFile(path.join(user.rootDir, "account-private-key"), "fake-account-credential-do-not-export");
+
+      const route = scope === "project" ? "/api/projects/paper1/export" : "/api/account/export";
+      const exported = await fetch(`${base}${route}`, { headers: auth });
+      assert.equal(exported.status, 200);
+      const archive = gunzipSync(Buffer.from(await exported.arrayBuffer()));
+      const entries = tarEntries(archive);
+      const prefix = scope === "project" ? "" : "projects/paper1/";
+      assert.ok(entries.has(`${prefix}project.json`));
+      for (const [relative, content] of Object.entries(customerFiles)) {
+        assert.equal(entries.get(`${prefix}${relative}`)?.toString("utf8"), content, relative);
+      }
+      for (const relative of internalFiles) assert.equal(entries.has(`${prefix}${relative}`), false, relative);
+      assert.equal([...entries.keys()].some((name) => name.includes("node_modules") || name.includes("/profiles/")), false);
+      assert.equal(archive.includes(Buffer.from("fake-internal-credential-do-not-export")), false);
+      assert.equal(archive.includes(Buffer.from("fake-account-credential-do-not-export")), false);
+    });
+  });
+
+  test(`${scope} export rejects symbolic links in customer content and history ancestors`, async () => {
+    await withAuthApp(async ({ app, base }) => {
+      const { auth } = await login(base);
+      const user = await app.store.userById("alice");
+      const project = await app.store.projectFor(user, "paper1", "Paper 1");
+      const outside = path.join(app.config.dataDir, "outside-export");
+      await mkdir(outside);
+      await writeFile(path.join(outside, "secret.txt"), "outside-scope");
+      const route = scope === "project" ? "/api/projects/paper1/export" : "/api/account/export";
+      for (const relative of [
+        "workspace/linked-source",
+        ".openscience/provenance.jsonl",
+        "runtime/container-runtime",
+        "runtime/container-runtime/dsh-home",
+        "runtime/container-runtime/dsh-home/sessions",
+        "runtime/container-runtime/dsh-home/sessions/native-session/linked-message",
+      ]) {
+        const link = path.join(project.rootDir, relative);
+        await mkdir(path.dirname(link), { recursive: true });
+        await symlink(outside, link);
+        const exported = await fetch(`${base}${route}`, { headers: auth });
+        assert.equal(exported.status, 403, relative);
+        assert.equal((await exported.json()).code, "path_forbidden", relative);
+        await rm(link);
+      }
+    });
+  });
+
+  test(`${scope} export rejects a customer directory replaced by a symbolic link during collection`, async (t) => {
+    await withAuthApp(async ({ app, base }) => {
+      const { auth } = await login(base);
+      const user = await app.store.userById("alice");
+      const project = await app.store.projectFor(user, "paper1", "Paper 1");
+      const source = path.join(project.workspaceDir, "race-source");
+      const outside = path.join(app.config.dataDir, "outside-race");
+      await mkdir(source);
+      await mkdir(outside);
+      await writeFile(path.join(outside, "secret.txt"), "outside-scope");
+      const originalLstat = fsp.lstat;
+      let replaced = false;
+      t.mock.method(fsp, "lstat", async (target, ...args) => {
+        const stat = await originalLstat(target, ...args);
+        if (!replaced && String(target).endsWith("/race-source")) {
+          replaced = true;
+          await rename(source, path.join(app.config.dataDir, "moved-source"));
+          await symlink(outside, source);
+        }
+        return stat;
+      });
+      const route = scope === "project" ? "/api/projects/paper1/export" : "/api/account/export";
+      const exported = await fetch(`${base}${route}`, { headers: auth });
+      assert.equal(replaced, true);
+      assert.equal(exported.status, 403);
+      assert.equal((await exported.json()).code, "path_forbidden");
+    });
+  });
+
+  test(`${scope} export limits count customer data without counting excluded runtime files`, async () => {
+    await withAuthApp(async ({ app, base }) => {
+      const { auth } = await login(base);
+      const user = await app.store.userById("alice");
+      const project = await app.store.projectFor(user, "paper1", "Paper 1");
+      await writeFile(path.join(project.workspaceDir, "report.md"), "customer report");
+      const dependencies = path.join(project.runtimeDir, "container-runtime/dsh-home/profiles/evimed-runtime/node_modules");
+      await mkdir(dependencies, { recursive: true });
+      for (let index = 0; index < 25; index += 1) {
+        await writeFile(path.join(dependencies, `${index}.js`), "x".repeat(8192));
+      }
+      const route = scope === "project" ? "/api/projects/paper1/export" : "/api/account/export";
+      const exported = await fetch(`${base}${route}`, { headers: auth });
+      assert.equal(exported.status, 200);
+      const entries = tarEntries(gunzipSync(Buffer.from(await exported.arrayBuffer())));
+      const prefix = scope === "project" ? "" : "projects/paper1/";
+      assert.equal(entries.get(`${prefix}workspace/report.md`)?.toString("utf8"), "customer report");
+      assert.ok(entries.size <= 20);
+    }, { maxArchiveEntries: 20, maxArchiveBytes: 4096 });
+  });
+}
+
+test("account export counts generated account metadata against the entry limit", async () => {
+  await withAuthApp(async ({ base }) => {
+    const { auth } = await login(base);
+    const exported = await fetch(`${base}/api/account/export`, { headers: auth });
+    assert.equal(exported.status, 413);
+    assert.equal((await exported.json()).code, "archive_too_large");
+  }, { maxArchiveEntries: 6 });
+});
+
+test("account export omits project directories absent from the owner's project list", async () => {
+  await withAuthApp(async ({ app, base }) => {
+    const { auth } = await login(base);
+    const user = await app.store.userById("alice");
+    const selected = await app.store.projectFor(user, "default", "Default Project");
+    const unlisted = await app.store.projectFor(user, "unlisted", "Unlisted");
+    await writeFile(path.join(selected.workspaceDir, "report.md"), "selected research");
+    await writeFile(path.join(unlisted.workspaceDir, "report.md"), "unlisted research");
+    app.store.listProjects = async () => [{ id: selected.id, name: selected.name }];
+    const exported = await fetch(`${base}/api/account/export`, { headers: auth });
+    assert.equal(exported.status, 200);
+    const entries = tarEntries(gunzipSync(Buffer.from(await exported.arrayBuffer())));
+    assert.equal(entries.get("projects/default/workspace/report.md")?.toString("utf8"), "selected research");
+    assert.equal([...entries.keys()].some((name) => name.startsWith("projects/unlisted/")), false);
   });
 });
 
