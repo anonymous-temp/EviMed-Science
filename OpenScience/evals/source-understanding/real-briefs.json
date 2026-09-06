@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "acceptanceStatus": "Real inputs frozen; DSH execution and public customer acceptance not yet run.",
+  "briefs": [
+    {
+      "id": "release-procedure",
+      "docType": "research-protocol",
+      "depth": "deep",
+      "fixtureOnly": false,
+      "inputPath": "real-inputs/release-procedure.txt",
+      "inputSha256": "e13860dd7e67a9ba0b98fd95c84d4a64fd194a135d629eb2492c3d5ed4a7ab4d",
+      "inputBytes": 8473,
+      "provenance": {
+        "type": "repository",
+        "sourcePath": "OpenScience/docs/WEB_OPERATIONS_RUNBOOK.md",
+        "sourceRevision": "3417ff4c2fa00bdf833202967e56b2e3a546b418"
+      },
+      "brief": "Understand this actual release procedure. Preserve its required inputs, operation sequence, capacity checks and forbidden operations as source-bound slots and method drafts. Do not execute the procedure.",
+      "acceptanceLimit": "This validates a real operating procedure, not clinical protocol expertise.",
+      "executionStatus": "not_run"
+    },
+    {
+      "id": "bmi-paper-record",
+      "docType": "published-paper",
+      "depth": "structured",
+      "fixtureOnly": false,
+      "inputPath": "real-inputs/bmi-paper-record.txt",
+      "inputSha256": "7d725c47ff3bf6976350d87faea85bb8ac392ea864cce8827d77de13014475a6",
+      "inputBytes": 352,
+      "provenance": {
+        "type": "public-bibliographic-excerpt",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/25673413/",
+        "retrievedAt": "2026-09-06",
+        "scope": "Metadata only; no abstract/full-text coverage claimed."
+      },
+      "brief": "Extract the supplied real paper record. Keep DOI and bibliographic facts anchored. Explicitly mark methods, population, exposure and effect estimates unknown when absent; do not retrieve or invent them.",
+      "acceptanceLimit": "This validates missing-information handling for a real record, not full-paper extraction.",
+      "executionStatus": "not_run"
+    },
+    {
+      "id": "release-decisions",
+      "docType": "note-memo",
+      "depth": "deep",
+      "fixtureOnly": false,
+      "inputPath": "real-inputs/release-decisions.txt",
+      "inputSha256": "64d6c007adae43b38bac0749130b363a38c52d5f46e192b7573a9f906dfa5377",
+      "inputBytes": 363,
+      "provenance": {
+        "type": "user-provided-conversation",
+        "scope": "Explicit release resource decisions from this task."
+      },
+      "brief": "Understand the actual release decisions. Preserve that domain, off-host backup and payments are deferred for now, while implementation/publication continues. Do not infer permanent exclusions, ownership of unspecified resources, or a reusable research method from this brief note.",
+      "acceptanceLimit": "This validates the supplied project decisions, not an invented meeting transcript.",
+      "executionStatus": "not_run"
+    }
+  ]
+}

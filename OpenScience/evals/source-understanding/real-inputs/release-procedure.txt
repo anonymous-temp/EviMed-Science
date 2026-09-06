@@ -1,0 +1,125 @@
+## Isolated release image preparation
+
+The September 7 serving-host build exhausted disk and restarted Web behind 502s.
+All release image writes must be admitted before they start. Never build on the
+serving host or the default Colima profile. `release:images` currently admits
+only a dependency-preserving isolated `build` and a layer-wise serving-host
+`pull`; `check-build` / `check-pull` perform the same read-only admission. It does
+not prepare a registry, start a VM, change Docker context, push, save/load an
+archive, prune, delete, deploy or run arbitrary operator shell commands.
+
+```bash
+pnpm release:images check-build --plan /absolute/release/build-plan.json
+pnpm release:images build --plan /absolute/release/build-plan.json
+# After the candidate's original smoke and the registry/SSH checks:
+pnpm release:images check-pull --plan /absolute/release/pull-plan.json
+pnpm release:images pull --plan /absolute/release/pull-plan.json
+```
+
+Keep these operator plans outside the immutable build checkout. A plan is
+admission input, not a new image format or proof that an unmeasured operation
+is safe. Evidence references have `{file: "/absolute/path", sha256:
+"sha256:<64 lowercase hex>"}` and bind regular files no larger than 2 MiB.
+Reads are nonblocking and bounded even if a file grows; FIFOs and symlinks are
+refused. Metadata output must not exist, including as a dangling symlink.
+Never invent measurements or mark a smoke pass without its underlying run.
+[BuildKit's native metadata](https://docs.docker.com/reference/cli/docker/buildx/build/#metadata-file)
+and OCI/Distribution manifests retain their original formats.
+
+Both plans require `operation` (`build` or `pull`), `component` (`web` or
+`runtime`), `platform: "linux/amd64"`,
+`sourceRevision` (full 40-character commit), positive integer `floorBytes`,
+positive integer `growthReserveBytes`, `target`, and a `measurement` reference.
+The measurement JSON records the same operation/revision/component/platform,
+`engineId`, and `peaks`: positive integer measured incremental peak bytes by storage-plane name.
+Build measurements also bind `recipeSha256`, `baseReference` and the identical
+`dependencyInputs` map; pull measurements bind `image` and `configDigest`.
+For each actual filesystem, admission is:
+
+`max(floorBytes, 5 GiB) + sum(measured plane peaks) + growthReserveBytes`.
+
+The minimum observed available capacity is used when several planes share a
+filesystem; their free bytes are never added. During execution, the retained
+threshold is `max(floorBytes, 5 GiB) + growthReserveBytes`. Required planes are
+`engine-root`, `engine-docker`, `engine-containerd`, `engine-tmp`; builds also
+require `host-source`, `host-builder`, `host-tmp`. The guarded layout observes
+`/`, the live Docker root, `/var/lib/containerd`, `/tmp`, the source checkout,
+`~/.colima/evimed-builder` and host temporary directory. Missing or unreadable
+planes refuse. Hosts with a different containerd storage layout need verified
+probe support before use. Measurements must include unpack/export overhead and
+new layers, and count separate plane footprints only once within each estimate.
+Use a peak from an equivalent measured operation with a documented growth
+reserve; a current-free-space snapshot alone is not a peak measurement.
+
+The monitor checks at admission, just before writes, during the child operation
+and after it exits. Each probe is bounded to five seconds. A failed/unreadable
+sample or timeout sends SIGTERM only to the owned Docker/buildx process group,
+then escalates that group to SIGKILL after five seconds even if its leader has
+already exited; leader exit cannot leave a surviving buildx descendant behind.
+The failure result remains bounded. Verify
+that the daemon cancelled the request before a retry. The one-hour operation
+limit is fixed. These sampled checks cannot guarantee protection against
+unrelated concurrent writes, a stalled kernel or writes between samples. They
+never reclaim current/rollback images, volumes or cache. Keep other workloads
+and all default-profile containers outside this operation.
+
+A build target records `context: "colima-evimed-builder"`, the exact endpoint
+`unix:///Users/wangzeyuan/.colima/evimed-builder/docker.sock`, live `engineId`,
+`engineName`, builder `hostName`, and distinct `servingHostName`. The live context,
+engine and single-node Buildx Docker driver must agree. `sourceRoot` is an
+absolute clean Git checkout, `sourceTree` its full tree ID, `inputs` a list of
+hashed dependency files, `dockerfile` the hashed fixed recipe, `image` a new
+explicit local release tag, and `metadataFile` a new absolute output path.
+`base` records the digest-pinned `reference`, its daemon-local `imageId`, and
+`dependencyInputs` mapping relative input paths to their SHA-256 values.
+`platformSmoke` references the actual endpoint/engine/base-specific JSON with
+`endpoint`, `engineId`, `platform`, `baseReference`, `nodeVersion: "v22.22.0"`,
+`nodeExitCode: 0` and `buildRunExitCode: 0`. Advertised BuildKit platforms do not
+satisfy this requirement.
+
+The hashed recipe uses one literal digest-pinned `FROM`, actual local `COPY`
+instructions and reviewed fixed `RUN` commands. Supported COPY forms are plain
+unquoted paths or JSON arrays, optionally with `--chown`/octal `--chmod`.
+Backslash continuations and multiple COPY/RUN instructions are supported. Static
+WORKDIR, USER, ENV, LABEL, ENTRYPOINT, CMD, SHELL, EXPOSE, STOPSIGNAL and HEALTHCHECK
+instructions are also allowed. Parser directives, heredocs, ARG, extra/flagged
+FROMs, COPY --from, RUN flags (including mounts/network overrides), ADD, ONBUILD,
+remote sources and inherited ONBUILD triggers are refused before Docker runs.
+The build uses `--network none`. Canonical dependency input paths must be unique
+and match the base's exact key set before their digests are compared. Compare the base's recorded
+lockfiles/dependency inputs to the candidate, update the real package copies
+loaded from the DSH seed pnpm tree, reseal, and execute the original runtime
+build-smoke in this recipe. Replacing only a visible bundle or retagging an old
+image is not a delta. The guard verifies an added rootfs layer over the exact
+base prefix and links the inspected result to native BuildKit export metadata
+(`exportDigest` may identify an OCI index, separately from `configDigest`); original smoke and seed-copy
+correctness still require the retained acceptance evidence before transfer.
+A dependency change needs a separately reviewed full rebuild procedure.
+
+A pull target records `endpoint: "unix:///var/run/docker.sock"`, the serving
+`engineId`, `engineName` and `hostName`, without a context selector. `image` is
+`127.0.0.1:<forward-port>/<repository>@sha256:<platform-manifest-digest>` and
+`configDigest` is the expected OCI config digest. `transferEvidence` references
+JSON containing a digest-pinned Distribution `registryImage`, `bindAddress:
+"127.0.0.1"`, `forwardBindAddress: "127.0.0.1"`, `reverseForwardVerified: true`,
+the exact `image`, `sourceRevision` and serving `engineId`. The registry must
+already exist on local loopback and reach production loopback through a verified
+SSH reverse forward. Do not broaden insecure-registry configuration. Registry
+setup/publication/forwarding need their own measured, reviewed operator steps;
+this CLI refuses missing metadata and never fabricates that infrastructure.
+
+`releaseSmoke` references the same `sourceRevision` and `configDigest`, with
+recorded `originalSmokePassed`, `profileSeedCopiesVerified`, `resealed` and
+`rootFsPrefixVerified` all true for the runtime candidate. Web candidates require
+only the original smoke and rootfs-prefix evidence; DSH seed checks do not apply. The CLI reads the raw
+single-platform manifest/config through the loopback forward, hashes both and
+checks source/platform/rootfs, then pulls that manifest digest and verifies the
+received RepoDigest and rootfs. Daemon-local image IDs are recorded separately:
+containerd may expose an OCI index ID while classic Docker exposes the config
+ID. Do not compare those IDs across stores as if they meant the same thing.
+
+After prepared image identity, release-manifest, backup integrity and restore
+drill verification, run production host preflight and recreate only the selected
+services with `compose up --no-build --pull never`. The host preflight keeps a
+10 GiB default floor and refuses overrides below 5 GiB. Build/transfer success
+alone is not deployment or OPS03 acceptance.
