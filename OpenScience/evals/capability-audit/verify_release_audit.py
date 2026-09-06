@@ -9,6 +9,9 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from hosted_receipts import read_owned, file_receipt, validate_receipt, artifact_paths
+import public_mr_fixture as public_mr
+
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -135,10 +138,30 @@ def verify_tools():
             require(item.get("artifactCount") == len(item.get("artifacts", [])), "%s artifact count does not reconcile" % item.get("tool"))
             require(all(receipt.get("bytes", 0) > 0 and len(receipt.get("sha256", "")) == 64 for receipt in item.get("artifacts", [])), "%s has invalid artifact receipts" % item.get("tool"))
             require(EVIDENCE.is_dir(), "%s receipt evidence snapshot is unavailable" % item.get("tool"))
+            if item.get("tool") == "mendelian_randomization":
+                require(item.get("receiptKind") == "isolated-adapter-v1", "MR requires an attested isolated public-fixture receipt")
+            if item.get("receiptKind") == "isolated-adapter-v1":
+                retained = item.get("hostedReceipt") or {}
+                require(file_receipt(EVIDENCE, retained.get("path")) == retained, "hosted receipt bytes changed")
+                value = json.loads(read_owned(EVIDENCE, retained["path"], 1024 * 1024))
+                proof = validate_receipt(value, EVIDENCE, item["tool"], 14)
+                require(item.get("jobId") == proof["jobId"] and item.get("jobStatus") == proof["jobStatus"], "hosted job identity changed")
+                require(item.get("executionEvidence") == proof["executionEvidence"], "hosted source evidence changed")
+                require(item.get("scope") == proof["scope"], "hosted scope changed")
+                require(item.get("executedAt") == proof["completedAt"], "hosted completion time changed")
+                require(item.get("releaseStatus") == proof.get("releaseStatus"), "hosted release status changed")
+                if item["tool"] == "mendelian_randomization":
+                    require(item.get("fixtureReceipts") == public_mr.fixture_file_receipts(public_mr.load_manifest()), "public fixture receipt bindings changed")
+                require(item.get("artifacts") == proof["artifacts"] and item.get("inputReceipts") == proof["inputs"], "hosted file bindings changed")
+                ready = proof["jobStatus"] == "succeeded" and proof.get("releaseStatus") in {None, "ready"}
+                require(item.get("publicationReady") is ready and item.get("status") == ("success" if ready else "warning"), "hosted release outcome changed")
+                continue
             state_file = JOB_STATE / ("%s.json" % item.get("jobId"))
             require(state_file.is_file() and not state_file.is_symlink(), "%s job state is unavailable" % item.get("tool"))
             state = json.loads(state_file.read_text(encoding="utf-8"))
             require(state.get("status") in {"succeeded", "blocked"}, "%s job is not terminal" % item.get("tool"))
+            require(isinstance(state.get("artifacts"), list), "legacy job artifact declaration is missing")
+            require(artifact_paths(state["artifacts"]) == artifact_paths(item.get("artifacts")), "legacy job artifact declarations do not match audit receipts")
             require(item.get("jobStatus") == state.get("status"), "%s job outcome is misstated" % item.get("tool"))
             require(item.get("releaseStatus") == state.get("releaseStatus"), "%s release status is misstated" % item.get("tool"))
             expected_ready = state.get("status") == "succeeded" and state.get("releaseStatus") in {None, "ready"}

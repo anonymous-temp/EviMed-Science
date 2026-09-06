@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "id": "twosamplemr-bmi-chd-public",
+  "repository": "https://github.com/MRCIEU/TwoSampleMR",
+  "commit": "c14776b89056e88422d9dff92b517b870a1339a4",
+  "files": [
+    {
+      "name": "vig_perform_mr.RData",
+      "url": "https://raw.githubusercontent.com/MRCIEU/TwoSampleMR/c14776b89056e88422d9dff92b517b870a1339a4/inst/extdata/vig_perform_mr.RData",
+      "sha256": "7a13b142efeafc0fee9b80888d60d1db4b06f175afe02e3a3c45c0bc11d63502",
+      "bytes": 900980
+    },
+    {
+      "name": "perform_mr.Rmd",
+      "url": "https://raw.githubusercontent.com/MRCIEU/TwoSampleMR/c14776b89056e88422d9dff92b517b870a1339a4/vignettes/perform_mr.Rmd",
+      "sha256": "60765b9856f7f5ce72ffc32a3a19ee10f0d3f63efec0c9bc768fe6ff2582b519",
+      "bytes": 40329
+    },
+    {
+      "name": "DESCRIPTION",
+      "url": "https://raw.githubusercontent.com/MRCIEU/TwoSampleMR/c14776b89056e88422d9dff92b517b870a1339a4/DESCRIPTION",
+      "sha256": "baa3a8a1a335329891ba553f56703779a835febbd846d677d1749bba79c50503",
+      "bytes": 2157
+    },
+    {
+      "name": "LICENSE",
+      "url": "https://raw.githubusercontent.com/MRCIEU/TwoSampleMR/c14776b89056e88422d9dff92b517b870a1339a4/LICENSE",
+      "sha256": "1a78a3ee942f05d5c2b0e6d6be9133202b7ce595b43094d884b92e71b67a21af",
+      "bytes": 43
+    },
+    {
+      "name": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/MRCIEU/TwoSampleMR/c14776b89056e88422d9dff92b517b870a1339a4/LICENSE.md",
+      "sha256": "f604d2e390892b08bc44e47a86d8079bad93c9079d4e0bc3bdb09aba52e42b53",
+      "bytes": 1072
+    }
+  ],
+  "outputs": {
+    "bmi_exposure.csv": {
+      "sha256": "6544c9f2869dc517c7dc59fc9bd6ad8de229a8e9a12f80f1c45545979920c0a8",
+      "bytes": 5850
+    },
+    "chd_outcome.csv": {
+      "sha256": "533fdcce39a4899e57c0412c8f6a8f6dbe9ecbb1c1f8667a7eac13ebb1c3d5af",
+      "bytes": 6437
+    }
+  },
+  "rows": 79,
+  "exposure": {
+    "trait": "body mass index",
+    "sampleSize": 339224,
+    "instrumentsPreclumped": true,
+    "clumpingProvenance": "MRCIEU/TwoSampleMR commit c14776b89056e88422d9dff92b517b870a1339a4 official vignette cache bmi_exp_dat, created by extract_instruments(ieu-a-2). Supplied instrument set; original clumping parameters are not serialized and LD independence was not rechecked."
+  },
+  "outcome": {
+    "trait": "coronary heart disease",
+    "sampleSize": 184305,
+    "instrumentsPreclumped": false,
+    "selectionProvenance": "The official chd_out_dat cache contains outcome associations for the BMI SNP set from extract_outcome_data(..., ieu-a-7), not independently selected CHD instruments."
+  },
+  "limitations": [
+    "Instrument subsets only, not full GWAS datasets.",
+    "Forward BMI to CHD only; this fixture does not support a preclumped bidirectional analysis.",
+    "BMI effect is per SD; CHD coefficients are log odds.",
+    "Historical cache metadata does not establish absence of sample overlap.",
+    "The package MIT license is retained; no separate license grant for the complete original GWAS datasets is inferred."
+  ]
+}

@@ -26,6 +26,7 @@ grok-build-main/
 deploy.env
 *.key
 *.pem
+!OpenScience/evals/capability-audit/fixtures/specialist-audit-public.pem
 *.p12
 *.pfx
 *.db
