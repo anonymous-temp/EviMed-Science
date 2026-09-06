@@ -4,7 +4,8 @@ import http from "node:http";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
 
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 2;
+// Version 3 requires an explicit capsule endpoint (empty means disabled).
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 3;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -180,11 +181,12 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "") {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
       password,
+      capsuleGatewayUrl,
     });
   }
 

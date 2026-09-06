@@ -1629,11 +1629,16 @@ function modelGatewayProviderUrl(config) {
 }
 
 /** @param {any} config */
-export function capsuleGatewayProviderUrl(config) {
-  if (config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+export function capsuleGatewayEndpointUrl(config) {
   const url = new URL(modelGatewayProviderUrl(config));
   url.pathname = "/internal/capsules/v1";
   return url.toString().replace(/\/$/, "");
+}
+
+/** @param {any} config */
+export function capsuleGatewayProviderUrl(config) {
+  if (config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
+  return capsuleGatewayEndpointUrl(config);
 }
 
 /**
@@ -1846,7 +1851,7 @@ function dshWorkloadTokenRuntimePath(plan) {
     : dshWorkloadTokenHostPath(plan);
 }
 
-export function buildRuntimeLaunchPlan(config, project, port) {
+export function buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl = capsuleGatewayProviderUrl(config) } = {}) {
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
     // Unix only. The kernel's web host binds loopback inside the container, so
@@ -2024,7 +2029,7 @@ export function buildRuntimeLaunchPlan(config, project, port) {
           capabilitiesDir: "/opt/evimed/capabilities",
           capabilitySkillsDir: "/opt/evimed/capability-skills",
           capsuleMethodsDir: "",
-          capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
+          capsuleGatewayUrl,
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
           flags: {
@@ -2032,7 +2037,7 @@ export function buildRuntimeLaunchPlan(config, project, port) {
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
             review: Boolean(config.runtimeReviewEnabled),
-            capsule: Boolean(capsuleGatewayProviderUrl(config)),
+            capsule: Boolean(capsuleGatewayUrl),
             requiredEnforcement: /** @type {'full'|'partial'} */ (config.runtimeSandboxEnforcement),
           },
           limits: {
@@ -2766,7 +2771,7 @@ export class RuntimeManager {
     });
     let child;
     if (plan.sandboxMode === "docker" && this.runtimeController) {
-      await this.runtimeController.startRuntime(project, port, password);
+      await this.runtimeController.startRuntime(project, port, password, capsuleGatewayProviderUrl(this.config));
       child = new RemoteRuntimeProcess(
         this.runtimeController,
         project,

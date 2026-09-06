@@ -1873,6 +1873,15 @@ test("the receipt scheduler declares the same runtime caps as the web service", 
   assert.deepEqual(scheduler, declared, "a cap the scheduler does not share is a mint refused a day later");
 });
 
+test("the controller trusts the same model gateway override as the web service", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const controller = compose.slice(compose.indexOf("\n  open-science-runtime-controller:\n    image:"));
+  const gateway = /^\s+OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:\s*(.+)$/m;
+  const webValue = compose.match(gateway)?.[1];
+  assert.ok(webValue, "the web service must declare its internal gateway");
+  assert.equal(controller.match(gateway)?.[1], webValue, "the controller must validate capsule endpoints against the same operator-configured gateway");
+});
+
 test("the preset root the control plane configures is the one the image's own smoke proves", async () => {
   // `roots` is scanned FOR presets, so the value has to be the directory that
   // contains `evimed-universal`, not `evimed-universal` itself. It was the
