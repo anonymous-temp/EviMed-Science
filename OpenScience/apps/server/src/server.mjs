@@ -8,6 +8,7 @@ import { isIP } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { createGzip } from "node:zlib";
+import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
 import { ResearchSessionStore } from "./researchSessions.mjs";
@@ -3411,7 +3412,7 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     modelGateway: await readinessCheck(() => readinessModelGateway(config)),
     release: await readinessCheck(() => readinessRelease(config)),
     resources: await readinessCheck(() => readinessResources(config)),
-    backup: await readinessCheck(async () => readinessBackup(config)),
+    backup: await readinessCheck(async () => readinessBackup(config, productDatabase)),
     runtime: await readinessCheck(async () => readinessRuntime(config, runtimeManager)),
     kernel: await readinessCheck(async () => readinessKernel(config, runtimeManager)),
   };
@@ -4027,7 +4028,7 @@ async function assertBackupPathNoSymlink(backupDir, options = {}) {
   }
 }
 
-async function readinessBackup(config) {
+export async function readinessBackup(config, database = null) {
   const mode = String(config.backupMode ?? "disabled").trim().toLowerCase();
   const summary = {
     production: Boolean(config.production),
@@ -4046,7 +4047,7 @@ async function readinessBackup(config) {
   if (mode === "external") {
     if (!config.backupExternalAck) throw readinessFailure("backup_external_unconfirmed");
     if (!config.restoreDrillAck) throw readinessFailure("restore_drill_unconfirmed");
-    return { ...summary, external: true };
+    return { ...summary, external: true, postgres: await postgresBackupReadiness(config, database) };
   }
 
   const backupDir = String(config.backupDir ?? "").trim();
@@ -4137,6 +4138,7 @@ async function readinessBackup(config) {
     retentionDays,
     encrypted: true,
     schedulerHealthy: true,
+    postgres: await postgresBackupReadiness(config, database),
   };
 }
 

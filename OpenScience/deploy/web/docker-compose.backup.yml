@@ -4,6 +4,17 @@ services:
       OPEN_SCIENCE_BACKUP_MODE: ${OPEN_SCIENCE_BACKUP_MODE:-local}
       OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK: "true"
       OPEN_SCIENCE_RESTORE_DRILL_ACK: "true"
+      OPEN_SCIENCE_POSTGRES_BACKUP_STATE_FILE: /run/postgres-backup-status/state.json
+      OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS: ${OPEN_SCIENCE_POSTGRES_BACKUP_MAX_AGE_SECONDS:-90000}
+    volumes:
+      # Directory mount follows atomic state-file replacement by the host timer.
+      # Only non-secret status is exposed, never the dumps or Docker socket.
+      - type: bind
+        source: ${OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR:-./postgres-backup-status}
+        target: /run/postgres-backup-status
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       open-science-backup:
         condition: service_healthy

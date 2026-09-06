@@ -1,0 +1,16 @@
+[Unit]
+Description=EviMed PostgreSQL encrypted backup and verified restore
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/evimed-postgres-backup
+User=root
+Group=root
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/evimed-science/shared/backups/postgres
+TimeoutStartSec=30m
+TimeoutStopSec=90s

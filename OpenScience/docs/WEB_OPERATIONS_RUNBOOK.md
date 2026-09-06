@@ -288,6 +288,27 @@ not sufficient containment for those events.
   `node scripts/ops/backup-scheduler.mjs health`. A failed or stale state means
   backup readiness is not proven even when old archives exist. Keep the API's
   backup mount read-only; only the backup service may create or prune archives.
+- The production host also has the single `evimed-postgres-backup.timer` unit.
+  Its versioned implementation is `scripts/ops/postgres-backup.py`, installed
+  as `/usr/local/sbin/evimed-postgres-backup`; the existing unit names and daily
+  schedule live in `deploy/host/`. Confirm the service is inactive before
+  replacing its executable. Install the script with mode 0755 and the unit
+  files with mode 0644, reload systemd, enable the existing timer, and run its
+  service once before deploying Web's PostgreSQL backup readiness requirement.
+  Do not create a second scheduler. The source container's PostgreSQL 16 tools
+  produce an encrypted snapshot and verify exact application tables/row counts
+  in a uniquely named temporary database; the source database is never a
+  restore target. The existing 30-day retention and encrypted archive format
+  remain supported. Unresolved drill cleanup stays in the receipt and is
+  retried before another backup can report healthy.
+- Set `OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR` to the existing host backup
+  directory's `status` subdirectory (normally
+  `/srv/evimed-science/shared/backups/postgres/status`). Mount only that
+  non-secret status directory read-only. Web verifies its age, restore/cleanup
+  proof and actual PostgreSQL system identifier, database OID and name. The
+  tracked empty default directory preserves non-PostgreSQL local deployment;
+  it is not a production restore receipt. This database dump does not cover
+  separate attachment volumes, MemOS stores/queues or OpenList configuration.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,
