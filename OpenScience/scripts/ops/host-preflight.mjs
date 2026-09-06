@@ -11,6 +11,7 @@ import {
 const scriptFile = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptFile), "../..");
 const MIN_DOCKER_MAJOR = 26;
+const SERVING_MIN_FREE_BYTES = 5 * 1024 * 1024 * 1024;
 const DEFAULT_MIN_FREE_BYTES = 10 * 1024 * 1024 * 1024;
 const MAX_ENV_BYTES = 1024 * 1024;
 
@@ -597,8 +598,8 @@ export function validateDeploymentConfig(values, envFile) {
     "OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES",
     DEFAULT_MIN_FREE_BYTES,
   );
-  if (minFreeBytes < 1024 * 1024 * 1024) {
-    throw failure("preflight_disk_floor", "Host preflight free-space floor must be at least 1 GiB.");
+  if (minFreeBytes < SERVING_MIN_FREE_BYTES) {
+    throw failure("preflight_disk_floor", "Host preflight free-space floor must be at least 5 GiB.");
   }
 
   return {
@@ -839,7 +840,7 @@ export async function runHostPreflight({
     throw failure(
       "preflight_runtime_image_unpinned",
       `No container references ${config.runtimeImage}, so a host-wide image prune will remove it and the next job will fail with runtime_image_unavailable. `
-        + "Create the pin: docker compose --profile runtime-image up --no-build --no-start dsh-runtime-image",
+        + "Create the pin: docker compose --profile runtime-image up --no-build --pull never --no-start dsh-runtime-image",
     );
   }
   onCheck("runtime-image-pinned", `referenced by ${runtimeImagePin.split("\n")[0]}`);

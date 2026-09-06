@@ -54,7 +54,7 @@ function deploymentValues(overrides = {}) {
     OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE: "./secrets/evimed-api-key.txt",
     OPEN_SCIENCE_ENABLE_KERNEL: "false",
     OPEN_SCIENCE_TRUST_PROXY: "true",
-    OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: String(1024 * 1024 * 1024),
+    OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: String(5 * 1024 * 1024 * 1024),
     ...overrides,
   };
 }
@@ -463,7 +463,7 @@ test("host preflight refuses a runtime image no container references", async (t)
     (error) => {
       assert.equal(error.code, "preflight_runtime_image_unpinned");
       assert.match(error.message, /host-wide image prune will remove it/);
-      assert.match(error.message, /--profile runtime-image up --no-build --no-start/);
+      assert.match(error.message, /--profile runtime-image up --no-build --pull never --no-start/);
       return true;
     },
   );
@@ -522,4 +522,35 @@ test("a host that cannot confine the agent's shell is refused before deployment"
     },
     "an unreadable version is unknown, not acceptable",
   );
+});
+
+test("serving floor cannot be lowered below 5 GiB by an explicit setting", async (t) => {
+  const fixture = await deploymentFixture();
+  t.after(() => rm(fixture.dir, { recursive: true, force: true }));
+  for (const bytes of [1, 1024 ** 3, 4_200_000_000, 5 * 1024 ** 3 - 1]) {
+    assert.throws(() => validateDeploymentConfig({ ...fixture.values, OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: String(bytes) }, fixture.envFile), { code: "preflight_disk_floor" });
+  }
+  assert.equal(validateDeploymentConfig({ ...fixture.values, OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: String(5 * 1024 ** 3) }, fixture.envFile).minFreeBytes, 5 * 1024 ** 3);
+  assert.equal(validateDeploymentConfig({ ...fixture.values, OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: undefined }, fixture.envFile).minFreeBytes, 10 * 1024 ** 3);
+});
+
+test("4.2 GB serving capacity fails before image inspection or any write operation", async (t) => {
+  const fixture = await deploymentFixture(deploymentValues({ OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: String(5 * 1024 ** 3) }));
+  t.after(() => rm(fixture.dir, { recursive: true, force: true }));
+  const calls = [];
+  await assert.rejects(runHostPreflight({
+    envFile: fixture.envFile, processEnv: {}, platform: "linux",
+    stat: () => ({ gid: 998, mode: 0o140660, isSocket: () => true }),
+    statfs: () => ({ bavail: 4_200_000_000n, bsize: 1n }),
+    readLsm: () => "landlock",
+    execute: (command, args) => {
+      calls.push([command, ...args]);
+      if (command === "uname") return "7.0.0";
+      if (args[0] === "version") return "26.1.4|linux|amd64";
+      if (args[0] === "compose") return "v2.27.1";
+      if (args[0] === "info") return "/var/lib/docker";
+      assert.fail("No later probe or write operation may run below the floor");
+    },
+  }), { code: "preflight_disk_space" });
+  assert.equal(calls.some((call) => call.some((part) => ["build", "pull", "load", "prune", "image"].includes(part))), false);
 });

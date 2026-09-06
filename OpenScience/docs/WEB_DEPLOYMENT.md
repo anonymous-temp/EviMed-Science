@@ -364,12 +364,12 @@ that cannot. On the China-hosted production server, measured:
 | npm | slow | `OPEN_SCIENCE_NPM_REGISTRY=https://registry.npmmirror.com` |
 | PyPI | slow | `OPEN_SCIENCE_PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple` |
 
-These belong in the deployment's `.env`, which is where Compose reads them from
-and where the production server already carries them. Build through Compose
-(`docker compose --profile runtime-image build dsh-runtime-image`) rather than
-invoking `docker build` directly: the forwarding is the part that is easy to
-lose, and a build that silently falls back to an unreachable default fails
-after several minutes on a `curl` timeout rather than at its first line.
+Keep the required mirror configuration in the reviewed isolated-builder recipe.
+Never run a release build through Compose on the serving host or the default
+local Colima profile. The guarded delta path below uses `--network none`; it
+therefore requires dependencies already present in the verified base. A
+dependency-changing full rebuild needs its own measured isolated-build recipe
+and acceptance; it is not admitted as a dependency-preserving delta.
 
 The failure this documents cost two builds before it was written down: the
 values existed only in the server's `.env`, and nothing in the repository said
@@ -378,8 +378,8 @@ which mirrors this deployment must use.
 ## Production Host Preflight
 
 The target host must run Linux and Docker Engine 26 or newer. Before starting
-Compose, build or pull the reviewed Web and Runtime images plus the exact Caddy
-image, generate the release manifest, configure the selected local-auth or
+Compose, prepare and verify the reviewed Web and Runtime images through the
+isolated image procedure below, ensure the exact Caddy image is present, generate the release manifest, configure the selected local-auth or
 OIDC identity secrets plus monitoring/backup secrets, and make the deployment
 env file private. Then run:
 
@@ -400,6 +400,8 @@ an invalid host-only API diagnostic port, disabled Caddy proxy trust, and
 invalid local-auth, OIDC, monitoring, or backup secret files. Local mode
 fails preflight when the bootstrap password is present in the environment,
 missing from its owner-only regular file, or reachable through a symbolic link.
+`OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES` defaults to 10 GiB and cannot be set below
+5 GiB (5,368,709,120 bytes). This serving floor is not a build or transfer budget.
 When
 `OPEN_SCIENCE_OBJECT_BACKUP_URI` is configured, it also creates a random
 canary object, reads it back byte-for-byte, and deletes it. Set
@@ -589,7 +591,7 @@ pnpm check:local-auth
 docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.local-auth.yml \
-  --profile tls up -d
+  --profile tls up -d --no-build --pull never
 ```
 
 The configuration command creates a random password in an owner-only regular
@@ -688,7 +690,7 @@ Start with the OIDC overlay:
 docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.oidc.yml \
-  --profile tls up -d
+  --profile tls up -d --no-build --pull never
 ```
 
 For the public individual-account technical profile, add the fail-closed SaaS
@@ -700,7 +702,7 @@ docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.oidc.yml \
   -f deploy/web/docker-compose.saas.yml \
-  --profile tls up -d
+  --profile tls up -d --no-build --pull never
 ```
 
 The hosted Settings page reads `/api/auth/methods` and presents only the
@@ -773,13 +775,15 @@ cp deploy/web/.env.example deploy/web/.env
 pnpm configure:local-auth
 pnpm check:local-auth
 
-docker compose --env-file deploy/web/.env \
-  -f deploy/web/docker-compose.yml \
-  -f deploy/web/docker-compose.local-auth.yml \
-  --profile runtime-image build
+# On the isolated builder: reviewed plan, measured peak and source/base proofs.
+pnpm release:images check-build --plan /absolute/release/build-plan.json
+pnpm release:images build --plan /absolute/release/build-plan.json
+# On the serving host, only after registry forwarding and release smoke exist:
+pnpm release:images check-pull --plan /absolute/release/pull-plan.json
+pnpm release:images pull --plan /absolute/release/pull-plan.json
 
 # Export the same release/image values to the manifest generator. It inspects
-# the two built images and writes deploy/web/release-manifest.json.
+# the two prepared images and writes deploy/web/release-manifest.json.
 export OPEN_SCIENCE_RELEASE_ID="2026.07.10-release.1"
 export OPEN_SCIENCE_SOURCE_REVISION="$(git rev-parse HEAD)"
 export OPEN_SCIENCE_BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
@@ -787,11 +791,13 @@ export OPEN_SCIENCE_WEB_CONTAINER_IMAGE="open-science-web:0.1.3"
 export OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE="open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26"
 pnpm release:manifest
 pnpm verify:release-manifest
+# Verify the deployment backup and restore-drill evidence before recreation.
+pnpm preflight:host --env-file deploy/web/.env
 
 docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.local-auth.yml \
-  --profile tls up -d
+  --profile tls up -d --no-build --pull never
 ```
 
 The exported release values and `deploy/web/.env` must be identical. In a
@@ -897,15 +903,10 @@ range, so naming an exact version pins one package and floats the rest — askin
 the registry for the tree as it stood at that instant is the only way to install
 what the pin was tested against. When changing any version, update every matching
 archive and license digest in the same reviewed release change; a mismatched
-asset fails the image build:
+asset fails the image build. For a production release, prepare it on the verified
+isolated builder through `release:images`; do not run a Compose build here.
 
-```bash
-docker compose -f deploy/web/docker-compose.yml \
-  --profile runtime-image \
-  build dsh-runtime-image
-```
-
-Pre-pull or build the image before marking the service healthy, or set
+Prepare and verify the image before marking the service healthy, or set
 `OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL=false` if your deployment policy
 allows runtime lazy pulls. For local API smoke tests without a real agent image
 or TLS endpoint, set `NODE_ENV=development`, `OPEN_SCIENCE_PUBLIC_URL` to the
@@ -1017,7 +1018,7 @@ docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.local-auth.yml \
   -f deploy/web/docker-compose.backup.yml \
-  --profile backup --profile tls up -d
+  --profile backup --profile tls up -d --no-build --pull never
 ```
 
 The API sees `/backups` read-only and never receives the passphrase. The backup
@@ -1189,7 +1190,7 @@ OPEN_SCIENCE_PUBLIC_URL=https://science.example.com \
 docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.local-auth.yml \
-  --profile tls up --build
+  --profile tls up --no-build --pull never
 ```
 
 When raising upload limits in the Caddy profile, raise
@@ -1390,7 +1391,7 @@ docker compose --env-file deploy/web/.env \
   -f deploy/web/docker-compose.yml \
   -f deploy/web/docker-compose.local-auth.yml \
   -f deploy/web/docker-compose.monitoring.yml \
-  --profile monitoring --profile tls up -d
+  --profile monitoring --profile tls up -d --no-build --pull never
 ```
 
 The examples above use local identity. For OIDC, replace
