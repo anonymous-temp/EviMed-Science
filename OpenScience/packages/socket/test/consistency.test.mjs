@@ -563,7 +563,7 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[], subagentStart?: (...args: any[]) => any }} [options] */
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null }} [options] */
 async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
@@ -577,7 +577,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   ctx.provide("evimedRun", { runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) }, planIndex: { put: async () => {} }, gateRuns: { put: async () => {} }, evidence: { entries: () => [] }, subagents: childRows });
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
-  ctx.subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
+  /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,

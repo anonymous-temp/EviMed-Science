@@ -77,7 +77,7 @@ test("a group label cannot turn a review or registry record into a primary study
 
 test("every included report declares its publication type when review accounting is present", () => {
   const value = ledger();
-  delete value.sourceRecords[0].reportType;
+  delete /** @type {any} */ (value.sourceRecords[0]).reportType;
   const result = reviewMethodsFindings(value);
   assert.equal(result.metrics.independentPrimaryStudies, null);
   assert.ok(result.issues.some((item) => item.text.includes("reportType")));
