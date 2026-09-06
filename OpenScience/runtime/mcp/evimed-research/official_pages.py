@@ -12,6 +12,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 import public_sources
+from immutable_capture import ImmutableCaptureError, preserve
 
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -130,6 +131,8 @@ def _safe_directory(workspace: Path, relative: Path) -> Path:
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:
+    # public_sources also imports this writer for other managed outputs;
+    # immutable official-page captures use preserve() instead.
     if path.exists() and path.is_symlink():
         raise OfficialPageError("official_page_output_invalid", "Managed source files must not be symbolic links.")
     temporary = path.with_name(".%s.%s.tmp" % (path.name, secrets.token_hex(8)))
@@ -179,22 +182,24 @@ def fetch(arguments: dict) -> dict:
         title, content = _extract(payload)
         digest = hashlib.sha256(payload).hexdigest()
         retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        # The approved URL is source identity: equal HTML at different URLs
+        # retains separate attribution. Acquisition time belongs to the result.
         markdown = "\n".join([
             "# " + title,
             "",
             "- Source: " + url,
-            "- Retrieved: " + retrieved_at,
             "- SHA-256: " + digest,
             "",
             content,
             "",
         ])
         workspace = _workspace()
-        output_root = _safe_directory(workspace, Path(".evimed-sources") / "official-pages" / digest[:16])
-        output_path = output_root / "page.md"
         markdown_payload = markdown.encode("utf-8")
-        _atomic_write(output_path, markdown_payload)
-        relative = output_path.relative_to(workspace).as_posix()
+        try:
+            paths = preserve(workspace, Path(".evimed-sources") / "official-pages" / digest[:16], {"page.md": markdown_payload})
+        except ImmutableCaptureError as error:
+            raise OfficialPageError("official_page_output_invalid", str(error)) from error
+        relative = paths["page.md"]
         source = {
             "id": "official-page:" + digest[:16],
             "title": title,

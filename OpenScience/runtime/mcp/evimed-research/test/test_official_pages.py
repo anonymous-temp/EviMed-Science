@@ -5,6 +5,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 
@@ -104,6 +105,59 @@ class OfficialPageTests(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["sources"][0]["url"], url)
         opened.assert_called_once_with(url, ("text/html",), timeout_seconds=60)
+
+    def test_repeated_official_capture_preserves_content_hash_and_mtime(self):
+        body = b"<html><title>Official guidance</title><main><p>" + b"Verified official content. " * 20 + b"</p></main></html>"
+        url = "https://www.nhs.uk/symptoms/chest-pain/"
+        with mock.patch.object(self.module.public_sources, "_open_remote", side_effect=lambda *_args, **_kwargs: self.response(body)), \
+                mock.patch.object(self.module, "datetime") as clock:
+            clock.now.return_value = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            first = self.module.fetch({"url": url})
+            artifact = self.workspace / first["data"]["markdownPath"]
+            original, mtime = artifact.read_bytes(), artifact.stat().st_mtime_ns
+            clock.now.return_value = datetime(2026, 1, 2, tzinfo=timezone.utc)
+            repeated = self.module.fetch({"url": url})
+        self.assertEqual(first["artifacts"], repeated["artifacts"])
+        self.assertEqual(first["data"]["artifactSha256s"], repeated["data"]["artifactSha256s"])
+        self.assertEqual(artifact.read_bytes(), original)
+        self.assertEqual(artifact.stat().st_mtime_ns, mtime)
+        self.assertNotEqual(first["sources"][0]["retrievedAt"], repeated["sources"][0]["retrievedAt"])
+        self.assertNotIn(b"- Retrieved:", original)
+
+    def test_changed_official_content_keeps_the_previously_bound_artifact(self):
+        first_body = b"<html><title>Official guidance</title><main><p>" + b"First verified content. " * 20 + b"</p></main></html>"
+        second_body = first_body.replace(b"First", b"Revised")
+        url = "https://www.nhs.uk/symptoms/chest-pain/"
+        with mock.patch.object(self.module.public_sources, "_open_remote", side_effect=[self.response(first_body), self.response(second_body)]):
+            first = self.module.fetch({"url": url})
+            original = (self.workspace / first["artifacts"][0]).read_bytes()
+            second = self.module.fetch({"url": url})
+        self.assertNotEqual(first["artifacts"], second["artifacts"])
+        self.assertEqual((self.workspace / first["artifacts"][0]).read_bytes(), original)
+        self.assertEqual(first["data"]["artifactSha256s"][first["artifacts"][0]], hashlib.sha256(original).hexdigest())
+
+    def test_identical_html_at_distinct_official_urls_cannot_overwrite_source_identity(self):
+        body = b"<html><title>Official guidance</title><main><p>" + b"Verified official content. " * 20 + b"</p></main></html>"
+        first_url = "https://www.nhs.uk/symptoms/chest-pain/"
+        second_url = first_url + "?view=print"
+        with mock.patch.object(self.module.public_sources, "_open_remote", side_effect=lambda *_args, **_kwargs: self.response(body)):
+            first = self.module.fetch({"url": first_url})
+            original = (self.workspace / first["artifacts"][0]).read_bytes()
+            second = self.module.fetch({"url": second_url})
+        self.assertNotEqual(first["artifacts"], second["artifacts"])
+        self.assertEqual((self.workspace / first["artifacts"][0]).read_bytes(), original)
+        self.assertIn(second_url, (self.workspace / second["artifacts"][0]).read_text())
+
+    def test_source_directory_symlinks_are_refused_before_preserving_content(self):
+        outside = pathlib.Path(self.temp.name) / "outside"
+        outside.mkdir()
+        (self.workspace / ".evimed-sources").symlink_to(outside, target_is_directory=True)
+        body = b"<main><p>" + b"Verified official content. " * 20 + b"</p></main>"
+        with mock.patch.object(self.module.public_sources, "_open_remote", return_value=self.response(body)):
+            result = self.module.fetch({"url": "https://www.nhs.uk/symptoms/chest-pain/"})
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "official_page_output_invalid")
+        self.assertEqual(list(outside.iterdir()), [])
 
 
 if __name__ == "__main__":

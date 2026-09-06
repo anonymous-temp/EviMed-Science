@@ -6,6 +6,9 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -128,6 +131,104 @@ class OpenAccessFullTextTests(unittest.TestCase):
         os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(linked)
         with self.assertRaisesRegex(self.module.FullTextError, "workspace"):
             self.module._workspace()
+
+    def test_identical_xml_is_immutable_while_retrieval_provenance_advances(self):
+        with mock.patch.object(self.module, "_resolve", return_value={"pmcid": "PMC123456"}), \
+                mock.patch.object(self.module, "_request_bytes", return_value=XML), \
+                mock.patch.object(self.module, "datetime") as clock:
+            clock.now.return_value = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            first = self.module.fetch({"identifier": "PMC123456"})
+            original = {name: (self.workspace / name).read_bytes() for name in first["artifacts"]}
+            mtimes = {name: (self.workspace / name).stat().st_mtime_ns for name in first["artifacts"]}
+            clock.now.return_value = datetime(2026, 1, 2, tzinfo=timezone.utc)
+            second = self.module.fetch({"identifier": "PMC123456"})
+        self.assertEqual(first["artifacts"], second["artifacts"])
+        self.assertEqual(first["data"]["artifactSha256s"], second["data"]["artifactSha256s"])
+        self.assertNotEqual(first["sources"][0]["retrievedAt"], second["sources"][0]["retrievedAt"])
+        for name, payload in original.items():
+            self.assertEqual((self.workspace / name).read_bytes(), payload)
+            self.assertEqual((self.workspace / name).stat().st_mtime_ns, mtimes[name])
+        self.assertNotIn("- Retrieved:", (self.workspace / first["data"]["markdownPath"]).read_text())
+
+    def test_changed_xml_has_a_new_version_and_preserves_both_prior_artifacts(self):
+        changed = XML.replace(b"100 participants", b"120 participants")
+        legacy = self.workspace / ".evimed-sources" / "PMC123456" / "fulltext.md"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("Already-bound legacy article.\n")
+        with mock.patch.object(self.module, "_resolve", return_value={"pmcid": "PMC123456"}), \
+                mock.patch.object(self.module, "_request_bytes", side_effect=[XML, changed, XML]):
+            first = self.module.fetch({"identifier": "PMC123456"})
+            original = {name: (self.workspace / name).read_bytes() for name in first["artifacts"]}
+            second = self.module.fetch({"identifier": "PMC123456"})
+            restored = self.module.fetch({"identifier": "PMC123456"})
+        self.assertTrue(set(first["artifacts"]).isdisjoint(second["artifacts"]))
+        self.assertEqual(restored["artifacts"], first["artifacts"])
+        for name, payload in original.items():
+            self.assertEqual((self.workspace / name).read_bytes(), payload)
+        self.assertEqual(legacy.read_text(), "Already-bound legacy article.\n")
+        self.assertIn("120 participants", (self.workspace / second["data"]["markdownPath"]).read_text())
+
+    def test_pdf_captures_reuse_identical_bytes_and_version_changed_bytes(self):
+        first_pdf, second_pdf = b"%PDF synthetic first", b"%PDF synthetic second"
+
+        def reader(stream):
+            text = ("First PDF evidence. " if stream.getvalue() == first_pdf else "Second PDF evidence. ") * 200
+            return SimpleNamespace(is_encrypted=False, pages=[SimpleNamespace(extract_text=lambda: text)], metadata=SimpleNamespace(title="Stable PDF title"))
+
+        records = [
+            (first_pdf, {"origin": "publisher", "version": "publishedVersion", "license": "cc-by"}),
+            (first_pdf, {"origin": "repository", "version": "acceptedVersion", "license": "unspecified"}),
+            (second_pdf, {"origin": "publisher", "version": "publishedVersion", "license": "cc-by"}),
+        ]
+        with mock.patch.dict(sys.modules, {"pypdf": SimpleNamespace(PdfReader=reader)}), \
+                mock.patch.object(self.module, "_resolve", return_value={"doi": "10.1/test", "title": "Lookup title"}), \
+                mock.patch.object(self.module.public_sources, "open_access_pdf_bytes", side_effect=records):
+            first = self.module.fetch({"identifier": "10.1/test"})
+            original = {name: (self.workspace / name).read_bytes() for name in first["artifacts"]}
+            repeated = self.module.fetch({"identifier": "10.1/test"})
+            changed = self.module.fetch({"identifier": "10.1/test"})
+        self.assertEqual(first["status"], "success")
+        self.assertEqual(first["artifacts"], repeated["artifacts"])
+        self.assertEqual(first["data"]["artifactSha256s"], repeated["data"]["artifactSha256s"])
+        self.assertEqual(repeated["data"]["openAccessOrigin"], "repository")
+        self.assertTrue(set(first["artifacts"]).isdisjoint(changed["artifacts"]))
+        for name, payload in original.items():
+            self.assertEqual((self.workspace / name).read_bytes(), payload)
+
+    def test_parallel_identical_fetches_publish_one_complete_capture(self):
+        with mock.patch.object(self.module, "_resolve", return_value={"pmcid": "PMC123456"}), \
+                mock.patch.object(self.module, "_request_bytes", return_value=XML), \
+                ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _index: self.module.fetch({"identifier": "PMC123456"}), range(8)))
+        self.assertTrue(all(result["status"] == "success" for result in results))
+        self.assertTrue(all(result["artifacts"] == results[0]["artifacts"] for result in results))
+        for name, digest in results[0]["data"]["artifactSha256s"].items():
+            self.assertEqual(hashlib.sha256((self.workspace / name).read_bytes()).hexdigest(), digest)
+        self.assertFalse(list(self.workspace.rglob("*.tmp")))
+
+    def test_an_existing_capture_symlink_is_refused_without_touching_its_target(self):
+        outside = pathlib.Path(self.temp.name) / "outside.txt"
+        outside.write_text("Do not change this target.")
+        with mock.patch.object(self.module, "_resolve", return_value={"pmcid": "PMC123456"}), \
+                mock.patch.object(self.module, "_request_bytes", return_value=XML):
+            first = self.module.fetch({"identifier": "PMC123456"})
+            target = self.workspace / first["data"]["markdownPath"]
+            target.unlink()
+            target.symlink_to(outside)
+            refused = self.module.fetch({"identifier": "PMC123456"})
+        self.assertEqual(refused["status"], "error")
+        self.assertEqual(refused["error"]["code"], "full_text_output_invalid")
+        self.assertEqual(outside.read_text(), "Do not change this target.")
+
+    def test_lookup_metadata_does_not_change_canonical_xml_content(self):
+        with mock.patch.object(self.module, "_resolve", side_effect=[
+            {"pmcid": "PMC123456", "doi": "10.1/lookup-first", "title": "First lookup"},
+            {"pmcid": "PMC123456", "doi": "10.1/lookup-second", "title": "Updated lookup"},
+        ]), mock.patch.object(self.module, "_request_bytes", return_value=XML):
+            first = self.module.fetch({"identifier": "PMC123456"})
+            repeated = self.module.fetch({"identifier": "PMC123456"})
+        self.assertEqual(first["artifacts"], repeated["artifacts"])
+        self.assertEqual(first["data"]["artifactSha256s"], repeated["data"]["artifactSha256s"])
 
 
 if __name__ == "__main__":
