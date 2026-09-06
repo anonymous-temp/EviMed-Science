@@ -326,7 +326,7 @@
     },
     "research-topic-report": {
       "capability": "research-topic-selection",
-      "requiredCount": 3,
+      "requiredCount": 5,
       "outputs": [
         {
           "path": "research-topic-report.md",
@@ -342,6 +342,16 @@
           "path": "research-topic-run.json",
           "required": true,
           "addedOn": "2026-08-30"
+        },
+        {
+          "path": "research-portfolio.json",
+          "required": true,
+          "addedOn": "2026-09-06"
+        },
+        {
+          "path": "evidence-records.json",
+          "required": true,
+          "addedOn": "2026-09-06"
         }
       ]
     },

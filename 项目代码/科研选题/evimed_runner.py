@@ -26,6 +26,17 @@ def _dump_model(value):
     return value.model_dump(mode="json") if hasattr(value, "model_dump") else value
 
 
+def _dump_evidence_record(record):
+    value = _dump_model(record)
+    return {
+        **value,
+        "publicationStatus": value.get("publication_status", "unknown"),
+        "statusCheckedAt": value.get("status_checked_at"),
+        "statusSource": value.get("status_source"),
+        "statusNote": value.get("status_note"),
+    }
+
+
 def _normalize_report_certainty(content: str) -> str:
     """Downgrade promotional certainty while preserving the scientific claim."""
     replacements = (
@@ -439,7 +450,7 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
     )
     evidence_path = output_dir / "evidence-records.json"
     evidence_path.write_text(
-        json.dumps([_dump_model(record) for record in completed.evidence_records], ensure_ascii=False, indent=2),
+        json.dumps([_dump_evidence_record(record) for record in completed.evidence_records], ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     stats_path = output_dir / "evidence-stats.json"

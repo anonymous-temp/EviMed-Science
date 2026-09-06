@@ -6,7 +6,7 @@ import asyncio
 import aiohttp
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import Counter
 from models.schemas import LiteratureRecord, QueryTerms, EvidenceStats
 import time
@@ -415,6 +415,17 @@ class PubMedSearchService:
 
             # 研究类型识别
             publication_types = article_elem.findall(".//PublicationType")
+            publication_type_names = [
+                value.text.strip() for value in publication_types if value.text and value.text.strip()
+            ]
+            status_terms = " ".join(publication_type_names).casefold()
+            title_status = title.strip().casefold()
+            if "retract" in status_terms or title_status.startswith("retracted:") or title_status.startswith("retraction notice"):
+                publication_status = "retracted"
+            elif any(term in status_terms for term in ("corrected", "erratum")) or title_status.startswith(("correction:", "corrigendum:")):
+                publication_status = "corrected"
+            else:
+                publication_status = "active"
             study_design = self._identify_study_design(
                 publication_types,
                 mesh_terms=mesh_terms,
@@ -441,7 +452,11 @@ class PubMedSearchService:
                 study_design=study_design,
                 is_clinical=is_clinical,
                 language="en",
-                citations=0
+                citations=0,
+                publication_types=publication_type_names,
+                publication_status=publication_status,
+                status_checked_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                status_source="PubMed",
             )
 
         except Exception as e:

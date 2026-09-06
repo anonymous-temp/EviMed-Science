@@ -87,6 +87,16 @@ function notice(issues, check, message, path = PORTFOLIO_FILE) {
   })
 }
 
+/** @param {GateIssue[]} issues @param {string} check @param {string} message @param {string} [path] */
+function requirement(issues, check, message, path = EVIDENCE_FILE) {
+  issues.push({ code: 'topic_portfolio_invalid', message, severity: 'required', path, check })
+}
+
+/** @param {unknown} value @returns {boolean} */
+function isoTimestamp(value) {
+  return nonEmpty(value) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
+}
+
 /** @param {GateInput} input @returns {{ issues: GateIssue[], metrics: Record<string, any> }} */
 export function researchTopicPortfolioFindings(input) {
   const issues = /** @type {GateIssue[]} */ ([])
@@ -174,6 +184,22 @@ export function researchTopicPortfolioFindings(input) {
     if (unknown.length) {
       notice(issues, 'topic-evidence-lineage', `${label} names ${unknown.length} source evidence id(s) that do not resolve to ${EVIDENCE_FILE}.`)
       evidenceFilesConsistent = false
+    }
+    for (const id of candidate.sourceEvidenceIds) {
+      const evidence = evidenceById.get(id)
+      if (!evidence) continue
+      const status = evidence.publicationStatus
+      const checked = isoTimestamp(evidence.statusCheckedAt) && nonEmpty(evidence.statusSource)
+      if (!checked || !['active', 'corrected', 'retracted', 'unknown'].includes(status)) {
+        requirement(issues, 'topic-publication-status', `${label} uses ${id} without a current, source-attributed publication-status check.`)
+        evidenceFilesConsistent = false
+      } else if (status === 'retracted') {
+        requirement(issues, 'topic-publication-status', `${label} uses retracted evidence ${id}; exclude it from candidate support or explicitly replace it with active evidence.`)
+        evidenceFilesConsistent = false
+      } else if (status === 'unknown') {
+        requirement(issues, 'topic-publication-status', `${label} uses ${id} whose publication status remains unknown; it cannot support a recommended topic.`)
+        evidenceFilesConsistent = false
+      }
     }
     const preservedPmids = candidate.sourceEvidenceIds
       .map((id) => evidenceById.get(id)?.pmid)

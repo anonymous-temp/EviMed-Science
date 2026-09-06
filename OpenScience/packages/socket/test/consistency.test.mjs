@@ -479,7 +479,7 @@ test("every plugin mounts against a registry with the harness's own precondition
   }
 
   const byPlugin = Object.fromEntries(mounted);
-  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_complete_run", "evimed_delegate", "evimed_plan", "evimed_submit_deliverable"]);
+  assert.deepEqual(byPlugin["run-policy"].sort(), ["evimed_complete_run", "evimed_delegate", "evimed_plan", "evimed_revise_deliverable", "evimed_submit_deliverable"]);
   assert.deepEqual(byPlugin.review, ["evimed_review_run"]);
   assert.deepEqual(byPlugin.screening, ["evimed_screen_batch"]);
   assert.deepEqual(byPlugin.capsule.sort(), ["evimed_capsule_note", "evimed_capsule_recall"]);
@@ -563,19 +563,21 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
-/** @param {{ briefId?: string|null, child?: boolean }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[], subagentStart?: (...args: any[]) => any }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
+  const childRows = new Map();
   const files = new Map();
   /** @type {any[]} */
   const injected = [];
   const agent = { id: "native-agent", session: { id: "native-session", header: { cwd: "/workspace", ...(child ? { origin: "subagent" } : {}) } }, inject: (/** @type {any} */ message) => injected.push(message) };
   ctx.provide("agents", { get: () => agent });
-  ctx.provide("evimedRun", { runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) }, planIndex: { put: async () => {} }, gateRuns: { put: async () => {} }, evidence: { entries: () => [] } });
+  ctx.provide("evimedRun", { runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) }, planIndex: { put: async () => {} }, gateRuns: { put: async () => {} }, evidence: { entries: () => [] }, subagents: childRows });
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
-  ctx.provide("evimedCapabilities", [{ id: "research-brief", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
+  ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
+  ctx.subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
     readText: async (/** @type {string} */ target) => target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
@@ -586,8 +588,45 @@ async function nativePolicyFixture({ briefId = null, child = false } = {}) {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
   };
   const execute = (/** @type {string} */ name, /** @type {any} */ args) => ctx.tools.execute({ agent, name, callId: `call-${name}`, arguments: args, signal: AbortSignal.timeout(2000) });
-  return { ctx, rows, files, injected, agent, step, execute };
+  return { ctx, rows, childRows, files, injected, agent, step, execute };
 }
+
+test("a delegation constructor failure leaves the item retriable and records no running child", async () => {
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => { throw new Error('tools.restrict() names unknown global tool "mcp__evimed__patent_search"'); },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const result = await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  assert.equal(result.value.ok, false);
+  assert.equal(result.value.code, "subagent_start_failed");
+  const status = await f.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.items[0].status, "planned", "the same deliverable must remain eligible for a corrected retry");
+  assert.equal(f.childRows.size, 0, "a child that never started cannot be recorded as running");
+});
+
+test("a successful delegation receipt exposes the kernel-owned child session id", async () => {
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => ({ id: "child-session-1", result: Promise.resolve({ stopReason: "completed", output: "done" }) }),
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+
+  const result = await f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+
+  assert.equal(result.value.ok, true);
+  assert.equal(result.value.data.childSessionId, "child-session-1");
+});
 
 test("a native root without a brief gets one stable isolated workflow id, while a bound run keeps its id", async () => {
   const native = await nativePolicyFixture();
@@ -599,6 +638,10 @@ test("a native root without a brief gets one stable isolated workflow id, while 
   const bound = await nativePolicyFixture({ briefId: "ordinary_owner" });
   await bound.step(1);
   assert.deepEqual([...bound.rows.keys()], ["ordinary_owner"]);
+  const plan = await bound.execute("evimed_plan", { action: "write", clarifications: ["Bound run"], deliverables: [], reason: "No file needed" });
+  assert.equal(plan.value.data.runId, "ordinary_owner", "the observed tool receipt must bind the projection to this run");
+  const status = await bound.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.runId, "ordinary_owner");
   const child = await nativePolicyFixture({ child: true });
   await child.step(1);
   assert.equal(child.rows.size, 0, "the root fallback must not mint child workflow identities");
@@ -617,6 +660,33 @@ test("a completed native workflow may plan again and its receipt names actual wo
   assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d2" })).value.ok, true);
   const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
   assert.equal(receipt.entries[0].files[0].path, "deliverables/d2/brief.md");
+});
+
+test("an accepted deliverable enters submitted state and needs a fresh receipt for its new bytes", async () => {
+  const f = await nativePolicyFixture({ briefId: "revision-owner" });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+  });
+  const path = "/workspace/deliverables/d1/brief.md";
+  const firstBytes = "# Report\nFirst accepted version.\n";
+  f.files.set(path, firstBytes);
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+  assert.equal((await f.execute("evimed_plan", { action: "status" })).value.data.items[0].status, "accepted");
+
+  const opened = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Server gate requested a correction." });
+
+  assert.equal(opened.value.ok, true);
+  assert.equal((await f.execute("evimed_plan", { action: "status" })).value.data.items[0].status, "submitted");
+
+  const secondBytes = "# Report\nCorrected and independently revalidated version.\n";
+  f.files.set(path, secondBytes);
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+  const current = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  const firstDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(firstBytes)).then((value) => [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
+  assert.notEqual(current.entries[0].files[0].sha256, firstDigest);
 });
 
 // The final-reply scan has to be able to fail.

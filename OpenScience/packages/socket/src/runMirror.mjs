@@ -3,9 +3,10 @@
  *
  * Hidden knowledge: what the control plane is allowed to read. DSH's own
  * storage format carries no compatibility promise, so nothing outside this
- * process may open it. Instead the four tables below are projected into one
+ * process may open it. Instead the tables below are projected into one
  * workspace file, `.evimed-run/state.json`, which the control plane and the
- * browser read — and which the path guard makes unwritable by the model.
+ * browser read for progress. It is diagnostic input, never final source proof;
+ * source SHA authority comes from authenticated kernel child histories.
  *
  * There is no `claims` table. A claim's binding to its sources already exists,
  * in `clinical-evidence-matrix.json`; a second copy would be a second truth.

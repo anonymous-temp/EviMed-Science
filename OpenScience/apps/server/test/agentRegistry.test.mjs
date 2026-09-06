@@ -150,7 +150,7 @@ test("official specialist packages preserve domain-specific evidence and release
     ["off-label-analysis", "2.2.1"],
     ["open-domain-answer", "1.0.0"],
     ["peer-review", "1.0.1"],
-    ["research-topic-selection", "1.2.0"],
+    ["research-topic-selection", "1.3.0"],
   ]);
   const evidenceSnapshotAgents = new Set(["comprehensive-drug-evaluation", "drug-selection", "off-label-analysis"]);
   for (const agent of registry.list()) {
@@ -234,6 +234,13 @@ test("official specialist packages preserve domain-specific evidence and release
   assert.match(skills["mendelian-randomization"], /do not invent SNPs/i);
   assert.match(skills["bibliometric-analysis"], /does not estimate clinical efficacy/i);
   assert.match(skills["research-topic-selection"], /absence from a small search is not proof of novelty/i);
+  for (const id of ["clinical-evidence-synthesis", "research-topic-selection"]) {
+    const deliverySkill = await readFile(path.join(officialCapabilityRoot, id, "SKILL.md"), "utf8");
+    assert.ok(
+      deliverySkill.lastIndexOf("evimed_review_run") < deliverySkill.lastIndexOf("evimed_submit_deliverable"),
+      `${id} must run scientific review while the draft is still editable, before submission freezes it`,
+    );
+  }
   assert.match(skills["peer-review"], /do not turn an exception into a\s+synthetic completed review/i);
 });
 
@@ -508,6 +515,12 @@ test("a capability that writes files declares its skills, its tools and every ou
       "clinical-evidence-run.json",
       "question-coverage.json",
     ],
+  );
+  const topic = catalogue.find((entry) => entry.id === "research-topic-selection").manifest;
+  assert.ok(!topic.tools.includes("mcp__evimed__patent_search"), "a deployment-disabled tool cannot enter a delegated child");
+  assert.deepEqual(
+    topic.produces[0].outputs.filter((output) => output.required).map((output) => output.path),
+    ["research-topic-report.md", "evidence-map.md", "research-topic-run.json", "research-portfolio.json", "evidence-records.json"],
   );
 
   // The required/optional distinction is live, not a field nobody sets: at least

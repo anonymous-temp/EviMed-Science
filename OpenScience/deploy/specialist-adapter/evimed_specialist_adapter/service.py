@@ -88,6 +88,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _job_id(arguments: dict[str, Any], spec: dict[str, Any]) -> str:
+    requested = arguments.get("jobId")
+    if requested is None:
+        return f"{spec['prefix']}{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
+    if not isinstance(requested, str) or not re.fullmatch(
+        re.escape(spec["prefix"]) + r"[a-z0-9-]{8,80}", requested
+    ):
+        raise ValueError(
+            "jobId must use the specialist prefix and contain only lowercase letters, numbers, and hyphens"
+        )
+    return requested
+
+
 def _kind() -> str:
     kind = os.getenv("EVIMED_SPECIALIST_KIND", "").strip()
     if kind not in SPECS:
@@ -97,6 +110,13 @@ def _kind() -> str:
 
 def _spec() -> dict[str, Any]:
     return SPECS[_kind()]
+
+
+def _accepted_start_inputs() -> list[str]:
+    inputs = [*_spec()["inputs"]]
+    if _kind() == "research-topic-selection":
+        inputs.append("jobId")
+    return inputs
 
 
 def _agent_root() -> Path:
@@ -267,11 +287,15 @@ def _validated_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
         allowed = {"action"}
     elif action == "start":
         allowed = {"action", *spec["inputs"]}
+        if _kind() == "research-topic-selection":
+            allowed.add("jobId")
     else:
         allowed = {"action", "jobId", "waitSeconds"}
     if set(arguments) - allowed:
         raise ValueError("request contains unsupported fields")
     if action == "start":
+        if "jobId" in arguments:
+            _job_id(arguments, spec)
         if _kind() == "research-topic-selection":
             for key, limit in (("researchDirection", 4000), ("availableData", 4000), ("population", 1000), ("studySetting", 1000)):
                 if key in arguments and (not isinstance(arguments[key], str) or not arguments[key].strip() or len(arguments[key]) > limit):
@@ -338,12 +362,14 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             request["manuscript"] = str(_workspace_file(workspace, request.get("manuscript")))
         except ValueError as exc:
             return _error("specialist_input_path_invalid", str(exc))
-    job_id = f"{spec['prefix']}{time.strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(6)}"
+    job_id = _job_id(arguments, spec)
     run_root = workspace / spec["directory"]
+    state_path, _ = _job_paths(workspace, job_id)
+    if (run_root / job_id).exists() or state_path.exists():
+        return _error("specialist_job_id_conflict", "jobId already exists in this project workspace.")
     for target in (run_root, run_root / ".jobs", run_root / job_id, run_root / job_id / "output"):
         _ensure_directory(workspace, target)
     output_root = run_root / job_id / "output"
-    state_path, _ = _job_paths(workspace, job_id)
     root = _agent_root()
     state = {
         "schemaVersion": 1,
@@ -498,7 +524,13 @@ def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return {
             "status": "success",
             "summary": f"{_spec()['label']} is configured for managed EviMed SaaS execution.",
-            "data": {"available": True, "model": "deepseek-v4-pro", "thinking": True},
+            "data": {
+                "available": True,
+                "model": "deepseek-v4-pro",
+                "thinking": True,
+                **({"acceptedStartInputs": _accepted_start_inputs()}
+                   if _kind() == "research-topic-selection" else {}),
+            },
             "sources": [_source("service")],
         }
     if action == "start":
@@ -616,7 +648,13 @@ def _create_app() -> FastAPI:
     @instance.get("/health")
     def health() -> dict[str, Any]:
         ready = _model_ready()
-        return {"status": "ok" if ready else "degraded", "ready": ready, "specialist": _kind()}
+        return {
+            "status": "ok" if ready else "degraded",
+            "ready": ready,
+            "specialist": _kind(),
+            **({"acceptedStartInputs": _accepted_start_inputs()}
+               if _kind() == "research-topic-selection" else {}),
+        }
 
     def specialist_call(
         arguments: dict[str, Any] = Body(...),

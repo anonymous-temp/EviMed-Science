@@ -38,7 +38,7 @@ const MOUNTED_TOOLS = new Set([
   "ask_user", "subagent", "subagent_control", "subagent_report", "workflow",
   // Ours, from packages/socket/plugins/*
   "evimed_plan", "evimed_delegate", "evimed_screen_batch", "evimed_review_run",
-  "evimed_submit_deliverable", "evimed_complete_run",
+  "evimed_revise_deliverable", "evimed_submit_deliverable", "evimed_complete_run",
   "evimed_capsule_note", "evimed_capsule_recall",
 ]);
 

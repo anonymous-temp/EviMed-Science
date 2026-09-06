@@ -198,6 +198,51 @@ def test_http_topic_job_persists_the_validated_request(tmp_path, monkeypatch) ->
     assert json.loads(state.read_text())["request"] == {key: value for key, value in request.items() if key != "action"}
 
 
+def test_http_topic_start_accepts_a_safe_scoped_job_id_and_rejects_reuse(tmp_path, monkeypatch) -> None:
+    module, client, secret, workspace = _load_service(tmp_path, monkeypatch, kind="research-topic-selection")
+    marker = tmp_path / "agent" / "services" / "task_service.py"
+    marker.parent.mkdir()
+    marker.write_text("# topic marker\n")
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: object())
+    request = {"action": "start", "jobId": "topic-dialysis-followup-001", "researchDirection": "Dialysis adherence"}
+    first = client.post("/api/v1/evimed/research-topic-selection", json=request,
+                        headers={"Authorization": f"Bearer {_token(secret)}"})
+    second = client.post("/api/v1/evimed/research-topic-selection", json=request,
+                         headers={"Authorization": f"Bearer {_token(secret)}"})
+    assert first.status_code == 200
+    assert first.json()["data"]["jobId"] == request["jobId"]
+    assert second.status_code == 200
+    assert second.json()["error"]["code"] == "specialist_job_id_conflict"
+    state = workspace / "research-topic-runs" / ".jobs" / (request["jobId"] + ".json")
+    assert json.loads(state.read_text())["request"] == {"researchDirection": "Dialysis adherence"}
+
+
+def test_topic_capabilities_publish_the_exact_start_contract(tmp_path, monkeypatch) -> None:
+    module, client, secret, _ = _load_service(tmp_path, monkeypatch, kind="research-topic-selection")
+    marker = tmp_path / "agent" / "services" / "task_service.py"
+    marker.parent.mkdir()
+    marker.write_text("# topic marker\n")
+    response = client.post("/api/v1/evimed/research-topic-selection", json={"action": "capabilities"},
+                           headers={"Authorization": f"Bearer {_token(secret)}"})
+    assert response.status_code == 200
+    assert response.json()["data"]["acceptedStartInputs"] == [
+        "researchDirection", "outputLanguage", "availableData", "population", "studySetting",
+        "resourceConstraints", "jobId",
+    ]
+
+
+def test_topic_health_binds_the_deployed_start_contract(tmp_path, monkeypatch) -> None:
+    _, client, _, _ = _load_service(tmp_path, monkeypatch, kind="research-topic-selection")
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["acceptedStartInputs"] == [
+        "researchDirection", "outputLanguage", "availableData", "population", "studySetting",
+        "resourceConstraints", "jobId",
+    ]
+
+
 def test_bibliometric_record_limit_is_rejected_before_queue(tmp_path, monkeypatch) -> None:
     _, client, secret, workspace = _load_service(tmp_path, monkeypatch)
     response = client.post(

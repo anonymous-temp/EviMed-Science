@@ -53,6 +53,7 @@ import {
   completionCheck,
   contentTriggerIssues,
   delegatableItems,
+  errorMessage,
   evidenceSourceErrorCode,
   gateDeliverable,
   indexPlan,
@@ -341,14 +342,16 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   // plugin's apply failed on its first line and the run either refused to start
   // or came up with no gate at all. The effect callbacks stay synchronous
   // because what they return is the disposer.
-  const [plan, delegate, submit, complete] = await Promise.all([
+  const [plan, delegate, revise, submit, complete] = await Promise.all([
     planTool(),
     delegateTool(),
+    reviseTool(),
     submitTool(),
     completeTool(),
   ])
   ctx.effect(() => registerTool(ctx, plan))
   ctx.effect(() => registerTool(ctx, delegate))
+  ctx.effect(() => registerTool(ctx, revise))
   ctx.effect(() => registerTool(ctx, submit))
   ctx.effect(() => registerTool(ctx, complete))
 
@@ -384,7 +387,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       async execute(args, call) {
         const entry = sessionState(call.sessionId)
         if (args.action === 'status') {
-          return { ok: true, data: { revision: entry.plan?.revision ?? 0, items: entry.items.map(publicItem) } }
+          return { ok: true, data: { runId: entry.runId, revision: entry.plan?.revision ?? 0, items: entry.items.map(publicItem) } }
         }
         const revision = (entry.plan?.revision ?? 0) + 1
         const raw = {
@@ -407,7 +410,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
         await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
         await putPlanIndex(store(), entry)
-        return { ok: true, data: { revision, deliverables: entry.items.map(publicItem) } }
+        return { ok: true, data: { runId: entry.runId, revision, deliverables: entry.items.map(publicItem) } }
       },
     })
   }
@@ -448,12 +451,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           inputs: args.inputs ?? {},
           toolFilter: delegationToolFilter(manifest, { allowBash: true }),
         })
-        entry.budget.children += 1
-        void putRunMirror(ctx, entry, config.bundleVersion)
-        Object.assign(item, advancePlanItem(item, 'delegate'))
-        await putPlanIndex(store(), entry)
-
-        // Recorded before the child starts, and again when it settles. The
+        // Recorded as soon as the child has actually started, and again when it settles. The
         // `subagents` medium had no writer at all: `projectRunState` published
         // an empty array beside a `budget.children` that counted delegations,
         // so the durable record said "no children" for a run that had them.
@@ -463,8 +461,26 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // the model never calls the `skill` tool and a transcript scan for that
         // call can only ever conclude the skill was missing.
         const injected = skillBodies.map((skill) => skill.name)
+        let run
+        try {
+          run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), call.signal)
+        } catch (error) {
+          // Starting is the commit point. A constructor can reject a stale
+          // tool filter before any child exists; charging a child, marking the
+          // item delegated, or recording a running subagent before that point
+          // leaves a job that can never settle and cannot be retried.
+          const detail = errorMessage(error)
+          return {
+            ok: false,
+            code: 'subagent_start_failed',
+            issues: [issue('subagent_start_failed', `分工没有启动：${detail}`)],
+          }
+        }
+        entry.budget.children += 1
+        Object.assign(item, advancePlanItem(item, 'delegate'))
         recordSubagent(ctx, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
-        const run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), call.signal)
+        await putPlanIndex(store(), entry)
+        await putRunMirror(ctx, entry, config.bundleVersion)
         const outcome = toSubagentOutcome(run, await run.result)
         item.childSessionId = outcome.childSessionId
         recordSubagent(ctx, item.id, {
@@ -498,7 +514,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             await putPlanIndex(store(), entry)
             return { ok: false, code: 'subagent_failed', issues: [issue('subagent_failed', `分工两次都没有完成：${retried.diagnostic || retried.stopReason}`)] }
           }
-          return { ok: true, data: { deliverableId: item.id, report: retried.structured ?? null, retried: true } }
+          return { ok: true, data: { deliverableId: item.id, childSessionId: retried.childSessionId, report: retried.structured ?? null, retried: true } }
         }
         if (settlement.action === 'fail') {
           Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
@@ -506,7 +522,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           return { ok: false, code: 'subagent_failed', issues: [issue('subagent_failed', settlement.reason)] }
         }
         await putPlanIndex(store(), entry)
-        return { ok: true, data: { deliverableId: item.id, report: outcome.structured ?? null, status: item.status } }
+        return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status } }
       },
     })
   }
@@ -598,6 +614,49 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         Object.assign(item, advancePlanItem({ ...item, status: 'submitted' }, 'accept', { receiptDigest: await sha256Hex(JSON.stringify(receiptEntry)), lastIssues: [] }))
         await putPlanIndex(store(), entry)
         return { ok: true, data: { deliverableId: item.id, contractKind: item.contractKind, label: contractKindLabel(item.contractKind), metrics: verdict.metrics, notices: receiptEntry.notices } }
+      },
+    })
+  }
+
+  async function reviseTool() {
+    return defineTool({
+      name: 'evimed_revise_deliverable',
+      description: [
+        '为已经通过本地门禁的交付物开启一次新修订。',
+        '服务端门禁提出修复时，已接受字节会先保存在运行容器不可见的控制面私有存储；本工具再次核对当前回执，只有一致时才重新允许修改。',
+        '按问题修改后必须重新调用 evimed_submit_deliverable，让新字节生成新回执。',
+      ].join(' '),
+      parameters: {
+        deliverableId: { type: 'string', required: true, description: '已接受、需要修订的交付物 id。' },
+        reason: { type: 'string', required: true, description: '开启修订的具体原因，例如服务端门禁返回的问题。' },
+      },
+      async execute(args, call) {
+        const entry = sessionState(call.sessionId)
+        const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
+        if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
+        if (item.status !== 'accepted') return { ok: false, code: 'deliverable_revision_unavailable', issues: [issue('deliverable_revision_unavailable', '只有已经通过门禁且仍与当前回执一致的交付物才能开启新修订。')] }
+        const reason = String(args.reason ?? '').trim()
+        if (!reason || reason.length > 1000) return { ok: false, code: 'deliverable_revision_reason_invalid', issues: [issue('deliverable_revision_reason_invalid', '修订原因必须是 1 到 1000 个字符。')] }
+        const runStore = store()
+        if (!runStore) return { ok: false, code: 'deliverable_revision_store_unavailable', issues: [issue('deliverable_revision_store_unavailable', '运行状态存储当前不可用，原版本未解除冻结。')] }
+        const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
+        const expectedOutputs = manifest?.produces?.find((/** @type {any} */ entryProduces) => entryProduces.contractKind === item.contractKind)?.outputs ?? []
+        const cwd = entry.cwd || call.cwd
+        const files = await readDeliverableFiles(ctx, cwd, item.id, expectedOutputs)
+        const receipt = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
+        const priorReceipt = Array.isArray(receipt?.entries) ? receipt.entries.find((/** @type {any} */ candidate) => candidate.deliverableId === item.id) : null
+        const currentDigests = await digestFiles(files, item.id)
+        const receiptFiles = Array.isArray(priorReceipt?.files) ? priorReceipt.files : []
+        const matches = currentDigests.length === receiptFiles.length && currentDigests.every((file) => receiptFiles.some((/** @type {any} */ recorded) => (
+          recorded.path === file.path && recorded.sha256 === file.sha256 && recorded.bytes === file.bytes
+        )))
+        if (!priorReceipt || !matches) return { ok: false, code: 'accepted_deliverable_drifted', issues: [issue('accepted_deliverable_drifted', '当前文件已经不再匹配已接受回执，不能把它登记为原始版本；请保留现场并让控制面重判。')] }
+        const revisionId = `${entry.runId}:${item.id}:${await sha256Hex(JSON.stringify(priorReceipt))}`
+        Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
+        entry.completed = false
+        await putPlanIndex(runStore, entry)
+        await putRunMirror(ctx, entry, config.bundleVersion)
+        return { ok: true, data: { deliverableId: item.id, revisionId, priorFiles: receiptFiles.length } }
       },
     })
   }

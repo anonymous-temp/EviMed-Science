@@ -122,6 +122,7 @@ const TRANSITIONS = Object.freeze({
     delegated: Object.freeze({ submit: 'submitted', fail: 'failed', delegate: 'delegated' }),
     submitted: Object.freeze({ accept: 'accepted', reject: 'rejected', fail: 'failed' }),
     rejected: Object.freeze({ delegate: 'delegated', submit: 'submitted', fail: 'failed' }),
+    accepted: Object.freeze({ revise: 'submitted' }),
   }),
   evidence: Object.freeze({
     queued: Object.freeze({ ready: 'ready', reject: 'rejected', stale: 'stale' }),
