@@ -156,6 +156,31 @@ The September 6 source review confirmed that the following six complete volumes 
 - [ ] Run restore drills only in newly identified volumes/containers/internal networks. Verify actual PG table contents/counts, attachment bytes, MemOS registry and records, Neo4j relationships, Qdrant vectors/payload, Redis consumer/acknowledgement state and OpenList configuration. Disable clone scheduling, production callbacks and external storage access.
 - [ ] Publish and verify one complete set receipt before making Web readiness require it. Preserve local-only backup custody; off-host storage remains excluded by the user.
 
+### ECO03: project plugin configuration lifecycle
+
+The approved August DSH design section 21.8 fixes binary bundles in the runtime image; its hosted-client amendment keeps native settings/cordis mutation disabled. Implement the customer lifecycle through the existing platform settings page and scoped product APIs. The actual dsh-cite 0.3.2 global settings are timeout and user agent; only a bounded timeout is customer-editable. Citation style/language remain per-call tool arguments. Keep the original direct-network cite provider disabled in every configuration.
+
+**Public contract:** `GET /api/projects/:projectId/plugins` returns the approved binary catalog, saved configuration, effective configuration and pending/failed application state separately. `PUT .../plugins/dsh-cite` accepts exactly `{expectedRevision,enabled,settings:{timeoutMs}}`, with a real boolean and integer timeout 2000–15000 ms bounded by deployment policy. `GET .../dsh-cite/revisions`, `POST .../dsh-cite/rollback` with `{expectedRevision,targetRevision}`, and `POST .../dsh-cite/retry` complete the lifecycle. Unknown plugin IDs, pins, URLs, token paths, environment fields and user-agent overrides are refused. Only built/approved 0.3.2 is currently available; present configuration rollback truthfully, with no invented binary update.
+
+- [ ] **Persist and route:** add `apps/server/src/pluginService.mjs` and `pluginRoutes.mjs`, wire them through `server.mjs`, and add `plugin-apply` to `productPersistence.mjs` with an idempotent CHECK migration. Use a project-namespaced plugin document ID, session/CSRF/project authorization and one transaction for configuration revision plus job. Keep saved revision independent of polling observations. Recover last-known-good state after process restart. The real PostgreSQL acceptance must include this behavior:
+
+  ```js
+  const saved = await service.save(owner, project, {
+    expectedRevision: 0, enabled: true, settings: { timeoutMs: 4000 },
+  });
+  assert.equal(saved.desired.revision, 1);
+  assert.equal(saved.phase, "pending");
+  await assert.rejects(service.save(owner, project, {
+    expectedRevision: 0, enabled: false, settings: { timeoutMs: 4000 },
+  }), { status: 409 });
+  ```
+
+- [ ] **Apply only when idle:** add `pluginApplyWorker.mjs` using ProductJobs leases and a project-scoped admission fence. Check both ledger and real kernel activity; pending does not interrupt work. Applying blocks new native HTTP/mux and ordinary prompts before stopping that project's runtime. Validate account/project generation and desired revision at completion. On failed candidate startup/probe, restart and verify last-known-good configuration; distinguish a successful rollback from a second startup failure. A stale worker must not publish effective state.
+- [ ] **Carry the configuration into the actual runtime:** update `runtimeManager.mjs`, the controller client/server and protocol together, `dshProfilePatch.mjs`, the socket preset and citation bridge. Pass only fixed enabled/timeout/revision data, never mutate the shared global config or accept arbitrary loader patches. Test real controller-to-container handoff and both actual pinned composer bundle orders for enable/disable without duplicate cite providers.
+- [ ] **Prove effective state:** use the authenticated kernel connection and a narrow approved-plugin probe. Read actual installed version, resolved timeout and the current agent's five tool registrations; enabled state must execute fixed cite health/DOI lookup through the managed gateway, disabled state must have none of those registrations. No generic tool-execution or installation endpoint may be exposed. `pluginInventory/list` is supporting loader evidence only. Publish effective revision only after the probe succeeds for the exact runtime generation.
+- [ ] **Deliver the settings and archive flows:** add `apps/web/src/components/settings/PluginsCard.tsx` to `SettingsPage.tsx` and its typed API client. Use existing UI primitives and Chinese labels for saved/effective/pending/failed state, retry and configuration history. Add a strict plugin projection to `accountExport.mjs` for documents/revisions without runtime internals or secret-bearing arbitrary payloads. Preserve fail-closed handling of unknown historical shapes.
+- [ ] **Independent and public acceptance:** cover two accounts/two projects, CAS and save/enqueue rollback, lease loss, restart recovery, pending during a real run, apply/new-prompt races, failing probe with verified rollback, version 1→2→restore 1, account export and project deletion. Run focused server/real-PostgreSQL tests, frontend tests/types/lint and actual pinned runtime composition/probe checks. Then deploy the Web/controller/runtime together and complete the same customer settings-to-native-tool flow in an external browser. Keep all rows open until that evidence exists.
+
 ## Verified implementation checkpoints
 
 - Transport policy passed independent specification and code review at `98e98dc`; native envelope hardening followed at `4fc862a`. Production publication and live acceptance remain open.
