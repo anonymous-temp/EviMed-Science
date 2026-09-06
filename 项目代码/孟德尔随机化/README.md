@@ -64,7 +64,46 @@ The original request, input bindings and source evidence are immutable; ordinary
 status reads the same protected record. Account/project deletion removes this
 metadata with the existing project tree.
 
-Delivery scope: the fixed runner does not currently copy `.R` scripts into its
-published artifacts. This uploaded-input entry point does not complete CAP06
-reproducible-code delivery. Input manifests and standard data copies remain
-available without claiming that an analysis script was delivered.
+## Portable local analysis replay
+
+Paired local inputs with a declared-preclumped exposure produce an explicit
+`analysis-data/<pair>/replay/` package in the fixed runner's returned artifacts.
+It contains the exact CSV bytes used for analysis, the generated `analysis.R`
+from the existing statistical template, and `run.R`, which is also the entry
+executed in the original run. No remote extraction script is published.
+
+`options.json` records column mappings, requested thresholds, the first threshold
+actually used by the local engine, supplied instrument-selection declarations,
+and the random seed. `run_mr_local(..., seed=73421)` uses that default seed before
+analysis; callers may explicitly choose another nonnegative R integer seed.
+`observed-environment.json` records the observed R version, platform, package
+versions, RNG kinds and TwoSampleMR method/parameter defaults. The manifest
+records byte counts, SHA-256 and MD5 digests of package files and original
+outputs. Digests detect changes; they are not signatures or independent source
+verification. The hosted input manifest and its original-upload provenance
+remain separate and unchanged.
+
+Copy the whole replay directory to a clean location, then run:
+
+```bash
+Rscript --vanilla run.R
+```
+
+The command also works with a path to `run.R` from another working directory.
+It verifies package file digests and writes a new `results/` directory beside
+the entry; it refuses to overwrite an existing `results/`. No Python service,
+model, OpenGWAS JWT or network request is required. R and the recorded packages
+must already be installed and discoverable by R (use `R_LIBS_USER` if needed).
+Core dependencies are TwoSampleMR, ieugwasr, jsonlite and their dependencies;
+MRPRESSO, RadialMR and MendelianRandomization enable the corresponding optional
+sensitivity analyses. Use the recorded versions and platform to compare
+seed-sensitive results. Version differences are reported with a warning and a
+new environment receipt; unavailable sensitivity methods remain explicit skips.
+
+This package covers local analysis of the supplied instrument set, including
+the existing harmonization, primary methods and sensitivity analyses. It does
+not independently verify LD selection, reproduce remote or mixed-source
+extraction, establish cohort independence, or regenerate the model-written
+manuscript. A reverse-direction package requires its exposure to have its own
+preclumped declaration and provenance. Only claim a delivered replay package
+when its complete manifest and files appear in the returned artifacts.

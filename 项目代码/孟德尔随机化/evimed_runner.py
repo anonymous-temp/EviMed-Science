@@ -24,6 +24,7 @@ from evimed_local_inputs import (
     runner_sources,
     verify_published_inputs,
 )
+from mr_agent.tools.mr_replay import copy_replay_package
 
 # Load environment from .env and deploy.env for API tokens
 load_dotenv(Path(__file__).parent / ".env", override=False)
@@ -229,6 +230,10 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
                     if source.resolve() != target.resolve():
                         shutil.copy2(source, target)
                     copied.append(target.relative_to(output_dir).as_posix())
+            copied.extend(
+                path.relative_to(output_dir).as_posix()
+                for path in copy_replay_package(raw / "replay", target_dir / "replay")
+            )
             result.raw_data_path = Path("analysis-data") / pair_name
         rewritten_plots = {}
         for label, path in result.plots.items():
