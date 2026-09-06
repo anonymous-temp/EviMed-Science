@@ -182,6 +182,78 @@ class PostgresBackupTests(unittest.TestCase):
                 with self.subTest(arguments=arguments), self.assertRaises(MODULE.BackupError):
                     MODULE.parse_cli(arguments)
 
+    def test_capture_member_keeps_writing_to_the_pinned_directory_when_its_name_is_replaced(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root).resolve()
+            output = directory / "member"
+            output.mkdir()
+            attacker = directory / "attacker"
+            attacker.mkdir()
+            saved = directory / "saved-member"
+            commands = []
+            session, command, _identity = self.fake_snapshot_session(commands)
+
+            def swap_after_open():
+                output.rename(saved)
+                output.symlink_to(attacker, target_is_directory=True)
+                return ["docker", "exec", "-i", "synthetic-postgres"], "evimed", "evimed", directory / "passphrase", ["openssl"]
+
+            with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
+                    patch.object(MODULE, "PsqlSession", session), patch.object(MODULE, "command", side_effect=command), \
+                    patch.object(MODULE, "recovery_config", side_effect=swap_after_open):
+                result = MODULE.capture_member(output)
+
+            self.assertEqual(sorted(path.name for path in saved.iterdir()),
+                             ["postgres.dump.enc", "postgres.dump.enc.capture.json", "postgres.dump.enc.sha256"])
+            self.assertEqual(list(attacker.iterdir()), [])
+            self.assertEqual(result["archive"], str(output / "postgres.dump.enc"))
+
+    def test_createdb_collision_never_drops_a_clone_the_attempt_did_not_mark_as_owned(self):
+        with tempfile.TemporaryDirectory() as root:
+            directory = Path(root).resolve()
+            output = directory / "member"
+            output.mkdir()
+            archive = output / "postgres.dump.enc"
+            archive.write_bytes(b"synthetic encrypted archive")
+            archive.with_name(archive.name + ".sha256").write_text(f"{MODULE.digest(archive)}  {archive.name}\n")
+            expected = [{"schema": "public", "table": "memo", "rows": "2"}]
+            identity = {"database": "evimed", "databaseOid": "16384", "systemIdentifier": "12345"}
+            archive.with_name(archive.name + ".capture.json").write_text(json.dumps({
+                "schemaVersion": 1, "status": "captured", "archive": archive.name,
+                "archiveSha256": MODULE.digest(archive), "database": "evimed",
+                "encryption": "aes-256-cbc-pbkdf2-sha256-250000", "snapshotId": "0001-0001-1",
+                "sourceIdentity": identity, "tables": expected, "tablesSha256": MODULE.table_digest(expected),
+            }))
+            receipt = directory / "restore.json"
+            target = "evimed_restore_20260907T120000Z_abcdef012345"
+            tools = []
+
+            def command(args, *, source=None, target=None, timeout=900, capture=False):
+                tool = args[args.index("exec") + 3] if "exec" in args else args[0]
+                tools.append(tool)
+                if args[-1:] == ["--version"]:
+                    return f"{tool} (PostgreSQL) 16.14"
+                if tool == "psql":
+                    if args[-1] == MODULE.SOURCE_IDENTITY_SQL:
+                        return json.dumps(identity)
+                    return "0\n"
+                if tool == "openssl":
+                    Path(args[args.index("-out") + 1]).write_bytes(b"plain")
+                    return ""
+                if tool == "pg_restore" and "--list" in args:
+                    return ""
+                if tool == "createdb":
+                    raise MODULE.BackupError("postgres_command_failed")
+                if tool == "dropdb":
+                    raise AssertionError("must not drop a database without a matching ownership marker")
+                raise AssertionError(args)
+
+            with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
+                    patch.object(MODULE, "command", side_effect=command), self.assertRaises(MODULE.BackupError):
+                MODULE.restore_clone(archive, target, receipt)
+            self.assertNotIn("dropdb", tools)
+            self.assertFalse(receipt.exists())
+
     def test_main_fallback_preserves_the_current_persisted_drill_intent(self):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root).resolve()

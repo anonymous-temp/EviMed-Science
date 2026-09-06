@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { access, chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -147,6 +148,86 @@ exec "$EVIMED_TEST_REAL_NODE" "$@"
       return true;
     },
   );
+  assert.deepEqual(await readdir(backups), []);
+});
+
+test("strict backup binds ctime and content when a same-size rewrite restores the original mtime", async (t) => {
+  const { backups, data, payload, root } = await fixture(t);
+  const original = await stat(payload, { bigint: true });
+  const bin = path.join(root, "ctime-bin");
+  await mkdir(bin);
+  const wrapper = path.join(bin, "node");
+  await writeFile(wrapper, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+  python3 -c 'import os,sys; p=sys.argv[1]; open(p,"wb").write(b"synthetic changed member!\\n"); os.utime(p, ns=(int(sys.argv[2]),int(sys.argv[3])))' "$EVIMED_TEST_MUTATE_PATH" "$EVIMED_TEST_ATIME_NS" "$EVIMED_TEST_MTIME_NS"
+fi
+exec "$EVIMED_TEST_REAL_NODE" "$@"
+`);
+  await chmod(wrapper, 0o700);
+
+  await assert.rejects(
+    execute("bash", [path.join(ops, "backup-data.sh"), data, backups], {
+      env: {
+        ...cleanEnvironment,
+        PATH: `${bin}:${process.env.PATH}`,
+        OPEN_SCIENCE_BACKUP_STRICT: "true",
+        EVIMED_TEST_ATIME_NS: String(original.atimeNs),
+        EVIMED_TEST_MTIME_NS: String(original.mtimeNs),
+        EVIMED_TEST_MUTATE_PATH: payload,
+        EVIMED_TEST_REAL_NODE: process.execPath,
+      },
+    }),
+    (error) => {
+      assert.match(error.stderr, /strict backup refused|identity changed/);
+      return true;
+    },
+  );
+  assert.deepEqual(await readdir(backups), []);
+});
+
+test("strict backup revalidates a file replaced after its bytes were read", async (t) => {
+  const { backups, data, payload, root } = await fixture(t);
+  await writeFile(path.join(data, "z-large.bin"), randomBytes(32 * 1024 * 1024));
+  const replacement = path.join(root, "replacement.txt");
+  await writeFile(replacement, "synthetic replacement data\n");
+  const marker = path.join(root, "replaced");
+  const bin = path.join(root, "post-read-bin");
+  await mkdir(bin);
+  const wrapper = path.join(bin, "node");
+  await writeFile(wrapper, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+  python3 -c 'import os,sys,time; out,target,replacement,marker=sys.argv[1:]; deadline=time.time()+10
+while time.time()<deadline:
+  try:
+    if os.stat(out).st_size > 65536:
+      os.replace(replacement,target); open(marker,"w").close(); break
+  except FileNotFoundError: pass
+  time.sleep(.005)' "$4" "$EVIMED_TEST_MUTATE_PATH" "$EVIMED_TEST_REPLACEMENT" "$EVIMED_TEST_MARKER" &
+fi
+exec "$EVIMED_TEST_REAL_NODE" "$@"
+`);
+  await chmod(wrapper, 0o700);
+
+  await assert.rejects(
+    execute("bash", [path.join(ops, "backup-data.sh"), data, backups], {
+      env: {
+        ...cleanEnvironment,
+        PATH: `${bin}:${process.env.PATH}`,
+        OPEN_SCIENCE_BACKUP_STRICT: "true",
+        EVIMED_TEST_MARKER: marker,
+        EVIMED_TEST_MUTATE_PATH: payload,
+        EVIMED_TEST_REAL_NODE: process.execPath,
+        EVIMED_TEST_REPLACEMENT: replacement,
+      },
+    }),
+    (error) => {
+      assert.match(error.stderr, /strict backup refused|identity changed/);
+      return true;
+    },
+  );
+  await access(marker);
   assert.deepEqual(await readdir(backups), []);
 });
 
