@@ -684,6 +684,62 @@ test("a successful delegation receipt exposes the kernel-owned child session id"
   assert.equal(result.value.data.childSessionId, "child-session-1");
 });
 
+test("a running delegation projects its child id before the child settles", async () => {
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const result = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => ({ id: "child-session-live", result }),
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const running = [...f.childRows.values()][0];
+  assert.equal(running.status, "running");
+  assert.equal(running.childSessionId, "child-session-live");
+  settle({ stopReason: "completed", output: "done" });
+  await pending;
+});
+
+test("a retry replaces the failed child with its running session id before settling", async () => {
+  /** @type {(value: any) => void} */
+  let settleRetry = () => {};
+  const retryResult = new Promise((resolve) => { settleRetry = resolve; });
+  let starts = 0;
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => {
+      starts += 1;
+      return starts === 1
+        ? { id: "child-first", result: Promise.resolve({ stopReason: "error", diagnostic: "temporary failure" }) }
+        : { id: "child-retry", result: retryResult };
+    },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ([...f.childRows.values()][0]?.childSessionId === "child-retry") break;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const running = [...f.childRows.values()][0];
+  assert.equal(running.status, "running");
+  assert.equal(running.childSessionId, "child-retry");
+  assert.equal(running.retried, true);
+  settleRetry({ stopReason: "completed", output: "done" });
+  await pending;
+});
+
 test("a native root without a brief gets one stable isolated workflow id, while a bound run keeps its id", async () => {
   const native = await nativePolicyFixture();
   await native.step(1);

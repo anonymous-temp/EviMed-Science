@@ -133,6 +133,25 @@ function recordSubagent(ctx, entry, key, record) {
   store.subagents.set(`${entry.runId}:${key}`, { ...record, runId: entry.runId })
 }
 
+/** Publish the kernel-owned child identity before waiting for its result.
+ * @param {any} ctx @param {Record<string, any>} entry @param {Record<string, any>} item
+ * @param {readonly string[]} skills @param {any} run @param {Record<string, any>} [extra]
+ * @returns {string}
+ */
+function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
+  const childSessionId = toSubagentOutcome(run, null).childSessionId
+  item.childSessionId = childSessionId || null
+  recordSubagent(ctx, entry, item.id, {
+    deliverableId: item.id,
+    capability: item.capability,
+    skills,
+    status: 'running',
+    childSessionId,
+    ...extra,
+  })
+  return childSessionId
+}
+
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
@@ -503,9 +522,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             issues: [issue('subagent_start_failed', `分工没有启动：${detail}`)],
           }
         }
+        recordStartedSubagent(ctx, entry, item, injected, run)
         entry.budget.children += 1
         Object.assign(item, advancePlanItem(item, 'delegate'))
-        recordSubagent(ctx, entry, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
         await putPlanIndex(store(), entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
         const outcome = toSubagentOutcome(run, await run.result)
@@ -527,6 +546,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // after a child had already failed, which is why nothing ever saw it.
           const parent = ctx.get('agents')?.get?.(call.agentId)
           const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
+          recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true })
+          await putPlanIndex(store(), entry)
+          await putRunMirror(ctx, entry, config.bundleVersion)
           const retried = toSubagentOutcome(retry, await retry.result)
           recordSubagent(ctx, entry, item.id, {
             deliverableId: item.id,

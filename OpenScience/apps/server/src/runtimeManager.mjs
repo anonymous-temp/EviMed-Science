@@ -3312,6 +3312,31 @@ export class RuntimeManager {
     }
   }
 
+  /** Authenticated sequence heads for declared direct children of one root.
+   * Candidate ids come from the run projection; the kernel catalogue must
+   * independently confirm their parent before they can count as activity.
+   * @param {Record<string, any>} project @param {string} parentSessionId
+   * @param {readonly string[]} childSessionIds
+   * @returns {Promise<{ sessionId: string, asOfSeq: number, running: boolean }[]>}
+   */
+  async childSessionActivity(project, parentSessionId, childSessionIds) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime || !Array.isArray(childSessionIds) || childSessionIds.length === 0) return [];
+    const parent = safeId(parentSessionId, "parent session id");
+    const candidates = childSessionIds.slice(0, 64).map((value) => safeId(value, "child session id"));
+    this.beginProxy(project);
+    try {
+      const value = await this.withRuntimeDeadline(
+        (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
+        "runtime_history_unavailable",
+        "Runtime child session status did not answer in time.",
+      );
+      return childSessionHeads(sessionListItems(value), parent, candidates);
+    } finally {
+      this.endProxy(project);
+    }
+  }
+
   /** Cancel one DSH session without stopping other interactive work in the project. */
   async cancelRuntimeSession(project, sessionId) {
     const runtime = this.runtimes.get(this.key(project));
@@ -4502,4 +4527,21 @@ export class RuntimeManager {
       }
     }
   }
+}
+
+/** Kernel-confirmed direct child heads, isolated for contract testing.
+ * @param {readonly Record<string, any>[]} summaries @param {string} parentSessionId
+ * @param {readonly string[]} childSessionIds
+ * @returns {{ sessionId: string, asOfSeq: number, running: boolean }[]}
+ */
+export function childSessionHeads(summaries, parentSessionId, childSessionIds) {
+  const wanted = new Set(childSessionIds.map(String));
+  return summaries.flatMap((summary) => {
+    const sessionId = String(summary?.sessionId ?? summary?.id ?? "");
+    const parent = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
+    const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
+    const asOfSeq = Number(summary?.projections?.asOfSeq ?? summary?.asOfSeq ?? NaN);
+    if (!wanted.has(sessionId) || parent !== parentSessionId || origin !== "subagent" || !Number.isSafeInteger(asOfSeq) || asOfSeq < 0) return [];
+    return [{ sessionId, asOfSeq, running: summary?.running === true }];
+  }).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
 }
