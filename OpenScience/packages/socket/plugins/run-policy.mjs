@@ -125,16 +125,16 @@ export const Config = Schema.object({
 /**
  * One delegated child's durable record, keyed by deliverable so a retry
  * replaces its first attempt rather than accumulating beside it.
- * @param {any} ctx @param {string} key @param {Record<string, any>} record
+ * @param {any} ctx @param {Record<string, any>} entry @param {string} key @param {Record<string, any>} record
  */
-function recordSubagent(ctx, key, record) {
+function recordSubagent(ctx, entry, key, record) {
   const store = ctx.get('evimedRun')
   if (!store) return
-  store.subagents.set(key, record)
+  store.subagents.set(`${entry.runId}:${key}`, { ...record, runId: entry.runId })
 }
 
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
-  /** Per-session state. A run is one session, and the sessions in one host are separate runs. */
+  /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
@@ -148,6 +148,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         cwd: '',
         briefText: null,
         contextInjected: false,
+        contextRevision: '',
+        contextInjection: null,
+        subagent: false,
         plan: null,
         items: [],
         budget: { steps: 0, tokens: 0, children: 0 },
@@ -167,9 +170,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   }
 
   const store = () => ctx.get('evimedRun')
-  const diagnostics = () => ctx.get('evimedDiagnostics')
+  /** @param {string} sessionId */
+  const diagnostics = (sessionId) => ctx.get('evimedDiagnostics')?.forSession?.(sessionId) ?? ctx.get('evimedDiagnostics')
 
-  // ---- the brief, injected exactly once, as a first-class user message -----
+  // ---- each dispatch context, injected as a first-class user message -------
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     void injectBrief(ctx, agent, sessionState, config)
   }))
@@ -180,10 +184,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     async (step) => {
       const entry = sessionState(step.sessionId)
       entry.cwd = step.cwd || entry.cwd
-      // The brief may have arrived after the session did; see `injectBrief`.
-      // Still before the model's first step, so the context is first-class and
-      // early exactly as it was meant to be — only the trigger is later.
-      if (!entry.contextInjected) {
+      // Every control-plane dispatch commits a new context revision. Reading it
+      // before every root step covers both a session's first request and later
+      // follow-up or repair requests; `injectBrief` itself de-duplicates the
+      // revision. This keeps the method contract in the logged model context
+      // even though DSH's prompt wire has no system field.
+      if (step.root) {
         // `?? step.agent` used to sit here. `StepInfo` carries `agentId` and no
         // `agent`, so that fallback was `undefined` every time it was reached —
         // the same never-fires shape as `ctx.get('evimedRunId')`, and just as
@@ -205,7 +211,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // explanation is injected first so it arrives on the next step the
         // model does get.
         injectContext(ctx.get('agents')?.get?.(step.agentId), `<evimed-budget>${decision.reason}</evimed-budget>`, name)
-        diagnostics()?.notice?.(decision.reason)
+        diagnostics(step.sessionId)?.notice?.(decision.reason)
       }
       return decision.allow ? { allow: true } : { allow: false, code: decision.code, reason: decision.reason }
     },
@@ -217,6 +223,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   ctx.effect(() => onSessionEvent(ctx, (session, event) => {
     if (event.type !== 'assistant/message') return
+    // Child work is represented by its subagent receipt and evidence rows.
+    // Writing a child entry under the parent's runId would replace the root
+    // mirror because runId is the table key; parallel children would then
+    // replace each other as well.
+    if (session.subagent) return
     const entry = sessionState(session.sessionId)
     entry.budget = accumulateBudget(entry.budget, toUsage(event.data?.usage))
     // Mirrored here as well, because this is the only event that happens on
@@ -241,15 +252,21 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (text) entry.finalReply = text
   }))
 
-  // Who last wrote each path, for the whole run rather than one session: the
-  // plugin instance is per-container and a container is one run, so this map is
-  // exactly run-scoped. Spec V15's concurrent-write half.
-  /** @type {Map<string, { sessionId: string, nested: boolean }>} */
-  const writers = new Map()
+  // Who last wrote each path, partitioned by run. One project container can
+  // host several root sessions concurrently, so a project-wide map would make
+  // unrelated runs look like competing writers. Spec V15's concurrent-write
+  // half.
+  /** @type {Map<string, Map<string, { sessionId: string, nested: boolean }>>} */
+  const writersByRun = new Map()
 
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
     const entry = sessionState(call.sessionId)
+    let writers = writersByRun.get(entry.runId)
+    if (!writers) {
+      writers = new Map()
+      writersByRun.set(entry.runId, writers)
+    }
     for (const field of ['path', 'file_path', 'filePath']) {
       const value = call.args?.[field]
       if (typeof value !== 'string' || !value) continue
@@ -263,7 +280,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       // normal shape of delegated work, and only a second CHILD is the shape
       // that loses somebody's output. It rides out on the run mirror's degraded
       // set, which the control plane already carries into the verdict.
-      if (notice) ctx.get('evimedDiagnostics')?.degrade?.(notice)
+      if (notice) diagnostics(call.sessionId)?.degrade?.(notice)
       break
     }
     return toolPolicy(call, {
@@ -315,14 +332,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   // ---- a subagent that did not complete must not disappear ---------------
   ctx.effect(() => onTurnEnd(ctx, (session, end) => {
+    if (session.subagent) return
     const entry = sessionState(session.sessionId)
     entry.lastTurnEnd = end
     void putRunMirror(ctx, entry, config.bundleVersion)
     if (end.kind === 'unknown') {
-      diagnostics()?.degrade?.(`runtime_turn_end_unknown: ${end.rawKind ?? ''}`)
+      diagnostics(session.sessionId)?.degrade?.(`runtime_turn_end_unknown: ${end.rawKind ?? ''}`)
     }
     if (!session.subagent && end.kind === 'completed') {
-      void scanFinalReply(ctx, session, entry, diagnostics())
+      void scanFinalReply(ctx, session, entry, diagnostics(session.sessionId))
     }
   }))
 
@@ -339,7 +357,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     try {
       injectContext(agent, '<evimed-run>计划里还有未通过的交付物。请继续提交，或调用 evimed_complete_run{partial:true} 以部分交付结束。</evimed-run>', name)
     } catch {
-      diagnostics()?.degrade?.('steer injection failed')
+      diagnostics(sessionId)?.degrade?.('steer injection failed')
     }
   }))
 
@@ -487,12 +505,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         }
         entry.budget.children += 1
         Object.assign(item, advancePlanItem(item, 'delegate'))
-        recordSubagent(ctx, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
+        recordSubagent(ctx, entry, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
         await putPlanIndex(store(), entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
         const outcome = toSubagentOutcome(run, await run.result)
         item.childSessionId = outcome.childSessionId
-        recordSubagent(ctx, item.id, {
+        recordSubagent(ctx, entry, item.id, {
           deliverableId: item.id,
           capability: item.capability,
           skills: injected,
@@ -510,7 +528,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           const parent = ctx.get('agents')?.get?.(call.agentId)
           const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
           const retried = toSubagentOutcome(retry, await retry.result)
-          recordSubagent(ctx, item.id, {
+          recordSubagent(ctx, entry, item.id, {
             deliverableId: item.id,
             capability: item.capability,
             skills: injected,
@@ -841,9 +859,30 @@ async function readDeliverableFiles(ctx, cwd, deliverableId, expectedOutputs) {
  */
 async function injectBrief(ctx, agent, sessionState, config) {
   const sessionId = String(agent?.session?.id ?? '')
-  const cwd = String(agent?.session?.header?.cwd ?? '')
   const entry = sessionState(sessionId)
-  if (entry.contextInjected) return
+  if (isSubagentSession(agent)) {
+    entry.subagent = true
+    const parentSessionId = String(agent?.session?.header?.parentSession ?? '')
+    entry.runId = parentSessionId ? sessionState(parentSessionId).runId : ''
+    ctx.get('evimedRun')?.sessionRuns?.set?.(sessionId, entry.runId)
+  }
+  if (entry.contextInjection) return entry.contextInjection
+  entry.contextInjection = injectBriefRevision(ctx, agent, entry, config)
+  try {
+    await entry.contextInjection
+  } finally {
+    entry.contextInjection = null
+  }
+}
+
+/**
+ * @param {any} ctx @param {any} agent @param {Record<string, any>} entry
+ * @param {Record<string, any>} config
+ * @returns {Promise<void>}
+ */
+async function injectBriefRevision(ctx, agent, entry, config) {
+  const sessionId = String(agent?.session?.id ?? '')
+  const cwd = String(agent?.session?.header?.cwd ?? '')
   entry.cwd = cwd
   // A subagent inherits its parent's cwd and would otherwise be handed the
   // whole run brief a second time. Latched, because that is a decision rather
@@ -868,11 +907,20 @@ async function injectBrief(ctx, agent, sessionState, config) {
   const rawIndex = await readFileAt(ctx, cwd, `${sessionBriefDir}/index.json`)
     ?? await readFileAt(ctx, cwd, workspaceLayout.briefIndexFile)
   if (rawIndex == null) return
-  entry.contextInjected = true
   const index = parseJson(rawIndex)
+  const contextRevision = String(index?.contextRevision ?? '')
+  // Legacy indexes have no revision and preserve the old inject-once behavior.
+  // New indexes use the request id, so a repair of the same run is still a new
+  // model-visible context revision while repeated steps remain de-duplicated.
+  if (entry.contextInjected && (!contextRevision || contextRevision === entry.contextRevision)) return
+  const indexedRunId = String(index?.runId ?? '')
+  if (contextRevision && indexedRunId && indexedRunId !== entry.runId) resetRunState(entry, indexedRunId)
+  entry.contextInjected = true
+  entry.contextRevision = contextRevision
   // A native workflow may already have started before a later dispatch binds
-  // context. Keep its established identity while respecting the real brief.
-  if (!entry.runId) entry.runId = String(index?.runId ?? '')
+  // context. A revision-bearing index is control-plane authority for the new
+  // run; a legacy index keeps the native workflow's established identity.
+  if (contextRevision || !entry.runId) entry.runId = indexedRunId
   entry.limits = {
     maxSteps: Number(index?.budget?.maxSteps ?? config.maxSteps) || 0,
     maxTokens: Number(index?.budget?.maxTokens ?? config.maxTokens) || 0,
@@ -897,6 +945,27 @@ async function injectBrief(ctx, agent, sessionState, config) {
   await putRunMirror(ctx, entry, config.bundleVersion)
   if (!parts.length) return
   injectContext(agent, parts.join('\n\n'), 'evimed-run-policy')
+}
+
+/** Reset only state owned by one ledger run; the session and in-flight
+ * injection lock remain valid across follow-up turns.
+ * @param {Record<string, any>} entry @param {string} runId
+ */
+function resetRunState(entry, runId) {
+  entry.runId = runId
+  entry.startedAt = new Date().toISOString()
+  entry.briefText = null
+  entry.plan = null
+  entry.items = []
+  entry.budget = { steps: 0, tokens: 0, children: 0 }
+  entry.attempts = new Map()
+  entry.structuralAttempts = new Map()
+  entry.redelegated = new Set()
+  entry.producedTexts = []
+  entry.finalReply = ''
+  entry.lastTurnEnd = null
+  entry.steered = false
+  entry.completed = false
 }
 
 /**
@@ -997,13 +1066,11 @@ async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
 /**
  * Writes the run's identity and running totals into the mirror.
  *
- * Hidden knowledge: nothing else creates this row, and everything downstream is
- * gated on it existing. The projection that produces `.evimed-run/state.json`
- * starts with `[...store.runMirror.entries()][0]`, and returns early when the
- * table is empty — so with no writer the file was never produced at all, and
- * the control plane's view of a run's evidence, budget and stall signals was
- * empty for a reason that looked exactly like "this run has not done anything
- * yet".
+ * Hidden knowledge: nothing else creates this row, and everything downstream
+ * is gated on it existing. The evidence store selects the active row for each
+ * root session and writes a run-scoped projection; with no writer the control
+ * plane's view of evidence, budget and stall signals is indistinguishable from
+ * a run that has not started doing work.
  *
  * Called on every event that changes what the row says rather than once at the
  * start: a mirror that is written once is a mirror of the first second.
@@ -1013,7 +1080,9 @@ async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
  */
 async function putRunMirror(ctx, entry, bundleVersion) {
   const store = ctx.get('evimedRun')
-  if (!store || !entry.runId) return
+  if (!store || !entry.runId || entry.subagent) return
+  store.activeRuns?.set?.(entry.sessionId, entry.runId)
+  store.sessionRuns?.set?.(entry.sessionId, entry.runId)
   // isolated: evimed_run_mirror_write_failures_total — a mirror that cannot be
   // written must not end the run it describes.
   try {
@@ -1033,7 +1102,7 @@ async function putRunMirror(ctx, entry, bundleVersion) {
       startedAt: entry.startedAt ?? new Date().toISOString(),
     })
   } catch {
-    ctx.get('evimedDiagnostics')?.degrade?.('run mirror unwritable')
+    ctx.get('evimedDiagnostics')?.forSession?.(entry.sessionId)?.degrade?.('run mirror unwritable')
   }
 }
 

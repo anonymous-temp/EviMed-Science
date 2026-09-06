@@ -85,9 +85,13 @@ export async function apply(ctx, config) {
    *
    * @param {any} store @returns {string}
    */
-  const runIdOf = (store) => {
+  /** @param {any} store @param {string} sessionId */
+  const runIdOf = (store, sessionId) => {
     try {
-      return String([...(store?.runMirror?.entries?.() ?? [])][0]?.[0] ?? '')
+      const scoped = String(store?.runIdForSession?.(sessionId) ?? '')
+      if (scoped) return scoped
+      const active = [...(store?.activeRuns?.values?.() ?? [])]
+      return active.length === 1 ? String(active[0] ?? '') : ''
     } catch {
       return ''
     }
@@ -97,7 +101,8 @@ export async function apply(ctx, config) {
     // isolated: evimed_evidence_ingest_failures_total
     try {
       const store = ctx.get('evimedRun')
-      const runId = runIdOf(store)
+      const runId = runIdOf(store, call.sessionId)
+      const diagnostics = ctx.get('evimedDiagnostics')?.forSession?.(call.sessionId) ?? ctx.get('evimedDiagnostics')
       const records = evidenceFromOutcome(call, outcome, { runId, now: new Date().toISOString(), digest })
       if (!records.length) {
         // A retrieval tool that produced no evidence row is the one case worth
@@ -121,9 +126,9 @@ export async function apply(ctx, config) {
           // it in the same words as an ordinary empty search.
           const { reason } = sourceProbe(outcome?.structured)
           if (reason === 'empty-container') {
-            ctx.get('evimedDiagnostics')?.notice?.(`${base} searched and returned no source`)
+            diagnostics?.notice?.(`${base} searched and returned no source`)
           } else {
-            ctx.get('evimedDiagnostics')?.degrade?.(
+            diagnostics?.degrade?.(
               `evidence ingest cannot read a completed ${base} result: no recognised source container (${reason}, structured=${outcome?.structured === undefined ? 'absent' : typeof outcome.structured})`,
             )
           }
@@ -137,7 +142,8 @@ export async function apply(ctx, config) {
       for (const record of records) void store.evidence.put(record.evidenceId, record)
     } catch (error) {
       failures += 1
-      ctx.get('evimedDiagnostics')?.degrade?.(`evidence ingest failed (${failures}): ${errorMessage(error)}`)
+      const diagnostics = ctx.get('evimedDiagnostics')?.forSession?.(call.sessionId) ?? ctx.get('evimedDiagnostics')
+      diagnostics?.degrade?.(`evidence ingest failed (${failures}): ${errorMessage(error)}`)
     }
   }))
 

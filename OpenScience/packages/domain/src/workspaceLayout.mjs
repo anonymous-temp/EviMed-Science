@@ -47,7 +47,7 @@ export const workspaceLayout = Object.freeze({
   dataDir: DATA_DIR,
   /** Question the control plane holds; the workspace copy is a read-only mirror. */
   briefFile: `${BRIEF_DIR}/research-brief.md`,
-  /** Knowledge slices + memory + capability catalogue, injected at session start. */
+  /** Knowledge slices + memory + capability catalogue, injected for each dispatch revision. */
   briefContextFile: `${BRIEF_DIR}/context.md`,
   /** Run identity handed into the container. */
   briefIndexFile: `${BRIEF_DIR}/index.json`,
@@ -75,6 +75,16 @@ export const workspaceLayout = Object.freeze({
   /** Agenda excerpt injected into an autopilot episode (§24.4.1). */
   agendaFile: `${BRIEF_DIR}/agenda.md`,
 })
+
+/** One immutable control-plane run's projection. The legacy shared file stays
+ * available for native UI turns that do not begin with a control-plane run id.
+ * @param {string} runId @returns {string}
+ */
+export function runStateFileFor(runId) {
+  const id = String(runId ?? '')
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(id)) throw new TypeError('Invalid run id for projection path')
+  return `${RUN_STATE_DIR}/runs/${id}/state.json`
+}
 
 /**
  * Paths a run may never write. Everything under these prefixes is either the

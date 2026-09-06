@@ -26,6 +26,7 @@ import {
   resolveContractKind,
   runGate,
   runPhase,
+  runStateFileFor,
   states,
   RUN_PHASES,
   TERMINAL_RUN_PHASES,
@@ -89,6 +90,8 @@ test("the path guard refuses the question, the receipt and the state projection"
   assert.ok(isProtectedWritePath("deliverables/../.evimed-brief/x"));
   assert.ok(!isProtectedWritePath("deliverables/d1/report.md"));
   assert.ok(!isProtectedWritePath("task-plan.json"));
+  assert.equal(runStateFileFor("run_123"), ".evimed-run/runs/run_123/state.json");
+  assert.throws(() => runStateFileFor("../other"), /Invalid run id/);
 });
 
 test("state transitions are enumerable and illegal moves throw", () => {
