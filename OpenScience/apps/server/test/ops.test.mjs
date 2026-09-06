@@ -723,26 +723,25 @@ test("ops backup skips the runtime scratch, and still refuses a symlink anywhere
   );
 });
 
-test("a file changing under a running backup is a note, and a real tar failure is not", async () => {
-  // tar's own distinction, and it is the right one. Exit 2 is fatal — could not
+test("a file changing under a running backup is a note, and a source read failure is not", async () => {
+  // The archive writer's distinction. Exit 2 is fatal — could not
   // read, could not write, out of space. Exit 1 means the archive was written
   // and something moved underneath it, which on a live multi-tenant data
   // directory happens whenever anyone is working: the first cycle after this
   // stack came up failed on `./users`, and threw away a complete archive.
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-ops-"));
   const dataDir = path.join(tmp, "data");
-  const unreadable = path.join(dataDir, "users", "locked");
-  await mkdir(unreadable, { recursive: true });
+  const unreadable = path.join(dataDir, "users", "locked.txt");
+  await mkdir(path.dirname(unreadable), { recursive: true });
+  await writeFile(unreadable, "This file must be read, not silently omitted.\n");
   await writeFile(path.join(dataDir, "users", "kept.txt"), "real\n");
   await chmod(unreadable, 0o000);
   try {
     await assert.rejects(
       () => run(backupScript, [dataDir, path.join(tmp, "backups")]),
       (err) => {
-        // GNU tar uses 2 for this fatal error; BSD tar uses 1. The invariant is
-        // that the backup fails and preserves tar's permission diagnostic.
-        assert.match(err.stderr, /Backup archive failed \(tar exit [12]\)/, "a fatal tar error must still fail the backup");
-        assert.match(err.stderr, /Permission denied/, "and must say what tar said");
+        assert.match(err.stderr, /Backup archive failed \(writer exit 2\)/, "a fatal read error must fail the backup");
+        assert.match(err.stderr, /permission denied/i, "and must preserve the permission diagnostic");
         return true;
       },
     );
@@ -761,7 +760,7 @@ test("a file changing under a running backup is a note, and a real tar failure i
   // return to failing on every busy cycle.
   const script = await readFile(backupScript, "utf8");
   assert.match(script, /file changed as we read it/, "the one warning that is tolerated must be named");
-  assert.match(script, /tar_status" -ne 1/, "and it must be tolerated only at tar's warning exit code");
+  assert.match(script, /archive_status" -ne 1/, "and it must be tolerated only at the writer's warning exit code");
 });
 
 test("ops restore refuses archives containing symbolic links", async () => {
