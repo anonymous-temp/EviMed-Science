@@ -76,6 +76,14 @@ independent outcome studies. Different papers sharing a study identifier remain
 separate reports and one study; do not combine their participants or outcomes
 as independent observations.
 
+Every included `sourceRecords` row also declares its own `reportType` using
+the same vocabulary. This is the publication's type: a systematic review stays
+`review` even when it reports a PROSPERO identifier, and a narrative review
+stays `review` even when it describes a primary cohort. A group label must
+match every report it contains. A registry record and a primary results paper
+may share one `studyId`; they remain different report types and contribute one
+primary study.
+
 Submission returns `metrics.reviewCoverage`, separating included reports,
 known primary studies, unassigned primary reports and unavailable search
 domains. An uncertain independent-study total is null, never a guessed integer.
@@ -1719,6 +1727,7 @@ Write strict JSON to `clinical-evidence-search.json`:
       "citationKey": "AuthorYearKeyword",
       "identifier": "PMID or DOI",
       "accessLevel": "full_text",
+      "reportType": "primary",
       "included": true,
       "role": "diagnostic pathway"
     }
@@ -1784,6 +1793,18 @@ Read every output back before claiming success. Do not use `grep` or another unb
   unverifiable premise is still answered;
 - the section names are the manuscript ones and no commissioning, acceptance-specification, or self-referential prose survives anywhere in the report (see "Register: what a manuscript never says"). Read the request once more and confirm that no phrase of it was copied into the report — the request's wording is the usual way this register gets in;
 - the practical answer is medically correct, source-supported, and does not encourage delay.
+
+Before submission, run the independent scientific reviewer while every file is
+still editable:
+
+```
+evimed_review_run{focus: "source status, independent study identity, denominators, quantitative claims, current applicability, and contradictions"}
+```
+
+Repair every `weakened` or `contradicted` finding that applies, then re-run
+the review. Record a reason in `revision-notes.md` for a finding that does not
+apply. Do not run this for the first time after acceptance: submission freezes
+the accepted bytes.
 
 Then submit the package:
 

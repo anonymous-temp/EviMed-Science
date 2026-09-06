@@ -25,6 +25,14 @@ class ResearchTopicPreflightTests(unittest.TestCase):
         (root / "evidence-map.md").write_text(
             "| Prior study | PMID 420001 | https://pubmed.ncbi.nlm.nih.gov/420001/ | pubmed | subject | Q1 | no |\n")
         (root / "research-topic-run.json").write_text('{"status":"succeeded"}')
+        (root / "research-portfolio.json").write_text(json.dumps({
+            "schemaVersion": "1.0.0", "researchDirection": "Rare disease",
+            "researchContext": {}, "candidates": [],
+        }))
+        (root / "evidence-records.json").write_text(json.dumps([{
+            "id": "pubmed_420001", "pmid": "420001", "publicationStatus": "active",
+            "statusCheckedAt": "2026-09-06T00:00:00Z", "statusSource": "PubMed",
+        }]))
 
     def test_sparse_topic_counts_are_advisory(self):
         with tempfile.TemporaryDirectory() as directory:

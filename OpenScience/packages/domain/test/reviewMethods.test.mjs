@@ -6,8 +6,8 @@ function ledger() {
   return {
     queries: [{ database: "PubMed", query: "prespecified review query", resultsRetrieved: 0 }],
     sourceRecords: [
-      { referenceNumber: 1, identifier: "PMID 100001", included: true, accessLevel: "full_text" },
-      { referenceNumber: 2, identifier: "DOI:10.1234/followup", included: true, accessLevel: "full_text" },
+      { referenceNumber: 1, identifier: "PMID 100001", included: true, accessLevel: "full_text", reportType: "primary" },
+      { referenceNumber: 2, identifier: "DOI:10.1234/followup", included: true, accessLevel: "full_text", reportType: "primary" },
     ],
     reviewMethods: {
       schemaVersion: 1, reviewType: "narrative",
@@ -49,6 +49,8 @@ test("primary reports with unknown identity do not become independent by default
 
 test("a review and protocol are separate sources, not additional primary studies", () => {
   const value = ledger();
+  value.sourceRecords[0].reportType = "review";
+  value.sourceRecords[1].reportType = "registry";
   value.reviewMethods.studyGroups = [
     { studyId: "review", evidenceType: "review", referenceNumbers: [1] },
     { studyId: "registration", evidenceType: "registry", referenceNumbers: [2] },
@@ -57,6 +59,28 @@ test("a review and protocol are separate sources, not additional primary studies
   assert.equal(result.metrics.independentPrimaryStudies, 0);
   assert.equal(result.metrics.primaryReports, 0);
   assert.equal(result.metrics.includedReports, 2);
+});
+
+test("a group label cannot turn a review or registry record into a primary study", () => {
+  const value = ledger();
+  value.sourceRecords[0].reportType = "review";
+  value.sourceRecords[1].reportType = "registry";
+  value.reviewMethods.studyGroups = [
+    { studyId: "PROSPERO:CRD42000000001", evidenceType: "primary", referenceNumbers: [1] },
+    { studyId: "NCS-R", evidenceType: "primary", referenceNumbers: [2] },
+  ];
+  const result = reviewMethodsFindings(value);
+  assert.equal(result.metrics.independentPrimaryStudies, null);
+  assert.equal(result.metrics.primaryReports, 0);
+  assert.ok(result.issues.some((item) => item.text.includes("conflicts with sourceRecords")));
+});
+
+test("every included report declares its publication type when review accounting is present", () => {
+  const value = ledger();
+  delete /** @type {any} */ (value.sourceRecords[0]).reportType;
+  const result = reviewMethodsFindings(value);
+  assert.equal(result.metrics.independentPrimaryStudies, null);
+  assert.ok(result.issues.some((item) => item.text.includes("reportType")));
 });
 
 test("excluded sources and repeated assignments are never counted as usable study members", () => {
@@ -73,14 +97,25 @@ test("missing and incompatible group assignments make the study total unknown", 
   for (const groups of [
     [],
     [{ studyId: "one", evidenceType: "invalid", referenceNumbers: [1, 2] }],
-    [{ studyId: "one", evidenceType: "primary", referenceNumbers: [1] },
-      { studyId: "one", evidenceType: "guideline", referenceNumbers: [2] }],
     [{ studyId: "one", evidenceType: "primary", referenceNumbers: [] }],
   ]) {
     const value = ledger();
     value.reviewMethods.studyGroups = groups;
     assert.equal(reviewMethodsFindings(value).metrics.independentPrimaryStudies, null);
   }
+});
+
+test("a registry and primary publication may share one study identity without adding a second study", () => {
+  const value = ledger();
+  value.sourceRecords[1].reportType = "registry";
+  value.reviewMethods.studyGroups = [
+    { studyId: "NCT00000001", evidenceType: "primary", referenceNumbers: [1] },
+    { studyId: "NCT00000001", evidenceType: "registry", referenceNumbers: [2] },
+  ];
+  const result = reviewMethodsFindings(value);
+  assert.equal(result.metrics.independentPrimaryStudies, 1);
+  assert.equal(result.metrics.primaryReports, 1);
+  assert.equal(result.metrics.includedReports, 2);
 });
 
 test("metadata-only inclusion is visible even if the report supplied a study identity", () => {
@@ -154,4 +189,3 @@ test("malformed optional ledgers are contained and old ledgers remain compatible
   value.reviewMethods.studyGroups = /** @type {any} */ (null);
   assert.equal(reviewMethodsFindings(value).metrics.independentPrimaryStudies, null);
 });
-
