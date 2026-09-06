@@ -83,7 +83,7 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 | UI02 | Implemented | Shared HTTP/mux authorization exists; real native denial, logout and spend-boundary acceptance remains. |
 | UI03 | Implemented | Signed per-frame binding exists; second-frame reopening works; distinct-project multitab/reconnect acceptance remains. |
 | UI04 | Implemented | External saved-session reopening retained the transcript; capability-start, back/forward and project switching remain. |
-| UI05 | Broken in production | Two native user turns produced one run ledger entry. Fix per-turn identity, routing, monitoring and replay handling before accepting the primary surface. |
+| UI05 | Reviewed candidate; production pending | Commit 69f3408 adds actual user-turn identity, durable workflow witnesses, ordinary/repair ownership and replay boundaries. Independent specification and code reviews closed the discovered counterexamples; real two-turn candidate verification remains required. |
 | UI06 | Partial | Native conversation and run side panel exist; synchronized evidence/files/revisions, mobile and keyboard journeys remain. |
 | ECO01 | Partial | Pin/seam/support manifests exist; publish and verify the actual supported host/client/tool/skill lifecycle. |
 | ECO02 | Partial | One citation bundle is installed; three candidates are explicitly rejected/incompatible. Verify shipped assets and tools; do not claim all candidates work. |
@@ -91,8 +91,8 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 | ECO04 | Partial | Fixed composition is confined; prove isolation through the implemented plugin lifecycle once available. |
 | ECO05 | Partial | Upstream matrix workflow exists; operated cadence, migrations and rollback evidence remain. |
 | CAP01 | Implemented | Canonical capability catalog is unified in source; verify every visible launch through the native surface. |
-| CAP02 | Partial | Capability contracts and engines exist; retain current scientific positive/insufficient-evidence/failure outcomes, including the separate published-paper benchmark. |
-| CAP03 | Partial | Plan/delegation/repair primitives exist; mixed-capability delivery and preservation of accepted outputs remain unaccepted. |
+| CAP02 | Fixed MR candidate; other cases broken | Current-source offline MR now matches official references across four real-data scenarios (47 tests; Python/scientific review), with provenance and explicit LD selection. Hosted local-file input and JWT remain separate. Published-paper review and topic delegation still expose delivery/provenance/tool-schema defects; preserve their original failures. |
+| CAP03 | Partial candidate; exception recovery open | 69f3408 fixes canonical receipt/download paths with real captured-file SHA comparisons. Topic delegation's unknown-tool error still leaves the deliverable delegated; constructor failure rollback and parent/child source proof remain open. |
 | CAP04 | Partial | Bounded screening/review exists; screening writes its ledger after all waves and lacks durable mid-run resume. |
 | CAP05 | Partial | Adapter/source readiness is green; current source/data correctness and external credential-dependent capabilities remain distinct gates. |
 | CAP06 | Partial | Exporters and contracts exist; actual office-file rendering, source/code/data provenance and clean reproduction remain. |
@@ -103,7 +103,7 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 | ING05 | Partial | Physical unit counts exist; parser-failure ratio is not a question-based omission audit. Reprocessing/version coverage remains. |
 | ING06 | Partial | Tidying UI exists; meaningful depth, automatic progress and understanding revision flow remain. |
 | MEM01 | Partial | MemOS live write/recall/delete contract previously passed; old Memos and capsule state need end-to-end ownership and lifecycle acceptance. |
-| MEM02 | Broken in production | Web derives a capsule endpoint, but the controller rebuilds the launch plan without it and disables recall/note tools. Fix the non-secret launch contract. |
+| MEM02 | Fixed candidate; production pending | Reviewed commit ddbbee9 carries the non-secret capsule endpoint across controller protocol 3. Fresh UI capsule creation/entry/activation and semantic API recall passed on baseline. Runtime recall/note tool acceptance awaits candidate deployment. |
 | MEM03 | Implemented | Encrypted capsule transfer and candidate/activation/revocation APIs exist; customer export/import/revocation journey remains. External UI creation, entry save, project activation and semantic recall passed separately; these do not certify transfer. |
 | MEM04 | Partial | Evidence-backed entries and lifecycle exist; conflict/decay/promotion/consolidation and five-layer collaboration remain. |
 | MEM05 | Missing | CRUD and extraction do not implement contextual feedback learning and held-out personalization evaluation. |
@@ -111,13 +111,13 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 | AUTO01 | Partial | Durable agendas/leased episodes exist; actual restart and coordinated scheduling acceptance remains. |
 | AUTO02 | Partial | Spend caps exist; daily task choice is a hash, not a research-state and remaining-budget allocation plan. |
 | AUTO03 | Partial | Ordinary run gates and artifact binding exist; independent validation episodes and frozen analysis-plan execution remain. |
-| AUTO04 | Broken integration | Digest source type is rejected by NotificationService; decisions do not affect later agendas and viewing does not update activity. |
+| AUTO04 | Fixed persistence candidate; partial workflow | Commit a577f7a fixes missing digest document/source types with real Postgres producer-consumer and legacy-migration tests. Decisions, viewing activity and opening a digest from its inbox action still need completion. |
 | AUTO05 | Partial | Cancel/budget/lease controls exist; inactivity is checked after work rather than before spending, and digest-open activity is not updated. |
 | BILL01 | Partial | Durable model reservations/settlements and uncertain states exist; complete resource accounting and provider reconciliation remain. |
 | BILL02 | Partial | Per-request durable admission exists; all native/specialist/background paths need real concurrent acceptance. |
 | BILL03 | Deferred by user | Actual payment is excluded. Nonpaid scope and enforced customer allowances remain required. |
 | NOTICE01 | Partial | Durable inbox exists; digest source, business actions and due-action effects must connect to their owning workflows. |
-| ACCT01 | Broken export; partial lifecycle | External registration and tenant identity succeeded. Account export returns 403 `path_forbidden` after native startup because archive collection traverses the kernel's generated dependency symlinks; exclude runtime installation/credentials and retain scoped customer data. Deletion/recovery/support/terms remain. |
+| ACCT01 | Fixed file-export candidate; partial lifecycle | External registration and tenant identity succeeded. Reviewed 617bb8e fixes the native-runtime symlink export failure; product data stored only in Postgres still needs inclusion. Deletion/recovery/support/terms and candidate public export remain unaccepted. |
 | ACCT02 | Missing | Personal account UI does not implement a scoped operator tenant-support console. |
 | OPS01 | Partial; off-host deferred | Local encrypted restore previously passed for 2,827 files. Confirm complete coverage of all newly added authoritative state; off-host custody alone is excluded. |
 | OPS02 | Partial | Online host preflight delivered a synthetic resolved alert; independent host-loss and operational response acceptance remains. |
@@ -137,6 +137,10 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 Do not rerun a failed whole-product model journey without a new diagnostic hypothesis. Persist release identity, run/session IDs, terminal outcome and artifacts before cleanup; report infrastructure failures, valid evidence insufficiency and scientific-quality failures separately. Deterministic artifact movement/registration should not depend on whether a model remembers to copy a file. Coordinate any production restart with the separate published-paper evaluation task before cutover.
 
 The separate published-paper evaluation reports `dsh-cite` Crossref network failures while managed literature/full-text tools work. This is live ECO02 evidence of an installed-but-unusable plugin path; preserve the first failure and diagnose controlled egress rather than broadening runtime network access.
+
+Its complete baseline is retained in `outputs/audit/reports/2026-09-06-published-paper-benchmark/benchmark-report.md`: two review failures and two nominally successful topic runs that bypassed the outdated specialist service. Additional required integration fixes are the topic service's old two-field request schema, action-specific `jobId` semantics, delegation failure rollback, actual downloadable artifact paths, and consistent parent/child preservation evidence and final acceptance/freeze authority. Retracted references and a retained power-table error remain scientific quality findings, not resolved by a technical success status. The benchmark finished and stopped all its runtimes; candidate cutover no longer needs to wait for it.
+
+Reviewed a6b2386 ships three missing Python helpers for topic selection and dataset scoping, regenerates the socket package, and extends parity checks to all sibling Python helpers. Both shipped preflight entry points now execute their CLI help locally; final-image invocation remains required.
 
 The user confirmed the OpenGWAS token is still being requested and directed testing with publicly downloadable GWAS data meanwhile. Use pinned official published-data subsets for local MR/harmonization/reference checks, retain provenance and checksums, and keep authenticated OpenGWAS extraction as a distinct pending acceptance step. Do not simulate API access or mislabel an offline fixture run as online connector acceptance.
 
