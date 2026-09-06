@@ -18,6 +18,8 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration
     fail: async (...args) => { calls.push({ method: "fail", args }); return { status: "failed" }; },
   };
   const sources = {
+    withIngestionLease: async (_job, operation) => operation(),
+    withAttemptCleanup: async (_job, operation) => operation(),
     get: async () => source,
     beginIngestion: async (...args) => {
       calls.push({ method: "beginIngestion", args });

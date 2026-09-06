@@ -48,6 +48,7 @@ import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService } from "./sourceService.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
+import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
@@ -507,6 +508,7 @@ export function createWebApiApp(overrides = {}) {
         throw new HttpError(503, "source_connector_unavailable", "This source connector is not available to the ingestion worker.");
       }
       const project = await sourceProject(job);
+      job.sourceProject = project;
       let localPath;
       if (connectorType === "openlist") {
         if (!openListConnector) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
@@ -518,12 +520,12 @@ export function createWebApiApp(overrides = {}) {
           throw new HttpError(409, "openlist_source_changed", "The OpenList file changed after it was registered; refresh the source before analysis.");
         }
         const name = path.posix.basename(String(remotePath));
-        const relative = `knowledge-base/.evimed-openlist-staging/${source.id}/${job.id}/${name}`;
+        const relative = `knowledge-base/.evimed-openlist-staging/${source.id}/${job.id}-${sourceAttemptId(job)}/${name}`;
         const full = resolveScopedPath(project.baseDir, relative);
-        await withProjectStorageMutation(project, async () => {
+        await sourceService.withIngestionLease(job, () => withProjectStorageMutation(project, async () => {
           await assertProjectCapacity(project, full, buffer.length, config);
           await writeFileAtomicNoFollow(project.baseDir, full, buffer, { mode: 0o600 });
-        });
+        }));
         localPath = full;
       } else {
         const relative = source.payload.paths?.[0];
@@ -546,31 +548,27 @@ export function createWebApiApp(overrides = {}) {
         throw new HttpError(409, "source_changed", "The source changed after it was registered; refresh it before analysis.");
       }
       const stagingRoot = path.resolve(config.documentParserStagingDir);
-      const stagingRelative = `${job.id}/${path.basename(localPath)}`;
+      const stagingRelative = `${job.id}-${sourceAttemptId(job)}/${path.basename(localPath)}`;
       const stagingPath = resolveScopedPath(stagingRoot, stagingRelative);
-      await writeFileAtomicNoFollow(stagingRoot, stagingPath, bytes, { mode: 0o600 });
-      await fsp.chown(path.dirname(stagingPath), config.documentParserUid, config.documentParserGid);
-      await fsp.chown(stagingPath, config.documentParserUid, config.documentParserGid);
-      return { localPath, stagingPath, parserPath: `/data/${job.id}/${path.basename(localPath)}` };
+      await sourceService.withIngestionLease(job, async () => {
+        await writeFileAtomicNoFollow(stagingRoot, stagingPath, bytes, { mode: 0o600 });
+        await fsp.chown(path.dirname(stagingPath), config.documentParserUid, config.documentParserGid);
+        await fsp.chown(stagingPath, config.documentParserUid, config.documentParserGid);
+      });
+      return { localPath, stagingPath, parserPath: `/data/${stagingRelative}` };
     },
-    releaseResolved: async (job, source, resolved) => {
-      const project = await sourceProject(job);
-      const localPath = typeof resolved === "string" ? resolved : resolved.localPath;
-      if (typeof resolved !== "string" && resolved.stagingPath && config.documentParserStagingDir) {
-        const stagingRoot = path.resolve(config.documentParserStagingDir);
-        await assertNoSymlinkPath(stagingRoot, resolved.stagingPath, { allowMissingTail: true });
-        await fsp.rm(path.dirname(resolved.stagingPath), { recursive: true, force: true });
-      }
-      if (source.payload.connector?.type === "openlist") {
-        await assertNoSymlinkPath(project.baseDir, localPath, { allowMissingTail: true });
-        await fsp.rm(path.dirname(localPath), { recursive: true, force: true });
-      }
+    releaseResolved: async (job, source, _resolved) => {
+      const project = job.sourceProject;
+      if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
+      await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), stagingOnly: true, parserStagingRoot: config.documentParserStagingDir }));
     },
     materialize: async (job, source, result) => {
-      const project = await sourceProject(job);
+      const project = job.sourceProject;
+      if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
       const generation = Number(source.payload?.generation);
       if (!Number.isSafeInteger(generation) || generation < 1) throw new HttpError(409, "source_generation_stale", "Source generation is invalid.");
-      const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}/index.md`;
+      const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}-${sourceAttemptId(job)}/index.md`;
       const full = resolveScopedPath(project.baseDir, relative);
       const original = source.payload.paths?.[0] ?? source.id;
       const value = [
@@ -589,11 +587,16 @@ export function createWebApiApp(overrides = {}) {
       });
       return relative;
     },
-    discardMaterialized: async (job, _source, artifactPath) => {
-      const project = await sourceProject(job);
-      const full = resolveScopedPath(project.baseDir, artifactPath);
-      await assertNoSymlinkPath(project.baseDir, full, { allowMissingTail: true });
-      await fsp.rm(path.dirname(full), { recursive: true, force: true });
+    discardMaterialized: async (job, source, _artifactPath) => {
+      const project = job.sourceProject;
+      if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
+      await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
+        jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), parserStagingRoot: config.documentParserStagingDir }));
+    },
+    prepareCleanup: sourceProject,
+    cleanupSource: async (_job, source, jobIds, project) => {
+      await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
+        jobIds, parserStagingRoot: config.documentParserStagingDir }));
     },
   }) : null;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
