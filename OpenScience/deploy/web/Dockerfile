@@ -20,22 +20,13 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-# The third-party skill packs are deliberately absent from git history — they
-# are fetched, pinned by commit, by scripts/dev/fetch-skills.sh. The runtime
-# stage below hard-COPYs one of them, so a clone that has not fetched them
-# fails there with `"/app/runtime/skills/external/ai4s-skills": not found`,
-# which names neither the cause nor the remedy.
-#
-# Every image built on this host succeeded only because the release directory
-# happened to hold 4.6 MB of content that no version control tracked. This says
-# so before the build gets far enough to be confusing.
-RUN for pack in runtime/skills/external/ai4s-skills; do \
-      test -d "$pack" || { \
-        echo "missing: $pack" >&2; \
-        echo "It is git-ignored on purpose and fetched by commit pin. Run scripts/dev/fetch-skills.sh in the repo root, then rebuild." >&2; \
-        exit 1; \
-      }; \
-    done
+# A clean Git context contains no ignored skill packs or generated assets.
+# Hydrate the existing immutable AI4S pin inside the image, applying the same
+# compatibility patch as local/CI installs. Caller environment cannot move it.
+RUN apk add --no-cache bash curl python3 \
+  && env -u AI4S_SKILLS_COMMIT bash scripts/dev/fetch-skills.sh
+
+RUN pnpm --filter @evimed/dsh-socket prepack
 
 ARG VITE_OPEN_SCIENCE_API_URL=/api
 ENV VITE_OPEN_SCIENCE_API_URL=${VITE_OPEN_SCIENCE_API_URL}

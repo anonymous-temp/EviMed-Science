@@ -10,8 +10,8 @@
 //
 // Both halves of one hole: a stranger cannot build the image, and our own
 // images depended on something outside version control. The Dockerfile now
-// checks and says what to run; this keeps a second such COPY from quietly
-// reintroducing it.
+// hydrates the pinned pack inside its build stage; this keeps a second such
+// COPY from quietly reintroducing a host-context dependency.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -31,15 +31,18 @@ function isIgnored(relative) {
   }
 }
 
-test("every git-ignored path the web image copies is checked for, by name", async () => {
+test("every git-ignored path the web image copies is generated inside the build", async () => {
   const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  const fetcher = await readFile(path.join(repoRoot, "scripts/dev/fetch-skills.sh"), "utf8");
 
   const copied = [...dockerfile.matchAll(/^COPY --from=build \/app\/(\S+)/gm)].map((match) => match[1]);
   // A parse that found nothing would report a clean Dockerfile.
   assert.ok(copied.length >= 5, `parsed only ${copied.length} COPY lines; the parse is wrong, not the file`);
 
-  const guarded = new Set([...dockerfile.matchAll(/for pack in ([^;]+); do/g)]
-    .flatMap((match) => match[1].trim().split(/\s+/)));
+  const hydratedPath = fetcher.match(/^OUT_DIR="\$ROOT\/([^"\n]+)"$/m)?.[1];
+  assert.ok(hydratedPath);
+  assert.match(fetcher, /^AI4S_SKILLS_COMMIT="\$\{AI4S_SKILLS_COMMIT:-[a-f0-9]{40}\}"$/m);
+  const hydrates = recipe => /RUN apk add --no-cache bash curl python3\s*\\\s*\n\s*&& env -u AI4S_SKILLS_COMMIT bash scripts\/dev\/fetch-skills\.sh/.test(recipe);
 
   // A git-ignored path is only a problem if it has to arrive WITH the context.
   // `apps/web/dist` is git-ignored and copied, and is fine: the build stage
@@ -52,15 +55,12 @@ test("every git-ignored path the web image copies is checked for, by name", asyn
   };
 
   const unguarded = copied.filter((relative) =>
-    isIgnored(relative) && !guarded.has(relative) && !buildProduced(relative));
+    isIgnored(relative) && !(relative === hydratedPath && hydrates(dockerfile)) && !buildProduced(relative));
   assert.deepEqual(
     unguarded,
     [],
-    "these are copied into the image but git does not carry them, and nothing tells a builder how to obtain them; "
-    + "add them to the Dockerfile's pack check (and to scripts/dev/fetch-skills.sh) or stop ignoring them",
+    "these ignored paths are copied but have no build-stage producer",
   );
-
-  // And the check must actually name the remedy — an early failure that says
-  // only "missing" trades one unhelpful message for another.
-  assert.match(dockerfile, /fetch-skills\.sh/, "the guard must name the script that fixes it");
+  assert.equal(hydrates(dockerfile.replace("env -u AI4S_SKILLS_COMMIT bash scripts/dev/fetch-skills.sh", "true")), false);
+  assert.equal(hydrates(dockerfile.replace("env -u AI4S_SKILLS_COMMIT", "env")), false, "a caller override cannot move the pinned source");
 });
