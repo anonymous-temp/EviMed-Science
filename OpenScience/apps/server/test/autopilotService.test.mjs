@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
 import { AutopilotService } from "../src/autopilotService.mjs";
+import { AutopilotWorker } from "../src/autopilotWorker.mjs";
+import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
+import { HttpError, sendError } from "../src/security.mjs";
 
 class MemoryDocuments {
   constructor() { this.rows = new Map(); }
@@ -32,7 +36,7 @@ class MemoryJobs {
   }
 }
 
-function fixture({ notificationCreate = null } = {}) {
+function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z") } = {}) {
   const documents = new MemoryDocuments();
   const jobs = new MemoryJobs();
   const usage = { assertWithinLimits: async () => ({ allowed: true }) };
@@ -41,7 +45,7 @@ function fixture({ notificationCreate = null } = {}) {
     notifications.created.push({ userId, input });
   } };
   const service = new AutopilotService({ documents, jobs, usage, notifications,
-    now: () => new Date("2026-09-06T01:00:00.000Z"), id: (() => { let i = 0; return (prefix) => `${prefix}${++i}`; })() });
+    now, id: (() => { let i = 0; return (prefix) => `${prefix}${++i}`; })() });
   return { documents, jobs, usage, notifications, service };
 }
 
@@ -50,6 +54,150 @@ const agendaInput = {
   taskTypes: ["literature-sentinel", "evidence-update"], dailyBudgetCny: 20, weeklyBudgetCny: 80,
   maxEpisodeCny: 8, scheduleHour: 1, timeZone: "Asia/Shanghai",
 };
+
+test("opening an owned digest records reading without treating list or get as activity", async () => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const { service } = fixture({ now: () => at });
+  const agenda = await service.create("user-one", agendaInput);
+  const digest = await service.createDigest("user-one", agenda.id, {
+    date: "2026-09-06", episodeIds: ["episode-read"], costCny: 0, claims: [],
+  });
+  const before = await service.get("user-one", agenda.id);
+  assert.equal(before.payload.lastDigestOpenedAt, null, "creating an agenda is not a digest read");
+  at = new Date("2026-09-12T01:00:00Z");
+  await service.listDigests("user-one", { projectId: agenda.projectId });
+  await service.getDigest("user-one", digest.id);
+  assert.equal((await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt, before.payload.lastDigestOpenedAt);
+  assert.equal((await service.getDigest("user-one", digest.id)).payload.openedAt, null);
+  await assert.rejects(() => service.markDigestOpened("other-user", digest.id), { code: "autopilot_digest_not_found" });
+  const opened = await service.markDigestOpened("user-one", digest.id);
+  assert.equal(opened.payload.openedAt, at.toISOString());
+  assert.equal((await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt, at.toISOString());
+});
+
+test("the real digest route and service use the digest's project and persist explicit viewing", async (t) => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const { service } = fixture({ now: () => at });
+  const agenda = await service.create("user-one", agendaInput);
+  const digest = await service.createDigest("user-one", agenda.id, { date: "2026-09-06", episodeIds: ["episode-route"], costCny: 0, claims: [] });
+  const route = createAutopilotRoutes({ service, maxJsonBytes: 8192, store: {
+    ensureSessionUser: async (req) => ({ user: { id: req.headers["x-test-user"] } }),
+    assertCsrf: async () => {},
+    requireProject: async (_user, id) => {
+      if (id !== "project-one") throw new HttpError(404, "project_not_found", "Project unavailable.");
+    },
+  } });
+  const server = createServer((req, res) => route(req, res).catch((error) => sendError(res, error)));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const endpoint = `http://127.0.0.1:${server.address().port}/api/autopilot/digests/${digest.id}`;
+  const headers = { "x-test-user": "user-one", "x-open-science-project-id": "another-project", "content-type": "application/json" };
+  at = new Date("2026-09-12T01:00:00Z");
+  const loaded = await fetch(endpoint, { headers });
+  assert.equal(loaded.status, 200);
+  assert.equal((await loaded.json()).data.projectId, "project-one");
+  assert.equal((await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt, null);
+  assert.equal((await fetch(`${endpoint}/opened`, { method: "POST", headers, body: "{}" })).status, 200);
+  assert.equal((await service.getDigest("user-one", digest.id)).payload.openedAt, at.toISOString());
+  assert.equal((await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt, at.toISOString());
+  assert.equal((await fetch(`${endpoint}/opened`, { method: "POST", headers: { ...headers, "x-test-user": "other-user" }, body: "{}" })).status, 404);
+});
+
+test("an interrupted digest activity update can be retried without losing intervening decisions", async () => {
+  const { service, documents } = fixture();
+  const agenda = await service.create("user-one", agendaInput);
+  const digest = await service.createDigest("user-one", agenda.id, {
+    date: "2026-09-06", episodeIds: ["episode-retry"], costCny: 0,
+    claims: [{ id: "claim-one", statement: "A finding", tier: "unverified", type: "direct" }],
+  });
+  const put = documents.put.bind(documents);
+  let interrupted = false;
+  documents.put = async (...args) => {
+    if (args[1] === "agenda" && !interrupted) { interrupted = true; throw new Error("database unavailable"); }
+    return put(...args);
+  };
+  await assert.rejects(() => service.markDigestOpened("user-one", digest.id), /database unavailable/);
+  await service.decide("user-one", digest.id, { action: "adopt", claimId: "claim-one" });
+  const opened = await service.markDigestOpened("user-one", digest.id);
+  assert.equal(opened.payload.decisions.length, 1);
+  assert.equal(opened.payload.openedAt, (await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt);
+});
+
+test("activity retries preserve a concurrent stop and a newer open timestamp", async () => {
+  const { service, documents } = fixture();
+  const agenda = await service.create("user-one", agendaInput);
+  const digest = await service.createDigest("user-one", agenda.id, { date: "2026-09-06", episodeIds: ["episode-one"], costCny: 0, claims: [] });
+  const put = documents.put.bind(documents);
+  let conflicted = false;
+  documents.put = async (...args) => {
+    if (args[1] === "agenda" && !conflicted) {
+      conflicted = true;
+      const current = await service.get("user-one", agenda.id);
+      await put("user-one", "agenda", agenda.id, { ...current.payload, enabled: false, status: "stopped",
+        lastDigestOpenedAt: "2026-09-06T02:00:00.000Z" }, { expectedRevision: current.revision, projectId: agenda.projectId });
+    }
+    return put(...args);
+  };
+  await service.markDigestOpened("user-one", digest.id);
+  const current = await service.get("user-one", agenda.id);
+  assert.equal(current.payload.lastDigestOpenedAt, "2026-09-06T02:00:00.000Z");
+  assert.equal(current.payload.status, "stopped");
+  assert.equal(current.payload.enabled, false);
+});
+
+test("seven days without reading pauses before scheduling or checking the spending allowance", async () => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const { service, jobs, usage } = fixture({ now: () => at });
+  const agenda = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  let allowances = 0;
+  usage.assertWithinLimits = async () => { allowances++; };
+  at = new Date("2026-09-13T01:00:00Z");
+  await assert.rejects(() => service.schedule("user-one", active.id, { date: "2026-09-13" }), { code: "autopilot_paused" });
+  assert.equal(allowances, 0);
+  assert.equal(jobs.items.length, 0);
+  assert.equal((await service.get("user-one", agenda.id)).payload.status, "paused");
+});
+
+test("the real worker and service stop a queued episode that becomes inactive before dispatch", async () => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const { service, jobs } = fixture({ now: () => at });
+  const agenda = await service.create("user-one", agendaInput);
+  await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  const scheduled = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  at = new Date("2026-09-13T01:00:00Z");
+  let dispatched = 0;
+  let result;
+  const worker = new AutopilotWorker({ service, jobs: {
+    claim: async () => ({ ...scheduled.job, projectId: agenda.projectId, leaseToken: "lease", attempts: 1 }),
+    renew: async () => true,
+    finish: async (_user, _id, _lease, value) => { result = value; },
+    fail: async () => assert.fail("inactivity must settle the queued job without a retry or failed episode"),
+  }, dispatchEpisode: async () => { dispatched++; return { runId: "run", sessionId: "session" }; } });
+  await worker.tick();
+  assert.equal(dispatched, 0, "runtime and billing reservation must never start");
+  assert.equal(result?.skipped, true);
+  assert.equal((await service.get("user-one", agenda.id)).payload.status, "paused");
+  assert.equal(jobs.items.length, 1);
+});
+
+test("a real digest open extends the window while explicit resume does not invent a read", async () => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const { service } = fixture({ now: () => at });
+  const agenda = await service.create("user-one", agendaInput);
+  await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  const digest = await service.createDigest("user-one", agenda.id, { date: "2026-09-06", episodeIds: ["episode-one"], costCny: 0, claims: [] });
+  at = new Date("2026-09-12T01:00:00Z");
+  await service.markDigestOpened("user-one", digest.id);
+  at = new Date("2026-09-13T01:00:00Z");
+  assert.ok(await service.schedule("user-one", agenda.id, { date: "2026-09-13" }));
+  at = new Date("2026-09-19T01:00:00Z");
+  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-19" }), { code: "autopilot_paused" });
+  const paused = await service.get("user-one", agenda.id);
+  await service.start("user-one", agenda.id, { expectedRevision: paused.revision });
+  assert.equal((await service.get("user-one", agenda.id)).payload.lastDigestOpenedAt, "2026-09-12T01:00:00.000Z");
+  assert.ok(await service.schedule("user-one", agenda.id, { date: "2026-09-19" }));
+});
 
 test("an agenda is persistent, bounded and disabled until the user starts it", async () => {
   const { service } = fixture();

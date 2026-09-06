@@ -4,10 +4,10 @@ import test from "node:test";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 
-async function fixture(t) {
+async function fixture(t, digestProjectId = "owned-project") {
   const calls = [];
   const agenda = { id: "agenda-one", projectId: "owned-project", revision: 2 };
-  const digest = { id: "digest-one", projectId: "owned-project", revision: 1 };
+  const digest = { id: "digest-one", projectId: digestProjectId, revision: 1 };
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [agenda], nextCursor: null }; },
     create: async (userId, body) => { calls.push({ method: "create", userId, body }); return agenda; },
@@ -17,6 +17,7 @@ async function fixture(t) {
     schedule: async (userId, id, body) => { calls.push({ method: "schedule", userId, id, body }); return { episode: { id: "episode-one" } }; },
     listDigests: async (userId, options) => { calls.push({ method: "digests", userId, options }); return { items: [digest], nextCursor: null }; },
     getDigest: async () => digest,
+    markDigestOpened: async (userId, id) => { calls.push({ method: "opened", userId, id }); return digest; },
     decide: async (userId, id, body) => { calls.push({ method: "decide", userId, id, body }); return digest; },
   };
   const store = {
@@ -70,4 +71,25 @@ test("digest decisions are scoped and accept only declared fields", async (t) =>
     body: JSON.stringify({ action: "adopt", claimId: "claim-one", note: "continue" }) });
   assert.equal(response.status, 200);
   assert.equal(calls.find((call) => call.method === "decide").userId, "owner");
+});
+
+test("an individual digest loads without activity and records an explicit authenticated open", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const url = `${base}/api/autopilot/digests/digest-one`;
+  assert.equal((await fetch(url)).status, 401);
+  const loaded = await fetch(url, { headers });
+  assert.equal(loaded.status, 200);
+  assert.equal((await loaded.json()).data.projectId, "owned-project");
+  assert.equal(calls.some(call => call.method === "opened"), false);
+  assert.equal((await fetch(`${url}/opened`, { method: "POST", headers: { cookie: headers.cookie }, body: "{}" })).status, 403);
+  assert.equal((await fetch(`${url}/opened`, { method: "POST", headers, body: '{"openedAt":"2099-01-01"}' })).status, 400);
+  assert.equal((await fetch(`${url}/opened`, { method: "POST", headers, body: "{}" })).status, 200);
+  assert.deepEqual(calls.at(-1), { method: "opened", userId: "owner", id: "digest-one" });
+});
+
+test("a digest read or open still requires access to its actual project", async (t) => {
+  const { base, headers, calls } = await fixture(t, "other-project");
+  assert.equal((await fetch(`${base}/api/autopilot/digests/digest-one`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/autopilot/digests/digest-one/opened`, { method: "POST", headers, body: "{}" })).status, 404);
+  assert.equal(calls.some(call => call.method === "opened"), false);
 });
