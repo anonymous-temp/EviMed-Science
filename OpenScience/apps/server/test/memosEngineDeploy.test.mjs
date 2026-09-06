@@ -71,6 +71,21 @@ test("the MemOS stack is private, persistent, bounded, and reachable only by the
   assert.match(compose, /evimed-memos-redis:[\s\S]*user: "999:1000"/);
 });
 
+test("memory readiness warms the resident embedding model within the existing resource budget", async () => {
+  const compose = await readFile(path.join(root, "deploy/web/docker-compose.memos-engine.yml"), "utf8");
+  const ollama = compose.split("\n  evimed-memos-ollama:\n")[1].split("\n  evimed-memos-secrets-init:\n")[0];
+  assert.match(ollama, /OLLAMA_KEEP_ALIVE: "-1"/);
+  assert.match(ollama, /cpus: "2\.0"/);
+  assert.match(ollama, /memory: 3g/);
+  assert.match(ollama, /ollama\/ollama:0\.33\.3@sha256:32931b46719f673c05fdbaa81ccb26da18ea4a1c57590a754874ab28ba269eb2/);
+  const web = compose.split("\n  evimed-memos-engine:\n")[0];
+  assert.match(web, /evimed-memos-engine:\n\s+condition: service_healthy/);
+  const dockerfile = await readFile(path.join(root, "deploy/memos-engine/Dockerfile"), "utf8");
+  assert.match(dockerfile, /HEALTHCHECK[^\n]*--timeout=10s/);
+  assert.match(dockerfile, /CMD \["python", "\/app\/serve\.py", "--health"\]/);
+  assert.doesNotMatch(dockerfile, /HEALTHCHECK[\s\S]*CMD python -c/);
+});
+
 test("production-state configuration creates a matched owner-only MemOS provider and Neo4j credential", async () => {
   const tmp = await mkdtemp(path.join(await realpath(os.tmpdir()), "evimed-memos-state-"));
   const script = path.join(root, "scripts/ops/configure-production-state.mjs");

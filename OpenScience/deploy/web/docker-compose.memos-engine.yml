@@ -185,6 +185,9 @@ services:
       OLLAMA_MODELS: /var/lib/ollama/current/models
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_NOHISTORY: "1"
+      # Keep the reviewed bge-m3 model (~1.2 GB resident) inside the existing
+      # 3 GiB limit. The engine's embedding health probe warms it before web readiness.
+      OLLAMA_KEEP_ALIVE: "-1"
     volumes:
       - evimed-memos-ollama-data:/var/lib/ollama:ro
     depends_on:
