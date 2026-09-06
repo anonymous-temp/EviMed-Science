@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from mr_agent.llm.client import LLMClient
-from mr_agent.models import MRAnalysisResult, PaperReference, SessionState, find_ivw
+from mr_agent.models import DataSourceType, MRAnalysisResult, PaperReference, SessionState, find_ivw
 from mr_agent.paper import references, sections
 from mr_agent.tools import pubmed
 
@@ -466,6 +466,12 @@ class PaperGenerator:
             out = result.outcome_name or result.outcome_id
             em = result.exposure_metadata
             om = result.outcome_metadata
+            metadata_note = ""
+            if any(metadata.get("metadata_source") == "provided_local_data" for metadata in (em, om)):
+                metadata_note = (
+                    "本地输入的性状、样本量和人群元数据由输入方提供，本次未独立核验。"
+                    if zh else "Local trait, sample-size and population metadata were supplied and not independently verified. "
+                )
             methods = ", ".join(item.method for item in result.mr_results) or "N/A"
             sensitivity: list[str] = []
             if result.heterogeneity:
@@ -480,6 +486,24 @@ class PaperGenerator:
                 sensitivity.append("leave-one-out plot")
             sensitivity_text = ", ".join(sensitivity) or "N/A"
             threshold = f"{result.pval_threshold:.1e}"
+            selection = result.instrument_selection
+            if selection.get("mode") == "provided_preclumped" and selection.get("ld_rechecked") is False:
+                clumping = (
+                    f"使用输入方提供的预筛选工具变量，LD未独立重新核验；来源说明：{selection.get('provenance', 'N/A')}。"
+                    if zh else
+                    "Provided preclumped instruments were used; LD was not independently rechecked. "
+                    f"Provided provenance: {selection.get('provenance', 'N/A')}. "
+                )
+            elif selection.get("mode") == "opengwas" and selection.get("ld_rechecked") is True:
+                clumping = (
+                    "已完成OpenGWAS LD clumping（r² < 0.001，窗口10,000 kb）。"
+                    if zh else "OpenGWAS LD clumping was completed (r² < 0.001; 10,000 kb). "
+                )
+            else:
+                clumping = (
+                    "结构化结果未记录LD筛选过程，不据此声明工具变量独立性已获核验。"
+                    if zh else "The structured output did not record LD selection; instrument independence was not verified here. "
+                )
             if zh:
                 overlap = (
                     "源元数据不能确认两个GWAS队列完全不重叠；运行时已标记潜在样本重叠，"
@@ -495,10 +519,10 @@ class PaperGenerator:
                     f"年份：{self._metadata_value(em, 'year')}；SNP总数：{self._metadata_value(em, 'nsnp')}）。"
                     f"结局GWAS为{result.outcome_id}（性状：{self._metadata_value(om, 'trait')}；"
                     f"样本量：{self._metadata_value(om, 'sample_size')}；人群：{self._metadata_value(om, 'population')}；"
-                    f"年份：{self._metadata_value(om, 'year')}；SNP总数：{self._metadata_value(om, 'nsnp')}）。{overlap}\n\n"
+                    f"年份：{self._metadata_value(om, 'year')}；SNP总数：{self._metadata_value(om, 'nsnp')}）。{metadata_note}{overlap}\n\n"
                     f"### {analysis_section}. 工具变量与统计分析\n"
-                    f"暴露相关SNP的筛选阈值为p < {threshold}，执行LD clumping（r² < 0.001，窗口10,000 kb）"
-                    f"及等位基因协调；最终进入分析的工具变量为{result.n_instruments}个。"
+                    f"暴露相关SNP的筛选阈值为p < {threshold}。{clumping}"
+                    f"经等位基因协调，最终进入分析的工具变量为{result.n_instruments}个。"
                     f"当前结构化结果仅记录平均F统计量"
                     f"{f'{result.f_statistic_mean:.3f}' if result.f_statistic_mean is not None else 'N/A'}，"
                     f"不据此虚构逐SNP的F值。实际估计方法为：{methods}。"
@@ -521,10 +545,10 @@ class PaperGenerator:
                     f"year: {self._metadata_value(em, 'year')}; total SNPs: {self._metadata_value(em, 'nsnp')}). "
                     f"The outcome GWAS was {result.outcome_id} (trait: {self._metadata_value(om, 'trait')}; "
                     f"sample size: {self._metadata_value(om, 'sample_size')}; population: {self._metadata_value(om, 'population')}; "
-                    f"year: {self._metadata_value(om, 'year')}; total SNPs: {self._metadata_value(om, 'nsnp')}). {overlap}\n\n"
+                    f"year: {self._metadata_value(om, 'year')}; total SNPs: {self._metadata_value(om, 'nsnp')}). {metadata_note}{overlap}\n\n"
                     f"### {analysis_section}. Instruments and analysis\n"
-                    f"Exposure-associated variants were selected at p < {threshold}, followed by LD clumping "
-                    f"(r² < 0.001; 10,000 kb) and allele harmonization. The analysis retained "
+                    f"Exposure-associated variants were selected at p < {threshold}. {clumping}"
+                    f"After allele harmonization, the analysis retained "
                     f"{result.n_instruments} instruments. The runtime recorded a mean F-statistic of "
                     f"{f'{result.f_statistic_mean:.3f}' if result.f_statistic_mean is not None else 'N/A'}; "
                     f"this is not represented as a per-SNP value. Estimation methods: {methods}. "
@@ -603,10 +627,10 @@ class PaperGenerator:
                 )
             if result.presso_global_pval is not None:
                 lines.append(
-                    f"MR-PRESSO全局检验p={self._fmt_p(result.presso_global_pval)}，"
+                    f"MR-PRESSO全局检验p{result.presso_global_pval_relation}{self._fmt_p(result.presso_global_pval)}，"
                     f"候选离群值={result.presso_n_outliers if result.presso_n_outliers is not None else 'N/A'}。"
                     if zh else
-                    f"MR-PRESSO global p={self._fmt_p(result.presso_global_pval)}; candidate outliers="
+                    f"MR-PRESSO global p{result.presso_global_pval_relation}{self._fmt_p(result.presso_global_pval)}; candidate outliers="
                     f"{result.presso_n_outliers if result.presso_n_outliers is not None else 'N/A'}."
                 )
             elif result.presso_n_outliers is not None:
@@ -648,7 +672,7 @@ class PaperGenerator:
                 if result.pleiotropy else "MR-Egger intercept=N/A"
             )
             presso = (
-                f"MR-PRESSO global p={self._fmt_p(result.presso_global_pval)}"
+                f"MR-PRESSO global p{result.presso_global_pval_relation}{self._fmt_p(result.presso_global_pval)}"
                 if result.presso_global_pval is not None else
                 f"MR-PRESSO global p=N/A; candidate outliers={result.presso_n_outliers}"
                 if result.presso_n_outliers is not None else
@@ -791,12 +815,15 @@ class PaperGenerator:
         zh = self.language == "zh"
         rows = []
         for result in results:
-            rows.append(
-                f"{result.exposure_id} (https://gwas.mrcieu.ac.uk/datasets/{result.exposure_id}/)"
-            )
-            rows.append(
-                f"{result.outcome_id} (https://gwas.mrcieu.ac.uk/datasets/{result.outcome_id}/)"
-            )
+            for identifier, source_type in (
+                (result.exposure_id, result.exposure_source_type),
+                (result.outcome_id, result.outcome_source_type),
+            ):
+                rows.append(
+                    f"{identifier} (https://gwas.mrcieu.ac.uk/datasets/{identifier}/)"
+                    if source_type == DataSourceType.OPENGWAS else
+                    f"{identifier} ({'本地输入，访问条件由提供方说明' if zh else 'local input; access terms supplied by its provider'})"
+                )
         unique = list(dict.fromkeys(rows))
         if zh:
             return (
@@ -812,12 +839,12 @@ class PaperGenerator:
     def _grounded_ethics_statement(self) -> str:
         if self.language == "zh":
             return (
-                "本次运行仅处理公开的去识别GWAS汇总统计量，未访问个体级数据。"
+                "本分析按GWAS汇总统计量输入格式执行；数据是否公开及去识别状态需根据来源材料确认。"
                 "原始研究的伦理审批和知情同意状态应以各数据集原始出版物为准；EviMed运行时没有独立验证这些文件。"
                 "在稿件提交或机构使用前，作者仍需按所在机构和期刊要求确认二次分析是否需额外审查。"
             )
         return (
-            "This run processed only public, de-identified GWAS summary statistics and did not access individual-level data. "
+            "This analysis used the GWAS summary-statistics input format; public availability and de-identification status require source documentation. "
             "Ethics approval and consent for the source studies must be verified in their original publications; the EviMed runtime did not independently verify those documents. "
             "Before submission or institutional use, authors remain responsible for confirming whether local and journal policies require additional review for this secondary analysis."
         )
@@ -878,6 +905,10 @@ class PaperGenerator:
         for result in results:
             em, om = result.exposure_metadata, result.outcome_metadata
             values = [
+                ("Metadata attribution", *[
+                    "Provided; not independently verified" if metadata.get("metadata_source") == "provided_local_data"
+                    else "Recorded source metadata" for metadata in (em, om)
+                ]),
                 ("Trait", self._metadata_value(em, "trait"), self._metadata_value(om, "trait")),
                 ("GWAS ID", result.exposure_id, result.outcome_id),
                 ("Sample size", self._metadata_value(em, "sample_size"), self._metadata_value(om, "sample_size")),

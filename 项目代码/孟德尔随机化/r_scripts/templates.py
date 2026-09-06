@@ -31,8 +31,15 @@ tryCatch({{
             dat$se.exposure, dat$se.outcome, dat$SNP)
         radial_res <- RadialMR::ivw_radial(radial_dat, alpha = 0.05)
         radial_df <- data.frame(
-            global_q_pval = radial_res$coef[1, "Pr(>|t|)"],
-            n_outliers = length(radial_res$outliers))
+            global_q_pval = pchisq(radial_res$qstatistic, radial_res$df,
+                lower.tail = FALSE),
+            n_outliers = if (is.data.frame(radial_res$outliers)) {{
+                nrow(radial_res$outliers)
+            }} else if (identical(radial_res$outliers, "No significant outliers")) {{
+                0L
+            }} else {{
+                NA_integer_
+            }})
         write.csv(radial_df, file.path(output_dir, "radial.csv"),
             row.names=FALSE)
     }}
@@ -396,7 +403,7 @@ exposure_dat <- format_data(
     effect_allele_col = "{col_effect_allele}",
     other_allele_col = "{col_other_allele}",
     eaf_col = "{col_eaf}",
-    pvalue_col = "{col_pval}"
+    pval_col = "{col_pval}"
     {extra_format_args}
 )
 
@@ -411,12 +418,8 @@ if (nrow(exposure_dat) < 3) {{
     quit(status = 0)
 }}
 
-# Clump via LD reference (API-based)
-tryCatch({{
-    exposure_dat <- clump_data(exposure_dat, clump_r2 = 0.001, clump_kb = 10000)
-}}, error = function(e) {{
-    cat(sprintf("Clumping failed (using unclumped data): %s\\n", e$message))
-}})
+# Clump via LD reference or explicitly supplied instrument selection
+{clumping_block}
 
 if (nrow(exposure_dat) < 3) {{
     result <- list(error = "Insufficient IVs after clumping (< 3)")
@@ -449,7 +452,7 @@ outcome_dat <- format_data(
     effect_allele_col = "{out_col_effect_allele}",
     other_allele_col = "{out_col_other_allele}",
     eaf_col = "{out_col_eaf}",
-    pvalue_col = "{out_col_pval}"
+    pval_col = "{out_col_pval}"
     {out_extra_format_args}
 )
 

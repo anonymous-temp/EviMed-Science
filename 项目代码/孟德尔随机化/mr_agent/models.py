@@ -8,9 +8,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # --- Enums ---
@@ -104,6 +104,15 @@ class DataSource(BaseModel):
     trait_name: str = ""
     sample_size: int | None = None
     population: str | None = None
+    instruments_preclumped: bool = False
+    clumping_provenance: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def require_preclumped_provenance(self) -> "DataSource":
+        if self.instruments_preclumped:
+            if not self.is_local() or not self.clumping_provenance or not self.clumping_provenance.strip():
+                raise ValueError("Preclumped local instruments require explicit source provenance.")
+        return self
 
     def is_local(self) -> bool:
         return self.source_type != DataSourceType.OPENGWAS
@@ -177,7 +186,9 @@ class MRAnalysisResult(BaseModel):
     interpretation: str = ""
     steiger_correct: bool | None = None
     steiger_pval: float | None = None
-    presso_global_pval: float | None = None
+    presso_global_pval: float | None = Field(default=None, ge=0, le=1)
+    # Permutation tests can report a strict upper bound, not an exact estimate.
+    presso_global_pval_relation: Literal["=", "<"] = "="
     presso_n_outliers: int | None = None
     radial_pval: float | None = None
     conmix_pval: float | None = None
@@ -185,6 +196,7 @@ class MRAnalysisResult(BaseModel):
     # means every optional analysis ran; it is not the same as a list that was
     # never populated, which is why the R side always writes this field.
     skipped_analyses: list[str] = Field(default_factory=list)
+    instrument_selection: dict[str, Any] = Field(default_factory=dict)
     sample_overlap_warning: bool = False
     sample_size_exposure: int | None = None
     sample_size_outcome: int | None = None
