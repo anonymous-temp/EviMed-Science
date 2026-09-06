@@ -307,6 +307,16 @@ def run_mr_local(
     result = _parse_results(exp_id, out_id, output_dir)
     result.exposure_source_type = exposure_source.source_type
     result.outcome_source_type = outcome_source.source_type
+    for label, source in (("exposure", exposure_source), ("outcome", outcome_source)):
+        if source.is_local():
+            setattr(result, f"{label}_name", source.trait_name)
+            setattr(result, f"{label}_metadata", {
+                "gwas_id": source.gwas_id, "trait": source.trait_name,
+                "sample_size": source.sample_size, "population": source.population,
+                "metadata_source": "provided_local_data",
+            })
+            if source.sample_size is not None:
+                setattr(result, f"sample_size_{label}", source.sample_size)
     return result
 
 
@@ -382,6 +392,9 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
     if isinstance(skipped, str):
         skipped = [skipped]
     result.skipped_analyses = [str(item) for item in skipped]
+    selection_file = output_dir / "instrument-selection.json"
+    if selection_file.exists():
+        result.instrument_selection = json.loads(selection_file.read_text(encoding="utf-8"))
 
 
 def _check_error_file(output_dir: Path) -> None:
@@ -483,9 +496,12 @@ def _parse_presso_csv(result: MRAnalysisResult, output_dir: Path) -> None:
     df = pd.read_csv(csv_path)
     if len(df) > 0:
         row = df.iloc[0]
-        global_p = safe_float(row.get("global_p"))
-        if global_p is not None:
+        raw_p = row.get("global_p")
+        bounded = isinstance(raw_p, str) and raw_p.strip().startswith("<")
+        global_p = safe_float(raw_p.strip()[1:].strip() if bounded else raw_p)
+        if global_p is not None and 0 <= global_p <= 1 and (not bounded or global_p > 0):
             result.presso_global_pval = global_p
+            result.presso_global_pval_relation = "<" if bounded else "="
         n_out = safe_int(row.get("n_outliers"))
         if n_out is not None:
             result.presso_n_outliers = n_out
@@ -503,6 +519,31 @@ def _collect_plots(result: MRAnalysisResult, output_dir: Path) -> None:
 
 
 # --- Local data script builders ---
+
+
+def _build_local_clumping(source: DataSource) -> str:
+    """Never substitute unselected SNPs when the requested LD step fails."""
+    if source.instruments_preclumped:
+        provenance = json.dumps(source.clumping_provenance, ensure_ascii=True)
+        block = (
+            'instrument_selection <- list(mode="provided_preclumped", '
+            f'provenance={provenance}, ld_rechecked=FALSE)\n'
+            'cat("Using provided clumped instruments; LD was not independently rechecked.\\n")\n'
+        )
+    else:
+        block = '''tryCatch({
+    exposure_dat <- clump_data(exposure_dat, clump_r2=0.001, clump_kb=10000)
+}, error=function(e) {
+    failure <- list(code="ld_clumping_failed", error="LD clumping failed; no unselected instruments were analyzed.")
+    write(toJSON(failure, auto_unbox=TRUE), file.path(output_dir,"mr_error.json"))
+    quit(status=1)
+})
+instrument_selection <- list(mode="opengwas", r2=0.001, kb=10000, ld_rechecked=TRUE)
+'''
+    return block + (
+        'write(toJSON(instrument_selection, auto_unbox=TRUE), '
+        'file.path(output_dir,"instrument-selection.json"))\n'
+    )
 
 
 def _column_mapping_to_r_args(mapping: ColumnMapping, prefix: str = "") -> dict[str, str]:
@@ -581,6 +622,7 @@ def _build_local_exposure_script(
         outcome_label=out_src.display_id(),
         zscore_block=_build_zscore_block(mapping),
         log10p_block=_build_log10p_block(mapping),
+        clumping_block=_build_local_clumping(exp_src),
         **exp_args,
     )
 
@@ -641,6 +683,7 @@ def _build_local_both_script(
         outcome_label=out_src.display_id(),
         zscore_block=_build_zscore_block(exp_mapping),
         log10p_block=_build_log10p_block(exp_mapping),
+        clumping_block=_build_local_clumping(exp_src),
         out_zscore_block=_build_zscore_block(out_mapping, "raw_out"),
         out_log10p_block=_build_log10p_block(out_mapping, "raw_out"),
         **exp_args,

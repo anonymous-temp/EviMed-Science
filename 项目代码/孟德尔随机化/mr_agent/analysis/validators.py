@@ -119,11 +119,13 @@ def _check_presso(result: MRAnalysisResult, report: ValidationReport) -> None:
     """Check MR-PRESSO global pleiotropy test."""
     if result.presso_global_pval is None:
         return
-    report.metrics["presso_global_pval"] = result.presso_global_pval
-    if result.presso_global_pval < 0.05:
+    bounded = result.presso_global_pval_relation == "<"
+    metric = "presso_global_pval_upper_bound" if bounded else "presso_global_pval"
+    report.metrics[metric] = result.presso_global_pval
+    if result.presso_global_pval < 0.05 or (bounded and result.presso_global_pval == 0.05):
         msg = (
             f"MR-PRESSO detected significant global pleiotropy "
-            f"(p={result.presso_global_pval:.4f})"
+            f"(p{result.presso_global_pval_relation}{result.presso_global_pval:.4g})"
         )
         if result.presso_n_outliers:
             msg += f", {result.presso_n_outliers} outlier(s) detected"
