@@ -3078,9 +3078,13 @@ test("a provenance rejection is repaired rather than discarded", async () => {
       monitorIntervalMs: 60_000,
       monitorMaxPolls: 20,
       maxClinicalRepairAttempts: 1,
-      readSessionHistory: async () => history,
+      readSessionHistory: async () => {
+        if (history.length) await new Promise((resolve) => setTimeout(resolve, 10));
+        return history;
+      },
       readSessionStatus: async () => "idle",
     });
+    store.scheduleMonitor = () => {};
     const run = await store.dispatch(project, {
       sessionId: binding.sessionId,
       dispatchId: "turn_repair_provenance",
@@ -3121,8 +3125,12 @@ test("a provenance rejection is repaired rather than discarded", async () => {
     // Either way the observable behaviour is the same and is what this pins: a
     // repair prompt goes back naming the path to correct, instead of the
     // finished package being discarded.
-    const first = await store.reconcileSession(project, binding.sessionId);
+    const [first, concurrent] = await Promise.all([
+      store.reconcileSession(project, binding.sessionId),
+      store.reconcileSession(project, binding.sessionId),
+    ]);
     assert.equal(first.id, run.id);
+    assert.equal(concurrent.id, run.id);
     assert.equal(repairPrompts.length, 1, "a repair prompt was sent");
     assert.match(repairPrompts[0], /\.evimed-sources\/official-pages\/source-a\/page\.md/);
     assert.match(repairPrompts[0], /no evidence tool reported preserving that file/);
