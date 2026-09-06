@@ -254,7 +254,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertEqual(environment["MAX_CONCURRENT_REVIEWS"], "1")
         self.assertEqual(environment["MAX_CONCURRENT_REVIEWS_V2"], "1")
 
-    def test_failed_status_preserves_terminal_job_state_for_pollers(self):
+    def test_failed_status_obeys_the_error_envelope_for_pollers(self):
         self.install_fake_specialist("research_topic_selection")
         job_id = "topic-20260718120000-abcdef123456"
         jobs = self.workspace / "research-topic-runs" / ".jobs"
@@ -277,8 +277,9 @@ class SpecialistJobContractTests(unittest.TestCase):
         )
 
         self.assertEqual(result["status"], "error")
-        self.assertEqual(result["data"]["jobStatus"], "failed")
-        self.assertEqual(result["data"]["jobId"], job_id)
+        self.assertNotIn("data", result)
+        self.assertNotIn("sources", result)
+        self.assertEqual(result["error"]["message"], "upstream model unavailable")
 
     def test_a_job_whose_worker_died_stops_answering_still_running(self):
         # A SIGKILL or an OOM kill left the state file saying "running" and
@@ -304,7 +305,8 @@ class SpecialistJobContractTests(unittest.TestCase):
         result = self.jobs.status_job("research_topic_selection", {"jobId": job_id})
 
         self.assertEqual(result["status"], "error")
-        self.assertEqual(result["data"]["jobStatus"], "failed")
+        self.assertNotIn("data", result)
+        self.assertNotIn("sources", result)
         self.assertTrue(result["error"]["retryable"], "an OOM kill is worth retrying")
         self.assertEqual(
             json.loads(state_path.read_text(encoding="utf-8"))["status"],

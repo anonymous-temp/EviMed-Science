@@ -8,6 +8,7 @@ environment variable, absolute output path, or caller-supplied tenant scope.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Security
 
+from .mr_job_store import MRJobStore
 from .security import _authorized_claims, _read_secret, _signing_secret
 
 
@@ -39,7 +41,14 @@ SPECS: dict[str, dict[str, Any]] = {
         "directory": "mendelian-randomization-runs",
         "marker": "mr_agent/core/engine.py",
         "required": ("exposure", "outcome"),
-        "inputs": ("exposure", "outcome", "outputLanguage", "analysisDirection"),
+        "inputs": (
+            "exposure",
+            "outcome",
+            "outputLanguage",
+            "analysisDirection",
+            "exposureSource",
+            "outcomeSource",
+        ),
     },
     "bibliometric-analysis": {
         "label": "Bibliometric analysis",
@@ -57,7 +66,14 @@ SPECS: dict[str, dict[str, Any]] = {
         "directory": "research-topic-runs",
         "marker": "services/task_service.py",
         "required": ("researchDirection",),
-        "inputs": ("researchDirection", "outputLanguage", "availableData", "population", "studySetting", "resourceConstraints"),
+        "inputs": (
+            "researchDirection",
+            "outputLanguage",
+            "availableData",
+            "population",
+            "studySetting",
+            "resourceConstraints",
+        ),
     },
     "peer-review": {
         "label": "Peer review",
@@ -76,9 +92,16 @@ SPECS: dict[str, dict[str, Any]] = {
         "marker": "safety_agent/analysis/pipeline.py",
         "required": ("drug",),
         "inputs": (
-            "drug", "reactions", "outputLanguage", "drugAliases", "suspectRoles",
-            "administrationRoutes", "studyDateFrom", "studyDateTo",
-            "backgroundDateFrom", "backgroundDateTo",
+            "drug",
+            "reactions",
+            "outputLanguage",
+            "drugAliases",
+            "suspectRoles",
+            "administrationRoutes",
+            "studyDateFrom",
+            "studyDateTo",
+            "backgroundDateFrom",
+            "backgroundDateTo",
         ),
     },
 }
@@ -192,6 +215,25 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _mr_store() -> MRJobStore:
+    return MRJobStore(Path(os.getenv("EVIMED_DATA_ROOT", "/data")), _mr_inputs())
+
+
+def _read_state(state_path: Path) -> dict[str, Any]:
+    if _kind() == "mendelian-randomization":
+        return _mr_store().read(state_path)
+    return _read_json(state_path)
+
+
+def _write_state(
+    state_path: Path, state: dict[str, Any], *, create: bool = False
+) -> None:
+    if _kind() == "mendelian-randomization":
+        _mr_store().write(state_path, state, create=create)
+    else:
+        _atomic_json(state_path, state)
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
@@ -238,10 +280,60 @@ def _source(job_id: str) -> dict[str, str]:
     }
 
 
+class MRInputSupportUnavailable(ValueError):
+    """A missing reviewed helper is a recoverable deployment dependency."""
+
+    code = "specialist_agent_unavailable"
+
+
+def _mr_inputs(root: Path | None = None) -> Any:
+    """Load the fixed dependency-free helper from the reviewed MR source tree."""
+    try:
+        location = (root or _agent_root()) / "evimed_local_inputs.py"
+        spec = importlib.util.spec_from_file_location(
+            "evimed_managed_mr_inputs", location
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("missing loader")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        raise MRInputSupportUnavailable(
+            "Managed MR input support is unavailable."
+        ) from None
+
+
+def _mr_job(root: Path) -> Any:
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "evimed_managed_mr_job", root / "evimed_mr_job.py"
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError("missing loader")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        raise MRInputSupportUnavailable(
+            "Managed MR execution support is unavailable."
+        ) from None
+
+
 def _source_evidence(root: Path) -> dict[str, str]:
     digest = hashlib.sha256()
-    for target in (root / "evimed_runner.py", root / _spec()["marker"], Path(__file__).resolve()):
+    for target in (
+        root / "evimed_runner.py",
+        root / _spec()["marker"],
+        Path(__file__).resolve(),
+    ):
         digest.update(target.read_bytes())
+    if _kind() == "mendelian-randomization":
+        digest.update(Path(__file__).with_name("mr_job_store.py").read_bytes())
+        for name in ("evimed_local_inputs.py", "evimed_mr_job.py"):
+            helper = root / name
+            if helper.is_file():
+                digest.update(helper.read_bytes())
     return {"algorithm": "sha256", "digest": digest.hexdigest()}
 
 
@@ -250,6 +342,8 @@ def _job_paths(workspace: Path, job_id: str) -> tuple[Path, Path]:
     pattern = re.compile(rf"^{re.escape(spec['prefix'])}[a-z0-9-]{{8,80}}$")
     if not pattern.fullmatch(job_id):
         raise ValueError("invalid specialist job id")
+    if _kind() == "mendelian-randomization":
+        return _mr_store().paths(workspace, job_id)
     root = workspace / spec["directory"] / ".jobs"
     if root.exists():
         _no_symlink_tree(workspace, root)
@@ -296,6 +390,8 @@ def _validated_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
     if action == "start":
         if "jobId" in arguments:
             _job_id(arguments, spec)
+        if _kind() == "mendelian-randomization":
+            _mr_inputs().validate_request(arguments)
         if _kind() == "research-topic-selection":
             for key, limit in (("researchDirection", 4000), ("availableData", 4000), ("population", 1000), ("studySetting", 1000)):
                 if key in arguments and (not isinstance(arguments[key], str) or not arguments[key].strip() or len(arguments[key]) > limit):
@@ -339,7 +435,12 @@ def _validated_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
 def _model_ready() -> bool:
     try:
         _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
-        _agent_root()
+        root = _agent_root()
+        if _kind() == "mendelian-randomization" and not all(
+            (root / name).is_file()
+            for name in ("evimed_local_inputs.py", "evimed_mr_job.py")
+        ):
+            raise RuntimeError("Managed MR input support is unavailable.")
         _signing_secret()
         if _kind() == "drug-safety-analysis":
             _read_secret(os.getenv("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "").strip())
@@ -359,24 +460,75 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     request = {key: arguments[key] for key in spec["inputs"] if key in arguments}
     if _kind() == "peer-review":
         try:
-            request["manuscript"] = str(_workspace_file(workspace, request.get("manuscript")))
+            request["manuscript"] = str(
+                _workspace_file(workspace, request.get("manuscript"))
+            )
         except ValueError as exc:
             return _error("specialist_input_path_invalid", str(exc))
+    input_bindings = None
+    if _kind() == "mendelian-randomization":
+        helper = _mr_inputs()
+        try:
+            input_bindings = helper.capture_bindings(
+                workspace, request, Path(os.getenv("EVIMED_DATA_ROOT", "/data"))
+            )
+        except helper.MRInputError as error:
+            return _error(error.code, str(error))
     job_id = _job_id(arguments, spec)
     run_root = workspace / spec["directory"]
-    state_path, _ = _job_paths(workspace, job_id)
-    if (run_root / job_id).exists() or state_path.exists():
-        return _error("specialist_job_id_conflict", "jobId already exists in this project workspace.")
-    for target in (run_root, run_root / ".jobs", run_root / job_id, run_root / job_id / "output"):
-        _ensure_directory(workspace, target)
-    output_root = run_root / job_id / "output"
+    queue_record = None
+    if _kind() == "mendelian-randomization":
+        try:
+            store = _mr_store()
+            queue_record = store.scope(workspace, create=True)
+            if (
+                input_bindings["workspace"]
+                != queue_record["context"]["identity"]["workspace"]
+            ):
+                raise ValueError("MR workspace changed before admission.")
+            state_path, _ = store.paths(workspace, job_id, record=queue_record)
+            output_root = store.reserve_output(queue_record, job_id)
+        except FileExistsError:
+            return _error(
+                "specialist_job_id_conflict", "jobId already exists in this project."
+            )
+        except (OSError, ValueError):
+            return _error(
+                "specialist_worker_unavailable",
+                "The protected MR queue or workspace scope is unavailable.",
+                True,
+            )
+    else:
+        state_path, _ = _job_paths(workspace, job_id)
+        if (run_root / job_id).exists() or state_path.exists():
+            return _error(
+                "specialist_job_id_conflict",
+                "jobId already exists in this project workspace.",
+            )
+        for target in (
+            run_root,
+            run_root / ".jobs",
+            run_root / job_id,
+            run_root / job_id / "output",
+        ):
+            _ensure_directory(workspace, target)
+        output_root = run_root / job_id / "output"
     root = _agent_root()
     state = {
-        "schemaVersion": 1,
+        "schemaVersion": 2 if queue_record is not None else 1,
         "kind": _kind(),
+        **(
+            {
+                "queueContext": queue_record["context"],
+                "queueGeneration": queue_record["generation"],
+            }
+            if queue_record is not None
+            else {}
+        ),
         "jobId": job_id,
         "status": "queued",
         "request": request,
+        **({"mrInputBindings": input_bindings} if input_bindings is not None else {}),
         "workspace": str(workspace),
         "outputRoot": str(output_root),
         "sourceEvidence": _source_evidence(root),
@@ -384,10 +536,25 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         "updatedAt": _now(),
         "artifacts": [],
     }
-    _atomic_json(state_path, state)
+    try:
+        _write_state(state_path, state, create=True)
+    except (OSError, ValueError):
+        if _kind() != "mendelian-randomization":
+            raise
+        return _error(
+            "specialist_worker_unavailable",
+            "The protected MR queue changed before admission.",
+            True,
+        )
     try:
         worker = subprocess.Popen(
-            [sys.executable, "-m", "evimed_specialist_adapter.service", "--run-job", str(state_path)],
+            [
+                sys.executable,
+                "-m",
+                "evimed_specialist_adapter.service",
+                "--run-job",
+                str(state_path),
+            ],
             cwd=str(Path(__file__).resolve().parents[1]),
             env=dict(os.environ),
             stdin=subprocess.DEVNULL,
@@ -397,16 +564,28 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         )
         _WORKERS[job_id] = worker
     except OSError:
-        state.update({"status": "failed", "updatedAt": _now(), "error": "Specialist worker could not start."})
-        _atomic_json(state_path, state)
-        return _error("specialist_worker_unavailable", "Specialist worker could not start.", True)
+        state.update(
+            {
+                "status": "failed",
+                "updatedAt": _now(),
+                "error": "Specialist worker could not start.",
+            }
+        )
+        _write_state(state_path, state)
+        return _error(
+            "specialist_worker_unavailable", "Specialist worker could not start.", True
+        )
     return {
         "status": "warning",
         "summary": f"{spec['label']} job {job_id} has started.",
         "data": {"jobId": job_id, "jobStatus": "queued"},
         "sources": [_source(job_id)],
-        "warnings": ["The specialist analysis is still running; interim files are not final results."],
-        "next_actions": ["Poll this specialist with action=status and the returned jobId."],
+        "warnings": [
+            "The specialist analysis is still running; interim files are not final results."
+        ],
+        "next_actions": [
+            "Poll this specialist with action=status and the returned jobId."
+        ],
     }
 
 
@@ -452,13 +631,17 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     job_id = str(arguments.get("jobId") or "")
     try:
         state_path, log_path = _job_paths(workspace, job_id)
-        state = _read_json(state_path)
+        state = _read_state(state_path)
+    except MRInputSupportUnavailable as error:
+        return _error(error.code, str(error), True)
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
-        return _error("specialist_job_unavailable", "The requested specialist job is unavailable.")
+        return _error(
+            "specialist_job_unavailable", "The requested specialist job is unavailable."
+        )
     if (
         state.get("kind") != _kind()
         or state.get("jobId") != job_id
-        or Path(state.get("workspace", "")).resolve() != workspace.resolve()
+        or Path(state.get("workspace", "")).absolute() != workspace.absolute()
     ):
         return _error("specialist_job_state_invalid", "The specialist job state is invalid.")
     job_status = state.get("status")
@@ -473,7 +656,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 "next_actions": ["Poll this job again after additional processing time."],
             }
         try:
-            refreshed = _read_json(state_path)
+            refreshed = _read_state(state_path)
         except (OSError, RuntimeError, json.JSONDecodeError):
             refreshed = state
         if refreshed.get("status") not in {"queued", "running"}:
@@ -487,7 +670,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 "retryable": True,
                 "error": "The specialist worker stopped before publishing a terminal result.",
             })
-            _atomic_json(state_path, state)
+            _write_state(state_path, state)
             job_status = "failed"
     worker = _WORKERS.pop(job_id, None)
     if worker is not None:
@@ -497,6 +680,12 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             _WORKERS[job_id] = worker
     if job_status == "failed":
         message = str(state.get("error") or f"{_spec()['label']} execution failed.")
+        if _kind() == "mendelian-randomization":
+            return _error(
+                state.get("errorCode") or "specialist_execution_failed",
+                message,
+                bool(state.get("retryable")),
+            )
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
@@ -528,8 +717,12 @@ def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 "available": True,
                 "model": "deepseek-v4-pro",
                 "thinking": True,
-                **({"acceptedStartInputs": _accepted_start_inputs()}
-                   if _kind() == "research-topic-selection" else {}),
+                **(
+                    {"acceptedStartInputs": _accepted_start_inputs()}
+                    if _kind()
+                    in {"research-topic-selection", "mendelian-randomization"}
+                    else {}
+                ),
             },
             "sources": [_source("service")],
         }
@@ -577,34 +770,123 @@ def _collect_artifacts(workspace: Path, output_root: Path) -> list[dict[str, str
     return artifacts[:100]
 
 
+def _run_isolated_mr(
+    state_path: Path, state: dict[str, Any], root: Path, data_root: Path
+) -> int:
+    """The hosted worker retains authority and never executes in the shared volume."""
+    helper = _mr_inputs(root)
+    state.update(
+        status="running", workerPid=os.getpid(), startedAt=_now(), updatedAt=_now()
+    )
+    _write_state(state_path, state)
+    try:
+        jobs = _mr_job(root)
+        job = jobs.Job(
+            workspace=Path(state["workspace"]),
+            output_root=Path(state["outputRoot"]),
+            data_root=data_root,
+            request=state["request"],
+            bindings=state.get("mrInputBindings", {}),
+            python=sys.executable,
+            runner=root / "evimed_runner.py",
+        )
+        environment = _child_environment()
+        outcome = jobs.execute(helper, job, environment)
+        if state.get("sourceEvidence") != _source_evidence(root):
+            raise helper.MRInputError(
+                "mr_input_changed", "Managed MR source changed during execution."
+            )
+        result = outcome["result"]
+        success = outcome["returnCode"] == 0 and result.get("status") == "succeeded"
+        state.update(
+            status="succeeded" if success else "failed",
+            finishedAt=_now(),
+            updatedAt=_now(),
+            returnCode=outcome["returnCode"],
+            artifacts=outcome["artifacts"] if success else [],
+            retryable=outcome["returnCode"] in {75, 137, 143},
+        )
+        if not success:
+            state["error"] = str(result.get("error") or "The fixed MR runner failed.")
+            if str(result.get("errorCode", "")).startswith("mr_input_"):
+                state["errorCode"] = result["errorCode"]
+        _write_state(state_path, state)
+        return 0 if success else outcome["returnCode"] or 1
+    except helper.MRInputError as error:
+        state.update(
+            status="failed",
+            finishedAt=_now(),
+            updatedAt=_now(),
+            returnCode=1,
+            errorCode=error.code,
+            error=str(error),
+            retryable=False,
+            artifacts=[],
+        )
+        _write_state(state_path, state)
+        return 1
+    except MRInputSupportUnavailable as error:
+        state.update(
+            status="failed",
+            finishedAt=_now(),
+            updatedAt=_now(),
+            returnCode=1,
+            errorCode=error.code,
+            error=str(error),
+            retryable=True,
+            artifacts=[],
+        )
+        _write_state(state_path, state)
+        return 1
+
+
 def run_job(state_file: str) -> int:
-    state_path = Path(state_file).resolve()
+    state_path = Path(state_file).absolute()
     data_root = Path(os.getenv("EVIMED_DATA_ROOT", "/data")).resolve()
     if data_root != state_path and data_root not in state_path.parents:
         raise RuntimeError("specialist state escaped the data root")
-    state = _read_json(state_path)
+    state = _read_state(state_path)
     if state.get("kind") != _kind():
         raise RuntimeError("specialist state kind is invalid")
-    workspace = Path(state["workspace"]).resolve()
-    output_root = Path(state["outputRoot"]).resolve()
-    root = _agent_root()
-    expected_state, log_path = _job_paths(workspace, state["jobId"])
-    if (
-        expected_state.resolve() != state_path
-        or (workspace != output_root and workspace not in output_root.parents)
-        or state.get("sourceEvidence") != _source_evidence(root)
+    workspace = Path(state["workspace"]).absolute()
+    output_root = Path(state["outputRoot"]).absolute()
+    if _kind() == "mendelian-randomization" and (
+        output_root != workspace / _spec()["directory"] / state["jobId"] / "output"
     ):
+        raise RuntimeError("Managed MR job scope does not match its location.")
+    root = _agent_root()
+    if state.get("sourceEvidence") != _source_evidence(root):
         raise RuntimeError("specialist state no longer matches its managed source")
-    state.update({"status": "running", "workerPid": os.getpid(), "startedAt": _now(), "updatedAt": _now()})
-    _atomic_json(state_path, state)
+    if _kind() == "mendelian-randomization":
+        return _run_isolated_mr(state_path, state, root, data_root)
+    expected_state, log_path = _job_paths(workspace, state["jobId"])
+    if expected_state.resolve() != state_path or workspace not in output_root.parents:
+        raise RuntimeError("specialist state no longer matches its managed source")
+    state.update(
+        {
+            "status": "running",
+            "workerPid": os.getpid(),
+            "startedAt": _now(),
+            "updatedAt": _now(),
+        }
+    )
+    _write_state(state_path, state)
     request_path = output_root / "request.json"
-    _atomic_json(request_path, state["request"])
+    request = state["request"]
+    _atomic_json(request_path, request)
     log_descriptor = os.open(
         log_path,
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
         0o600,
     )
-    command = [sys.executable, str(root / "evimed_runner.py"), "--request", str(request_path), "--output-dir", str(output_root)]
+    command = [
+        sys.executable,
+        str(root / "evimed_runner.py"),
+        "--request",
+        str(request_path),
+        "--output-dir",
+        str(output_root),
+    ]
     with os.fdopen(log_descriptor, "ab", buffering=0) as log:
         completed = subprocess.run(
             command,
@@ -618,26 +900,33 @@ def run_job(state_file: str) -> int:
     result_path = output_root / "result.json"
     result = _read_json(result_path) if result_path.is_file() else {}
     if completed.returncode != 0 or result.get("status") != "succeeded":
-        state.update({
-            "status": "failed",
-            "updatedAt": _now(),
-            "finishedAt": _now(),
-            "returnCode": completed.returncode,
-            "retryable": completed.returncode in {75, 137, 143},
-            "error": str(result.get("error") or f"{_spec()['label']} exited with code {completed.returncode}."),
-        })
-        _atomic_json(state_path, state)
+        state.update(
+            {
+                "status": "failed",
+                "updatedAt": _now(),
+                "finishedAt": _now(),
+                "returnCode": completed.returncode,
+                "retryable": completed.returncode in {75, 137, 143},
+                "error": str(
+                    result.get("error")
+                    or f"{_spec()['label']} exited with code {completed.returncode}."
+                ),
+            }
+        )
+        _write_state(state_path, state)
         return completed.returncode or 1
     if state.get("sourceEvidence") != _source_evidence(root):
         raise RuntimeError("specialist source changed while the job was running")
-    state.update({
-        "status": "succeeded",
-        "updatedAt": _now(),
-        "finishedAt": _now(),
-        "returnCode": 0,
-        "artifacts": _collect_artifacts(workspace, output_root),
-    })
-    _atomic_json(state_path, state)
+    state.update(
+        {
+            "status": "succeeded",
+            "updatedAt": _now(),
+            "finishedAt": _now(),
+            "returnCode": 0,
+            "artifacts": _collect_artifacts(workspace, output_root),
+        }
+    )
+    _write_state(state_path, state)
     return 0
 
 
@@ -652,8 +941,11 @@ def _create_app() -> FastAPI:
             "status": "ok" if ready else "degraded",
             "ready": ready,
             "specialist": _kind(),
-            **({"acceptedStartInputs": _accepted_start_inputs()}
-               if _kind() == "research-topic-selection" else {}),
+            **(
+                {"acceptedStartInputs": _accepted_start_inputs()}
+                if _kind() in {"research-topic-selection", "mendelian-randomization"}
+                else {}
+            ),
         }
 
     def specialist_call(
@@ -662,7 +954,13 @@ def _create_app() -> FastAPI:
     ) -> dict[str, Any]:
         try:
             validated = _validated_arguments(arguments)
+        except MRInputSupportUnavailable as exc:
+            return _error(exc.code, str(exc), True)
         except ValueError as exc:
+            if _kind() == "mendelian-randomization" and str(
+                getattr(exc, "code", "")
+            ).startswith("mr_input_"):
+                return _error(exc.code, str(exc))
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return call(validated, workspace_for_claims(claims))
 
@@ -674,11 +972,15 @@ if len(sys.argv) == 3 and sys.argv[1] == "--run-job":
     try:
         raise SystemExit(run_job(sys.argv[2]))
     except Exception as exc:
+        # MR failures are published only while the original scope remains owned.
+        # Reopening this path after a scope failure could adopt a replacement job.
+        if _kind() == "mendelian-randomization":
+            raise SystemExit(1)
         try:
-            target = Path(sys.argv[2]).resolve()
-            failed = _read_json(target)
+            target = Path(sys.argv[2]).absolute()
+            failed = _read_state(target)
             failed.update({"status": "failed", "updatedAt": _now(), "finishedAt": _now(), "error": str(exc)})
-            _atomic_json(target, failed)
+            _write_state(target, failed)
         except Exception:
             pass
         raise SystemExit(1)

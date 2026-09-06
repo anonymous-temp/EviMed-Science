@@ -62,6 +62,45 @@ def object_schema(properties, required=()):
 STRING = {"type": "string", "minLength": 1, "maxLength": 512}
 SHORT_STRING = {"type": "string", "minLength": 1, "maxLength": 128}
 LONG_STRING = {"type": "string", "minLength": 1, "maxLength": 4000}
+MR_COLUMN_KEYS = ("snp", "beta", "se", "effect_allele", "other_allele", "eaf", "pval")
+MR_SOURCE_SCHEMA = {
+    "oneOf": [
+        object_schema(
+            {
+                "type": {"type": "string", "enum": ["local_file"]},
+                "path": {
+                    **STRING,
+                    "description": (
+                        "Uploaded workspace-relative CSV or TSV path; "
+                        "never an absolute path."
+                    ),
+                },
+                "columnMapping": object_schema(
+                    {key: SHORT_STRING for key in MR_COLUMN_KEYS}, MR_COLUMN_KEYS
+                ),
+                "sampleSize": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1_000_000_000_000,
+                },
+                "population": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "instrumentsPreclumped": {"type": "boolean"},
+                "clumpingProvenance": LONG_STRING,
+            },
+            ("type", "path", "columnMapping", "instrumentsPreclumped"),
+        ),
+        object_schema(
+            {
+                "type": {"type": "string", "enum": ["opengwas"]},
+                "gwasId": {
+                    "type": "string",
+                    "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+                },
+            },
+            ("type", "gwasId"),
+        ),
+    ],
+}
 NUMBER = {"type": "number"}
 LIMIT = {"type": "integer", "minimum": 1, "maximum": 200}
 EVIMED_SEARCH_LIMIT = {"type": "integer", "minimum": 1, "maximum": 100}
@@ -623,7 +662,17 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "mendelian_randomization",
-        "description": "Start or inspect a managed Mendelian-randomization analysis and manuscript job. Statistical results must come from the installed MR engines, never from the language model.",
+        "description": 'Start or inspect a managed Mendelian-randomization job. '
+        'Uploaded sources require the configured isolated MR adapter; '
+        'the same-container fallback accepts legacy text only. For '
+        'uploaded CSV/TSV supply both exposureSource and '
+        'outcomeSource with explicit roles and seven-column mappings. '
+        'No-JWT execution requires two local files and preclumped '
+        'instruments with provenance for every analyzed exposure '
+        '(both sides for bidirectional). Mixed OpenGWAS inputs '
+        'require the existing configured credential. Omit both '
+        'sources for legacy remote text selection. Statistics come '
+        'only from the installed MR engines.',
         "inputSchema": object_schema(
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},
@@ -633,6 +682,8 @@ TOOL_DEFINITIONS = [
                 "waitSeconds": STATUS_WAIT_SECONDS,
                 "outputLanguage": {"type": "string", "enum": ["zh", "en"]},
                 "analysisDirection": {"type": "string", "enum": ["forward", "bidirectional"]},
+                "exposureSource": MR_SOURCE_SCHEMA,
+                "outcomeSource": MR_SOURCE_SCHEMA,
             },
             ("action",),
         ),
@@ -838,6 +889,16 @@ def failure(code, message, retryable, stop_reason, next_actions):
 
 
 def _validate(value, schema, path):
+    if "oneOf" in schema:
+        matches = 0
+        for candidate in schema["oneOf"]:
+            try:
+                _validate(value, candidate, path)
+                matches += 1
+            except ValueError:
+                continue
+        if matches != 1:
+            raise ValueError("%s must match exactly one allowed input form" % path)
     expected = schema.get("type")
     if expected == "object":
         if not isinstance(value, dict):
@@ -849,7 +910,9 @@ def _validate(value, schema, path):
         if schema.get("additionalProperties") is False:
             unknown = sorted(set(value) - set(properties))
             if unknown:
-                raise ValueError("%s contains unsupported field %s" % (path, unknown[0]))
+                raise ValueError(
+                    "%s contains unsupported field %s" % (path, unknown[0])
+                )
         for key, item in value.items():
             if key in properties:
                 _validate(item, properties[key], "%s.%s" % (path, key))
@@ -873,13 +936,20 @@ def _validate(value, schema, path):
             raise ValueError("%s is not an allowed value" % path)
         if "pattern" in schema and re.match(schema["pattern"], value) is None:
             raise ValueError("%s has an invalid format" % path)
+    elif expected == "boolean":
+        if not isinstance(value, bool):
+            raise ValueError("%s must be a boolean" % path)
     elif expected == "integer":
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("%s must be an integer" % path)
         if value < schema.get("minimum", value) or value > schema.get("maximum", value):
             raise ValueError("%s is outside the allowed range" % path)
     elif expected == "number":
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
             raise ValueError("%s must be a finite number" % path)
         if value < schema.get("minimum", value) or value > schema.get("maximum", value):
             raise ValueError("%s is outside the allowed range" % path)

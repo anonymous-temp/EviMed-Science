@@ -49,7 +49,14 @@ SPECS = {
         "marker": "mr_agent/core/engine.py",
         "directory": "mendelian-randomization-runs",
         "required": ("exposure", "outcome"),
-        "inputs": ("exposure", "outcome", "outputLanguage", "analysisDirection"),
+        "inputs": (
+            "exposure",
+            "outcome",
+            "outputLanguage",
+            "analysisDirection",
+            "exposureSource",
+            "outcomeSource",
+        ),
     },
     "bibliometric_analysis": {
         "id": "bibliometric-analysis",
@@ -71,7 +78,14 @@ SPECS = {
         "marker": "services/task_service.py",
         "directory": "research-topic-runs",
         "required": ("researchDirection",),
-        "inputs": ("researchDirection", "outputLanguage", "availableData", "population", "studySetting", "resourceConstraints"),
+        "inputs": (
+            "researchDirection",
+            "outputLanguage",
+            "availableData",
+            "population",
+            "studySetting",
+            "resourceConstraints",
+        ),
     },
     "peer_review": {
         "id": "peer-review",
@@ -94,9 +108,16 @@ SPECS = {
         "directory": "drug-safety-runs",
         "required": ("drug",),
         "inputs": (
-            "drug", "reactions", "outputLanguage", "drugAliases", "suspectRoles",
-            "administrationRoutes", "studyDateFrom", "studyDateTo",
-            "backgroundDateFrom", "backgroundDateTo",
+            "drug",
+            "reactions",
+            "outputLanguage",
+            "drugAliases",
+            "suspectRoles",
+            "administrationRoutes",
+            "studyDateFrom",
+            "studyDateTo",
+            "backgroundDateFrom",
+            "backgroundDateTo",
         ),
     },
 }
@@ -383,11 +404,32 @@ def capabilities(tool_name):
             "thinking": True,
             "execution": "managed-background-job",
             "supportedActions": ["capabilities", "start", "status"],
-            **({"acceptedStartInputs": [*spec["inputs"], "jobId"]}
-               if tool_name == "research_topic_selection" else {}),
+            **(
+                {"acceptedStartInputs": [*spec["inputs"], "jobId"]}
+                if tool_name == "research_topic_selection"
+                else {}
+            ),
+            **(
+                {
+                    "localSourceExecution": "requires-isolated-adapter",
+                    "acceptedStartInputs": [
+                        key
+                        for key in spec["inputs"]
+                        if key not in {"exposureSource", "outcomeSource"}
+                    ],
+                }
+                if tool_name == "mendelian_randomization"
+                else {}
+            ),
             "python": python.name,
         },
-        "sources": [{"id": "%s:local" % spec["id"], "source": spec["label"], "retrievedAt": _now()}],
+        "sources": [
+            {
+                "id": "%s:local" % spec["id"],
+                "source": spec["label"],
+                "retrievedAt": _now(),
+            }
+        ],
     }
 
 
@@ -411,6 +453,14 @@ def start_job(tool_name, arguments):
     for required in spec["required"]:
         if not str(arguments.get(required) or "").strip():
             raise SpecialistJobError("specialist_input_required", "%s requires %s." % (spec["label"], required))
+    if tool_name == "mendelian_randomization" and any(
+        key in arguments for key in ("exposureSource", "outcomeSource")
+    ):
+        raise SpecialistJobError(
+            "specialist_agent_unconfigured",
+            "Uploaded GWAS inputs require the configured isolated MR adapter.",
+            True,
+        )
     root = _root(spec)
     python = _python(spec, root)
     model_environment = _model_environment()
@@ -564,19 +614,21 @@ def status_job(tool_name, arguments):
             "next_actions": ["Poll this job again after additional processing time."],
         }
     if job_status == "failed":
-        tail = _log_tail(log_path)
+        input_error = (
+            state.get("errorCode", "") if tool_name == "mendelian_randomization" else ""
+        )
+        input_error = input_error if input_error.startswith("mr_input_") else ""
+        tail = "" if input_error else _log_tail(log_path)
         message = str(state.get("error") or "%s execution failed." % spec["label"])
         return {
             "status": "error",
             "summary": message,
-            "data": {
-                "jobId": job_id,
-                "jobStatus": job_status,
-                "updatedAt": state.get("updatedAt"),
-            },
-            "next_actions": ["Review the bounded job log, correct the reported input or service issue, and start a new job."],
+            "next_actions": [
+                'Review the bounded job log, correct the reported input or '
+                'service issue, and start a new job.'
+            ],
             "error": {
-                "code": "specialist_execution_failed",
+                "code": input_error or "specialist_execution_failed",
                 "message": message + ((" Log tail: " + tail[-2000:]) if tail else ""),
                 "retryable": bool(state.get("retryable", False)),
                 "stopReason": "Stop until the failed specialist job is reviewed.",
@@ -652,7 +704,16 @@ def _run_job(state_path):
     state.update({"status": "running", "workerPid": os.getpid(), "startedAt": _now(), "updatedAt": _now()})
     _atomic_json(state_path, state)
     request_path = output_root / "request.json"
-    _atomic_json(request_path, state["request"])
+    request = state["request"]
+    if state["tool"] == "mendelian_randomization" and any(
+        key in request for key in ("exposureSource", "outcomeSource")
+    ):
+        raise SpecialistJobError(
+            "specialist_agent_unconfigured",
+            "Uploaded GWAS inputs require the configured isolated MR adapter.",
+            True,
+        )
+    _atomic_json(request_path, request)
     _, _, log_path = _paths(spec, state["jobId"])
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(root)
@@ -686,6 +747,22 @@ def _run_job(state_path):
             _atomic_json(state_path, state)
             return 1
     result_path = output_root / "result.json"
+    if state["tool"] == "mendelian_randomization" and result_path.is_file():
+        result = _read_json(result_path)
+        if result.get("status") != "succeeded" and str(
+            result.get("errorCode", "")
+        ).startswith("mr_input_"):
+            state.update(
+                status="failed",
+                updatedAt=_now(),
+                finishedAt=_now(),
+                returnCode=completed.returncode,
+                retryable=False,
+                errorCode=result["errorCode"],
+                error=str(result.get("error") or "MR input validation failed."),
+            )
+            _atomic_json(state_path, state)
+            return completed.returncode or 1
     if completed.returncode != 0 or not result_path.is_file():
         state.update({
             "status": "failed",

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -130,6 +131,75 @@ def sanitize_gwas_id(gwas_id: str) -> str:
     if not validate_gwas_id(gwas_id):
         raise ValueError(f"Invalid GWAS ID format: {gwas_id}")
     return gwas_id
+
+
+class OpenGwasMetadataError(RuntimeError):
+    """The requested repository record could not be verified."""
+
+
+def fetch_gwas_metadata(gwas_id: str) -> dict:
+    """Fetch one explicit dataset through the existing fixed OpenGWAS client."""
+    identifier = sanitize_gwas_id(gwas_id)
+    headers = _auth_headers()
+    if not headers:
+        raise OpenGwasAuthError(401)
+    try:
+        with requests.post(
+            f"{OPENGWAS_API}/gwasinfo",
+            json={"id": [identifier]},
+            headers=headers,
+            timeout=OPENGWAS_TIMEOUT,
+            allow_redirects=False,
+            stream=True,
+        ) as response:
+            _raise_if_unauthorized(response)
+            if response.status_code != 200:
+                raise OpenGwasMetadataError("Requested OpenGWAS metadata is unavailable.")
+            content = bytearray()
+            for chunk in response.iter_content(chunk_size=8192):
+                content.extend(chunk)
+                if len(content) > 1024 * 1024:
+                    raise OpenGwasMetadataError(
+                        "Requested OpenGWAS metadata exceeds its size limit."
+                    )
+            payload = json.loads(content)
+    except (OpenGwasAuthError, OpenGwasMetadataError):
+        raise
+    except (requests.RequestException, ValueError, UnicodeError):
+        raise OpenGwasMetadataError("Requested OpenGWAS metadata is unavailable.") from None
+    if isinstance(payload, dict):
+        row = payload.get(identifier)
+    elif isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
+        row = payload[0] if payload[0].get("id") == identifier else None
+    else:
+        row = None
+    if not isinstance(row, dict) or row.get("id", identifier) != identifier:
+        raise OpenGwasMetadataError("Requested OpenGWAS metadata has no matching dataset.")
+    if any(
+        not isinstance(row.get(key), str) or not row[key].strip() for key in ("trait", "population")
+    ):
+        raise OpenGwasMetadataError("Requested OpenGWAS metadata is incomplete.")
+    for key in ("sample_size", "year"):
+        value = row.get(key)
+        if isinstance(value, bool) or not (
+            isinstance(value, int)
+            or isinstance(value, str) and re.fullmatch(r"[0-9]+", value)
+            or isinstance(value, float) and value.is_integer()
+        ):
+            raise OpenGwasMetadataError("Requested OpenGWAS metadata is incomplete.")
+    entry = _dict_to_gwas_entry({**row, "id": identifier})
+    if (
+        entry is None
+        or not entry.trait.strip()
+        or not entry.population
+        or not entry.population.strip()
+        or not entry.sample_size
+        or entry.sample_size <= 0
+        or not entry.year
+        or not 1900 <= entry.year <= 2100
+    ):
+        raise OpenGwasMetadataError("Requested OpenGWAS metadata is incomplete.")
+    return {**entry.model_dump(mode="json"), "metadata_source": "opengwas_api"}
 
 
 def search_gwas_api(keyword: str, max_results: int = 50) -> list[GWASEntry]:
