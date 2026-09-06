@@ -2839,6 +2839,123 @@ test("a finding about the evidence itself still stamps the package unverified", 
   assert.match(result.blockingIssues.join("\n"), /not found in its preserved source artifact/);
 });
 
+test("server-valid clinical bytes without a local receipt get one resubmit-only repair", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-resubmit-valid-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_resubmit_valid", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const pkg = deepResearchPackage();
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+            { path: "clinical-evidence-search.json", required: true },
+            { path: "references.bib", required: true },
+            { path: "citation-ledger.csv", required: true },
+            { path: "citation-audit.md", required: true },
+            { path: "question-coverage.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_resubmit_valid",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) repairPrompts.push(repairText);
+      return { accepted: true };
+    });
+
+    const deliverables = new Map([
+      ["clinical-evidence-report.md", pkg.reportText],
+      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+      ["clinical-evidence-search.json", pkg.searchLogText],
+      ["references.bib", pkg.referencesText],
+      ["citation-ledger.csv", pkg.citationLedgerText],
+      ["citation-audit.md", pkg.citationAuditText],
+      ["question-coverage.json", pkg.questionCoverageText],
+    ]);
+    for (const [relative, content] of deliverables) {
+      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+    }
+    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+    }
+    await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: run.id,
+      plan: { revision: 1, items: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", status: "rejected", attempts: 3 }] },
+      budget: { steps: 60, tokens: 1, children: 1, limits: {} },
+      evidence: { total: 1, byStatus: { ready: 1 } },
+      gateRuns: [],
+      subagents: [],
+      qualityNotices: [],
+      degraded: [],
+    }, null, 2), "utf8");
+
+    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_open_access_full_text",
+      state: {
+        status: "completed",
+        output: JSON.stringify({ status: "success", artifacts: [artifactPath], data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } } }),
+      },
+    }));
+    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_literature_search",
+      state: { status: "completed", input: { query: entry.query } },
+    }));
+    history = [{
+      info: { id: "msg_resubmit_valid", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...retrievalParts,
+        ...searchParts,
+        ...[...deliverables.keys()].map((filePath) => ({ type: "tool", tool: "write", state: { status: "completed", input: { filePath } } })),
+        { type: "text", text: "The corrected files are complete; the local submission ceiling was reached before this version could receive a receipt." },
+      ],
+    }];
+
+    const current = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(current.status, "running", "the server-valid current bytes need a receipt, not a terminal failure");
+    assert.equal(repairPrompts.length, 1, "one resubmit-only repair must be sent");
+    assert.match(repairPrompts[0], /evimed_submit_deliverable/);
+    assert.match(repairPrompts[0], /do not edit|不要修改/i);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("delivers a package whose only gap is bookkeeping, and does not stamp it unverified", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-clinical-degrade-"));
   try {
