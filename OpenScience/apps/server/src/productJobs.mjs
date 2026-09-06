@@ -120,10 +120,14 @@ export class ProductJobs {
     const payload = productPayload(result);
     const updated = await this.withLease(userId, id, leaseToken, async (client) => {
       await operation(client);
-      return client.query(`UPDATE evimed_product.jobs SET status='succeeded',result=$4::jsonb,error=NULL,
+      const completed = await client.query(`UPDATE evimed_product.jobs SET status='succeeded',result=$4::jsonb,error=NULL,
         finished_at=clock_timestamp(),updated_at=clock_timestamp(),lease_token=NULL,lease_expires_at=NULL
         WHERE user_id=$1 AND id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp() RETURNING *`,
       [userId, id, leaseToken, payload]);
+      // Reject inside the transaction so a lease lost while the operation
+      // waited on another row also rolls back that operation's side effects.
+      if (!completed.rows[0]) throw new HttpError(409, "product_job_lease_lost", "This worker no longer owns the job.");
+      return completed;
     });
     if (!updated?.rows[0]) throw new HttpError(409, "product_job_lease_lost", "This worker no longer owns the job.");
     return job(updated.rows[0]);

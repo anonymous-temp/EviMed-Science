@@ -148,12 +148,30 @@ export class MemoryIndexing {
       if (!snapshot || snapshot.generation !== accountCreatedAt) {
         return this.jobs.finish(job.userId, job.id, job.leaseToken, { status: "superseded_account_generation" });
       }
+      const verifySnapshot = async (client) => {
+        const current = await this.snapshot(job.userId, capsuleId, { client, lock: true });
+        if (!current || current.fingerprint !== snapshot.fingerprint) {
+          throw new HttpError(409, "memory_index_snapshot_changed", "Canonical memory changed while its index was being verified.");
+        }
+      };
       const published = await this.database.query(`SELECT fingerprint,account_created_at FROM evimed_product.memory_index_state
         WHERE user_id=$1 AND capsule_id=$2`, [job.userId, capsuleId]);
       if (published.rows[0]?.fingerprint === snapshot.fingerprint
         && published.rows[0]?.account_created_at === snapshot.generation) {
-        return this.jobs.finish(job.userId, job.id, job.leaseToken,
-          { status: "already_current", capsuleId, fingerprint: snapshot.fingerprint });
+        let verified = false;
+        try {
+          await this.readback(snapshot);
+          verified = true;
+        } catch (error) {
+          // An old SQL receipt cannot prove that the engine still has its
+          // records. Only observed record drift justifies replacing a scope;
+          // transport and malformed-response failures retain ordinary retries.
+          if (!["memory_index_readback_incomplete", "memory_index_readback_mismatch"].includes(error?.code)) throw error;
+        }
+        if (verified) {
+          return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken,
+            { status: "already_current", capsuleId, fingerprint: snapshot.fingerprint }, verifySnapshot);
+        }
       }
       await this.engine.deleteScope(job.userId, { accountCreatedAt, capsuleId });
       const memoryIds = [];
@@ -169,10 +187,7 @@ export class MemoryIndexing {
       return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken,
         { status, capsuleId, entries: snapshot.entries.length, fingerprint: snapshot.fingerprint },
         async (client) => {
-          const current = await this.snapshot(job.userId, capsuleId, { client, lock: true });
-          if (!current || current.fingerprint !== snapshot.fingerprint) {
-            throw new HttpError(409, "memory_index_snapshot_changed", "Canonical memory changed while its index was being rebuilt.");
-          }
+          await verifySnapshot(client);
           await client.query(`INSERT INTO evimed_product.memory_index_state
             (user_id,capsule_id,account_created_at,fingerprint,entry_count,status,engine_memory_ids,last_job_id,published_at,verified_at)
             VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,clock_timestamp(),clock_timestamp())
