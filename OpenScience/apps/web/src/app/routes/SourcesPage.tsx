@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Cloud, Database, FilePlus2, FileSearch, Folder, RotateCcw, SlidersHorizontal, Trash2, XCircle } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
+import { useProjectStore } from "@/lib/projects";
 import { browseOpenList, cancelSource, importOpenListSource, listSources, overrideSource, removeSource, retrySource,
   type OpenListEntry, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
@@ -12,6 +13,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
+import { SourceUnderstandingPanel } from "@/components/sources/SourceUnderstandingPanel";
 
 const STATUS: Record<string, string> = {
   queued: "等待分析", parsing: "正在解析", complete: "已完成", needs_attention: "需要你看一下",
@@ -29,47 +31,85 @@ const TYPE_OPTIONS = [
 const DEPTH_OPTIONS = [["skip", "仅保留指纹"], ["index_only", "只建索引"], ["structured", "结构化抽取"], ["deep", "深度分析"]] as const;
 
 export function SourcesPage() {
+  // Store fallback repairs do not reload the document. Subscribe to those
+  // repairs, while the tab's current selection still owns in-flight requests.
+  useProjectStore(state => state.currentId);
+  const projectId = getWebProjectId();
+  return <ProjectSourcesPage key={projectId} projectId={projectId} />;
+}
+
+function ProjectSourcesPage({ projectId }: { projectId: string }) {
   const [filter, setFilter] = useState("all");
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SourceRecord | null>(null);
   const [deleting, setDeleting] = useState<SourceRecord | null>(null);
+  const [understandingId, setUnderstandingId] = useState<string | null>(null);
   const [showOpenList, setShowOpenList] = useState(false);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
-  const load = useCallback(async () => {
+  const loadingRequest = useRef<number | null>(null);
+  const load = useCallback(async (background = false) => {
+    if (getWebProjectId() !== projectId || (background && loadingRequest.current != null)) return;
     const current = ++generation.current;
-    setSources(null); setError(null);
+    loadingRequest.current = current;
+    if (!background) { setSources(null); setError(null); }
     try {
-      const page = await listSources(getWebProjectId(), { status: filter === "all" ? "" : filter });
-      if (generation.current === current) setSources(page.items);
+      const page = await listSources(projectId, { status: filter === "all" ? "" : filter });
+      if (generation.current !== current || getWebProjectId() !== projectId) return;
+      if (page.items.some(source => source.projectId !== projectId)) throw new Error("Source project changed.");
+      setSources(page.items); setError(null);
     } catch (loadError) {
-      if (generation.current === current) { setSources([]); setError(`无法加载资料状态：${productErrorMessage(loadError)}`); }
-    }
-  }, [filter]);
+      if (generation.current === current && getWebProjectId() === projectId) {
+        if (!background) setSources([]);
+        setError(`无法加载资料状态：${productErrorMessage(loadError)}`);
+      }
+    } finally { if (loadingRequest.current === current) loadingRequest.current = null; }
+  }, [filter, projectId]);
   useEffect(() => { void load(); return () => { generation.current += 1; }; }, [load]);
+  const processing = sources?.some(source => ["queued", "parsing"].includes(source.payload.status)) ?? false;
+  useEffect(() => {
+    if (!processing || error) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(timer);
+      if (!document.hidden) timer = setTimeout(() => { void load(true); }, 5000);
+    };
+    schedule();
+    document.addEventListener("visibilitychange", schedule);
+    return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", schedule); };
+  }, [sources, processing, error, load]);
   const mutate = async (operation: () => Promise<unknown>) => {
+    if (getWebProjectId() !== projectId) return;
     setBusy(true);
-    try { await operation(); setEditing(null); setDeleting(null); await load(); }
-    catch (operationError) { setError(productErrorMessage(operationError)); }
-    finally { setBusy(false); }
+    try {
+      await operation();
+      if (getWebProjectId() !== projectId) return;
+      setEditing(null); setDeleting(null); await load();
+    } catch (operationError) { if (getWebProjectId() === projectId) setError(productErrorMessage(operationError)); }
+    finally { if (getWebProjectId() === projectId) setBusy(false); }
   };
+  const selectedSource = sources?.find(source => source.id === understandingId);
 
   return (
     <main className="h-full overflow-y-auto px-5 py-6">
       <div className="mx-auto max-w-content-wide space-y-5">
         <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="font-serif text-title text-text">资料整理台</h1><p className="mt-2 text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p></div>
           <Button variant="ghost" onClick={() => setShowOpenList((value) => !value)}><Cloud size={15} />连接网盘资料</Button></header>
-        {showOpenList && <OpenListBrowser busy={busy} setBusy={setBusy} onImported={load} onError={setError} />}
+        {showOpenList && <OpenListBrowser projectId={projectId} busy={busy} setBusy={setBusy} onImported={load} onError={setError} />}
         <SegmentedControl value={filter} onChange={setFilter} aria-label="资料状态"
           options={[{ value: "all", label: "全部" }, { value: "needs_attention", label: "需要处理" }, { value: "parsing", label: "分析中" }, { value: "complete", label: "已完成" }]} />
         {error && <Card><div className="flex items-center gap-2 text-ui text-error"><AlertCircle size={16} /><span className="flex-1">{error}</span><Button size="sm" variant="ghost" onClick={() => void load()}>重试</Button></div></Card>}
         {sources === null ? <MemorySkeleton /> : sources.length === 0 && !error ? <EmptyState icon={Database} title="还没有进入分析流程的资料"
           description="从知识库上传资料后，系统会先建立索引，再按价值进行结构化或深度分析。" /> : (
           <div className="space-y-4">{sources.map((source) => <SourceCard key={source.id} source={source} busy={busy}
+            onUnderstanding={() => setUnderstandingId(source.id)}
             onEdit={() => setEditing(source)} onRetry={() => void mutate(() => retrySource(source.id, source.revision))}
             onCancel={() => void mutate(() => cancelSource(source.id, source.revision))} onDelete={() => setDeleting(source)} />)}</div>
         )}
+        {selectedSource && <SourceUnderstandingPanel key={selectedSource.id} projectId={projectId} sourceId={selectedSource.id}
+          sourceName={baseName(selectedSource.payload.paths[0] ?? selectedSource.id)} generation={selectedSource.payload.generation}
+          onClose={() => setUnderstandingId(null)} />}
         {editing && <EditSource source={editing} busy={busy} onCancel={() => setEditing(null)}
           onSave={(input) => void mutate(() => overrideSource(editing.id, input))} />}
       </div>
@@ -79,21 +119,29 @@ export function SourcesPage() {
   );
 }
 
-function OpenListBrowser({ busy, setBusy, onImported, onError }: { busy: boolean; setBusy: (value: boolean) => void;
+function OpenListBrowser({ projectId, busy, setBusy, onImported, onError }: { projectId: string; busy: boolean; setBusy: (value: boolean) => void;
   onImported: () => Promise<void>; onError: (value: string | null) => void }) {
   const [remotePath, setRemotePath] = useState("/");
   const [entries, setEntries] = useState<OpenListEntry[] | null>(null);
+  const request = useRef(0);
+  useEffect(() => () => { request.current += 1; }, []);
   const browse = async (selected = remotePath) => {
+    if (getWebProjectId() !== projectId) return;
+    const current = ++request.current;
     setBusy(true); onError(null);
-    try { const page = await browseOpenList(getWebProjectId(), selected); setRemotePath(selected); setEntries(page.entries); }
-    catch (error) { onError(productErrorMessage(error)); setEntries([]); }
-    finally { setBusy(false); }
+    const valid = () => request.current === current && getWebProjectId() === projectId;
+    try { const page = await browseOpenList(projectId, selected); if (valid()) { setRemotePath(selected); setEntries(page.entries); } }
+    catch (error) { if (valid()) { onError(productErrorMessage(error)); setEntries([]); } }
+    finally { if (valid()) setBusy(false); }
   };
   const importFile = async (selected: string) => {
+    if (getWebProjectId() !== projectId) return;
+    const current = ++request.current;
     setBusy(true); onError(null);
-    try { await importOpenListSource(getWebProjectId(), selected); await onImported(); }
-    catch (error) { onError(productErrorMessage(error)); }
-    finally { setBusy(false); }
+    const valid = () => request.current === current && getWebProjectId() === projectId;
+    try { await importOpenListSource(projectId, selected); if (valid()) await onImported(); }
+    catch (error) { if (valid()) onError(productErrorMessage(error)); }
+    finally { if (valid()) setBusy(false); }
   };
   const parent = remotePath === "/" ? "/" : remotePath.split("/").slice(0, -1).join("/") || "/";
   return <Card title="OpenList 网盘" hint="每个账号只能浏览自己的 /tenants 命名空间；大文件请使用本地分析代理。">
@@ -113,22 +161,24 @@ function OpenListBrowser({ busy, setBusy, onImported, onError }: { busy: boolean
   </Card>;
 }
 
-function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete }: {
-  source: SourceRecord; busy: boolean; onEdit: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void;
+function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete, onUnderstanding }: {
+  source: SourceRecord; busy: boolean; onEdit: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
 }) {
   const coverage = source.payload.coverage;
   const accountedPercent = coverage ? coverage.accountedPercent ?? Math.round((coverage.accounted / Math.max(1, coverage.total)) * 100) : 0;
-  return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`版本 ${source.payload.version} · ${STATUS[source.payload.status] ?? source.payload.status}`}>
+  const status = source.payload.status === "parsing" && source.payload.analysis?.phase === "understanding" ? "正在理解资料" : STATUS[source.payload.status] ?? source.payload.status;
+  return <Card title={baseName(source.payload.paths[0] ?? source.id)} hint={`文件版本 ${source.payload.version}${source.payload.generation != null ? ` · 处理第 ${source.payload.generation} 代` : ""} · ${status}`}>
     <div className="space-y-3 text-ui text-text">
       {source.payload.outputs.summary && <p>{source.payload.outputs.summary}</p>}
       <div className="flex flex-wrap gap-2 text-ui-sm text-muted">
         <span>{TYPE_OPTIONS.find(([value]) => value === source.payload.docType)?.[1] ?? source.payload.docType}</span><span>·</span>
         <span>{DEPTH_OPTIONS.find(([value]) => value === source.payload.depth)?.[1] ?? source.payload.depth}</span>
-        {coverage && <><span>·</span><span>处理成功 {coverage.percent}% · 已逐单元核对 {accountedPercent}% · 遗漏 {Math.round(coverage.omissionRate * 100)}%</span></>}
-        <span>·</span><span>事实 {source.payload.outputs.facts ?? 0} · 方法线索 {source.payload.outputs.methods ?? 0}</span>
+        {coverage && <><span>·</span><span>解析处理成功 {coverage.percent}% · 处理台账 {accountedPercent}% · 失败单元 {coverage.failed}/{coverage.total}</span></>}
+        <span>·</span><span>理解遗漏尚未审计</span>
       </div>
       <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted"><FileSearch size={14} className="mr-1 inline" />{source.payload.reasons[0]}</div>
       <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} />查看理解</Button>
         <Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}><SlidersHorizontal size={13} />调整分析</Button>
         {["failed", "needs_attention", "complete", "canceled"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onRetry}><RotateCcw size={13} />重新分析</Button>}
         {["queued", "parsing"].includes(source.payload.status) && <Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}><XCircle size={13} />取消</Button>}
