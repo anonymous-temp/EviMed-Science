@@ -2359,6 +2359,8 @@ export class AgentRunStore {
       throw new TypeError("AgentRunStore maxClinicalStructuralRepairAttempts must be a non-negative integer.");
     }
     this.monitors = new Map();
+    /** One reconciliation per project session; monitor and explicit callers join it. */
+    this.reconciles = new Map();
     this.projects = new Map();
     this.dispatchOwners = new Set();
     this.clinicalRepairAttempts = new Map();
@@ -2990,6 +2992,17 @@ export class AgentRunStore {
   }
 
   async reconcileSession(project, sessionId, runId = null) {
+    const key = JSON.stringify([project.userId, project.id, sessionId]);
+    const existing = this.reconciles.get(key);
+    if (existing) return existing;
+    const active = this.reconcileSessionOnce(project, sessionId, runId).finally(() => {
+      if (this.reconciles.get(key) === active) this.reconciles.delete(key);
+    });
+    this.reconciles.set(key, active);
+    return active;
+  }
+
+  async reconcileSessionOnce(project, sessionId, runId = null) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = foldEvents(events);
     let run = [...runs.values()].find((item) => item.sessionId === sessionId && item.status === "running" && (!runId || item.id === runId));
