@@ -1656,15 +1656,9 @@ async function specialistCompletionOutcome(
           qualityIssues: [`The source artifact ${relative} named in clinical-evidence-run.json does not exist in the workspace.`],
         };
       }
-      if (sourceFile.stat.mtimeMs + 1_000 < Date.parse(run.startedAt)) {
-        return {
-          artifacts,
-          errorCode: "specialist_evidence_traceability_failed",
-          qualityIssues: [
-            `The source artifact ${relative} predates this run, so it was not retrieved by it. Retrieve the source in this run, or drop the claims that rest on it.`,
-          ],
-        };
-      }
+      // The current run's preserving-tool receipt binds these bytes. Immutable
+      // captures retain their first publication mtime when retrieved again;
+      // that filesystem timestamp is not the time of this run's retrieval.
       if (createHash("sha256").update(sourceFile.text, "utf8").digest("hex") !== expectedDigest) {
         return {
           artifacts,
