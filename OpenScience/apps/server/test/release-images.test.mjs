@@ -118,14 +118,49 @@ test("engine mismatch and unverified base refuse before an operation starts", as
   }
 });
 
-test("a verified isolated delta retains standard BuildKit metadata and explicit endpoint", async (t) => {
+test("a verified isolated delta builds through the checked explicit context and retains native metadata", async (t) => {
   const f = fixture(t);
   const result = await runReleaseImages(f.options);
   assert.equal(result.checked, true);
-  assert.deepEqual(result.args.slice(0, 5), ["--host", endpoint, "buildx", "build", "--builder"]);
+  assert.deepEqual(result.args.slice(0, 6), ["--context", "colima-evimed-builder", "buildx", "build", "--builder", "colima-evimed-builder"]);
+  assert.equal(result.args.includes("--host"), false, "Buildx requires the named context rather than the equivalent --host override");
+  for (const call of f.calls.filter(call => call[0] === "docker" && (call.includes("info") || call.includes("image")))) {
+    assert.deepEqual(call.slice(1, 3), ["--host", endpoint], "identity reads remain bound to the verified endpoint");
+  }
   assert.ok(result.args.includes("--metadata-file"));
   assert.ok(result.args.includes("--load"));
   assert.equal(result.args.some((arg) => /prune|remove|save|load$/.test(arg) && arg !== "--load"), false);
+});
+
+test("a delta build refuses a context whose live endpoint mapping changed", async t => {
+  const f = fixture(t);
+  await assert.rejects(runReleaseImages({ ...f.options, checkOnly: false,
+    execute: (command, args, cwd) => command === "docker" && args.includes("context")
+      ? "unix:///var/run/docker.sock" : f.options.execute(command, args, cwd),
+    spawn: () => assert.fail("The wrong context cannot start a build"),
+  }), { code: "release_endpoint_changed" });
+});
+
+for (const changed of ["context", "engine"]) test(`delta build rechecks ${changed} synchronously at the child creation boundary`, async t => {
+  const f = fixture(t);
+  let changedAtLastCheck = false;
+  let samples = 0;
+  let spawns = 0;
+  await assert.rejects(runReleaseImages({ ...f.options, checkOnly: false,
+    sample: () => {
+      if (++samples === 3) changedAtLastCheck = true;
+      return f.sample();
+    },
+    execute: (command, args, cwd) => {
+      const result = f.options.execute(command, args, cwd);
+      if (changedAtLastCheck && command === "docker" && changed === "context" && args.includes("context")) return "unix:///var/run/docker.sock";
+      if (changedAtLastCheck && command === "docker" && changed === "engine" && args.includes("info")) return JSON.stringify({ ...JSON.parse(result), ID: "replacement-engine" });
+      return result;
+    },
+    spawn: () => { spawns++; assert.fail("Changed builder identity cannot start Docker"); },
+  }), { code: "release_child_failed" });
+  assert.equal(changedAtLastCheck, true);
+  assert.equal(spawns, 0);
 });
 
 test("source, dependency and smoke tampering are rejected without a build", async (t) => {
@@ -147,7 +182,7 @@ test("capacity crossing gracefully stops only the owned child, escalates bounded
   child.kill = (signal) => { signals.push(signal); if (signal === "SIGKILL") queueMicrotask(() => child.emit("exit", null, signal)); return true; };
   let samples = 0;
   await assert.rejects(runMonitoredOperation({
-    args: ["--host", endpoint, "buildx", "build"], spawn: () => child,
+    args: ["--context", "colima-evimed-builder", "buildx", "build"], spawn: () => child,
     check: () => { samples += 1; if (samples > 1) throw Object.assign(new Error("Reserve crossed"), { code: "release_capacity_insufficient" }); },
     intervalMs: 5, stopGraceMs: 10, timeoutMs: 1000,
   }), { code: "release_capacity_insufficient" });

@@ -134,11 +134,61 @@ test("check-build is read-only and names only fixed full-Web build arguments", a
   assert.equal(result.ai4sCommit, "8fa2ab0523082c135598909b227ed8feb48263ad");
   assert.equal(fs.existsSync(f.plan.evidenceDir), false);
   assert.ok(result.args.includes("--load") && result.args.includes("--pull=false"));
+  assert.deepEqual(result.args.slice(0, 6), ["--context", releaseImageSafety.BUILDER, "buildx", "build", "--builder", releaseImageSafety.BUILDER]);
+  assert.equal(result.args.includes("--host"), false);
+  for (const call of f.calls.filter(call => call[0] === "docker" && (call.includes("info") || call.includes("image")))) {
+    assert.deepEqual(call.slice(1, 3), ["--host", releaseImageSafety.BUILDER_ENDPOINT]);
+  }
   assert.equal(result.args.some(arg => ["--push", "--target", "--secret", "--ssh", "--allow", "--cache-from"].includes(arg)), false);
   assert.equal(result.args.at(-1), "-");
   assert.equal(result.args[result.args.indexOf("--file") + 1], "deploy/web/Dockerfile");
   assert.ok(result.context.entries.some(item => item.path === "deploy/web/Dockerfile"));
   assert.equal(result.context.entries.some(item => item.path.startsWith("OpenScience/") || item.path.includes("sibling-must-not-enter")), false);
+});
+
+test("a full build refuses a context whose live endpoint mapping changed before staging or Docker writes", async t => {
+  const f = fixture(t);
+  await assert.rejects(runFullWebBuild({ ...f.options, checkOnly: false,
+    execute: (command, args, cwd) => command === "docker" && args.includes("context")
+      ? "unix:///var/run/docker.sock" : f.options.execute(command, args, cwd),
+    spawn: () => assert.fail("The wrong context cannot start a build"),
+  }), { code: "release_endpoint_changed" });
+  assert.equal(fs.existsSync(f.plan.evidenceDir), false);
+});
+
+for (const changed of ["context", "engine"]) test(`full build rechecks ${changed} after archive staging before spawning Docker`, async t => {
+  const f = fixture(t);
+  let archiveFinished = false;
+  let dockerSpawns = 0;
+  let contextChecks = 0;
+  let engineChecks = 0;
+  await assert.rejects(runFullWebBuild({ ...f.options, checkOnly: false,
+    execute: (command, args, cwd) => {
+      const result = f.options.execute(command, args, cwd);
+      if (command === "docker" && args.includes("context")) {
+        contextChecks++;
+        if (archiveFinished && changed === "context") return "unix:///var/run/docker.sock";
+      }
+      if (command === "docker" && args.includes("info")) {
+        engineChecks++;
+        if (archiveFinished && changed === "engine") return JSON.stringify({ ...JSON.parse(result), ID: "replacement-engine" });
+      }
+      return result;
+    },
+    archiveSpawn: command => {
+      const child = releaseImageSafety.spawnOwnedProcess("git", command, ["ignore", "pipe", "pipe"]);
+      child.once("exit", () => { archiveFinished = true; });
+      return child;
+    },
+    spawn: () => { dockerSpawns++; assert.fail("A remapped builder cannot receive Docker writes"); },
+  }), { code: "release_child_failed" });
+  assert.equal(archiveFinished, true);
+  assert.equal(dockerSpawns, 0);
+  assert.ok(contextChecks >= 2);
+  if (changed === "engine") assert.ok(engineChecks >= 2);
+  const report = JSON.parse(fs.readFileSync(path.join(f.plan.evidenceDir, "calibration.json"), "utf8"));
+  assert.equal(report.completed, false);
+  assert.equal(report.publicationAllowed, false);
 });
 
 test("the full remaining virtual allocation is reserved once per host filesystem", async t => {
