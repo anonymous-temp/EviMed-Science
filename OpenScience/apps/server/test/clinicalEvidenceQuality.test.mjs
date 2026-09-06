@@ -1534,6 +1534,41 @@ test("rejects an unrequested medicine and exclusive safety language", () => {
   assert.match(result.issues.join("\n"), /exclusive safety claim/);
 });
 
+test("does not treat unique research evidence or methods as exclusive safety claims", () => {
+  const ordinaryResearchStatements = [
+    "以原研究全文为唯一事实底稿，忠实核对并评述其方法学与关键结果。",
+    "该试验是唯一直接比较两种治疗方法的随机研究。",
+    "这篇综述是唯一纳入远程监测策略研究的证据来源。",
+    "该数据库是唯一可靠的全文来源。",
+    "这是唯一事实底稿，结果与既往研究一致。",
+  ];
+  for (const statement of ordinaryResearchStatements) {
+    const input = validPackage();
+    input.reportText += `\n${statement}`;
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, true, `${statement}\n${result.issues.join("\n")}`);
+  }
+});
+
+test("rejects an exclusive clinical action method without an explicit safety adjective", () => {
+  const exclusiveClinicalStatements = [
+    "这是出现胸痛后的唯一处置方法。",
+    "这是安全的唯一用药方案。",
+    "这种治疗是唯一可行的方法。",
+    "这是唯一应当采取的处置方法。",
+    "这是唯一应该选择的治疗方案。",
+    "这是唯一且正确的处置策略。",
+    "这是唯一的、正确的处置方法。",
+  ];
+  for (const statement of exclusiveClinicalStatements) {
+    const input = validPackage();
+    input.reportText += `\n${statement}`;
+    const result = validateClinicalEvidencePackage(input);
+    assert.equal(result.valid, false, statement);
+    assert.match(result.issues.join("\n"), /exclusive safety claim/);
+  }
+});
+
 test("recognizes diagnostic-accuracy and jurisdiction language as limitation dimensions", () => {
   const input = validPackage();
   input.reportText = input.reportText.replace(
