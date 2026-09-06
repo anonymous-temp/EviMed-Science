@@ -1690,6 +1690,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
     revisionGatewayUrl: revisionGatewayProviderUrl(config),
     publicSourceGatewayUrl: publicSourceGatewayProviderUrl(config),
+    pluginConfig: plan.pluginConfig,
     modelGatewayTokenFile: plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName),
     workloadTokenFile: workloadTokenPath,
     bundleVersion: String(config.socketBundleVersion ?? ""),
@@ -1870,6 +1871,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
   revisionGatewayUrl = revisionGatewayProviderUrl(config),
   publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config),
+  pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
 } = {}) {
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
@@ -2051,6 +2053,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           capsuleGatewayUrl,
           revisionGatewayUrl,
           publicSourceGatewayUrl,
+          pluginConfig,
           modelGatewayTokenFile: `${runtimeDshHome}/${modelGatewayTokenFileName}`,
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
@@ -2260,6 +2263,8 @@ export class RuntimeManager {
     onRuntimeStart = () => {},
   } = {}) {
     this.config = config;
+    /** @type {any} */ this.pluginService = null;
+    this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
     this.runtimeController = this.runtimeControllerMode === "socket"
@@ -2541,6 +2546,10 @@ export class RuntimeManager {
   }
 
   async start(project) {
+    return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project)) : this.startAdmitted(project);
+  }
+
+  async startAdmitted(project) {
     const key = this.key(project);
     await this.runtimeQuotaStops.get(key);
     await this.enforceProjectQuota(project);
@@ -2646,7 +2655,10 @@ export class RuntimeManager {
     if (this.config.runtimeSandboxMode === "docker") {
       await this.assertDockerSupport();
     }
-    const plan = buildRuntimeLaunchPlan(this.config, project, port);
+    const pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService ? (await this.pluginService.get(project.userId, project)).desired
+      : { revision: 0, enabled: true, settings: { timeoutMs: 15000 } });
+    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
+    plan.pluginConfig = pluginConfig;
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
     let socketStat = null;
     if (plan.socketPath) {
@@ -2810,6 +2822,7 @@ export class RuntimeManager {
         capsuleGatewayProviderUrl(this.config),
         revisionGatewayProviderUrl(this.config),
         publicSourceGatewayProviderUrl(this.config),
+        plan.pluginConfig,
       );
       child = new RemoteRuntimeProcess(
         this.runtimeController,
@@ -2836,6 +2849,7 @@ export class RuntimeManager {
       child.stderr?.on("data", collect);
     }
     const runtime = {
+      pluginConfig: plan.pluginConfig,
       // The kernel that is actually running, from one binding. This was once
       // the literal `opencode` written out in twelve places, so every `exited`,
       // `cleaned_orphan` and state record a DSH container produced was labelled
@@ -3347,7 +3361,17 @@ export class RuntimeManager {
    * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean }} input
    * @returns {Promise<void>}
    */
-  async dispatchPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false }) {
+  async dispatchPrompt(project, sessionId, input) {
+    try {
+      return this.pluginService ? await this.pluginService.withAdmission(project, () => this.dispatchAdmittedPrompt(project, sessionId, input), { prompt: true })
+        : await this.dispatchAdmittedPrompt(project, sessionId, input);
+    } catch (error) {
+      if (error?.code === "plugin_apply_in_progress") error.definitivelyRejected = true;
+      throw error;
+    }
+  }
+
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3520,6 +3544,40 @@ export class RuntimeManager {
     return count;
   }
 
+  async pluginRuntimeBusy(project) {
+    if (this.starts.has(this.key(project)) || this.boundedRuntimeScope(project)) return true;
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return false;
+    const value = await this.callKernel(runtime, project, "evimedPlugins/status", {}, AbortSignal.timeout(10000));
+    if (typeof value?.busy !== "boolean") throw new HttpError(502, "plugin_probe_invalid", "Kernel activity proof is unavailable.");
+    return value.busy;
+  }
+
+  runtimePluginConfig(project) { return this.runtimes.get(this.key(project))?.pluginConfig ?? null; }
+
+  async replacePluginRuntime(project, pluginConfig) {
+    const key = this.key(project);
+    this.pluginOverrides.set(key, pluginConfig);
+    try {
+      await this.stop(project);
+      return await this.startAdmitted(project);
+    } finally { this.pluginOverrides.delete(key); }
+  }
+
+  async probePlugin(project, expected) {
+    const runtime = this.runtimes.get(this.key(project));
+    const generation = this.runtimeGeneration(project);
+    if (!runtime || !generation) throw new HttpError(409, "plugin_runtime_unavailable", "The runtime is unavailable.");
+    const proof = await this.callKernel(runtime, project, "evimedPlugins/verify", {}, AbortSignal.timeout(45000));
+    const tools = ["cite_lookup", "cite_format", "cite_bibtex", "cite_check", "cite_health"];
+    if (this.runtimeGeneration(project) !== generation || proof?.binaryVersion !== "0.3.2"
+      || proof.revision !== expected.revision || proof.enabled !== expected.enabled || proof.timeoutMs !== expected.settings.timeoutMs
+      || !Array.isArray(proof.tools) || JSON.stringify([...proof.tools].sort()) !== JSON.stringify(expected.enabled ? tools.sort() : [])) {
+      throw new HttpError(502, "plugin_probe_invalid", "The runtime did not prove the expected plugin configuration.");
+    }
+    return { generation };
+  }
+
   async restart(project) {
     await this.stop(project);
     return this.start(project);
@@ -3540,6 +3598,7 @@ export class RuntimeManager {
     const runtime = this.runtimes.get(key);
     if (!runtime) {
       await this.runtimeQuotaStops.get(key);
+      await this.pluginService?.clearPromptAdmissions(project);
       return;
     }
     this.runtimes.delete(key);
@@ -3551,6 +3610,7 @@ export class RuntimeManager {
     runtime.closedByManager = true;
     try {
       await runtime.close();
+      await this.pluginService?.clearPromptAdmissions(project);
     } finally {
       await this.notifyRuntimeStop(project, runtime, "canceled");
     }
@@ -4254,6 +4314,7 @@ export class RuntimeManager {
     runtime.closedByManager = true;
     try {
       await runtime.close();
+      await this.pluginService?.clearPromptAdmissions(project);
     } finally {
       await this.notifyRuntimeStop(project, runtime, "canceled");
     }
@@ -4349,6 +4410,8 @@ export class RuntimeManager {
         req, socket, head, runtime,
         maxPayload: Math.max(1024, Number(this.config.maxJsonBytes) || 12 * 1024 * 1024),
         ...policy,
+        admit: (endpoint, operation) => endpoint === "session/prompt" && this.pluginService
+          ? this.pluginService.withAdmission(project, operation, { prompt: true }) : operation(),
       });
     } catch (error) {
       release();

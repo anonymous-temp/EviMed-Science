@@ -1,11 +1,14 @@
 /** The published citation tools, with transport confined to the source gateway. */
 import { buildCiteTools, resolveConfig } from 'dsh-cite'
-import { configSchema, readFileAt, registerTool } from '@evimed/harness-port'
+import { configSchema, readFileAt, registerTool, registerCitationConfiguration, installedCitationVersion } from '@evimed/harness-port'
 
 const Schema = await configSchema()
+const binaryVersion = await installedCitationVersion(import.meta.resolve('dsh-cite/package.json'))
 export const name = 'evimed-citation-bridge'
 export const inject = ['tools']
 export const Config = Schema.object({
+  enabled: Schema.boolean().default(true),
+  revision: Schema.number().default(0),
   gatewayUrl: Schema.string().default(''),
   tokenFile: Schema.string().default(''),
   timeoutMs: Schema.number().default(15000),
@@ -94,8 +97,13 @@ export function createManagedFetch(config, readToken, gatewayFetch = fetch) {
   }
 }
 
-/** @param {any} ctx @param {{gatewayUrl:string, tokenFile:string, timeoutMs:number}} config */
-export function apply(ctx, config) {
+/** @param {any} ctx @param {{gatewayUrl:string, tokenFile:string, timeoutMs:number, enabled?:boolean, revision?:number}} config */
+export async function apply(ctx, config) {
+  if (typeof config.enabled !== 'undefined' && typeof config.enabled !== 'boolean') throw new Error('citation_config_invalid')
+  if (!Number.isSafeInteger(config.timeoutMs) || config.timeoutMs < 2000 || config.timeoutMs > 15000) throw new Error('citation_config_invalid')
+  await registerCitationConfiguration(ctx, { binaryVersion, enabled: config.enabled !== false,
+    timeoutMs: resolveConfig(config, {}).timeoutMs, revision: config.revision ?? 0 })
+  if (config.enabled === false) return
   const managedFetch = createManagedFetch(config, (file, signal) => readFileAt(ctx, '/', file.replace(/^\/+/, ''), signal))
   for (const tool of buildCiteTools(resolveConfig(config, {}), managedFetch)) ctx.effect(() => registerTool(ctx, tool))
 }

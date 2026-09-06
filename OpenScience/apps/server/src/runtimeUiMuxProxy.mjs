@@ -42,9 +42,11 @@ function send(peer, data) {
  *
  * @param {{ req: any, socket: any, head: Buffer, runtime: any, maxPayload: number,
  * heartbeat?: { intervalMs: number, timeoutMs: number },
+ * admit?: (endpoint:string,operation:()=>Promise<void>) => Promise<void>,
  * revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void> }} options
  */
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
+  admit = async (_endpoint, operation) => operation(),
   heartbeat = { intervalMs: 15_000, timeoutMs: 10_000 } }) {
   const target = new URL("/api/remote.mux", runtime.url);
   target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
@@ -57,6 +59,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   /** @type {WebSocket | undefined} */
   let browser;
   let closed = false;
+  const acknowledgements = new Map();
   /** @type {NodeJS.Timeout | undefined} */
   let validationTimer;
   /** @type {NodeJS.Timeout | undefined} */
@@ -69,6 +72,8 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   const shutdown = (code = 1001, reason = "runtime_ui_closed") => {
     if (closed) return;
     closed = true;
+    for (const pending of acknowledgements.values()) pending.reject(new Error("Prompt acceptance is unknown."));
+    acknowledgements.clear();
     clearInterval(validationTimer);
     clearInterval(heartbeatTimer);
     clearTimeout(pongTimer);
@@ -165,7 +170,19 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       streams.add(frame.streamId);
     }
     // Preserve endpoint payloads and cancellation semantics byte-for-byte.
-    await send(upstream, raw);
+    if (frame.type === "open" && frame.endpoint === "session/prompt") {
+      try {
+        await admit(frame.endpoint, async () => {
+          const accepted = new Promise((resolve, reject) => { acknowledgements.set(frame.streamId, { resolve, reject }); });
+          const deadline = setTimeout(() => shutdown(1011, "runtime_prompt_acceptance_unknown"), 30000);
+          try { await send(upstream, raw); await accepted; }
+          finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
+        });
+      } catch (error) {
+        streams.delete(frame.streamId);
+        if (!closed) await rejectStream(frame.streamId, error);
+      }
+    } else await send(upstream, raw);
     if (frame.type === "cancel") streams.delete(frame.streamId);
   }
   client.on("message", (raw, binary) => {
@@ -189,7 +206,12 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
     try {
       const frame = JSON.parse(raw.toString());
       if (!nativeServerFrame(frame)) { shutdown(1008, "runtime_ui_frame_invalid"); return; }
-      if (frame.type === "end" || frame.type === "error") streams.delete(frame.streamId);
+      if (frame.type === "end" || frame.type === "error") {
+        streams.delete(frame.streamId);
+        // A valid terminal response proves acceptance or an explicit refusal;
+        // either releases admission. Transport loss retains pending authority.
+        acknowledgements.get(frame.streamId)?.resolve();
+      }
     } catch { shutdown(1008, "runtime_ui_frame_invalid"); return; }
     if (client.bufferedAmount > maxPayload * 2) { shutdown(1009, "runtime_ui_queue_limit"); return; }
     upstream.pause();

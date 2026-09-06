@@ -100,7 +100,10 @@
     "@deepseek-ai/dsh-tool-skill": "config-row",
     "@deepseek-ai/dsh-tool-ask-user": "config-row",
     "@deepseek-ai/dsh-llm-deepseek": "config-row",
-    "@deepseek-ai/dsh-storage-json": "config-row"
+    "@deepseek-ai/dsh-storage-json": "config-row",
+    "@deepseek-ai/dsh-typert-protocol": "dependency",
+    "@deepseek-ai/dsh-scope": "dependency",
+    "@deepseek-ai/dsh-system-prompt": "dependency"
   },
   "wire": {
     "unary": [
@@ -112,7 +115,9 @@
       "session/list",
       "subagents/list",
       "skills/list",
-      "agentPresets/list"
+      "agentPresets/list",
+      "evimedPlugins/status",
+      "evimedPlugins/verify"
     ],
     "denied": [
       "agentPresets/copy",
@@ -187,7 +192,9 @@
       "skills/list": [
         "request"
       ],
-      "agentPresets/list": []
+      "agentPresets/list": [],
+      "evimedPlugins/status": [],
+      "evimedPlugins/verify": []
     },
     "mux": "/api/remote.mux",
     "streamEndpoints": {

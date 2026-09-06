@@ -535,6 +535,8 @@
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'
+- id: evimed-plugin-probe
+  name: '@evimed/dsh-socket/plugins/plugin-probe'
 - id: evimed-seam-probe
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store

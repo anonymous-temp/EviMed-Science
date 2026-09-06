@@ -1,3 +1,6 @@
+import { PluginService } from "./pluginService.mjs";
+import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
+import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -454,6 +457,8 @@ export function createWebApiApp(overrides = {}) {
   const productDatabase = "database" in store ? store.database : null;
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
+  const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
+  const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
   const usageLedger = productDatabase ? new UsageLedger(productDatabase) : null;
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
@@ -684,8 +689,20 @@ export function createWebApiApp(overrides = {}) {
       return agentRuns?.closeProject(project, status);
     },
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId),
-    onRuntimeStart: (project, runtime) => runtimeEventPump.attach(project, runtime),
+    onRuntimeStart: (project, runtime) => {
+      runtimeEventPump.attach(project, runtime);
+      if (!runtimeManager.pluginOverrides.has(runtimeManager.key(project))) {
+        void pluginService?.runtimeStarted(project).catch(() => { process.stderr.write("plugin first-launch verification enqueue failed\n"); });
+      }
+    },
   });
+  runtimeManager.pluginService = pluginService;
+  if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
+  const pluginApplyWorker = pluginService ? new PluginApplyWorker({
+    service: pluginService, runtime: runtimeManager,
+    resolveProject: sourceProject,
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => run.status === "running"),
+  }) : null;
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     coverageJudge,
@@ -1182,6 +1199,7 @@ export function createWebApiApp(overrides = {}) {
     try {
       enforceRequestRateLimits(req, pathname);
       await store.assertCsrf(req, pathname);
+      if (await pluginRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
@@ -1690,7 +1708,7 @@ export function createWebApiApp(overrides = {}) {
                 : "unrouted:open-domain",
             }
           : null);
-        const run = await agentRuns.dispatch(ctx.project, {
+        const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
           question: text,
@@ -1740,6 +1758,7 @@ export function createWebApiApp(overrides = {}) {
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
         });
+        const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
         sendJson(res, 202, { data: run });
         return;
       }
@@ -2325,6 +2344,8 @@ export function createWebApiApp(overrides = {}) {
     usageLedger,
     notificationService,
     capsuleService,
+    pluginService,
+    pluginApplyWorker,
     commands,
     taskManager,
     operationalMetrics,
@@ -2346,6 +2367,7 @@ export function createWebApiApp(overrides = {}) {
       // restart look like a port conflict.
       await runtimeUi.listen();
       if (capsuleTransferService) { capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000); capsuleCleanupTimer.unref(); }
+      pluginApplyWorker?.start();
       memoryIndexWorker?.start();
       sourceWorker?.start();
       autopilotWorker?.start();
@@ -2361,6 +2383,7 @@ export function createWebApiApp(overrides = {}) {
     async close() {
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
+      await pluginApplyWorker?.close();
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await autopilotWorker?.close();

@@ -200,11 +200,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
     await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager);
-    await runtimeManager.proxy(req, res, project, frame.suffix, {
+    const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
       revalidate,
     });
+    if (method === "session/prompt" && runtimeManager.pluginService) await runtimeManager.pluginService.withAdmission(project, forward, { prompt: true });
+    else await forward();
   }
 
   const server = createServer((req, res) => {

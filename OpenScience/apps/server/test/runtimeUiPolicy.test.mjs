@@ -8,6 +8,7 @@ import path from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket, { WebSocketServer } from "ws";
+import { HttpError } from "../src/security.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 import { createRuntimeUiServer } from "../src/runtimeUiServer.mjs";
@@ -778,4 +779,59 @@ test("bound workspace registration is rechecked when runtime startup changes its
   const response = await fetch(`${f.base}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json" },
     body: JSON.stringify({ type: "client-request", rpcId: "workspace-bind", method: "workspace/create", payload: { args: { request: { path: "/workspace" } } } }) });
   assert.equal(response.status, 403); assert.equal(reached, false);
+});
+
+test("plugin apply admission covers native HTTP prompt forwarding and refuses a concurrent apply", async t => {
+  const f = await fixture(t);
+  let applying = true;
+  let admissions = 0;
+  f.manager.pluginService = {
+    withAdmission: async (_project, operation) => {
+      admissions++;
+      if (applying) throw new HttpError(423, "plugin_apply_in_progress", "Applying plugin settings.");
+      return operation();
+    },
+  };
+  const request = () => fetch(`${f.base}/api/session/prompt`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "prompt", method: "session/prompt", payload: { args: { request: {} } } }) });
+  assert.equal((await request()).status, 423);
+  applying = false;
+  assert.equal((await request()).status, 200);
+  assert.equal(admissions, 2);
+});
+
+test("PostgreSQL plugin fence holds native mux admission through kernel ACK and retains an unknown disconnect", {
+  skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, timeout: 10000,
+}, async t => {
+  const { ControlPlaneDatabase } = await import("../src/controlPlaneDatabase.mjs");
+  const { PluginService } = await import("../src/pluginService.mjs");
+  const f = await fixture(t);
+  const url = new URL(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL);
+  assert.ok(["127.0.0.1", "localhost"].includes(url.hostname)); assert.match(url.pathname, /evimed_test/);
+  const db = new ControlPlaneDatabase({ databaseUrl: url.href, databasePoolMax: 6, databaseConnectionTimeoutMs: 2000 });
+  const project = await f.store.requireProject(f.user, "default");
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Native admission','development')", [f.user.id]);
+  await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,$2,'Native',1000000)", [f.user.id, project.id]);
+  t.after(async () => { await db.query("DELETE FROM evimed_control.users WHERE id=$1", [f.user.id]); await db.close(); });
+  const service = new PluginService(db); f.manager.pluginService = service;
+  const connection = f.connect(); await connection.opened;
+  connection.send(open("plugin-prompt", "session/prompt"));
+  assert.equal((await connection.next()).type, "item");
+  const lockKey = `plugin-project:${f.user.id}:${project.id}`;
+  const claim = () => db.transaction(client => client.query("SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired", [lockKey]));
+  assert.equal((await claim()).rows[0].acquired, false, "the item is not the terminal ACK");
+  for (const peer of f.peers) peer.send(JSON.stringify({ type: "end", streamId: "plugin-prompt" }));
+  assert.equal((await connection.next()).type, "end");
+  for (let n = 0; n < 50; n++) { if ((await claim()).rows[0].acquired) break; await delay(10); }
+  assert.equal((await claim()).rows[0].acquired, true);
+  await db.transaction(async client => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [lockKey]);
+    const before = f.received.length; connection.send(open("during-apply", "session/prompt"));
+    assertNativeError(await connection.next(), "during-apply", "plugin_apply_in_progress");
+    await connection.next(); assert.equal(f.received.length, before);
+  });
+  connection.send(open("unknown-prompt", "session/prompt")); await connection.next();
+  connection.ws.terminate();
+  for (let n = 0; n < 50; n++) { if (await service.hasPendingPrompts(project)) break; await delay(10); }
+  assert.equal(await service.hasPendingPrompts(project), true);
 });

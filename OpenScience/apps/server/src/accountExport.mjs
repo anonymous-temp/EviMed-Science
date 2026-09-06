@@ -1,3 +1,4 @@
+import { exportPluginPayload, projectPluginId } from "./pluginService.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -5,7 +6,7 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
-const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences"];
+const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "knowledge", "profile", "agenda", "episode", "digest", "notification", "preferences", "plugin"];
 const queries = [
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
@@ -57,8 +58,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       transaction_timestamp() AS "snapshotAt" FROM evimed_control.users WHERE id=$1 FOR SHARE`, [user.id, user.accountCreatedAt]);
     const owner = account.rows[0];
     if (!owner?.sameGeneration) throw new HttpError(409, "account_export_account_changed", "The authenticated account generation changed before export.");
-    // plugin is a reserved kind without a customer settings contract. Any new
-    // persisted kind needs review instead of silently disappearing from export.
+    // New persisted kinds require an explicit customer export contract.
     const unsupported = await client.query("SELECT 1 FROM evimed_product.documents WHERE user_id=$1 AND NOT(kind=ANY($2::text[])) LIMIT 1", [user.id, [...customerKinds, "price-list"]]);
     if (unsupported.rowCount) throw new HttpError(503, "account_export_unsupported_state", "Stored settings need a supported customer export shape.");
     const tables = {};
@@ -73,6 +73,13 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       bytes += Number(size.rows[0].bytes);
       if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
       tables[key] = (await client.query(query, values)).rows;
+      if (key === "documents" || key === "revisions") tables[key] = tables[key].map(row => {
+        if (row.kind !== "plugin") return row;
+        if (typeof row.projectId !== "string" || row.id !== projectPluginId(row.projectId)) {
+          throw new HttpError(503, "account_export_unsupported_state", "Stored plugin identity is unsupported.");
+        }
+        return { ...row, payload: exportPluginPayload(row.payload) };
+      });
     }
     const state = {
       version: 1, snapshotAt: owner.snapshotAt, account: { id: owner.id, name: owner.name, accountCreatedAt: owner.accountCreatedAt },

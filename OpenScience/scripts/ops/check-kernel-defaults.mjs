@@ -99,8 +99,10 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.2-rc.1",
-  sha256: "89e9fd996e89650b8e09e0892f92f795b78d26f4e9880c7e70599bda5dd28b7f",
+  sha256: "ee0977a56ae51ba770bd28e060ec33a90109d58349bb54895e50904d8fc94ef5",
   recordedBy: "deploy/runtime-dsh/Dockerfile - `dsh --profile evimed-runtime --dump-config` on the seeded profile",
+  // ECO03 plugin-probe was re-recorded with the exact rc.1 CLI in an isolated
+  // network-disabled cached image on 2026-09-07; its only byte change is that row.
   // The EviMed native-client row was recorded by the actual rc.1 native UI
   // acceptance image. The dsh-cite row was recorded on 2026-09-06 by adding
   // dsh-cite@0.3.2 to an isolated rc.1 profile on the production host and

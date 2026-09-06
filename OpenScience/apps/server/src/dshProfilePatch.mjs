@@ -25,6 +25,7 @@
  * @module dshProfilePatch
  */
 
+import { validatePluginConfig } from "./pluginService.mjs";
 import { MCP_SERVER_NAME } from "@evimed/domain";
 
 /** The reference name the kernel resolves the workload token through. */
@@ -67,6 +68,7 @@ export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
  * @property {string} capsuleMethodsDir
  * @property {string} capsuleGatewayUrl
  * @property {string} [revisionGatewayUrl]
+ * @property {{revision:number,enabled:boolean,settings:{timeoutMs:number}}} [pluginConfig]
  * @property {string} [publicSourceGatewayUrl]
  * @property {string} [modelGatewayTokenFile]
  * @property {string} workloadTokenFile
@@ -401,13 +403,18 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
  */
 export function runtimeEnvironment(input) {
+  const pluginConfig = input.pluginConfig ?? { revision: 0, enabled: true, settings: { timeoutMs: 15000 } };
+  validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings });
   return {
+    EVIMED_CITE_ENABLED: pluginConfig.enabled ? "1" : "0",
+    EVIMED_CITE_TIMEOUT_MS: String(pluginConfig.settings.timeoutMs),
+    EVIMED_CITE_CONFIG_REVISION: String(pluginConfig.revision),
     // Absolute, because the skill loader resolves its roots with `path.resolve`
     // — a relative root lands under `process.cwd()`, which in a runtime
     // container is `/workspace`. The preset carried `./skills/core` and three

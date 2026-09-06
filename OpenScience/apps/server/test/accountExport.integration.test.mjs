@@ -182,3 +182,19 @@ test("reserved plugin data is neither silently discarded nor exported without a 
   assert.equal(response.status, 503);
   assert.equal((await response.json()).code, "account_export_unsupported_state");
 });
+
+test("account export includes only approved plugin config history and excludes runtime observations", options, async t => {
+  const f = await fixture(t);
+  const user = await f.app.store.userById(f.owner);
+  const project = await f.app.store.requireProject(user, "default");
+  await f.app.pluginService.save(user, project, { expectedRevision: 0, enabled: true, settings: { timeoutMs: 4000 } });
+  await f.app.pluginService.save(user, project, { expectedRevision: 1, enabled: false, settings: { timeoutMs: 5000 } });
+  const response = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+  assert.equal(response.status, 200);
+  const state = JSON.parse(tarEntries(Buffer.from(await response.arrayBuffer())).get("account/customer-state.json").toString());
+  assert.deepEqual(state.documents.find(row => row.kind === "plugin").payload, {
+    schemaVersion: 1, pluginId: "dsh-cite", binaryVersion: "0.3.2", enabled: false, settings: { timeoutMs: 5000 },
+  });
+  assert.deepEqual(state.revisions.filter(row => row.kind === "plugin").map(row => row.payload.settings.timeoutMs), [4000, 5000]);
+  assert.ok(!JSON.stringify(state).includes("runtime_generation"));
+});

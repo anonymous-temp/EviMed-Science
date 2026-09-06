@@ -22,7 +22,7 @@ export const BUNDLE_NAME = '@evimed/dsh-socket'
 export function apply() {}
 
 /** The plugin row ids this bundle owns. The `--dump-config` snapshot test walks it. */
-export const HOST_PLUGIN_IDS = Object.freeze(['evimed-runtime-ui', 'evimed-seam-probe', 'evimed-evidence-store'])
+export const HOST_PLUGIN_IDS = Object.freeze(['evimed-runtime-ui', 'evimed-plugin-probe', 'evimed-seam-probe', 'evimed-evidence-store'])
 export const AGENT_PLUGIN_IDS = Object.freeze(['evimed-guidance', 'evimed-run-policy', 'evimed-evidence', 'evimed-capsule', 'evimed-screening', 'evimed-review', 'evimed-citation-bridge'])
 
 /** The single composition. There is no second one, and adding one is a design change. */
@@ -31,6 +31,7 @@ export const PRESET_NAME = 'evimed-universal'
 /** Module specifiers, so the packaging test can assert every row resolves. */
 export const PLUGIN_SPECIFIERS = Object.freeze({
   'evimed-runtime-ui': './index.mjs',
+  'evimed-plugin-probe': './plugins/plugin-probe.mjs',
   'evimed-seam-probe': './plugins/seam-probe.mjs',
   'evimed-evidence-store': './plugins/evidence-store.mjs',
   'evimed-guidance': './plugins/guidance.mjs',
