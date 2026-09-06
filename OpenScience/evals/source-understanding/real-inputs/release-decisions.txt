@@ -1,0 +1,4 @@
+User-confirmed scope for the current release, quoted from the project conversation.
+The question concerned the domain, off-host backup storage and a payment channel.
+User response: “先不用，域名先ip就行，异地备份先不考虑，收款渠道也先不考虑，”
+The user later requested continuing the full implementation and publishing it online.
