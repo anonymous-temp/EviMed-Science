@@ -125,5 +125,6 @@ test("a durable cancellation job terminates one runtime session and records comp
   const { calls, worker } = fixture({ cancelJob: true });
   await worker.tick();
   assert.deepEqual(calls.map((call) => call.method), ["cancelDispatched", "cancellationComplete", "finish"]);
+  assert.equal(calls[0].args[0].episodeId, "episode-one");
   assert.equal(calls.some((call) => call.method === "dispatch"), false);
 });
