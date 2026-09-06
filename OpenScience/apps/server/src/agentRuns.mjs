@@ -2336,6 +2336,7 @@ export class AgentRunStore {
     this.id = options.id ?? (() => randomId("run_"));
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
+    this.readChildSessionActivity = options.readChildSessionActivity ?? (async () => []);
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
     /** Whoever forwards a run's own projection to the browser. @type {(project: any, run: any, type: string, data: any) => void} */
@@ -3397,7 +3398,7 @@ export class AgentRunStore {
    * them would mean reading it three times on three schedules.
    *
    * @param {any} project @param {Record<string, any>} run
-   * @returns {Promise<{ signature: string | null, unreadable: boolean }>}
+   * @returns {Promise<{ signature: string | null, unreadable: boolean, childSessionIds: string[] }>}
    */
   async readRunSideActivity(project, run) {
     // Read from the host, because that is where this process opens files.
@@ -3417,8 +3418,8 @@ export class AgentRunStore {
     // `successfulEvidenceSourceArtifacts` still take the container root, and
     // correctly: they relativise paths the model wrote.
     const read = await readRunStateProjection(project, project.workspaceDir, run);
-    if (read.state === "unattributed") return { signature: null, unreadable: true };
-    if (read.state === "missing") return { signature: null, unreadable: false };
+    if (read.state === "unattributed") return { signature: null, unreadable: true, childSessionIds: [] };
+    if (read.state === "missing") return { signature: null, unreadable: false, childSessionIds: [] };
     if (read.state === "unreadable") {
       // Said once per run, not once per poll: the monitor wakes on a fixed
       // interval and a notice per wake would bury the ledger in one repeated
@@ -3429,11 +3430,15 @@ export class AgentRunStore {
           "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。",
         ]).catch(() => {});
       }
-      return { signature: null, unreadable: true };
+      return { signature: null, unreadable: true, childSessionIds: [] };
     }
     const projection = read.projection ?? {};
     this.publishRunProjection(project, run, projection);
-    return { signature: runSideActivitySignature(projection), unreadable: false };
+    const childSessionIds = [...new Set((projection.subagents ?? [])
+      .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
+      .map((child) => child.childSessionId.trim())
+      .filter(Boolean))].slice(0, 64);
+    return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds };
   }
 
   /**
@@ -3564,7 +3569,33 @@ export class AgentRunStore {
     // RuntimeEventPump's authenticated, project/run-attributed sequence below.
     const runSide = await this.readRunSideActivity(project, run);
     const activity = runSide.signature;
-    const kernelActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
+    const eventActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
+    let childActivity = [];
+    let childActivityUnreadable = false;
+    if (runSide.childSessionIds.length > 0) {
+      try {
+        const observed = await this.readChildSessionActivity(project, run.sessionId, runSide.childSessionIds);
+        childActivity = (Array.isArray(observed) ? observed : []).filter((child) =>
+          typeof child?.sessionId === "string"
+          && child.sessionId.length > 0
+          && child.sessionId.length <= 512
+          && Number.isSafeInteger(child?.asOfSeq)
+          && child.asOfSeq >= 0,
+        ).map((child) => ({
+          sessionId: child.sessionId,
+          asOfSeq: child.asOfSeq,
+          running: child.running === true,
+        })).slice(0, 256).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
+      } catch {
+        // An unreadable catalogue is unknown activity, never proof of a stall
+        // and never permission to trust the projection's own counters.
+        childActivityUnreadable = true;
+      }
+    }
+    if (childActivityUnreadable) return null;
+    const kernelActivity = eventActivity || childActivity.length > 0
+      ? createHash("sha256").update(JSON.stringify({ eventActivity, childActivity })).digest("hex")
+      : null;
 
     const stillByHistory = messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0);
     const stillByRunSide = activity === null || activity === (run.observedRunSideActivity ?? null);

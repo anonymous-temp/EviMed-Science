@@ -1467,7 +1467,7 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
 });
 
 /** A run fixture whose root history and run-side projection are both scriptable. */
-async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40 } = {}) {
+async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [] } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = {
@@ -1485,6 +1485,7 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40 } = {}) {
     // The root session never moves again after this: it delegated and is waiting.
     readSessionHistory: async () => [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }],
     readSessionStatus: async () => "running",
+    readChildSessionActivity,
     runtimeWorkspaceRoot: () => root,
     onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
   });
@@ -1541,6 +1542,60 @@ test("a running-subagent label without child activity does not keep a stalled ru
 
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_stalled", "a silent child must still reach the stall threshold");
+});
+
+test("a kernel-confirmed child sequence keeps a delegated run alive", async (t) => {
+  let head = 10;
+  const calls = [];
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 3,
+    maxPolls: 8,
+    readChildSessionActivity: async (_project, parentSessionId, childSessionIds) => {
+      calls.push({ parentSessionId, childSessionIds });
+      head += 1;
+      return [{ sessionId: "child-live", asOfSeq: head, running: true }];
+    },
+  });
+  await writeProjection({
+    evidence: { total: 0, byStatus: {} },
+    budget: { children: 1 },
+    subagents: [{ deliverableId: "d1", capability: "research-brief", status: "running", childSessionId: "child-live" }],
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await store.monitors.get(run.id)?.promise;
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_timeout", "changing authenticated child heads must prevent a false stall");
+  assert.ok(calls.length >= 3);
+  assert.deepEqual(calls[0], { parentSessionId: "ses_deleg", childSessionIds: ["child-live"] });
+});
+
+test("a retry child's authenticated head replaces the failed child's stall signal", async (t) => {
+  let retryHead = 20;
+  const seen = [];
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 3,
+    maxPolls: 8,
+    readChildSessionActivity: async (_project, _parentSessionId, childSessionIds) => {
+      seen.push([...childSessionIds]);
+      const id = childSessionIds[0];
+      return id === "child-retry"
+        ? [{ sessionId: id, asOfSeq: retryHead += 1, running: true }]
+        : [{ sessionId: "child-first", asOfSeq: 10, running: false }];
+    },
+  });
+  await writeProjection({
+    subagents: [{ deliverableId: "d1", status: "running", childSessionId: "child-first" }],
+    evidence: {}, budget: { children: 1 },
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await writeProjection({
+    subagents: [{ deliverableId: "d1", status: "running", childSessionId: "child-retry", retried: true }],
+    evidence: {}, budget: { children: 2 },
+  });
+  await store.monitors.get(run.id)?.promise;
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_timeout");
+  assert.ok(seen.some((ids) => ids[0] === "child-retry"), "the monitor never switched to the retry child");
 });
 
 test("changing model-writable projection counters cannot keep a stalled run alive", async (t) => {
