@@ -327,3 +327,4 @@ export {
 /** @typedef {import('./src/runTranscript.mjs').TranscriptToolCall} TranscriptToolCall */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
+export { SOURCE_UNDERSTANDING_VERSION, SOURCE_UNDERSTANDING_MAX_CHARS, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE, SOURCE_UNDERSTANDING_SCHEMAS, normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput } from './src/sourceUnderstanding.mjs'

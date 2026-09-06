@@ -26,6 +26,9 @@ const VERIFICATION_METRICS = ["citationCoverage", "confidenceMix", "disputedShar
 
 /** Kinds whose deliverable is structured JSON checked against its own schema. */
 const JSON_SHAPED = new Set([
+  // Frozen-source understanding checks exact character anchors and typed slots;
+  // it does not certify a literature report or infer an omission percentage.
+  'source-understanding',
   "episode-plan",
   "agenda-delta",
   "analysis-plan",

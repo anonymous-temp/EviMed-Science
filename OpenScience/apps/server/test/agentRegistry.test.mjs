@@ -53,10 +53,25 @@ const officialCapabilityRoot = path.resolve(
 test("the public registry includes every canonical capability plus the answer line", async () => {
   const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
   const ids = registry.list().map((agent) => agent.id);
-  assert.equal(ids.length, 16);
-  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "open-domain-answer"]) {
+  assert.equal(ids.length, 17);
+  for (const id of ["evidence-appraisal", "geo-content", "manuscript-support", "research-grant-development", "source-understanding", "open-domain-answer"]) {
     assert.ok(ids.includes(id), `${id} is absent from the public capability catalogue`);
   }
+});
+
+test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {
+  const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
+  assert.deepEqual(registry.get("source-understanding").requiredTools, []);
+  const { manifest } = (await dshCapabilities()).find(item => item.id === "source-understanding");
+  const tools = delegationToolFilter(manifest);
+  for (const required of ["read", "write", "evimed_submit_deliverable"]) assert.ok(tools.includes(required));
+});
+
+test("legacy agent packages retain their external tool requirement", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-empty-agent-tools-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writePackage(root, { ...validManifest, requiredTools: [] });
+  await assert.rejects(loadAgentRegistry({ packageDirs: [root] }), /requiredTools must contain between 1 and 64/);
 });
 
 async function writePackage(root, manifest = validManifest, options = {}) {

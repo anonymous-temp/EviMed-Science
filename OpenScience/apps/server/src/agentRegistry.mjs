@@ -184,7 +184,7 @@ function validateOutputs(value, { requireDeliverable = true } = {}) {
   });
 }
 
-function validateManifest(value, directoryName, allowedToolIds, allowedDataSources, allowedCompletionChecks) {
+function validateManifest(value, directoryName, allowedToolIds, allowedDataSources, allowedCompletionChecks, { nativeCapability = false } = {}) {
   const manifest = expectPlainObject(value, "agent.yaml");
   const unknownFields = Object.keys(manifest).filter((field) => !publicManifestFields.includes(field));
   if (unknownFields.length > 0) {
@@ -225,7 +225,10 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
   if (overlappingInputs.length > 0) {
     throw registryError(`requiredInputs and optionalInputs overlap: ${overlappingInputs.join(", ")}.`);
   }
-  const requiredTools = validateTools(manifest.requiredTools, "requiredTools", id, allowedToolIds, { min: 1 });
+  // A validated capability always receives the native read/write/submit tools.
+  // Its external-MCP requirements may honestly be empty; legacy packages keep
+  // their existing minimum, and every declared external tool is still checked.
+  const requiredTools = validateTools(manifest.requiredTools, "requiredTools", id, allowedToolIds, { min: nativeCapability ? 0 : 1 });
   const optionalTools = validateTools(manifest.optionalTools, "optionalTools", id, allowedToolIds, { min: 0 });
   const overlappingTools = requiredTools.filter((tool) => optionalTools.includes(tool));
   if (overlappingTools.length > 0) {
@@ -437,7 +440,7 @@ export async function loadAgentRegistry({
         dataSources: source.dataSources,
         outputs,
         completionChecks: checks,
-      }, entry.name, toolIds, dataSources, completionChecks);
+      }, entry.name, toolIds, dataSources, completionChecks, { nativeCapability: true });
       const skillText = await readRegularFileNoFollow(skillPath, `${entry.name}/${skillFileName}`, maxSkillBytes);
       if (parseSkillName(skillText, `${entry.name}/${skillFileName}`) !== mapped.skill) {
         throw registryError(`${entry.name}/${skillFileName} frontmatter name must be "${mapped.skill}".`);

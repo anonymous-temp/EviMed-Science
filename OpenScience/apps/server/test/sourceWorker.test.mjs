@@ -9,7 +9,7 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration
     payload: { sourceId: "source-one", sourceRevision: jobRevision, extractorVersion: "evimed-analysis-1.0.0" },
     leaseToken: "lease-one", attempts: 1 };
   const source = { id: "source-one", revision: sourceRevision, projectId: "project-one", payload: {
-    status: sourceStatus, generation: sourceGeneration, paths: ["knowledge-base/paper.txt"], fingerprint: { sha256: "a".repeat(64), mimeType: "text/plain" },
+    status: sourceStatus, generation: sourceGeneration, depth: "index_only", paths: ["knowledge-base/paper.txt"], fingerprint: { sha256: "a".repeat(64), mimeType: "text/plain" },
   } };
   const jobs = {
     claim: async () => job,
@@ -27,7 +27,9 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration
       source.payload.status = "parsing";
       return { ...source, payload: { ...source.payload } };
     },
-    recordExtraction: async (...args) => { calls.push({ method: "recordExtraction", args }); return { ...source, revision: source.revision + 1 }; },
+    loadCapture: async () => null,
+    freezeCapture: async (_job, result) => ({ ...result, input: { text: result.text, units: result.units } }),
+    publishUnderstanding: async (...args) => { calls.push({ method: "publishUnderstanding", args }); return { ...source, revision: source.revision + 1 }; },
     recordFailure: async (...args) => { calls.push({ method: "recordFailure", args }); return { ...source, revision: source.revision + 1 }; },
   };
   const parser = {
@@ -53,11 +55,10 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration
 test("an ingest lease parses, accounts, materializes and finishes exactly once", async () => {
   const { calls, worker } = fixture();
   await worker.tick();
-  assert.deepEqual(calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "materialize", "recordExtraction", "finish"]);
-  const extraction = calls.find((call) => call.method === "recordExtraction").args[2];
-  assert.equal(extraction.facts, 1);
-  assert.equal(extraction.methods, 0);
-  assert.equal(extraction.artifactPath, "knowledge-base/.evimed-derived/source-one/index.md");
+  assert.deepEqual(calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "materialize", "publishUnderstanding"]);
+  const publication = calls.find((call) => call.method === "publishUnderstanding").args;
+  assert.equal(publication[2], null);
+  assert.equal(publication[3], "knowledge-base/.evimed-derived/source-one/index.md");
   assert.equal(worker.status().lastError, null);
   assert.ok(worker.status().lastCompletedAt);
 });
@@ -91,7 +92,7 @@ test("canceling after parsing fences the result before materialization", async (
   } });
   await worker.tick();
   assert.equal(calls.some((call) => call.method === "materialize"), false);
-  assert.equal(calls.some((call) => call.method === "recordExtraction"), false);
+  assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
   assert.equal(calls.some((call) => call.method === "recordFailure"), false);
 });
 
@@ -110,7 +111,7 @@ test("a cancel racing with materialization deletes only this job's unpublished a
   await worker.tick();
   assert.equal(calls.some((call) => call.method === "materialize"), true);
   assert.equal(calls.some((call) => call.method === "discard"), true);
-  assert.equal(calls.some((call) => call.method === "recordExtraction"), false);
+  assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
 });
 
 test("an expired lease never publishes a parsed artifact", async () => {
@@ -119,5 +120,5 @@ test("an expired lease never publishes a parsed artifact", async () => {
   await worker.tick();
   assert.equal(calls.some((call) => call.method === "materialize"), true);
   assert.equal(calls.some((call) => call.method === "discard"), true);
-  assert.equal(calls.some((call) => call.method === "recordExtraction"), false);
+  assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
 });

@@ -1,3 +1,4 @@
+import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
@@ -21,7 +22,10 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
     await store.assertCsrf(req, url.pathname);
     if (!service) throw new HttpError(503, "product_state_unavailable", "Source analysis storage is temporarily unavailable.");
     const method = req.method ?? "GET";
-    const reply = (value, status = 200) => { sendJson(res, status, { data: value }); return true; };
+    const project = value => value?.kind === "source" ? projectSourceManifestRecord(value)
+      : value?.source?.kind === "source" ? { ...value, source: projectSourceManifestRecord(value.source) }
+      : Array.isArray(value?.items) ? { ...value, items: value.items.map(item => item?.kind === "source" ? projectSourceManifestRecord(item) : item) } : value;
+    const reply = (value, status = 200) => { sendJson(res, status, { data: project(value) }); return true; };
     if (url.pathname === "/api/sources/openlist" && method === "GET") {
       if (!openList) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
       const projectId = url.searchParams.get("projectId");
@@ -67,10 +71,17 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
         cursor: url.searchParams.get("cursor"),
       }));
     }
-    if (parts.length < 1 || parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
+    if (parts.length < 1 || parts.length > 3) throw new HttpError(404, "not_found", "Source route not found.");
     const [sourceId, action] = parts;
     const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
     await store.requireProject(user, source.projectId);
+    if (action === "understanding" && method === "GET") {
+      if (parts.length === 2) return reply(await service.getUnderstanding(user.id, sourceId));
+      if (parts[2] === "history") return reply(await service.understandingHistory(user.id, sourceId, {
+        limit: Number(url.searchParams.get("limit") ?? 20), cursor: url.searchParams.get("cursor"),
+      }));
+    }
+    if (parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     if (parts.length === 1 && method === "GET") return reply(source);
     if (parts.length === 1 && method === "PATCH") {
       return reply(await service.override(user.id, sourceId,

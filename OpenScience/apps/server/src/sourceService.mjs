@@ -2,6 +2,48 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
+import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput } from "@evimed/domain";
+
+function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
+function projectUnit(unit) { return { id: unit.id, unitType: unit.unitType, start: unit.start, end: unit.end,
+  ...(typeof unit.text === "string" ? { text: unit.text } : {}), status: unit.status,
+  ...(Array.isArray(unit.itemIds) ? { itemIds: unit.itemIds.map(String) } : {}) }; }
+export function projectSourceManifestRecord(row) {
+  const { analysis, pendingRunCancellations: _pending, outputs, ...payload } = row.payload;
+  const { artifactPath: _path, ...publicOutputs } = outputs ?? {};
+  if (outputs?.artifactPath != null) publicOutputs.artifactPath = sourcePath(outputs.artifactPath);
+  return { ...row, payload: { ...payload, outputs: publicOutputs, ...(analysis ? { analysis: {
+    generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
+    run: projectRun(analysis.run),
+  } } : {}) } };
+}
+
+/** Explicit source-derived projection shared by the API and account export. */
+export function projectSourceDerivedRecord(row) {
+  const p = row.payload;
+  const base = { id: row.id, sourceId: p.sourceId, generation: p.generation, createdAt: row.createdAt };
+  if (p.recordType === "source-understanding") return { ...base, ...projectSourceUnderstandingOutput(p.output), run: projectRun(p.run), usage: p.usage ? {
+    currency: p.usage.currency, modelId: p.usage.modelId, providerId: p.usage.providerId, actualCost: p.usage.actualCost,
+    inputTokens: p.usage.inputTokens, outputTokens: p.usage.outputTokens,
+  } : null, units: p.units.map(projectUnit) };
+  if (p.recordType === "source-capture" || row.kind === "source-unit") return { ...base, recordType: p.recordType,
+    ...(p.unit ? { unit: projectUnit(p.unit) } : { content: String(p.content ?? ""), status: p.status ?? null }) };
+  if (p.recordType === "source-method") return { ...base, recordType: p.recordType, status: "draft", method: projectSourceUnderstandingOutput({
+    slots: {}, claims: [], methods: [p.method], omissionAudit: { reason: "Not audited." },
+  }).methods[0], run: projectRun(p.run) };
+  return null;
+}
+
+async function insertSourceRecords(client, userId, projectId, records) {
+  if (!records.length) return;
+  const payload = records.map(item => ({ kind: item.kind, id: item.id, payload: JSON.parse(productPayload(item.payload)) }));
+  const result = await client.query(`WITH inserted AS (
+    INSERT INTO evimed_product.documents(user_id,project_id,kind,id,payload)
+    SELECT $1,$2,kind,id,payload FROM jsonb_to_recordset($3::jsonb) AS x(kind text,id text,payload jsonb)
+    RETURNING user_id,kind,id,revision,payload,deleted_at
+  ) INSERT INTO evimed_product.revisions(user_id,kind,id,revision,payload,deleted_at) SELECT * FROM inserted`, [userId, projectId, JSON.stringify(payload)]);
+  return result;
+}
 
 function sourceRecord(row) {
   return { id: row.id, kind: row.kind, projectId: row.project_id, payload: row.payload, revision: row.revision,
@@ -100,6 +142,13 @@ function defaultValueVector(docType) {
 }
 
 function isConflict(error) { return error?.code === "product_revision_conflict"; }
+
+function retiredSourceRun(payload) {
+  const pending = [...(payload.pendingRunCancellations ?? [])];
+  const run = payload.analysis?.run;
+  if (run?.id && !pending.some(item => item.id === run.id)) pending.push(run);
+  return { pendingRunCancellations: pending };
+}
 
 /** Durable source manifests and coverage, built on the account-scoped product
  * document ledger and its leased job queue. */
@@ -209,9 +258,9 @@ export class SourceService {
         return { id, unitType, status, itemIds: [...new Set(unit.itemIds)] };
       });
       const failed = units.filter((unit) => unit.status === "failed").length;
-      const omissionRate = Number((failed / units.length).toFixed(4));
+      const parserFailureRate = Number((failed / units.length).toFixed(4));
       const threshold = current.payload.depth === "deep" ? 0.05 : current.payload.depth === "structured" ? 0.15 : 1;
-      const status = omissionRate <= threshold ? "complete" : "needs_attention";
+      const status = parserFailureRate <= threshold ? "complete" : "needs_attention";
       const extractor = input.extractor;
       if (!extractor || typeof extractor !== "object" || Array.isArray(extractor)) throw new HttpError(400, "source_extractor_invalid", "Extractor identity is required.");
       const payload = {
@@ -231,9 +280,10 @@ export class SourceService {
           noContent: units.filter((unit) => unit.status === "no_content").length,
           failed,
           percent: Number((((units.length - failed) / units.length) * 100).toFixed(2)),
-          omissionRate,
+          omissionRate: null,
+          parserFailureRate,
           units,
-          auditedAt: this.now().toISOString(),
+          parsedAt: this.now().toISOString(),
         },
         outputs: {
           summary: text(input.summary, "source summary", 16_000),
@@ -242,10 +292,229 @@ export class SourceService {
           ...(input.artifactPath == null ? {} : { artifactPath: sourcePath(input.artifactPath) }),
         },
         error: null,
+        omissionAudit: { status: "not_run", omissionRate: null, reason: "Question-based understanding audit has not run." },
         updatedAt: this.now().toISOString(),
       };
       return payload;
     });
+  }
+
+  /** The parser snapshot is immutable across retries and process recovery.
+   * Pending capture records are not published source units or knowledge claims. */
+  async freezeCapture(job, parsed) {
+    return this.withSourceLease(job, async (source, client) => {
+      if (source.payload.analysis?.generation === source.payload.generation) return this.loadCapture(job.userId, source, client);
+      const input = normalizeSourceText({ sourceId: source.id, generation: source.payload.generation,
+        docType: source.payload.docType, depth: source.payload.depth, text: parsed.text });
+      const units = parsed.units ?? [];
+      const failed = units.filter(unit => unit.status === "failed").length;
+      const parserCoverage = { total: units.length, accounted: units.length, accountedPercent: 100,
+        extracted: units.filter(unit => unit.status === "extracted").length,
+        indexedOnly: units.filter(unit => unit.status === "indexed_only").length,
+        noContent: units.filter(unit => unit.status === "no_content").length, failed,
+        percent: units.length ? Number((100 * (units.length - failed) / units.length).toFixed(2)) : 0,
+        parserFailureRate: units.length ? failed / units.length : null, omissionRate: null, parsedAt: this.now().toISOString() };
+      const analysis = { generation: input.generation, phase: "indexed", schemaVersion: 1, unitCount: input.units.length,
+        textSha256: digest(input.text),
+        extractor: parsed.extractor, summary: String(parsed.summary).slice(0, 16000), parserCoverage };
+      await insertSourceRecords(client, job.userId, job.projectId, input.units.map(unit => ({ kind: "knowledge", id: `capture:${unit.id}`,
+        payload: { recordType: "source-capture", sourceId: source.id, generation: input.generation, status: "pending", unit } })));
+      await this.documents.put(job.userId, "source", source.id, { ...source.payload, analysis, coverage: parserCoverage },
+        { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
+      return { input, extractor: parsed.extractor, summary: parsed.summary, parserCoverage };
+    });
+  }
+
+  async loadCapture(userId, source, client = this.documents.database) {
+    const analysis = source.payload.analysis;
+    if (analysis?.generation !== source.payload.generation) return null;
+    const result = await client.query(`SELECT payload FROM evimed_product.documents WHERE user_id=$1 AND project_id=$2 AND kind='knowledge'
+      AND deleted_at IS NULL AND payload->>'recordType'='source-capture' AND payload->>'sourceId'=$3 AND payload->>'generation'=$4
+      ORDER BY (payload->'unit'->>'start')::integer`, [userId, source.projectId, source.id, String(source.payload.generation)]);
+    const units = result.rows.map(row => row.payload.unit);
+    if (units.length !== analysis.unitCount || units.some((unit, index) => unit.start !== (units[index - 1]?.end ?? 0) || unit.end - unit.start !== unit.text.length
+      || unit.id !== `${source.id}:g${source.payload.generation}:u${index + 1}`)
+      || digest(units.map(unit => unit.text).join("")) !== analysis.textSha256) {
+      throw new HttpError(409, "source_capture_invalid", "The immutable source capture is incomplete.");
+    }
+    return { input: { schemaVersion: 1, sourceId: source.id, generation: source.payload.generation,
+      docType: source.payload.docType, depth: source.payload.depth, schema: sourceUnderstandingSchema(source.payload.docType), units, text: units.map(unit => unit.text).join("") },
+    extractor: analysis.extractor, summary: analysis.summary, parserCoverage: analysis.parserCoverage };
+  }
+
+  /** Waiting for a bounded runtime is not a failed parse or a retry attempt. */
+  async deferIngestion(job, run = null, delayMs = 5000) {
+    return this.withSourceLease(job, async (source, client) => {
+      if (run) await this.documents.put(job.userId, "source", source.id, { ...source.payload,
+        analysis: { ...source.payload.analysis, phase: "understanding", run: { ...source.payload.analysis?.run, id: run.runId, sessionId: run.sessionId, dispatchId: run.dispatchId } } },
+      { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
+      // Validate the lease after source-row waits; the final update both checks
+      // and relinquishes it. withSourceLease's normal post-operation test cannot
+      // apply after deliberate release, so it is handled outside that wrapper.
+      return { deferred: true, delayMs };
+    }).then(async result => {
+      const changed = await this.jobs.withLease(job.userId, job.id, job.leaseToken, client => client.query(`UPDATE evimed_product.jobs
+        SET status='queued',attempts=greatest(0,attempts-1),run_after=clock_timestamp()+($4::integer*interval '1 millisecond'),
+        lease_token=NULL,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE user_id=$1 AND id=$2 AND lease_token=$3
+        AND status='running' AND lease_expires_at>clock_timestamp() RETURNING id`, [job.userId, job.id, job.leaseToken, delayMs]));
+      if (!changed?.rowCount) throw new HttpError(409, "product_job_lease_lost", "Source waiting lease was lost.");
+      return result;
+    });
+  }
+
+  async bindUnderstandingRun(job, run) {
+    const expected = `source-understanding-${digest(`${job.payload.sourceId}\0${job.payload.sourceGeneration ?? job.payload.sourceRevision}`).slice(0, 32)}`;
+    if (!run || run.dispatchId !== expected || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.runId)
+      || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(run.sessionId)) throw new HttpError(400, "source_run_binding_invalid", "Invalid source understanding run binding.");
+    return this.mutateIngestion(job.userId, job.payload.sourceId, job, current => {
+      const bound = current.payload.analysis?.run;
+      if (bound && (bound.id !== run.runId || bound.sessionId !== run.sessionId || bound.dispatchId !== run.dispatchId)) {
+        throw new HttpError(409, "source_run_binding_conflict", "This source generation is already bound to a run.");
+      }
+      if (bound) return current.payload;
+      return { ...current.payload, analysis: { ...current.payload.analysis, phase: "understanding",
+        run: { id: run.runId, sessionId: run.sessionId, dispatchId: run.dispatchId,
+          ...(run.workspaceName != null ? { workspaceName: run.workspaceName === "" ? "" : text(run.workspaceName, "workspace name", 160) } : {}),
+          ...(run.artifactDirectory ? { artifactDirectory: sourcePath(run.artifactDirectory) } : {}),
+        } } };
+    });
+  }
+
+  /** Resolve the durable owner rather than trusting run route labels. Includes
+   * tombstoned sources until their owned runtime and bytes are cleaned up. */
+  async understandingRunForRun(userId, projectId, runId) {
+    const result = await this.documents.database.query(`SELECT payload,deleted_at FROM evimed_product.documents
+      WHERE user_id=$1 AND project_id=$2 AND kind='source' AND
+        (payload->'analysis'->'run'->>'id'=$3 OR payload @> jsonb_build_object('pendingRunCancellations',jsonb_build_array(jsonb_build_object('id',$3::text))))`,
+    [userId, projectId, runId]);
+    const matches = result.rows.flatMap(row => [row.payload.analysis?.run, ...(row.payload.pendingRunCancellations ?? [])].filter(Boolean)
+      .map(run => ({ ...run, sourceStatus: row.payload.status, sourceDeleted: Boolean(row.deleted_at),
+        recoverable: !row.deleted_at && ["queued", "parsing", "failed"].includes(row.payload.status)
+          && row.payload.analysis?.generation === row.payload.generation && row.payload.analysis?.run?.id === run.id
+          && !(row.payload.pendingRunCancellations ?? []).some(pending => pending.id === run.id),
+      })))
+      .filter(run => run?.id === runId);
+    if (!matches.length) return null;
+    if (matches.some(run => run.sessionId !== matches[0].sessionId || run.dispatchId !== matches[0].dispatchId)) {
+      throw new HttpError(409, "source_run_binding_conflict", "The source run has ambiguous durable ownership.");
+    }
+    return matches[0];
+  }
+
+  async enqueueRunCancellations(userId, source) {
+    for (const run of source.payload.pendingRunCancellations ?? []) {
+      const account = await this.documents.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
+      // The run being canceled stays the same across later source corrections.
+      // Its queue identity cannot include the source's changing generation.
+      await this.jobs.enqueue(userId, "ingest", { action: "source-run-cancel", sourceId: source.id,
+        accountCreatedAt: account.rows[0]?.generation, run },
+      { projectId: source.projectId, idempotencyKey: `source-run-cancel:${source.id}:${run.id}`, rearmFailed: true });
+    }
+  }
+
+  async consumeRunCancellation(job, cancel) {
+    return this.withSourceLease(job, async (source, client) => {
+      const run = (source.payload.pendingRunCancellations ?? []).find(item => item.id === job.payload.run?.id
+        && item.sessionId === job.payload.run?.sessionId && item.dispatchId === job.payload.run?.dispatchId);
+      if (!run) return { sourceId: source.id, canceled: false, reason: "already_canceled" };
+      await cancel({ userId: job.userId, projectId: job.projectId, runId: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId,
+        workspaceName: run.workspaceName, artifactDirectory: run.artifactDirectory });
+      await this.documents.put(job.userId, "source", source.id, { ...source.payload,
+        pendingRunCancellations: source.payload.pendingRunCancellations.filter(item => item.id !== run.id) },
+      { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
+      return { sourceId: source.id, canceled: true, runId: run.id };
+    }, false, true);
+  }
+
+  /** Units, structured knowledge, method drafts and current pointer are one
+   * account/project/generation/lease-checked publication transaction. */
+  async publishUnderstanding(job, parsed, completed = null, artifactPath = null) {
+    return this.withSourceLease(job, async (source, client) => {
+      const generation = source.payload.generation;
+      const isSkip = source.payload.depth === "skip";
+      const input = isSkip ? null : (await this.loadCapture(job.userId, source, client))?.input;
+      if (!isSkip && !input) throw new HttpError(409, "source_capture_invalid", "Source capture is missing.");
+      const deep = ["structured", "deep"].includes(source.payload.depth);
+      if (deep && !completed?.output) throw new HttpError(409, "source_understanding_missing", "Structured depth requires its bounded understanding result.");
+      if (completed) {
+        const bound = source.payload.analysis?.run;
+        if (!bound || bound.id !== completed.runId || bound.sessionId !== completed.sessionId || bound.dispatchId !== completed.dispatchId) {
+          throw new HttpError(409, "source_run_binding_conflict", "The result belongs to a different source run.");
+        }
+        const issues = validateSourceUnderstanding(completed.output, input);
+        if (issues.length) throw new HttpError(422, "source_understanding_invalid", issues[0]);
+      }
+      const id = `understanding:${source.id}:g${generation}`;
+      const output = completed ? projectSourceUnderstandingOutput(completed.output) : null;
+      const run = completed ? { id: completed.runId, sessionId: completed.sessionId, dispatchId: completed.dispatchId } : null;
+      const units = input?.units ?? [];
+      const cited = new Set(output ? [...Object.values(output.slots).flatMap(slot => slot.evidence ?? []), ...output.claims.flatMap(claim => claim.evidence), ...output.methods.flatMap(method => method.evidence)].map(anchor => anchor.unitId) : []);
+      const links = output ? [
+        ...Object.entries(output.slots).filter(([, slot]) => slot.state === "known").map(([key, slot]) => ({ id: `${id}:slot:${key}`, evidence: slot.evidence })),
+        ...output.claims.map(claim => ({ id: `${id}:claim:${claim.id}`, evidence: claim.evidence })),
+        ...output.methods.map(method => ({ id: `method:${source.id}:g${generation}:${method.id}`, evidence: method.evidence })),
+      ] : [];
+      const publishedUnits = units.map(unit => ({ ...unit, status: cited.has(unit.id) ? "extracted" : unit.status,
+        itemIds: links.filter(link => link.evidence.some(anchor => anchor.unitId === unit.id)).map(link => link.id) }));
+      const records = publishedUnits.map(unit => ({ kind: "source-unit", id: unit.id,
+        payload: { recordType: "source-unit", sourceId: source.id, generation, unit, status: "indexed", provenance: [{ type: "source", id: source.id }] } }));
+      if (output) {
+        records.push({ kind: "knowledge", id, payload: { recordType: "source-understanding", sourceId: source.id, generation,
+          status: "current", output, run, usage: completed.usage, units: publishedUnits.filter(unit => cited.has(unit.id)).map(({ text: _text, ...unit }) => unit) } });
+        for (const method of output.methods) records.push({ kind: "method", id: `method:${source.id}:g${generation}:${method.id}`,
+          payload: { recordType: "source-method", sourceId: source.id, generation, status: "draft", method, run } });
+      }
+      await insertSourceRecords(client, job.userId, job.projectId, records);
+      const coverage = isSkip ? null : source.payload.analysis.parserCoverage;
+      const status = coverage?.failed > 0 ? "needs_attention" : "complete";
+      const payload = { ...source.payload, status, currentUnderstandingId: output ? id : null, coverage,
+        omissionAudit: { status: "not_run", omissionRate: null, reason: "Question-based understanding audit has not run." },
+        analysis: { ...(source.payload.analysis ?? {}), generation, phase: isSkip ? "skipped" : output ? "understood" : "indexed", run: run ? { ...source.payload.analysis?.run, ...run } : null },
+        outputs: { summary: output?.summary ?? (isSkip ? "Skipped by the selected analysis depth." : parsed.summary),
+          facts: output?.claims.length ?? 0, methods: output?.methods.length ?? 0,
+          ...(artifactPath ? { artifactPath: sourcePath(artifactPath) } : {}) },
+        extractor: isSkip ? null : parsed.extractor, error: null, updatedAt: this.now().toISOString() };
+      const updated = await this.documents.put(job.userId, "source", source.id, payload, { expectedRevision: source.revision, projectId: source.projectId, transactionClient: client });
+      return { sourceId: source.id, sourceRevision: updated.revision, status, understandingId: output ? id : null };
+    }, false, true);
+  }
+
+  async getUnderstanding(userId, sourceId) {
+    const source = await this.requireSource(userId, sourceId);
+    const row = source.payload.currentUnderstandingId ? await this.documents.get(userId, "knowledge", source.payload.currentUnderstandingId) : null;
+    return { sourceId, generation: source.payload.generation, depth: source.payload.depth, status: source.payload.status,
+      current: row?.projectId === source.projectId && row.payload.sourceId === sourceId && row.payload.generation === source.payload.generation
+        ? projectSourceDerivedRecord(await this.hydrateUnderstanding(userId, row)) : null };
+  }
+
+  async hydrateUnderstanding(userId, row) {
+    const ids = row.payload.units.map(unit => unit.id);
+    if (!ids.length) return row;
+    const result = await this.documents.database.query(`SELECT payload->'unit' AS unit FROM evimed_product.documents
+      WHERE user_id=$1 AND project_id=$2 AND kind='source-unit' AND id=ANY($3::text[]) AND deleted_at IS NULL
+      AND payload->>'sourceId'=$4 AND payload->>'generation'=$5`, [userId, row.projectId, ids, row.payload.sourceId, String(row.payload.generation)]);
+    if (result.rows.length !== ids.length) throw new HttpError(409, "source_capture_invalid", "Understanding source anchors are unavailable.");
+    const byId = new Map(result.rows.map(item => [item.unit.id, item.unit]));
+    return { ...row, payload: { ...row.payload, units: ids.map(id => byId.get(id)) } };
+  }
+
+  async understandingHistory(userId, sourceId, { limit = 20, cursor = null } = {}) {
+    const source = await this.requireSource(userId, sourceId);
+    const page = await this.documents.list(userId, "knowledge", { projectId: source.projectId, limit: Math.min(limit, 20), cursor,
+      filter: { recordType: "source-understanding", sourceId } });
+    // A bounded page never silently drops anchors or part of an understanding.
+    // The cursor resumes from the last complete record returned.
+    const items = [];
+    let bytes = 0;
+    let last = null;
+    for (const row of page.items) {
+      const item = projectSourceDerivedRecord(await this.hydrateUnderstanding(userId, row));
+      const size = Buffer.byteLength(JSON.stringify(item));
+      if (items.length && bytes + size > 2 * 1024 * 1024) return { items,
+        nextCursor: Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") };
+      items.push(item); bytes += size; last = row;
+    }
+    return { items, nextCursor: page.nextCursor };
   }
 
   /** @param {string} userId @param {string} sourceId @param {Record<string,any>} input */
@@ -258,11 +527,13 @@ export class SourceService {
     const reason = text(input.reason, "override reason", 1000);
     const updated = await this.documents.put(userId, "source", sourceId, {
       ...current.payload, docType, depth, status: "queued", generation: (Number(current.payload.generation) || 1) + 1,
+      ...retiredSourceRun(current.payload),
       reasons: [`User override: ${reason}`, ...current.payload.reasons].slice(0, 20),
       override: { docType, depth, reason, at: this.now().toISOString() },
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
     await this.enqueue(updated, userId);
+    if (this.documents.database) await this.enqueueRunCancellations(userId, updated);
     return updated;
   }
 
@@ -273,6 +544,7 @@ export class SourceService {
     const at = this.now().toISOString();
     return this.documents.put(userId, "source", sourceId, {
       ...current.payload, status: "missing", generation: (Number(current.payload.generation) || 1) + 1,
+      ...retiredSourceRun(current.payload),
       missingAt: at, updatedAt: at,
     }, { expectedRevision: current.revision, projectId: current.projectId });
   }
@@ -328,10 +600,13 @@ export class SourceService {
       if (current.payload.status === "canceled") return current;
       throw new HttpError(409, "source_state_conflict", "This source is no longer processing.");
     }
-    return this.documents.put(userId, "source", sourceId, {
+    const updated = await this.documents.put(userId, "source", sourceId, {
       ...current.payload, status: "canceled", generation: (Number(current.payload.generation) || 1) + 1,
+      ...retiredSourceRun(current.payload),
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
+    if (this.documents.database) await this.enqueueRunCancellations(userId, updated);
+    return updated;
   }
 
   /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number}} input */
@@ -343,10 +618,12 @@ export class SourceService {
     }
     const updated = await this.documents.put(userId, "source", sourceId, {
       ...current.payload, status: "queued", error: null,
+      ...retiredSourceRun(current.payload),
       generation: (Number(current.payload.generation) || 1) + 1,
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: current.revision, projectId: current.projectId });
     await this.enqueue(updated, userId, { rearmFailed: true });
+    if (this.documents.database) await this.enqueueRunCancellations(userId, updated);
     return updated;
   }
 
@@ -439,9 +716,10 @@ export class SourceService {
       if (!generation || (job.payload.accountCreatedAt && job.payload.accountCreatedAt !== generation)) throw new HttpError(409, "source_account_changed", "The source account changed.");
       const found = await client.query("SELECT * FROM evimed_product.documents WHERE user_id=$1 AND kind='source' AND id=$2 FOR UPDATE", [job.userId, job.payload.sourceId]);
       const row = found.rows[0];
-      if (!row || row.project_id !== job.projectId || Number(row.payload.generation) !== Number(job.payload.sourceGeneration ?? job.payload.sourceRevision)
+      const cancelling = job.payload.action === "source-run-cancel";
+      if (!row || row.project_id !== job.projectId || (!cancelling && Number(row.payload.generation) !== Number(job.payload.sourceGeneration ?? job.payload.sourceRevision))
         || (deleting ? !row.deleted_at || row.payload.deletion?.jobId !== job.id || row.payload.deletion?.revision !== job.payload.deletionRevision
-          : row.deleted_at || !["queued", "parsing", "failed"].includes(row.payload.status))) throw new HttpError(409, "source_generation_stale", "This source job was superseded.");
+          : row.deleted_at || (!cancelling && !["queued", "parsing", "failed"].includes(row.payload.status)))) throw new HttpError(409, "source_generation_stale", "This source job was superseded.");
       const output = await operation(sourceRecord(row), client);
       const live = await client.query("SELECT 1 FROM evimed_product.jobs WHERE id=$1 AND user_id=$2 AND lease_token=$3 AND status='running' AND lease_expires_at>clock_timestamp()", [job.id, job.userId, job.leaseToken]);
       if (!live.rowCount) throw new HttpError(409, "product_job_lease_lost", "The source job lease expired.");
@@ -579,6 +857,9 @@ export class SourceService {
   async reconcileJobs() {
     const database = this.documents.database;
     if (!database) return { scanned: 0, enqueued: 0 };
+    const cancellations = await database.query(`SELECT user_id,id,project_id,payload FROM evimed_product.documents
+      WHERE kind='source' AND deleted_at IS NULL AND jsonb_array_length(coalesce(payload->'pendingRunCancellations','[]'::jsonb))>0 LIMIT 100`);
+    for (const row of cancellations.rows) await this.enqueueRunCancellations(row.user_id, sourceRecord(row));
     const deleted = await database.query(`SELECT d.user_id,d.id,d.revision,u.created_at::text AS account_created_at
       FROM evimed_product.documents d JOIN evimed_control.users u ON u.id=d.user_id WHERE d.kind='source' AND d.deleted_at IS NOT NULL
       AND (payload->'deletion'->>'jobId' IS NULL OR NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.id=d.payload->'deletion'->>'jobId'))
@@ -591,7 +872,7 @@ export class SourceService {
     const result = await database.query(`SELECT user_id,id,project_id,payload,revision FROM evimed_product.documents d
       WHERE kind='source' AND deleted_at IS NULL AND payload->>'status'=ANY($1::text[])
       AND NOT EXISTS (SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=d.user_id AND j.kind='ingest'
-        AND j.payload->>'action' IS DISTINCT FROM 'source-delete'
+        AND j.payload->>'action' IS NULL
         AND j.payload->>'sourceId'=d.id AND j.payload->>'sourceGeneration'=d.payload->>'generation'
         AND j.status IN ('queued','running','succeeded'))
       ORDER BY updated_at,id LIMIT 100`, [["queued", "parsing", "failed"]]);
