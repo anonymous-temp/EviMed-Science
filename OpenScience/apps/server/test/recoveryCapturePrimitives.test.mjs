@@ -113,6 +113,43 @@ exec "$EVIMED_TEST_REAL_NODE" "$@"
   assert.deepEqual(await readdir(backups), []);
 });
 
+test("strict backup rejects a same-inode content change without publishing an archive or checksum", async (t) => {
+  const { backups, data, payload, root } = await fixture(t);
+  const bin = path.join(root, "strict-bin");
+  await mkdir(bin);
+  const wrapper = path.join(bin, "node");
+  await writeFile(wrapper, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+  "$EVIMED_TEST_REAL_NODE" -e 'const fs=require("node:fs"); const file=process.argv[1]; fs.writeFileSync(file,"synthetic changed member!\\n"); fs.utimesSync(file,new Date(1000),new Date(2000));' "$EVIMED_TEST_MUTATE_PATH"
+fi
+exec "$EVIMED_TEST_REAL_NODE" "$@"
+`);
+  await chmod(wrapper, 0o700);
+  const env = {
+    ...cleanEnvironment,
+    PATH: `${bin}:${process.env.PATH}`,
+    EVIMED_TEST_MUTATE_PATH: payload,
+    EVIMED_TEST_REAL_NODE: process.execPath,
+  };
+
+  const legacy = await execute("bash", [path.join(ops, "backup-data.sh"), data, path.join(root, "legacy")], { env });
+  assert.match(legacy.stderr, /backup note: 1 file\(s\) changed while being read/);
+  assert.ok(legacy.stdout.trim().endsWith(".tar.gz"));
+
+  await writeFile(payload, "synthetic recovery member\n");
+  await assert.rejects(
+    execute("bash", [path.join(ops, "backup-data.sh"), data, backups], {
+      env: { ...env, OPEN_SCIENCE_BACKUP_STRICT: "true" },
+    }),
+    (error) => {
+      assert.match(error.stderr, /strict backup refused a changing source/);
+      return true;
+    },
+  );
+  assert.deepEqual(await readdir(backups), []);
+});
+
 test("numeric-owner restore is explicit, root-gated, and leaves the target untouched on refusal", async (t) => {
   const { backups, data, root } = await fixture(t);
   const archive = await capture(data, backups);
