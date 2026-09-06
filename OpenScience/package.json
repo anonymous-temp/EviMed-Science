@@ -46,6 +46,7 @@
     "verify:release-manifest": "node scripts/ops/generate-release-manifest.mjs --check --verify-images",
     "smoke:deployment": "node scripts/ops/deployment-smoke.mjs",
     "preflight:host": "node scripts/ops/host-preflight.mjs",
+    "release:images": "node scripts/ops/release-images.mjs",
     "preflight:deepseek": "node scripts/ops/deepseek-compatibility-preflight.mjs",
     "preflight:deepseek:release": "node scripts/ops/deepseek-kernel-release-gate.mjs",
     "backup:object": "node scripts/ops/object-backup.mjs upload",
