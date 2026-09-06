@@ -1,7 +1,6 @@
 """Review regressions for protected MR signing and single-execution ownership."""
 from __future__ import annotations
 
-import copy
 import importlib.util
 import json
 import os
@@ -73,7 +72,7 @@ def test_non_mr_hosted_evidence_preserves_legacy_rule(tmp_path, monkeypatch):
 
 
 def test_audit_mode_refuses_same_uid_runner_before_launch(tmp_path, monkeypatch):
-    setup = setup_audit(tmp_path, monkeypatch)
+    setup = setup_audit(tmp_path, monkeypatch, simulate_isolation=False)
     from evimed_specialist_adapter import audit_receipt
     with pytest.raises(audit_receipt.AuditReceiptUnavailable):
         audit_receipt.analysis_credentials()
@@ -81,7 +80,8 @@ def test_audit_mode_refuses_same_uid_runner_before_launch(tmp_path, monkeypatch)
 
 @pytest.mark.skipif(not os.getenv("EVIMED_AUDIT_CONTAINER_TEST_IMAGE"), reason="explicit cached Linux test image required")
 @pytest.mark.parametrize("drop_capability", [False, True])
-def test_actual_analysis_uid_cannot_read_key_and_missing_drop_capability_fails(drop_capability):
+@pytest.mark.parametrize("key_mode", [0o400, 0o600])
+def test_actual_analysis_uid_cannot_read_key_and_missing_drop_capability_fails(drop_capability, key_mode):
     image = os.environ["EVIMED_AUDIT_CONTAINER_TEST_IMAGE"]
     repo = Path(__file__).resolve().parents[3]
     script = r'''
@@ -91,13 +91,17 @@ sys.path[:0]=['/src/OpenScience/deploy/specialist-adapter','/src/项目代码/�
 from evimed_specialist_adapter import audit_receipt
 import evimed_mr_job as jobs
 import evimed_local_inputs as inputs
-key=Path('/run/test-audit-key');key.write_bytes(b'test-only-signing-secret');key.chmod(0o400)
+key=Path('/run/test-audit-key');key.write_bytes(b'test-only-signing-secret');key.chmod(KEY_MODE)
 os.environ['EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE']=str(key)
-workspace=Path('/data/users/user1/projects/project1/workspace');workspace.mkdir(parents=True)
+workspace=Path('/data/users/user1/projects/project1/workspace');workspace.mkdir(parents=True);workspace.chmod(0o700)
 output=workspace/'mendelian-randomization-runs/mr-audit-test/output';output.mkdir(parents=True)
 runner=Path('/agent/evimed_runner.py')
-runner.write_text("import errno,json,os\nfrom pathlib import Path\nos.fchdir(int(__import__('sys').argv[-1]))\nassert os.getuid()==65532 and os.getgid()==65532 and os.getgroups()==[]\ntry:\n open('/run/test-audit-key','rb').read()\n raise AssertionError('key readable')\nexcept PermissionError as e:\n assert e.errno==errno.EACCES\ntry:\n os.setuid(0)\n raise AssertionError('root regained')\nexcept PermissionError: pass\nPath('result.json').write_text(json.dumps({'status':'succeeded'}))\n")
+runner.write_text("import errno,json,os\nfrom pathlib import Path\nos.fchdir(int(__import__('sys').argv[-1]))\nassert 'rs1' in Path('inputs/exposure.csv').read_text()\nassert os.getuid()==65532 and os.getgid()==65532 and os.getgroups()==[]\ntry:\n open('/run/test-audit-key','rb').read()\n raise AssertionError('key readable')\nexcept PermissionError as e:\n assert e.errno==errno.EACCES\ntry:\n os.setuid(0)\n raise AssertionError('root regained')\nexcept PermissionError: pass\nPath('result.json').write_text(json.dumps({'status':'succeeded'}))\n")
+source={'type':'local_file','columnMapping':{'snp':'SNP','beta':'beta','se':'se','effect_allele':'effect_allele','other_allele':'other_allele','eaf':'eaf','pval':'pval'},'sampleSize':10000,'instrumentsPreclumped':True,'clumpingProvenance':'Provider declared independent instruments; LD not rechecked.'}
 request={'exposure':'BMI','outcome':'CHD','analysisDirection':'forward'}
+for role in ('exposure','outcome'):
+ path=workspace/(role+'.csv');path.write_text('SNP,beta,se,effect_allele,other_allele,eaf,pval\\nrs1,0.2,0.01,A,G,0.2,1e-10\\n'.replace('\\n','\n'));path.chmod(0o600)
+ request[role+'Source']={**source,'path':path.name}
 bindings=inputs.capture_bindings(workspace,request,Path('/data'))
 job=jobs.Job(workspace=workspace,output_root=output,data_root=Path('/data'),request=request,bindings=bindings,python=sys.executable,runner=runner)
 try:
@@ -108,7 +112,7 @@ except (inputs.MRInputError,audit_receipt.AuditReceiptUnavailable,PermissionErro
  assert DROP
  assert not (output/'result.json').exists()
  print('privilege-drop-refused-before-runner')
-'''.replace("DROP", repr(drop_capability))
+'''.replace("DROP", repr(drop_capability)).replace("KEY_MODE", repr(key_mode))
     command = ["docker", "run", "--rm", "--pull", "never", "--network", "none", "--read-only",
         "--cap-drop", "ALL", "--cap-add", "SETGID", "--security-opt", "no-new-privileges:true",
         "--tmpfs", "/tmp", "--tmpfs", "/run", "--tmpfs", "/data", "--tmpfs", "/agent",
@@ -118,3 +122,81 @@ except (inputs.MRInputError,audit_receipt.AuditReceiptUnavailable,PermissionErro
     result = subprocess.run([*command, image, "python", "-c", script], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert ("privilege-drop-refused-before-runner" if drop_capability else "actual-uid-key-access-denied") in result.stdout
+
+
+def test_concurrent_claims_have_one_winner(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    setup = setup_audit(tmp_path, monkeypatch)
+    path, _ = start_job(setup, monkeypatch)
+    barrier = Barrier(4)
+
+    def claim():
+        barrier.wait(timeout=5)
+        with setup[0]._mr_store().claim(path) as state:
+            return state is not None
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        winners = list(pool.map(lambda _: claim(), range(4)))
+    assert winners.count(True) == 1
+    assert setup[0]._read_state(path)["status"] == "running"
+
+
+def test_unsigned_jobs_need_no_privilege_drop(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch, simulate_isolation=False)
+    monkeypatch.delenv("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE")
+    result, _ = completed(setup, monkeypatch)
+    assert "auditReceipt" not in result["data"]
+
+
+def test_unproven_isolation_fails_before_analysis_execution(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch, simulate_isolation=False)
+    path, job_id = start_job(setup, monkeypatch)
+    service = setup[0]
+    original = service._mr_job
+    executions = []
+
+    def wrapped(root):
+        jobs = original(root)
+        jobs.execute = lambda *_args, **_kwargs: executions.append(True)
+        return jobs
+
+    monkeypatch.setattr(service, "_mr_job", wrapped)
+    assert service.run_job(str(path)) == 1
+    assert executions == []
+    assert service._status({"jobId": job_id}, setup[3])["status"] == "error"
+
+
+def test_image_manifest_detects_deployment_changes_without_reading_private_state(tmp_path, monkeypatch):
+    setup_audit(tmp_path, monkeypatch)
+    from evimed_specialist_adapter import audit_receipt
+    target = tmp_path / "image/evimed_specialist_adapter"
+    shutil.copytree(Path(__file__).parent / "evimed_specialist_adapter", target)
+    for name in audit_receipt.DEPLOYMENT_INPUTS:
+        (target.parent / name).write_bytes((Path(__file__).parent / name).read_bytes())
+    manifest = audit_receipt.adapter_manifest(target)
+    (target.parent / "adapter-evidence.json").write_bytes(audit_receipt.canonical(manifest) + b"\n")
+    audit_receipt.adapter_evidence(target)
+    (target.parent / "requirements.txt").write_text("changed dependency")
+    with pytest.raises(audit_receipt.AuditReceiptUnavailable, match="manifest_changed"):
+        audit_receipt.adapter_evidence(target)
+
+
+def test_status_race_preserves_worker_terminal_receipt(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    path, job_id = start_job(setup, monkeypatch)
+    service = setup[0]
+    monkeypatch.setattr(service, "_managed_worker_alive", lambda *_: False)
+    write = service._write_state
+    injected = []
+
+    def race(state_path, state, **kwargs):
+        if state.get("status") == "failed" and not injected:
+            injected.append(True)
+            assert service.run_job(str(path)) == 0
+        return write(state_path, state, **kwargs)
+
+    monkeypatch.setattr(service, "_write_state", race)
+    result = service._status({"jobId": job_id}, setup[3])
+    assert result["status"] == "success"
+    assert result["data"]["auditReceipt"] == service._read_state(path)["auditReceipt"]

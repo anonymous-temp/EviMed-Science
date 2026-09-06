@@ -14,6 +14,7 @@ import os
 import re
 import secrets
 import stat
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -315,36 +316,76 @@ class MRJobStore:
                 "Protected MR job state is unavailable or unsafe."
             ) from None
 
+    @contextmanager
+    def _job_lock(self, directory: int, job_id: str) -> Iterator[None]:
+        descriptor = os.open(job_id + ".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                    or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077):
+                raise ValueError("Invalid protected MR job lock.")
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(descriptor)
+
+    @contextmanager
+    def claim(self, path: Path) -> Iterator[dict[str, Any] | None]:
+        """Atomically consume queued authority; a crash cannot rearm execution."""
+        parts, job_id = self._state_location(path)
+        claimed = None
+        try:
+            with self.inputs.directory_fd(self.root, parts[:-1]) as directory:
+                with self._job_lock(directory, job_id):
+                    state = self._read(directory, parts[-1])
+                    self._validate_record(parts, job_id, state)
+                    if state.get("status") == "queued":
+                        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                        state.update(status="running", workerPid=os.getpid(), startedAt=now, updatedAt=now)
+                        self._write(directory, parts[-1], state, create=False)
+                        claimed = state
+        except (OSError, ValueError):
+            raise ValueError("Protected MR job state is unavailable or unsafe.") from None
+        # The durable status rejects a second worker after the atomic lock ends.
+        yield claimed
+
     def write(self, path: Path, state: dict[str, Any], *, create: bool = False) -> None:
         parts, job_id = self._state_location(path)
         self._validate_record(parts, job_id, state)
         with self.inputs.directory_fd(self.root, parts[:-1]) as directory:
-            if create:
-                context = state["queueContext"]
-                if self.context(Path(state["workspace"])) != context:
-                    raise ValueError("MR scope changed before job admission.")
-                if (
-                    state.get("mrInputBindings", {}).get("workspace")
-                    != context["identity"]["workspace"]
-                ):
-                    raise ValueError(
-                        "MR input binding differs from accepted workspace."
-                    )
-            else:
-                accepted = self._read(directory, parts[-1])
-                for key in (
-                    "schemaVersion",
-                    "kind",
-                    "jobId",
-                    "workspace",
-                    "outputRoot",
-                    "createdAt",
-                    "request",
-                    "mrInputBindings",
-                    "sourceEvidence",
-                    "queueContext",
-                    "queueGeneration",
-                ):
-                    if accepted.get(key) != state.get(key):
-                        raise ValueError("Accepted MR job authority cannot be changed.")
-            self._write(directory, parts[-1], state, create=create)
+            with self._job_lock(directory, job_id):
+                if create:
+                    context = state["queueContext"]
+                    if self.context(Path(state["workspace"])) != context:
+                        raise ValueError("MR scope changed before job admission.")
+                    if (
+                        state.get("mrInputBindings", {}).get("workspace")
+                        != context["identity"]["workspace"]
+                    ):
+                        raise ValueError(
+                            "MR input binding differs from accepted workspace."
+                        )
+                else:
+                    accepted = self._read(directory, parts[-1])
+                    if accepted.get("status") in {"succeeded", "failed"}:
+                        if state != accepted:
+                            raise ValueError("Terminal MR job state is immutable.")
+                        return
+                    if accepted.get("status") == "running" and state.get("status") == "queued":
+                        raise ValueError("Running MR jobs cannot be rearmed.")
+                    for key in (
+                        "schemaVersion",
+                        "kind",
+                        "jobId",
+                        "workspace",
+                        "outputRoot",
+                        "createdAt",
+                        "request",
+                        "mrInputBindings",
+                        "sourceEvidence",
+                        "queueContext",
+                        "queueGeneration",
+                    ):
+                        if accepted.get(key) != state.get(key):
+                            raise ValueError("Accepted MR job authority cannot be changed.")
+                self._write(directory, parts[-1], state, create=create)

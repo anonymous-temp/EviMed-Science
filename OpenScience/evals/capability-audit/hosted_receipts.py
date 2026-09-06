@@ -159,6 +159,15 @@ def write_new(root, relative, blob):
 
 
 def current_evidence(tool, repo=REPO):
+    if tool != "mendelian_randomization":
+        location = repo / "runtime/mcp/evimed-research/execution_evidence.py"
+        spec = importlib.util.spec_from_file_location("hosted_legacy_execution_evidence", location)
+        legacy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(legacy)
+        adapter = repo / "deploy/specialist-adapter"
+        return {"executionEvidence": legacy.execution_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool],
+                    adapter / "evimed_specialist_adapter/service.py"),
+                "adapterEvidence": legacy.source_tree_evidence(adapter)}
     adapter = repo / "deploy/specialist-adapter/evimed_specialist_adapter"
     location = adapter / "audit_receipt.py"
     spec = importlib.util.spec_from_file_location("hosted_audit_execution_evidence", location)

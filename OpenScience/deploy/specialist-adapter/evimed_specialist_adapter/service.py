@@ -667,8 +667,15 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 "retryable": True,
                 "error": "The specialist worker stopped before publishing a terminal result.",
             })
-            _write_state(state_path, state)
-            job_status = "failed"
+            try:
+                _write_state(state_path, state)
+            except ValueError:
+                if _kind() != "mendelian-randomization":
+                    raise
+                state = _read_state(state_path)
+                if state.get("status") not in {"succeeded", "failed"}:
+                    raise
+            job_status = state["status"]
     worker = _WORKERS.pop(job_id, None)
     if worker is not None:
         try:
@@ -790,7 +797,11 @@ def _run_isolated_mr(
             runner=root / "evimed_runner.py",
         )
         environment = _child_environment()
-        outcome = jobs.execute(helper, job, environment)
+        try:
+            credentials = audit_receipt.analysis_credentials()
+        except audit_receipt.AuditReceiptUnavailable:
+            raise helper.MRInputError("mr_input_isolation_unavailable", "Signed MR audit requires isolated analysis permissions.") from None
+        outcome = jobs.execute(helper, job, environment, analysis_credentials=credentials)
         if state.get("sourceEvidence") != _source_evidence(root):
             raise helper.MRInputError(
                 "mr_input_changed", "Managed MR source changed during execution."
@@ -854,7 +865,12 @@ def run_job(state_file: str) -> int:
     data_root = Path(os.getenv("EVIMED_DATA_ROOT", "/data")).resolve()
     if data_root != state_path and data_root not in state_path.parents:
         raise RuntimeError("specialist state escaped the data root")
-    state = _read_state(state_path)
+    if _kind() == "mendelian-randomization":
+        with _mr_store().claim(state_path) as state:
+            if state is None:
+                return 1
+    else:
+        state = _read_state(state_path)
     if state.get("kind") != _kind():
         raise RuntimeError("specialist state kind is invalid")
     workspace = Path(state["workspace"]).absolute()

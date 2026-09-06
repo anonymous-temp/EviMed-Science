@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import importlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ from test_service import _token
 AUDIT = Path(__file__).resolve().parents[2] / "evals/capability-audit"
 
 
-def setup_audit(tmp_path, monkeypatch):
+def setup_audit(tmp_path, monkeypatch, *, simulate_isolation=True):
     monkeypatch.syspath_prepend(str(AUDIT))
     import hosted_receipts as receipts
     import public_mr_fixture as fixture
@@ -50,6 +51,10 @@ def setup_audit(tmp_path, monkeypatch):
         producer = None
     if producer:
         monkeypatch.setattr(producer, "FIXTURE_MANIFEST", manifest_path)
+        if simulate_isolation:
+            # This non-root contract fixture cannot change UID. The separate
+            # Linux probe executes the real boundary, including EACCES.
+            monkeypatch.setattr(producer, "analysis_credentials", lambda: {} if os.getenv("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE") else None)
     key = Ed25519PrivateKey.generate()
     pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                             serialization.NoEncryption())
@@ -131,7 +136,7 @@ def test_health_reports_optional_signing_readiness_without_secret_paths(tmp_path
 
 
 @pytest.mark.parametrize("invalid", ["missing", "mode", "symlink", "non_ed25519"])
-def test_unavailable_signing_key_keeps_normal_jobs_unsigned(tmp_path, monkeypatch, invalid):
+def test_unavailable_signing_key_is_not_loaded_or_advertised(tmp_path, monkeypatch, invalid):
     setup = setup_audit(tmp_path, monkeypatch)
     key_file = setup[-1]
     if invalid == "missing":
@@ -146,8 +151,8 @@ def test_unavailable_signing_key_keeps_normal_jobs_unsigned(tmp_path, monkeypatc
         from cryptography.hazmat.primitives.asymmetric import ec
         key_file.write_bytes(ec.generate_private_key(ec.SECP256R1()).private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
-    result, _ = completed(setup, monkeypatch)
-    assert "auditReceipt" not in result["data"]
+    from evimed_specialist_adapter import audit_receipt
+    assert audit_receipt.signing_key() is None
     assert setup[1].get("/health").json()["auditReceiptsReady"] is False
 
 
