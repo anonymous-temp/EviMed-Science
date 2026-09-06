@@ -17,6 +17,19 @@ beforeEach(() => {
   vi.mocked(api.inboxErrorMessage).mockImplementation(() => "操作未完成，请重试。");
 });
 
+it("opens the exact digest without resolving its notice or hiding an already-read link", async () => {
+  const digestNotice = { ...review, id: "digest-notice", projectId: "another-owned-project",
+    source: { type: "digest" as const, id: "digest-owned" },
+    actions: [{ id: "open", label: "查看简报", style: "neutral" as const }],
+    readAt: "2026-09-06T00:01:00Z", resolvedAt: "2026-09-06T00:01:00Z" };
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [digestNotice], nextCursor: null });
+  render(<InboxPage />);
+  const link = await screen.findByRole("link", { name: "查看简报" });
+  expect(link).toHaveAttribute("href", "/app/autopilot?digest=digest-owned");
+  expect(api.resolveInboxItem).not.toHaveBeenCalled();
+  expect(api.markInboxRead).not.toHaveBeenCalled();
+});
+
 it("shows blocking reviews first and resolves a selected action", async () => {
   vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...review, revision: 2, resolvedAt: "2026-09-06T00:01:00Z", resolution: { actionId: "adopt" } });
   render(<InboxPage />);

@@ -76,12 +76,16 @@ export class AutopilotWorker {
       if (!agenda.payload.enabled || agenda.payload.status !== "active" || !["queued", "failed"].includes(episode.payload.status)) {
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
       }
-      const currentAgenda = await this.service.get(job.userId, job.payload?.agendaId);
-      if (!currentAgenda.payload.enabled || currentAgenda.payload.status !== "active") {
-        return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_stopped" });
-      }
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost before dispatch."), { code: "product_job_lease_lost" })); throw error;
+      }
+      const currentAgenda = await this.service.checkInactivity(job.userId, job.payload?.agendaId);
+      if (!currentAgenda.payload.enabled || currentAgenda.payload.status !== "active") {
+        return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
+      }
+      const activityLeaseRenewed = leaseLost ? false : await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs);
+      if (leaseLost || !activityLeaseRenewed) {
+        const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Autopilot job lease was lost during the activity check."), { code: "product_job_lease_lost" })); throw error;
       }
       dispatched = await this.dispatchEpisode({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: episode.id });
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {

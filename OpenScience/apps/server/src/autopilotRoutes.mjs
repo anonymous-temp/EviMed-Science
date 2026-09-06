@@ -51,6 +51,17 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
       if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
       return reply(await service.listDigests(user.id, { projectId: await requireProject(projectId) }));
     }
+    if (parts[0] === "digests" && parts.length === 2 && method === "GET") {
+      const digest = await service.getDigest(user.id, parts[1]);
+      await requireProject(digest.projectId);
+      return reply(digest);
+    }
+    if (parts[0] === "digests" && parts.length === 3 && parts[2] === "opened" && method === "POST") {
+      const digest = await service.getDigest(user.id, parts[1]);
+      await requireProject(digest.projectId);
+      await bodyOf(req, maxJsonBytes, []);
+      return reply(await service.markDigestOpened(user.id, digest.id));
+    }
     if (parts[0] === "digests" && parts.length === 3 && parts[2] === "decisions" && method === "POST") {
       const digest = await service.getDigest(user.id, parts[1]);
       await requireProject(digest.projectId);

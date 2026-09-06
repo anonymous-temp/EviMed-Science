@@ -10,6 +10,7 @@ function fixture({ enabled = true, dispatchError = null, cancelJob = false } = {
       : { agendaId: "agenda-one", episodeId: "episode-one", taskType: "evidence-update", budgetCny: 3, prompt: "Run evidence update" } };
   const service = {
     get: async () => ({ id: "agenda-one", projectId: "project-one", revision: 2, payload: { enabled, status: enabled ? "active" : "paused" } }),
+    checkInactivity: async () => ({ id: "agenda-one", projectId: "project-one", revision: 2, payload: { enabled, status: enabled ? "active" : "paused" } }),
     getEpisode: async () => ({ id: "episode-one", projectId: "project-one", revision: 1, payload: { status: "queued" } }),
     markEpisodeDispatched: async (...args) => { calls.push({ method: "mark", args }); return { revision: 2 }; },
     markEpisodeFailed: async (...args) => { calls.push({ method: "failed", args }); },
@@ -46,6 +47,56 @@ test("a paused agenda prevents a claimed job from spending", async () => {
   await worker.tick();
   assert.equal(calls.some((call) => call.method === "dispatch"), false);
   assert.equal(calls.find((call) => call.method === "finish").args[3].skipped, true);
+});
+
+test("a lease lost while checking activity prevents dispatch", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const { calls, service, worker } = fixture();
+  let readsStarted;
+  let finishRead;
+  const reading = new Promise((resolve) => { readsStarted = resolve; });
+  service.checkInactivity = async () => {
+    readsStarted();
+    return new Promise((resolve) => { finishRead = resolve; });
+  };
+  let renewals = 0;
+  worker.jobs.renew = async () => ++renewals === 1;
+  const tick = worker.tick();
+  await reading;
+  t.mock.timers.tick(1000);
+  await Promise.resolve();
+  finishRead({ payload: { enabled: true, status: "active" } });
+  await tick;
+  assert.equal(calls.some(call => call.method === "dispatch"), false);
+  assert.equal(worker.status().lastError, "product_job_lease_lost");
+});
+
+test("an expired lease with a pending background renewal is revalidated after the activity check", { timeout: 5000 }, async () => {
+  const { calls, service, worker } = fixture();
+  const sequence = [];
+  let finishPending;
+  let renewals = 0;
+  worker.jobs.renew = async () => {
+    renewals++;
+    sequence.push(`renew-${renewals}`);
+    if (renewals === 1) return true;
+    if (renewals === 2) return new Promise((resolve) => { finishPending = resolve; });
+    return false;
+  };
+  service.checkInactivity = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    return { payload: { enabled: true, status: "active" } };
+  };
+  const dispatch = worker.dispatchEpisode;
+  worker.dispatchEpisode = async (...args) => { sequence.push("dispatch"); return dispatch(...args); };
+  try {
+    await worker.tick();
+    assert.deepEqual(sequence, ["renew-1", "renew-2", "renew-3"]);
+    assert.equal(calls.some(call => call.method === "dispatch"), false);
+    assert.equal(worker.status().lastError, "product_job_lease_lost");
+  } finally {
+    finishPending?.(false);
+  }
 });
 
 test("dispatch failures update the episode and use bounded queue retry", async () => {

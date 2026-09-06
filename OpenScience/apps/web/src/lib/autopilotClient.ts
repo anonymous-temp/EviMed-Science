@@ -4,7 +4,7 @@ export interface AgendaPayload { title: string; topics: string[]; taskTypes: str
   maxEpisodeCny: number; scheduleHour: number; timeZone: string; enabled: boolean; status: string; pauseReason: string | null; outcomes: unknown[] }
 export interface DigestClaim { id: string; statement: string }
 export interface DigestPayload { date: string; costCny: number; headlines: DigestClaim[]; leads: DigestClaim[];
-  decisions: Array<{ action: string; claimId: string; note: string }> }
+  openedAt?: string | null; decisions: Array<{ action: string; claimId: string; note: string }> }
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };
 export type DigestRecord = ProductRecord<DigestPayload> & { projectId: string };
 
@@ -14,4 +14,6 @@ export function startAgenda(id: string, revision: number) { return productReques
 export function stopAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/stop`, "POST", { expectedRevision: revision }); }
 export function scheduleAgenda(id: string, date: string) { return productRequest<{ episode: { id: string } }>(`/autopilot/agendas/${encodeURIComponent(id)}/schedule`, "POST", { date }); }
 export function listDigests(projectId: string) { return productRequest<ProductPage<DigestRecord>>(`/autopilot/digests?projectId=${encodeURIComponent(projectId)}`); }
+export function getDigest(id: string) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}`); }
+export function markDigestOpened(id: string) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}/opened`, "POST", {}); }
 export function decideDigest(id: string, input: { action: string; claimId: string; note: string }) { return productRequest<DigestRecord>(`/autopilot/digests/${encodeURIComponent(id)}/decisions`, "POST", input); }

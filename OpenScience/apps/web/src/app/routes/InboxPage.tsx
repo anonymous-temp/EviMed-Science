@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CheckCircle2 } from "lucide-react";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
-import { Button, type ButtonVariant } from "@/components/ui/Button";
+import { Button, buttonClasses, type ButtonVariant } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { inboxErrorMessage, listInbox, markInboxRead, resolveInboxItem, type InboxItem } from "@/lib/inboxClient";
@@ -108,6 +108,7 @@ function InboxCard({ item, busy, onRead, onResolve }: {
   item: InboxItem; busy: boolean; onRead: () => Promise<void>; onResolve: (actionId: string) => Promise<void>;
 }) {
   const completed = Boolean(item.resolvedAt);
+  const availableActions = item.actions.filter((action) => !completed || (item.source?.type === "digest" && action.id === "open"));
   return <Card>
     <article className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -116,8 +117,12 @@ function InboxCard({ item, busy, onRead, onResolve }: {
         {completed && <span className="flex items-center gap-1 text-caption text-ok"><CheckCircle2 size={13} />已处理</span>}
       </div>
       <div><h2 className="text-body font-medium text-text">{item.title}</h2><p className="mt-1 whitespace-pre-wrap text-ui text-muted">{item.body}</p></div>
-      {!completed && item.actions.length > 0 && <div className="flex flex-wrap gap-2">{item.actions.map((action) => {
+      {availableActions.length > 0 && <div className="flex flex-wrap gap-2">{availableActions.map((action) => {
         const variant: ButtonVariant = action.style === "danger" ? "danger" : action.style === "primary" ? "primary" : "ghost";
+        if (item.source?.type === "digest" && action.id === "open") {
+          return <a key={action.id} className={buttonClasses({ size: "sm", variant })}
+            href={`/app/autopilot?digest=${encodeURIComponent(item.source.id)}`}>{action.label}</a>;
+        }
         return <Button key={action.id} size="sm" variant={variant} loading={busy} onClick={() => void onResolve(action.id)}>{action.label}</Button>;
       })}</div>}
       {!item.readAt && item.actions.length === 0 && <Button size="sm" variant="ghost" loading={busy} onClick={() => void onRead()}>标为已读</Button>}

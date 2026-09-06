@@ -3,6 +3,8 @@ import { fetchWithWebAuth, WebApiError, webApiBase } from "./apiClient";
 export interface InboxAction { id: string; label: string; style: "neutral" | "primary" | "danger" }
 export interface InboxItem {
   id: string;
+  projectId?: string | null;
+  source?: { type: "run" | "thread" | "share" | "system" | "digest"; id: string } | null;
   noticeType: "notify" | "question" | "review";
   priority: number;
   title: string;
