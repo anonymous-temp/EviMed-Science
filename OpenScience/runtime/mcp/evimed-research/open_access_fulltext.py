@@ -7,14 +7,13 @@ import io
 import json
 import os
 import re
-import secrets
-import stat
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
 import public_sources
+from immutable_capture import ImmutableCaptureError, preserve
 
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -147,13 +146,11 @@ def _pdf_markdown(payload: bytes, metadata: dict, provenance: dict) -> tuple[str
         )
     doi = str(metadata.get("doi") or "")
     title = str(metadata.get("title") or "").strip() or doi or "Open-access article"
+    canonical_title = str(getattr(getattr(reader, "metadata", None), "title", None) or "").strip() or "Open-access article"
     header = [
-        "# " + title,
+        "# " + canonical_title,
         "",
-        "- DOI: " + doi,
-        "- Retrieved from: " + (provenance.get("origin") or "the registered open-access location"),
-        "- Open-access version: " + (provenance.get("version") or "unspecified"),
-        "- License: " + (provenance.get("license") or "unspecified"),
+        "- DOI: " + doi.casefold(),
         "- Extracted from PDF text layer (%d pages)" % len(pages),
         "",
         "> Text below is the PDF's own text layer. Page order is preserved; "
@@ -235,12 +232,11 @@ def _render_markdown(xml_payload: bytes, metadata: dict) -> tuple[str, dict]:
     doi = str(metadata.get("doi") or _article_id(article, "doi"))
     pmcid = str(metadata.get("pmcid") or "")
     lines = [
-        "# " + title,
+        "# " + (_first(article, "article-title") or "Untitled article"),
         "",
         "- PMCID: " + pmcid,
-        "- DOI: " + (doi or "not supplied"),
+        "- DOI: " + (_article_id(article, "doi") or "not supplied"),
         "- Primary source: https://europepmc.org/articles/%s" % pmcid,
-        "- Retrieved: " + datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "",
     ]
     abstract = next((node for node in article.iter() if _tag(node) == "abstract"), None)
@@ -278,29 +274,6 @@ def _workspace() -> Path:
     return workspace
 
 
-def _safe_directory(workspace: Path, relative: Path) -> Path:
-    current = workspace
-    for part in relative.parts:
-        current = current / part
-        if current.exists() and current.is_symlink():
-            raise FullTextError("full_text_output_invalid", "Managed full-text paths must not contain symbolic links.")
-        current.mkdir(mode=0o700, exist_ok=True)
-    return current
-
-
-def _atomic_write(path: Path, payload: bytes) -> None:
-    if path.exists() and path.is_symlink():
-        raise FullTextError("full_text_output_invalid", "Managed full-text files must not be symbolic links.")
-    temporary = path.with_name(".%s.%s.tmp" % (path.name, secrets.token_hex(8)))
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        os.write(descriptor, payload)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    os.replace(temporary, path)
-
-
 def _doi_slug(doi: str) -> str:
     """A filesystem-safe directory name that still identifies the article."""
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", doi).strip("-.")[:96]
@@ -322,15 +295,14 @@ def _fetch_open_access_pdf(metadata: dict, workspace: Path) -> dict:
         raise FullTextError("full_text_upstream_unavailable", "Open-access PDF retrieval failed.", True) from error
 
     markdown, details = _pdf_markdown(payload, metadata, provenance)
-    relative_root = Path(".evimed-sources") / _doi_slug(doi)
-    output_root = _safe_directory(workspace, relative_root)
-    markdown_path = output_root / "fulltext.md"
-    pdf_path = output_root / "fulltext.pdf"
+    relative_root = Path(".evimed-sources") / _doi_slug(doi.casefold())
     markdown_payload = markdown.encode("utf-8")
-    _atomic_write(markdown_path, markdown_payload)
-    _atomic_write(pdf_path, payload)
-    markdown_relative = markdown_path.relative_to(workspace).as_posix()
-    pdf_relative = pdf_path.relative_to(workspace).as_posix()
+    try:
+        paths = preserve(workspace, relative_root, {"fulltext.md": markdown_payload, "fulltext.pdf": payload})
+    except ImmutableCaptureError as error:
+        raise FullTextError("full_text_output_invalid", str(error)) from error
+    markdown_relative = paths["fulltext.md"]
+    pdf_relative = paths["fulltext.pdf"]
     return {
         "status": "success",
         "summary": "Retrieved the open-access PDF and extracted its text into the managed workspace.",
@@ -381,14 +353,13 @@ def fetch(arguments: dict) -> dict:
             raise
         markdown, details = _render_markdown(xml_payload, {**metadata, "pmcid": pmcid})
         relative_root = Path(".evimed-sources") / pmcid
-        output_root = _safe_directory(workspace, relative_root)
-        markdown_path = output_root / "fulltext.md"
-        xml_path = output_root / "fulltext.xml"
         markdown_payload = markdown.encode("utf-8")
-        _atomic_write(markdown_path, markdown_payload)
-        _atomic_write(xml_path, xml_payload)
-        markdown_relative = markdown_path.relative_to(workspace).as_posix()
-        xml_relative = xml_path.relative_to(workspace).as_posix()
+        try:
+            paths = preserve(workspace, relative_root, {"fulltext.md": markdown_payload, "fulltext.xml": xml_payload})
+        except ImmutableCaptureError as error:
+            raise FullTextError("full_text_output_invalid", str(error)) from error
+        markdown_relative = paths["fulltext.md"]
+        xml_relative = paths["fulltext.xml"]
         source = {
             "id": pmcid,
             "title": details["title"],
