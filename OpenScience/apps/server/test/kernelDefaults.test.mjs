@@ -73,8 +73,14 @@ test("every setting the runtime depends on still holds in the composition the im
   // rows read out of them is fixed too, and a parser that thinned out silently
   // is the way a checker starts reporting nothing wrong. Re-recording the image
   // moves BASELINE_PROVENANCE and this number in the same edit.
-  assert.equal(report.counts.baselineRows, 149, "the image's recorded composition, including the native client and citation bundle");
-  assert.equal(report.counts.presetRows, 23, "the preset's rows, counting the eight our groups mount");
+  assert.equal(report.counts.baselineRows, 150, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
+  const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
+  assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
+  assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
+  assert.equal(report.counts.presetRows, 24, "the preset includes the managed citation bridge as well as grouped native tools");
+  const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
+  assert.equal(preset.rows.filter(row => row.id === "evimed-citation-bridge").length, 1);
+  assert.equal(preset.byId.get("evimed-citation-bridge").name, "@evimed/dsh-socket/plugins/citation-bridge");
   assert.ok(report.invariants.length >= 20, `only ${report.invariants.length} invariants were derived`);
 
   // Every invariant the review named, present by address rather than by count.

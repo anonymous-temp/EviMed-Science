@@ -427,7 +427,7 @@ async function checkDeepSeekCompatibilityPreflight() {
   }
 }
 
-/** Check the reviewed controller boundary, including its three validated v5 endpoints. */
+/** Check the v6 controller boundary: three fixed endpoints and typed plugin settings. */
 export function controllerLaunchPlanIsScoped(source) {
   const code = String(source).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const body = code.match(/async function startRuntime\(project, payload\)\s*\{([\s\S]*?)\n {2}function runtimeStatus\(/)?.[1];
@@ -437,7 +437,7 @@ export function controllerLaunchPlanIsScoped(source) {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig"].sort();
   return Array.isArray(fields) && JSON.stringify(fields.sort()) === JSON.stringify(expected)
     && /functionassertExactKeys\(value,allowed\)\{constallowlist=newSet\(allowed\);constunexpected=Object\.keys\(value\?\?\{\}\)\.find\(\(key\)=>!allowlist\.has\(key\)\);if\(unexpected\)\{throwcontrollerFailure\(400,["']runtime_controller_payload_invalid["'],/.test(compact)
     && compact.includes("assertExactKeys(payload,allowed);constproject=awaitprojectFromReference(config,payload);")
@@ -446,10 +446,14 @@ export function controllerLaunchPlanIsScoped(source) {
     && /constcapsuleGatewayUrl=payload\.capsuleGatewayUrl;if\(typeofcapsuleGatewayUrl!==["']string["']\|\|\(capsuleGatewayUrl!==["']["']&&capsuleGatewayUrl!==capsuleGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_capsule_gateway_invalid["'],[^;]+;\}/.test(launch)
     && /constrevisionGatewayUrl=payload\.revisionGatewayUrl;if\(typeofrevisionGatewayUrl!==["']string["']\|\|\(revisionGatewayUrl!==["']["']&&revisionGatewayUrl!==revisionGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_revision_gateway_invalid["'],[^;]+;\}/.test(launch)
     && /constpublicSourceGatewayUrl=payload\.publicSourceGatewayUrl;if\(typeofpublicSourceGatewayUrl!==["']string["']\|\|\(publicSourceGatewayUrl!==["']["']&&publicSourceGatewayUrl!==publicSourceGatewayProviderUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_source_gateway_invalid["'],[^;]+;\}/.test(launch)
-    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl});")
+    // The v6 addition is one typed, closed configuration object, not generic
+    // caller-owned environment, mounts, images or Docker arguments.
+    && /import\{validatePluginConfig\}from["']\.\/pluginService\.mjs["'];/.test(compact)
+    && /constpluginConfig=payload\.pluginConfig;if\(!pluginConfig\|\|Object\.keys\(pluginConfig\)\.sort\(\)\.join\(["'],["']\)!==["']enabled,revision,settings["']\)thrownewHttpError\(400,["']plugin_config_invalid["'],[^;]+;validatePluginConfig\(\{expectedRevision:pluginConfig\.revision,enabled:pluginConfig\.enabled,settings:pluginConfig\.settings\},config\.publicSourceGatewayTimeoutMs\?\?15000\);/.test(launch)
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,pluginConfig});")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|pluginConfig)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {
@@ -489,7 +493,7 @@ async function checkRuntimeContainerTopology() {
     /Web API root filesystem must be read-only/.test(workflow) &&
     /Web API container must not mount \/var\/run\/docker\.sock/.test(workflow) &&
     /Web API controller mount must be read-only/.test(workflow) &&
-    // V3 adds a validated capsule endpoint, not caller-owned Docker settings.
+    // V6 adds validated fixed plugin settings, not caller-owned Docker options.
     controllerLaunchPlanIsScoped(controller)
   ) {
     pass("runtime_controller_privilege_boundary", "Only the unexposed runtime controller holds the Docker socket; the capability-free, read-only API receives a read-only control-socket mount, and the controller reconstructs fixed launch plans from scoped project identifiers.");

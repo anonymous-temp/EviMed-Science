@@ -86,7 +86,7 @@
         args:
           - '/opt/evimed/mcp/evimed-research/server.py'
         env:
-          EVIMED_PUBLIC_SOURCE_GATEWAY_URL: 'https://open-science-web:8787/internal/sources/v1'
+          EVIMED_PUBLIC_SOURCE_GATEWAY_URL: 'https://open-science-web:8787/internal/sources/v1/fetch'
           EVIMED_WEB_SEARCH_GATEWAY_URL: 'https://open-science-web:8787/internal/search/v1'
           EVIMED_WORKLOAD_TOKEN_FILE: '/runtime/secrets/workload-token'
           OPEN_SCIENCE_PROJECT_ID: 'prj_1'
