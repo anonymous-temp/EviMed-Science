@@ -11,6 +11,15 @@ if [ ! -d "$DATA_DIR" ]; then
   exit 1
 fi
 
+case "${OPEN_SCIENCE_BACKUP_STRICT:-false}" in
+  true) strict_backup=true ;;
+  false|"") strict_backup=false ;;
+  *)
+    echo "OPEN_SCIENCE_BACKUP_STRICT must be true or false." >&2
+    exit 2
+    ;;
+esac
+
 mkdir -p "$BACKUP_DIR"
 umask 077
 
@@ -60,7 +69,8 @@ function collect(relative) {
     throw new Error(`Refusing to back up a non-file data entry: ${full}`);
   }
   entries.push({ path: relative || '.', type: metadata.isDirectory() ? 'directory' : 'file',
-    dev: String(metadata.dev), ino: String(metadata.ino), size: String(metadata.size), mtimeNs: String(metadata.mtimeNs) });
+    dev: String(metadata.dev), ino: String(metadata.ino), size: String(metadata.size), mtimeNs: String(metadata.mtimeNs),
+    mode: String(metadata.mode), uid: String(metadata.uid), gid: String(metadata.gid) });
   return true;
 }
 
@@ -97,6 +107,11 @@ if [ "$archive_status" -ne 0 ]; then
   if [ "$archive_status" -ne 1 ] || [ -n "$unexpected" ]; then
     echo "Backup archive failed (writer exit ${archive_status}):" >&2
     sed -n '1,20p' "$archive_stderr" >&2
+    rm -f "$archive_stderr"
+    exit 1
+  fi
+  if [ "$strict_backup" = true ]; then
+    echo "strict backup refused a changing source; no archive was published" >&2
     rm -f "$archive_stderr"
     exit 1
   fi
