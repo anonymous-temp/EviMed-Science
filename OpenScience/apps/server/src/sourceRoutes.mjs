@@ -69,7 +69,7 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
     }
     if (parts.length < 1 || parts.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
     const [sourceId, action] = parts;
-    const source = await service.get(user.id, sourceId);
+    const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
     await store.requireProject(user, source.projectId);
     if (parts.length === 1 && method === "GET") return reply(source);
     if (parts.length === 1 && method === "PATCH") {
@@ -77,8 +77,8 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
         await bodyOf(req, maxJsonBytes, ["expectedRevision", "docType", "depth", "reason"])));
     }
     if (parts.length === 1 && method === "DELETE") {
-      return reply(await service.remove(user.id, sourceId,
-        await bodyOf(req, maxJsonBytes, ["expectedRevision"])));
+      const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);
+      return reply(await service.remove(user.id, sourceId, { ...body, accountCreatedAt: user.accountCreatedAt }));
     }
     if (["retry", "cancel"].includes(action) && method === "POST") {
       const body = await bodyOf(req, maxJsonBytes, ["expectedRevision"]);

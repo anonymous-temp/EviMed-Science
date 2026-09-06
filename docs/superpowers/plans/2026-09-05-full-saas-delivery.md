@@ -97,7 +97,7 @@ External Chrome evidence is retained under the workspace's ignored `outputs/audi
 | CAP05 | Partial | Adapter/source readiness is green; current source/data correctness and external credential-dependent capabilities remain distinct gates. |
 | CAP06 | Partial | Exporters and contracts exist; actual office-file rendering, source/code/data provenance and clean reproduction remain. |
 | ING01 | Partial | OpenList is connected with scoped browse/import; customer connection lifecycle and incremental change detection remain. |
-| ING02 | Partial | Source fingerprints, versions, retries and cancellation exist; source-delete enqueues a job with no consumer. Resumable upload/local connector delivery remains. |
+| ING02 | Reviewed deletion candidate; partial | Durable source-delete consumption now retires canonical units/facts, cancels ingestion, cleans only owned copies and survives retry/restart. Epoch-aware producer/metadata writes and lease-specific attempts close late-worker races; Linux/PostgreSQL 18 cases and 17 units passed independent review. Not yet deployed. Resumable upload and the local connector remain. |
 | ING03 | Partial | MinerU service is deployed and healthy; real document, table, formula and fallback acceptance remains. |
 | ING04 | Partial | Parser units are recorded; declared analysis depth does not change extraction. Typed understanding, methods and merge/materialization remain. |
 | ING05 | Partial | Physical unit counts exist; parser-failure ratio is not a question-based omission audit. Reprocessing/version coverage remains. |

@@ -175,7 +175,7 @@ test("a disappeared upstream source retains its derived understanding", async ()
   assert.ok(missing.payload.missingAt);
 });
 
-test("cancel, retry and delete preserve explicit lifecycle and idempotent work", async () => {
+test("cancel and retry preserve lifecycle while deletion requires a durable transaction", async () => {
   const { service, jobs } = fixture();
   const { source } = await service.register("user-one", upload());
   const canceled = await service.cancel("user-one", source.id, { expectedRevision: source.revision });
@@ -185,8 +185,5 @@ test("cancel, retry and delete preserve explicit lifecycle and idempotent work",
   assert.equal(retried.payload.status, "queued");
   assert.equal(jobs.enqueued.at(-1).options.rearmFailed, true);
 
-  const removed = await service.remove("user-one", source.id, { expectedRevision: retried.revision });
-  assert.ok(removed.deletedAt);
-  assert.equal(jobs.enqueued.at(-1).kind, "consolidate");
-  assert.equal(jobs.enqueued.at(-1).payload.action, "source-delete");
+  await assert.rejects(service.remove("user-one", source.id, { expectedRevision: retried.revision }), { code: "source_state_unavailable" });
 });

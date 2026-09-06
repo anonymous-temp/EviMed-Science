@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
@@ -63,6 +63,26 @@ test("the actual upload path creates one durable source manifest and ingest job"
     const jobs = await app.store.database.query("SELECT kind,status FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest'", [user.id]);
     assert.equal(jobs.rowCount, 1);
     assert.equal(jobs.rows[0].status, "succeeded");
+    if (process.platform === "linux") {
+      const removal = await fetch(`${base}/api/sources/${sources[0].id}`, { method: "DELETE", headers,
+        body: JSON.stringify({ expectedRevision: sources[0].revision }) });
+      assert.equal(removal.status, 200);
+      const deleted = (await removal.json()).data;
+      let finished;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        finished = await app.sourceService.get(user.id, sources[0].id, { includeDeleted: true });
+        if (finished.payload.deletion.status === "complete") break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.equal(finished.payload.deletion.status, "complete");
+      await assert.rejects(stat(path.join(project.baseDir, sources[0].payload.outputs.artifactPath)), { code: "ENOENT" });
+      assert.equal(await readFile(path.join(project.baseDir, "knowledge-base/研究方案.txt"), "utf8"), content);
+      assert.equal(await readFile(path.join(project.baseDir, "knowledge-base/研究方案-copy.txt"), "utf8"), content);
+      const repeat = await fetch(`${base}/api/sources/${sources[0].id}`, { method: "DELETE", headers,
+        body: JSON.stringify({ expectedRevision: sources[0].revision }) });
+      assert.equal(repeat.status, 200);
+      assert.equal((await repeat.json()).data.payload.deletion.jobId, deleted.payload.deletion.jobId);
+    }
   } finally {
     if (user) await app.store.database.query("DELETE FROM evimed_control.users WHERE id=$1", [user.id]);
     if (listening) await app.close();

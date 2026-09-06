@@ -4,13 +4,14 @@ const TERMINAL_ERRORS = new Set([
   "source_job_invalid", "source_path_invalid", "source_digest_invalid", "source_format_unsupported",
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
   "source_parser_input_too_large",
+  "source_not_found", "source_account_changed", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
 ]);
 
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string,parserPath:string,stagingPath?:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, materialize, discardMaterialized = async () => {}, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string,parserPath:string,stagingPath?:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -24,6 +25,8 @@ export class SourceIngestionWorker {
     this.releaseResolved = releaseResolved;
     this.materialize = materialize;
     this.discardMaterialized = discardMaterialized;
+    this.cleanupSource = cleanupSource;
+    this.prepareCleanup = prepareCleanup;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -58,10 +61,13 @@ export class SourceIngestionWorker {
     const job = await this.jobs.claim(["ingest"], this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let leaseLost = false;
+    let renewing = false;
     const renewal = setInterval(() => {
+      if (renewing) return;
+      renewing = true;
       void this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs)
         .then((renewed) => { if (!renewed) leaseLost = true; })
-        .catch(() => { leaseLost = true; });
+        .catch(() => { leaseLost = true; }).finally(() => { renewing = false; });
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     let processing = null;
@@ -69,6 +75,15 @@ export class SourceIngestionWorker {
     let artifactPath = null;
     let extractionRecorded = false;
     try {
+      if (job.payload?.action === "source-delete") {
+        if (!this.cleanupSource) throw Object.assign(new Error("Source deletion cleanup is unavailable."), { code: "source_cleanup_unconfigured" });
+        const scope = await this.prepareCleanup(job);
+        const finished = await this.sources.consumeDeletion(job, (ownedJob, source, ids) => this.cleanupSource(ownedJob, source, ids, scope));
+        this.lastError = null;
+        this.lastCompletedAt = new Date().toISOString();
+        return finished;
+      }
+      if (job.payload?.action != null) throw Object.assign(new Error("Unknown source lifecycle action."), { code: "source_job_invalid" });
       const source = await this.sources.get(job.userId, job.payload?.sourceId);
       const expectedGeneration = Number(job.payload?.sourceGeneration ?? job.payload?.sourceRevision);
       const actualGeneration = Number(source?.payload?.generation ?? source?.revision);
@@ -79,7 +94,7 @@ export class SourceIngestionWorker {
       if (!["queued", "parsing", "failed"].includes(source.payload.status)) {
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "source_no_longer_processing" });
       }
-      processing = await this.sources.beginIngestion(job.userId, source.id, { generation: actualGeneration });
+      processing = await this.sources.beginIngestion(job.userId, source.id, { generation: actualGeneration, job });
       const resolved = await this.resolveSource(job, processing);
       resolvedFile = resolved;
       const file = typeof resolved === "string" ? resolved : resolved.parserPath;
@@ -93,13 +108,13 @@ export class SourceIngestionWorker {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Source ingestion lease was lost before materialization."), { code: "product_job_lease_lost" })); throw error;
       }
       await this.#assertCurrent(job.userId, processing.id, actualGeneration);
-      artifactPath = await this.materialize(job, processing, result);
+      artifactPath = await this.sources.withIngestionLease(job, () => this.materialize(job, processing, result));
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Source ingestion lease was lost before commit."), { code: "product_job_lease_lost" })); throw error;
       }
       await this.#assertCurrent(job.userId, processing.id, actualGeneration);
       const completed = await this.sources.recordExtraction(job.userId, processing.id, {
-        expectedRevision: processing.revision,
+        expectedRevision: processing.revision, job,
         generation: actualGeneration,
         extractor: result.extractor,
         units: result.units,
@@ -118,12 +133,15 @@ export class SourceIngestionWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "source_ingestion_failed";
       this.lastError = code;
+      if (job.payload?.action === "source-delete" && !leaseLost && code !== "product_job_lease_lost") {
+        await this.sources.recordDeletionFailure(job, code).catch(() => {});
+      }
       if (artifactPath && !extractionRecorded) {
-        await this.discardMaterialized(job, processing, artifactPath).catch(() => {});
+        await this.sources.withAttemptCleanup(job, () => this.discardMaterialized(job, processing, artifactPath)).catch(() => {});
       }
       if (processing && code !== "source_generation_stale" && code !== "product_job_lease_lost") {
         await this.sources.recordFailure(job.userId, processing.id, {
-          expectedRevision: processing.revision, generation: processing.payload.generation,
+          expectedRevision: processing.revision, generation: processing.payload.generation, job,
           code, message: "Source analysis failed.",
         }).catch(() => {});
       }
@@ -139,7 +157,7 @@ export class SourceIngestionWorker {
       return null;
     } finally {
       clearInterval(renewal);
-      if (resolvedFile && processing) await this.releaseResolved(job, processing, resolvedFile).catch(() => {});
+      if (resolvedFile && processing) await this.sources.withAttemptCleanup(job, () => this.releaseResolved(job, processing, resolvedFile)).catch(() => {});
     }
   }
 
