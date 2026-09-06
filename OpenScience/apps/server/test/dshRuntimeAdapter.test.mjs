@@ -593,7 +593,12 @@ test("the opening snapshot is replayed as events, so a tab that connects mid-run
   assert.ok(seen.every((item) => item.sessionId === RECORDED_SESSION));
   const direct = golden.session.map((frame) => decodeSessionFrame(RECORDED_SESSION, frame)).filter(Boolean);
   const fromSnapshot = snapshot.records.map((record) => decodeSessionFrame(RECORDED_SESSION, record)).filter(Boolean);
-  assert.deepEqual(seen, [...fromSnapshot, ...direct]);
+  assert.deepEqual(seen, [
+    ...fromSnapshot.map((item) => ({ ...item, replay: true })),
+    ...direct.map((item) => ({ ...item, replay: false })),
+  ]);
+  assert.ok(seen.slice(0, fromSnapshot.length).every((item) => item.replay === true));
+  assert.ok(seen.slice(fromSnapshot.length).every((item) => item.replay === false));
   assert.ok(fromSnapshot.length > 0, "the snapshot's own records must reach the caller, not just the frames after it");
 });
 

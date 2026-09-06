@@ -133,6 +133,9 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  * @property {AbortController} controller
  * @property {Map<string, string>} rootSessions - kernel sessionId -> run id, for a run's own top-level session
  * @property {Map<string, { runId: string, label: string, capability: string }>} childSessions - kernel sessionId -> owning run, for a subagent's session
+ * @property {Map<string, string>} childOwners - first run that owned a child session, retained until the runtime detaches
+ * @property {Map<string, { summary: Record<string, any>, runId: string|null }>} childAnnouncements - live HOST announcements bound to the run active when they arrived
+ * @property {Map<string, number>} sessionHeads - highest trusted event sequence observed for each followed session
  * @property {Map<string, AbortController>} follows - kernel sessionId -> the follow stream open for it
  * @property {(() => void) | null} resync - wakes the follow reconciler when the session maps change
  * @property {Map<string, { runId: string, kind: 'approval'|'question', adapter: DshRuntimeAdapter }>} pending - kernel eventId -> the question awaiting a person
@@ -154,7 +157,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number }) => void }} options
    */
   constructor({
     runEvents,
@@ -167,6 +170,7 @@ export class RuntimeEventPump {
     // browser application could create one.
     adoptSession = async () => null,
     adoptIntervalMs = ADOPTION_SWEEP_MS,
+    onRunActivity = () => {},
   }) {
     this.adoptSession = adoptSession;
     this.runEvents = runEvents;
@@ -179,6 +183,7 @@ export class RuntimeEventPump {
     this.callUnary = callUnary;
     this.reconnectDelayMs = reconnectDelayMs;
     this.adoptIntervalMs = adoptIntervalMs;
+    this.onRunActivity = onRunActivity;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
     /** Adoptions still writing, so `closeAll` can wait for them. @type {Set<Promise<void>>} */
@@ -209,7 +214,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map() };
+    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), childOwners: new Map(), childAnnouncements: new Map(), sessionHeads: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map() };
     this.projects.set(key, state);
     // On the project's own lifetime, not the mux's: a reconnect must not reset
     // the sweep's clock, and the kernel is reachable for `session/list` whether
@@ -291,8 +296,15 @@ export class RuntimeEventPump {
       if (seq != null) state.rootTurnSeqs.set(run.sessionId, seq);
     } else if (state.rootSessions.get(run.sessionId) === run.id) {
       state.rootSessions.delete(run.sessionId);
+      state.sessionHeads.delete(run.sessionId);
       for (const [sessionId, child] of state.childSessions) {
-        if (child.runId === run.id) state.childSessions.delete(sessionId);
+        if (child.runId === run.id) {
+          state.childSessions.delete(sessionId);
+          state.sessionHeads.delete(sessionId);
+        }
+      }
+      for (const [sessionId, announcement] of state.childAnnouncements) {
+        if (announcement.runId === run.id) state.childAnnouncements.delete(sessionId);
       }
     }
     // A session added to the map is not followed until something opens a
@@ -396,8 +408,8 @@ export class RuntimeEventPump {
           signal.addEventListener("abort", stop, { once: true });
           (async () => {
             try {
-              for await (const { event } of adapter.watchSession({ sessionId, signal: controller.signal })) {
-                this.#handle(state, sessionId, event);
+              for await (const { event, replay } of adapter.watchSession({ sessionId, signal: controller.signal })) {
+                this.#handle(state, sessionId, event, { replay });
               }
             } catch {
               // isolated: evimed_runtime_session_follow_failures_total — one
@@ -479,11 +491,90 @@ export class RuntimeEventPump {
       const sessions = sessionListItems(reply?.ok ? reply.value : null);
       for (const summary of sessions) {
         if (signal.aborted) return;
+        if (summary && typeof summary === "object" && this.#considerChildSession(state, summary)) {
+          continue;
+        }
         if (summary && typeof summary === "object" && !summary.blank) {
           this.#adopt(state, String(summary.sessionId ?? ""), summary);
         }
       }
     }
+  }
+
+  /**
+   * Binds a kernel-owned child session to the currently active root run.
+   * The host's `api-session/added` summary is the live path; `session/list`
+   * supplies the same ancestry on reconnect. A completed historical child is
+   * never rebound merely because its session remains in the catalogue.
+   * @param {PumpProjectState} state
+   * @param {Record<string, any>} summary
+   * @param {{ liveRunId?: string }} [options]
+   * @returns {boolean} whether the summary describes a child session
+   */
+  #considerChildSession(state, summary, options = {}) {
+    const sessionId = String(summary?.sessionId ?? summary?.id ?? "");
+    const parentSessionId = String(summary?.parentSessionId ?? summary?.parentSession ?? summary?.header?.parentSession ?? "");
+    const origin = String(summary?.origin ?? summary?.header?.origin ?? "");
+    if (!parentSessionId && origin !== "subagent") return false;
+    if (!sessionId || !parentSessionId) return true;
+    const parentChild = state.childSessions.get(parentSessionId);
+    const rootRunId = state.rootSessions.get(parentSessionId);
+    const currentRunId = parentChild?.runId ?? rootRunId;
+    const liveRunId = String(options.liveRunId ?? "");
+    const firstOwner = state.childOwners.get(sessionId);
+    // A catalogue is recovery, not authority. An unknown child in
+    // `session/list` may belong to an earlier run on the same root session, so
+    // only a live HOST announcement or a parent-session descriptor may create
+    // its first ownership record.
+    const runId = liveRunId || firstOwner || "";
+    if (!runId || currentRunId !== runId) return true;
+    if (!liveRunId && summary?.running === false) return true;
+    if (firstOwner && firstOwner !== runId) return true;
+    if (rootRunId) {
+      const input = state.rootInputs.get(parentSessionId);
+      if (input && !input.active) return true;
+    }
+    const existing = state.childSessions.get(sessionId);
+    if (existing && existing.runId !== runId) return true;
+    if (!firstOwner) state.childOwners.set(sessionId, runId);
+    state.childSessions.set(sessionId, {
+      runId,
+      label: String(summary?.label ?? existing?.label ?? ""),
+      capability: String(summary?.capability ?? existing?.capability ?? ""),
+    });
+    const head = Number(summary?.projections?.asOfSeq ?? summary?.asOfSeq ?? NaN);
+    // The catalogue/opening summary describes history. It seeds replay
+    // suppression once; only a later session/follow event is fresh activity.
+    if (Number.isSafeInteger(head) && head >= 0 && !state.sessionHeads.has(sessionId)) state.sessionHeads.set(sessionId, head);
+    state.resync?.();
+    return true;
+  }
+
+  /** Replays live HOST announcements only into the run they named at arrival. */
+  #activateChildAnnouncements(state, parentSessionId, runId) {
+    for (const announcement of state.childAnnouncements.values()) {
+      const parent = String(
+        announcement.summary?.parentSessionId
+        ?? announcement.summary?.parentSession
+        ?? announcement.summary?.header?.parentSession
+        ?? "",
+      );
+      if (parent === parentSessionId && announcement.runId === runId) {
+        this.#considerChildSession(state, announcement.summary, { liveRunId: runId });
+      }
+    }
+  }
+
+  /**
+   * Advances only on a new sequence from a session the pump already mapped to
+   * this run. Opening snapshots and reconnect replays stop at the stored high
+   * water mark and therefore cannot keep a stalled child alive.
+   * @param {PumpProjectState} state @param {string} sessionId @param {string} runId @param {number} seq
+   */
+  #noteRunActivity(state, sessionId, runId, seq) {
+    if (!Number.isSafeInteger(seq) || seq < 0 || seq <= (state.sessionHeads.get(sessionId) ?? -1)) return;
+    state.sessionHeads.set(sessionId, seq);
+    this.onRunActivity(state.project, runId, { sessionId, seq });
   }
 
   /**
@@ -526,6 +617,44 @@ export class RuntimeEventPump {
   }
 
   #handleHostFrame(state, adapter, frame) {
+    if (frame?.type === "emit" && frame.event === "api-session/added") {
+      const summary = Array.isArray(frame.args) && frame.args[0] && typeof frame.args[0] === "object" ? frame.args[0] : null;
+      if (summary) {
+        const sessionId = String(summary.sessionId ?? summary.id ?? "");
+        const parentSessionId = String(summary.parentSessionId ?? summary.parentSession ?? summary.header?.parentSession ?? "");
+        const origin = String(summary.origin ?? summary.header?.origin ?? "");
+        if (!parentSessionId && origin !== "subagent") return;
+        const parentChild = state.childSessions.get(parentSessionId);
+        const rootRunId = state.rootSessions.get(parentSessionId);
+        const runId = parentChild?.runId ?? rootRunId ?? null;
+        let active = true;
+        if (rootRunId) {
+          const input = state.rootInputs.get(parentSessionId);
+          if (input && !input.active) active = false;
+        }
+        if (sessionId) state.childAnnouncements.set(sessionId, { summary, runId });
+        if (runId && active) this.#considerChildSession(state, summary, { liveRunId: runId });
+      }
+    }
+    if (frame?.type === "emit" && frame.event === "api-session/status") {
+      const [rawSessionId, running] = Array.isArray(frame.args) ? frame.args : [];
+      const sessionId = String(rawSessionId ?? "");
+      const announced = state.childAnnouncements.get(sessionId);
+      if (running === true && announced?.runId) {
+        announced.summary = { ...announced.summary, running: true };
+        this.#considerChildSession(state, announced.summary, { liveRunId: announced.runId });
+      }
+    }
+    if (frame?.type === "emit" && frame.event === "api-session/removed") {
+      const sessionId = String(Array.isArray(frame.args) ? frame.args[0] ?? "" : "");
+      const removed = state.childSessions.delete(sessionId);
+      const forgotten = state.childOwners.delete(sessionId);
+      state.childAnnouncements.delete(sessionId);
+      if (removed || forgotten) {
+        state.sessionHeads.delete(sessionId);
+        state.resync?.();
+      }
+    }
     const decoded = decodeHostInteraction(frame);
     if (!decoded) {
       if (frame?.type === "waterfall" && frame?.eventId) this.#decline(adapter, String(frame.eventId));
@@ -605,8 +734,9 @@ export class RuntimeEventPump {
    * @param {PumpProjectState} state
    * @param {string} sessionId
    * @param {import('@evimed/domain').RunEvent} event
+   * @param {{ replay?: boolean }} [options]
    */
-  #handle(state, sessionId, event) {
+  #handle(state, sessionId, event, options = {}) {
     const input = state.rootInputs.get(sessionId);
     if (input && !state.childSessions.has(sessionId)) {
       if (input.baseline != null && event.seq <= input.baseline) return;
@@ -619,10 +749,12 @@ export class RuntimeEventPump {
           input.active = true;
           input.admitted = true;
           input.pending = null;
+          this.#activateChildAnnouncements(state, sessionId, input.runId);
         }
       }
       if (event.type === "message/user" && event.source === "user" && input.requests.has(event.sourceRequestId)) {
         input.active = true;
+        this.#activateChildAnnouncements(state, sessionId, input.runId);
         if (input.pending) this.runEvents.publish(input.runId, "run/event", { event: input.pending });
         input.pending = null;
       }
@@ -641,10 +773,15 @@ export class RuntimeEventPump {
       // grandchild's own `subagent/started` arrives on the child's session,
       // which by then is already in this map, so nesting resolves without
       // the ledger ever having to enumerate it.
-      state.childSessions.set(event.childSessionId, { runId, label: event.label, capability: event.capability });
-      state.resync?.();
+      const firstOwner = state.childOwners.get(event.childSessionId);
+      if (!firstOwner || firstOwner === runId) {
+        state.childOwners.set(event.childSessionId, runId);
+        state.childSessions.set(event.childSessionId, { runId, label: event.label, capability: event.capability });
+        state.resync?.();
+      }
     }
     if (!runId) return; // isolated: evimed_runtime_event_pump_unrouted_total
+    if (!options.replay) this.#noteRunActivity(state, sessionId, runId, event.seq);
     this.runEvents.publish(runId, "run/event", { event });
     if (event.type === "turn/end") {
       // The one lifecycle fact the mux stream carries that `run/event` alone

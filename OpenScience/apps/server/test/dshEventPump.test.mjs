@@ -82,7 +82,7 @@ const sessionEvent = (event) => ({ type: "event", event });
 
 /**
  * Attaches a pump backed by one FakeMux and gives the test the mux back.
- * @param {{ reconnectDelayMs?: number, onOpen?: (mux: FakeMux, attempt: number) => void }} [options]
+ * @param {{ reconnectDelayMs?: number, onOpen?: (mux: FakeMux, attempt: number) => void, onRunActivity?: (project: any, runId: string, activity: {sessionId: string, seq: number}) => void }} [options]
  */
 function pumpOnFakeMux(options = {}) {
   const runEvents = new RunEventHub();
@@ -100,6 +100,7 @@ function pumpOnFakeMux(options = {}) {
     runEvents,
     isDshKernel: true,
     openMux,
+    ...(options.onRunActivity === undefined ? {} : { onRunActivity: options.onRunActivity }),
     ...(options.reconnectDelayMs === undefined ? {} : { reconnectDelayMs: options.reconnectDelayMs }),
   });
   // Unless a test supplies an older cursor, these manually created sessions
@@ -210,6 +211,99 @@ test("a subagent discovered mid-run is followed, and its own turn ending becomes
   const update = runEvents.channel("run-4").buffer.find((entry) => entry.type === "subagent/update");
   assert.deepEqual(update.data, { childSessionId: "s-child", label: "ADR 分析", capability: "adr-analysis", status: "completed" });
   pump.detach(project);
+});
+
+test("the authenticated host child announcement drives replay-safe run activity", async () => {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/evidence/alpha5-subagent-run.json", import.meta.url), "utf8"));
+  const added = fixture.events.find((event) => event.event === "api-session/added" && event.args?.[0]?.origin === "subagent");
+  const childSessionId = added.args[0].sessionId;
+  const rootSessionId = added.args[0].parentSessionId;
+  const started = fixture.events.find((event) => event.event === "api-session/status" && event.args?.[0] === childSessionId && event.args?.[1] === true);
+  assert.equal(added.args[0].running, false, "the recorded rc.1 creation summary starts idle");
+  assert.ok(started);
+  const activity = [];
+  const { pump, muxes } = pumpOnFakeMux({
+    onRunActivity: (project, runId, value) => {
+      if (value.sessionId === childSessionId) activity.push({ project: project.id, runId, ...value });
+    },
+  });
+  const project = { userId: "alice", id: "paper-child-activity" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, {
+    id: "run-child",
+    sessionId: rootSessionId,
+    status: "running",
+    baselineCursor: "seq_1",
+    kernelRequestIds: ["req-current"],
+  });
+  await waitFor(() => muxes[0]?.streams.some((stream) => stream.endpoint === "$events"), "the authenticated host stream");
+  await waitFor(() => muxes[0].follow(rootSessionId), "the root follow stream");
+  const host = muxes[0].streams.find((stream) => stream.endpoint === "$events");
+  assert.ok(host);
+
+  host.push(added);
+  host.push(started);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(muxes[0].follow(childSessionId), null, "the independent HOST stream may announce a child before root input is admitted");
+
+  muxes[0].follow(rootSessionId).push(sessionEvent({ type: "turn/start", seq: 2, data: { turn: 1 } }));
+  muxes[0].follow(rootSessionId).push(sessionEvent({
+    type: "user/message",
+    seq: 3,
+    data: { content: [{ type: "text", text: "current" }], source: { kind: "user", rpcId: "req-current" } },
+  }));
+  await waitFor(() => muxes[0].follow(childSessionId), "a child follow opened from the recorded host announcement");
+  assert.deepEqual(activity, [], "the opening catalogue head is history, not fresh activity");
+
+  // The follow opens with a snapshot through the advertised head. It is
+  // history, not fresh work, and must not reset a stall counter on reconnect.
+  muxes[0].follow(childSessionId).push(sessionEvent({ type: "assistant/message", seq: 2, data: { message: { content: [] } } }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(activity.length, 0);
+
+  muxes[0].follow(childSessionId).push(sessionEvent({ type: "tool/call", seq: 3, data: { message: { content: [] } } }));
+  await waitFor(() => activity.length === 1, "fresh child activity after the opening snapshot");
+  assert.deepEqual(activity[0], { project: project.id, runId: "run-child", sessionId: childSessionId, seq: 3 });
+
+  pump.noteRun(project, { id: "run-child", sessionId: rootSessionId, status: "canceled" });
+  await waitFor(() => muxes[0].follow(childSessionId) === null, "the child follow to close with its owning run");
+
+  pump.noteRun(project, { id: "run-next", sessionId: rootSessionId, status: "running" });
+  host.push(added);
+  host.push(started);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(muxes[0].follow(childSessionId), null, "an old child id must not be rebound to a later run on the same root session");
+  assert.equal(activity.length, 1, "a late old-epoch announcement must not keep the next run alive");
+  pump.detach(project);
+});
+
+test("the session catalogue cannot assign an unknown child to the current run", async () => {
+  const mux = new FakeMux();
+  const activity = [];
+  const pump = new RuntimeEventPump({
+    runEvents: new RunEventHub(),
+    isDshKernel: true,
+    openMux: async () => mux,
+    adoptIntervalMs: 10,
+    callUnary: async (_runtime, method) => method === "session/list"
+      ? { ok: true, value: { items: [{
+        sessionId: "s-child",
+        parentSessionId: "s-root",
+        origin: "subagent",
+        running: true,
+        projections: { asOfSeq: 12 },
+      }] } }
+      : { ok: true, value: {} },
+    onRunActivity: (project, runId, value) => activity.push({ project: project.id, runId, ...value }),
+  });
+  const project = { userId: "alice", id: "paper-child-reconnect" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-child", sessionId: "s-root", status: "running", baselineCursor: null });
+
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(mux.follow("s-child"), null, "catalogue ancestry alone carries no run epoch authority");
+  assert.deepEqual(activity, [], "an old catalogue head must not become current-run activity");
+  await pump.closeAll();
 });
 
 test("a session the pump was never told about is not followed, and its events go nowhere", async () => {
