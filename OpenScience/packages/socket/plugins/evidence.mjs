@@ -88,7 +88,7 @@ export async function apply(ctx, config) {
   /** @param {any} store @param {string} sessionId */
   const runIdOf = (store, sessionId) => {
     try {
-      const scoped = String(ctx.get('evimedRunId')?.(sessionId) ?? '')
+      const scoped = String(store?.runIdForSession?.(sessionId) ?? '')
       if (scoped) return scoped
       const active = [...(store?.activeRuns?.values?.() ?? [])]
       return active.length === 1 ? String(active[0] ?? '') : ''

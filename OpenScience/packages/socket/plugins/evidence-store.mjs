@@ -65,6 +65,12 @@ export async function apply(ctx, config) {
      * durable, while projections select only these run ids. */
     /** @type {Map<string, string>} */
     activeRuns: new Map(),
+    /** Root and child session ids mapped to their owning run inside this
+     * isolated agent store; no process-global custom service is published. */
+    /** @type {Map<string, string>} */
+    sessionRuns: new Map(),
+    /** @param {string} sessionId @returns {string} */
+    runIdForSession(sessionId) { return this.sessionRuns.get(sessionId) ?? '' },
   }
   ctx.provide('evimedRun', store, true)
   /** @param {Map<string, Set<string>>} map @param {string} runId */
@@ -96,7 +102,7 @@ export async function apply(ctx, config) {
     forRun(runId) { return runId ? scopedDiagnostics(runId) : this },
     /** @param {string} sessionId */
     forSession(sessionId) {
-      const runId = String(ctx.get('evimedRunId')?.(sessionId) ?? '')
+      const runId = String(store.runIdForSession(sessionId) ?? '')
       return runId ? scopedDiagnostics(runId) : this
     },
   }, true)
