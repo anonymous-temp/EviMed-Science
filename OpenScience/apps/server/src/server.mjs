@@ -2419,11 +2419,31 @@ async function sendUserArchive(res, user, entries = null, config = null) {
 }
 
 async function collectProjectArchiveEntries(project, config = null) {
-  return collectScopedArchiveEntries(project.rootDir, "project", config?.maxArchiveEntries, config?.maxArchiveBytes);
+  return collectScopedArchiveEntries(project.rootDir, "project", projectArchivePathType, config?.maxArchiveEntries, config?.maxArchiveBytes);
+}
+
+/** @param {string} relative @returns {"file" | "directory" | "content" | null} */
+function projectArchivePathType(relative) {
+  if (relative === "project.json") return "file";
+  if (relative === "workspace") return "directory";
+  if (relative.startsWith("workspace/")) return "content";
+  if (relative === ".openscience") return "directory";
+  if (/^\.openscience\/(?:runs|provenance|tasks|audit|usage)\.jsonl(?:\.[1-9]\d*)?$/.test(relative)
+    || relative === ".openscience/research-sessions.json"
+    || relative === ".openscience/tasks-state.json") return "file";
+
+  // Only session history belongs to the customer. The surrounding runtime home
+  // holds credentials and image-managed profile/dependency symlinks; those
+  // siblings must never be inspected, followed, or included in a customer export.
+  const sessions = "runtime/container-runtime/dsh-home/sessions";
+  if (relative === sessions || sessions.startsWith(`${relative}/`)) return "directory";
+  if (relative.startsWith(`${sessions}/`)) return "content";
+  return null;
 }
 
 async function collectUserArchiveEntries(user, projects = null, config = null) {
   const listedProjects = projects ?? [];
+  const projectIds = new Set(listedProjects.map((project) => safeId(project.id, "project id")));
   const metadataData = Buffer.from(`${JSON.stringify({
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -2438,12 +2458,17 @@ async function collectUserArchiveEntries(user, projects = null, config = null) {
     mode: 0o600,
     mtime: new Date(),
   };
-  const entries = await collectScopedArchiveEntries(user.rootDir, "account", config?.maxArchiveEntries, config?.maxArchiveBytes);
-  const filteredEntries = entries.filter((entry) => entry.rel !== "account.json");
-  assertArchiveByteLimit(metadata.size + archiveEntryBytes(filteredEntries), config?.maxArchiveBytes, "account");
+  const entries = await collectScopedArchiveEntries(user.rootDir, "account", (relative) => {
+    if (relative === "projects") return "directory";
+    const [container, projectId, ...parts] = relative.split("/");
+    if (container !== "projects" || !projectIds.has(projectId)) return null;
+    return parts.length === 0 ? "directory" : projectArchivePathType(parts.join("/"));
+  }, config?.maxArchiveEntries, config?.maxArchiveBytes);
+  assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");
+  assertArchiveByteLimit(metadata.size + archiveEntryBytes(entries), config?.maxArchiveBytes, "account");
   return [
     metadata,
-    ...filteredEntries,
+    ...entries,
   ];
 }
 
@@ -2482,7 +2507,8 @@ function archiveEntryBytes(entries) {
   return entries.reduce((total, entry) => total + (Number.isSafeInteger(entry.size) ? entry.size : 0), 0);
 }
 
-async function collectScopedArchiveEntries(rootDir, scope, maxEntries = null, maxBytes = null) {
+/** @param {(relative: string) => "file" | "directory" | "content" | null} pathType */
+async function collectScopedArchiveEntries(rootDir, scope, pathType, maxEntries = null, maxBytes = null) {
   const entries = [];
   let bytes = 0;
 
@@ -2500,15 +2526,20 @@ async function collectScopedArchiveEntries(rootDir, scope, maxEntries = null, ma
       for (const entry of dirents) {
         const child = path.join(dir, entry.name);
         const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+        const allowedType = pathType(childRel);
+        if (allowedType === null) continue;
         const stat = await fsp.lstat(path.join(opened.path, entry.name));
         if (stat.isSymbolicLink()) {
           throw new HttpError(403, "path_forbidden", `symbolic links are not allowed in ${scope} exports.`);
         }
         if (stat.isDirectory()) {
+          if (allowedType === "file") {
+            throw new HttpError(403, "path_forbidden", `${scope} export expected a regular file.`);
+          }
           await walk(child, childRel);
           continue;
         }
-        if (!stat.isFile()) {
+        if (!stat.isFile() || allowedType === "directory") {
           throw new HttpError(403, "path_forbidden", `${scope} export supports only regular files and directories.`);
         }
         const tarPath = childRel.replace(/\\/g, "/");
