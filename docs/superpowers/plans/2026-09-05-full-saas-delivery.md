@@ -104,7 +104,7 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 | ING06 | Partial | Tidying UI exists; meaningful depth, automatic progress and understanding revision flow remain. |
 | MEM01 | Partial | MemOS live write/recall/delete contract previously passed; old Memos and capsule state need end-to-end ownership and lifecycle acceptance. |
 | MEM02 | Broken in production | Web derives a capsule endpoint, but the controller rebuilds the launch plan without it and disables recall/note tools. Fix the non-secret launch contract. |
-| MEM03 | Implemented | Encrypted capsule transfer and candidate/activation/revocation APIs exist; customer export/import/revocation journey remains. |
+| MEM03 | Implemented | Encrypted capsule transfer and candidate/activation/revocation APIs exist; customer export/import/revocation journey remains. External UI creation, entry save, project activation and semantic recall passed separately; these do not certify transfer. |
 | MEM04 | Partial | Evidence-backed entries and lifecycle exist; conflict/decay/promotion/consolidation and five-layer collaboration remain. |
 | MEM05 | Missing | CRUD and extraction do not implement contextual feedback learning and held-out personalization evaluation. |
 | MEM06 | Partial | History API and method exports exist; timeline, method-as-skill publication and run-version traceability remain. |
@@ -137,6 +137,8 @@ Fresh external Chrome evidence is retained under the workspace's ignored `output
 Do not rerun a failed whole-product model journey without a new diagnostic hypothesis. Persist release identity, run/session IDs, terminal outcome and artifacts before cleanup; report infrastructure failures, valid evidence insufficiency and scientific-quality failures separately. Deterministic artifact movement/registration should not depend on whether a model remembers to copy a file. Coordinate any production restart with the separate published-paper evaluation task before cutover.
 
 The separate published-paper evaluation reports `dsh-cite` Crossref network failures while managed literature/full-text tools work. This is live ECO02 evidence of an installed-but-unusable plugin path; preserve the first failure and diagnose controlled egress rather than broadening runtime network access.
+
+The user confirmed the OpenGWAS token is still being requested and directed testing with publicly downloadable GWAS data meanwhile. Use pinned official published-data subsets for local MR/harmonization/reference checks, retain provenance and checksums, and keep authenticated OpenGWAS extraction as a distinct pending acceptance step. Do not simulate API access or mislabel an offline fixture run as online connector acceptance.
 
 ## Verified implementation checkpoints
 
