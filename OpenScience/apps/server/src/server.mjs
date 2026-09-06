@@ -35,6 +35,7 @@ import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSea
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
+import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemOsClient } from "./memOsEngineClient.mjs";
@@ -1751,18 +1752,17 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/account/export" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
-        const projects = await store.listProjects(user);
-        if (config.requireMemos && !memosClient.configured) {
-          throw new HttpError(503, "memory_required_unavailable", "Required research memory is unavailable for account export.");
-        }
-        const memory = memosClient.configured ? await memosClient.exportUserMemory(user.id) : null;
-        const entries = appendMemoryArchiveEntry(
-          await collectUserArchiveEntries(user, projects, config),
-          memory,
-          config,
-        );
-        await securityAudit(config, "account.export", "completed", { userId: user.id });
-        await sendUserArchive(res, user, entries);
+        await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
+          const projects = snapshot?.projects ?? await store.listProjects(user);
+          if (config.requireMemos && !memosClient.configured) {
+            throw new HttpError(503, "memory_required_unavailable", "Required research memory is unavailable for account export.");
+          }
+          const memory = memosClient.configured ? await memosClient.exportUserMemory(user.id) : null;
+          let entries = appendMemoryArchiveEntry(await collectUserArchiveEntries(user, projects, config), memory, config);
+          if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
+          await securityAudit(config, "account.export", "completed", { userId: user.id });
+          await sendUserArchive(res, user, entries);
+        });
         return;
       }
 
