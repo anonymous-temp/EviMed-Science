@@ -570,12 +570,21 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   const ctx = harness();
   const rows = new Map();
   const childRows = new Map();
+  const sessionRuns = new Map();
   const files = new Map();
   /** @type {any[]} */
   const injected = [];
   const agent = { id: "native-agent", session: { id: "native-session", header: { cwd: "/workspace", ...(child ? { origin: "subagent" } : {}) } }, inject: (/** @type {any} */ message) => injected.push(message) };
   ctx.provide("agents", { get: () => agent });
-  ctx.provide("evimedRun", { runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) }, planIndex: { put: async () => {} }, gateRuns: { put: async () => {} }, evidence: { entries: () => [] }, subagents: childRows });
+  ctx.provide("evimedRun", {
+    runMirror: { put: async (/** @type {string} */ key, /** @type {any} */ value) => rows.set(key, value) },
+    planIndex: { put: async () => {} },
+    gateRuns: { put: async () => {} },
+    evidence: { entries: () => [] },
+    subagents: childRows,
+    sessionRuns,
+    runIdForSession: (/** @type {string} */ sessionId) => sessionRuns.get(sessionId) ?? "",
+  });
   ctx.provide("evimedDiagnostics", { degrade() {}, notice() {} });
   ctx.provide("evimedCapabilities", capabilities ?? [{ id: "research-brief", skills: [], tools: [], persona: "Research analyst", produces: [{ contractKind: "research-brief", outputs: [{ path: "brief.md", required: true }] }] }]);
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
@@ -628,7 +637,7 @@ test("each session-scoped dispatch revision is logged once before its model step
   const child = { session: { id: "child-session", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } } };
   for (const handler of f.ctx.listeners.get(SEAMS.events.sessionStart) ?? []) handler({ agent: child, source: "subagent" });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(f.ctx.get("evimedRunId")("child-session"), "run_followup", "child evidence must inherit the parent run");
+  assert.equal(f.ctx.get("evimedRun").runIdForSession("child-session"), "run_followup", "child evidence must inherit the parent run");
   const rootMirror = { ...f.rows.get("run_followup") };
   for (const handler of f.ctx.listeners.get(SEAMS.events.sessionEvent) ?? []) {
     handler(child.session, { type: "assistant/message", seq: 4, data: { usage: { completionTokens: 99 } } });

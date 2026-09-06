@@ -169,10 +169,6 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     return entry
   }
 
-  // Call-time lookup covers child sessions too: their state inherits the
-  // parent run before any child tool can emit evidence.
-  ctx.provide('evimedRunId', (/** @type {string} */ sessionId) => sessionState(sessionId).runId, true)
-
   const store = () => ctx.get('evimedRun')
   /** @param {string} sessionId */
   const diagnostics = (sessionId) => ctx.get('evimedDiagnostics')?.forSession?.(sessionId) ?? ctx.get('evimedDiagnostics')
@@ -868,6 +864,7 @@ async function injectBrief(ctx, agent, sessionState, config) {
     entry.subagent = true
     const parentSessionId = String(agent?.session?.header?.parentSession ?? '')
     entry.runId = parentSessionId ? sessionState(parentSessionId).runId : ''
+    ctx.get('evimedRun')?.sessionRuns?.set?.(sessionId, entry.runId)
   }
   if (entry.contextInjection) return entry.contextInjection
   entry.contextInjection = injectBriefRevision(ctx, agent, entry, config)
@@ -1085,6 +1082,7 @@ async function putRunMirror(ctx, entry, bundleVersion) {
   const store = ctx.get('evimedRun')
   if (!store || !entry.runId || entry.subagent) return
   store.activeRuns?.set?.(entry.sessionId, entry.runId)
+  store.sessionRuns?.set?.(entry.sessionId, entry.runId)
   // isolated: evimed_run_mirror_write_failures_total — a mirror that cannot be
   // written must not end the run it describes.
   try {
