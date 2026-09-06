@@ -133,13 +133,16 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
   const sourceGuard = controller.match(/    if \(\s*typeof publicSourceGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(sourceGuard);
   assert.ok(revisionGuard, "the revision endpoint guard must be exercised by the negative controls");
+  const pluginGuard = controller.match(/    if \(!pluginConfig[^\n]+\n/)?.[0];
+  const pluginValidation = controller.match(/    validatePluginConfig\([^\n]+\n/)?.[0];
+  assert.ok(pluginGuard && pluginValidation, "the fixed plugin shape and typed validator must be exercised");
   const cases = [
     ["arbitrary fourth argument", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, payload)")],
     ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, args: payload.args })")],
@@ -153,7 +156,13 @@ test("the controller audit accepts only validated internal endpoints in a recons
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl"]', '"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "args"]')],
+    ["unknown fields allowed", controller.replace('"publicSourceGatewayUrl", "pluginConfig"]', '"publicSourceGatewayUrl", "pluginConfig", "args"]')],
+    ["plugin shape guard removed", controller.replace(pluginGuard, "")],
+    ["plugin validator removed", controller.replace(pluginValidation, "")],
+    ["plugin validation only mentioned in a comment", controller.replace(pluginValidation, `/* ${pluginValidation} */`)],
+    ["plugin extra fields allowed", controller.replace('"enabled,revision,settings"', '"args,enabled,revision,settings"')],
+    ["plugin gateway timeout ceiling removed", controller.replace("config.publicSourceGatewayTimeoutMs ?? 15000);", "15000);")],
+    ["unvalidated plugin reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig: payload.pluginConfig })")],
     ["key validation skipped", controller.replace("assertExactKeys(payload, allowed);", "")],
     ["key validator disabled", controller.replace("if (unexpected) {", "if (false) {")],
     ["project scope bypassed", controller.replace("await projectFromReference(config, payload)", "payload")],
@@ -262,12 +271,25 @@ test("the boot proof boots under the environment production actually emits", asy
   }));
 
   const smoke = await readFile(path.join(repoRoot, "deploy/runtime-dsh/build-smoke.sh"), "utf8");
-  const exported = new Set(smoke.match(/EVIMED_[A-Z_]+/g) ?? []);
+  const exportedNames = script => new Set(script.split("\n").filter(line => /^export\s/.test(line))
+    .flatMap(line => [...line.matchAll(/\b(EVIMED_[A-Z_]+)=/g)].map(match => match[1])));
+  const exported = exportedNames(smoke);
   const missing = produced.filter((name) => !exported.has(name)).sort();
   assert.deepEqual(missing, [], "the boot proof would boot under an environment no run has");
 
   // Negative control: the check must notice a variable the proof does not set.
   assert.equal(exported.has("EVIMED_NOT_A_REAL_VARIABLE"), false);
+  const citeExport = smoke.split("\n").filter(line => /^export\s.*EVIMED_CITE_/.test(line)).join("\n");
+  assert.ok(citeExport);
+  const citeNames = ["EVIMED_CITE_ENABLED", "EVIMED_CITE_TIMEOUT_MS", "EVIMED_CITE_CONFIG_REVISION"];
+  const shell = spawnSync("bash", ["-c", `${citeExport}\nfor name in ${citeNames.join(" ")}; do printenv "$name"; done`], {
+    encoding: "utf8", env: { PATH: process.env.PATH },
+  });
+  assert.equal(shell.status, 0, shell.stderr);
+  const defaults = runtimeEnvironment({ flags: {}, limits: {} });
+  assert.deepEqual(shell.stdout.trim().split("\n"), citeNames.map(name => defaults[name]), "the actual shell exports must equal shipped plugin defaults");
+  const commented = exportedNames(smoke.replace(citeExport, `# ${citeExport}`));
+  for (const name of citeNames) assert.equal(commented.has(name), false, "commented settings must not count as a boot environment");
   assert.ok(produced.length >= 10, `expected a real environment surface, got ${produced.length} names`);
   // And the kernel's own two, which are set in three places on purpose.
   assert.match(smoke, /DSH_TELEMETRY_DISABLED=1/, "telemetry has no redaction rules and must be off wherever the kernel boots");

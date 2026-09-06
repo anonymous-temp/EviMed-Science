@@ -553,18 +553,29 @@ test("MCP bootstrap is idempotent when the managed public-source gateway is enab
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-gateway-restart-"));
   try {
     const { project, plan } = await fixture(tmp);
-    const settings = dshConfig({ publicSourceGatewayInternalUrl: "http://127.0.0.1:8799" });
+    const settings = dshConfig({ publicSourceGatewayInternalUrl: "http://127.0.0.1:8799/internal/sources/v1/fetch" });
 
     await syncRuntimeDshProfile(settings, project, plan);
     await syncRuntimeDshProfile(settings, project, plan);
 
     assert.equal(
       mcpEnvironment(await readPatch(plan)).EVIMED_PUBLIC_SOURCE_GATEWAY_URL,
-      "http://127.0.0.1:8799",
+      "http://127.0.0.1:8799/internal/sources/v1/fetch",
     );
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
+});
+
+test("MCP bootstrap refuses an origin-only override instead of silently changing the fixed gateway endpoint", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-gateway-invalid-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    for (const publicSourceGatewayInternalUrl of ["http://127.0.0.1:8799", "http://127.0.0.1:8799/internal/sources/v1"]) {
+      await assert.rejects(syncRuntimeDshProfile(dshConfig({ publicSourceGatewayInternalUrl }), project, plan),
+        { code: "runtime_public_source_gateway_url_invalid" });
+    }
+  } finally { await rm(tmp, { recursive: true, force: true }); }
 });
 
 

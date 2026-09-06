@@ -522,6 +522,7 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
       capsuleGatewayUrl: "https://trusted-gateway.example:9443/internal/capsules/v1",
       revisionGatewayUrl: "https://trusted-gateway.example:9443/internal/revisions/v1/authorize",
       publicSourceGatewayUrl: "https://sources.example:9443/internal/sources/v1/fetch",
+      pluginConfig: { revision: 0, enabled: true, settings: { timeoutMs: 4000 } },
     };
     for (const capsuleGatewayUrl of [
       undefined, null, true, {},
@@ -572,6 +573,18 @@ test("runtime controller accepts only its trusted internal gateway endpoints or 
         client.request("POST", "/v1/runtime/start", { ...payload, ...extra }),
         (error) => error?.status === 400 && error?.code === "runtime_controller_payload_invalid",
       );
+    }
+    for (const pluginConfig of [undefined, null, false, {},
+      { ...payload.pluginConfig, args: ["--privileged"] },
+      { ...payload.pluginConfig, enabled: "true" },
+      { ...payload.pluginConfig, revision: -1 },
+      { ...payload.pluginConfig, settings: { timeoutMs: 1999 } },
+      { ...payload.pluginConfig, settings: { timeoutMs: 15001 } },
+      { ...payload.pluginConfig, settings: { timeoutMs: 4000.5 } },
+      { ...payload.pluginConfig, settings: { timeoutMs: 4000, gatewayUrl: "https://attacker.example" } },
+    ]) {
+      await assert.rejects(client.request("POST", "/v1/runtime/start", { ...payload, pluginConfig }),
+        error => error?.status === 400, "invalid fixed settings must fail before Docker mutation");
     }
     const invocations = (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
     assert.ok(!invocations.some((args) => args[0] === "run" || args[0] === "rm"), "invalid requests must be rejected before Docker mutation");

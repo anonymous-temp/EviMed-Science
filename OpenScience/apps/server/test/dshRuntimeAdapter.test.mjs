@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { SEAMS } from "@evimed/harness-port";
+import { SEAMS, loadHarnessModule, registerPluginProbe } from "@evimed/harness-port";
 
 import {
   ALLOWED_WIRE_METHODS,
@@ -178,7 +178,9 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 51);
+  // The upstream split plus its gateway remains 51. ECO03 adds exactly the
+  // two parameterless, registered EviMed plugin probe endpoints below.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 53);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -201,6 +203,24 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   assert.ok(!isAllowedWireMethod("session/selectModel"), "the model is the deployment's decision, not the run's");
   assert.ok(!isAllowedWireMethod("workspace/delete"));
   assert.ok(!isAllowedWireMethod("session/status"), "the kernel publishes no such method");
+});
+
+test("the two plugin probe methods are actual Typert registrations with no caller arguments", async () => {
+  const { Context } = await loadHarnessModule("@deepseek-ai/cordis");
+  const { remoteMethods } = await loadHarnessModule("@deepseek-ai/dsh-typert-protocol");
+  const ctx = new Context();
+  try {
+    const probe = await registerPluginProbe(ctx);
+    assert.equal(probe.typertRemote.namespace, "evimedPlugins");
+    const actual = remoteMethods(probe).map(item => `${probe.typertRemote.namespace}/${item.method}`).sort();
+    assert.deepEqual(actual, ["evimedPlugins/status", "evimedPlugins/verify"]);
+    assert.deepEqual(SEAMS.wire.unary.filter(method => method.startsWith("evimedPlugins/")).sort(), actual);
+    for (const method of actual) {
+      assert.ok(ALLOWED_WIRE_METHODS.has(method));
+      assert.deepEqual(SEAMS.wire.unaryArgs[method], []);
+      assert.equal(probe[method.split("/")[1]].length, 0);
+    }
+  } finally { await ctx.fiber.dispose(); }
 });
 
 test("a forbidden method is refused before it reaches the container", async () => {
