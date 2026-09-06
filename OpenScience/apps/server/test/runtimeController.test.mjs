@@ -411,7 +411,7 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   }
 });
 
-test("capsule settings survive the manager to isolated controller startup boundary", async (t) => {
+test("capsule and revision settings survive the manager to isolated controller startup boundary", async (t) => {
   for (const scenario of [
     { name: "enabled", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "1" },
     { name: "custom gateway", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "https://trusted-gateway.example:9443/custom/model/v1/", active: "1" },
@@ -463,7 +463,9 @@ test("capsule settings survive the manager to isolated controller startup bounda
         assert.ok(args, "the assertion must inspect the controller's actual Docker spawn");
         const capsuleEnv = (argv) => argv.filter((arg) => arg.startsWith("EVIMED_CAPSULE_")).sort();
         const expectedUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/capsules/v1` : "";
+        const expectedRevisionUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/revisions/v1/authorize` : "";
         assert.ok(args.includes(`EVIMED_CAPSULE_GATEWAY_URL=${expectedUrl}`), "the final container must receive the caller's capsule endpoint");
+        assert.ok(args.includes(`EVIMED_REVISION_AUTHORIZE_URL=${expectedRevisionUrl}`), "the isolated controller must preserve the web process's revision endpoint decision");
         assert.ok(args.includes(`EVIMED_CAPSULE_ACTIVE=${scenario.active}`), "the plugin flag must agree with the endpoint");
         assert.deepEqual(capsuleEnv(args), capsuleEnv(buildRuntimeLaunchPlan(webConfig, project, 49152).args));
         const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
@@ -508,6 +510,7 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
       port: 49152,
       password: "pw_abcdefghijklmnopqrstuvwxyz",
       capsuleGatewayUrl: "https://trusted-gateway.example:9443/internal/capsules/v1",
+      revisionGatewayUrl: "https://trusted-gateway.example:9443/internal/revisions/v1/authorize",
     };
     for (const capsuleGatewayUrl of [
       undefined, null, true, {},
