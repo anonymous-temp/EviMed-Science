@@ -1,15 +1,11 @@
 ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.10-slim-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
-ARG APP_VERSION=1.0.0
 ARG APT_MIRROR=http://deb.debian.org/debian
 ARG DEBIAN_SECURITY_MIRROR=http://deb.debian.org/debian-security
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG GITHUB_DOWNLOAD_PREFIX=
 ARG CRAN_MIRROR=https://cloud.r-project.org
-
-LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
-      org.opencontainers.image.version="${APP_VERSION}"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -95,6 +91,11 @@ RUN python -m compileall -q /adapter/evimed_specialist_adapter /agent \
     && if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
          PYTHONPATH=/agent python -c 'from mr_agent.output.figures import format_summary_card; assert callable(format_summary_card)'; \
        fi
+
+# APP_VERSION is label metadata, not an input to package installation or smoke checks.
+ARG APP_VERSION=1.0.0
+LABEL org.opencontainers.image.title="EviMed Specialist Adapter" \
+      org.opencontainers.image.version="${APP_VERSION}"
 
 VOLUME ["/data"]
 EXPOSE 8025
