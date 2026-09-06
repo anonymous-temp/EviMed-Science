@@ -165,4 +165,35 @@ test("one proactive run has an independent hard ceiling and exact summary", opti
   assert.equal(summary.calls, 1);
   assert.equal(summary.actualCost, 0.5);
   assert.equal(summary.openCost, 0);
+  assert.equal(summary.modelId, "deepseek-v4-flash");
+  assert.equal(summary.providerId, "deepseek");
+  assert.equal(summary.inputTokens, 5);
+  assert.equal(summary.outputTokens, 5);
+  assert.equal(summary.settledCalls, 1);
+  assert.equal(summary.reservedCalls, 0);
+});
+
+test("run receipts aggregate actual token counts and never invent a single model for mixed-model work", options, async () => {
+  const runId = `run-${randomUUID()}`;
+  for (const [model, hit, miss, output] of [["deepseek-v4-pro", 7, 11, 13], ["deepseek-v4-flash", 17, 19, 23]]) {
+    const request = await ledger.reserveModel(reservation(owner, { runId, model }));
+    await ledger.settleModel(owner, request.id, { usage: { cacheHitTokens: hit, cacheMissTokens: miss, completionTokens: output }, actualCost: 0.01, priced: true });
+  }
+  const result = await ledger.summaryRun(owner, runId);
+  assert.equal(result.modelId, null);
+  assert.equal(result.inputTokens, 54);
+  assert.equal(result.outputTokens, 36);
+  assert.equal(result.actualCost, 0.02);
+  assert.equal((await ledger.summaryRun(other, runId)).settledCalls, 0);
+});
+
+test("run receipts flag incomplete historical settled token accounting", options, async () => {
+  const runId = `run-${randomUUID()}`;
+  const request = await ledger.reserveModel(reservation(owner, { runId }));
+  await ledger.settleModel(owner, request.id, { actualCost: 0.01, priced: true,
+    usage: { cacheHitTokens: 1, cacheMissTokens: 2, completionTokens: 3 } });
+  await database.query("UPDATE evimed_usage.model_requests SET cache_miss_tokens=NULL WHERE id=$1", [request.id]);
+  const result = await ledger.summaryRun(owner, runId);
+  assert.equal(result.settledCalls, 1);
+  assert.equal(result.incompleteUsageCalls, 1);
 });

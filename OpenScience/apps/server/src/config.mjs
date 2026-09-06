@@ -1089,6 +1089,12 @@ export function loadConfig(overrides = {}) {
     sourceIngestionLeaseMs: Number(
       overrides.sourceIngestionLeaseMs ?? process.env.OPEN_SCIENCE_SOURCE_INGESTION_LEASE_MS ?? 900_000,
     ),
+    sourceUnderstandingRunLimitCny: Number(overrides.sourceUnderstandingRunLimitCny
+      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_RUN_LIMIT_CNY ?? 3),
+    sourceUnderstandingDailyLimitCny: Number(overrides.sourceUnderstandingDailyLimitCny
+      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_DAILY_LIMIT_CNY ?? 10),
+    sourceUnderstandingWeeklyLimitCny: Number(overrides.sourceUnderstandingWeeklyLimitCny
+      ?? process.env.OPEN_SCIENCE_SOURCE_UNDERSTANDING_WEEKLY_LIMIT_CNY ?? 50),
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),

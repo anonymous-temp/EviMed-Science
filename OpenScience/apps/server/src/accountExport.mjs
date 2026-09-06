@@ -3,6 +3,7 @@ import { HttpError } from "./security.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
+import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -74,6 +75,9 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
       tables[key] = (await client.query(query, values)).rows;
       if (key === "documents" || key === "revisions") tables[key] = tables[key].map(row => {
+        if (row.kind === "source") return { ...row, payload: projectSourceManifestRecord(row).payload };
+        const sourceDerived = projectSourceDerivedRecord(row);
+        if (sourceDerived) return { ...row, payload: sourceDerived };
         if (row.kind !== "plugin") return row;
         if (typeof row.projectId !== "string" || row.id !== projectPluginId(row.projectId)) {
           throw new HttpError(503, "account_export_unsupported_state", "Stored plugin identity is unsupported.");

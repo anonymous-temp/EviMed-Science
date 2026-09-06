@@ -198,3 +198,38 @@ test("account export includes only approved plugin config history and excludes r
   assert.deepEqual(state.revisions.filter(row => row.kind === "plugin").map(row => row.payload.settings.timeoutMs), [4000, 5000]);
   assert.ok(!JSON.stringify(state).includes("runtime_generation"));
 });
+
+test("source understanding, captures and method history export through their public projections", options, async t => {
+  const f = await fixture(t);
+  const run = { id: "run-source", sessionId: "session-source", dispatchId: "dispatch-source",
+    workspaceName: "private-source-workspace", artifactDirectory: "private-source-directory" };
+  const source = await f.documents.get(f.owner, "source", "source-one");
+  await f.documents.put(f.owner, "source", source.id, { ...source.payload, generation: 1,
+    analysis: { generation: 1, phase: "complete", run }, pendingRunCancellations: [run],
+  }, { expectedRevision: source.revision, projectId: "default" });
+  const unit = { id: "unit-source", unitType: "chunk", start: 0, end: 8, text: "Evidence", status: "extracted", privatePath: "private-unit-file" };
+  const method = { id: "method-one", title: "Record evidence", description: "Retain source evidence.", whenToUse: "When indexing.",
+    steps: ["Record evidence"], checks: [], pitfalls: [], evidence: [], status: "draft", privatePath: "private-method-file" };
+  const output = { schemaVersion: 1, sourceId: source.id, generation: 1, docType: "note-memo", depth: "deep",
+    summary: "Evidence is preserved.", slots: {}, claims: [], methods: [method],
+    omissionAudit: { status: "not_run", reason: "Not audited", omissionRate: null }, privatePath: "private-output-file" };
+  const knowledge = { recordType: "source-understanding", sourceId: source.id, generation: 1, output, run,
+    usage: { currency: "CNY", providerId: "deepseek", modelId: "deepseek-v4-pro", actualCost: 0.12, inputTokens: 13, outputTokens: 17, providerRequestId: "private-provider-request" },
+    units: [unit] };
+  await f.documents.put(f.owner, "knowledge", "understanding-one", knowledge, { expectedRevision: 0, projectId: "default" });
+  await f.documents.put(f.owner, "knowledge", "understanding-one", { ...knowledge, output: { ...output, summary: "Revised evidence." } }, { expectedRevision: 1, projectId: "default" });
+  await f.documents.put(f.owner, "knowledge", "capture-one", { recordType: "source-capture", sourceId: source.id, generation: 1, unit, privateLease: "private-capture-lease" }, { expectedRevision: 0, projectId: "default" });
+  await f.documents.put(f.owner, "source-unit", "unit-source", { sourceId: source.id, generation: 1, unit }, { expectedRevision: 0, projectId: "default" });
+  await f.documents.put(f.owner, "method", "source-method", { recordType: "source-method", sourceId: source.id, generation: 1, method, run }, { expectedRevision: 0, projectId: "default" });
+  const response = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+  assert.equal(response.status, 200);
+  const state = JSON.parse(tarEntries(Buffer.from(await response.arrayBuffer())).get("account/customer-state.json").toString());
+  const result = state.documents.find(row => row.id === "understanding-one").payload;
+  assert.equal(result.summary, "Revised evidence.");
+  assert.equal(result.usage.inputTokens, 13);
+  assert.equal(result.run.id, "run-source");
+  assert.equal(state.documents.find(row => row.id === "unit-source").payload.unit.text, "Evidence");
+  assert.deepEqual(state.revisions.filter(row => row.id === "understanding-one").map(row => row.payload.summary), ["Evidence is preserved.", "Revised evidence."]);
+  assert.equal(state.documents.find(row => row.id === "source-method").payload.method.status, "draft");
+  assert.equal(JSON.stringify(state).includes("private-"), false);
+});
