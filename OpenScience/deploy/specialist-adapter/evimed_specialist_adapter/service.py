@@ -24,6 +24,7 @@ from typing import Any
 from fastapi import Body, FastAPI, HTTPException, Security
 
 from .mr_job_store import MRJobStore
+from . import audit_receipt
 from .security import _authorized_claims, _read_secret, _signing_secret
 
 
@@ -320,7 +321,9 @@ def _mr_job(root: Path) -> Any:
         ) from None
 
 
-def _source_evidence(root: Path) -> dict[str, str]:
+def _source_evidence(root: Path) -> dict[str, Any]:
+    if _kind() == "mendelian-randomization":
+        return audit_receipt.current_evidence(root)
     digest = hashlib.sha256()
     for target in (
         root / "evimed_runner.py",
@@ -328,12 +331,6 @@ def _source_evidence(root: Path) -> dict[str, str]:
         Path(__file__).resolve(),
     ):
         digest.update(target.read_bytes())
-    if _kind() == "mendelian-randomization":
-        digest.update(Path(__file__).with_name("mr_job_store.py").read_bytes())
-        for name in ("evimed_local_inputs.py", "evimed_mr_job.py"):
-            helper = root / name
-            if helper.is_file():
-                digest.update(helper.read_bytes())
     return {"algorithm": "sha256", "digest": digest.hexdigest()}
 
 
@@ -695,7 +692,8 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     return {
         "status": "success",
         "summary": f"{_spec()['label']} job {job_id} completed.",
-        "data": {"jobId": job_id, "jobStatus": "succeeded"},
+        "data": {"jobId": job_id, "jobStatus": "succeeded",
+                 **({"auditReceipt": state["auditReceipt"]} if state.get("auditReceipt") else {})},
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
     }
@@ -742,6 +740,7 @@ def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
 def _child_environment() -> dict[str, str]:
     api_key = _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
     environment = dict(os.environ)
+    environment.pop("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", None)
     environment.update({
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/"),
@@ -806,6 +805,16 @@ def _run_isolated_mr(
             artifacts=outcome["artifacts"] if success else [],
             retryable=outcome["returnCode"] in {75, 137, 143},
         )
+        if success:
+            receipt = audit_receipt.produce(state, outcome, data_root)
+            if receipt is not None:
+                candidate = {**state, "auditReceipt": receipt}
+                if len(json.dumps(candidate, ensure_ascii=False, indent=2).encode("utf-8")) <= _STATE_LIMIT:
+                    state["auditReceipt"] = receipt
+            # Full source evidence includes the signing implementation itself.
+            if state.get("sourceEvidence") != _source_evidence(root):
+                state.pop("auditReceipt", None)
+                raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
         if not success:
             state["error"] = str(result.get("error") or "The fixed MR runner failed.")
             if str(result.get("errorCode", "")).startswith("mr_input_"):
@@ -856,6 +865,12 @@ def run_job(state_file: str) -> int:
         raise RuntimeError("Managed MR job scope does not match its location.")
     root = _agent_root()
     if state.get("sourceEvidence") != _source_evidence(root):
+        if _kind() == "mendelian-randomization":
+            state.update(status="failed", finishedAt=_now(), updatedAt=_now(),
+                         errorCode="mr_input_changed", retryable=False, artifacts=[],
+                         error="Managed MR source changed after admission.")
+            _write_state(state_path, state)
+            return 1
         raise RuntimeError("specialist state no longer matches its managed source")
     if _kind() == "mendelian-randomization":
         return _run_isolated_mr(state_path, state, root, data_root)
@@ -941,6 +956,7 @@ def _create_app() -> FastAPI:
             "status": "ok" if ready else "degraded",
             "ready": ready,
             "specialist": _kind(),
+            **({"auditReceiptsReady": audit_receipt.ready()} if _kind() == "mendelian-randomization" else {}),
             **(
                 {"acceptedStartInputs": _accepted_start_inputs()}
                 if _kind() in {"research-topic-selection", "mendelian-randomization"}

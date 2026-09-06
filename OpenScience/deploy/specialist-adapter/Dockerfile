@@ -85,6 +85,7 @@ RUN if [ "${AGENT_KIND}" = "mendelian-randomization" ]; then \
     fi
 
 COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter ./evimed_specialist_adapter
+COPY OpenScience/evals/capability-audit/fixtures/public_mr.json /adapter/fixtures/public_mr.json
 
 RUN python -m compileall -q /adapter/evimed_specialist_adapter /agent \
     && test -f /agent/evimed_runner.py \

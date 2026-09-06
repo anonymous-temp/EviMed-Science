@@ -358,6 +358,9 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
     (agent / "mr_agent/core/__init__.py").write_text("")
     (agent / "mr_agent/tools").mkdir()
     (agent / "mr_agent/tools/__init__.py").write_text("")
+    (agent / "mr_agent/tools/mr_replay.py").write_bytes(
+        (source / "mr_agent/tools/mr_replay.py").read_bytes()
+    )
     (agent / "mr_agent/tools/gwas.py").write_text(
         "# No remote sources in this fixture.\n"
     )

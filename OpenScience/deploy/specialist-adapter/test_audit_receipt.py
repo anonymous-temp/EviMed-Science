@@ -181,3 +181,144 @@ def test_full_agent_source_change_after_enqueue_fails_before_execution(tmp_path,
     result = setup[0]._status({"jobId": job_id}, setup[3])
     assert result["status"] == "error"
     assert "auditReceipt" not in result.get("data", {})
+
+
+def test_worker_receipts_keep_original_bytes_after_workspace_input_changes(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    service, _, _, workspace, arguments, receipts, public, _ = setup
+    original_helper = service._mr_inputs
+
+    def wrapped_helper(root=None):
+        helper = original_helper(root)
+        prepare = helper.prepare_sources
+
+        def prepare_then_mutate(*args, **kwargs):
+            authority = prepare(*args, **kwargs)
+            (workspace / arguments["exposureSource"]["path"]).write_text("replaced after authoritative read")
+            return authority
+
+        helper.prepare_sources = prepare_then_mutate
+        return helper
+
+    monkeypatch.setattr(service, "_mr_inputs", wrapped_helper)
+    result, _ = completed(setup, monkeypatch)
+    value = wrapper(setup, result)
+    receipts.verify_attestation(value["proof"], public)
+    expected = next(row for row in value["proof"]["inputs"] if row["path"] == arguments["exposureSource"]["path"])
+    assert expected["sha256"] != receipts.digest((workspace / expected["path"]).read_bytes())
+    with pytest.raises(receipts.ReceiptError):
+        receipts.validate_receipt(value, workspace, "mendelian_randomization", 1,
+            expected=service._source_evidence(tmp_path / "agent"), trustedPublicKey=public)
+
+
+def test_raw_license_mutation_omits_attestation(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    (setup[3] / setup[4]["exposureSource"]["path"]).parent.joinpath("LICENSE").write_text("replaced license")
+    result, _ = completed(setup, monkeypatch)
+    assert "auditReceipt" not in result["data"]
+
+
+def test_signed_status_is_isolated_by_authenticated_account_and_project(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    result, _ = completed(setup, monkeypatch)
+    for user, project in (("user2", "project1"), ("user1", "project2")):
+        denied = setup[1].post("/api/v1/evimed/mendelian-randomization",
+            headers={"Authorization": f"Bearer {_token(setup[2], user=user, project=project)}"},
+            json={"action": "status", "jobId": result["data"]["jobId"]})
+        assert "auditReceipt" not in denied.text
+        assert denied.status_code != 200 or denied.json()["status"] != "success"
+
+
+@pytest.mark.parametrize("attack", ["artifact_paths", "input_hash", "symlink_license", "hardlink_key"])
+def test_untrusted_or_unsafe_material_is_never_signed(tmp_path, monkeypatch, attack):
+    setup = setup_audit(tmp_path, monkeypatch)
+    service = setup[0]
+    if attack == "hardlink_key":
+        import os
+        os.link(setup[-1], setup[-1].with_suffix(".alias"))
+    elif attack == "symlink_license":
+        target = (setup[3] / setup[4]["exposureSource"]["path"]).parent / "LICENSE"
+        moved = target.with_suffix(".original")
+        target.rename(moved)
+        target.symlink_to(moved)
+    else:
+        original_jobs = service._mr_job
+
+        def wrapped_jobs(root):
+            jobs = original_jobs(root)
+            execute = jobs.execute
+
+            def altered(*args, **kwargs):
+                outcome = execute(*args, **kwargs)
+                if attack == "artifact_paths":
+                    outcome["artifacts"][0]["path"] = "../unowned.json"
+                else:
+                    outcome["inputReceipts"][0]["sha256"] = "0" * 64
+                return outcome
+
+            jobs.execute = altered
+            return jobs
+
+        monkeypatch.setattr(service, "_mr_job", wrapped_jobs)
+    result, _ = completed(setup, monkeypatch)
+    assert "auditReceipt" not in result["data"]
+
+
+def test_source_change_during_runner_fails_without_signed_output(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    service = setup[0]
+    original_jobs = service._mr_job
+
+    def wrapped_jobs(root):
+        jobs = original_jobs(root)
+        execute = jobs.execute
+
+        def mutate_source(*args, **kwargs):
+            outcome = execute(*args, **kwargs)
+            (root / "mr_agent/new_algorithm.py").write_text("VERSION = 2\n")
+            return outcome
+
+        jobs.execute = mutate_source
+        return jobs
+
+    monkeypatch.setattr(service, "_mr_job", wrapped_jobs)
+    state, job_id = start_job(setup, monkeypatch)
+    assert service.run_job(str(state)) == 1
+    result = service._status({"jobId": job_id}, setup[3])
+    assert result["status"] == "error"
+    assert "auditReceipt" not in result.get("data", {})
+
+
+def test_checked_in_fixture_contract_and_clean_source_evidence_share_producer(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(AUDIT))
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parent))
+    import hosted_receipts
+    import public_mr_fixture
+    from evimed_specialist_adapter import audit_receipt
+
+    manifest = json.loads((AUDIT / "fixtures/public_mr.json").read_text())
+    request, binding, _, files = audit_receipt._fixture_contract(manifest)
+    assert request == public_mr_fixture.arguments_for_manifest(manifest)
+    assert binding == public_mr_fixture.fixture_binding(manifest)
+    assert files == public_mr_fixture.fixture_file_receipts(manifest)
+    agent = AUDIT.parents[2] / "项目代码/孟德尔随机化"
+    assert hosted_receipts.current_evidence("mendelian_randomization") == audit_receipt.current_evidence(agent)
+
+
+def test_signing_secret_locator_is_not_given_to_the_analysis_child(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    assert "EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE" not in setup[0]._child_environment()
+
+
+def test_optional_receipt_never_overflows_protected_terminal_state(tmp_path, monkeypatch):
+    setup = setup_audit(tmp_path, monkeypatch)
+    service = setup[0]
+    state_path, job_id = start_job(setup, monkeypatch)
+    state = service._read_state(state_path)
+    state["testPadding"] = "x" * (252 * 1024 - len(json.dumps(state, ensure_ascii=False, indent=2).encode()))
+    service._write_state(state_path, state)
+    assert service.run_job(str(state_path)) == 0
+    result = service._status({"jobId": job_id}, setup[3])
+    assert result["status"] == "success"
+    assert "auditReceipt" not in result["data"]
+    assert len(state_path.read_bytes()) <= 256 * 1024

@@ -6,6 +6,7 @@ fixed runner. Workspace paths are never reopened for runner input or output.
 """
 
 import copy
+import hashlib
 import json
 import os
 import stat
@@ -128,7 +129,7 @@ def _inventory(
     return files
 
 
-def _publish(inputs: Any, source: int, output: int, prefix: Path) -> list[dict[str, str]]:
+def _publish(inputs: Any, source: int, output: int, prefix: Path) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     files = _inventory(inputs, source)
     if sum(size for _, size in files) > MAX_PUBLISHED_BYTES:
         raise inputs.MRInputError(
@@ -138,8 +139,8 @@ def _publish(inputs: Any, source: int, output: int, prefix: Path) -> list[dict[s
         raise inputs.MRInputError(
             "mr_input_changed", "The reserved MR output directory is no longer empty."
         )
-    artifacts = []
-    for parts, _ in files:
+    artifacts, receipts = [], []
+    for parts, size in files:
         parent = os.dup(output)
         try:
             for name in parts[:-1]:
@@ -151,6 +152,8 @@ def _publish(inputs: Any, source: int, output: int, prefix: Path) -> list[dict[s
                 os.close(parent)
                 parent = child
             with inputs._regular_file(source, parts) as descriptor:
+                before = inputs._identity(os.fstat(descriptor))
+                hasher, copied = hashlib.sha256(), 0
                 target = os.open(
                     parts[-1],
                     os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -159,16 +162,24 @@ def _publish(inputs: Any, source: int, output: int, prefix: Path) -> list[dict[s
                 )
                 with os.fdopen(os.dup(descriptor), "rb") as src, os.fdopen(target, "wb") as dst:
                     while chunk := src.read(1024 * 1024):
+                        copied += len(chunk)
+                        if copied > size:
+                            raise inputs.MRInputError("mr_input_changed", "An MR artifact changed during publication.")
+                        hasher.update(chunk)
                         dst.write(chunk)
                     dst.flush()
                     os.fsync(dst.fileno())
+                    if (copied != size or before != inputs._identity(os.fstat(descriptor))
+                            or os.fstat(dst.fileno()).st_nlink != 1):
+                        raise inputs.MRInputError("mr_input_changed", "An MR artifact changed during publication.")
             relative = prefix.joinpath(*parts)
+            receipts.append({"path": relative.as_posix(), "bytes": copied, "sha256": hasher.hexdigest()})
             artifacts.append(
                 {"kind": relative.suffix.lstrip(".") or "file", "path": relative.as_posix()}
             )
         finally:
             os.close(parent)
-    return artifacts
+    return artifacts, receipts
 
 
 def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any]:
@@ -248,11 +259,18 @@ def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any
                                 output_directory_fd=stage,
                             )
                         _target_is_current(inputs, job, workspace, output)
-                        artifacts = _publish(
+                        artifacts, artifact_receipts = _publish(
                             inputs, stage, output, job.output_root.relative_to(job.workspace)
                         )
                         _target_is_current(inputs, job, workspace, output)
-                        return {"returnCode": 0, "result": result, "artifacts": artifacts}
+                        # These raw receipts come from the worker-held authority,
+                        # not the standardized request or mutable workspace files.
+                        input_receipts = [
+                            {key: source[key] for key in ("path", "bytes", "sha256")}
+                            for source in authority["sources"].values()
+                        ]
+                        return {"returnCode": 0, "result": result, "artifacts": artifacts,
+                                "inputReceipts": input_receipts, "artifactReceipts": artifact_receipts}
     except inputs.MRInputError:
         raise
     except (OSError, ValueError, subprocess.TimeoutExpired):
