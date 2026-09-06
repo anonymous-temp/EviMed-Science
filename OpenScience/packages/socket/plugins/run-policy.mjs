@@ -177,6 +177,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         attempts: new Map(),
         /** Submissions the gate could not read, budgeted apart from content repairs. */
         structuralAttempts: new Map(),
+        /** One-shot submissions granted by a control-plane-authorized revision. */
+        revisionSubmissionGrants: new Map(),
         redelegated: new Set(),
         producedTexts: [],
         finalReply: '',
@@ -316,7 +318,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     const entry = sessionState(call.sessionId)
     const id = String(call.args?.deliverableId ?? '')
     const attempts = entry.attempts.get(id) ?? 0
-    if (attempts < config.deliveryAttemptLimit) return undefined
+    const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === id)
+    const revisionGrant = entry.revisionSubmissionGrants.get(id)
+    const grantMatches = revisionGrant
+      && revisionGrant.revisionId === item?.revisionId
+      && revisionGrant.planRevision === entry.plan?.revision
+      && revisionGrant.contractKind === item?.contractKind
+      && revisionGrant.capability === item?.capability
+    if (revisionGrant && !grantMatches) entry.revisionSubmissionGrants.delete(id)
+    if (attempts < config.deliveryAttemptLimit || grantMatches) return undefined
     return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。请调用 evimed_complete_run{partial:true} 交付已完成的部分。`
   }))
 
@@ -450,6 +460,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // A revision keeps what was already accepted: re-planning must not undo
         // delivered work, or a model that adds one deliverable loses five.
         const previous = new Map(entry.items.map((/** @type {any} */ item) => [item.id, item]))
+        // A revision authorization belongs to the exact plan the control plane
+        // inspected. Even a same-id rewrite creates a new plan identity.
+        entry.revisionSubmissionGrants.clear()
         entry.plan = indexed
         entry.completed = false
         entry.steered = false
@@ -620,12 +633,23 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // reserved for repairing content.
         const unreadable = unreadableSubmission(verdict)
         const structural = (entry.structuralAttempts.get(item.id) ?? 0) + (unreadable ? 1 : 0)
-        if (unreadable && structural <= config.structuralAttemptAllowance) {
+        const structuralAllowanceApplies = unreadable && structural <= config.structuralAttemptAllowance
+        if (structuralAllowanceApplies) {
           entry.structuralAttempts.set(item.id, structural)
         } else {
           entry.attempts.set(item.id, attempts)
           item.attempts = attempts
         }
+        // A control-plane authorization promises one judgeable submission.
+        // An unreadable package within the separate structural allowance did
+        // not spend an ordinary attempt, so it must not spend this grant.
+        const revisionGrant = entry.revisionSubmissionGrants.get(item.id)
+        const grantMatches = revisionGrant
+          && revisionGrant.revisionId === item.revisionId
+          && revisionGrant.planRevision === entry.plan?.revision
+          && revisionGrant.contractKind === item.contractKind
+          && revisionGrant.capability === item.capability
+        if (!structuralAllowanceApplies && grantMatches) entry.revisionSubmissionGrants.delete(item.id)
         const charged = entry.attempts.get(item.id) ?? 0
         await recordGateRun(store(), entry, item, verdict, charged)
         // The attempt count the mirror carries is what the control plane reads
@@ -709,6 +733,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (!authorized) return { ok: false, code: 'deliverable_revision_unauthorized', issues: [issue('deliverable_revision_unauthorized', '控制面尚未为当前已接受字节创建可消费的修订授权，原版本继续冻结。')] }
         const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
         Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
+        entry.revisionSubmissionGrants.set(item.id, {
+          revisionId,
+          planRevision: entry.plan?.revision ?? 0,
+          contractKind: item.contractKind,
+          capability: item.capability,
+        })
         entry.completed = false
         await putPlanIndex(runStore, entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
@@ -982,6 +1012,7 @@ function resetRunState(entry, runId) {
   entry.budget = { steps: 0, tokens: 0, children: 0 }
   entry.attempts = new Map()
   entry.structuralAttempts = new Map()
+  entry.revisionSubmissionGrants = new Map()
   entry.redelegated = new Set()
   entry.producedTexts = []
   entry.finalReply = ''
