@@ -18,6 +18,7 @@ import {
   capsuleGatewayEndpointUrl,
   cleanupDockerContainer,
   revisionGatewayEndpointUrl,
+  publicSourceGatewayProviderUrl,
   runtimeContainerName,
 } from "./runtimeManager.mjs";
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION } from "./runtimeControllerClient.mjs";
@@ -499,7 +500,14 @@ export function createRuntimeController(overrides = {}) {
     ) {
       throw controllerFailure(400, "runtime_controller_revision_gateway_invalid", "Runtime controller revision gateway must match its configured gateway endpoint or be empty.");
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl });
+    const publicSourceGatewayUrl = payload.publicSourceGatewayUrl;
+    if (
+      typeof publicSourceGatewayUrl !== "string" ||
+      (publicSourceGatewayUrl !== "" && publicSourceGatewayUrl !== publicSourceGatewayProviderUrl(config))
+    ) {
+      throw controllerFailure(400, "runtime_controller_source_gateway_invalid", "The public-source endpoint must match the configured gateway.");
+    }
+    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl });
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;
@@ -694,7 +702,7 @@ export function createRuntimeController(overrides = {}) {
         }
         const payload = await readJson(req, config.maxJsonBytes);
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl"]
           : url.pathname === "/v1/kernel/run"
             ? ["userId", "projectId", "activeWorkspace", "language", "code"]
             : ["userId", "projectId", "activeWorkspace"];

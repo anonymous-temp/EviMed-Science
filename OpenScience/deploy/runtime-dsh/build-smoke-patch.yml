@@ -94,6 +94,9 @@
 # The two plugins the bundle mounts in the host composition. Every other
 # setting of ours travels as container environment, because a profile patch
 # cannot reach a row that a preset mounts.
+- id: cite
+  disabled: true
+
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'

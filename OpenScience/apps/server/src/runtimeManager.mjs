@@ -1374,23 +1374,8 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     OPEN_SCIENCE_PROJECT_ID: String(project.id),
     OPEN_SCIENCE_WORKSPACE_DIR: String(plan.proxyWorkspaceDir),
   };
-  const publicSourceGatewayUrl = String(config.publicSourceGatewayInternalUrl ?? "").trim();
+  const publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config);
   if (publicSourceGatewayUrl) {
-    let parsed;
-    try {
-      parsed = new URL(publicSourceGatewayUrl);
-    } catch {
-      throw runtimeMcpError(
-        "runtime_public_source_gateway_url_invalid",
-        "The public-source gateway URL must be an absolute HTTP(S) URL.",
-      );
-    }
-    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
-      throw runtimeMcpError(
-        "runtime_public_source_gateway_url_invalid",
-        "The public-source gateway URL must be an HTTP(S) URL without embedded credentials.",
-      );
-    }
     environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL = publicSourceGatewayUrl;
     // Open-web search rides the same runtime token as the source gateway, and
     // is only offered when the deployment actually has a metasearch backend.
@@ -1629,6 +1614,20 @@ function modelGatewayProviderUrl(config) {
 }
 
 /** @param {any} config */
+export function publicSourceGatewayProviderUrl(config) {
+  const value = String(config.publicSourceGatewayInternalUrl ?? "").trim();
+  if (!value) return "";
+  let url;
+  try { url = new URL(value); } catch {
+    throw new HttpError(500, "runtime_public_source_gateway_url_invalid", "Public-source gateway internal URL is invalid.");
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== "/internal/sources/v1/fetch") {
+    throw new HttpError(500, "runtime_public_source_gateway_url_invalid", "Public-source gateway internal URL is invalid.");
+  }
+  return url.href;
+}
+
+/** @param {any} config */
 export function capsuleGatewayEndpointUrl(config) {
   const url = new URL(modelGatewayProviderUrl(config));
   url.pathname = "/internal/capsules/v1";
@@ -1690,6 +1689,8 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     capsuleMethodsDir: "",
     capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
     revisionGatewayUrl: revisionGatewayProviderUrl(config),
+    publicSourceGatewayUrl: publicSourceGatewayProviderUrl(config),
+    modelGatewayTokenFile: plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName),
     workloadTokenFile: workloadTokenPath,
     bundleVersion: String(config.socketBundleVersion ?? ""),
     dshVersion: String(config.dshVersion ?? ""),
@@ -1868,6 +1869,7 @@ function dshWorkloadTokenRuntimePath(plan) {
 export function buildRuntimeLaunchPlan(config, project, port, {
   capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
   revisionGatewayUrl = revisionGatewayProviderUrl(config),
+  publicSourceGatewayUrl = publicSourceGatewayProviderUrl(config),
 } = {}) {
   const sandboxMode = config.runtimeSandboxMode;
   if (sandboxMode === "docker") {
@@ -2048,6 +2050,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           capsuleMethodsDir: "",
           capsuleGatewayUrl,
           revisionGatewayUrl,
+          publicSourceGatewayUrl,
+          modelGatewayTokenFile: `${runtimeDshHome}/${modelGatewayTokenFileName}`,
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
           flags: {
@@ -2805,6 +2809,7 @@ export class RuntimeManager {
         password,
         capsuleGatewayProviderUrl(this.config),
         revisionGatewayProviderUrl(this.config),
+        publicSourceGatewayProviderUrl(this.config),
       );
       child = new RemoteRuntimeProcess(
         this.runtimeController,

@@ -28,6 +28,7 @@ module.exports = {
     // plugin sweeps for stale sources on an unref'd timer it disposes through
     // `ctx.effect`. Both are the sandbox's own globals, not an escape from it.
     fetch: "readonly",
+    Response: "readonly",
     AbortSignal: "readonly",
   },
   rules: {

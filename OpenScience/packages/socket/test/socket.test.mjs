@@ -73,7 +73,7 @@ test("the composition mounts our five agent plugins and nothing we ruled out", a
 
 test("every plugin exports only the four named members and no default", async () => {
   const files = (await readdir(new URL("../plugins/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
-  assert.equal(files.length, 8);
+  assert.equal(files.length, Object.values(PLUGIN_SPECIFIERS).filter((file) => file.startsWith("./plugins/")).length);
   for (const file of files) {
     const source = await readFile(new URL(`../plugins/${file}`, import.meta.url), "utf8");
     assert.ok(!/export\s+default/.test(source), `${file} has a default export (DSH postmortem 0001)`);
@@ -131,7 +131,7 @@ test("every service a plugin reads is one somebody provides", async () => {
   }
   // The walk has to prove it walked: a glob that matched nothing, or a regex
   // that matched nothing, would otherwise pass this test forever.
-  assert.equal(files.length, 8, "plugin sweep did not see every plugin");
+  assert.equal(files.length, Object.values(PLUGIN_SPECIFIERS).filter((file) => file.startsWith("./plugins/")).length, "plugin sweep did not see every plugin");
   assert.ok(read.size >= 5, `only ${read.size} distinct ctx.get names found — the scan did not read the sources`);
   assert.ok(read.has("evimedRun") && read.has("evimedDiagnostics"), "the scan missed services known to be read");
   assert.ok(provided.has("evimedRun") && provided.has("evimedEvidence"), "the scan missed services known to be provided");

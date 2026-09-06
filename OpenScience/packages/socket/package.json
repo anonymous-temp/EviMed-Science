@@ -50,7 +50,8 @@
   },
   "dependencies": {
     "@evimed/domain": "workspace:^0.1.0",
-    "@evimed/harness-port": "workspace:^0.1.0"
+    "@evimed/harness-port": "workspace:^0.1.0",
+    "dsh-cite": "0.3.2"
   },
   "bundledDependencies": [
     "@evimed/domain",

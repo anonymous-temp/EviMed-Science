@@ -67,6 +67,8 @@ export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
  * @property {string} capsuleMethodsDir
  * @property {string} capsuleGatewayUrl
  * @property {string} [revisionGatewayUrl]
+ * @property {string} [publicSourceGatewayUrl]
+ * @property {string} [modelGatewayTokenFile]
  * @property {string} workloadTokenFile
  * @property {string} bundleVersion
  * @property {string} dshVersion
@@ -323,6 +325,10 @@ function presetRows(input) {
     "# The two plugins the bundle mounts in the host composition. Every other",
     "# setting of ours travels as container environment, because a profile patch",
     "# cannot reach a row that a preset mounts.",
+    // Profile overrides run after every bundle, regardless of install order.
+    "- id: cite",
+    "  disabled: true",
+    "",
     "- id: evimed-seam-probe",
     "  config:",
     `    requiredEnforcement: ${yamlScalar(input.flags.requiredEnforcement)}`,
@@ -395,7 +401,7 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -415,6 +421,8 @@ export function runtimeEnvironment(input) {
     EVIMED_CAPSULE_METHODS_DIR: input.capsuleMethodsDir,
     EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
     EVIMED_REVISION_AUTHORIZE_URL: input.revisionGatewayUrl ?? "",
+    EVIMED_PUBLIC_SOURCE_GATEWAY_URL: input.publicSourceGatewayUrl ?? "",
+    EVIMED_MODEL_GATEWAY_TOKEN_FILE: input.modelGatewayTokenFile ?? "",
     EVIMED_WORKLOAD_TOKEN_FILE: input.workloadTokenFile,
     EVIMED_BUNDLE_VERSION: input.bundleVersion,
     EVIMED_ASK_USER: input.flags.askUser ? "1" : "0",

@@ -133,23 +133,27 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
+  const sourceGuard = controller.match(/    if \(\s*typeof publicSourceGatewayUrl[\s\S]*?\n    \}/)?.[0];
+  assert.ok(sourceGuard);
   assert.ok(revisionGuard, "the revision endpoint guard must be exercised by the negative controls");
   const cases = [
     ["arbitrary fourth argument", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, payload)")],
-    ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, args: payload.args })")],
-    ["caller image", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, image: payload.image })")],
-    ["caller mounts", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, mounts: payload.mounts })")],
-    ["spread caller settings", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, ...payload })")],
-    ["unvalidated capsule endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl: payload.capsuleGatewayUrl, revisionGatewayUrl })")],
-    ["unvalidated revision endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl: payload.revisionGatewayUrl })")],
+    ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, args: payload.args })")],
+    ["caller image", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, image: payload.image })")],
+    ["caller mounts", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, mounts: payload.mounts })")],
+    ["spread caller settings", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, ...payload })")],
+    ["unvalidated capsule endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl: payload.capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl })")],
+    ["unvalidated revision endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl: payload.revisionGatewayUrl })")],
+    ["source guard removed", controller.replace(sourceGuard, "")],
+    ["source endpoint comparison removed", controller.replace("publicSourceGatewayUrl !== publicSourceGatewayProviderUrl(config)", "false")],
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl"]', '"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "args"]')],
+    ["unknown fields allowed", controller.replace('"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl"]', '"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "args"]')],
     ["key validation skipped", controller.replace("assertExactKeys(payload, allowed);", "")],
     ["key validator disabled", controller.replace("if (unexpected) {", "if (false) {")],
     ["project scope bypassed", controller.replace("await projectFromReference(config, payload)", "payload")],
