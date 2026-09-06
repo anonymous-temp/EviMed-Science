@@ -501,6 +501,10 @@ export function normalizeTranscript(sessionId, entries) {
   const subagents = [];
   /** @type {{ kind: string, code?: string, subCode?: string } | null} */
   let turnEnd = null;
+  /** @type {import('@evimed/domain').TranscriptTurn[]} */
+  const turns = [];
+  /** @type {import('@evimed/domain').TranscriptTurn | null} */
+  let activeTurn = null;
   let lastSeq = -1;
 
   for (const entry of entries) {
@@ -511,15 +515,22 @@ export function normalizeTranscript(sessionId, entries) {
     const data = event.data && typeof event.data === "object" ? event.data : {};
     const time = Number(event.time ?? 0) || 0;
     switch (event.type) {
+      case "turn/start": {
+        activeTurn = { startSeq: seq, turn: Number(data.turn ?? 0), time, end: null };
+        turns.push(activeTurn);
+        break;
+      }
       case "user/message": {
         messages.push({
           role: "user",
           // `plugin` is how an injected context is told apart from something the
           // user typed — the difference the injection is logged for.
           source: /** @type {any} */ (String(data?.source?.kind ?? "user")),
+          sourceRequestId: typeof data?.source?.rpcId === "string" ? data.source.rpcId : null,
+          turnStartSeq: activeTurn?.startSeq ?? null,
           seq,
           time,
-          turn: Number(data.turn ?? 0),
+          turn: Number(data.turn ?? activeTurn?.turn ?? 0),
           step: Number(data.step ?? 0),
           parts: contentParts(data.content),
           usage: null,
@@ -532,6 +543,7 @@ export function normalizeTranscript(sessionId, entries) {
         messages.push({
           role: "assistant",
           source: "system",
+          turnStartSeq: activeTurn?.startSeq ?? null,
           seq,
           time,
           turn: Number(data.turn ?? 0),
@@ -560,6 +572,7 @@ export function normalizeTranscript(sessionId, entries) {
         messages.push({
           role: "tool",
           source: "system",
+          turnStartSeq: activeTurn?.startSeq ?? null,
           seq,
           time,
           turn: Number(data.turn ?? 0),
@@ -595,6 +608,8 @@ export function normalizeTranscript(sessionId, entries) {
         const output = toolResultText(message?.content);
         if (part) {
           part.status = error ? "error" : "completed";
+          part.completedAt = time;
+          part.completedSeq = seq;
           part.output = output;
           part.error = error;
           if (data.meta !== undefined) part.meta = data.meta;
@@ -619,6 +634,8 @@ export function normalizeTranscript(sessionId, entries) {
           ...(mapped.errorCode ? { code: mapped.errorCode } : {}),
           ...(mapped.subCode ? { subCode: mapped.subCode } : {}),
         };
+        const ended = [...turns].reverse().find((turn) => turn.turn === Number(data.turn ?? activeTurn?.turn));
+        if (ended) ended.end = { ...turnEnd, seq, time };
         break;
       }
       default:
@@ -629,6 +646,7 @@ export function normalizeTranscript(sessionId, entries) {
   return {
     sessionId,
     messages: Object.freeze(messages),
+    turns: Object.freeze(turns),
     turnEnd,
     subagents: Object.freeze(subagents),
     lastSeq,
@@ -761,6 +779,7 @@ export function decodeMuxFrame(frame) {
           seq,
           text: contentText(data.content),
           source: /** @type {any} */ (String(data?.source?.kind ?? "user")),
+          ...(typeof data?.source?.rpcId === "string" ? { sourceRequestId: data.source.rpcId } : {}),
         },
       };
     case "assistant/message": {
@@ -869,7 +888,7 @@ export function decodeMuxFrame(frame) {
  * @returns {Record<string, any>[]}
  */
 export function transcriptToLedgerMessages(transcript) {
-  // The turn's own ending, carried on the last message.
+  // Each turn's own ending, carried on its last message.
   //
   // `normalizeTranscript` decodes `turn/end` — the frame that says whether the
   // kernel stopped because it was done, refused, hit a token ceiling, or
@@ -879,63 +898,76 @@ export function transcriptToLedgerMessages(transcript) {
   // and "the run was refused" and "the run ran out of tokens" all reached the
   // ledger as the same silence.
   //
-  // It rides the last message because that is the only carrier this contract
-  // has; `info.error` is set alongside it only when the ending actually maps
+  // It rides each turn's last message, including a trailing steering input.
+  // `info.error` is set alongside it only when the ending actually maps
   // to an error, mirroring how `interrupted` already surfaces.
   const lastIndex = transcript.messages.length - 1;
   const turnEnd = transcript.turnEnd;
-  return transcript.messages.map((message, index) => ({
-    info: {
-      // The ledger takes the last message's id as its baseline cursor, so every
-      // message needs a stable one. Under this kernel the sequence number is
-      // that identity: it is assigned by the log, monotonic, and survives a
-      // reload, which is exactly what a cursor has to be.
-      id: `seq_${message.seq}`,
-      role: message.role === "tool" ? "assistant" : message.role,
-      // An assembled assistant message is, by construction, a finished step:
-      // the kernel emits it after the step closes. The ledger reads a completion
-      // timestamp to tell a finished message from a streaming one, and without
-      // it every run looked like it was still speaking.
-      //
-      // A tool message needs it for the same reason and did not get it. The
-      // line above rewrites `tool` to `assistant` — which the ledger wants —
-      // but the timestamp was only attached to messages that were already
-      // assistant, so every tool message arrived as an assistant message that
-      // `assistantFinished` reads as still streaming and the delivery gate
-      // filters out. Artifacts, evidence provenance and skill loads are all
-      // derived from tool parts, so the gate saw a run that called no tools:
-      // no artifacts, no provenance, no skills, and nothing anywhere saying
-      // the messages had been dropped rather than never made.
-      //
-      // A tool message is a record of a call that happened; whether the call
-      // finished is `parts[].state.status`, which the gate reads separately.
-      ...(message.role === "assistant" || message.role === "tool"
-        ? { time: { created: message.time, completed: message.time } }
-        : {}),
-      ...(message.usage ? { usage: message.usage } : {}),
-      ...(message.interrupted ? { error: { name: "interrupted" } } : {}),
-      ...(turnEnd && index === lastIndex
+  const endings = new Map((transcript.turns ?? []).map((turn) => [turn.startSeq, turn.end]));
+  const lastInTurn = new Map();
+  transcript.messages.forEach((message, index) => lastInTurn.set(message.turnStartSeq, index));
+  return transcript.messages.map((message, index) => {
+    const ending = message.turnStartSeq != null
+      ? (lastInTurn.get(message.turnStartSeq) === index ? endings.get(message.turnStartSeq) : null)
+      : (index === lastIndex ? turnEnd : null);
+    return {
+      info: {
+        // The ledger takes the last message's id as its baseline cursor, so every
+        // message needs a stable one. Under this kernel the sequence number is
+        // that identity: it is assigned by the log, monotonic, and survives a
+        // reload, which is exactly what a cursor has to be.
+        id: `seq_${message.seq}`,
+        source: message.source,
+        sourceRequestId: message.sourceRequestId ?? null,
+        turnStartSeq: message.turnStartSeq ?? null,
+        role: message.role === "tool" ? "assistant" : message.role,
+        // An assembled assistant message is, by construction, a finished step:
+        // the kernel emits it after the step closes. The ledger reads a completion
+        // timestamp to tell a finished message from a streaming one, and without
+        // it every run looked like it was still speaking.
+        //
+        // A tool message needs it for the same reason and did not get it. The
+        // line above rewrites `tool` to `assistant` — which the ledger wants —
+        // but the timestamp was only attached to messages that were already
+        // assistant, so every tool message arrived as an assistant message that
+        // `assistantFinished` reads as still streaming and the delivery gate
+        // filters out. Artifacts, evidence provenance and skill loads are all
+        // derived from tool parts, so the gate saw a run that called no tools:
+        // no artifacts, no provenance, no skills, and nothing anywhere saying
+        // the messages had been dropped rather than never made.
+        //
+        // A tool message is a record of a call that happened; whether the call
+        // finished is `parts[].state.status`, which the gate reads separately.
+        ...(message.role === "assistant" || message.role === "tool"
+          ? { time: { created: message.time, completed: message.time } }
+          : {}),
+        ...(message.usage ? { usage: message.usage } : {}),
+        ...(message.interrupted ? { error: { name: "interrupted" } } : {}),
+        ...(ending
+          ? {
+            turnEnd: ending,
+            ...(message.interrupted || !ending.code ? {} : { error: { name: ending.kind, code: ending.code } }),
+          }
+          : {}),
+      },
+      parts: message.parts.map((part) => (part.type === "tool"
         ? {
-          turnEnd,
-          ...(message.interrupted || !turnEnd.code ? {} : { error: { name: turnEnd.kind, code: turnEnd.code } }),
+          type: "tool",
+          tool: part.tool,
+          callID: part.callId,
+          state: {
+            status: part.status,
+            input: part.input,
+            output: part.output,
+            ...(part.completedAt == null ? {} : { completedAt: part.completedAt }),
+            ...(part.completedSeq == null ? {} : { completedSeq: part.completedSeq }),
+            ...(part.error ? { error: part.error.code } : {}),
+            ...(part.meta === undefined ? {} : { metadata: part.meta }),
+          },
         }
-        : {}),
-    },
-    parts: message.parts.map((part) => (part.type === "tool"
-      ? {
-        type: "tool",
-        tool: part.tool,
-        callID: part.callId,
-        state: {
-          status: part.status,
-          input: part.input,
-          output: part.output,
-          ...(part.error ? { error: part.error.code } : {}),
-          ...(part.meta === undefined ? {} : { metadata: part.meta }),
-        },
-      }
-      : { type: part.type, text: part.text })),
-  }));
+        : { type: part.type, text: part.text })),
+    };
+  });
 }
 
 /**

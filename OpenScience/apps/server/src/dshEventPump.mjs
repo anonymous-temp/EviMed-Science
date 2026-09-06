@@ -137,7 +137,10 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  * @property {(() => void) | null} resync - wakes the follow reconciler when the session maps change
  * @property {Map<string, { runId: string, kind: 'approval'|'question', adapter: DshRuntimeAdapter }>} pending - kernel eventId -> the question awaiting a person
  * @property {Set<string>} adopting - sessions whose adoption is in flight, so a burst announces one run and not several
- * @property {Set<string>} mintedSessions - sessions this control plane created, which are never adopted
+ * @property {Map<string, number>} adoptionHeads - successfully scanned log heads
+ * @property {Map<string, number>} rootTurnSeqs - current native turn's start sequence
+ * @property {Map<string, number>} rootTurnEnds - last sequence belonging to the mapped native turn
+ * @property {Map<string, { runId: string, baseline: number|null, requests: Set<string>, active: boolean, admitted: boolean, pending: import('@evimed/domain').RunEvent|null }>} rootInputs - ordinary dispatch and repair input ownership
  */
 
 /**
@@ -206,7 +209,7 @@ export class RuntimeEventPump {
     if (this.projects.has(key)) return;
     const controller = new AbortController();
     /** @type {PumpProjectState} */
-    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), mintedSessions: new Set() };
+    const state = { project, controller, rootSessions: new Map(), childSessions: new Map(), follows: new Map(), resync: null, pending: new Map(), adopting: new Set(), adoptionHeads: new Map(), rootTurnSeqs: new Map(), rootTurnEnds: new Map(), rootInputs: new Map() };
     this.projects.set(key, state);
     // On the project's own lifetime, not the mux's: a reconnect must not reset
     // the sweep's clock, and the kernel is reachable for `session/list` whether
@@ -259,27 +262,39 @@ export class RuntimeEventPump {
    * run's stops being routed rather than silently accepting a kernel session
    * id a later, unrelated run might reuse.
    * @param {{ userId: string, id: string }} project
-   * @param {{ id: string, sessionId?: string, status: string }} run
+   * @param {{ id: string, sessionId?: string, status: string, nativeTurn?: { startSeq: number }, baselineCursor?: string|null, kernelRequestIds?: string[] }} run
    */
-  /**
-   * A session this control plane created, so the pump never adopts it.
-   *
-   * Recorded at creation because that is the only moment the distinction
-   * exists: by the time the kernel announces it, a control-plane session and
-   * one typed into the browser application look identical from here.
-   * @param {{ userId: string, id: string }} project @param {string} sessionId
-   */
-  noteMintedSession(project, sessionId) {
-    if (!sessionId) return;
-    const state = this.projects.get(this.#key(project));
-    state?.mintedSessions.add(String(sessionId));
-  }
-
   noteRun(project, run) {
     const state = this.projects.get(this.#key(project));
     if (!state || !run?.sessionId) return;
-    if (run.status === "running") state.rootSessions.set(run.sessionId, run.id);
-    else state.rootSessions.delete(run.sessionId);
+    if (run.status === "running") {
+      const seq = run.nativeTurn?.startSeq;
+      if (seq != null && seq < (state.rootTurnSeqs.get(run.sessionId) ?? -1)) return;
+      if (seq == null) {
+        state.rootTurnSeqs.delete(run.sessionId);
+        state.rootTurnEnds.delete(run.sessionId);
+        const requests = new Set(run.kernelRequestIds ?? []);
+        const existing = state.rootInputs.get(run.sessionId);
+        if (existing?.runId === run.id) existing.requests = requests;
+        else {
+          const match = typeof run.baselineCursor === "string" ? /^seq_(\d+)$/.exec(run.baselineCursor) : null;
+          const baseline = run.baselineCursor === null ? -1 : match ? Number(match[1]) : null;
+          state.rootInputs.set(run.sessionId, { runId: run.id, baseline, requests,
+            active: requests.size === 0 && baseline === -1, admitted: false, pending: null,
+          });
+        }
+      } else {
+        state.rootInputs.delete(run.sessionId);
+      }
+      if (seq != null && seq !== state.rootTurnSeqs.get(run.sessionId)) state.rootTurnEnds.delete(run.sessionId);
+      state.rootSessions.set(run.sessionId, run.id);
+      if (seq != null) state.rootTurnSeqs.set(run.sessionId, seq);
+    } else if (state.rootSessions.get(run.sessionId) === run.id) {
+      state.rootSessions.delete(run.sessionId);
+      for (const [sessionId, child] of state.childSessions) {
+        if (child.runId === run.id) state.childSessions.delete(sessionId);
+      }
+    }
     // A session added to the map is not followed until something opens a
     // stream for it. Before 0.1.2 the map was only a routing table over one
     // stream that already carried every session; now it decides what is
@@ -432,7 +447,7 @@ export class RuntimeEventPump {
    * @param {Record<string, any>} frame
    */
   /**
-   * Sessions the kernel holds that no run here owns, adopted on a sweep.
+   * Committed user turns, including follow-ups in existing sessions, scanned on a sweep.
    *
    * Not driven by an announcement. `api-session/added` was the obvious trigger
    * and the mock runtime emits it, so the tests went green -- but alpha.5
@@ -472,7 +487,7 @@ export class RuntimeEventPump {
   }
 
   /**
-   * Files one unowned session as a run.
+   * Scans a changed root session for user turns not yet owned by the ledger.
    *
    * Serialised per session so a sweep landing on the previous one cannot create
    * two runs for it, and failures are swallowed: an adoption that cannot be
@@ -481,14 +496,14 @@ export class RuntimeEventPump {
    */
   #adopt(state, sessionId, summary) {
     if (!sessionId) return;
-    if (state.rootSessions.has(sessionId) || state.childSessions.has(sessionId)) return;
-    // A session this control plane minted is one it is about to bind and
-    // dispatch on, so neither the ledger nor the research-session store can
-    // tell it from an unclaimed one yet. Only the creator knows.
-    if (state.mintedSessions.has(sessionId)) return;
+    if (state.childSessions.has(sessionId)) return;
+    // A minted session can later be opened in the native UI. Its committed
+    // input's request identity, not who created the session, decides ownership.
     // A subagent's session is already owned by its parent's run; adopting it
     // would file the same work twice.
     if (summary?.parentSessionId || summary?.origin === "subagent") return;
+    const head = summary?.projections?.asOfSeq;
+    if (Number.isSafeInteger(head) && state.adoptionHeads.get(sessionId) === head) return;
     if (state.adopting.has(sessionId)) return;
     state.adopting.add(sessionId);
     // Tracked, not fired and forgotten. An adoption writes to the project's
@@ -496,10 +511,9 @@ export class RuntimeEventPump {
     // landing in a directory the caller had already started removing.
     const inFlight = Promise.resolve(this.adoptSession(state.project, sessionId))
       .then((run) => {
-        if (run?.id && !state.controller.signal.aborted) {
-          state.rootSessions.set(sessionId, run.id);
-          state.resync?.();
-        }
+        if (state.controller.signal.aborted) return;
+        if (Number.isSafeInteger(head)) state.adoptionHeads.set(sessionId, head);
+        if (run?.id) this.noteRun(state.project, run);
       })
       .catch(() => {
         // isolated: evimed_runtime_session_adoption_failed_total
@@ -593,6 +607,34 @@ export class RuntimeEventPump {
    * @param {import('@evimed/domain').RunEvent} event
    */
   #handle(state, sessionId, event) {
+    const input = state.rootInputs.get(sessionId);
+    if (input && !state.childSessions.has(sessionId)) {
+      if (input.baseline != null && event.seq <= input.baseline) return;
+      if (event.type === "turn/start") {
+        input.pending = event;
+        input.active = false;
+        // A pre-request-id ledger can safely follow its first new turn after
+        // a numeric baseline. Unknown legacy cursors cannot identify a turn.
+        if (!input.requests.size && input.baseline != null && !input.admitted) {
+          input.active = true;
+          input.admitted = true;
+          input.pending = null;
+        }
+      }
+      if (event.type === "message/user" && event.source === "user" && input.requests.has(event.sourceRequestId)) {
+        input.active = true;
+        if (input.pending) this.runEvents.publish(input.runId, "run/event", { event: input.pending });
+        input.pending = null;
+      }
+      if (!input.active) return;
+      if (event.type === "turn/end") input.active = false;
+    }
+    const start = state.rootTurnSeqs.get(sessionId);
+    if (start != null && !state.childSessions.has(sessionId)) {
+      if (event.type === "turn/start" && event.seq > start) state.rootTurnEnds.set(sessionId, event.seq - 1);
+      if (event.seq < start || event.seq > (state.rootTurnEnds.get(sessionId) ?? Infinity)) return;
+      if (event.type === "turn/end") state.rootTurnEnds.set(sessionId, event.seq);
+    }
     const runId = state.rootSessions.get(sessionId) ?? state.childSessions.get(sessionId)?.runId;
     if (event.type === "subagent/started" && runId) {
       // Registered under the parent's run, one hop at a time: a

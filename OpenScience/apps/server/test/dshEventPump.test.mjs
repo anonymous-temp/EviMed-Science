@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -102,6 +102,10 @@ function pumpOnFakeMux(options = {}) {
     openMux,
     ...(options.reconnectDelayMs === undefined ? {} : { reconnectDelayMs: options.reconnectDelayMs }),
   });
+  // Unless a test supplies an older cursor, these manually created sessions
+  // have an explicitly empty baseline, as a real fresh dispatch does.
+  const noteRun = pump.noteRun.bind(pump);
+  pump.noteRun = (project, run) => noteRun(project, { baselineCursor: null, ...run });
   return { runEvents, pump, muxes, attemptCount: () => attempts };
 }
 
@@ -264,9 +268,9 @@ test("a dropped mux reconnects and reopens a stream for every session still want
   // Kill the connection under it: every stream on that generation ends.
   for (const stream of muxes[0].streams) stream.finish();
   await waitFor(() => muxes.length >= 2 && muxes[1].follow("s-1"), "a rebuilt follow stream after the drop");
-  muxes[1].follow("s-1").push(sessionEvent({ type: "turn/start", seq: 2, data: { turn: 2 } }));
+  muxes[1].follow("s-1").push(sessionEvent({ type: "step/start", seq: 2, data: { turn: 1, step: 1 } }));
   await waitFor(() => eventsOf(runEvents, "run-7").length === 2, "an event over the rebuilt connection");
-  assert.deepEqual(eventsOf(runEvents, "run-7").map((event) => event.turn), [1, 2]);
+  assert.deepEqual(eventsOf(runEvents, "run-7").map((event) => event.seq), [1, 2]);
   pump.detach(project);
 });
 
@@ -335,7 +339,7 @@ test("a real turn through the mock DSH kernel reaches the SSE channel as run/eve
   t.after(() => pump.detach(project));
 
   pump.attach(project, { url: mock.url, authority: mock.authority, cookie: mock.cookie });
-  pump.noteRun(project, { id: "run-e2e", sessionId: "s-e2e", status: "running" });
+  pump.noteRun(project, { id: "run-e2e", sessionId: "s-e2e", status: "running", baselineCursor: null, kernelRequestIds: ["req-e2e"] });
 
   await callKernel("session/prompt", {
     request: { requestId: "req-e2e", sessionId: "s-e2e", mode: "queue", content: [{ type: "text", text: "hello from the pump test" }] },
@@ -429,9 +433,10 @@ test("a session the kernel holds and no run owns is adopted on the sweep", async
   const adopted = [];
   const listed = [
     { sessionId: "s-blank", blank: true },
-    { sessionId: "s-typed", blank: false },
+    { sessionId: "s-typed", blank: false, projections: { asOfSeq: 12 } },
     { sessionId: "s-child", blank: false, parentSessionId: "s-typed" },
-    { sessionId: "s-minted", blank: false },
+    { sessionId: "s-origin-child", blank: false, origin: "subagent" },
+    { sessionId: "s-minted", blank: false, projections: { asOfSeq: 15 } },
   ];
   const pump = new RuntimeEventPump({
     runEvents,
@@ -444,18 +449,17 @@ test("a session the kernel holds and no run owns is adopted on the sweep", async
     ),
     adoptSession: async (_project, sessionId) => {
       adopted.push(sessionId);
-      return { id: `run-for-${sessionId}` };
+      return { id: `run-for-${sessionId}`, sessionId, status: "running" };
     },
   });
   const project = { userId: "alice", id: "paper-1" };
   pump.attach(project, { url: "http://127.0.0.1:1" });
-  // A session this control plane minted is one it is about to dispatch on.
-  pump.noteMintedSession(project, "s-minted");
+  // Minting does not exempt later committed native inputs from observation.
 
   await waitFor(() => adopted.includes("s-typed"), "the unowned session to be adopted");
   await new Promise((resolve) => setTimeout(resolve, 60));
 
-  assert.deepEqual(adopted, ["s-typed"], `adopted ${JSON.stringify(adopted)}`);
+  assert.deepEqual(adopted, ["s-typed", "s-minted"], `adopted ${JSON.stringify(adopted)}`);
   await pump.closeAll();
 });
 
@@ -494,4 +498,101 @@ test("the sweep survives the mux reconnecting", async () => {
   await waitFor(() => adopted.length > 0, "an adoption despite the reconnect churn");
   assert.ok(opens > 1, `the mux should have reconnected; it opened ${opens} time(s)`);
   await pump.closeAll();
+});
+
+test("a prior terminal callback does not unmap a newer turn and its replay excludes old events", async (t) => {
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "native-turns" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-second", sessionId: "same", status: "running", nativeTurn: { startSeq: 137 } });
+  pump.noteRun(project, { id: "run-first", sessionId: "same", status: "succeeded", nativeTurn: { startSeq: 4 } });
+  await waitFor(() => muxes[0]?.follow("same"), "the second turn's follow");
+  const stream = muxes[0].follow("same");
+  stream.push(sessionEvent({ type: "assistant/message", seq: 133, data: { message: { content: [{ type: "text", text: "old answer" }] } } }));
+  stream.push(sessionEvent({ type: "assistant/message", seq: 226, data: { message: { content: [{ type: "text", text: "current answer" }] } } }));
+  await waitFor(() => eventsOf(runEvents, "run-second").length > 0, "the current answer");
+  assert.deepEqual(eventsOf(runEvents, "run-second").map((event) => event.text), ["current answer"]);
+});
+
+test("a sweep returning a terminal run never turns it into a live stream owner", async (t) => {
+  const runEvents = new RunEventHub();
+  const mux = new FakeMux();
+  let calls = 0;
+  let head = 135;
+  const pump = new RuntimeEventPump({ runEvents, isDshKernel: true, openMux: async () => mux, adoptIntervalMs: 10,
+    callUnary: async () => ({ ok: true, value: [{ sessionId: "same", blank: false, projections: { asOfSeq: head } }] }),
+    adoptSession: async () => { calls++; return { id: "run-old", sessionId: "same", status: "succeeded" }; },
+  });
+  t.after(() => pump.closeAll());
+  pump.attach({ userId: "alice", id: "p1" }, { url: "http://127.0.0.1:1" });
+  await waitFor(() => calls === 1, "first sweep");
+  head = 228;
+  await waitFor(() => calls === 2, "second input's sweep");
+  assert.deepEqual(mux.followedSessions, []);
+});
+
+test("an ordinary dispatch after a native turn receives events beyond the old native boundary", async (t) => {
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "native-to-ordinary" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "native-first", sessionId: "same", status: "running", nativeTurn: { startSeq: 4 } });
+  await waitFor(() => muxes[0]?.follow("same"), "native follow");
+  muxes[0].follow("same").push(sessionEvent({ type: "turn/end", seq: 135, data: { turn: 1, reason: { kind: "completed" } } }));
+  await waitFor(() => eventsOf(runEvents, "native-first").length > 0, "native completion");
+  pump.noteRun(project, { id: "native-first", sessionId: "same", status: "succeeded", nativeTurn: { startSeq: 4 } });
+  pump.noteRun(project, { id: "ordinary-next", sessionId: "same", status: "running" });
+  await waitFor(() => muxes[0]?.follow("same"), "ordinary follow");
+  muxes[0].follow("same").push(sessionEvent({ type: "assistant/message", seq: 226, data: { message: { content: [{ type: "text", text: "ordinary answer" }] } } }));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.deepEqual(eventsOf(runEvents, "ordinary-next").map((event) => event.text), ["ordinary answer"]);
+});
+
+test("an ordinary run's complete opening snapshot excludes the preceding native turn", async (t) => {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "native-snapshot" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "native-first", sessionId: "same", status: "running", nativeTurn: { startSeq: 4 } });
+  pump.noteRun(project, { id: "ordinary-next", sessionId: "same", status: "running", baselineCursor: "seq_133",
+    kernelRequestIds: [fixture.events.find((event) => event.seq === 140).data.source.rpcId],
+  });
+  await waitFor(() => muxes[0]?.follow("same"), "ordinary follow");
+  muxes[0].follow("same").push({ type: "snapshot", records: fixture.events.map(sessionEvent) });
+  await waitFor(() => eventsOf(runEvents, "ordinary-next").some((event) => event.seq === 228), "the new turn's ending");
+  assert.deepEqual(eventsOf(runEvents, "ordinary-next").map((event) => event.seq), [137, 140, 226, 228]);
+});
+
+test("repair request ownership reopens the same ordinary run after its first turn ends", async (t) => {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
+  const ids = fixture.events.filter((event) => event.type === "user/message" && event.data.source.kind === "user").map((event) => event.data.source.rpcId);
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "repair-inputs" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  const run = { id: "repair-owner", sessionId: "same", status: "running", baselineCursor: null };
+  pump.noteRun(project, { ...run, kernelRequestIds: [ids[0]] });
+  await waitFor(() => muxes[0]?.follow("same"), "ordinary follow");
+  const stream = muxes[0].follow("same");
+  stream.push({ type: "snapshot", records: fixture.events.filter((event) => event.seq <= 135).map(sessionEvent) });
+  await waitFor(() => eventsOf(runEvents, run.id).some((event) => event.seq === 135), "first ending");
+  pump.noteRun(project, { ...run, kernelRequestIds: ids });
+  for (const event of fixture.events.filter((event) => event.seq >= 137)) stream.push(sessionEvent(event));
+  await waitFor(() => eventsOf(runEvents, run.id).some((event) => event.seq === 228), "repair ending");
+  assert.deepEqual(eventsOf(runEvents, run.id).filter((event) => event.type === "turn/start").map((event) => event.seq), [4, 137]);
+});
+
+test("an unknown legacy cursor cannot claim an unowned opening snapshot", async (t) => {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "unknown-cursor" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "legacy-unknown", sessionId: "same", status: "running", baselineCursor: "opaque-cursor" });
+  await waitFor(() => muxes[0]?.follow("same"), "legacy follow");
+  muxes[0].follow("same").push({ type: "snapshot", records: fixture.events.map(sessionEvent) });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.deepEqual(eventsOf(runEvents, "legacy-unknown"), []);
 });

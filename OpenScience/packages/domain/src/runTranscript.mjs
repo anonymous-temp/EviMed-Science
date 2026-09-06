@@ -26,6 +26,8 @@ import { isEviMedToolName } from './toolNames.mjs'
  * @property {string} output               model-facing result text
  * @property {{ name: string, code: string } | null} error
  * @property {unknown} [meta]
+ * @property {number} [completedAt]
+ * @property {number} [completedSeq]
  */
 
 /**
@@ -43,6 +45,8 @@ import { isEviMedToolName } from './toolNames.mjs'
  * @property {number} seq
  * @property {number} time      epoch milliseconds the log recorded it
  * @property {number} turn
+ * @property {number|null} [turnStartSeq]
+ * @property {string|null} [sourceRequestId]
  * @property {number} step
  * @property {readonly TranscriptPart[]} parts
  * @property {{ input: number, output: number, cacheHit: number, cacheMiss: number } | null} usage
@@ -50,9 +54,18 @@ import { isEviMedToolName } from './toolNames.mjs'
  */
 
 /**
+ * @typedef {object} TranscriptTurn
+ * @property {number} startSeq
+ * @property {number} turn
+ * @property {number} time
+ * @property {{ kind: string, code?: string, subCode?: string, seq: number, time: number } | null} end
+ */
+
+/**
  * @typedef {object} RunTranscript
  * @property {string} sessionId
  * @property {readonly TranscriptMessage[]} messages
+ * @property {readonly TranscriptTurn[]} [turns]
  * @property {{ kind: string, code?: string, subCode?: string } | null} turnEnd
  * @property {readonly { sessionId: string, parentSessionId: string, label: string, capability: string }[]} subagents
  * @property {number} lastSeq
@@ -138,7 +151,7 @@ export function totalOutputTokens(transcript) {
  *   | { type: 'turn/end', seq: number, turn: number, endKind: string, errorCode?: string, subCode?: string }
  *   | { type: 'step/start', seq: number, turn: number, step: number }
  *   | { type: 'step/end', seq: number, turn: number, step: number }
- *   | { type: 'message/user', seq: number, text: string, source: 'user'|'plugin'|'system'|'subagent' }
+ *   | { type: 'message/user', seq: number, text: string, source: 'user'|'plugin'|'system'|'subagent', sourceRequestId?: string }
  *   | { type: 'message/assistant', seq: number, text: string, reasoning: string, usage: { input: number, output: number, cacheHit: number, cacheMiss: number } | null, interrupted: boolean }
  *   | { type: 'assistant/delta', seq: number, kind: 'text'|'reasoning', text: string }
  *   | { type: 'tool/call', seq: number, callId: string, tool: string, input: Record<string, unknown>, narration: string }

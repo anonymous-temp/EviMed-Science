@@ -1,0 +1,212 @@
+{
+  "release": "evimed-20260906-f041aa0",
+  "sessionId": "bdd86a13-ac33-4d8c-97b0-fe0fddd89b6b",
+  "note": "Actual synthetic QA session events; injected context reduced without changing ordering or source kind.",
+  "events": [
+    {
+      "type": "turn/start",
+      "seq": 4,
+      "time": 1788661856875,
+      "data": {
+        "turn": 1
+      }
+    },
+    {
+      "type": "user/message",
+      "seq": 7,
+      "time": 1788661856895,
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "请用一句话回答：科研证据来源为什么需要保留？不检索、不生成文件。"
+          }
+        ],
+        "source": {
+          "kind": "user",
+          "rpcId": "2a50beb9-11f8-4601-8641-ff8d274ff23c",
+          "clientTimeZone": "Asia/Shanghai"
+        },
+        "role": "user",
+        "id": "04542bb0-2e81-4678-a51f-a82cdab24cdf"
+      },
+      "surfaceOp": "append"
+    },
+    {
+      "type": "user/message",
+      "seq": 8,
+      "time": 1788661856899,
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Synthetic injected context retained only to test user-source filtering."
+          }
+        ],
+        "source": {
+          "kind": "plugin",
+          "plugin": "@deepseek-ai/dsh-system-prompt",
+          "form": "snapshot"
+        },
+        "role": "user",
+        "id": "9e87f839-cfb1-4427-8162-e772514d1d73"
+      },
+      "surfaceOp": "append"
+    },
+    {
+      "type": "user/message",
+      "seq": 9,
+      "time": 1788661856901,
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Synthetic injected context retained only to test user-source filtering."
+          }
+        ],
+        "source": {
+          "kind": "skill-catalog",
+          "form": "catalog"
+        },
+        "role": "user",
+        "id": "9e30d2d4-8812-4558-8034-7b6d658a7552"
+      },
+      "surfaceOp": "append"
+    },
+    {
+      "type": "assistant/message",
+      "seq": 133,
+      "time": 1788661859382,
+      "data": {
+        "turn": 1,
+        "step": 1,
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "reasoning",
+              "text": "The user asks a one-sentence question in Chinese: \"为什么科研证据来源需要保留？\" (Why do research evidence sources need to be retained?) They explicitly say: don't search, don't generate files, answer in one sentence.\n\nThis is a direct question, no planning, no files, no delegation needed. Just answer in one sentence in Chinese."
+            },
+            {
+              "type": "text",
+              "text": "因为科研结论必须能被他人独立核验与重现——保留可追溯的证据来源（文献、数据、方法）是科学可复现性、可信度审查与防造假的基本前提。"
+            }
+          ],
+          "source": {
+            "kind": "model",
+            "provider": "deepseek-official",
+            "model": "deepseek-v4-flash"
+          },
+          "id": "03ad28bf-50d9-4d5d-a56a-10f8bb8fb1e1"
+        },
+        "usage": {
+          "inputTokens": 23495,
+          "outputTokens": 114,
+          "totalTokens": 23609,
+          "cacheReadTokens": 0,
+          "reasoningTokens": 73
+        }
+      },
+      "sourceEventSeqs": [
+        [
+          14,
+          132
+        ]
+      ],
+      "surfaceOp": "append"
+    },
+    {
+      "type": "turn/end",
+      "seq": 135,
+      "time": 1788661859384,
+      "data": {
+        "turn": 1,
+        "reason": {
+          "kind": "completed"
+        }
+      }
+    },
+    {
+      "type": "turn/start",
+      "seq": 137,
+      "time": 1788661888318,
+      "data": {
+        "turn": 2
+      }
+    },
+    {
+      "type": "user/message",
+      "seq": 140,
+      "time": 1788661888334,
+      "data": {
+        "content": [
+          {
+            "type": "text",
+            "text": "继续上一轮，请只列两个保存原始证据的好处，不检索、不生成文件。"
+          }
+        ],
+        "source": {
+          "kind": "user",
+          "rpcId": "9c925f0e-bf90-4c28-9c2b-8859950f63cd",
+          "clientTimeZone": "Asia/Shanghai"
+        },
+        "role": "user",
+        "id": "1fd47b3b-f7d8-43df-9131-7287c4cf8cf8"
+      },
+      "surfaceOp": "append"
+    },
+    {
+      "type": "assistant/message",
+      "seq": 226,
+      "time": 1788661889877,
+      "data": {
+        "turn": 2,
+        "step": 1,
+        "message": {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "reasoning",
+              "text": "The user wants only two benefits of preserving original evidence, listed. No search, no files. Just answer concisely."
+            },
+            {
+              "type": "text",
+              "text": "1. 便于他人独立核验与复现研究结论，确保结论可信、可审计；\n2. 当出现争议、数据更新或后续研究时，可回溯原始材料，查证与修正错误，防止结论被曲解或伪造。"
+            }
+          ],
+          "source": {
+            "kind": "model",
+            "provider": "deepseek-official",
+            "model": "deepseek-v4-flash"
+          },
+          "id": "a19962d4-56f9-44a6-bd2e-705712b79404"
+        },
+        "usage": {
+          "inputTokens": 81,
+          "outputTokens": 80,
+          "totalTokens": 23713,
+          "cacheReadTokens": 23552,
+          "reasoningTokens": 25
+        }
+      },
+      "sourceEventSeqs": [
+        [
+          141,
+          225
+        ]
+      ],
+      "surfaceOp": "append"
+    },
+    {
+      "type": "turn/end",
+      "seq": 228,
+      "time": 1788661889878,
+      "data": {
+        "turn": 2,
+        "reason": {
+          "kind": "completed"
+        }
+      }
+    }
+  ]
+}

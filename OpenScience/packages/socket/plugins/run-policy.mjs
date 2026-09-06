@@ -22,6 +22,7 @@ import {
   contractKindLabel,
   delegationToolFilter,
   deliverableDir,
+  deliverablePath,
   errorCodeMessage,
   resolveContractKind,
   workspaceLayout,
@@ -179,6 +180,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // reassuring to read. If the lookup misses, `injectBrief` must see the
         // miss rather than a second name for the same nothing.
         await injectBrief(ctx, ctx.get('agents')?.get?.(step.agentId), sessionState, config)
+      }
+      // Native UI input has no control-plane brief. Give its root workflow a
+      // stable name at the first real step, after an ordinary dispatch has had
+      // its chance to install a brief. This is a storage key, never authority;
+      // each project's runtime owns a separate store and filesystem.
+      if (!entry.runId && step.root) {
+        entry.runId = `native_${(await sha256Hex(`${entry.cwd}\n${step.sessionId}`)).slice(0, 32)}`
+        await putRunMirror(ctx, entry, config.bundleVersion)
       }
       const decision = stepPolicy(entry.budget, entry.limits)
       if (!decision.allow) {
@@ -393,6 +402,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // delivered work, or a model that adds one deliverable loses five.
         const previous = new Map(entry.items.map((/** @type {any} */ item) => [item.id, item]))
         entry.plan = indexed
+        entry.completed = false
+        entry.steered = false
         entry.items = items.map((item) => ({ ...item, ...(previous.get(item.id) ?? {}), contractKind: item.contractKind, capability: item.capability, dependsOn: item.dependsOn }))
         await writeFileAt(ctx, entry.cwd || call.cwd, workspaceLayout.planFile, `${JSON.stringify(raw, null, 2)}\n`)
         await putPlanIndex(store(), entry)
@@ -578,7 +589,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           deliverableId: item.id,
           contractKind: item.contractKind,
           capability: item.capability,
-          files: await digestFiles(files),
+          files: await digestFiles(files, item.id),
           acceptedAt: new Date().toISOString(),
           attempt: attempts,
           notices: verdict.issues.filter((entryIssue) => entryIssue.severity !== 'required').map((entryIssue) => entryIssue.message),
@@ -694,12 +705,12 @@ async function sha256Hex(text) {
 }
 
 /**
- * @param {Map<string, string>} files
+ * @param {Map<string, string>} files @param {string} deliverableId
  * @returns {Promise<{ path: string, sha256: string, bytes: number }[]>}
  */
-async function digestFiles(files) {
+async function digestFiles(files, deliverableId) {
   return Promise.all([...files.entries()].map(async ([path, text]) => ({
-    path,
+    path: deliverablePath(deliverableId, path),
     sha256: await sha256Hex(text),
     bytes: byteLength(text),
   })))
@@ -758,7 +769,9 @@ async function injectBrief(ctx, agent, sessionState, config) {
   if (rawIndex == null) return
   entry.contextInjected = true
   const index = parseJson(rawIndex)
-  entry.runId = String(index?.runId ?? '')
+  // A native workflow may already have started before a later dispatch binds
+  // context. Keep its established identity while respecting the real brief.
+  if (!entry.runId) entry.runId = String(index?.runId ?? '')
   entry.limits = {
     maxSteps: Number(index?.budget?.maxSteps ?? config.maxSteps) || 0,
     maxTokens: Number(index?.budget?.maxTokens ?? config.maxTokens) || 0,

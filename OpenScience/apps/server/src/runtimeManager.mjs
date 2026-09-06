@@ -3305,10 +3305,10 @@ export class RuntimeManager {
    * session start, where it becomes a first-class logged message.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, strictContext?: boolean, allowBounded?: boolean }} input
+   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean }} input
    * @returns {Promise<void>}
    */
-  async dispatchPrompt(project, sessionId, { text, system = null, runId = null, strictContext = false, allowBounded = false }) {
+  async dispatchPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3341,9 +3341,9 @@ export class RuntimeManager {
           request: {
             // 0.1.2 requires the client's own identity for this submission; the
             // kernel echoes it on the queued message so a client can retire its
-            // local echo. Two dispatches sharing one id would be
-            // indistinguishable in the queue, so it is minted per call.
-            requestId: randomId("req_"),
+            // local echo. Ledger dispatches reserve this identity before
+            // sending; other callers use the per-call default above.
+            requestId: safeId(requestId, "runtime request id"),
             sessionId,
             mode: "queue",
             content: [{ type: "text", text }],

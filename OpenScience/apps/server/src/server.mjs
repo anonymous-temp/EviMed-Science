@@ -650,10 +650,13 @@ export function createWebApiApp(overrides = {}) {
       // Adoption used to file the run with no agent at all, which meant no
       // deliverable contract and so nothing for the delivery gate to check --
       // work that ran outside the evidence rules and was only labelled as such.
-      // The first user message is already there by the time a session stops
-      // being blank, which is what makes routing possible at adoption.
-      const routed = await routeAdoptedSession(full, sessionId).catch(() => ({}));
-      return agentRuns.adoptRuntimeSession(full, sessionId, routed);
+      // Each committed user turn carries its own input and request identity;
+      // an existing conversation is not a permanent ownership exemption.
+      const transcript = await runtimeManager.sessionTranscript(full, sessionId, { wake: false });
+      return agentRuns.adoptRuntimeSession(full, sessionId, {
+        transcript,
+        routeTurn: (text) => routeAdoptedInput(full, sessionId, text),
+      });
     },
   });
   let agentRuns;
@@ -938,7 +941,6 @@ export function createWebApiApp(overrides = {}) {
           runLimit: Number(episode.budgetCny),
         });
         try {
-          runtimeEventPump.noteMintedSession(project, session.id);
           await researchSessions.put(project, session.id, {
             mode: "specialist", agentId: selected.id, agentVersion: selected.version,
           });
@@ -977,6 +979,7 @@ export function createWebApiApp(overrides = {}) {
               text: `<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}\n${promptText}`,
               system: prepared.system, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
+              requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
           });
           if (run.status === "running") {
@@ -1052,16 +1055,15 @@ export function createWebApiApp(overrides = {}) {
    * The same two steps a dispatch takes -- the named/regex router and the model
    * classifier, then the answer line for anything they do not claim -- reading
    * the question out of the session's own transcript instead of a request body.
-   * @param {Record<string, any>} project @param {string} sessionId
+   * @param {Record<string, any>} project @param {string} sessionId @param {string} text
    */
-  async function routeAdoptedSession(project, sessionId) {
-    const transcript = await runtimeManager.sessionTranscript(project, sessionId, { wake: false });
-    const first = (transcript?.messages ?? []).find((message) => message.role === "user");
-    const text = (first?.parts ?? [])
-      .map((part) => (part?.type === "text" ? String(/** @type {any} */ (part).text ?? "") : ""))
-      .join(" ")
-      .trim();
+  async function routeAdoptedInput(project, sessionId, text) {
     if (!text) return {};
+    const binding = await researchSessions.get(project, sessionId);
+    if (binding?.mode === "specialist") return {
+      effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
+      effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
+    };
     const registry = await agentRegistry;
     const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
     const named = routeNamedSpecialist(text, routableAgents);
@@ -1701,6 +1703,7 @@ export function createWebApiApp(overrides = {}) {
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
             runId: dispatchedRun.id,
+            requestId: dispatchedRun.kernelRequestIds?.at(-1),
           });
         });
         sendJson(res, 202, { data: run });
@@ -2029,10 +2032,6 @@ export function createWebApiApp(overrides = {}) {
       if (pathname === "/api/runtime/sessions" && req.method === "POST") {
         const ctx = await context(req, res);
         const created = await runtimeManager.createRuntimeSession(ctx.project);
-        // Told before it can be announced: the kernel emits `api-session/added`
-        // for this id, and without knowing the control plane minted it the pump
-        // would adopt the session out from under the dispatch about to use it.
-        runtimeEventPump.noteMintedSession(ctx.project, created.id);
         if (!created.id) throw new HttpError(502, "runtime_session_create_failed", "The runtime returned no session id.");
         sendJson(res, 200, { data: created });
         return;

@@ -320,6 +320,7 @@ export {
 /** @typedef {import('./src/runTranscript.mjs').RunEvent} RunEvent */
 /** @typedef {import('./src/runTranscript.mjs').RunTranscript} RunTranscript */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptMessage} TranscriptMessage */
+/** @typedef {import('./src/runTranscript.mjs').TranscriptTurn} TranscriptTurn */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptPart} TranscriptPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptTextPart} TranscriptTextPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptToolCall} TranscriptToolCall */
