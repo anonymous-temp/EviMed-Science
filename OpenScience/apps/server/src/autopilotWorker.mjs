@@ -61,7 +61,7 @@ export class AutopilotWorker {
     let dispatched = null;
     try {
       if (job.payload?.action === "cancel") {
-        await this.cancelDispatched({ userId: job.userId, projectId: job.projectId,
+        await this.cancelDispatched({ userId: job.userId, projectId: job.projectId, episodeId: job.payload.episodeId,
           sessionId: job.payload.sessionId, runId: job.payload.runId });
         await this.service.markCancellationCompleted(job.userId, job.payload.episodeId, job.payload.runId);
         const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {

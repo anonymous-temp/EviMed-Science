@@ -1,3 +1,4 @@
+import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
@@ -756,43 +757,30 @@ export function createWebApiApp(overrides = {}) {
         attempts: run.attempts ?? 0,
       });
       runtimeEventPump.noteRun(project, run);
-      if (autopilotService) {
-        let claims = [];
-        let deltaSchemaVersion = null;
-        let deltaErrorCode = null;
-        const delta = (run.artifacts ?? []).find((artifact) => typeof artifact === "string" && artifact.endsWith("agenda-delta.json"));
-        if (delta) {
-          try {
-            const file = resolveScopedPath(project.workspaceDir, delta);
-            const parsed = JSON.parse(String(await readFileNoFollow(project.workspaceDir, file, "utf8")));
-            deltaSchemaVersion = Number(parsed?.schemaVersion);
-            if (Array.isArray(parsed?.claims)) claims = parsed.claims.slice(0, 500);
-            else deltaErrorCode = "agenda_delta_claims_invalid";
-          } catch { deltaErrorCode = "agenda_delta_unreadable"; }
-        }
-        const boundedScope = runtimeManager.boundedRuntimeScope(project);
-        const episodeRecord = await autopilotService.episodeForRun(project.userId, project.id, run.id).catch(() => null)
-          ?? (String(run.effectiveRouteReason ?? "").startsWith("autopilot:") && run.dispatchId
-            ? await autopilotService.getEpisode(project.userId, run.dispatchId).catch(() => null) : null);
-        const episodeUsage = usageLedger ? await usageLedger.summaryRun(project.userId, episodeRecord?.id ?? boundedScope?.runId ?? run.id).catch(() => null) : null;
-        await autopilotService.completeRun(project.userId, {
-          projectId: project.id, runId: run.id, episodeId: episodeRecord?.id ?? null, sessionId: run.sessionId,
-          status: run.status, deltaSchemaVersion, deltaErrorCode,
-          claims, artifacts: run.artifacts ?? [],
-          costCny: episodeUsage?.actualCost ?? 0,
-        }).catch(async (error) => {
-          await securityAudit(config, "autopilot.run.complete", "failed", {
-            userId: project.userId, projectId: project.id, runId: run.id,
-            code: typeof error?.code === "string" ? error.code : "autopilot_completion_failed",
-          });
-        });
-        if (boundedScope) await runtimeManager.endBoundedRuntime(project, boundedScope.runId).catch(async (error) => {
-          await securityAudit(config, "autopilot.runtime.release", "failed", {
-            userId: project.userId, projectId: project.id, runId: run.id,
-            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
-          });
-        });
-      }
+      await completeOwnedAutopilotRun({
+        service: autopilotService, runtimeManager, usageLedger,
+        readDelta: async () => {
+          let claims = [];
+          let deltaSchemaVersion = null;
+          let deltaErrorCode = null;
+          const delta = (run.artifacts ?? []).find((artifact) => typeof artifact === "string" && artifact.endsWith("agenda-delta.json"));
+          if (delta) {
+            try {
+              const file = resolveScopedPath(project.workspaceDir, delta);
+              const parsed = JSON.parse(String(await readFileNoFollow(project.workspaceDir, file, "utf8")));
+              deltaSchemaVersion = Number(parsed?.schemaVersion);
+              if (Array.isArray(parsed?.claims)) claims = parsed.claims.slice(0, 500);
+              else deltaErrorCode = "agenda_delta_claims_invalid";
+            } catch { deltaErrorCode = "agenda_delta_unreadable"; }
+          }
+          return { claims, deltaSchemaVersion, deltaErrorCode };
+        },
+        audit: async (event, error) => securityAudit(config, event, "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code
+            : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
+        }),
+      }, project, run);
       if (notificationService) {
         try {
           await notificationService.create(project.userId, {
@@ -925,7 +913,7 @@ export function createWebApiApp(overrides = {}) {
     pollMs: config.autopilotPollMs,
     leaseMs: config.autopilotLeaseMs,
     busyDelayMs: Math.min(86_400_000, Math.max(5 * 60_000, Number(config.runtimeIdleTimeoutMs) + 60_000)),
-    cancelDispatched: async ({ userId, projectId, sessionId }) => {
+    cancelDispatched: async ({ userId, projectId, sessionId, episodeId }) => {
       const user = await store.userById(userId);
       if (!user) return;
       const project = await store.requireProject(user, projectId);
@@ -937,8 +925,8 @@ export function createWebApiApp(overrides = {}) {
       catch (error) { ledgerError = error; }
       const boundedScope = runtimeManager.boundedRuntimeScope(project);
       let stopError = null;
-      if (boundedScope) {
-        try { await runtimeManager.endBoundedRuntime(project, boundedScope.runId); }
+      if (boundedScope && boundedScope.runId === episodeId) {
+        try { await runtimeManager.endBoundedRuntime(project, episodeId); }
         catch (error) { stopError = error; }
         if (!stopError) cancellationError = null;
       }
