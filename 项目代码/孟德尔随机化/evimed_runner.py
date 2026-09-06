@@ -7,11 +7,23 @@ import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+from evimed_local_inputs import (
+    MANIFEST_NAME,
+    MRInputError,
+    bind_remote_metadata,
+    bind_result_provenance,
+    relative_parts,
+    remote_metadata,
+    runner_sources,
+    verify_published_inputs,
+)
 
 # Load environment from .env and deploy.env for API tokens
 load_dotenv(Path(__file__).parent / ".env", override=False)
@@ -63,6 +75,44 @@ def _parse_paper_markdown(content: str) -> dict[str, str]:
     return sections
 
 
+def _validate_local_metadata(metadata: dict, paper: str, label: str) -> None:
+    """Validate supplied file provenance without inventing repository identity."""
+    proof = metadata.get("input_provenance")
+    if (
+        metadata.get("metadata_source") != "provided_local_data"
+        or metadata.get("verification_status") != "supplied_not_independently_verified"
+        or metadata.get("ld_rechecked") is not False
+        or not isinstance(proof, dict)
+        or proof.get("type") != "local_file"
+        or proof.get("verification_status") != "supplied_not_independently_verified"
+        or proof.get("ld_rechecked") is not False
+    ):
+        raise RuntimeError(f"MR {label} local input provenance is incomplete")
+    relative_parts(proof.get("path"))
+    if (
+        not re.fullmatch(r"[a-f0-9]{64}", str(proof.get("sha256", "")))
+        or not isinstance(proof.get("bytes"), int)
+        or isinstance(proof.get("bytes"), bool)
+        or proof["bytes"] <= 0
+    ):
+        raise RuntimeError(f"MR {label} local file digest or size is missing")
+    if not metadata.get("trait") or metadata.get("gwas_id") or metadata.get("year"):
+        raise RuntimeError(
+            f"MR {label} local metadata needs a trait, without fabricated GWAS IDs or years"
+        )
+    if metadata.get("sample_size") != proof.get("sampleSize") or metadata.get(
+        "population"
+    ) != proof.get("population"):
+        raise RuntimeError(f"MR {label} local metadata differs from the supplied declaration")
+    sample_size = metadata.get("sample_size")
+    if (
+        sample_size is not None
+        and str(sample_size) not in paper
+        and f"{sample_size:,}" not in paper
+    ):
+        raise RuntimeError(f"MR paper omitted supplied {label} sample size")
+
+
 def _validate_release(paper: str, results: list) -> None:
     unsupported_runtime_claims = (
         "通过phenoscanner数据库排除",
@@ -82,6 +132,10 @@ def _validate_release(paper: str, results: list) -> None:
             ("exposure", result.exposure_metadata),
             ("outcome", result.outcome_metadata),
         ):
+            source_type = getattr(result, f"{label}_source_type", "opengwas")
+            if getattr(source_type, "value", source_type) == "local_file":
+                _validate_local_metadata(metadata, paper, label)
+                continue
             required = ("gwas_id", "trait", "sample_size", "population", "year")
             missing = [key for key in required if metadata.get(key) in (None, "")]
             if missing:
@@ -186,7 +240,13 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
     return copied
 
 
-def run(request_path: Path, output_dir: Path) -> int:
+def run(
+    request_path: Path,
+    output_dir: Path,
+    *,
+    input_authority: dict | None = None,
+    output_directory_fd: int | None = None,
+) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         request = json.loads(request_path.read_text(encoding="utf-8"))
@@ -195,29 +255,64 @@ def run(request_path: Path, output_dir: Path) -> int:
         if not exposure or not outcome:
             raise ValueError("exposure and outcome are required")
 
-        from mr_agent.core.engine import MRAgent
-
         language = str(request.get("outputLanguage") or "zh")
-        agent = MRAgent(language=language)
-        agent.state.slots.exposure = exposure
-        agent.state.slots.outcome = outcome
-        agent.state.slots.bidirectional = request.get("analysisDirection") == "bidirectional"
-        token = os.environ.get("OPENGWAS_JWT", "").strip()
-        if token:
-            agent.state.slots.gwas_token = token
-        analysis_message = agent._run_analysis()
-        valid_results = [result for result in agent.state.analysis_results if result.n_instruments > 0]
+        with tempfile.TemporaryDirectory(prefix="evimed-mr-inputs-") as temporary:
+            sources, provenance = runner_sources(
+                request,
+                output_dir,
+                Path(temporary),
+                authority=input_authority,
+                output_directory_fd=output_directory_fd,
+            )
+            repository_metadata = remote_metadata(sources) if sources else {}
+            from mr_agent.core.engine import MRAgent
+
+            agent = MRAgent(language=language)
+            agent.state.slots.exposure = exposure
+            agent.state.slots.outcome = outcome
+            agent.state.slots.bidirectional = request.get("analysisDirection") == "bidirectional"
+            for role, source in sources.items():
+                setattr(agent.state.slots, f"{role}_source", source)
+            token = os.environ.get("OPENGWAS_JWT", "").strip()
+            if token:
+                agent.state.slots.gwas_token = token
+            analysis_message = agent._run_analysis()
+        for role, source in sources.items():
+            if source.is_local():
+                source.file_path = f"inputs/{role}.csv"
+        valid_results = [
+            result for result in agent.state.analysis_results if result.n_instruments > 0
+        ]
         if not valid_results:
             detail = agent.state.errors[-1] if agent.state.errors else analysis_message
             raise RuntimeError("MR analysis produced no valid instruments: %s" % detail)
+        if provenance:
+            bind_result_provenance(valid_results, provenance, request)
+            if repository_metadata:
+                bind_remote_metadata(valid_results, repository_metadata)
         agent._run_paper_generation()
         paper = _paper_markdown(agent.state.paper_sections, exposure, outcome)
         if len(paper.strip()) < 500:
             raise RuntimeError("MR paper generation produced an incomplete manuscript")
         _validate_release(paper, valid_results)
+        if provenance:
+            verify_published_inputs(
+                request, output_dir, provenance, output_directory_fd=output_directory_fd
+            )
         report_path = output_dir / "mendelian-randomization-report.md"
         report_path.write_text(paper, encoding="utf-8")
         copied_artifacts = _copy_release_artifacts(output_dir, agent.state, valid_results)
+        if provenance:
+            copied_artifacts.extend(
+                [
+                    MANIFEST_NAME,
+                    *[
+                        f"inputs/{role}.csv"
+                        for role, source in sources.items()
+                        if source.is_local()
+                    ],
+                ]
+            )
         analysis_path = output_dir / "mendelian-randomization-run.json"
         analysis_path.write_text(
             json.dumps(
@@ -227,16 +322,24 @@ def run(request_path: Path, output_dir: Path) -> int:
             ),
             encoding="utf-8",
         )
-        _write_result(output_dir, {
-            "status": "succeeded",
-            "exposure": exposure,
-            "outcome": outcome,
-            "analysisPairs": len(valid_results),
-            "instruments": sum(result.n_instruments for result in valid_results),
-            "report": report_path.name,
-            "artifacts": [report_path.name, analysis_path.name, *copied_artifacts],
-        })
+        _write_result(
+            output_dir,
+            {
+                "status": "succeeded",
+                "exposure": exposure,
+                "outcome": outcome,
+                "analysisPairs": len(valid_results),
+                "instruments": sum(result.n_instruments for result in valid_results),
+                "report": report_path.name,
+                "artifacts": [report_path.name, analysis_path.name, *copied_artifacts],
+            },
+        )
         return 0
+    except MRInputError as error:
+        _write_result(
+            output_dir, {"status": "failed", "errorCode": error.code, "error": str(error)}
+        )
+        return 1
     except Exception as error:
         traceback.print_exc()
         _write_result(output_dir, {"status": "failed", "error": str(error)})
@@ -305,10 +408,28 @@ def main() -> int:
     parser.add_argument("--request", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--finalize-existing", action="store_true")
+    parser.add_argument("--input-authority-fd", type=int)
+    parser.add_argument("--working-directory-fd", type=int)
     args = parser.parse_args()
+    if args.working_directory_fd is not None:
+        if not stat.S_ISDIR(os.fstat(args.working_directory_fd).st_mode):
+            raise ValueError("Invalid MR execution directory descriptor.")
+        os.fchdir(args.working_directory_fd)
+    authority = None
+    if args.input_authority_fd is not None:
+        if not stat.S_ISFIFO(os.fstat(args.input_authority_fd).st_mode):
+            raise ValueError("MR authority must arrive through the worker pipe.")
+        with os.fdopen(args.input_authority_fd, "rb") as channel:
+            payload = channel.read(64 * 1024 + 1)
+        if len(payload) > 64 * 1024:
+            raise ValueError("MR input authority exceeds its size limit.")
+        authority = json.loads(payload)
     if args.finalize_existing:
         return finalize_existing(args.request, args.output_dir)
-    return run(args.request, args.output_dir)
+    return run(
+        args.request, args.output_dir, input_authority=authority,
+        output_directory_fd=args.working_directory_fd,
+    )
 
 
 if __name__ == "__main__":

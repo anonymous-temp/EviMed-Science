@@ -121,6 +121,8 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "meta_agent_python_unavailable",
   "meta_model_config_unavailable",
   "specialist_agent_unavailable",
+  "mr_input_remote_auth_required",
+  "mr_input_remote_metadata_unavailable",
   "specialist_agent_unconfigured",
   "specialist_worker_unavailable",
   "specialist_python_unavailable",
@@ -302,6 +304,14 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "specialist_input_required",
   "specialist_input_invalid",
   "specialist_input_path_invalid",
+  // Declared local MR inputs need correction or a fresh job. Missing clumping
+  // evidence must never be repaired by inventing a preclumped declaration.
+  "mr_input_invalid",
+  "mr_input_path_invalid",
+  "mr_input_changed",
+  "mr_input_size_limit",
+  "mr_input_clumping_required",
+  "mr_input_manifest_invalid",
   "specialist_job_id_invalid",
   "specialist_job_state_invalid",
   "specialist_job_state_too_large",

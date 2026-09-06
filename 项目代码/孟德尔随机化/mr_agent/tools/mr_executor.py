@@ -18,7 +18,6 @@ import pandas as pd
 from mr_agent.models import (
     ColumnMapping,
     DataSource,
-    DataSourceType,
     HeterogeneityResult,
     MRAnalysisResult,
     MRResult,
@@ -157,8 +156,8 @@ def _check_r_environment_impl() -> tuple[bool, str]:
 
 
 def _r_path(p: Path | str) -> str:
-    """Convert path to R-compatible forward-slash string."""
-    return str(p).replace("\\", "/")
+    """Escape the contents of a quoted R path, preserving legacy slash conversion."""
+    return json.dumps(str(p).replace("\\", "/"), ensure_ascii=False)[1:-1]
 
 
 def run_mr_analysis(
@@ -799,7 +798,7 @@ def run_summary_forest(
         return False
     from r_scripts.templates import MR_FOREST_SUMMARY_TEMPLATE
     paths_str = ", ".join(f'"{p}"' for p in csv_paths)
-    labels_str = ", ".join(f'"{l}"' for l in labels)
+    labels_str = ", ".join(f'"{label}"' for label in labels)
     out = _r_path(output_dir)
     script = MR_FOREST_SUMMARY_TEMPLATE.format(
         output_dir=out, result_csv_paths=paths_str, pair_labels=labels_str,

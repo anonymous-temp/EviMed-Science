@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: mendelian-randomization
-version: 1.0.1
+version: 1.0.2
 title: 孟德尔随机化
 category: 因果推断
 description: 使用 GWAS 工具变量开展可追溯的孟德尔随机化、敏感性分析和 STROBE-MR 报告，并生成完整研究包。
@@ -28,6 +28,8 @@ produces:
     required: true
   - path: mendelian-randomization-run.json
     required: true
+  - path: mendelian-randomization-inputs.json
+    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -38,7 +40,8 @@ inputs:
   optional:
   - outputLanguage
   - analysisDirection
-  - uploadedFiles
+  - exposureSource
+  - outcomeSource
 autopilot:
   taskTypes: []
   costClass: high

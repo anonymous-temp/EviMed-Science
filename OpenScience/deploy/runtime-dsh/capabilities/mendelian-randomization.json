@@ -1,6 +1,6 @@
 {
   "id": "mendelian-randomization",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "title": "孟德尔随机化",
   "description": "使用 GWAS 工具变量开展可追溯的孟德尔随机化、敏感性分析和 STROBE-MR 报告，并生成完整研究包。",
   "whenToUse": "交付物是一份孟德尔随机化因果推断报告时，委派给我。",
@@ -25,6 +25,10 @@
         {
           "path": "mendelian-randomization-run.json",
           "required": true
+        },
+        {
+          "path": "mendelian-randomization-inputs.json",
+          "required": false
         }
       ],
       "checks": [
@@ -41,7 +45,8 @@
     "optional": [
       "outputLanguage",
       "analysisDirection",
-      "uploadedFiles"
+      "exposureSource",
+      "outcomeSource"
     ]
   },
   "safetyClass": "general",

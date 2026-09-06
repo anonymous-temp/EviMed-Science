@@ -36,11 +36,35 @@ provide `clumping_provenance` identifying the source and its selection method.
 This is a declared input property, not independent LD verification. The engine
 records it in `instrument-selection.json` and the report states that LD was not
 rechecked. Two local files in this mode require no OpenGWAS API request. The
-hosted runner's current text-only request contract is a separate integration
-boundary and does not yet expose these local-file fields.
+hosted MCP accepts paired `exposureSource` / `outcomeSource` objects. The adapter
+binds uploaded workspace-relative CSV/TSV files at admission, safely reopens them
+in its worker and supplies standard-column job copies plus
+`mendelian-randomization-inputs.json` to the fixed runner. The isolated adapter worker sends the authoritative preparation snapshot through
+an anonymous pipe, and publishes artifacts through held directory descriptors.
+The runner checks the manifest against that authority before and after analysis;
+the editable manifest itself is never the trust root. Uploaded source objects
+require the isolated hosted adapter; the same-container MCP fallback retains
+legacy text requests only.
+Explicit column mappings and boolean clumping declarations are required; a
+bidirectional no-JWT analysis needs independent preclumped declarations and
+provenance for both roles. Original uploads are preserved.
 
 MR-PRESSO permutation bounds are represented by `presso_global_pval` together
 with `presso_global_pval_relation` (`=` or `<`); consumers must preserve that
 relation instead of rendering an upper bound as an exact p-value. Radial MR
 reports the heterogeneity Q-test probability and the number of outlier rows,
 not the causal-effect probability or the number of data-frame columns.
+
+
+Hosted MR queue authority lives under the project's protected
+`.openscience/mr-jobs` metadata, outside the customer's workspace/runtime mounts.
+It is scoped to the authenticated account, project, active workspace and private
+generation. Workspace JSON files are never imported as accepted queue records.
+The original request, input bindings and source evidence are immutable; ordinary
+status reads the same protected record. Account/project deletion removes this
+metadata with the existing project tree.
+
+Delivery scope: the fixed runner does not currently copy `.R` scripts into its
+published artifacts. This uploaded-input entry point does not complete CAP06
+reproducible-code delivery. Input manifests and standard data copies remain
+available without claiming that an analysis script was delivered.
