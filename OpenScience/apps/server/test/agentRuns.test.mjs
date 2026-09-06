@@ -11,6 +11,7 @@ import {
   AgentRunStore,
   artifactCandidatesForTest,
   clinicalEvidenceRepairPromptForTest,
+  consumeRepairAuthorizationForTest,
   delegatedDocumentReadsForTest,
   ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
@@ -5044,6 +5045,11 @@ test("a repair instruction names a check the run can actually run", () => {
 
   assert.match(prompt, /evimed_submit_deliverable/, "the repair must name the check that exists");
   assert.match(prompt, /evimed_revise_deliverable/, "an accepted package needs an explicit new revision before its files can change");
+  const unaccepted = clinicalEvidenceRepairPromptForTest([
+    "clinical-evidence-matrix.json is malformed",
+  ], null, false);
+  assert.equal(/evimed_revise_deliverable|local gate already accepted|protected kernel storage/.test(unaccepted), false,
+    "a package with no accepted receipt must be repaired directly without inventing revision authority");
   assert.equal(/preflight\.py/.test(prompt), false, "no run can execute a script that is not shipped");
   assert.equal(/opencode/i.test(prompt), false, "and the path named must not belong to the other kernel");
   // The issue itself has to travel, or the run is told to fix something without
@@ -5095,6 +5101,16 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
     const result = await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null });
 
     assert.equal(result.revisionRequired, true);
+    assert.equal(result.authorizations.length, 1);
+    const authorization = result.authorizations[0];
+    assert.deepEqual(
+      { runId: authorization.runId, deliverableId: authorization.deliverableId },
+      { runId: "kernel-run-1", deliverableId: "review" },
+    );
+    assert.match(authorization.acceptedDigest, /^[0-9a-f]{64}$/);
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization)).authorized, true);
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization)).authorized, false, "the authorization must be one-time");
+    assert.equal((await consumeRepairAuthorizationForTest(project, { ...authorization, acceptedDigest: "f".repeat(64) })).authorized, false);
     assert.ok(result.snapshotPath.startsWith(project.metaDir + path.sep));
     await writeFile(path.join(project.workspaceDir, relative), "changed workspace bytes");
     const snapshot = JSON.parse(await readFile(result.snapshotPath, "utf8"));

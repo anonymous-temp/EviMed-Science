@@ -17,6 +17,7 @@
  */
 
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import test from "node:test";
 
 import { SEAMS, __setHarnessModule, defineTool } from "@evimed/harness-port";
@@ -563,8 +564,8 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "" } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -580,10 +581,10 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   /** @type {any} */ (ctx).subagents = { start: subagentStart ?? (() => { throw new Error("unexpected subagent start"); }) };
   ctx.provide("fs", {
     resolve: async (/** @type {string} */ relative, /** @type {{ cwd: string }} */ { cwd }) => `${cwd}/${relative}`,
-    readText: async (/** @type {string} */ target) => target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
+    readText: async (/** @type {string} */ target) => target === "//runtime/revision-token" ? "test-workload-token" : target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0" });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
   };
@@ -662,8 +663,22 @@ test("a completed native workflow may plan again and its receipt names actual wo
   assert.equal(receipt.entries[0].files[0].path, "deliverables/d2/brief.md");
 });
 
-test("an accepted deliverable enters submitted state and needs a fresh receipt for its new bytes", async () => {
-  const f = await nativePolicyFixture({ briefId: "revision-owner" });
+test("an accepted deliverable needs one control-plane authorization before a fresh receipt", async () => {
+  const requests = [];
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      requests.push({ authorization: req.headers.authorization, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ authorized: true }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  const f = await nativePolicyFixture({ briefId: "revision-owner", revisionAuthorizeUrl });
+  try {
   await f.step(1);
   await f.execute("evimed_plan", {
     action: "write",
@@ -679,6 +694,12 @@ test("an accepted deliverable enters submitted state and needs a fresh receipt f
   const opened = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Server gate requested a correction." });
 
   assert.equal(opened.value.ok, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].authorization, "Bearer test-workload-token");
+  assert.deepEqual(Object.keys(requests[0].body).sort(), ["acceptedDigest", "deliverableId", "runId"]);
+  assert.equal(requests[0].body.runId, "revision-owner");
+  assert.equal(requests[0].body.deliverableId, "d1");
+  assert.match(requests[0].body.acceptedDigest, /^[0-9a-f]{64}$/);
   assert.equal((await f.execute("evimed_plan", { action: "status" })).value.data.items[0].status, "submitted");
 
   const secondBytes = "# Report\nCorrected and independently revalidated version.\n";
@@ -687,6 +708,27 @@ test("an accepted deliverable enters submitted state and needs a fresh receipt f
   const current = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
   const firstDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(firstBytes)).then((value) => [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
   assert.notEqual(current.entries[0].files[0].sha256, firstDigest);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("a model cannot open an accepted revision before the control plane authorizes it", async () => {
+  const f = await nativePolicyFixture({ briefId: "revision-owner" });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+  });
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted bytes.\n");
+  assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+
+  const denied = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Model chose to revise." });
+
+  assert.equal(denied.value.ok, false);
+  assert.equal(denied.value.code, "deliverable_revision_unauthorized");
+  assert.equal((await f.execute("evimed_plan", { action: "status" })).value.data.items[0].status, "accepted");
 });
 
 // The final-reply scan has to be able to fail.
