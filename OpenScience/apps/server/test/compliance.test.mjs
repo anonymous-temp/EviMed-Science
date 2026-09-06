@@ -129,23 +129,27 @@ test("hosted compliance audit is part of the Web CI script", async () => {
   assert.match(pkg.scripts["ci:web"], /pnpm audit:saas-alignment/);
 });
 
-test("the controller audit accepts only the validated capsule extension to a reconstructed launch plan", async () => {
+test("the controller audit accepts only validated internal endpoints in a reconstructed launch plan", async () => {
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
+  const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
+  assert.ok(revisionGuard, "the revision endpoint guard must be exercised by the negative controls");
   const cases = [
     ["arbitrary fourth argument", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, payload)")],
-    ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, args: payload.args })")],
-    ["caller image", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, image: payload.image })")],
-    ["caller mounts", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, mounts: payload.mounts })")],
-    ["spread caller settings", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, ...payload })")],
-    ["unvalidated endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl: payload.capsuleGatewayUrl })")],
+    ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, args: payload.args })")],
+    ["caller image", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, image: payload.image })")],
+    ["caller mounts", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, mounts: payload.mounts })")],
+    ["spread caller settings", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, ...payload })")],
+    ["unvalidated capsule endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl: payload.capsuleGatewayUrl, revisionGatewayUrl })")],
+    ["unvalidated revision endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl: payload.revisionGatewayUrl })")],
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
-    ["unknown fields allowed", controller.replace('"port", "password", "capsuleGatewayUrl"]', '"port", "password", "capsuleGatewayUrl", "args"]')],
+    ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
+    ["unknown fields allowed", controller.replace('"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl"]', '"port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "args"]')],
     ["key validation skipped", controller.replace("assertExactKeys(payload, allowed);", "")],
     ["key validator disabled", controller.replace("if (unexpected) {", "if (false) {")],
     ["project scope bypassed", controller.replace("await projectFromReference(config, payload)", "payload")],

@@ -692,6 +692,7 @@ export function createWebApiApp(overrides = {}) {
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
+    runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // A run's own state changes ride the same stream as the kernel's events,
     // because from a user's point of view they are one story: "it is running",
     // "the second deliverable came back with three fixes", "it finished".

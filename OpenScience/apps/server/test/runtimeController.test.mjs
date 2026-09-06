@@ -484,7 +484,7 @@ test("capsule and revision settings survive the manager to isolated controller s
   }
 });
 
-test("runtime controller accepts only its trusted capsule endpoint or explicit disabled state", async () => {
+test("runtime controller accepts only its trusted internal gateway endpoints or explicit disabled state", async () => {
   const tmp = await shortTempDir("oscv-");
   const dataDir = path.join(tmp, "data");
   const socketPath = path.join(tmp, "control", "controller.sock");
@@ -528,6 +528,20 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
         (error) => error?.status === 400 && error?.code === "runtime_controller_capsule_gateway_invalid",
       );
     }
+    for (const revisionGatewayUrl of [
+      undefined, null, true, {},
+      "https://attacker.example/internal/revisions/v1/authorize",
+      "http://trusted-gateway.example:9443/internal/revisions/v1/authorize",
+      "https://trusted-gateway.example:9443/internal/capsules/v1",
+      `${payload.revisionGatewayUrl}?redirect=attacker`,
+      `${payload.revisionGatewayUrl}#fragment`,
+      `${payload.revisionGatewayUrl}\nEVIMED_REVISION_AUTHORIZE_URL=https://attacker.example`,
+    ]) {
+      await assert.rejects(
+        client.request("POST", "/v1/runtime/start", { ...payload, revisionGatewayUrl }),
+        (error) => error?.status === 400 && error?.code === "runtime_controller_revision_gateway_invalid",
+      );
+    }
     for (const extra of [{ args: ["run", "--privileged"] }, { env: { EVIMED_CAPSULE_ACTIVE: "1" } }, { stateStore: "postgres" }, { evimedWorkloadSigningSecret: "injected" }]) {
       await assert.rejects(
         client.request("POST", "/v1/runtime/start", { ...payload, ...extra }),
@@ -547,7 +561,7 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
 
 test("the capsule startup protocol refuses a controller from before endpoint handoff", async () => {
   const client = new RuntimeControllerClient({});
-  client.request = async () => ({ protocolVersion: 2 });
+  client.request = async () => ({ protocolVersion: 3 });
   await assert.rejects(
     client.health(),
     (error) => error?.status === 503 && error?.code === "runtime_controller_protocol_mismatch",
@@ -677,6 +691,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
         port: 49152,
         password: "pw_abcdefghijklmnopqrstuvwxyz",
         capsuleGatewayUrl: "",
+        revisionGatewayUrl: "",
       },
       { signal: abort.signal },
     );

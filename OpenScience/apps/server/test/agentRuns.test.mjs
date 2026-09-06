@@ -5110,7 +5110,7 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
     };
     await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify(receipt));
 
-    const result = await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null });
+    const result = await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1");
 
     assert.equal(result.revisionRequired, true);
     assert.equal(result.authorizations.length, 1);
@@ -5120,9 +5120,19 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
       { runId: "kernel-run-1", deliverableId: "review" },
     );
     assert.match(authorization.acceptedDigest, /^[0-9a-f]{64}$/);
-    assert.equal((await consumeRepairAuthorizationForTest(project, authorization)).authorized, true);
-    assert.equal((await consumeRepairAuthorizationForTest(project, authorization)).authorized, false, "the authorization must be one-time");
-    assert.equal((await consumeRepairAuthorizationForTest(project, { ...authorization, acceptedDigest: "f".repeat(64) })).authorized, false);
+    const lifecycle = { runtimeGeneration: "runtime-generation-1", controlRunRepairing: async () => true };
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, runtimeGeneration: "replacement-runtime" })).authorized, false,
+      "a replacement runtime cannot consume the prior generation's grant");
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, controlRunRepairing: async () => false })).authorized, false,
+      "a canceled or terminal control-plane run invalidates its outstanding grant");
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, true);
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, false, "the authorization must be one-time");
+    assert.equal((await consumeRepairAuthorizationForTest(project, { ...authorization, acceptedDigest: "f".repeat(64) }, lifecycle)).authorized, false);
+    await assert.rejects(
+      snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1"),
+      /already consumed/,
+      "reissuing the same accepted digest must not reset consumedAt",
+    );
     assert.ok(result.snapshotPath.startsWith(project.metaDir + path.sep));
     await writeFile(path.join(project.workspaceDir, relative), "changed workspace bytes");
     const snapshot = JSON.parse(await readFile(result.snapshotPath, "utf8"));
