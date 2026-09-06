@@ -1932,9 +1932,12 @@ async function verifiedReceiptArtifacts(project, receipt) {
 }
 
 /** Preserve locally accepted bytes in control-plane-only project metadata before repair. */
-async function snapshotAcceptedPackageForRepair(project, run) {
+async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration = null) {
   const receipt = await readDeliveryReceipt(project, run);
   if (!receipt) return { revisionRequired: false, snapshotPath: null };
+  if (typeof runtimeGeneration !== "string" || !runtimeGeneration || runtimeGeneration.length > 256) {
+    throw new Error("active runtime generation is unavailable for repair authorization");
+  }
   const verified = await verifiedReceiptArtifacts(project, receipt);
   if (verified.mismatched.length > 0) {
     throw new Error(`accepted receipt drifted before repair: ${verified.mismatched.slice(0, 6).join(", ")}`);
@@ -1970,6 +1973,7 @@ async function snapshotAcceptedPackageForRepair(project, run) {
     const authorization = {
       formatVersion: 1,
       controlPlaneRunId: run.id,
+      runtimeGeneration,
       runId: verified.receipt.runId,
       deliverableId: entry.deliverableId,
       acceptedDigest: createHash("sha256").update(JSON.stringify(entry)).digest("hex"),
@@ -1980,7 +1984,26 @@ async function snapshotAcceptedPackageForRepair(project, run) {
     const key = createHash("sha256").update(JSON.stringify([
       authorization.runId, authorization.deliverableId, authorization.acceptedDigest,
     ])).digest("hex");
-    await writeFileAtomicNoFollow(project.rootDir, path.join(authorizationDirectory, `${key}.json`), `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    const target = path.join(authorizationDirectory, `${key}.json`);
+    await withProjectStorageMutation(project, async () => {
+      const existing = await readTextFileNoFollow(project.rootDir, target, "").catch(() => "");
+      if (existing) {
+        let current;
+        try { current = JSON.parse(existing); } catch { throw new Error("existing repair authorization is unreadable"); }
+        if (
+          current?.runId !== authorization.runId
+          || current?.deliverableId !== authorization.deliverableId
+          || current?.acceptedDigest !== authorization.acceptedDigest
+          || current?.runtimeGeneration !== runtimeGeneration
+        ) throw new Error("existing repair authorization conflicts with current accepted bytes");
+        if (current.consumedAt !== null) throw new Error("repair authorization for these accepted bytes was already consumed");
+        if (!Number.isFinite(Date.parse(current.expiresAt)) || Date.parse(current.expiresAt) <= Date.now()) {
+          throw new Error("repair authorization for these accepted bytes already expired");
+        }
+        return;
+      }
+      await writeFileAtomicNoFollow(project.rootDir, target, `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    });
     authorizations.push({
       runId: authorization.runId,
       deliverableId: authorization.deliverableId,
@@ -1990,8 +2013,13 @@ async function snapshotAcceptedPackageForRepair(project, run) {
   return { revisionRequired: authorizations.length > 0, snapshotPath, authorizations };
 }
 
-/** Consume one repair authorization whose accepted bytes already have a private snapshot. */
-async function consumeRepairAuthorization(project, input) {
+/** Consume one repair authorization whose accepted bytes already have a private snapshot.
+ * @param {Record<string, any>} project @param {Record<string, any>} input
+ * @param {{ runtimeGeneration?: string|null, controlRunRepairing?: (controlPlaneRunId: string) => Promise<boolean> }} [options] */
+async function consumeRepairAuthorization(project, input, {
+  runtimeGeneration = null,
+  controlRunRepairing = async () => false,
+} = {}) {
   const runId = typeof input?.runId === "string" ? input.runId : "";
   const deliverableId = typeof input?.deliverableId === "string" ? input.deliverableId : "";
   const acceptedDigest = typeof input?.acceptedDigest === "string" ? input.acceptedDigest : "";
@@ -2010,10 +2038,12 @@ async function consumeRepairAuthorization(project, input) {
       || authorization.runId !== runId
       || authorization.deliverableId !== deliverableId
       || authorization.acceptedDigest !== acceptedDigest
+      || authorization.runtimeGeneration !== runtimeGeneration
       || authorization.consumedAt !== null
       || !Number.isFinite(Date.parse(authorization.expiresAt))
       || Date.parse(authorization.expiresAt) <= Date.now()
     ) return { authorized: false };
+    if (!(await controlRunRepairing(authorization.controlPlaneRunId))) return { authorized: false };
     authorization.consumedAt = new Date().toISOString();
     await writeFileAtomicNoFollow(project.rootDir, target, `${JSON.stringify(authorization, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     return { authorized: true };
@@ -2267,6 +2297,7 @@ export class AgentRunStore {
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
+    this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
     /** Whoever forwards a run's own projection to the browser. @type {(project: any, run: any, type: string, data: any) => void} */
     this.onRunProjection = options.onRunProjection ?? (() => {});
     /** Per-run memory, so a fixed-interval poll does not repeat itself. */
@@ -3067,7 +3098,7 @@ export class AgentRunStore {
         if (canRepair) {
           let revision;
           try {
-            revision = await snapshotAcceptedPackageForRepair(project, run);
+            revision = await snapshotAcceptedPackageForRepair(project, run, await this.runtimeGeneration(project));
           } catch {
             revision = null;
             terminal.status = "failed";
@@ -3871,7 +3902,15 @@ export class AgentRunStore {
   }
 
   async consumeRepairAuthorization(project, input) {
-    return consumeRepairAuthorization(project, input);
+    return consumeRepairAuthorization(project, input, {
+      runtimeGeneration: input?.runtimeGeneration,
+      controlRunRepairing: async (controlPlaneRunId) => {
+        const current = (await this.list(project)).find((candidate) => candidate.id === controlPlaneRunId);
+        return current?.status === "running"
+          && this.clinicalRepairBaselineCursors.has(controlPlaneRunId)
+          && this.clinicalRepairSenders.has(controlPlaneRunId);
+      },
+    });
   }
 
   async closeAll() {
@@ -3916,13 +3955,13 @@ export function readDelegatedAssistantMessagesForTest(project, messages, reader)
 }
 
 /** Test seam: repair snapshots live in control-plane-private project metadata. */
-export function snapshotAcceptedPackageForRepairForTest(project, run) {
-  return snapshotAcceptedPackageForRepair(project, run);
+export function snapshotAcceptedPackageForRepairForTest(project, run, runtimeGeneration) {
+  return snapshotAcceptedPackageForRepair(project, run, runtimeGeneration);
 }
 
 /** Test seam: one accepted digest authorizes exactly one revision transition. */
-export function consumeRepairAuthorizationForTest(project, input) {
-  return consumeRepairAuthorization(project, input);
+export function consumeRepairAuthorizationForTest(project, input, options) {
+  return consumeRepairAuthorization(project, input, options);
 }
 
 /** Test seam: which files a message claims to have written, without a run

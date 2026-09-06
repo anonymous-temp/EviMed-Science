@@ -427,7 +427,7 @@ async function checkDeepSeekCompatibilityPreflight() {
   }
 }
 
-/** Check the reviewed controller boundary, including its one validated v3 setting. */
+/** Check the reviewed controller boundary, including its two validated v4 endpoints. */
 export function controllerLaunchPlanIsScoped(source) {
   const code = String(source).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const body = code.match(/async function startRuntime\(project, payload\)\s*\{([\s\S]*?)\n {2}function runtimeStatus\(/)?.[1];
@@ -437,16 +437,18 @@ export function controllerLaunchPlanIsScoped(source) {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl"].sort();
   return Array.isArray(fields) && JSON.stringify(fields.sort()) === JSON.stringify(expected)
     && /functionassertExactKeys\(value,allowed\)\{constallowlist=newSet\(allowed\);constunexpected=Object\.keys\(value\?\?\{\}\)\.find\(\(key\)=>!allowlist\.has\(key\)\);if\(unexpected\)\{throwcontrollerFailure\(400,["']runtime_controller_payload_invalid["'],/.test(compact)
     && compact.includes("assertExactKeys(payload,allowed);constproject=awaitprojectFromReference(config,payload);")
     // The endpoint must be captured once, rejected unless empty or exactly the
     // configured internal endpoint, and only that validated local may cross.
-    && /constcapsuleGatewayUrl=payload\.capsuleGatewayUrl;if\(typeofcapsuleGatewayUrl!==["']string["']\|\|\(capsuleGatewayUrl!==["']["']&&capsuleGatewayUrl!==capsuleGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_capsule_gateway_invalid["'],[^;]+;\}constplan=buildRuntimeLaunchPlan\(config,project,port,\{capsuleGatewayUrl\}\);/.test(launch)
+    && /constcapsuleGatewayUrl=payload\.capsuleGatewayUrl;if\(typeofcapsuleGatewayUrl!==["']string["']\|\|\(capsuleGatewayUrl!==["']["']&&capsuleGatewayUrl!==capsuleGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_capsule_gateway_invalid["'],[^;]+;\}/.test(launch)
+    && /constrevisionGatewayUrl=payload\.revisionGatewayUrl;if\(typeofrevisionGatewayUrl!==["']string["']\|\|\(revisionGatewayUrl!==["']["']&&revisionGatewayUrl!==revisionGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_revision_gateway_invalid["'],[^;]+;\}/.test(launch)
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl});")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {
