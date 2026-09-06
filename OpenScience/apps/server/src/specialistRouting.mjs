@@ -138,6 +138,16 @@ function selection(agent, reason) {
   });
 }
 
+/** Keep classifier-failure provenance inside the AgentRun reason vocabulary.
+ * @param {unknown} base @param {unknown} failure @returns {string} */
+export function classifierFailureReason(base, failure) {
+  let prefix = String(base ?? "route").toLowerCase().replace(/[^a-z0-9_.:-]+/g, "-");
+  if (!/^[a-z]/.test(prefix)) prefix = `route:${prefix}`;
+  const code = String(failure ?? "unknown").toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").slice(0, 32) || "unknown";
+  const suffix = `:classifier:${code}`;
+  return `${prefix.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+}
+
 /** TypeScript infers a destructured parameter as exactly the shape its
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} query
@@ -241,7 +251,7 @@ export function routeOpenDomainSpecialist(query, agents, { afterCleanNone = fals
     if (dataInHand) return selection(byId.get("dataset-research-scoping"), "matched:dataset-research-scoping");
     return selection(
       byId.get("clinical-evidence-synthesis"),
-      afterCleanNone ? "matched:clinical-evidence-synthesis(safety-medicine)" : "matched:clinical-evidence-synthesis",
+      afterCleanNone ? "matched:clinical-evidence-synthesis:safety-medicine" : "matched:clinical-evidence-synthesis",
     );
   }
   return null;

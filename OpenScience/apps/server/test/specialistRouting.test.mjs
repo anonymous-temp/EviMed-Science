@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadAgentRegistry } from "../src/agentRegistry.mjs";
-import { routeNamedSpecialist, routeOpenDomainSpecialist } from "../src/specialistRouting.mjs";
+import { classifierFailureReason, routeNamedSpecialist, routeOpenDomainSpecialist } from "../src/specialistRouting.mjs";
 
 
 const packageRoot = path.resolve(
@@ -311,12 +311,21 @@ test("one rule still outranks a clean 'none', and it is the one made of data", a
     /safety-medicine/,
     "the ledger must say the net overrode a model verdict, and on what grounds",
   );
+  assert.match(routed.reason, /^[a-z][a-z0-9_.:-]{0,63}$/, "the route reason must fit the AgentRun ledger contract");
 
   // And a request that names no such medicine does not get there this way.
   assert.equal(
     routeOpenDomainSpecialist("请就某种保健品的口碑做一份综述报告。", agents, { afterCleanNone: true }),
     null,
   );
+});
+
+test("classifier failure attribution remains a valid bounded AgentRun reason", () => {
+  for (const base of ["matched:clinical-evidence-synthesis", "unrouted:open-domain"]) {
+    const reason = classifierFailureReason(base, "empty_content");
+    assert.match(reason, /^[a-z][a-z0-9_.:-]{0,63}$/);
+    assert.match(reason, /:classifier:empty_content$/);
+  }
 });
 
 // Naming a package is an instruction; a paper's own title is not.

@@ -127,7 +127,7 @@ test("the regex net says when it caught a request the model never judged", async
     /routedSpecialist = net && classifierTrace\.failure/,
     "a net match after a classifier failure must be distinguishable from one after a clean verdict",
   );
-  assert.match(source, /\$\{net\.reason\}\(classifier:\$\{classifierTrace\.failure\}\)/);
+  assert.match(source, /classifierFailureReason\(net\.reason, classifierTrace\.failure\)/);
   // And the answer-line fallback keeps its own attribution.
-  assert.match(source, /`unrouted:open-domain\(classifier:\$\{classifierTrace\.failure\}\)`/);
+  assert.match(source, /classifierFailureReason\("unrouted:open-domain", classifierTrace\.failure\)/);
 });
