@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { fetchWebMe } from "@/lib/apiClient";
+import { useEffect, useRef, useState } from "react";
+import { fetchWebMe, getWebProjectId } from "@/lib/apiClient";
+import { PluginsCard } from "@/components/settings/PluginsCard";
 import { DataFlowCard } from "@/components/settings/DataFlowCard";
 import { WebProjectsCard } from "@/components/settings/WebProjectsCard";
 import { WebReadinessCard } from "@/components/settings/WebReadinessCard";
@@ -20,12 +21,20 @@ import { WebTasksCard } from "@/components/settings/WebTasksCard";
  * does not offer it.
  */
 export function SettingsPage() {
-  const [projectId, setProjectId] = useState("default");
+  const [projectId, setProjectId] = useState(() => getWebProjectId());
+  const projectChanged = useRef(false);
 
   useEffect(() => {
+    let active = true;
+    const requestedProjectId = getWebProjectId();
     void fetchWebMe().then((me) => {
-      if (me?.project?.id) setProjectId(me.project.id);
-    });
+      if (!active || projectChanged.current || !me?.project?.id) return;
+      const currentProjectId = getWebProjectId();
+      // The project store may already have repaired a deleted remembered project.
+      // Accept that same resolved project, but never replace a newer selection.
+      if (currentProjectId === requestedProjectId || currentProjectId === me.project.id) setProjectId(me.project.id);
+    }).catch(() => { /* Project-scoped cards present their own retryable API errors. */ });
+    return () => { active = false; };
   }, []);
 
   return (
@@ -34,7 +43,8 @@ export function SettingsPage() {
         <h1 className="font-serif text-display font-semibold text-text">设置</h1>
         <p className="mt-2 text-body text-muted">项目、运行资源、数据边界与服务就绪状态。</p>
 
-        <WebProjectsCard onProjectChange={(project) => setProjectId(project.id)} />
+        <WebProjectsCard onProjectChange={(project) => { projectChanged.current = true; setProjectId(project.id); }} />
+        <PluginsCard projectId={projectId} />
         <WebResourcesCard key={`resources-${projectId}`} />
         <DataFlowCard hosted model="平台托管模型" workspace={`/workspace/${projectId}`} />
         <WebReadinessCard />
