@@ -93,10 +93,20 @@ function destroyUpgrade(socket, status, code) {
 }
 
 /**
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any }} deps
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null }) {
+export function createRuntimeUiServer({ config, store, runtimeManager, usageLedger = null, authorizePrompt = null }) {
+  async function authorizePromptSession(project, payload) {
+    if (!authorizePrompt) return;
+    // The existing native wire uses payload.args.request on both HTTP RPC and
+    // mux opens, exactly as DshRuntimeAdapter.prompt and callKernel produce.
+    const sessionId = payload?.args?.request?.sessionId;
+    if (typeof sessionId !== "string" || !sessionId || sessionId.length > 128) {
+      throw new HttpError(400, "runtime_ui_prompt_invalid", "A native prompt must name its session.");
+    }
+    await authorizePrompt(project, sessionId);
+  }
   const upgradeSockets = new Set();
   /** Only live transports are indexed. Renewal updates their short ticket, never their login. */
   const frameConnections = new Map();
@@ -154,6 +164,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
       throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical native API method is required.");
     }
     let workspaceBody = null;
+    let promptBody = null;
+    if (method === "session/prompt" && authorizePrompt) {
+      const raw = await readBody(req, config.maxJsonBytes);
+      req.__openScienceProxyBody = raw;
+      try { promptBody = JSON.parse(raw.toString("utf8")); } catch { /* Rejected below as an invalid native RPC. */ }
+      if (promptBody?.type !== "client-request" || promptBody.method !== "session/prompt") {
+        throw new HttpError(400, "runtime_ui_prompt_invalid", "A native prompt RPC is required.");
+      }
+    }
     if (method === "workspace/create" && req.method === "POST") {
       const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
       req.__openScienceProxyBody = raw;
@@ -200,6 +219,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
     await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager);
+    if (method === "session/prompt") await authorizePromptSession(project, promptBody?.payload);
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
@@ -217,6 +237,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
       }
       const status = error instanceof HttpError ? error.status : 502;
       const code = error?.code ?? "runtime_ui_failed";
+      if (code === "runtime_reserved_for_autopilot") {
+        sendNotice(res, status, "后台任务正在进行", "当前项目正在整理资料或执行科研任务，请稍后重试。任务完成后可打开历史记录。");
+        return;
+      }
+      if (code === "agent_background_only") {
+        sendNotice(res, status, "此任务由资料页管理", "请在资料页调整或重试该来源；已有结果仍可查看。");
+        return;
+      }
       sendNotice(res, status, "内核界面暂时不可用", String(code));
     });
   });
@@ -234,11 +262,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
         const snapshot = { url: req.url, headers: { cookie: req.headers.cookie } };
         trackFrame(snapshot, claims, socket);
         const revalidate = async () => { await resolveFrame(snapshot, null); };
-        const authorize = async (endpoint) => {
+        const authorize = async (endpoint, payload = null) => {
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
+          if (endpoint === "session/prompt") await authorizePromptSession(project, payload);
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize });
       } catch (error) {

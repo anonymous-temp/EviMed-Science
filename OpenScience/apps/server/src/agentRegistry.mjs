@@ -33,8 +33,9 @@ const publicManifestFields = Object.freeze([
   "dataSources",
   "outputs",
   "completionChecks",
+  "visibility",
 ]);
-const optionalManifestFields = new Set(["companionSkills"]);
+const optionalManifestFields = new Set(["companionSkills", "visibility"]);
 
 /**
  * The research tools an agent package may declare.
@@ -198,6 +199,7 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
   }
 
   const id = expectString(manifest.id, "agent id", { max: 63 });
+  if (manifest.visibility != null && !["public", "internal"].includes(manifest.visibility)) throw registryError("visibility must be public or internal.");
   if (!idPattern.test(id)) throw registryError(`Invalid agent id "${id}".`);
   const version = expectString(manifest.version, "version", { max: 128 });
   if (!semverPattern.test(version)) throw registryError(`version "${version}" must be semantic versioning.`);
@@ -253,6 +255,7 @@ function validateManifest(value, directoryName, allowedToolIds, allowedDataSourc
 
   return Object.freeze({
     id,
+    ...(manifest.visibility === "internal" ? { visibility: "internal" } : {}),
     version,
     title: expectString(manifest.title, "title", { max: 128 }),
     category: expectString(manifest.category, "category", { max: 96 }),
@@ -328,8 +331,8 @@ class AgentRegistry {
     this.#packagesById = new Map(sorted.map((entry) => [entry.manifest.id, Object.freeze(entry)]));
   }
 
-  list() {
-    return [...this.#publicAgents];
+  list({ includeInternal = false } = {}) {
+    return this.#publicAgents.filter(agent => includeInternal || agent.visibility !== "internal");
   }
 
   get(id) {
@@ -425,6 +428,7 @@ export async function loadAgentRegistry({
       const checks = [...new Set(source.produces.flatMap((product) => product.checks))];
       const mapped = validateManifest({
         id: source.id,
+        ...(source.visibility === "internal" ? { visibility: "internal" } : {}),
         version: source.version,
         title: source.title,
         category: source.category,

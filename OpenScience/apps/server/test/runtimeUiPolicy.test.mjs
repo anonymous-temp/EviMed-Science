@@ -27,7 +27,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -73,7 +73,7 @@ async function fixture(t, overrides = {}, muxOptions = {}) {
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -116,6 +116,94 @@ async function fixture(t, overrides = {}, muxOptions = {}) {
 }
 
 const open = (streamId, endpoint, args = {}) => ({ type: "open", streamId, endpoint, payload: { args } });
+
+test("native HTTP prompts check the bound session before forwarding while source history stays readable", async t => {
+  const checked = [];
+  const f = await fixture(t, {}, {}, { authorizePrompt: async (project, sessionId) => {
+    checked.push({ userId: project.userId, projectId: project.id, sessionId });
+    if (sessionId === "source-private") throw new HttpError(403, "agent_background_only", "Use Sources to adjust or retry this source.");
+  } });
+  const forwarded = [];
+  f.manager.proxy = async (req, res) => { forwarded.push(req.__openScienceProxyBody?.toString("utf8") ?? "read"); res.writeHead(200); res.end("{}"); };
+  const request = sessionId => JSON.stringify({ type: "client-request", rpcId: `rpc-${sessionId}`, method: "session/prompt",
+    payload: { args: { request: { requestId: `req-${sessionId}`, sessionId, mode: "queue", content: [{ type: "text", text: "An ordinary follow-up" }] } } } });
+  const send = body => fetch(`${f.base}/api/session/prompt`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body });
+  const denied = await send(request("source-private"));
+  assert.equal(denied.status, 403); assert.ok((await denied.text()).includes("资料页")); assert.equal(forwarded.length, 0);
+  const publicRequest = request("public-session");
+  assert.equal((await send(publicRequest)).status, 200); assert.deepEqual(forwarded, [publicRequest]);
+  assert.equal(checked[0].userId, f.user.id); assert.equal(checked[0].projectId, "default");
+  const history = await fetch(`${f.base}/api/session/page`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ sessionId: "source-private" }) });
+  assert.equal(history.status, 200); assert.equal(checked.length, 2);
+});
+
+test("native mux denies internal-session prompts before upstream and preserves public frames", async t => {
+  const f = await fixture(t, {}, {}, { authorizePrompt: async (_project, sessionId) => {
+    if (sessionId === "source-private") throw new HttpError(403, "agent_background_only", "Use Sources to adjust or retry this source.");
+  } });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const prompt = (id, sessionId) => open(id, "session/prompt", { request: { requestId: id, sessionId, mode: "queue", content: [{ type: "text", text: "A follow-up" }] } });
+  c.send(prompt("blocked", "source-private"));
+  const denied = await c.next(); assert.equal(denied.type, "error"); assert.equal(denied.error.code, "agent_background_only");
+  assert.equal((await c.next()).type, "end");
+  assert.equal(f.received.length, 0);
+  const ordinary = prompt("ordinary", "public-session"); c.send(ordinary);
+  assert.equal((await c.next()).type, "item"); assert.deepEqual(f.received, [ordinary]);
+  // End the accepted prompt before sending another stream, as the native
+  // admission owner waits for its explicit terminal acknowledgement.
+  for (const peer of f.peers) peer.send(JSON.stringify({ type: "end", streamId: "ordinary" }));
+  await c.next();
+  c.send(open("history", "session/page", { request: { sessionId: "source-private" } }));
+  assert.equal((await c.next()).type, "item"); assert.equal(f.received.at(-1).endpoint, "session/page");
+});
+
+test("real HTTP and mux startup cannot replace a bounded source workspace and history opens after release", async t => {
+  const f = await fixture(t, { runtimeIdleTimeoutMs: 0 });
+  const project = await f.store.requireProject(f.user, "default");
+  const sourceProject = { ...project, workspaceDir: path.join(project.baseDir, "knowledge-base/.evimed-derived/source-job") };
+  await mkdir(sourceProject.workspaceDir, { recursive: true });
+  const calls = { stop: 0, spawn: 0, close: 0, http: 0 };
+  const bounded = { kind: "mock", url: "http://kernel.local", socketPath: path.join(f.dataDir, "mux.sock"), cookie: "kernel_auth=fixture",
+    project: sourceProject, workspaceDir: sourceProject.workspaceDir, startedAt: new Date().toISOString(), pid: null, exitedAt: null,
+    modelGatewayScope: { runId: "source_reserved", dailyLimit: 20, weeklyLimit: 80, runLimit: 8 },
+    close: async () => { calls.close++; } };
+  // Exercise real admission/startup/proxy methods. Only the external process
+  // launcher and the upstream kernel protocol are fixtures.
+  f.manager.start = RuntimeManager.prototype.start.bind(f.manager);
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.manager.config.runtimeMode = "kernel";
+  f.manager.startKernel = async (selected, scope) => {
+    calls.spawn++;
+    return { ...bounded, project: selected, workspaceDir: selected.workspaceDir, modelGatewayScope: scope,
+      closedByManager: false, close: async () => {} };
+  };
+  const stop = f.manager.stop.bind(f.manager);
+  f.manager.stop = async selected => { calls.stop++; return stop(selected); };
+  f.manager.runtimes.set(f.manager.key(project), bounded);
+  t.after(() => f.manager.closeAll());
+  f.upstream.on("request", (_req, res) => { calls.http++; res.writeHead(200, { "content-type": "application/json" }); res.end('{"history":true}'); });
+
+  assert.equal(await f.manager.start(sourceProject), bounded, "same-workspace read startup must reuse its runtime");
+  const denied = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(denied.status, 423);
+  assert.ok((await denied.text()).includes("后台任务正在进行"));
+  const socketDenied = f.connect(); assert.equal(await socketDenied.opened, 423);
+  assert.deepEqual(calls, { stop: 0, spawn: 0, close: 0, http: 0 });
+  assert.equal(f.manager.runtimes.get(f.manager.key(project)), bounded);
+  assert.equal(f.manager.boundedRuntimeScope(project).runId, "source_reserved");
+
+  assert.equal(await f.manager.endBoundedRuntime(sourceProject, "source_reserved"), true);
+  assert.equal(calls.stop, 1); assert.equal(calls.close, 1);
+  const history = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(history.status, 200); assert.deepEqual(await history.json(), { history: true });
+  const socket = f.connect(); assert.equal(await socket.opened, 101);
+  socket.send(open("history-after-release", "session/page", { request: { sessionId: "source-session" } }));
+  assert.equal((await socket.next()).type, "item");
+  assert.equal(calls.spawn, 1, "the HTTP and mux readers reuse one ordinary runtime after release");
+  assert.equal(calls.stop, 1);
+});
 
 // Source-derived contract: @deepseek-ai/dsh-api-gateway@0.1.2-rc.1,
 // lib/client.js:105-146. Its native parser requires these exact keys and a

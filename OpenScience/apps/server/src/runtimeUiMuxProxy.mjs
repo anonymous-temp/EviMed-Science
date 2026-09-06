@@ -43,7 +43,7 @@ function send(peer, data) {
  * @param {{ req: any, socket: any, head: Buffer, runtime: any, maxPayload: number,
  * heartbeat?: { intervalMs: number, timeoutMs: number },
  * admit?: (endpoint:string,operation:()=>Promise<void>) => Promise<void>,
- * revalidate: () => Promise<void>, authorize: (endpoint: string) => Promise<void> }} options
+ * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
  */
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
   admit = async (_endpoint, operation) => operation(),
@@ -161,7 +161,7 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       if (streams.has(frame.streamId)) { shutdown(1008, "runtime_ui_stream_duplicate"); return; }
       try {
         if (streams.size >= MAX_STREAMS) throw new HttpError(429, "runtime_ui_stream_limit", "Too many active mux streams.");
-        await authorize(frame.endpoint);
+        await authorize(frame.endpoint, frame.payload);
       } catch (error) {
         await rejectStream(frame.streamId, error);
         return;

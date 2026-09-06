@@ -1116,6 +1116,7 @@ export function createWebApiApp(overrides = {}) {
   async function routeAdoptedInput(project, sessionId, text) {
     if (!text) return {};
     const binding = await researchSessions.get(project, sessionId);
+    await assertPublicSessionPrompt(project, sessionId, binding);
     if (binding?.mode === "specialist") return {
       effectiveAgentId: binding.agentId, effectiveAgentVersion: binding.agentVersion,
       effectiveRuntimeAgent: binding.runtimeAgent, effectiveRouteReason: "session-binding",
@@ -1143,6 +1144,17 @@ export function createWebApiApp(overrides = {}) {
       effectiveRuntimeAgent: effective?.runtimeAgent ?? null,
       effectiveRouteReason: effective?.reason ?? null,
     };
+  }
+
+  async function assertPublicAgent(agentId) {
+    if ((await agentRegistry).get(agentId)?.visibility === "internal") {
+      throw new HttpError(403, "agent_background_only", "Source understanding is managed from Sources; adjust or retry the source there.");
+    }
+  }
+
+  async function assertPublicSessionPrompt(project, sessionId, knownBinding = undefined) {
+    const binding = knownBinding ?? await researchSessions.get(project, sessionId);
+    if (binding?.mode === "specialist") await assertPublicAgent(binding.agentId);
   }
 
   async function context(req, res) {
@@ -1643,6 +1655,7 @@ export function createWebApiApp(overrides = {}) {
         const sessionId = decodeRouteComponent(rawSessionId, "research session id");
         const ctx = await context(req, res);
         const body = await readJson(req, config.maxJsonBytes);
+        if (body?.mode === "specialist") await assertPublicAgent(body.agentId);
         sendJson(res, 200, { data: await researchSessions.put(ctx.project, sessionId, body) });
         return;
       }
@@ -1662,6 +1675,9 @@ export function createWebApiApp(overrides = {}) {
         }
         const text = assertString(body.text, "text", { max: config.maxJsonBytes });
         if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
+        const registry = await agentRegistry;
+        const boundSession = await researchSessions.get(ctx.project, body.sessionId);
+        await assertPublicSessionPrompt(ctx.project, body.sessionId, boundSession);
         if (config.runtimeMode === "kernel" && !config.deepseekProviderEnabled) {
           throw new HttpError(
             503,
@@ -1674,8 +1690,6 @@ export function createWebApiApp(overrides = {}) {
           weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
         });
         else await assertSpendWithinLimits(config, ctx.user.id);
-        const registry = await agentRegistry;
-        const boundSession = await researchSessions.get(ctx.project, body.sessionId);
         // The default open-domain answer agent is the fallback handler, never
         // a routable specialist: exclude it from router/classifier candidates.
         const routableAgents = registry.list().filter((agent) => agent.id !== OPEN_DOMAIN_ANSWER_AGENT_ID);
@@ -2305,7 +2319,7 @@ export function createWebApiApp(overrides = {}) {
   // The kernel's browser application, on an origin of its own. It is a
   // listener rather than a route because the application builds every URL it
   // fetches from `location.origin`; see `runtimeUiServer.mjs`.
-  const runtimeUi = createRuntimeUiServer({ config, store, runtimeManager, usageLedger });
+  const runtimeUi = createRuntimeUiServer({ config, store, runtimeManager, usageLedger, authorizePrompt: assertPublicSessionPrompt });
 
   // No `upgrade` handler here on purpose. The only WebSocket this deployment
   // serves belongs to the kernel's browser application, and that application

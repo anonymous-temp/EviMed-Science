@@ -339,6 +339,27 @@ test("specialty agent catalog requires authentication and exposes only public me
   });
 });
 
+test("background source sessions remain readable but public binding and dispatch cannot restart them", async () => {
+  await withAuthApp(async ({ app, base }) => {
+    const auth = await login(base);
+    const headers = { ...auth.auth, "Content-Type": "application/json" };
+    const denied = await fetch(`${base}/api/research-sessions/source-private`, { method: "PUT", headers,
+      body: JSON.stringify({ mode: "specialist", agentId: "source-understanding", agentVersion: "1.0.0" }) });
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.json()).code, "agent_background_only");
+    const user = await app.store.userById("alice");
+    const project = await app.store.requireProject(user, "default");
+    await app.researchSessions.put(project, "source-private", { mode: "specialist", agentId: "source-understanding", agentVersion: "1.0.0" });
+    const listed = await fetch(`${base}/api/research-sessions`, { headers });
+    assert.equal((await listed.json()).data.some(session => session.sessionId === "source-private"), true);
+    const prompted = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers,
+      body: JSON.stringify({ sessionId: "source-private", dispatchId: "source-manual", text: "Run again without a frozen ingestion job" }) });
+    assert.equal(prompted.status, 403);
+    assert.equal((await prompted.json()).code, "agent_background_only");
+    assert.equal((await app.agentRuns.list(project)).length, 0);
+  });
+});
+
 function tarEntries(buffer) {
   const entries = new Map();
   let offset = 0;

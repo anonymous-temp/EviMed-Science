@@ -465,6 +465,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         }
         const manifest = (ctx.get('evimedCapabilities') ?? []).find((/** @type {any} */ candidate) => candidate.id === item.capability)
         if (!manifest) return { ok: false, code: 'capability_unknown', issues: [issue('capability_unknown', `能力目录里没有「${item.capability}」。`)] }
+        if (manifest.visibility === 'internal') return { ok: false, code: 'capability_background_only',
+          issues: [issue('capability_background_only', 'This capability is managed by its background workflow; use the Sources page to adjust or retry source understanding.')] }
         const kind = resolveContractKind(manifest, item.contractKind)
         if (!kind.ok) return { ok: false, code: kind.code, issues: [issue(kind.code, kind.message)] }
 
