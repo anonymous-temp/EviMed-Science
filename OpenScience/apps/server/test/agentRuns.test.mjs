@@ -1493,6 +1493,24 @@ test("a run whose subagents are working is not judged stalled because its root s
   assert.equal(finished.errorCode, "runtime_monitor_timeout", "it should run out the window, not be judged dead");
 });
 
+test("a running-subagent label without child activity does not keep a stalled run alive", async (t) => {
+  // The workspace projection is model-writable. Its claim that a child is
+  // running may explain a quiet root, but it cannot be the heartbeat that
+  // keeps the run alive forever. Only changing kernel-owned child activity is
+  // mirrored into the budget counters used by the stall signal.
+  const { project, store, writeProjection } = await delegatingRunFixture(t, { stallPolls: 3, maxPolls: 40 });
+  await writeProjection({
+    evidence: { total: 0, byStatus: {} },
+    budget: { steps: 4, tokens: 100, children: 1 },
+    subagents: [{ deliverableId: "d1", capability: "research-brief", status: "running" }],
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await store.monitors.get(run.id)?.promise;
+
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_stalled", "a silent child must still reach the stall threshold");
+});
+
 test("a run-side projection that will not parse is a named notice, never evidence of a stall", async (t) => {
   // §14 rule 18. Counting an unreadable file as "did not move" would mean the
   // fix for stall misjudgement introduced a fresh source of it.
