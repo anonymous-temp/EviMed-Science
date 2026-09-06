@@ -38,7 +38,9 @@ async function fixture(t) {
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Default',1048576),($2,'default','Default',1048576)", [owner, other]);
   const manifest = { projectId: "default", connector: { type: "upload", id: "library" }, path: "knowledge-base/original.txt",
     sha256: "a".repeat(64), size: 10, mimeType: "text/plain", mtime: "2026-09-06T00:00:00Z" };
-  const { source } = await sources.register(owner, manifest);
+  let { source } = await sources.register(owner, manifest);
+  source = await sources.override(owner, source.id, { expectedRevision: source.revision,
+    docType: source.payload.docType, depth: "index_only", reason: "Source-copy deletion fixture." });
   await documents.put(other, "source", source.id, { ...source.payload, status: "complete" }, { expectedRevision: 0, projectId: "default" });
   await mkdir(path.join(root, "knowledge-base"), { recursive: true });
   await writeFile(path.join(root, manifest.path), "original raw data");
@@ -58,6 +60,7 @@ async function fixture(t) {
     cleanupSource: async (_job, current, jobIds) => removeSourceCopies({ projectRoot: root, sourceId: current.id, jobIds }),
     leaseMs: 1000, pollMs: 100, ...overrides,
   });
+  await worker().tick(); // Retire the superseded default-depth job without parsing.
   return { root, database, documents, jobs, sources, source, manifest, owner, other, worker, parse };
 }
 
@@ -113,7 +116,8 @@ test("a slow parser cannot recreate source copies after a second worker complete
   assert.equal(await absent(path.join(f.root, "knowledge-base/.evimed-derived", current.id)), true);
   assert.equal((await f.documents.get(f.owner, "source", current.id, { includeDeleted: true })).payload.deletion.status, "complete");
   const jobs = (await f.database.query("SELECT status,payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest'", [f.owner])).rows;
-  assert.equal(jobs.find(job => !job.payload.action).status, "canceled");
+  assert.equal(jobs.find(job => !job.payload.action && job.payload.sourceGeneration === f.source.payload.generation).status, "canceled");
+  assert.equal(jobs.find(job => !job.payload.action && job.payload.sourceGeneration === 1).status, "succeeded");
   assert.equal(jobs.find(job => job.payload.action === "source-delete").status, "succeeded");
 });
 
@@ -195,9 +199,10 @@ test("a failed outbox insert rolls back the source tombstone and ingestion cance
   await assert.rejects(source.remove(f.owner, f.source.id, { expectedRevision: f.source.revision }), /fixture outbox unavailable/);
   assert.equal((await f.sources.get(f.owner, f.source.id)).revision, f.source.revision);
   const jobs = (await f.database.query("SELECT status,payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest'", [f.owner])).rows;
-  assert.equal(jobs.length, 1);
-  assert.equal(jobs[0].status, "queued");
-  assert.equal(jobs[0].payload.action, undefined);
+  assert.equal(jobs.length, 2, "the failed deletion must add no job to either existing generation");
+  const current = jobs.find(job => job.payload.sourceGeneration === f.source.payload.generation);
+  assert.equal(current.status, "queued");
+  assert.equal(current.payload.action, undefined);
 });
 
 test("restart repairs an old tombstone with no deletion job and ignores a restored legacy target", options, async t => {
@@ -279,7 +284,9 @@ test("a stale tombstone reconciliation snapshot cannot delete a recreated accoun
       await f.database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Replacement','development')", [f.owner]);
       await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Replacement',1048576)", [f.owner]);
       const fresh = await f.sources.register(f.owner, f.manifest);
-      const processing = await f.sources.beginIngestion(f.owner, fresh.source.id, { generation: 1 });
+      const indexed = await f.sources.override(f.owner, fresh.source.id, { expectedRevision: fresh.source.revision,
+        docType: fresh.source.payload.docType, depth: "index_only", reason: "Replacement source fixture." });
+      const processing = await f.sources.beginIngestion(f.owner, fresh.source.id, { generation: indexed.payload.generation });
       assert.equal(processing.revision, removed.revision);
     }
     return result;
@@ -308,13 +315,15 @@ test("a stale worker discard cannot delete a new lease's published copy of the s
   const old = f.worker({ jobs }).tick();
   await paused;
   await new Promise(resolve => setTimeout(resolve, 1100));
-  const fresh = f.worker({ parser: { parse: async () => ({ ...await f.parse(), text: "NEW_PUBLISHED" }) } });
+  const fresh = f.worker({ parser: { parse: async () => { throw new Error("The fresh lease must reuse the frozen source capture."); } } });
   const finished = await fresh.tick();
   assert.equal(finished.id, oldJob.id, "the next worker must reclaim the same durable job");
   const source = await f.sources.get(f.owner, f.source.id);
   const published = path.join(f.root, source.payload.outputs.artifactPath);
-  assert.equal(await readFile(published, "utf8"), "NEW_PUBLISHED");
+  assert.equal(published.includes(sourceAttemptId(oldJob)), false, "publication belongs to the new lease's directory");
+  assert.equal(await readFile(published, "utf8"), "parsed source text");
   resume(); await old;
-  assert.equal(await readFile(published, "utf8"), "NEW_PUBLISHED");
+  assert.equal(await readFile(published, "utf8"), "parsed source text");
+  assert.equal((await f.sources.get(f.owner, f.source.id)).payload.outputs.artifactPath, source.payload.outputs.artifactPath);
   assert.equal((await f.sources.get(f.owner, f.source.id)).payload.status, "complete");
 });

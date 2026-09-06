@@ -232,13 +232,27 @@ export class UsageLedger {
   async summaryRun(userId, runId) {
     await migrateUsageLedger(this.database);
     const result = await this.database.query(`SELECT count(*)::integer AS calls,
+      count(*) FILTER (WHERE status='settled')::integer AS settled_calls,
+      count(*) FILTER (WHERE status='reserved')::integer AS reserved_calls,
+      count(*) FILTER (WHERE status='settled' AND (cache_hit_tokens IS NULL OR cache_miss_tokens IS NULL
+        OR output_tokens IS NULL OR actual_cost IS NULL))::integer AS incomplete_usage_calls,
       coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS actual_cost,
       coalesce(sum(reserved_cost) FILTER (WHERE status IN ('reserved','uncertain')),0) AS open_cost,
-      count(*) FILTER (WHERE status='uncertain')::integer AS uncertain
+      count(*) FILTER (WHERE status='uncertain')::integer AS uncertain,
+      coalesce(sum(cache_hit_tokens + cache_miss_tokens) FILTER (WHERE status='settled'),0) AS input_tokens,
+      coalesce(sum(output_tokens) FILTER (WHERE status='settled'),0) AS output_tokens,
+      coalesce(array_agg(DISTINCT model) FILTER (WHERE status='settled'),ARRAY[]::text[]) AS models
       FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=$2`,
     [productId(userId, "user"), productId(runId, "run")]);
-    return { calls: result.rows[0].calls, actualCost: Number(result.rows[0].actual_cost),
-      openCost: Number(result.rows[0].open_cost), uncertain: result.rows[0].uncertain, currency: "CNY" };
+    const row = result.rows[0];
+    return { calls: row.calls, settledCalls: row.settled_calls, reservedCalls: row.reserved_calls,
+      incompleteUsageCalls: row.incomplete_usage_calls,
+      actualCost: Number(row.actual_cost), openCost: Number(row.open_cost), uncertain: row.uncertain,
+      currency: "CNY", inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens),
+      // This ledger is settled by the existing DeepSeek gateway. Report the
+      // actually billed model only when the run has one unambiguous identity.
+      providerId: "deepseek", modelId: row.models.length === 1 ? row.models[0] : null,
+    };
   }
 
   /** Refuse a new interactive entry point that is already at its configured limit. */

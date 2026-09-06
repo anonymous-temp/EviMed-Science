@@ -26,6 +26,9 @@ test("the actual upload path creates one durable source manifest and ingest job"
     user = await app.store.createUser(username, "test-only-source-password", "Source fixture");
     const project = await app.store.defaultProject(await app.store.userById(user.id));
     const address = await app.listen(0, "127.0.0.1");
+    // This fixture exercises upload, parsing, indexing and deletion. Structured
+    // understanding has a separate bounded-runtime integration fixture.
+    await app.sourceWorker.close();
     listening = true;
     const base = `http://127.0.0.1:${address.port}`;
     const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" },
@@ -46,6 +49,11 @@ test("the actual upload path creates one durable source manifest and ingest job"
     const duplicate = await upload("研究方案-copy.txt");
     assert.equal(duplicate.status, 200);
     assert.equal((await duplicate.json()).data.duplicate, true);
+    const registered = await app.sourceService.get(user.id, firstBody.data.source.id);
+    await app.sourceService.override(user.id, registered.id, { expectedRevision: registered.revision,
+      docType: registered.payload.docType, depth: "index_only", reason: "Parser and source-file lifecycle fixture." });
+    await app.sourceWorker.tick(); // Retire the superseded initial-depth job.
+    await app.sourceWorker.tick(); // Consume the explicitly selected index job.
 
     let sources = [];
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -61,13 +69,30 @@ test("the actual upload path creates one durable source manifest and ingest job"
     assert.equal(sources[0].payload.coverage.percent, 100);
     assert.match(await readFile(path.join(project.baseDir, sources[0].payload.outputs.artifactPath), "utf8"), /比较两种证据综合方法/);
     const jobs = await app.store.database.query("SELECT kind,status FROM evimed_product.jobs WHERE user_id=$1 AND kind='ingest'", [user.id]);
-    assert.equal(jobs.rowCount, 1);
-    assert.equal(jobs.rows[0].status, "succeeded");
+    assert.equal(jobs.rowCount, 2, "one admission per explicitly selected generation");
+    assert.ok(jobs.rows.every(job => job.status === "succeeded"));
+    const processed = await app.sourceService.get(user.id, sources[0].id);
+    const privateRun = { id: "fixture-run", sessionId: "fixture-session", dispatchId: "fixture-dispatch",
+      workspaceName: "private-workspace", artifactDirectory: "private-derived-directory" };
+    const seeded = await app.sourceService.documents.put(user.id, "source", processed.id, {
+      ...processed.payload, analysis: { ...processed.payload.analysis, run: privateRun }, pendingRunCancellations: [privateRun],
+    }, { expectedRevision: processed.revision, projectId: project.id });
+    const duplicateProcessed = await upload("研究方案-copy.txt");
+    assert.equal(duplicateProcessed.status, 200);
+    const publicDuplicate = await duplicateProcessed.json();
+    assert.equal(publicDuplicate.data.duplicate, true);
+    assert.equal(publicDuplicate.data.source.payload.analysis.run.id, "fixture-run");
+    for (const privateValue of ["private-workspace", "private-derived-directory", "pendingRunCancellations", "artifactDirectory", "workspaceName"]) {
+      assert.equal(JSON.stringify(publicDuplicate).includes(privateValue), false, privateValue);
+    }
+    sources[0] = await app.sourceService.documents.put(user.id, "source", processed.id, processed.payload,
+      { expectedRevision: seeded.revision, projectId: project.id });
     if (process.platform === "linux") {
       const removal = await fetch(`${base}/api/sources/${sources[0].id}`, { method: "DELETE", headers,
         body: JSON.stringify({ expectedRevision: sources[0].revision }) });
       assert.equal(removal.status, 200);
       const deleted = (await removal.json()).data;
+      await app.sourceWorker.tick();
       let finished;
       for (let attempt = 0; attempt < 30; attempt++) {
         finished = await app.sourceService.get(user.id, sources[0].id, { includeDeleted: true });

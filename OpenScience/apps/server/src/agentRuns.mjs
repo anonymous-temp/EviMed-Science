@@ -2338,6 +2338,9 @@ export class AgentRunStore {
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
+    // Workflow-owned runs may retain a different workspace after a user changes
+    // the active workspace. Null means its durable owner cannot authorize recovery.
+    this.resolveRunProject = options.resolveRunProject ?? (async (project) => project);
     /** Whoever forwards a run's own projection to the browser. @type {(project: any, run: any, type: string, data: any) => void} */
     this.onRunProjection = options.onRunProjection ?? (() => {});
     /** Per-run memory, so a fixed-interval poll does not repeat itself. */
@@ -2455,10 +2458,12 @@ export class AgentRunStore {
   async recover(project) {
     let runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
+      const runProject = await this.resolveRunProject(project, run);
+      if (!runProject) continue;
       if (run.dispatchStatus === "dispatching" && !this.dispatchOwners.has(run.id)) {
-        await this.markDispatch(project, run.id, "unknown");
+        await this.markDispatch(runProject, run.id, "unknown");
       }
-      this.scheduleMonitor(project, run.id);
+      this.scheduleMonitor(runProject, run.id);
     }
     this.projects.set(`${project.userId}:${project.id}`, project);
     runs = await this.list(project);
@@ -2600,9 +2605,11 @@ export class AgentRunStore {
   async existingDispatch(project, run) {
     if (run.status !== "running" || run.dispatchStatus !== "dispatching") return run;
     if (this.dispatchOwners.has(run.id)) return run;
-    const unknown = await this.markDispatch(project, run.id, "unknown");
-    this.projects.set(`${project.userId}:${project.id}`, project);
-    this.scheduleMonitor(project, run.id);
+    const runProject = await this.resolveRunProject(project, run);
+    if (!runProject) return run;
+    const unknown = await this.markDispatch(runProject, run.id, "unknown");
+    this.projects.set(`${project.userId}:${project.id}`, runProject);
+    this.scheduleMonitor(runProject, run.id);
     return unknown;
   }
 
@@ -3885,12 +3892,16 @@ export class AgentRunStore {
           return cursor != null && turns.find((candidate) => candidate.startSeq > cursor)?.startSeq === turn.startSeq;
         });
         if (matches.length === 1 && requestIds.length && !unknownLegacy) {
-          run = await this.bindLegacyKernelRequests(project, matches[0].id, requestIds);
+          const legacyProject = await this.resolveRunProject(project, matches[0]);
+          if (!legacyProject) continue;
+          run = await this.bindLegacyKernelRequests(legacyProject, matches[0].id, requestIds);
           knownRuns[knownRuns.findIndex((item) => item.id === run.id)] = run;
         } else if (matches.length > 1 || unknownLegacy) {
           const notice = "Native replay could not be attributed because a legacy ordinary run has no unique verifiable input boundary.";
           for (const item of legacyOrdinary) if (!item.qualityNotices?.includes(notice) && !notifiedLegacy.has(item.id)) {
-            await this.appendQualityNotices(project, item.id, [notice], { unchecked: true });
+            const legacyProject = await this.resolveRunProject(project, item);
+            if (!legacyProject) continue;
+            await this.appendQualityNotices(legacyProject, item.id, [notice], { unchecked: true });
             notifiedLegacy.add(item.id);
           }
           continue;
@@ -3926,8 +3937,10 @@ export class AgentRunStore {
         }
       }
       if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
-        await this.reconcileSession(project, sessionId, run.id);
-        this.scheduleMonitor(project, run.id);
+        const runProject = await this.resolveRunProject(project, run);
+        if (!runProject) continue;
+        await this.reconcileSession(runProject, sessionId, run.id);
+        this.scheduleMonitor(runProject, run.id);
       }
     }
     const active = (await this.list(project)).filter((run) => run.sessionId === sessionId && run.status === "running");
@@ -3948,7 +3961,12 @@ export class AgentRunStore {
       }
       for (const run of runs) {
         if (run.status !== "running") continue;
-        this.scheduleMonitor(project, run.id);
+        const runProject = await this.resolveRunProject(project, run);
+        if (!runProject) continue;
+        if (run.dispatchStatus === "dispatching" && !this.dispatchOwners.has(run.id)) {
+          await this.markDispatch(runProject, run.id, "unknown");
+        }
+        this.scheduleMonitor(runProject, run.id);
         adopted += 1;
       }
     }

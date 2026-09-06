@@ -50,9 +50,11 @@ import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
-import { SourceService } from "./sourceService.mjs";
+import { SourceService, projectSourceManifestRecord } from "./sourceService.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
+import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
+import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
 import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { OpenListClient } from "./openListClient.mjs";
@@ -505,12 +507,18 @@ export function createWebApiApp(overrides = {}) {
     if (!user) throw new HttpError(404, "source_account_unavailable", "Source account is unavailable.");
     return store.requireProject(user, job.projectId);
   };
+  let sourceUnderstandingRuntime = null;
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
     jobs: productJobs,
     sources: sourceService,
     parser: documentParser,
     pollMs: config.sourceIngestionPollMs,
     leaseMs: config.sourceIngestionLeaseMs,
+    understandingRuns: new SourceUnderstandingRuns({
+      dispatch: request => sourceUnderstandingRuntime.dispatch(request),
+      readResult: identity => sourceUnderstandingRuntime.readResult(identity),
+    }),
+    cancelUnderstanding: identity => sourceUnderstandingRuntime.cancel(identity),
     resolveSource: async (job, source) => {
       const connectorType = source.payload.connector?.type;
       if (!["upload", "internal", "openlist"].includes(connectorType)) {
@@ -573,8 +581,7 @@ export function createWebApiApp(overrides = {}) {
         jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), stagingOnly: true, parserStagingRoot: config.documentParserStagingDir }));
     },
     materialize: async (job, source, result) => {
-      const project = job.sourceProject;
-      if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
+      const project = job.sourceProject ?? await sourceProject(job);
       const generation = Number(source.payload?.generation);
       if (!Number.isSafeInteger(generation) || generation < 1) throw new HttpError(409, "source_generation_stale", "Source generation is invalid.");
       const relative = `knowledge-base/.evimed-derived/${source.id}/generation-${generation}-${job.id}-${sourceAttemptId(job)}/index.md`;
@@ -597,8 +604,7 @@ export function createWebApiApp(overrides = {}) {
       return relative;
     },
     discardMaterialized: async (job, source, _artifactPath) => {
-      const project = job.sourceProject;
-      if (!project) throw new HttpError(409, "source_scope_unavailable", "The source workspace was not resolved.");
+      const project = job.sourceProject ?? await sourceProject(job);
       await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir, sourceId: source.id,
         jobIds: [job.id], generation: source.payload.generation, attemptId: sourceAttemptId(job), parserStagingRoot: config.documentParserStagingDir }));
     },
@@ -721,6 +727,8 @@ export function createWebApiApp(overrides = {}) {
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    resolveRunProject: (project, run) => sourceUnderstandingRuntime
+      ? sourceUnderstandingRuntime.resolveRunProject(project, run) : Promise.resolve(project),
     // A run's own state changes ride the same stream as the kernel's events,
     // because from a user's point of view they are one story: "it is running",
     // "the second deliverable came back with three fixes", "it finished".
@@ -757,6 +765,14 @@ export function createWebApiApp(overrides = {}) {
         attempts: run.attempts ?? 0,
       });
       runtimeEventPump.noteRun(project, run);
+      if (sourceUnderstandingRuntime) {
+        await sourceUnderstandingRuntime.complete(project, run).catch(async error => {
+          await securityAudit(config, "source.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+          });
+        });
+      }
       await completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
         readDelta: async () => {
@@ -896,6 +912,17 @@ export function createWebApiApp(overrides = {}) {
         // the only way to find the failing endpoint is to probe each by hand.
         detail: String(error?.message ?? "").slice(0, 300),
       });
+    },
+  });
+  if (sourceService) sourceUnderstandingRuntime = createSourceUnderstandingRuntime({
+    config, store, sources: sourceService, agentRuns, runtimeManager, researchSessions,
+    registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
+    cleanup: async (project, binding) => {
+      const relative = binding.artifactDirectory;
+      const match = /^knowledge-base\/\.evimed-derived\/(src_[a-f0-9]{32})\/generation-([1-9][0-9]*)-([A-Za-z0-9_-]+)-([a-f0-9]{24})$/.exec(relative ?? "");
+      if (!match) throw new HttpError(409, "source_run_scope_unavailable", "The source cleanup scope is invalid.");
+      await withProjectStorageMutation(project, () => removeSourceCopies({ projectRoot: project.baseDir,
+        sourceId: match[1], generation: Number(match[2]), jobIds: [match[3]], attemptId: match[4] }));
     },
   });
   if (autopilotService && config.autopilotEnabled) {
@@ -2211,7 +2238,8 @@ export function createWebApiApp(overrides = {}) {
             duplicate: registered.duplicate,
           });
         }
-        sendJson(res, 200, { data: { path: rel, ...(registered ?? {}) } });
+        sendJson(res, 200, { data: { path: rel, ...(registered
+          ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
       }
 
@@ -2351,6 +2379,7 @@ export function createWebApiApp(overrides = {}) {
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
     usageLedger,
@@ -2363,6 +2392,7 @@ export function createWebApiApp(overrides = {}) {
     operationalMetrics,
     agentRegistry,
     researchSessions,
+    agentRuns,
     server,
     runtimeUi,
     async listen(port = config.port, host = config.host) {
