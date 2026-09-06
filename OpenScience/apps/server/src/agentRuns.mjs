@@ -2992,10 +2992,18 @@ export class AgentRunStore {
   }
 
   async reconcileSession(project, sessionId, runId = null) {
-    const key = JSON.stringify([project.userId, project.id, sessionId]);
+    let targetRunId = runId;
+    if (!targetRunId) {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      targetRunId = [...foldEvents(events).values()].find((candidate) => (
+        candidate.sessionId === sessionId && candidate.status === "running"
+      ))?.id ?? null;
+    }
+    if (!targetRunId) return null;
+    const key = JSON.stringify([project.userId, project.id, sessionId, targetRunId]);
     const existing = this.reconciles.get(key);
     if (existing) return existing;
-    const active = this.reconcileSessionOnce(project, sessionId, runId).finally(() => {
+    const active = this.reconcileSessionOnce(project, sessionId, targetRunId).finally(() => {
       if (this.reconciles.get(key) === active) this.reconciles.delete(key);
     });
     this.reconciles.set(key, active);
