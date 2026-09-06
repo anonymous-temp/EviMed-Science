@@ -81,7 +81,7 @@ const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 // Generic (non-drug-specific) safety rule. Drug- and scenario-specific rules
 // live in clinical-safety-rules.json so pharmacists can maintain them as data.
-const exclusiveSafetyPattern = /(?:唯一.{0,24}(?:安全|可靠|正确|一致|策略|方法|途径)|(?:安全|可靠|正确).{0,24}唯一)/i;
+const exclusiveSafetyPattern = /(?:(?:唯一(?:的)?(?:(?:(?:且|并且|同时)?(?:安全|可靠|正确|推荐|可行|适当|合理)(?:的)?|的、(?:安全|可靠|正确|推荐|可行|适当|合理)(?:的)?))?(?:(?:(?:应当|应该|应|可以|需要|必须)(?:采取|使用|选择|采用)?(?:的)?|(?:采取|使用|选择|采用)(?:的)?))?|(?:安全|可靠|正确)(?:的)?唯一(?:的)?(?:(?:(?:应当|应该|应|可以|需要|必须)(?:采取|使用|选择|采用)?(?:的)?|(?:采取|使用|选择|采用)(?:的)?))?)(?:处置|治疗|用药|剂量|停药|换药|诊疗|急救|就医|转诊|救治|预防|检查|诊断|筛查|监测)(?:的)?(?:策略|方法|途径|方案|选择|建议)|(?:处置|治疗|用药|剂量|停药|换药|诊疗|急救|就医|转诊|救治|预防|检查|诊断|筛查|监测)(?:是|为)唯一(?:的)?(?:(?:(?:且|并且|同时)?(?:安全|可靠|正确|推荐|可行|适当|合理)(?:的)?|的、(?:安全|可靠|正确|推荐|可行|适当|合理)(?:的)?))?(?:(?:(?:应当|应该|应|可以|需要|必须)(?:采取|使用|选择|采用)?(?:的)?|(?:采取|使用|选择|采用)(?:的)?))?(?:的)?(?:策略|方法|途径|方案|选择|建议))/i;
 // The heading the safety-first practical answer sits under. It was
 // 安全优先的实际处置; the manuscript rewrite renames it 临床实践要点. Every
 // safety check on that section finds it by name, so a rename that stopped
