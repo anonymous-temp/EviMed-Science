@@ -14,6 +14,8 @@ async function fixture(t, { withOpenList = false } = {}) {
     cancel: async (userId, id, body) => { calls.push({ method: "cancel", userId, id, body }); return { id, status: "canceled" }; },
     remove: async (userId, id, body) => { calls.push({ method: "remove", userId, id, body }); return { id, deletedAt: "now" }; },
     register: async (userId, input) => { calls.push({ method: "register", userId, input }); return { source: { id: "source-openlist" }, job: { id: "job-openlist" } }; },
+    getUnderstanding: async (userId, id) => { calls.push({ method: "getUnderstanding", userId, id }); return { sourceId: id, generation: 1, depth: "structured", status: "parsing", current: null }; },
+    understandingHistory: async (userId, id, options) => { calls.push({ method: "understandingHistory", userId, id, options }); return { items: [], nextCursor: null }; },
   };
   const store = {
     ensureSessionUser: async (req) => {
@@ -45,6 +47,7 @@ async function fixture(t, { withOpenList = false } = {}) {
     base: `http://127.0.0.1:${server.address().port}`,
     headers: { cookie: "fixture=active", "x-open-science-csrf": "csrf", "content-type": "application/json" },
     calls,
+    service,
   };
 }
 
@@ -57,6 +60,32 @@ test("source listing is project scoped before the service sees the request", asy
   assert.deepEqual(calls[0], { method: "list", userId: "owner", options: {
     projectId: "owned-project", status: "needs_attention", limit: 50, cursor: null,
   } });
+});
+
+test("understanding current and history use the authenticated source project and bounded page contract", async t => {
+  const { base, headers, calls, service } = await fixture(t);
+  const current = await fetch(`${base}/api/sources/source-one/understanding`, { headers });
+  assert.equal(current.status, 200); assert.equal((await current.json()).data.current, null);
+  const history = await fetch(`${base}/api/sources/source-one/understanding/history?limit=8&cursor=opaque`, { headers });
+  assert.equal(history.status, 200);
+  assert.deepEqual(calls.find(call => call.method === "understandingHistory"), {
+    method: "understandingHistory", userId: "owner", id: "source-one", options: { limit: 8, cursor: "opaque" },
+  });
+  service.get = async () => ({ id: "source-other", projectId: "other-project" });
+  assert.equal((await fetch(`${base}/api/sources/source-other/understanding`, { headers })).status, 404);
+});
+
+test("source routes never expose runtime binding paths or cancellation work items", async t => {
+  const { base, headers, service } = await fixture(t);
+  service.get = async () => ({ id: "source-one", kind: "source", projectId: "owned-project", payload: {
+    generation: 1, outputs: { summary: "Notes", artifactPath: "knowledge-base/.evimed-derived/source-one/index.md" }, pendingRunCancellations: [{ id: "private" }],
+    analysis: { phase: "understanding", generation: 1, run: { id: "run1", sessionId: "session1", dispatchId: "dispatch1", workspaceName: "private", artifactDirectory: "private/path" } },
+  } });
+  const response = await fetch(`${base}/api/sources/source-one`, { headers });
+  const body = await response.json();
+  assert.equal(JSON.stringify(body).includes("private"), false);
+  assert.equal(body.data.payload.analysis.run.id, "run1");
+  assert.equal(body.data.payload.outputs.artifactPath, "knowledge-base/.evimed-derived/source-one/index.md");
 });
 
 test("source mutations require CSRF and reject browser-supplied ownership", async (t) => {

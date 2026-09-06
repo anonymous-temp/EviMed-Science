@@ -13,6 +13,7 @@
 /** @typedef {typeof CONTRACT_KINDS[number]} ContractKind */
 
 export const CONTRACT_KINDS = Object.freeze([
+  'source-understanding',
   // P0/P1 — the eleven specialist packages' outputs
   'clinical-evidence-report',
   'drug-evaluation-report',

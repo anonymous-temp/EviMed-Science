@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "acceptanceStatus": "offline fixtures only; real source DSH acceptance pending",
+  "briefs": [
+    {
+      "id": "sop",
+      "docType": "research-protocol",
+      "depth": "deep",
+      "fixtureOnly": true,
+      "sourceText": "Purpose: produce a traceable evidence table.\nApplicability: reviews with an agreed study question.\nInputs: the protocol and the retrieved records.\nSteps: preserve the original records; deduplicate by DOI; record inclusion decisions.\nChecks: every included study must retain its source identifier.\nPitfalls: do not merge distinct reports solely because their titles resemble one another.\n",
+      "brief": "Understand the complete SOP at deep depth, retain its checks and pitfalls, and produce a reusable method draft with precise anchors.",
+      "expectations": [
+        "All six procedure slots are known with exact anchors.",
+        "At least one method draft preserves the source checks.",
+        "Nothing is published as a capsule skill.",
+        "Omission audit remains not_run."
+      ]
+    },
+    {
+      "id": "paper",
+      "docType": "published-paper",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "Research report fixture\nMethods: This retrospective cohort used routinely collected records from one institution. Adults who attended follow-up were included. The exposure was attendance at a structured follow-up visit. The primary outcome was completeness of recorded outcomes at 30 days.\nResults: The report does not provide an effect estimate or sample size.\nLimitations: Selection of participants and incomplete records may affect interpretation.\n",
+      "brief": "Extract the paper schema at structured depth. Explicitly identify absent DOI, effect estimate and sample size without supplying external information.",
+      "expectations": [
+        "The design, population, exposure, outcomes and limitations remain source-bound.",
+        "DOI and effectEstimates remain unknown with reasons.",
+        "No method draft is produced at structured depth.",
+        "The system records the configured actual model and CNY receipt."
+      ]
+    },
+    {
+      "id": "notes",
+      "docType": "note-memo",
+      "depth": "deep",
+      "fixtureOnly": true,
+      "sourceText": "Research meeting notes\nDecision: keep the primary outcome definition unchanged.\nAction: compare the extracted table against the original records before the next meeting.\nOpen question: the follow-up window has not yet been finalized.\nLoose fragment: perhaps discuss this later.\n",
+      "brief": "Understand the meeting notes, separate the explicit decision, action and unresolved question, and keep ambiguous fragments out of asserted claims.",
+      "expectations": [
+        "Decision, action and open-question slots cite their exact passages.",
+        "The unresolved follow-up window is not converted into a decided value.",
+        "No reusable method is invented from an incomplete fragment.",
+        "Retry and history retain the frozen source generation."
+      ]
+    }
+  ],
+  "capability": "source-understanding",
+  "liveBriefs": [
+    {
+      "id": "source-live-sop-release-checklist",
+      "title": "Make the actual release checklist traceable and reusable",
+      "docType": "research-protocol",
+      "depth": "deep",
+      "input": {
+        "workspaceSource": "docs/EVIMED_RELEASE_AND_DELIVERY_CHECKLIST.md",
+        "intake": "Upload an immutable copy through the source API; never bind to the live checkout path."
+      },
+      "question": "Explain what the release checklist requires, preserve its prerequisites and verification steps, and draft a reusable method. Show exactly where every known slot and method step came from.",
+      "mustDo": [
+        "Read the complete frozen source, including later rollback and verification sections.",
+        "Use known or explicitly unknown procedure slots and retain the source conditions.",
+        "Keep the method a draft and keep omission audit not_run."
+      ],
+      "liveStatus": "not_run"
+    },
+    {
+      "id": "source-live-paper-mimic-iv",
+      "title": "Understand an actual data descriptor without inventing trial fields",
+      "docType": "published-paper",
+      "depth": "structured",
+      "input": {
+        "sourceIdentifier": "PMID 36596836",
+        "catalogueProvenance": "evals/clinical-review-quality/briefs.json records this as the MIMIC-IV data descriptor; the source was not fetched for this implementation.",
+        "intake": "Upload the actual full-text paper, record its digest, and freeze the parser text before the DSH run."
+      },
+      "question": "Understand this data descriptor. Identify its design, population, coverage and limitations. Explain explicitly when intervention, endpoint or effect-estimate slots are not applicable, with no invented clinical trial results.",
+      "mustDo": [
+        "Use the paper schema even though the source is a data descriptor.",
+        "Keep unavailable or inapplicable fields unknown with reasons.",
+        "Show exact full-text evidence and record the actual gateway model and CNY cost."
+      ],
+      "liveStatus": "awaiting actual source intake"
+    },
+    {
+      "id": "source-live-notes-milestone-log",
+      "title": "Distinguish completed milestones from unresolved acceptance work",
+      "docType": "note-memo",
+      "depth": "deep",
+      "input": {
+        "workspaceSource": "PROGRESS.md",
+        "intake": "Upload an immutable copy of the current milestone log through the source API."
+      },
+      "question": "Read these working notes. Identify decisions, completed actions and open questions. Preserve dates and uncertainty, and avoid promoting an unresolved live acceptance step into a completed result.",
+      "mustDo": [
+        "Keep completed work distinct from remaining acceptance work.",
+        "Anchor late-document as well as early-document findings.",
+        "A source correction creates a new generation; history retains the earlier result while it ceases to be current."
+      ],
+      "liveStatus": "not_run"
+    }
+  ]
+}

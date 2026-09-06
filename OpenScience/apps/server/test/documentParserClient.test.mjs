@@ -20,6 +20,14 @@ test("plain text has a bounded local fallback with complete chunk coverage", asy
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("an empty source is preserved as empty text rather than an invented source sentence", async t => {
+  const root = await mkdtemp(path.join("/tmp", "evimed-empty-source-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const file = path.join(root, "empty.txt"); await writeFile(file, "");
+  const result = await new DocumentParserClient().parse({ path: file, mimeType: "text/plain", sha256: "a".repeat(64), sourceId: "empty" });
+  assert.equal(result.text, ""); assert.equal(result.units[0].status, "no_content");
+});
+
 test("the configured parser uses the bounded MinerU service contract", async (t) => {
   let request = null;
   const server = createServer(async (req, res) => {

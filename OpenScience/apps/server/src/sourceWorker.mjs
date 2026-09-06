@@ -3,15 +3,15 @@ import { randomUUID } from "node:crypto";
 const TERMINAL_ERRORS = new Set([
   "source_job_invalid", "source_path_invalid", "source_digest_invalid", "source_format_unsupported",
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
-  "source_parser_input_too_large",
+  "source_parser_input_too_large", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_usage_invalid", "source_understanding_input_too_large",
   "source_not_found", "source_account_changed", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
 ]);
 
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string,parserPath:string,stagingPath?:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string,parserPath:string,stagingPath?:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000 }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -27,6 +27,8 @@ export class SourceIngestionWorker {
     this.discardMaterialized = discardMaterialized;
     this.cleanupSource = cleanupSource;
     this.prepareCleanup = prepareCleanup;
+    this.understandingRuns = understandingRuns;
+    this.cancelUnderstanding = cancelUnderstanding;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -75,10 +77,22 @@ export class SourceIngestionWorker {
     let artifactPath = null;
     let extractionRecorded = false;
     try {
+      if (job.payload?.action === "source-run-cancel") {
+        if (!this.cancelUnderstanding) throw Object.assign(new Error("Source run cancellation is unavailable."), { code: "source_cancel_unconfigured" });
+        return await this.sources.consumeRunCancellation(job, this.cancelUnderstanding);
+      }
       if (job.payload?.action === "source-delete") {
         if (!this.cleanupSource) throw Object.assign(new Error("Source deletion cleanup is unavailable."), { code: "source_cleanup_unconfigured" });
         const scope = await this.prepareCleanup(job);
-        const finished = await this.sources.consumeDeletion(job, (ownedJob, source, ids) => this.cleanupSource(ownedJob, source, ids, scope));
+        const finished = await this.sources.consumeDeletion(job, async (ownedJob, source, ids) => {
+          const runs = [...(source.payload.pendingRunCancellations ?? []), ...(source.payload.analysis?.run ? [source.payload.analysis.run] : [])];
+          for (const run of runs) {
+            if (!this.cancelUnderstanding) throw Object.assign(new Error("Source run cancellation is unavailable."), { code: "source_cancel_unconfigured" });
+            await this.cancelUnderstanding({ userId: job.userId, projectId: job.projectId, runId: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId,
+              workspaceName: run.workspaceName, artifactDirectory: run.artifactDirectory });
+          }
+          await this.cleanupSource(ownedJob, source, ids, scope);
+        });
         this.lastError = null;
         this.lastCompletedAt = new Date().toISOString();
         return finished;
@@ -95,15 +109,36 @@ export class SourceIngestionWorker {
         return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "source_no_longer_processing" });
       }
       processing = await this.sources.beginIngestion(job.userId, source.id, { generation: actualGeneration, job });
-      const resolved = await this.resolveSource(job, processing);
-      resolvedFile = resolved;
-      const file = typeof resolved === "string" ? resolved : resolved.parserPath;
-      const result = await this.parser.parse({
-        path: file,
-        mimeType: processing.payload.fingerprint.mimeType,
-        sha256: processing.payload.fingerprint.sha256,
-        sourceId: processing.id,
-      });
+      if (processing.payload.depth === "skip") {
+        const finished = await this.sources.publishUnderstanding(job, null);
+        this.lastError = null;
+        this.lastCompletedAt = new Date().toISOString();
+        return finished;
+      }
+      let parsed = await this.sources.loadCapture(job.userId, processing);
+      if (!parsed) {
+        const resolved = await this.resolveSource(job, processing);
+        resolvedFile = resolved;
+        const file = typeof resolved === "string" ? resolved : resolved.parserPath;
+        const result = await this.parser.parse({
+          path: file,
+          mimeType: processing.payload.fingerprint.mimeType,
+          sha256: processing.payload.fingerprint.sha256,
+          sourceId: processing.id,
+        });
+        parsed = await this.sources.freezeCapture(job, result);
+      }
+      let completed = null;
+      if (["structured", "deep"].includes(processing.payload.depth)) {
+        if (!this.understandingRuns) throw Object.assign(new Error("Source understanding is unavailable."), { code: "source_understanding_unconfigured" });
+        completed = await this.understandingRuns.execute({ job, source: processing, parsed });
+        if (completed.state === "pending") {
+          await this.sources.deferIngestion(job, completed);
+          this.lastError = null;
+          return { deferred: true, runId: completed.runId };
+        }
+      }
+      const result = { ...parsed, text: parsed.input.text, units: parsed.input.units, facts: [], methods: [] };
       if (leaseLost || !(await this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs))) {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Source ingestion lease was lost before materialization."), { code: "product_job_lease_lost" })); throw error;
       }
@@ -113,26 +148,19 @@ export class SourceIngestionWorker {
         const error = /** @type {Error & {code:string}} */ (Object.assign(new Error("Source ingestion lease was lost before commit."), { code: "product_job_lease_lost" })); throw error;
       }
       await this.#assertCurrent(job.userId, processing.id, actualGeneration);
-      const completed = await this.sources.recordExtraction(job.userId, processing.id, {
-        expectedRevision: processing.revision, job,
-        generation: actualGeneration,
-        extractor: result.extractor,
-        units: result.units,
-        summary: result.summary,
-        facts: Array.isArray(result.facts) ? result.facts.length : 0,
-        methods: Array.isArray(result.methods) ? result.methods.length : 0,
-        artifactPath,
-      });
+      const finished = await this.sources.publishUnderstanding(job, parsed, completed, artifactPath);
       extractionRecorded = true;
-      const finished = await this.jobs.finish(job.userId, job.id, job.leaseToken, {
-        sourceId: processing.id, sourceRevision: completed.revision, status: completed.payload.status, artifactPath,
-      });
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return finished;
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "source_ingestion_failed";
       this.lastError = code;
+      if (processing && ["project_runtime_busy", "runtime_busy", "runtime_session_busy", "source_understanding_busy"].includes(code) && !leaseLost) {
+        await this.sources.deferIngestion(job);
+        this.lastError = null;
+        return { deferred: true };
+      }
       if (job.payload?.action === "source-delete" && !leaseLost && code !== "product_job_lease_lost") {
         await this.sources.recordDeletionFailure(job, code).catch(() => {});
       }

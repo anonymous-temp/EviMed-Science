@@ -103,7 +103,7 @@ test("exact content is deduplicated while a changed path remains in one version 
   assert.equal(jobs.enqueued.length, 2, "an exact duplicate must not enqueue extraction twice");
 });
 
-test("coverage accounts for every source unit and deep omissions require attention", async () => {
+test("parser coverage is separate from the unperformed understanding omission audit", async () => {
   const { service } = fixture();
   const { source } = await service.register("user-one", upload());
   const processing = await service.beginIngestion("user-one", source.id, { generation: source.payload.generation });
@@ -125,7 +125,9 @@ test("coverage accounts for every source unit and deep omissions require attenti
   assert.equal(reviewed.payload.coverage.accounted, 20);
   assert.equal(reviewed.payload.coverage.accountedPercent, 100);
   assert.equal(reviewed.payload.coverage.percent, 95);
-  assert.equal(reviewed.payload.coverage.omissionRate, 0.05);
+  assert.equal(reviewed.payload.coverage.parserFailureRate, 0.05);
+  assert.equal(reviewed.payload.coverage.omissionRate, null);
+  assert.equal(reviewed.payload.omissionAudit.status, "not_run");
   assert.equal(reviewed.payload.status, "complete");
 
   const queued = await service.retry("user-one", source.id, { expectedRevision: reviewed.revision });
@@ -138,7 +140,8 @@ test("coverage accounts for every source unit and deep omissions require attenti
     facts: 8,
     methods: 2,
   });
-  assert.equal(incomplete.payload.coverage.omissionRate, 0.1);
+  assert.equal(incomplete.payload.coverage.parserFailureRate, 0.1);
+  assert.equal(incomplete.payload.coverage.omissionRate, null);
   assert.equal(incomplete.payload.status, "needs_attention");
 });
 

@@ -18,6 +18,7 @@ import { appraisalTableFindings } from './appraisalContract.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
+import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
 
 /**
  * Every check a gate verdict can attribute a finding to.
@@ -43,6 +44,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'topic-evidence-lineage',
   'topic-study-plan',
   'topic-research-context',
+  'source-understanding-schema',
 ])
 
 /**
@@ -411,6 +413,11 @@ function isRecord(value) {
  * @type {Readonly<Record<string, (input: GateInput) => GateVerdict>>}
  */
 const VALIDATORS = Object.freeze({
+  'source-understanding': (input) => {
+    const issues = [...requiredOutputIssues(input), ...validateSourceUnderstanding(json(input, SOURCE_UNDERSTANDING_FILE), json(input, SOURCE_UNDERSTANDING_INPUT_FILE))
+      .map(message => issue('deliverable_rejected', message, { path: SOURCE_UNDERSTANDING_FILE, check: 'source-understanding-schema' }))]
+    return { ok: !issues.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: issues.length ? 'deliverable_rejected' : null }
+  },
   'clinical-evidence-report': validateClinicalEvidenceReport,
   'drug-evaluation-report': (input) => validateReportShaped(input, proseFilesOf(input)),
   'drug-selection-report': (input) => validateReportShaped(input, proseFilesOf(input)),

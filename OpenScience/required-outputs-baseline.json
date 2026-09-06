@@ -5,7 +5,8 @@
   "history": {
     "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15",
     "appraisal-table": "5 required on 2026-09-02, the contract's opening count",
-    "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution"
+    "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution",
+    "source-understanding": "2 required on 2026-09-07, the opening contract for approved ING04/06: typed understanding and its frozen input copy. Control-plane publication independently validates against the canonical capture."
   },
   "contracts": {
     "adr-analysis-report": {
@@ -455,6 +456,22 @@
           "path": "delivery-summary.md",
           "required": true,
           "addedOn": "2026-09-02"
+        }
+      ]
+    },
+    "source-understanding": {
+      "capability": "source-understanding",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "source-understanding.json",
+          "required": true,
+          "addedOn": "2026-09-07"
+        },
+        {
+          "path": "source-understanding-input.json",
+          "required": true,
+          "addedOn": "2026-09-07"
         }
       ]
     }

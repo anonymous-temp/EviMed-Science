@@ -64,6 +64,7 @@ function validateResult(value) {
   });
   const facts = Array.isArray(value.facts) ? value.facts.slice(0, 10_000) : [];
   const methods = Array.isArray(value.methods) ? value.methods.slice(0, 2_000) : [];
+  if (typeof value.text !== "string" || value.text.length > 16 * 1024 * 1024) throw parserError("source_parser_response_invalid", "Parser full text is invalid.");
   return {
     extractor: {
       name: stringField(extractor.name, "extractor name", 80),
@@ -74,7 +75,7 @@ function validateResult(value) {
     summary: stringField(value.summary, "summary", 16_000),
     facts,
     methods,
-    text: stringField(value.text, "text", 16 * 1024 * 1024),
+    text: value.text,
   };
 }
 
@@ -166,7 +167,7 @@ export class DocumentParserClient {
       return validateResult({
         protocolVersion: 1,
         extractor: { name: "plain-text", version: "1.0.0", parser: "fallback" },
-        units, summary, facts: [], methods: [], text: value || "No extractable text.",
+        units, summary, facts: [], methods: [], text: value,
       });
     } finally { await handle.close(); }
   }
