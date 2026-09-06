@@ -53,8 +53,15 @@ function fixture(t) {
     }
     if (command === "docker" && args.includes("context")) return endpoint;
     if (command === "docker" && args.includes("info")) return JSON.stringify({ ID: "builder-engine", Name: "colima-evimed-builder", OSType: "linux", DockerRootDir: "/var/lib/docker", Architecture: "aarch64" });
-    if (command === "docker" && args.includes("ls")) return "";
-    if (command === "docker" && args.includes("buildx")) return JSON.stringify({ Driver: "docker", Nodes: [{ Endpoint: "colima-evimed-builder" }] });
+    if (command === "docker" && args.includes("image") && args.includes("ls")) return "";
+    if (command === "docker" && args.includes("buildx")) {
+      assert.deepEqual(args, ["--context", "colima-evimed-builder", "buildx", "ls", "--format", "json"], "Buildx 0.33 requires native JSON ls output; inspect --format is unsupported");
+      return [
+        { Name: "colima", Current: false, Driver: "docker", Nodes: [{ Endpoint: "colima", Status: "running" }] },
+        { Name: "colima-evimed-builder", Current: true, Driver: "docker", Nodes: [{ Endpoint: "colima-evimed-builder", Status: "running", Platforms: ["linux/arm64", "linux/386"] }] },
+        { Name: "default", Current: false, Driver: "", Err: "Unrelated default daemon unavailable", Nodes: [{ Endpoint: "", Name: "" }] },
+      ].map(row => JSON.stringify(row)).join("\n");
+    }
     if (command === "docker" && args.includes("inspect")) return JSON.stringify([{ Id: imageId, Os: "linux", Architecture: "amd64", RepoDigests: [base], RootFS: { Layers: [`sha256:${"e".repeat(64)}`] } }]);
     throw new Error("Unexpected fixture command");
   };
@@ -124,6 +131,9 @@ test("a verified isolated delta builds through the checked explicit context and 
   assert.equal(result.checked, true);
   assert.deepEqual(result.args.slice(0, 6), ["--context", "colima-evimed-builder", "buildx", "build", "--builder", "colima-evimed-builder"]);
   assert.equal(result.args.includes("--host"), false, "Buildx requires the named context rather than the equivalent --host override");
+  const buildxList = f.calls.find(call => call[0] === "docker" && call.includes("buildx") && call.includes("ls"));
+  assert.deepEqual(buildxList.slice(1), ["--context", "colima-evimed-builder", "buildx", "ls", "--format", "json"]);
+  assert.equal(buildxList.includes("--host"), false);
   for (const call of f.calls.filter(call => call[0] === "docker" && (call.includes("info") || call.includes("image")))) {
     assert.deepEqual(call.slice(1, 3), ["--host", endpoint], "identity reads remain bound to the verified endpoint");
   }
@@ -139,6 +149,32 @@ test("a delta build refuses a context whose live endpoint mapping changed", asyn
       ? "unix:///var/run/docker.sock" : f.options.execute(command, args, cwd),
     spawn: () => assert.fail("The wrong context cannot start a build"),
   }), { code: "release_endpoint_changed" });
+});
+
+test("Buildx native JSON lines reject malformed, duplicated or errored target identities before writes", async t => {
+  const f = fixture(t);
+  for (const mutate of [
+    () => "not-json", () => "[]", () => "{\"Driver\":\"docker\"}", () => "",
+    rows => [...rows, rows.find(row => row.Name === "colima-evimed-builder")],
+    rows => rows.map(row => row.Name === "colima-evimed-builder" ? { ...row, Err: "target is unavailable" } : row),
+    rows => rows.map(row => row.Name === "colima-evimed-builder" ? { ...row, Current: false } : row),
+    rows => rows.map(row => row.Name === "colima-evimed-builder" ? { ...row, Nodes: [null] } : row),
+    rows => rows.map(row => row.Name === "colima-evimed-builder" ? { ...row, Nodes: [{ Endpoint: "colima", Status: "running" }] } : row),
+    rows => rows.map(row => row.Name === "colima-evimed-builder" ? { ...row, Nodes: [{ Endpoint: "colima-evimed-builder", Status: "stopped" }] } : row),
+    rows => rows.map(row => row.Name === "colima-evimed-builder" ? { ...row, Nodes: [{ Endpoint: "colima-evimed-builder", Status: "running", Err: "node unavailable" }] } : row),
+  ]) {
+    let spawns = 0;
+    await assert.rejects(runReleaseImages({ ...f.options, checkOnly: false,
+      execute: (command, args, cwd) => {
+        const output = f.options.execute(command, args, cwd);
+        if (command !== "docker" || !args.includes("buildx")) return output;
+        const altered = mutate(output.split("\n").map(line => JSON.parse(line)));
+        return typeof altered === "string" ? altered : altered.map(row => JSON.stringify(row)).join("\n");
+      },
+      spawn: () => { spawns++; assert.fail("Invalid Buildx identity cannot write"); },
+    }), { code: "release_builder_changed" });
+    assert.equal(spawns, 0);
+  }
 });
 
 for (const changed of ["context", "engine"]) test(`delta build rechecks ${changed} synchronously at the child creation boundary`, async t => {

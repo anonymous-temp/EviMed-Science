@@ -163,7 +163,7 @@ export function verifyVmDiskTopology(status, devices, mounts, backing) {
   const invalid = condition => require(condition, "release_vm_disks_unverified",
     "Verify evimed-builder VZ status, lsblk hard capacities, findmnt storage mapping and its two raw backing files.");
   invalid(status.driver === "macOS Virtualization.Framework" && status.disk === 20 * GiB
-    && status.docker_socket === safety.BUILDER_ENDPOINT.slice("unix://".length));
+    && status.docker_socket === safety.BUILDER_ENDPOINT);
   const writable = devices.blockdevices?.filter(device => device.type === "disk" && (device.ro === false || device.ro === 0));
   invalid(Array.isArray(writable) && writable.length === 2);
   invalid(writable.find(device => device.name === "vda")?.size === 8 * GiB
