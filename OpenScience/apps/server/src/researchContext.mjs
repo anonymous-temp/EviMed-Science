@@ -355,10 +355,16 @@ export async function prepareResearchContext(
         "若没有专项实质匹配，保持开放域回答；工具未配置、任务失败或证据不足时保留真实状态，不得假装已执行。",
       ].join("\n")
     : "专项科研会话必须继续遵循已注册专项 Agent 的 SKILL.md、工具边界和交付物约束。";
+  const routedSkills = routedSpecialist
+    ? [routedSpecialist.skill, ...(routedSpecialist.companionSkills ?? [])].filter(Boolean)
+    : [];
   const routingInstruction = routedSpecialist
     ? [
         `平台已根据当前问题确定性路由到专项 Agent：${escapeContext(routedSpecialist.agentId)}（${escapeContext(routedSpecialist.runtimeAgent)}）。`,
-        "必须加载并完整执行该专项的 SKILL.md；只有满足其必需交付物和完成门禁时才能声称本轮成功。不得退回普通开放域回答来绕过专项契约。",
+        routedSkills.length
+          ? `开始实质工作前，必须逐个调用 skill 工具并成功加载以下全部方法：${escapeContext(routedSkills.join("、"))}。任一项未成功加载，都必须继续加载或如实停止，不得在缺失方法时声称完成。`
+          : "开始实质工作前必须成功加载该专项的 SKILL.md；加载失败时如实停止。",
+        "必须完整执行该专项的 SKILL.md；只有满足其必需交付物和完成门禁时才能声称本轮成功。不得退回普通开放域回答来绕过专项契约。",
       ].join("\n")
     : session.mode === "open-domain"
       ? [

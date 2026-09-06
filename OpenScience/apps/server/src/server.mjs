@@ -977,7 +977,17 @@ export function createWebApiApp(overrides = {}) {
               if (config.requireMemos) throw error;
             }
             const prepared = await prepareResearchContext(project, binding, config, {
-              query: episode.prompt, memories, memoryError, specialists: [], routedSpecialist: null,
+              query: episode.prompt,
+              memories,
+              memoryError,
+              specialists: [],
+              routedSpecialist: {
+                agentId: selected.id,
+                agentVersion: selected.version,
+                runtimeAgent: selected.runtimeAgent,
+                skill: selected.skill,
+                companionSkills: selected.companionSkills,
+              },
             });
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
@@ -1720,12 +1730,25 @@ export function createWebApiApp(overrides = {}) {
               throw unavailable;
             }
           }
+          const contextSpecialist = routedSpecialist
+            ? registry.get(routedSpecialist.agentId)
+            : session.mode === "specialist"
+              ? registry.get(session.agentId)
+              : null;
           const prepared = await prepareResearchContext(ctx.project, session, config, {
             query: text,
             memories,
             memoryError,
             specialists: session.mode === "open-domain" ? routableAgents : [],
-            routedSpecialist,
+            routedSpecialist: contextSpecialist
+              ? {
+                  agentId: contextSpecialist.id,
+                  agentVersion: contextSpecialist.version,
+                  runtimeAgent: contextSpecialist.runtimeAgent,
+                  skill: contextSpecialist.skill,
+                  companionSkills: contextSpecialist.companionSkills,
+                }
+              : routedSpecialist,
           });
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
@@ -1734,6 +1757,7 @@ export function createWebApiApp(overrides = {}) {
             model: `deepseek/${config.deepseekModel}`,
             runId: dispatchedRun.id,
             requestId: dispatchedRun.kernelRequestIds?.at(-1),
+            strictContext: true,
           });
         });
         sendJson(res, 202, { data: run });
