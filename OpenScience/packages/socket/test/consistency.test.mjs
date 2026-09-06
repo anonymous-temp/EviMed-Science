@@ -564,8 +564,8 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "" } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3 } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -593,7 +593,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     readText: async (/** @type {string} */ target) => target === "//runtime/revision-token" ? "test-workload-token" : target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance: 2, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
   };
@@ -821,6 +821,84 @@ test("an accepted deliverable needs one control-plane authorization before a fre
   const current = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
   const firstDigest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(firstBytes)).then((value) => [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
   assert.notEqual(current.entries[0].files[0].sha256, firstDigest);
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test("a control-plane-authorized revision gets one submission after the ordinary ceiling", async () => {
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ authorized: true }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  const f = await nativePolicyFixture({ briefId: "revision-owner", revisionAuthorizeUrl, deliveryAttemptLimit: 1 });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["A bounded report"],
+      deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+    });
+    const reportPath = "/workspace/deliverables/d1/brief.md";
+    f.files.set(reportPath, "# Report\nFirst accepted version.\n");
+    assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+
+    assert.equal((await f.execute("evimed_revise_deliverable", {
+      deliverableId: "d1",
+      reason: "The server gate requires one correction.",
+    })).value.ok, true);
+    f.files.delete(reportPath);
+    const unreadable = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(unreadable.value.ok, false, "a missing required file remains a structural rejection");
+    f.files.set(reportPath, "# Report\nServer-requested correction.\n");
+
+    const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
+    const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+    assert.equal(receipt.entries[0].attempt, 2, "the receipt preserves the total attempt count");
+    const replayed = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(replayed.error?.code, "GUARDED", "the revision authorization must grant exactly one extra submission");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test("rewriting the plan invalidates an unused revision submission grant", async () => {
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ authorized: true }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  const f = await nativePolicyFixture({ briefId: "revision-owner", revisionAuthorizeUrl, deliveryAttemptLimit: 1 });
+  try {
+    await f.step(1);
+    const deliverables = [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }];
+    await f.execute("evimed_plan", { action: "write", clarifications: ["Initial plan"], deliverables });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted bytes.\n");
+    assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+    assert.equal((await f.execute("evimed_revise_deliverable", {
+      deliverableId: "d1",
+      reason: "The server gate requires one correction.",
+    })).value.ok, true);
+
+    assert.equal((await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["Rewritten plan"],
+      deliverables: [{ ...deliverables[0], title: "Replacement report" }],
+    })).value.ok, true);
+    const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(submitted.error?.code, "GUARDED", "a plan rewrite must not inherit the old revision authorization");
   } finally {
     await new Promise((resolve) => server.close(() => resolve(undefined)));
   }
