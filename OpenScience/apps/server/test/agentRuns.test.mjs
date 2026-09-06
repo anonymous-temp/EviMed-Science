@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1190,8 +1190,8 @@ test("a routed clinical evidence turn honors a configured bounded repair limit",
   }
 });
 
-test("clinical evidence source artifacts must come from successful retrieval tools in the same turn", async () => {
-  for (const scenario of ["missing", "valid", "tampered"]) {
+for (const scenario of ["missing", "valid", "tampered", "old-missing", "reused", "old-tampered", "prior-turn-only"]) {
+  test(`clinical evidence source artifacts must come from successful retrieval tools in the same turn: ${scenario}`, async () => {
     const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-clinical-provenance-${scenario}-`));
     try {
       const project = {
@@ -1203,6 +1203,38 @@ test("clinical evidence source artifacts must come from successful retrieval too
       };
       await mkdir(project.workspaceDir, { recursive: true });
       await mkdir(project.metaDir, { recursive: true });
+      const sourceA = ".evimed-sources/official-pages/source-a/page.md";
+      const sourceB = ".evimed-sources/official-pages/source-b/page.md";
+      const quotes = [
+        "Patients with acute pressure-like chest discomfort require prompt emergency evaluation for acute coronary syndrome.",
+        "Serial high-sensitivity cardiac troponin measurements support rapid diagnostic assessment in acute chest pain.",
+        "The evidence review included fifteen trials with a total of 1776 participants and found important study limitations.",
+        "The available trials were generally of poor methodological quality, which limits confidence in treatment effects.",
+      ];
+      const sourceContents = new Map([
+        [sourceA, quotes.slice(0, 2).join("\n")],
+        [sourceB, quotes.slice(2).join("\n")],
+      ]);
+      const retrievalParts = !["missing", "old-missing"].includes(scenario)
+        ? [sourceA, sourceB].map((source) => ({
+            type: "tool",
+            tool: "evimed-research_evimed_official_page_fetch",
+            state: {
+              status: "completed",
+              output: JSON.stringify({
+                status: "success",
+                artifacts: [source],
+                data: { artifactSha256s: {
+                  [source]: createHash("sha256").update(sourceContents.get(source), "utf8").digest("hex"),
+                } },
+              }),
+            },
+          }))
+        : [];
+      const previousHistory = scenario === "prior-turn-only" ? [{
+        info: { id: "prior_turn_source_receipt", role: "assistant", time: { completed: Date.now() - 86_400_000 } },
+        parts: retrievalParts,
+      }] : [];
       const binding = {
         sessionId: `ses_clinical_provenance_${scenario}`,
         mode: "open-domain",
@@ -1210,7 +1242,7 @@ test("clinical evidence source artifacts must come from successful retrieval too
         agentVersion: null,
         runtimeAgent: null,
       };
-      let history = [];
+      let history = [...previousHistory];
       const store = new AgentRunStore({ get: async () => binding }, {
         agentRegistry: {
           get: () => ({
@@ -1244,14 +1276,6 @@ test("clinical evidence source artifacts must come from successful retrieval too
         effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
       }, async () => ({ accepted: true }));
 
-      const sourceA = ".evimed-sources/official-pages/source-a/page.md";
-      const sourceB = ".evimed-sources/official-pages/source-b/page.md";
-      const quotes = [
-        "Patients with acute pressure-like chest discomfort require prompt emergency evaluation for acute coronary syndrome.",
-        "Serial high-sensitivity cardiac troponin measurements support rapid diagnostic assessment in acute chest pain.",
-        "The evidence review included fifteen trials with a total of 1776 participants and found important study limitations.",
-        "The available trials were generally of poor methodological quality, which limits confidence in treatment effects.",
-      ];
       const claims = quotes.map((supportQuote, index) => ({
         claimId: `CLM-00${index + 1}`,
         claim: supportQuote,
@@ -1293,10 +1317,6 @@ test("clinical evidence source artifacts must come from successful retrieval too
         qualityChecks: { claimsVerified: true, citationsResolved: true, contradictionsChecked: true },
         status: "succeeded",
       };
-      const sourceContents = new Map([
-        [sourceA, quotes.slice(0, 2).join("\n")],
-        [sourceB, quotes.slice(2).join("\n")],
-      ]);
       await mkdir(path.join(project.workspaceDir, path.dirname(sourceA)), { recursive: true });
       await mkdir(path.join(project.workspaceDir, path.dirname(sourceB)), { recursive: true });
       await writeFile(path.join(project.workspaceDir, sourceA), sourceContents.get(sourceA), "utf8");
@@ -1304,32 +1324,17 @@ test("clinical evidence source artifacts must come from successful retrieval too
       await writeFile(path.join(project.workspaceDir, "clinical-evidence-report.md"), report, "utf8");
       await writeFile(path.join(project.workspaceDir, "clinical-evidence-matrix.json"), JSON.stringify({ claims }), "utf8");
       await writeFile(path.join(project.workspaceDir, "clinical-evidence-run.json"), JSON.stringify(receipt), "utf8");
-      if (scenario === "tampered") {
+      if (["tampered", "old-tampered"].includes(scenario)) {
         await writeFile(path.join(project.workspaceDir, sourceA), `${sourceContents.get(sourceA)}\nAuthored replacement.`, "utf8");
       }
-
-      const retrievalParts = scenario !== "missing"
-        ? [sourceA, sourceB].map((source) => ({
-            type: "tool",
-            tool: "evimed-research_evimed_official_page_fetch",
-            state: {
-              status: "completed",
-              output: JSON.stringify({
-                status: "success",
-                artifacts: [source],
-                data: {
-                  artifactSha256s: {
-                    [source]: createHash("sha256").update(sourceContents.get(source), "utf8").digest("hex"),
-                  },
-                },
-              }),
-            },
-          }))
-        : [];
-      history = [{
+      if (["old-missing", "reused", "old-tampered", "prior-turn-only"].includes(scenario)) {
+        const old = new Date(Date.parse(run.startedAt) - 86_400_000);
+        await Promise.all([sourceA, sourceB].map((source) => utimes(path.join(project.workspaceDir, source), old, old)));
+      }
+      history = [...previousHistory, {
         info: { id: `msg_clinical_provenance_${scenario}`, role: "assistant", time: { completed: Date.now() } },
         parts: [
-          ...retrievalParts,
+          ...(scenario === "prior-turn-only" ? [] : retrievalParts),
           ...["clinical-evidence-report.md", "clinical-evidence-matrix.json", "clinical-evidence-run.json"].map((filePath) => ({
             type: "tool",
             tool: "write",
@@ -1340,18 +1345,22 @@ test("clinical evidence source artifacts must come from successful retrieval too
       }];
       const finished = await store.reconcileSession(project, binding.sessionId);
       assert.equal(finished.id, run.id);
-      assert.equal(finished.status, scenario === "valid" ? "succeeded" : "failed");
+      assert.equal(finished.status, ["valid", "reused"].includes(scenario) ? "succeeded" : "failed");
       assert.equal(finished.errorCode, {
         missing: "specialist_evidence_provenance_failed",
         valid: null,
         tampered: "specialist_evidence_integrity_failed",
+        "old-missing": "specialist_evidence_provenance_failed",
+        reused: null,
+        "old-tampered": "specialist_evidence_integrity_failed",
+        "prior-turn-only": "specialist_evidence_provenance_failed",
       }[scenario]);
       await store.closeProject(project, "canceled");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  }
-});
+  });
+}
 
 test("rejects browser-forged identity/model fields and unknown research sessions", async () => {
   await withApp(async ({ base }) => {
