@@ -5126,7 +5126,7 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
     assert.ok(result.snapshotPath.startsWith(project.metaDir + path.sep));
     await writeFile(path.join(project.workspaceDir, relative), "changed workspace bytes");
     const snapshot = JSON.parse(await readFile(result.snapshotPath, "utf8"));
-    assert.equal(snapshot.files[0].text, accepted);
+    assert.equal(snapshot.files.find((file) => file.path === relative)?.text, accepted);
     assert.equal(snapshot.acceptedReceipt.entries[0].files[0].sha256, createHash("sha256").update(accepted).digest("hex"));
   } finally {
     await rm(root, { recursive: true, force: true });

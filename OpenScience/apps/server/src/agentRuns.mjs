@@ -1966,7 +1966,7 @@ async function snapshotAcceptedPackageForRepair(project, run) {
   const authorizationDirectory = path.join(project.metaDir, "repair-authorizations");
   await mkdir(authorizationDirectory, { recursive: true, mode: 0o700 });
   const authorizations = [];
-  for (const entry of verified.receipt.entries) {
+  for (const entry of verified.receipt.entries.filter((candidate) => candidate.contractKind === "clinical-evidence-report")) {
     const authorization = {
       formatVersion: 1,
       controlPlaneRunId: run.id,
@@ -1987,7 +1987,7 @@ async function snapshotAcceptedPackageForRepair(project, run) {
       acceptedDigest: authorization.acceptedDigest,
     });
   }
-  return { revisionRequired: true, snapshotPath, authorizations };
+  return { revisionRequired: authorizations.length > 0, snapshotPath, authorizations };
 }
 
 /** Consume one repair authorization whose accepted bytes already have a private snapshot. */
