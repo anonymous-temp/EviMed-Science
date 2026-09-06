@@ -3,15 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionRoute } from "./SessionRoute";
+import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
 
 vi.mock("./RunStreamSessionPage", () => ({ RunStreamSessionPage: () => <div>built-in session view</div> }));
 vi.mock("@/components/run/RunSidePanel", () => ({ RunSidePanel: () => <aside>run panel</aside> }));
-const mocks = vi.hoisted(() => ({ create: vi.fn(), release: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/apiClient", () => ({
   hasWebApi: true, fetchWebMe: () => Promise.resolve({}), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
+  renewWebRuntimeUiFrame: mocks.renew,
 }));
-const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000 };
+const binding = { frameId: "frame-a", frameUrl: "https://host.example:8443/__evimed/f/frame-a/", expiresAt: Date.now() + 600_000, renewalToken: "renew-frame-a" };
 function PathProbe() {
   const navigate = useNavigate();
   return <div><span data-testid="path">{useLocation().pathname}</span>
@@ -29,13 +31,124 @@ function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = 
     data: { version: 1, frameId: binding.frameId, projectId: "default", seq: 1, ...data } })));
 }
 beforeEach(() => {
-  window.localStorage.clear(); mocks.create.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
+  window.localStorage.clear(); mocks.create.mockReset(); mocks.renew.mockReset(); mocks.release.mockReset(); mocks.release.mockResolvedValue(undefined); mocks.projectId = "default";
   mocks.create.mockResolvedValue(binding);
+  mocks.renew.mockImplementation(async () => ({ ...binding, expiresAt: Date.now() + 300_000 }));
   mocks.profile.uiOrigin = "https://host.example:8443";
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("native frame identity and readiness", () => {
+  async function establishedClockFrame() {
+    vi.useFakeTimers();
+    mocks.create.mockResolvedValue({ ...binding, expiresAt: Date.now() + 300_000 });
+    const view = mount(null, "/app/chat/session-a");
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const frame = view.container.querySelector("iframe")!;
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const command = post.mock.calls[0][0];
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: command.requestId, ok: true, sessionId: "session-a" });
+    return { ...view, frame, post };
+  }
+
+  it("renews the five-minute lease without replacing the native document or replaying navigation", async () => {
+    const { container, frame, post } = await establishedClockFrame();
+    await act(async () => { await vi.advanceTimersByTimeAsync(270_000); });
+    expect(mocks.renew).toHaveBeenCalledWith(expect.objectContaining({ frameId: binding.frameId, renewalToken: binding.renewalToken }));
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+  it("renews on foreground recovery after the old lease expired, preserving the native document", async () => {
+    const { container, frame, post } = await establishedClockFrame();
+    vi.setSystemTime(Date.now() + 360_000);
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.renew).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(post).toHaveBeenCalledTimes(1);
+    await act(async () => { emit(frame, { type: "evimed.runtime-ui.error", seq: 3, error: "NATIVE_NOT_READY" }); });
+    expect(container.querySelector("iframe")).toBe(frame);
+  });
+
+  it("shows renewal failure without dropping native state and keeps recovery single-flight", async () => {
+    const { container, frame } = await establishedClockFrame();
+    let rejectRenew!: (reason: Error) => void;
+    mocks.renew.mockImplementation(() => new Promise((_resolve, reject) => { rejectRenew = reject; }));
+    await act(async () => { window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { window.dispatchEvent(new Event("online")); document.dispatchEvent(new Event("visibilitychange")); });
+    expect(mocks.renew).toHaveBeenCalledTimes(1);
+    await act(async () => { rejectRenew(new Error("offline")); });
+    expect(screen.getByRole("alert")).toHaveTextContent("连接");
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(mocks.release).not.toHaveBeenCalled();
+    mocks.renew.mockResolvedValue({ ...binding, expiresAt: Date.now() + 300_000 });
+    await act(async () => { screen.getByRole("button", { name: "重新连接" }).click(); await vi.advanceTimersByTimeAsync(0); });
+    expect(mocks.renew).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(container.querySelector("iframe")).toBe(frame);
+  });
+
+  it("recovers failed readiness through the real native bridge without a new generation or fabricated ready", async () => {
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const origin = "https://shell.example";
+    let listener = (_event: unknown) => {};
+    let generation = {};
+    let generationChanged = () => {};
+    let dispose = () => {};
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const create = vi.fn(); const draft = vi.fn();
+    const parent = { postMessage: (data: Record<string, unknown>) => {
+      window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: mocks.profile.uiOrigin, data }));
+    } };
+    const post = vi.spyOn(frame.contentWindow!, "postMessage").mockImplementation(data => listener({ data, origin, source: parent }));
+    await act(async () => {
+      applyNativeBridge({
+        loader: { await: async () => {} },
+        connection: { generation: { getSnapshot: () => generation, subscribe: (fn: () => void) => { generationChanged = fn; return () => {}; } } },
+        sessions: { refresh, create, open: vi.fn(), scope: () => ({}),
+          list: { getSnapshot: () => ({ current: "session-a" }), subscribe: () => () => {} } },
+        workspaces: { create: vi.fn(), list: { getSnapshot: () => ({ items: [] }) } },
+        conversation: { input: { for: () => ({ setDraft: draft }) } },
+        effect: (setup: () => () => void) => { dispose = setup(); },
+      }, {}, {
+        __EVIMED_FRAME__: { version: 1, frameId: binding.frameId, projectId: "default", shellOrigin: origin, cwd: "/workspace" },
+        parent, addEventListener: (_type: string, fn: typeof listener) => { listener = fn; }, removeEventListener() {},
+      });
+    });
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(1);
+    refresh.mockRejectedValueOnce(new Error("temporary unary 401"));
+    await act(async () => { generation = {}; generationChanged(); });
+    await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(post.mock.calls.some(([data]) => data.type === "evimed.runtime-ui.resume")).toBe(true);
+    expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(1);
+    expect(container.querySelector("iframe")).toBe(frame);
+    expect(create).not.toHaveBeenCalled(); expect(draft).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
+    refresh.mockRejectedValueOnce(new Error("still unavailable")).mockRejectedValueOnce(new Error("still unavailable"));
+    await act(async () => { generation = {}; generationChanged(); });
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("恢复"));
+    expect(container.querySelector("iframe")).toBe(frame);
+    await userEvent.click(screen.getByRole("button", { name: "重新连接" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(1);
+    expect(create).not.toHaveBeenCalled(); expect(draft).not.toHaveBeenCalled();
+    dispose();
+  });
+
   it("creates an immutable frame and waits for verified native readiness rather than iframe load", async () => {
     const { container, unmount } = mount();
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
@@ -125,7 +238,7 @@ describe("native frame identity and readiness", () => {
     expect(screen.queryByText("built-in session view")).toBeNull();
   });
 
-  it("retries a failed established frame by reopening the exact current URL", async () => {
+  it("recovers an established frame without recreating its document or navigation", async () => {
     const { container } = mount(null, "/app/chat/session-a");
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     const frame = container.querySelector("iframe")!;
@@ -136,14 +249,13 @@ describe("native frame identity and readiness", () => {
     expect(screen.getByText("正在打开研究任务…")).toBeInTheDocument();
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.error", seq: 4, error: "NATIVE_NOT_READY" });
-    await userEvent.click(await screen.findByRole("button", { name: "重试" }));
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
-    const fresh = container.querySelector("iframe")!;
-    expect(fresh).not.toBe(frame);
-    const freshPost = vi.spyOn(fresh.contentWindow!, "postMessage");
-    emit(fresh, { type: "evimed.runtime-ui.ready" });
-    await waitFor(() => expect(freshPost).toHaveBeenCalledTimes(1));
-    expect(freshPost.mock.calls[0][0].intent).toEqual({ kind: "open", sessionId: "session-a" });
+    await waitFor(() => expect(mocks.renew).toHaveBeenCalledTimes(1));
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("iframe")).toBe(frame);
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 5 });
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate")).toHaveLength(1);
+    expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.resume")).toHaveLength(1);
   });
 
   it("releases late frame cookies without mounting a disposed response", async () => {
@@ -174,20 +286,21 @@ describe("native frame identity and readiness", () => {
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     const frame = container.querySelector("iframe")!;
     const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    const navigations = () => post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.navigate");
     emit(frame, { type: "evimed.runtime-ui.ready" });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
     emit(frame, { type: "evimed.runtime-ui.connecting", seq: 3 });
     await userEvent.click(screen.getByText("Open B"));
-    expect(post).toHaveBeenCalledTimes(1);
+    expect(navigations()).toHaveLength(1);
     emit(frame, { type: "evimed.runtime-ui.ready", seq: 4 });
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
-    const request = post.mock.calls[1][0];
+    await waitFor(() => expect(navigations()).toHaveLength(2));
+    const request = navigations()[1][0];
     expect(request.intent).toEqual({ kind: "open", sessionId: "session-b" });
     emit(frame, { type: "evimed.runtime-ui.ready", seq: 5 });
-    await waitFor(() => expect(post).toHaveBeenCalledTimes(3));
-    expect(post.mock.calls[2][0]).toMatchObject({ requestId: request.requestId, intent: request.intent });
-    expect(post.mock.calls[2][0].seq).toBeGreaterThan(request.seq);
+    await waitFor(() => expect(navigations()).toHaveLength(3));
+    expect(navigations()[2][0]).toMatchObject({ requestId: request.requestId, intent: request.intent });
+    expect(navigations()[2][0].seq).toBeGreaterThan(request.seq);
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 6, requestId: request.requestId, ok: true, sessionId: "session-b" });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-b");

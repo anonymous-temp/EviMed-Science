@@ -646,12 +646,21 @@ export interface WebRuntimeUiFrame {
   frameId: string;
   frameUrl: string;
   expiresAt: number;
+  renewalToken: string;
 }
 
 /** Create one immutable native frame through the authenticated control plane. */
 export async function createWebRuntimeUiFrame(projectId: string): Promise<WebRuntimeUiFrame> {
   const res = await fetchWithWebAuth(apiUrl("/runtime-ui/frames"), {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+  });
+  return parseApiResponse<WebRuntimeUiFrame>(res);
+}
+
+/** Renew the original login/project binding; the proof never travels into the native document. */
+export async function renewWebRuntimeUiFrame(frame: WebRuntimeUiFrame): Promise<WebRuntimeUiFrame> {
+  const res = await fetchWithWebAuth(apiUrl(`/runtime-ui/frames/${encodeURIComponent(frame.frameId)}/renew`), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ renewalToken: frame.renewalToken }),
   });
   return parseApiResponse<WebRuntimeUiFrame>(res);
 }

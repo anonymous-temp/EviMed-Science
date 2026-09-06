@@ -20,6 +20,7 @@ export function apply(ctx, _config, target = globalThis) {
   /** @type {string | null} */ let selectedSession = null;
   let disposed = false;
   let refreshing = false;
+  let resumeRequested = false;
   /** @type {string | null | undefined} */ let previousSession;
   let actions = Promise.resolve();
   const requests = new Map();
@@ -110,6 +111,7 @@ export function apply(ctx, _config, target = globalThis) {
     const generation = ctx.connection.generation.getSnapshot();
     if (!generation) { unavailable(); return; }
     refreshing = true;
+    resumeRequested = false;
     unavailable();
     try {
       await ctx.sessions.refresh();
@@ -125,16 +127,25 @@ export function apply(ctx, _config, target = globalThis) {
     }
     finally {
       refreshing = false;
-      if (!disposed && ctx.connection.generation.getSnapshot() && ctx.connection.generation.getSnapshot() !== generation) void establish();
+      if (!disposed && ctx.connection.generation.getSnapshot()
+        && (ctx.connection.generation.getSnapshot() !== generation || (!ready && resumeRequested))) void establish();
     }
   }
   /** @param {any} event */
   function message(event) {
     if (disposed || event.source !== parent || event.origin !== frame.shellOrigin) return;
     const data = event.data;
-    if (!data || data.type !== 'evimed.runtime-ui.navigate' || data.version !== 1
+    if (!data || data.version !== 1
       || data.frameId !== frame.frameId || data.projectId !== frame.projectId
-      || !Number.isSafeInteger(data.seq) || data.seq <= incoming
+      || !Number.isSafeInteger(data.seq) || data.seq <= incoming) return;
+    if (data.type === 'evimed.runtime-ui.resume') {
+      incoming = data.seq;
+      // Cookie renewal need not replace the carrier generation. Retry only
+      // the readiness read, preserving native input and pending navigation.
+      if (!ready) { resumeRequested = true; void establish(); }
+      return;
+    }
+    if (data.type !== 'evimed.runtime-ui.navigate'
       || typeof data.requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(data.requestId)) return;
     const intent = data.intent;
     if (!intent || !['create', 'open'].includes(intent.kind)

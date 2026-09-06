@@ -69,6 +69,45 @@ test("signed frame claims bind the login fingerprint and reject tampering, expir
   }
 });
 
+test("a renewal proof restores only the same binding after its short cookie expires", async () => {
+  const { issueRuntimeUiFrame, renewRuntimeUiFrame, validateRuntimeUiFrame } = await import("../src/runtimeUiFrames.mjs");
+  const limited = { ...config, runtimeUiFrameTtlMs: 5_000 };
+  const issued = issueRuntimeUiFrame({ config: limited, req, user, session, project, now: 1000 });
+  assert.equal(typeof issued.renewalToken, "string");
+  const renewed = renewRuntimeUiFrame({ config: limited, req, user, session, frameId: issued.frameId, renewalToken: issued.renewalToken, now: 7000 });
+  assert.equal(renewed.frameId, issued.frameId);
+  assert.equal(renewed.frameUrl, issued.frameUrl);
+  assert.equal(renewed.expiresAt, 12000);
+  const renewedReq = { headers: { cookie: `${req.headers.cookie}; ${renewed.cookie.split(";")[0]}` } };
+  assert.equal(validateRuntimeUiFrame({ config: limited, req: renewedReq, user, session, frameId: issued.frameId, now: 7001 }).projectId, project.id);
+  assert.throws(() => validateRuntimeUiFrame({ config: limited, req: { headers: { cookie: `${req.headers.cookie}; evimed_ui_frame=${issued.renewalToken}` } }, user, session, frameId: issued.frameId, now: 7001 }));
+  for (const change of [
+    { frameId: "a".repeat(32) }, { user: { id: "another-user" } },
+    { req: { headers: { cookie: "session=another-login" } } },
+    { config: { ...limited, runtimeUiPublicOrigin: "https://science.example:9443" } },
+    { renewalToken: issued.cookie.split(";")[0].split("=")[1] }, { now: session.expiresAt },
+  ]) assert.throws(() => renewRuntimeUiFrame({ config: limited, req, user, session, frameId: issued.frameId, renewalToken: issued.renewalToken, now: 7000, ...change }));
+});
+
+test("frame renewal requires the original proof plus live authentication, CSRF and project access", async (t) => {
+  const f = await frameApi(t);
+  const headers = { cookie: f.cookie, "content-type": "application/json", "x-open-science-csrf": f.csrfToken };
+  const created = await fetch(`${f.base}/api/runtime-ui/frames`, { method: "POST", headers, body: JSON.stringify({ projectId: "default" }) });
+  const frame = (await created.json()).data;
+  const renew = (requestHeaders, body, id = frame.frameId) => fetch(`${f.base}/api/runtime-ui/frames/${id}/renew`, { method: "POST", headers: requestHeaders, body: JSON.stringify(body) });
+  const proof = { renewalToken: frame.renewalToken };
+  assert.equal((await renew({}, proof)).status, 401);
+  assert.equal((await renew({ cookie: f.cookie, "content-type": "application/json" }, proof)).status, 403);
+  assert.notEqual((await renew(headers, { projectId: "default" })).status, 200);
+  const response = await renew(headers, proof);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.frameId, frame.frameId);
+  assert.match(response.headers.get("set-cookie"), new RegExp(`Path=/__evimed/f/${frame.frameId}/;`));
+  assert.notEqual((await renew(headers, proof, "a".repeat(32))).status, 200);
+  await f.app.store.logout({ headers: { cookie: f.cookie } });
+  assert.equal((await renew(headers, proof)).status, 401);
+});
+
 test("production frame signing fails closed without stable protected material and deployment origins must share host", async () => {
   const { issueRuntimeUiFrame } = await import("../src/runtimeUiFrames.mjs");
   for (const overrides of [
