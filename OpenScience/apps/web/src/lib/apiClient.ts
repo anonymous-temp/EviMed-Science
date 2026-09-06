@@ -129,6 +129,23 @@ export interface WebProject {
   name: string;
 }
 
+export interface WebPluginConfiguration {
+  revision: number;
+  enabled: boolean;
+  settings: { timeoutMs: number };
+}
+
+export interface WebPluginState {
+  id: "dsh-cite";
+  binaryVersion: string;
+  availableUpdate: null;
+  desired: WebPluginConfiguration | null;
+  effective: WebPluginConfiguration | null;
+  phase: "saved" | "pending" | "applying" | "effective" | "rolled_back" | "unavailable" | "failed";
+  error: string | null;
+  limits: { minTimeoutMs: number; maxTimeoutMs: number };
+}
+
 export interface WebResearchAgentOutput {
   path: string;
   required: boolean;
@@ -710,6 +727,44 @@ export async function listWebProjects(): Promise<WebProject[]> {
   if (!hasWebApi) throw new BackendUnavailableError("projects.list");
   const res = await fetchWithWebAuth(apiUrl("/projects"));
   return parseApiResponse<WebProject[]>(res);
+}
+
+/** Both the path and header keep an in-flight operation bound to its original project. */
+async function webPluginRequest<T>(projectId: string, suffix: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetchWithWebAuth(apiUrl(`/projects/${encodeURIComponent(projectId)}/plugins${suffix}`), {
+    method,
+    signal,
+    headers: {
+      "X-Open-Science-Project": projectId,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return parseApiResponse<T>(res);
+}
+
+export async function listWebPlugins(projectId: string, signal?: AbortSignal): Promise<WebPluginState[]> {
+  return (await webPluginRequest<{ plugins: WebPluginState[] }>(projectId, "", "GET", undefined, signal)).plugins;
+}
+
+export function saveWebPlugin(projectId: string, input: { expectedRevision: number; enabled: boolean; settings: { timeoutMs: number } }, signal?: AbortSignal): Promise<WebPluginState> {
+  return webPluginRequest(projectId, "/dsh-cite", "PUT", {
+    expectedRevision: input.expectedRevision, enabled: input.enabled, settings: { timeoutMs: input.settings.timeoutMs },
+  }, signal);
+}
+
+export async function listWebPluginRevisions(projectId: string, signal?: AbortSignal): Promise<WebPluginConfiguration[]> {
+  return (await webPluginRequest<{ items: WebPluginConfiguration[] }>(projectId, "/dsh-cite/revisions", "GET", undefined, signal)).items;
+}
+
+export function rollbackWebPlugin(projectId: string, input: { expectedRevision: number; targetRevision: number }, signal?: AbortSignal): Promise<WebPluginState> {
+  return webPluginRequest(projectId, "/dsh-cite/rollback", "POST", {
+    expectedRevision: input.expectedRevision, targetRevision: input.targetRevision,
+  }, signal);
+}
+
+export function retryWebPlugin(projectId: string, signal?: AbortSignal): Promise<WebPluginState> {
+  return webPluginRequest(projectId, "/dsh-cite/retry", "POST", {}, signal);
 }
 
 export async function createWebProject(id: string, name = id): Promise<WebProject> {
