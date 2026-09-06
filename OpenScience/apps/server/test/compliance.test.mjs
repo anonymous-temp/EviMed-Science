@@ -129,6 +129,34 @@ test("hosted compliance audit is part of the Web CI script", async () => {
   assert.match(pkg.scripts["ci:web"], /pnpm audit:saas-alignment/);
 });
 
+test("the controller audit accepts only the validated capsule extension to a reconstructed launch plan", async () => {
+  const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
+  const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
+  assert.equal(controllerLaunchPlanIsScoped(controller), true);
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl })";
+  const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
+  assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
+  const cases = [
+    ["arbitrary fourth argument", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, payload)")],
+    ["caller Docker args", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, args: payload.args })")],
+    ["caller image", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, image: payload.image })")],
+    ["caller mounts", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, mounts: payload.mounts })")],
+    ["spread caller settings", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, ...payload })")],
+    ["unvalidated endpoint reread", controller.replace(call, "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl: payload.capsuleGatewayUrl })")],
+    ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
+    ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
+    ["unknown fields allowed", controller.replace('"port", "password", "capsuleGatewayUrl"]', '"port", "password", "capsuleGatewayUrl", "args"]')],
+    ["key validation skipped", controller.replace("assertExactKeys(payload, allowed);", "")],
+    ["key validator disabled", controller.replace("if (unexpected) {", "if (false) {")],
+    ["project scope bypassed", controller.replace("await projectFromReference(config, payload)", "payload")],
+    ["caller arguments passed to spawn", controller.replace("spawn(plan.command, plan.args,", 'spawn(plan.command, payload["args"],')],
+  ];
+  for (const [label, source] of cases) {
+    assert.notEqual(source, controller, `${label} must actually mutate the reviewed source`);
+    assert.equal(controllerLaunchPlanIsScoped(source), false, label);
+  }
+});
+
 test("hosted compliance audit rejects restricted Anthropic skills when configured for runtime deployment", () => {
   const result = runAudit({
     OPEN_SCIENCE_RUNTIME_SKILL_DIRS: "runtime/skills/external/anthropic-skills",

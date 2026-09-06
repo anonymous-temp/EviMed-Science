@@ -427,6 +427,28 @@ async function checkDeepSeekCompatibilityPreflight() {
   }
 }
 
+/** Check the reviewed controller boundary, including its one validated v3 setting. */
+export function controllerLaunchPlanIsScoped(source) {
+  const code = String(source).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const body = code.match(/async function startRuntime\(project, payload\)\s*\{([\s\S]*?)\n {2}function runtimeStatus\(/)?.[1];
+  if (!body) return false;
+  const compact = code.replace(/\s+/g, "");
+  const launch = body.replace(/\s+/g, "");
+  const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
+  let fields;
+  try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl"].sort();
+  return Array.isArray(fields) && JSON.stringify(fields.sort()) === JSON.stringify(expected)
+    && /functionassertExactKeys\(value,allowed\)\{constallowlist=newSet\(allowed\);constunexpected=Object\.keys\(value\?\?\{\}\)\.find\(\(key\)=>!allowlist\.has\(key\)\);if\(unexpected\)\{throwcontrollerFailure\(400,["']runtime_controller_payload_invalid["'],/.test(compact)
+    && compact.includes("assertExactKeys(payload,allowed);constproject=awaitprojectFromReference(config,payload);")
+    // The endpoint must be captured once, rejected unless empty or exactly the
+    // configured internal endpoint, and only that validated local may cross.
+    && /constcapsuleGatewayUrl=payload\.capsuleGatewayUrl;if\(typeofcapsuleGatewayUrl!==["']string["']\|\|\(capsuleGatewayUrl!==["']["']&&capsuleGatewayUrl!==capsuleGatewayEndpointUrl\(config\)\)\)\{throwcontrollerFailure\(400,["']runtime_controller_capsule_gateway_invalid["'],[^;]+;\}constplan=buildRuntimeLaunchPlan\(config,project,port,\{capsuleGatewayUrl\}\);/.test(launch)
+    && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
+    && launch.includes("spawn(plan.command,plan.args,{")
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl)\b/g, ""));
+}
+
 async function checkRuntimeContainerTopology() {
   const dockerfile = await read("deploy/runtime-dsh/Dockerfile");
   const compose = await read("deploy/web/docker-compose.yml");
@@ -464,14 +486,8 @@ async function checkRuntimeContainerTopology() {
     /Web API root filesystem must be read-only/.test(workflow) &&
     /Web API container must not mount \/var\/run\/docker\.sock/.test(workflow) &&
     /Web API controller mount must be read-only/.test(workflow) &&
-    // The launch plan is still reconstructed inside the controller from the
-    // scoped project identifier and a port, never handed over by the API. The
-    // signature lost its `password` argument when the kernel it authenticated
-    // was retired, and the arity is pinned here because a plan builder that
-    // started accepting caller-supplied arguments is exactly the regression
-    // this check exists to catch.
-    /buildRuntimeLaunchPlan\(config, project, port\)/.test(controller) &&
-    !/payload\.args|payload\.image|payload\.mount/.test(controller)
+    // V3 adds a validated capsule endpoint, not caller-owned Docker settings.
+    controllerLaunchPlanIsScoped(controller)
   ) {
     pass("runtime_controller_privilege_boundary", "Only the unexposed runtime controller holds the Docker socket; the capability-free, read-only API receives a read-only control-socket mount, and the controller reconstructs fixed launch plans from scoped project identifiers.");
   } else {
