@@ -230,11 +230,13 @@ export class DshMux {
     // — it is a different cookie the kernel never looks for, and the request
     // reads as unauthenticated with nothing said about a name mismatch.
     if (this.runtime.cookie) headers.cookie = this.runtime.cookie;
-    // Left to Node, which sets `Host` from the URL — the same value the cookie
-    // was minted against. An override exists only for a caller that must dial
-    // one address and be seen as another; setting it by hand in the ordinary
-    // case would be a second copy of a value that must not diverge.
-    if (this.runtime.authority) headers.host = this.runtime.authority;
+    // Node derives Host from `socketPath` as `localhost`, not from `target`, on
+    // a unix-socket request. The cookie was minted for the URL authority, so
+    // that silent default makes the authenticated mux a different origin and
+    // the kernel correctly answers 401 while unary calls keep working. Always
+    // send the URL's authority; an explicit override remains available for a
+    // caller that must dial one address and be seen as another.
+    headers.host = this.runtime.authority ?? target.host;
 
     const request = this.runtime.socketPath
       ? http.request({ method: "GET", headers, socketPath: this.runtime.socketPath, path: `${target.pathname}${target.search}` })
