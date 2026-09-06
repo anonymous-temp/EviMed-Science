@@ -3,7 +3,7 @@
 This is deliberately a different schema from legacy workspace .jobs files.
 An authenticated terminal response must supply data.auditReceipt from protected
 job state; a driver must never manufacture that proof from its own checkout.
-The current adapter's status-only response is insufficient and remains uncertified.
+Status-only responses remain insufficient; only a protected signed receipt qualifies.
 Ed25519 verification requires cryptography and a digest-pinned public PEM. The
 signature covers canonical(proof without attestation); keyId is "ed25519-"
 followed by SHA-256 of the raw 32-byte public key. No receipt-provided key is
@@ -159,16 +159,12 @@ def write_new(root, relative, blob):
 
 
 def current_evidence(tool, repo=REPO):
-    location = repo / "runtime/mcp/evimed-research/execution_evidence.py"
+    adapter = repo / "deploy/specialist-adapter/evimed_specialist_adapter"
+    location = adapter / "audit_receipt.py"
     spec = importlib.util.spec_from_file_location("hosted_audit_execution_evidence", location)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    adapter = repo / "deploy/specialist-adapter"
-    return {
-        "executionEvidence": module.execution_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool],
-            adapter / "evimed_specialist_adapter/service.py"),
-        "adapterEvidence": module.source_tree_evidence(adapter),
-    }
+    return module.current_evidence(repo.parent / "项目代码" / SOURCE_DIRS[tool], adapter)
 
 
 def request_inputs(request):

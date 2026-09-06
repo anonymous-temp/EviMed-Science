@@ -1,0 +1,13 @@
+# Optional overlay; ordinary MR jobs and the base stack need no audit key.
+# Apply after docker-compose.yml when the dedicated operator key is installed.
+services:
+  evimed-mr-agent:
+    environment:
+      EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE: /run/secrets/specialist-audit-signing-key
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_SPECIALIST_AUDIT_SIGNING_KEY_HOST_FILE:?set a protected audit signing key file}
+        target: /run/secrets/specialist-audit-signing-key
+        read_only: true
+        bind:
+          create_host_path: false
