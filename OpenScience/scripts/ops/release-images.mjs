@@ -85,13 +85,30 @@ function inspectReleaseEngine(target, execute) {
 }
 
 function inspectBuildBase(plan, execute) {
+  assertBuilderContext(execute);
   const docker = ["--host", plan.target.endpoint];
   const base = imageInfo(execute("docker", [...docker, "image", "inspect", plan.base.reference]));
   requireValue(base.Id === plan.base.imageId && base.Os === "linux" && base.Architecture === "amd64" && base.RepoDigests?.includes(plan.base.reference) && Array.isArray(base.RootFS?.Layers) && base.RootFS.Layers.length > 0 && !base.Config?.OnBuild?.length, "release_base_unverified", "The installed base does not match its manifest, local identity or platform.");
   requireValue(execute("docker", [...docker, "image", "ls", "--quiet", "--no-trunc", plan.image]) === "", "release_tag_exists", "The candidate tag already exists; preserve existing and rollback references and choose a new tag.");
-  const builder = JSON.parse(execute("docker", [...docker, "buildx", "inspect", BUILDER, "--format", "{{json .}}"]));
-  requireValue(builder.Driver === "docker" && builder.Nodes?.length === 1 && [BUILDER, BUILDER_ENDPOINT].includes(builder.Nodes[0].Endpoint), "release_builder_changed", "Buildx must use the verified single-node Docker driver on the isolated endpoint.");
+  const builder = parseBuildxBuilders(execute("docker", ["--context", BUILDER, "buildx", "ls", "--format", "json"]));
+  const node = builder.Nodes?.[0];
+  requireValue(builder.Driver === "docker" && builder.Current === true && !builder.Err && !builder.Error
+    && Array.isArray(builder.Nodes) && builder.Nodes.length === 1
+    && node && typeof node === "object" && !Array.isArray(node)
+    && node.Endpoint === BUILDER && node.Status === "running" && !node.Err && !node.Error,
+  "release_builder_changed", "Buildx must use the current, running single-node Docker builder on the isolated context.");
   return base;
+}
+
+function parseBuildxBuilders(output) {
+  let rows;
+  try { rows = String(output).split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line)); }
+  catch { throw fail("release_builder_changed", "Buildx did not return valid JSON builder rows."); }
+  requireValue(rows.every(row => row && typeof row === "object" && !Array.isArray(row)
+    && typeof row.Name === "string" && row.Name.length > 0), "release_builder_changed", "Buildx returned malformed builder identity rows.");
+  const selected = rows.filter(row => row.Name === BUILDER);
+  requireValue(selected.length === 1, "release_builder_changed", "Buildx must identify the isolated builder exactly once.");
+  return selected[0];
 }
 
 function assertBuilderContext(execute) {

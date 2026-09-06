@@ -19,7 +19,7 @@ const nextLayer = `sha256:${"1".repeat(64)}`;
 
 function topology() {
   return {
-    status: { driver: "macOS Virtualization.Framework", disk: 20 * GiB, docker_socket: releaseImageSafety.BUILDER_ENDPOINT.slice(7) },
+    status: { driver: "macOS Virtualization.Framework", disk: 20 * GiB, docker_socket: releaseImageSafety.BUILDER_ENDPOINT },
     devices: { blockdevices: [{ name: "vda", type: "disk", size: 8 * GiB, ro: false },
       { name: "vdb", type: "disk", size: 20 * GiB, ro: false }, { name: "vdc", type: "disk", size: 20_000_000, ro: true }] },
     mounts: { root: "/dev/vda1", tmp: "/dev/vda1", docker: "/dev/vdb1[/docker]", containerd: "/dev/vdb1[/containerd]" },
@@ -73,7 +73,14 @@ function fixture(t) {
     }
     if (command === "docker" && args.includes("context")) return releaseImageSafety.BUILDER_ENDPOINT;
     if (args.includes("info")) return JSON.stringify({ ID: state.changedEngine ? "other-engine" : "builder-engine", Name: "isolated-engine", OSType: "linux", DockerRootDir: "/var/lib/docker" });
-    if (args.includes("buildx")) return JSON.stringify({ Driver: "docker", Nodes: [{ Endpoint: releaseImageSafety.BUILDER }] });
+    if (args.includes("buildx")) {
+      assert.deepEqual(args, ["--context", releaseImageSafety.BUILDER, "buildx", "ls", "--format", "json"], "mirror Buildx 0.33's supported machine output");
+      return [
+        { Name: "colima", Current: false, Driver: "docker", Nodes: [{ Endpoint: "colima", Status: "running" }] },
+        { Name: releaseImageSafety.BUILDER, Current: true, Driver: "docker", Nodes: [{ Endpoint: releaseImageSafety.BUILDER, Status: "running", Platforms: ["linux/arm64", "linux/386"] }] },
+        { Name: "default", Current: false, Driver: "", Err: "Unrelated default daemon unavailable", Nodes: [{ Endpoint: "", Name: "" }] },
+      ].map(row => JSON.stringify(row)).join("\n");
+    }
     if (args.includes("ls")) return state.built ? resultId : "";
     if (args.includes("inspect")) return JSON.stringify([args.at(-1) === baseReference
       ? { Id: baseId, Os: "linux", Architecture: "amd64", RepoDigests: [baseReference], RootFS: { Layers: [layer] }, Config: { Env: ["NODE_VERSION=22.22.0"] } }
@@ -115,6 +122,7 @@ test("calibration verifies hard disk sizes and the existing storage mappings", (
   const f = topology();
   assert.equal(verifyVmDiskTopology(f.status, f.devices, f.mounts, f.backing).virtualCapacityBytes, 28 * GiB);
   for (const mutate of [
+    value => { value.status.docker_socket = releaseImageSafety.BUILDER_ENDPOINT.slice("unix://".length); },
     value => { value.status.disk = 40 * GiB; }, value => { value.devices.blockdevices[0].size = 9 * GiB; },
     value => { value.devices.blockdevices[1].size = 40 * GiB; }, value => { value.devices.blockdevices[2].ro = false; },
     value => { value.mounts.docker = "/dev/vda1"; }, value => { value.mounts.tmp = "virtiofs"; },
@@ -136,6 +144,9 @@ test("check-build is read-only and names only fixed full-Web build arguments", a
   assert.ok(result.args.includes("--load") && result.args.includes("--pull=false"));
   assert.deepEqual(result.args.slice(0, 6), ["--context", releaseImageSafety.BUILDER, "buildx", "build", "--builder", releaseImageSafety.BUILDER]);
   assert.equal(result.args.includes("--host"), false);
+  const buildxList = f.calls.find(call => call[0] === "docker" && call.includes("buildx") && call.includes("ls"));
+  assert.deepEqual(buildxList.slice(1), ["--context", releaseImageSafety.BUILDER, "buildx", "ls", "--format", "json"]);
+  assert.equal(buildxList.includes("--host"), false);
   for (const call of f.calls.filter(call => call[0] === "docker" && (call.includes("info") || call.includes("image")))) {
     assert.deepEqual(call.slice(1, 3), ["--host", releaseImageSafety.BUILDER_ENDPOINT]);
   }
