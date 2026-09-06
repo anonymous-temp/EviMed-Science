@@ -182,12 +182,38 @@ def _publish(inputs: Any, source: int, output: int, prefix: Path) -> tuple[list[
     return artifacts, receipts
 
 
-def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any]:
+@contextmanager
+def _analysis_group(credentials):
+    previous = os.getegid()
+    try:
+        if credentials is not None and "group" in credentials:
+            os.setegid(credentials["group"])
+        yield
+    finally:
+        if os.getegid() != previous:
+            os.setegid(previous)
+
+
+def _analysis_access(inputs, directory):
+    # Only this private staging tree becomes accessible to the analysis group.
+    # Root retains ownership; SETGID suffices, so CHOWN/DAC overrides stay absent.
+    os.fchmod(directory, 0o770)
+    for name in os.listdir(directory):
+        info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if stat.S_ISDIR(info.st_mode):
+            with inputs.directory_fd(directory, (name,)) as child:
+                _analysis_access(inputs, child)
+        else:
+            with inputs._regular_file(directory, (name,)) as descriptor:
+                os.fchmod(descriptor, 0o660)
+
+
+def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_credentials=None) -> dict[str, Any]:
     """Run in the adapter's private mount and publish through the original FD."""
     parts = job.workspace.relative_to(job.data_root).parts
     output_parts = job.output_root.relative_to(job.workspace).parts
     try:
-        with inputs.directory_fd(job.data_root, parts) as workspace:
+        with _analysis_group(analysis_credentials), inputs.directory_fd(job.data_root, parts) as workspace:
             if inputs._identity(os.fstat(workspace), directory=True) != job.bindings.get(
                 "workspace"
             ):
@@ -200,6 +226,9 @@ def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any
                     tempfile.TemporaryDirectory(prefix="evimed-mr-scratch-", dir="/tmp") as scratch,
                 ):
                     child_environment = {**environment, "TMPDIR": scratch}
+                    if analysis_credentials is not None:
+                        os.chmod(scratch, 0o770)
+                        child_environment.update(HOME=scratch, MPLCONFIGDIR=str(Path(scratch) / "matplotlib"))
                     with inputs.directory_fd(Path(temporary)) as stage:
                         authority = {"request": copy.deepcopy(job.request), "sources": {}}
                         if inputs.validate_request(job.request):
@@ -217,6 +246,8 @@ def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any
                             "request.json",
                             json.dumps(authority["request"], ensure_ascii=False).encode("utf-8"),
                         )
+                        if analysis_credentials is not None:
+                            _analysis_access(inputs, stage)
                         with (
                             authority_pipe(authority) as proof,
                             tempfile.TemporaryFile(dir=scratch) as log,
@@ -243,6 +274,7 @@ def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any
                                 stderr=subprocess.STDOUT,
                                 check=False,
                                 timeout=job.timeout,
+                                **(analysis_credentials or {}),
                             )
                         result = _read_result(inputs, stage)
                         if completed.returncode != 0 or result.get("status") != "succeeded":
@@ -270,7 +302,8 @@ def execute(inputs: Any, job: Job, environment: dict[str, str]) -> dict[str, Any
                             for source in authority["sources"].values()
                         ]
                         return {"returnCode": 0, "result": result, "artifacts": artifacts,
-                                "inputReceipts": input_receipts, "artifactReceipts": artifact_receipts}
+                                "inputReceipts": input_receipts, "artifactReceipts": artifact_receipts,
+                                "analysisIsolated": analysis_credentials is not None}
     except inputs.MRInputError:
         raise
     except (OSError, ValueError, subprocess.TimeoutExpired):

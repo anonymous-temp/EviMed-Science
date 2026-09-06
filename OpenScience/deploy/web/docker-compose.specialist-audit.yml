@@ -2,6 +2,12 @@
 # Apply after docker-compose.yml when the dedicated operator key is installed.
 services:
   evimed-mr-agent:
+    user: "0:0"
+    # The trusted worker keeps key ownership; only analysis drops to 65532.
+    # Base cap_drop: ALL and no-new-privileges remain in force.
+    cap_add:
+      - SETUID
+      - SETGID
     environment:
       EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE: /run/secrets/specialist-audit-signing-key
     volumes:

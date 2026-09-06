@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -73,7 +74,7 @@ def _read_file(root, relative, limit=MAX_FILE_BYTES, *, secret=False):
         try:
             before = os.fstat(descriptor)
             if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > limit
-                    or (secret and (before.st_uid != os.geteuid() or stat.S_IMODE(before.st_mode) != 0o600))):
+                    or (secret and (before.st_uid != os.geteuid() or stat.S_IMODE(before.st_mode) not in {0o400, 0o600}))):
                 raise AuditReceiptUnavailable("audit_file_invalid")
             chunks, total = [], 0
             while chunk := os.read(descriptor, min(65536, limit + 1 - total)):
@@ -110,6 +111,31 @@ def signing_key():
         return None
 
 
+
+def analysis_credentials():
+    """Audit signing requires a Linux owner process with a separate analysis UID.
+
+    The runner receives neither this key path nor a privileged group. No-new-
+    privileges plus the UID change performed by Popen prevents regaining root at exec.
+    The existing unsigned deployment needs no privilege-changing capability.
+    """
+    name = os.environ.get("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", "")
+    if not name:
+        return None
+    if sys.platform != "linux" or os.geteuid() != 0:
+        raise AuditReceiptUnavailable("audit_analysis_isolation_unavailable")
+    try:
+        process = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
+        if int(process["CapEff"].strip(), 16) & ((1 << 6) | (1 << 7)) != ((1 << 6) | (1 << 7)) or process["NoNewPrivs"].strip() != "1":
+            raise AuditReceiptUnavailable("audit_analysis_isolation_unavailable")
+        path = Path(name).absolute()
+        # The descriptor read also verifies owner, link count, mode and size.
+        _read_file(Path(path.anchor), path.relative_to(path.anchor).as_posix(), 8192, secret=True)
+    except (OSError, KeyError, ValueError):
+        raise AuditReceiptUnavailable("audit_analysis_isolation_unavailable") from None
+    return {"user": 65532, "group": 65532, "extra_groups": [], "umask": 0o007}
+
+
 def _load_manifest():
     return json.loads(_read_file(FIXTURE_MANIFEST.parent, FIXTURE_MANIFEST.name, 64 * 1024))
 
@@ -118,6 +144,7 @@ def ready():
     if signing_key() is None:
         return False
     try:
+        analysis_credentials()
         _fixture_contract(_load_manifest())
         return True
     except (OSError, ValueError, TypeError, KeyError):
@@ -153,13 +180,34 @@ def source_tree_evidence(root):
     return {"sha256": hasher.hexdigest(), "files": len(files)}
 
 
+DEPLOYMENT_INPUTS = ("Dockerfile", "Dockerfile.evidence", "requirements.txt")
+
+
+def adapter_manifest(adapter_package=PACKAGE):
+    package = Path(adapter_package)
+    files = []
+    for name in DEPLOYMENT_INPUTS:
+        blob = _read_file(package.parent, name)
+        files.append({"path": name, "sha256": digest(blob), "bytes": len(blob)})
+    return {"schemaVersion": 1, "package": source_tree_evidence(package), "deploymentInputs": files}
+
+
+def adapter_evidence(adapter_package=PACKAGE):
+    manifest = adapter_manifest(adapter_package)
+    pinned = Path(adapter_package).parent / "adapter-evidence.json"
+    if pinned.exists() or pinned.is_symlink():
+        if json.loads(_read_file(pinned.parent, pinned.name, 64 * 1024)) != manifest:
+            raise AuditReceiptUnavailable("audit_adapter_manifest_changed")
+    return {"sha256": digest(canonical(manifest)), "files": manifest["package"]["files"] + len(DEPLOYMENT_INPUTS)}
+
+
 def current_evidence(agent_root, adapter_package=PACKAGE):
     tree = source_tree_evidence(agent_root)
     return {"executionEvidence": {"schemaVersion": 1, "agentSourceSha256": tree["sha256"],
         "agentSourceFiles": tree["files"], "adapterSha256": digest(_read_file(adapter_package, "service.py")),
         "evidenceModuleSha256": digest(_read_file(adapter_package, "audit_receipt.py")),
         "model": "deepseek-v4-pro", "thinking": True, "reasoningEffort": "high"},
-        "adapterEvidence": source_tree_evidence(adapter_package)}
+        "adapterEvidence": adapter_evidence(adapter_package)}
 
 
 def _fixture_contract(manifest):
@@ -210,7 +258,8 @@ def produce(state, outcome, data_root):
     try:
         from cryptography.hazmat.primitives import serialization
         request, fixture, inputs, files = _fixture_contract(_load_manifest())
-        if state["status"] != "succeeded" or state["request"] != request:
+        if (state["status"] != "succeeded" or state["request"] != request
+                or outcome.get("analysisIsolated") is not True):
             return None
         if _receipt_rows(outcome.get("inputReceipts")) != _receipt_rows(inputs):
             return None
@@ -245,3 +294,10 @@ def produce(state, outcome, data_root):
     except (OSError, ValueError, TypeError, KeyError, ImportError):
         # Optional audit eligibility is narrower than normal MR eligibility.
         return None
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3 or sys.argv[1] != "--write-adapter-manifest":
+        raise SystemExit("Expected --write-adapter-manifest OUTPUT")
+    with Path(sys.argv[2]).open("xb") as stream:
+        stream.write(canonical(adapter_manifest()) + b"\n")
