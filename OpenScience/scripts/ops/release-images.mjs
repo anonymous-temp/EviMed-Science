@@ -379,7 +379,7 @@ export async function runReleaseImages({ plan, checkOnly = false, execute = exec
   let config;
   if (plan.operation === "build") {
     base = inspectBuildBase(plan, execute);
-    args = [...docker, "buildx", "build", "--builder", BUILDER, "--platform", plan.platform, "--network", "none", "--pull=false", "--load", "--metadata-file", plan.metadataFile, "--label", `org.opencontainers.image.revision=${plan.sourceRevision}`, "--file", plan.dockerfile.file, "--tag", plan.image, plan.sourceRoot];
+    args = ["--context", BUILDER, "buildx", "build", "--builder", BUILDER, "--platform", plan.platform, "--network", "none", "--pull=false", "--load", "--metadata-file", plan.metadataFile, "--label", `org.opencontainers.image.revision=${plan.sourceRevision}`, "--file", plan.dockerfile.file, "--tag", plan.image, plan.sourceRoot];
   } else {
     requireValue(["amd64", "x86_64"].includes(engine.Architecture), "release_platform_invalid", "The serving engine must be linux/amd64.");
     const manifest = await registryBlob(plan, `manifests/${plan.image.split("@")[1]}`, plan.image.split("@")[1], fetchImpl);
@@ -393,7 +393,11 @@ export async function runReleaseImages({ plan, checkOnly = false, execute = exec
   // Repeat admission after the identity/registry probes, immediately before writes.
   if (plan.operation === "build") verifySource(plan, execute);
   check(true);
-  await runMonitoredOperation({ args, check, spawn });
+  await runMonitoredOperation({ args, check, spawn: plan.operation === "build" ? command => {
+    assertBuilderContext(execute);
+    inspectReleaseEngine(plan.target, execute);
+    return spawn(command);
+  } : spawn });
   check();
   if (plan.operation === "build") {
     verifySource(plan, execute);

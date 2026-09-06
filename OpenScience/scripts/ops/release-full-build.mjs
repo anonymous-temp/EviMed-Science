@@ -292,7 +292,7 @@ export async function runFullWebBuild({ plan, checkOnly = false, execute = execu
   require(initial.some(value => value.filesystem === source.evidenceFilesystem), "release_metadata_invalid", "The evidence directory must be on a monitored host filesystem.");
   const capacities = checkFloors(initial, plan, disks, true, inventory.upperBoundBytes);
   const metadataFile = path.join(plan.evidenceDir, "buildkit.json");
-  const args = ["--host", plan.target.endpoint, "buildx", "build", "--builder", safety.BUILDER,
+  const args = ["--context", safety.BUILDER, "buildx", "build", "--builder", safety.BUILDER,
     "--platform", "linux/amd64", "--network", "default", "--pull=false", "--load", "--progress", "plain",
     "--metadata-file", metadataFile, "--file", WEB_DOCKERFILE, "--tag", plan.image,
     "--build-arg", `NODE_BASE_IMAGE=${plan.base.reference}`, "--build-arg", `SOURCE_REVISION=${plan.sourceRevision}`,
@@ -363,6 +363,8 @@ export async function runFullWebBuild({ plan, checkOnly = false, execute = execu
     context = { subtree: source.sourceSubtree, ...snapshot(), inventory: inventory.entries };
     await runMonitoredOperation({ args, check, spawn: command => {
       require(JSON.stringify(snapshot()) === JSON.stringify({ bytes: context.bytes, sha256: context.sha256 }), "release_context_changed", "The private context snapshot changed before build.");
+      assertBuilderContext(execute);
+      inspectReleaseEngine(plan.target, execute);
       const child = spawn ? spawn(command, contextFd) : defaultSpawn(command, [contextFd, "pipe", "pipe"]);
       return capChildOutput(child, [{ stream: child.stdout, sink: logSink }, { stream: child.stderr, sink: logSink }]);
     } });
