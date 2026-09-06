@@ -8,11 +8,14 @@ import hashlib
 import importlib.util
 import json
 import os
-import shutil
 import sys
 import time
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+import public_mr_fixture as public_mr
+from hosted_receipts import (ReceiptError, RECEIPT_DIRECTORY, artifact_paths, canonical, file_receipt, read_owned, validate_receipt, write_new)
 
 
 HERE = Path(__file__).resolve().parent
@@ -243,7 +246,35 @@ def workspace_roots(explicit, probe_workspace=None) -> list[Path]:
     return sorted(set(roots))
 
 
+def latest_hosted_receipt(tool, roots, max_age_days):
+    candidates = []
+    for workspace in roots:
+        for path in workspace.glob(RECEIPT_DIRECTORY + "/*.json"):
+            try:
+                relative = path.relative_to(workspace).as_posix()
+                value = json.loads(read_owned(workspace, relative, 1024 * 1024))
+                proof = validate_receipt(value, workspace, tool, max_age_days)
+                ready = proof["jobStatus"] == "succeeded" and proof.get("releaseStatus") in {None, "ready"}
+                candidates.append({"tool": tool, "probeType": "completed_managed_job", "receiptKind": "isolated-adapter-v1",
+                    "operation": "start_then_poll_to_terminal", "status": "success" if ready else "warning", "operational": True,
+                    "summary": "An isolated managed adapter completed with current source evidence and verified retained inputs/artifacts.",
+                    "jobId": proof["jobId"], "jobStatus": proof["jobStatus"], "releaseStatus": proof.get("releaseStatus"),
+                    "publicationReady": ready, "executedAt": proof["completedAt"],
+                    "workspace": workspace.relative_to(REPO).as_posix(), "executionEvidence": proof["executionEvidence"],
+                    "hostedReceipt": file_receipt(workspace, relative), "inputReceipts": proof["inputs"],
+                    "fixtureReceipts": public_mr.fixture_file_receipts(public_mr.load_manifest()) if tool == "mendelian_randomization" else [],
+                    "artifacts": proof["artifacts"], "artifactCount": len(proof["artifacts"]), "scope": proof["scope"]})
+            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+                continue
+    return max(candidates, key=lambda row: row["executedAt"]) if candidates else None
+
+
 def latest_specialist_receipt(tool, roots, max_age_days):
+    hosted = latest_hosted_receipt(tool, roots, max_age_days)
+    # Current public-MR certification must exercise uploaded inputs through the
+    # isolated adapter; a legacy remote-text .jobs file cannot certify that path.
+    if hosted is not None or tool == "mendelian_randomization":
+        return hosted
     directory, prefix = SPECIALISTS[tool]
     candidates = []
     for workspace in roots:
@@ -313,34 +344,46 @@ def snapshot_evidence(results, evidence_root: Path) -> None:
     # a run that certifies less than the last one — a specialist whose job did
     # not start, an upstream that was down — deletes evidence it cannot replace,
     # and the loss is silent because the document it writes looks complete.
-    staging_root = evidence_root.with_name(evidence_root.name + ".staging")
-    if staging_root.exists():
-        shutil.rmtree(staging_root)
+    if evidence_root.exists():
+        raise ReceiptError("audit_snapshot_exists_use_new_output_directory")
+    evidence_root.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = Path(tempfile.mkdtemp(prefix=evidence_root.name + ".staging-", dir=evidence_root.parent))
     job_state_root = staging_root / "job-state"
     job_state_root.mkdir(parents=True, exist_ok=True)
     for item in results:
         workspace = REPO / str(item.get("workspace", ""))
-        receipts = list(item.get("artifacts") or [])
+        receipts = list(item.get("artifacts") or []) + list(item.get("inputReceipts") or []) + list(item.get("fixtureReceipts") or [])
+        if item.get("hostedReceipt"):
+            receipts.append(item["hostedReceipt"])
         response = item.get("responseReceipt")
         if isinstance(response, dict) and response.get("path"):
             receipts.append(response)
         for receipt in receipts:
-            source = (workspace / str(receipt["path"])).resolve()
-            source.relative_to(workspace.resolve())
-            target = staging_root / str(receipt["path"])
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, target)
+            relative = str(receipt["path"])
+            if file_receipt(workspace, relative) != {key: receipt[key] for key in ("path", "bytes", "sha256")}:
+                raise ReceiptError("audit_snapshot_artifact_changed")
+            target = staging_root / relative
+            blob = read_owned(workspace, relative)
+            if target.exists():
+                if read_owned(staging_root, relative) != blob:
+                    raise ReceiptError("audit_snapshot_path_collision")
+            else:
+                write_new(staging_root, relative, blob)
         job_id = item.get("jobId")
-        if not job_id:
+        if not job_id or item.get("receiptKind") == "isolated-adapter-v1":
             continue
         directory = SPECIALISTS[item["tool"]][0]
-        shutil.copyfile(
-            workspace / directory / ".jobs" / ("%s.json" % job_id),
-            job_state_root / ("%s.json" % job_id),
-        )
+        state = json.loads(read_owned(workspace, directory + "/.jobs/" + job_id + ".json"))
+        declared = artifact_paths(state.get("artifacts"))
+        if declared != artifact_paths(item.get("artifacts")):
+            raise ReceiptError("audit_snapshot_legacy_artifact_binding_changed")
+        public_state = {key: state.get(key) for key in ("jobId", "status", "releaseStatus", "executionEvidence", "updatedAt")}
+        public_state["artifacts"] = declared
+        for key in ("root", "metaRoot"):
+            if state.get(key):
+                public_state[key] = Path(str(state[key]).replace("\\", "/")).name
+        write_new(staging_root, "job-state/" + job_id + ".json", canonical(public_state) + b"\n")
     # Everything copied, so the swap is safe.
-    if evidence_root.exists():
-        shutil.rmtree(evidence_root)
     staging_root.rename(evidence_root)
 
 
@@ -398,6 +441,8 @@ def main():
     parser.add_argument("--max-receipt-age-days", type=float, default=14)
     parser.add_argument("--output-dir", type=Path, default=RESULTS)
     args = parser.parse_args()
+    if (args.output_dir / "tool-probe-v3.json").exists() or (args.output_dir / "evidence").exists():
+        raise SystemExit("audit output already exists; use a new --output-dir to preserve prior evidence")
     workspace = args.probe_workspace.resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(workspace)
