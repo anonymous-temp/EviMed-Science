@@ -5079,8 +5079,12 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
     await mkdir(project.metaDir, { recursive: true });
     const relative = "deliverables/review/clinical-evidence-report.md";
     const accepted = "# Accepted review\nOriginal accepted bytes.\n";
+    const unrelatedRelative = "deliverables/brief/brief.md";
+    const unrelated = "# Unrelated accepted brief\n";
     await mkdir(path.dirname(path.join(project.workspaceDir, relative)), { recursive: true });
     await writeFile(path.join(project.workspaceDir, relative), accepted);
+    await mkdir(path.dirname(path.join(project.workspaceDir, unrelatedRelative)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, unrelatedRelative), unrelated);
     const receipt = {
       formatVersion: 1,
       runId: "kernel-run-1",
@@ -5094,6 +5098,14 @@ test("server repair preserves accepted bytes outside the runtime workspace", asy
         attempt: 1,
         notices: [],
         files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+      }, {
+        deliverableId: "brief",
+        contractKind: "research-brief",
+        capability: "research-brief",
+        acceptedAt: "2026-09-06T00:00:00Z",
+        attempt: 1,
+        notices: [],
+        files: [{ path: unrelatedRelative, sha256: createHash("sha256").update(unrelated).digest("hex"), bytes: Buffer.byteLength(unrelated) }],
       }],
     };
     await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify(receipt));
