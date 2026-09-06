@@ -256,16 +256,16 @@ export function startMockDshRuntime(options = {}) {
    * for, and closes the turn. Synchronous on purpose — a test that has to wait
    * for a fake is a test that is flaky about something that never happens in
    * production.
-   * @param {any} session @param {string} text
+   * @param {any} session @param {string} text @param {string} requestId
    */
-  const runTurn = async (session, text) => {
+  const runTurn = async (session, text, requestId) => {
     session.running = true;
     emit("api-session/status", [session.id, true]);
-    const turn = 1;
+    const turn = session.events.filter((event) => event.type === "turn/start").length + 1;
     append(session, "turn/start", { turn });
     append(session, "user/message", {
       content: [{ type: "text", text }],
-      source: { kind: "user", rpcId: randomUUID() },
+      source: { kind: "user", rpcId: requestId },
       role: "user",
       id: randomUUID(),
     });
@@ -633,7 +633,7 @@ export function startMockDshRuntime(options = {}) {
           .map((part) => String(part.text ?? ""))
           .join("\n") || "web prompt";
         res.end(JSON.stringify(ok(rpcId, { accepted: true })));
-        await runTurn(session, text);
+        await runTurn(session, text, request.requestId);
         return;
       }
       if (endpoint === "session/cancel") {

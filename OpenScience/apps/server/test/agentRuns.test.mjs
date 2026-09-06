@@ -726,7 +726,7 @@ test("every fact the durable finish path reads, the live one reads too", async (
   const durableEnd = source.indexOf("async finishInternal(", durableStart);
   assert.ok(durableStart > 0 && durableEnd > durableStart, "could not locate finishFromDurableRecord");
   const durable = source.slice(durableStart, durableEnd);
-  const receiptRead = source.indexOf("const finalReceipt = await readDeliveryReceipt(project);");
+  const receiptRead = source.indexOf("const finalReceipt = await readDeliveryReceipt(project, run);");
   assert.ok(receiptRead > 0, "the live path no longer reads the receipt at all");
   const liveStart = source.lastIndexOf("async reconcileSession(", receiptRead);
   const liveEnd = source.indexOf("/** Append what is observably happening", receiptRead);
@@ -5003,7 +5003,7 @@ test("the run's own projection is read from the host, not from the container's v
   const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const body = code.slice(code.indexOf("async readRunSideActivity("));
   const call = body.slice(0, body.indexOf("readRunStateProjection(") + 60);
-  assert.match(call, /readRunStateProjection\(project, project\.workspaceDir\)/, "the projection must be read from the host path");
+  assert.match(call, /readRunStateProjection\(project, project\.workspaceDir, run\)/, "the projection must be read from the host path and scoped to this run");
   assert.equal(
     /runtimeWorkspaceRoot\(/.test(call),
     false,

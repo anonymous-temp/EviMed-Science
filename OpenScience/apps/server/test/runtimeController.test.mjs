@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
@@ -516,7 +517,7 @@ test("runtime controller accepts only its trusted capsule endpoint or explicit d
       "https://trusted-gateway.example:9443/internal/model/v1",
       `${payload.capsuleGatewayUrl}?redirect=attacker`,
       `${payload.capsuleGatewayUrl}#fragment`,
-      "https://user:password@trusted-gateway.example:9443/internal/capsules/v1",
+      `https://test-user:${randomBytes(8).toString("hex")}@trusted-gateway.example:9443/internal/capsules/v1`,
       `${payload.capsuleGatewayUrl}\nEVIMED_CAPSULE_ACTIVE=1`,
     ]) {
       await assert.rejects(

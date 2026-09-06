@@ -292,6 +292,9 @@ function foldEvents(events) {
         id,
         dispatchId,
         dispatchStatus,
+        ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
+        ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
+        ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
         sessionId: safeStoredId(event.sessionId, "sessionId"),
         mode,
         agentId: event.agentId,
@@ -317,6 +320,22 @@ function foldEvents(events) {
         observedRunSideActivity: null,
         lastProgressAt: null,
       }));
+      continue;
+    }
+    if (event.event === "runtime-turn" || event.event === "kernel-request") {
+      const id = safeStoredId(event.id, "id");
+      const current = runs.get(id);
+      if (!current) throw corrupt("Runtime input refers to an unknown run.");
+      runs.set(id, Object.freeze({ ...current,
+        ...(event.event === "runtime-turn" ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
+        kernelRequestIds: [...new Set([...(current.kernelRequestIds ?? []), ...(event.requestIds ?? []).map(storedKernelRequestId)])],
+      }));
+      continue;
+    }
+    if (event.event === "native-workflow") {
+      const current = runs.get(event.id);
+      if (!current?.nativeTurn || event.evidence?.turnStartSeq !== current.nativeTurn.startSeq) throw corrupt("Native workflow proof has no matching input.");
+      runs.set(event.id, Object.freeze({ ...current, nativeWorkflow: event.evidence }));
       continue;
     }
     if (event.event === "dispatch") {
@@ -522,9 +541,10 @@ function serializeNext(events, event, maxBytes) {
   const keep = [...events, event];
   for (let index = keep.length - 1; index >= 0; index -= 1) {
     const item = keep[index];
-    if (item?.event !== "progress") continue;
-    if (superseded.has(item.id)) keep[index] = null;
-    else superseded.add(item.id);
+    if (item?.event !== "progress" && item?.event !== "native-workflow") continue;
+    const key = `${item.event}:${item.id}`;
+    if (superseded.has(key)) keep[index] = null;
+    else superseded.add(key);
   }
   const retained = keep.filter(Boolean);
   const text = `${retained.map((item) => JSON.stringify(item)).join("\n")}\n`;
@@ -536,6 +556,133 @@ function serializeNext(events, event, maxBytes) {
 
 function messageRole(message) {
   return message?.info?.role ?? message?.role;
+}
+
+/** @param {any} value */
+function validateNativeTurn(value) {
+  if (!value || !Number.isSafeInteger(value.startSeq) || value.startSeq < 0
+    || !Number.isSafeInteger(value.userSeq) || value.userSeq <= value.startSeq) {
+    throw corrupt("Native run input has no valid log boundary.");
+  }
+  return { startSeq: value.startSeq, userSeq: value.userSeq };
+}
+
+/** Native request identities are opaque strings, not our short resource ids. */
+function storedKernelRequestId(value) {
+  if (typeof value !== "string" || !value || value.length > 512 || [...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+    throw corrupt("Runtime request identity is invalid.");
+  }
+  return value;
+}
+
+/** The log, not elapsed time or matching text, assigns messages to a run. */
+function runHistory(run, history) {
+  const turns = new Set(history.filter((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId))
+    .map((message) => message.info?.turnStartSeq).filter((seq) => Number.isSafeInteger(seq)));
+  if (run.nativeTurn) turns.add(run.nativeTurn.startSeq);
+  if (turns.size) return history.filter((message) => turns.has(message.info?.turnStartSeq));
+  // A lost acceptance is not permission to claim the next unrelated input.
+  // Histories predating the DSH normalization retain their baseline behavior.
+  return run.kernelRequestIds?.length && history.some((message) => message.info?.turnStartSeq != null) ? [] : history;
+}
+
+function actualUserMessage(message) {
+  return messageRole(message) === "user" && message.info?.source === "user";
+}
+
+/** Only completed control tools in the owned turn may establish workflow provenance. */
+function nativeWorkflowEvidence(run, history) {
+  let plan = null;
+  let completion = null;
+  const submissions = new Map();
+  const delegates = new Set();
+  for (const message of history) for (const part of message.parts ?? []) {
+    if (part.type !== "tool" || part.state?.status !== "completed") continue;
+    const result = parsedToolResult(part);
+    if (!result || typeof result.ok !== "boolean") continue;
+    const start = Number(message.info?.time?.created);
+    const end = Number(part.state.completedAt);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+    const args = part.state.input ?? {};
+    const span = { start, end, callId: String(part.callID ?? ""), messageId: messageId(message) };
+    if (part.tool === "evimed_plan" && result.ok && ["write", "status"].includes(args.action)) {
+      const items = args.action === "write" ? result.data?.deliverables : result.data?.items;
+      if (!Number.isSafeInteger(result.data?.revision) || !Array.isArray(items)) continue;
+      const definitions = items.filter((item) => typeof item?.id === "string" && isContractKind(item.contractKind))
+        .map((item) => ({ id: item.id, contractKind: item.contractKind, capability: String(item.capability ?? "") }));
+      if (args.action === "write" && !definitions.every((item) => args.deliverables?.some((input) => input.id === item.id && input.contractKind === item.contractKind && input.capability === item.capability))) continue;
+      plan = { revision: result.data.revision, written: args.action === "write", items: definitions, ...span };
+    }
+    if (part.tool === "evimed_submit_deliverable" && typeof args.deliverableId === "string") {
+      const id = args.deliverableId;
+      const entry = submissions.get(id) ?? { id, attempts: 0, accepted: null, rejected: null };
+      entry.attempts++;
+      if (result.ok && result.data?.deliverableId === id && isContractKind(result.data?.contractKind)) {
+        entry.accepted = { ...span, contractKind: result.data.contractKind, notices: normalizeQualityNotices(result.data.notices) };
+      } else if (!result.ok) {
+        entry.rejected = { ...span, code: String(result.code ?? ""), notices: normalizeQualityNotices((result.issues ?? []).map((issue) => issue.message)) };
+      }
+      submissions.set(id, entry);
+    }
+    if (part.tool === "evimed_delegate" && result.ok && result.data?.deliverableId === args.deliverableId) delegates.add(args.deliverableId);
+    if (part.tool === "evimed_complete_run") completion = { ok: result.ok, notices: normalizeQualityNotices((result.issues ?? result.data?.issues ?? []).map((issue) => issue.message)), ...span };
+  }
+  if (!plan && !submissions.size && !delegates.size && !completion) return null;
+  const throughSeq = history.reduce((head, message) => Math.max(head,
+    Number(messageId(message)?.replace(/^seq_/, "")) || 0,
+    Number(message.info?.turnEnd?.seq) || 0,
+    (message.parts ?? []).reduce((seq, part) => Math.max(seq, Number(part.state?.completedSeq) || 0), 0),
+  ), run.nativeTurn.startSeq);
+  return { turnStartSeq: run.nativeTurn.startSeq, throughSeq, throughMessage: messageId(history.at(-1)), endTime: history.at(-1)?.info?.turnEnd?.time ?? null,
+    plan, submissions: [...submissions.values()], delegates: [...delegates], completion };
+}
+
+function nativeWorkflowNotices(proof) {
+  return normalizeQualityNotices([
+    ...(proof?.submissions ?? []).flatMap((item) => [...(item.accepted?.notices ?? []), ...(item.rejected?.notices ?? [])]),
+    ...(proof?.completion?.notices ?? []),
+  ]);
+}
+
+/** Match plan revision and item identity, never a projection's refresh timestamp. */
+function scopeNativeProjection(projection, run) {
+  const proof = run.nativeWorkflow;
+  if (!proof || projection.sessionId !== run.sessionId || !projection.runId) return null;
+  const rawItems = Array.isArray(projection.plan?.items) ? projection.plan.items : [];
+  const invoked = new Set([...(proof.submissions ?? []).map((item) => item.id), ...(proof.delegates ?? [])]);
+  const definitions = (proof.plan?.written ? proof.plan.items : (proof.plan?.items ?? []).filter((item) => invoked.has(item.id))).map((item) => ({ ...item }));
+  for (const submission of proof.submissions ?? []) if (submission.accepted && !definitions.some((item) => item.id === submission.id)) {
+    definitions.push({ id: submission.id, contractKind: submission.accepted.contractKind, capability: "" });
+  }
+  if (proof.plan?.written && projection.plan?.revision !== proof.plan.revision) return null;
+  if (!definitions.length || !definitions.every((item) => rawItems.some((raw) => raw.id === item.id && raw.contractKind === item.contractKind && (!item.capability || raw.capability === item.capability)))) return null;
+  const items = definitions.map((definition) => {
+    const raw = rawItems.find((item) => item.id === definition.id);
+    const submission = proof.submissions.find((item) => item.id === definition.id);
+    return { ...raw, status: submission?.accepted ? "accepted" : submission?.rejected ? "submitted" : proof.delegates.includes(definition.id) ? "delegated" : "planned",
+      attempts: submission?.attempts ?? 0 };
+  });
+  const gateRuns = (Array.isArray(projection.gateRuns) ? projection.gateRuns : []).filter((gate) => proof.submissions.some((item) => item.id === gate.deliverableId
+    && [item.accepted, item.rejected].some((attempt) => attempt && Date.parse(gate.at) >= attempt.start && Date.parse(gate.at) <= attempt.end)));
+  const subagents = (Array.isArray(projection.subagents) ? projection.subagents : []).filter((child) => proof.delegates.includes(child.deliverableId)
+    && definitions.some((item) => item.id === child.deliverableId && item.capability === child.capability));
+  return { ...projection, plan: { revision: proof.plan?.revision ?? projection.plan?.revision, items }, gateRuns, subagents,
+    qualityNotices: nativeWorkflowNotices(proof), degraded: [] };
+}
+
+/** A receipt is cumulative. Only acceptance witnessed in this input's tool call belongs here. */
+function scopeNativeReceipt(receipt, run) {
+  const proof = run.nativeWorkflow;
+  if (!proof || (proof.kernelRunId && proof.kernelRunId !== receipt.runId)) return null;
+  const entries = receipt.entries.filter((entry) => proof.submissions.some((submission) => {
+    const accepted = submission.accepted;
+    const definition = proof.plan?.items?.find((item) => item.id === entry.deliverableId);
+    const at = Date.parse(entry.acceptedAt);
+    return accepted && submission.id === entry.deliverableId && accepted.contractKind === entry.contractKind
+      && (!definition?.capability || definition.capability === entry.capability)
+      && at >= accepted.start && at <= accepted.end;
+  }));
+  return entries.length ? { ...receipt, entries } : null;
 }
 
 function messageId(message) {
@@ -857,13 +1004,14 @@ function artifactCandidates(message, runtimeWorkspaceRoot) {
   return [...new Set(candidates)].slice(0, maxArtifacts).sort();
 }
 
-async function existingArtifacts(project, candidates) {
+async function existingArtifacts(project, candidates, run = null, endTime = null) {
   const result = [];
   for (const relative of candidates) {
     let opened;
     try {
       opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
-      if (opened.stat.isFile()) result.push(relative);
+      if (opened.stat.isFile() && (!run?.nativeTurn || (opened.stat.mtimeMs >= Date.parse(run.startedAt)
+        && (endTime == null || opened.stat.mtimeMs <= endTime + 1)))) result.push(relative);
     } catch { /* missing, escaped, or linked artifacts are not recorded */ }
     finally { await opened?.handle.close().catch(() => {}); }
   }
@@ -901,7 +1049,7 @@ async function openWorkspaceText(project, relative) {
   try {
     opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
     if (!opened.stat.isFile() || opened.stat.size <= 0 || opened.stat.size > 8 * 1024 * 1024) return null;
-    return { text: await opened.handle.readFile("utf8"), stat: opened.stat };
+    return { text: await opened.handle.readFile("utf8"), stat: opened.stat, relativePath: relative };
   } catch {
     return null;
   } finally {
@@ -1153,9 +1301,9 @@ async function requiredSpecialistArtifacts(
  * the first leaves a tool call to scan for.
  * @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>}
  */
-async function loadedOrInjectedSkills(project, assistantMessages) {
+async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
   const loaded = successfullyLoadedSkills(assistantMessages);
-  const read = await readRunStateProjection(project, project.workspaceDir);
+  const read = await readRunStateProjection(project, project.workspaceDir, run);
   if (read.state !== "read") return loaded;
   for (const name of injectedSkills(read.projection)) loaded.add(name);
   return loaded;
@@ -1199,7 +1347,7 @@ async function specialistCompletionOutcome(
     // violation: deliver the reply marked "unverified" instead of discarding a
     // sound answer.
     if (agent.completionChecks.includes("skillsLoaded")) {
-      const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages);
+      const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
       const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
       if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
         return {
@@ -1244,7 +1392,7 @@ async function specialistCompletionOutcome(
     return { artifacts: [], errorCode: null };
   }
   if (agent.completionChecks.includes("skillsLoaded")) {
-    const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages);
+    const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
     const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
     if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
       return { artifacts: [], errorCode: "specialist_required_skill_missing" };
@@ -1254,8 +1402,32 @@ async function specialistCompletionOutcome(
   const artifacts = [];
   const files = new Map();
   for (const relative of required) {
-    const file = await readRequiredFile(project, relative);
+    let file = null;
+    let artifactPath = relative;
+    let outsideNativeTurn = false;
+    if (run.nativeTurn) {
+      // The same workspace holds every turn's files. Apply the existing
+      // freshness rule to the log's actual interval, not the later sweep time;
+      // a root file from yesterday must not hide today's nested deliverable.
+      const candidates = [relative, ...await deliverableCandidatePaths(project, relative)];
+      for (const candidate of candidates) {
+        const found = await openWorkspaceText(project, candidate);
+        if (found && found.stat.mtimeMs >= Date.parse(run.startedAt)
+          && (run.nativeTurn.endTime == null || found.stat.mtimeMs <= run.nativeTurn.endTime + 1)) {
+          file = found;
+          artifactPath = candidate;
+          break;
+        }
+        if (found) outsideNativeTurn = true;
+      }
+    } else {
+      file = await readRequiredFile(project, relative);
+      if (file) artifactPath = file.relativePath;
+    }
     if (!file) {
+      if (outsideNativeTurn) return { artifacts, errorCode: "specialist_required_output_stale", qualityIssues: [
+        `${relative} exists outside this native turn's log interval, so it cannot be delivered as this turn's output.`,
+      ] };
       return {
         artifacts,
         errorCode: missingOutputErrorCodes[relative] ?? "specialist_required_output_missing",
@@ -1278,7 +1450,7 @@ async function specialistCompletionOutcome(
       };
     }
     files.set(relative, file.text);
-    artifacts.push(relative);
+    artifacts.push(artifactPath);
   }
   if (agent.completionChecks.includes("citationsResolvable")) {
     const markdown = [...files].filter(([relative]) => relative.endsWith(".md")).map(([, text]) => text);
@@ -1641,7 +1813,7 @@ async function specialistCompletionOutcome(
  * @param {Record<string, any>} project
  * @returns {Promise<import('@evimed/domain').DeliveryReceipt|null>}
  */
-async function readDeliveryReceipt(project) {
+async function readDeliveryReceipt(project, run = null) {
   let text;
   try {
     text = await readTextFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, workspaceLayout.receiptFile), "");
@@ -1657,41 +1829,66 @@ async function readDeliveryReceipt(project) {
   }
   // Validated, not trusted: the receipt is written inside the sandbox, and a
   // malformed one must read as "no receipt" rather than as an accepted run.
-  return validateDeliveryReceipt(parsed) ? parsed : null;
+  const validated = validateDeliveryReceipt(parsed);
+  if (!validated.ok) return null;
+  const receipt = run?.nativeTurn ? scopeNativeReceipt(validated.receipt, run) : validated.receipt;
+  return receipt ? (await verifiedReceiptArtifacts(project, receipt)).receipt : null;
 }
 
 /**
  * The receipt's files, confirmed present and unchanged since they were graded.
  * @param {Record<string, any>} project
  * @param {import('@evimed/domain').DeliveryReceipt} receipt
- * @returns {Promise<{ artifacts: string[], mismatched: string[] }>}
+ * @returns {Promise<{ artifacts: string[], mismatched: string[], receipt: import('@evimed/domain').DeliveryReceipt }>}
  */
 async function verifiedReceiptArtifacts(project, receipt) {
   /** @type {string[]} */
   const artifacts = [];
   /** @type {string[]} */
   const mismatched = [];
+  const entries = [];
   for (const entry of receipt.entries ?? []) {
+    const files = [];
     for (const file of entry.files ?? []) {
-      const relative = normalizeWorkspaceRelativePath(String(file.path ?? ""), "receipt artifact path");
-      let opened;
+      let resolved = String(file.path ?? "");
+      let matched = false;
       try {
-        opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
-        if (!opened.stat.isFile()) { mismatched.push(relative); continue; }
-        const digest = createHash("sha256").update(await opened.handle.readFile()).digest("hex");
-        if (digest !== String(file.sha256 ?? "")) mismatched.push(relative);
-        else artifacts.push(relative);
-      } catch {
-        mismatched.push(relative);
-      } finally {
-        await opened?.handle.close().catch(() => {});
-      }
+        const relative = normalizeWorkspaceRelativePath(resolved, "receipt artifact path");
+        const id = String(entry.deliverableId ?? "");
+        if (!id || id === "." || id === ".." || /[/\\]/.test(id)) throw new Error("Invalid deliverable identity.");
+        const prefix = `${workspaceLayout.deliverablesDir}/${id}/`;
+        if (relative.startsWith(`${workspaceLayout.deliverablesDir}/`) && !relative.startsWith(prefix)) throw new Error("Receipt crosses deliverable identity.");
+        const candidates = [relative];
+        // Version-one writers hashed logical names but wrote the files under
+        // this one declared deliverable. Never search other deliverables.
+        if (receipt.formatVersion <= 1 && !relative.startsWith(`${workspaceLayout.deliverablesDir}/`)) {
+          candidates.push(normalizeWorkspaceRelativePath(`${prefix}${relative}`, "legacy receipt artifact path"));
+        }
+        for (const candidate of candidates) {
+          let opened;
+          try {
+            opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, candidate));
+            if (!opened.stat.isFile()) continue;
+            const digest = createHash("sha256").update(await opened.handle.readFile()).digest("hex");
+            if (digest === String(file.sha256 ?? "")) {
+              resolved = candidate;
+              matched = true;
+              artifacts.push(candidate);
+              break;
+            }
+          } catch { /* only these two explicitly scoped locations are candidates */ }
+          finally { await opened?.handle.close().catch(() => {}); }
+        }
+      } catch { /* malformed and cross-deliverable paths never resolve */ }
+      if (!matched) mismatched.push(resolved);
+      files.push({ ...file, path: resolved });
     }
+    entries.push({ ...entry, files });
   }
-  return { artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(), mismatched: [...new Set(mismatched)] };
+  return { artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(), mismatched: [...new Set(mismatched)], receipt: { ...receipt, entries } };
 }
 
-async function readRunStateProjection(project, workspaceRoot) {
+async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
   try {
     text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, workspaceLayout.runStateFile), "");
@@ -1704,7 +1901,9 @@ async function readRunStateProjection(project, workspaceRoot) {
   try {
     const projection = JSON.parse(text);
     if (!projection || typeof projection !== "object" || Array.isArray(projection)) return { state: "unreadable" };
-    return { state: "read", projection };
+    if (!run?.nativeTurn) return { state: "read", projection };
+    const scoped = scopeNativeProjection(projection, run);
+    return scoped ? { state: "read", projection: scoped } : { state: "unattributed" };
   } catch {
     return { state: "unreadable" };
   }
@@ -2099,10 +2298,30 @@ export class AgentRunStore {
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
     effectiveRuntimeAgent = session.mode === "specialist" ? session.runtimeAgent : null,
     effectiveRouteReason = session.mode === "specialist" ? "session-binding" : null,
+    nativeTurn = null,
+    kernelRequestIds = null,
+    legacyRunId = null,
+    startedAt = null,
   } = {}) {
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
+      if (nativeTurn) {
+        kernelRequestIds = (kernelRequestIds ?? []).map(storedKernelRequestId);
+        nativeTurn = validateNativeTurn(nativeTurn);
+        const owned = [...runs.values()].find((run) => run.sessionId === session.sessionId && (
+          run.nativeTurn?.startSeq === nativeTurn.startSeq
+          || (kernelRequestIds ?? []).some((id) => (run.kernelRequestIds ?? []).includes(id))
+        ));
+        if (owned) return { run: owned, owner: false };
+        const legacy = runs.get(legacyRunId);
+        if (legacy && !legacy.nativeTurn && legacy.sessionId === session.sessionId
+          && String(legacy.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) {
+          const event = { event: "runtime-turn", id: legacy.id, nativeTurn, requestIds: kernelRequestIds ?? [] };
+          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          return { run: foldEvents([...events, event]).get(legacy.id), owner: false };
+        }
+      }
       const duplicate = dispatchId == null
         ? null
         : [...runs.values()].find((run) => run.dispatchId === dispatchId);
@@ -2113,8 +2332,8 @@ export class AgentRunStore {
       // of being refused by the placeholder -- otherwise the first real request
       // on a session the browser application had already opened is answered
       // `agent_run_active` by a run that exists only because nothing else did.
-      const adopted = active?.effectiveRouteReason === adoptedRouteReason;
-      if (active && !adopted) {
+      const adopted = !nativeTurn && !active?.nativeTurn && active?.effectiveRouteReason === adoptedRouteReason;
+      if (active && !adopted && !nativeTurn) {
         throw new HttpError(409, "agent_run_active", "This research session already has an active run.");
       }
       if (adopted) {
@@ -2140,6 +2359,8 @@ export class AgentRunStore {
         id,
         dispatchId,
         dispatchStatus: dispatchId ? "dispatching" : "accepted",
+        ...(nativeTurn ? { nativeTurn } : {}),
+        kernelRequestIds: kernelRequestIds ?? (dispatchId ? [randomId("req_")] : []),
         sessionId: session.sessionId,
         mode: session.mode,
         agentId: session.agentId,
@@ -2152,7 +2373,7 @@ export class AgentRunStore {
         model: this.model,
         question,
         createdAt: now,
-        startedAt: now,
+        startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
       };
       const text = serializeNext(events, event, this.maxBytes);
@@ -2220,7 +2441,10 @@ export class AgentRunStore {
         throw new HttpError(502, "runtime_prompt_rejected", "Runtime rejected the prompt before accepting it.");
       }
       const accepted = await this.markDispatch(project, record.id, "accepted");
-      this.clinicalRepairSenders.set(record.id, (repairText) => sendPrompt(session, record, repairText));
+      this.clinicalRepairSenders.set(record.id, async (repairText) => {
+        const updated = await this.recordKernelRequest(project, record.id, randomId("req_"));
+        return sendPrompt(session, updated, repairText);
+      });
       this.scheduleMonitor(project, record.id);
       return accepted;
     } catch (error) {
@@ -2387,13 +2611,22 @@ export class AgentRunStore {
    */
 
   async finishFromDurableRecord(project, run) {
-    const receipt = await readDeliveryReceipt(project);
+    if (run.nativeTurn) run = (await this.list(project)).find((item) => item.id === run.id) ?? run;
+    const receipt = await readDeliveryReceipt(project, run);
+    if (run.nativeWorkflow?.completion?.ok === false) {
+      const verified = receipt ? await verifiedReceiptArtifacts(project, receipt) : null;
+      return this.finishInternal(project, run.id, {
+        status: "failed", errorCode: "specialist_deliverable_not_accepted",
+        artifacts: verified && !verified.mismatched.length ? verified.artifacts : [],
+        qualityNotices: nativeWorkflowNotices(run.nativeWorkflow),
+      });
+    }
     if (!receipt) {
       // Nothing durable: the runtime really did stop before it delivered.
       // Whatever the projection saw of it travels with the verdict, because a
       // run that died mid-flight is exactly when its last recorded state is
       // worth having.
-      const projection = await readRunStateProjection(project, project.workspaceDir);
+      const projection = await readRunStateProjection(project, project.workspaceDir, run);
       // Deduplicated against what the run already admitted while it was alive.
       // `publishRunProjection` puts these same lines on the ledger as they
       // appear, so re-adding the whole set here reported every admission twice
@@ -2435,11 +2668,12 @@ export class AgentRunStore {
       if (projection.state === "read") this.publishDeliverables(project, run, projection.projection ?? {}, null);
       return this.finishInternal(project, run.id, {
         status: "failed",
-        errorCode: unsubmitted.length
+        errorCode: projection.state === "unattributed" ? "specialist_deliverable_not_accepted" : unsubmitted.length
           ? "runtime_deliverable_never_submitted"
           : rejected.length ? "specialist_deliverable_not_accepted" : "runtime_stopped",
         artifacts: [],
         qualityNotices: [
+          ...(projection.state === "unattributed" ? ["Native workflow state could not be attributed to this input; delivery acceptance remains unverified."] : []),
           ...unsubmitted.map((entry) => `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`),
           ...(unsubmitted.length ? [] : rejected.map((entry) => (
             `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`
@@ -2465,7 +2699,7 @@ export class AgentRunStore {
         qualityNotices: mismatched.slice(0, 10).map((entry) => `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`),
       });
     }
-    const delivered = await readRunStateProjection(project, project.workspaceDir);
+    const delivered = await readRunStateProjection(project, project.workspaceDir, run);
     this.publishDeliverables(project, run, delivered.state === "read" ? delivered.projection ?? {} : {}, receipt);
 
     return this.finishInternal(project, run.id, {
@@ -2492,7 +2726,8 @@ export class AgentRunStore {
       const current = runs.get(runId);
       if (!current) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
       if (current.status !== "running") return { run: current, transitioned: false };
-      const finishedAt = this.now().toISOString();
+      const finishedAt = current.nativeTurn && terminal.finishedAt
+        ? storedTimestamp(terminal.finishedAt, "finishedAt") : this.now().toISOString();
       const durationMs = Math.max(0, Date.parse(finishedAt) - Date.parse(current.startedAt));
       const event = { event: "finished", id: runId, ...normalized, finishedAt, durationMs };
       const text = serializeNext(events, event, this.maxBytes);
@@ -2568,10 +2803,10 @@ export class AgentRunStore {
     return finished;
   }
 
-  async reconcileSession(project, sessionId) {
+  async reconcileSession(project, sessionId, runId = null) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = foldEvents(events);
-    const run = [...runs.values()].find((item) => item.sessionId === sessionId && item.status === "running");
+    let run = [...runs.values()].find((item) => item.sessionId === sessionId && item.status === "running" && (!runId || item.id === runId));
     if (!run) return null;
     const started = events.find((event) => event.event === "started" && event.id === run.id);
     const baselineCursor = started?.baselineCursor ?? null;
@@ -2598,10 +2833,19 @@ export class AgentRunStore {
       return run;
     }
     if (!Array.isArray(history)) return run;
-    const baselineIndex = baselineCursor == null
+    history = runHistory(run, history);
+    if (run.nativeTurn) {
+      run = await this.recordNativeWorkflow(project, run, history);
+      if (run.status !== "running") return run;
+    }
+    const ownsTurns = Boolean(run.nativeTurn) || history.some((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId));
+    if (run.dispatchId && ownsTurns && !history.some((message) => actualUserMessage(message) && message.info?.sourceRequestId === run.kernelRequestIds?.at(-1))) return run;
+    const ownEnd = history.at(-1)?.info?.turnEnd;
+    if (ownsTurns && !ownEnd) return run;
+    const baselineIndex = ownsTurns && !run.nativeTurn ? -1 : baselineCursor == null
       ? -1
       : history.findIndex((message) => messageId(message) === baselineCursor);
-    if (baselineCursor != null && baselineIndex < 0) return run;
+    if (baselineCursor != null && baselineIndex < 0 && !ownsTurns) return run;
     const allAssistants = history
       .slice(baselineIndex + 1)
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
@@ -2613,15 +2857,22 @@ export class AgentRunStore {
     const assistants = history
       .slice(repairBaselineIndex + 1)
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
-    if (assistants.length === 0) return run;
-    let sessionStatus;
-    try {
-      sessionStatus = await this.readSessionStatus(project, sessionId, { wake: false });
-    } catch {
+    if (assistants.length === 0) {
+      if (ownEnd?.code) return this.finishInternal(project, run.id, { ...terminalFromMessages(history), artifacts: [],
+        ...(run.nativeTurn && ownEnd.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
+      });
       return run;
     }
-    if (sessionStatus !== "idle") return run;
-    const terminal = terminalFromMessages(assistants);
+    if (!ownEnd) {
+      try {
+        if (await this.readSessionStatus(project, sessionId, { wake: false }) !== "idle") return run;
+      } catch { return run; }
+    }
+    // A steering input can be the final message in a turn. The end belongs to
+    // the turn, irrespective of the role of the message carrying it.
+    const terminal = terminalFromMessages(ownEnd?.code
+      ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code } } }, ...assistants]
+      : assistants);
     let runtimeWorkspaceRoot;
     try {
       runtimeWorkspaceRoot = await this.runtimeWorkspaceRoot(project);
@@ -2631,14 +2882,14 @@ export class AgentRunStore {
     const candidates = [...new Set(
       allAssistants.flatMap((message) => artifactCandidates(message, runtimeWorkspaceRoot)),
     )].slice(0, maxArtifacts).sort();
-    let artifacts = await existingArtifacts(project, candidates);
+    let artifacts = await existingArtifacts(project, candidates, run, ownEnd?.time);
     if (terminal.status === "succeeded" && run.effectiveAgentId) {
       let completion;
       try {
         const sourceArtifactProvenance = successfulEvidenceSourceArtifacts(allAssistants, runtimeWorkspaceRoot);
         completion = await requiredSpecialistArtifacts(
           project,
-          run,
+          run.nativeTurn ? { ...run, nativeTurn: { ...run.nativeTurn, endTime: ownEnd?.time } } : run,
           this.agentRegistry,
           sourceArtifactProvenance,
           allAssistants,
@@ -2787,12 +3038,25 @@ export class AgentRunStore {
     // lie about them; here nothing claims they were graded, the run's own
     // delivery summary says 部分交付, and discarding the work would help nobody.
     if (terminal.status === "succeeded") {
-      const projection = await readRunStateProjection(project, project.workspaceDir);
+      const projection = await readRunStateProjection(project, project.workspaceDir, run);
+      if (run.nativeTurn) {
+        const proof = run.nativeWorkflow;
+        const requiresAcceptance = proof?.plan?.items?.length || proof?.submissions?.length;
+        const currentReceipt = await readDeliveryReceipt(project, run);
+        const incomplete = proof?.completion?.ok === false || (requiresAcceptance && !currentReceipt);
+        if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
+          terminal.status = "failed";
+          terminal.errorCode = "specialist_deliverable_not_accepted";
+          terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...nativeWorkflowNotices(proof),
+            ...(projection.state === "unattributed" ? ["Native workflow state could not be attributed to this input; delivery acceptance remains unverified."] : []),
+          ];
+        }
+      }
       const planned = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
         ? projection.projection.plan.items
         : [];
       const accepted = planned.filter((item) => item?.status === "accepted");
-      if (planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project))) {
+      if (planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project, run))) {
         terminal.status = "failed";
         terminal.errorCode = "specialist_deliverable_not_accepted";
         terminal.qualityNotices = [
@@ -2801,11 +3065,11 @@ export class AgentRunStore {
         ];
       }
     }
-    const finalReceipt = await readDeliveryReceipt(project);
+    const finalReceipt = await readDeliveryReceipt(project, run);
     // The receipt's own entries reach the browser here, on the path that runs
     // every time, and ahead of the terminal `run/state` that makes a watching
     // tab close its stream.
-    const finalProjection = await readRunStateProjection(project, project.workspaceDir);
+    const finalProjection = await readRunStateProjection(project, project.workspaceDir, run);
     // Guarded on having something to say, not on the projection being readable:
     // an answer-mode run writes no projection and a receipt alone is still a
     // delivered package, and requiring both is how the durable path came to
@@ -2871,7 +3135,9 @@ export class AgentRunStore {
         ].slice(0, 20);
       }
     }
-    return this.finishInternal(project, run.id, { ...terminal, artifacts });
+    return this.finishInternal(project, run.id, { ...terminal, artifacts,
+      ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
+    });
   }
 
   /** Append what is observably happening, when it changes.
@@ -2908,7 +3174,8 @@ export class AgentRunStore {
     // One accessor was being used for two questions. `artifactCandidates` and
     // `successfulEvidenceSourceArtifacts` still take the container root, and
     // correctly: they relativise paths the model wrote.
-    const read = await readRunStateProjection(project, project.workspaceDir);
+    const read = await readRunStateProjection(project, project.workspaceDir, run);
+    if (read.state === "unattributed") return { signature: null, unreadable: true };
     if (read.state === "missing") return { signature: null, unreadable: false };
     if (read.state === "unreadable") {
       // Said once per run, not once per poll: the monitor wakes on a fixed
@@ -3023,6 +3290,7 @@ export class AgentRunStore {
       return null;
     }
     if (!Array.isArray(history)) return null;
+    history = runHistory(run, history);
     const messages = history.length;
     const toolCalls = history.reduce(
       (total, message) => total + (message?.parts ?? []).filter((part) => part?.type === "tool").length,
@@ -3086,7 +3354,7 @@ export class AgentRunStore {
         const runs = await this.list(project);
         const run = runs.find((item) => item.id === runId);
         if (!run || run.status !== "running") return;
-        const reconciled = await this.reconcileSession(project, run.sessionId);
+        const reconciled = await this.reconcileSession(project, run.sessionId, run.id);
         if (reconciled?.status !== "running") return;
         // A ledger of started/dispatch/finished cannot tell a run that is
         // working from one that died an hour ago, so both wait out the full
@@ -3205,10 +3473,11 @@ export class AgentRunStore {
    * ungated work indistinguishable from work that passed.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null }} [routed]
+   * @param {{ question?: string|null, effectiveAgentId?: string|null, effectiveAgentVersion?: string|null, effectiveRuntimeAgent?: string|null, effectiveRouteReason?: string|null, transcript?: import('@evimed/domain').RunTranscript, routeTurn?: (text: string) => Promise<any> }} [routed]
    */
   async adoptRuntimeSession(project, sessionId, routed = {}) {
     const id = safeId(sessionId, "runtime session id");
+    if (routed.transcript) return this.adoptRuntimeTurns(project, id, routed.transcript, routed.routeTurn);
     const existing = (await this.list(project)).find((run) => run.sessionId === id);
     if (existing) return existing;
     // A session this control plane is starting is announced by the kernel
@@ -3258,6 +3527,146 @@ export class AgentRunStore {
       ], { unchecked: true });
     }
     return (await this.list(project)).find((item) => item.id === run.id) ?? run;
+  }
+
+  /** Persist a repair's native request identity before sending it. */
+  async recordKernelRequest(project, runId, requestId) {
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run || run.status !== "running") throw new HttpError(409, "agent_run_active", "The run is no longer accepting repair prompts.");
+      const event = { event: "kernel-request", id: runId, requestIds: [storedKernelRequestId(requestId)] };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, updated);
+      return updated;
+    });
+  }
+
+  /** A captured legacy baseline identifies its first consumed user input. */
+  async bindLegacyKernelRequests(project, runId, requestIds) {
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run || run.kernelRequestIds?.length) return run;
+      const event = { event: "kernel-request", id: runId, requestIds: requestIds.map(storedKernelRequestId) };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, updated);
+      return updated;
+    });
+  }
+
+  /** Persist observed tool provenance before the kernel can disappear. */
+  async recordNativeWorkflow(project, run, history) {
+    const evidence = nativeWorkflowEvidence(run, history);
+    if (!evidence) return run;
+    const candidate = { ...run, nativeWorkflow: evidence };
+    const projection = await readRunStateProjection(project, project.workspaceDir);
+    const scoped = projection.state === "read" ? scopeNativeProjection(projection.projection, candidate) : null;
+    if (scoped) evidence.kernelRunId = scoped.runId;
+    else {
+      const receipt = await readDeliveryReceipt(project);
+      const current = receipt ? scopeNativeReceipt(receipt, candidate) : null;
+      if (current && !(await verifiedReceiptArtifacts(project, current)).mismatched.length) evidence.kernelRunId = current.runId;
+    }
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(run.id);
+      if (!current || current.status !== "running") return current ?? run;
+      const previousSeq = current.nativeWorkflow?.throughSeq
+        ?? Number(current.nativeWorkflow?.throughMessage?.replace(/^seq_/, ""));
+      if (Number.isFinite(previousSeq) && evidence.throughSeq <= previousSeq) return current;
+      if (JSON.stringify(current.nativeWorkflow) === JSON.stringify(evidence)) return current;
+      const event = { event: "native-workflow", id: run.id, evidence };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      return foldEvents([...events, event]).get(run.id);
+    });
+  }
+
+  /**
+   * Observe committed user inputs. Queueing, steering and sending remain the
+   * kernel's job; request identities already in our ledger belong to dispatch
+   * or repair, and multiple user inputs in one kernel turn are steering.
+   * @param {any} project @param {string} sessionId
+   * @param {import('@evimed/domain').RunTranscript} transcript
+   * @param {(text: string) => Promise<any>} [routeTurn]
+   */
+  async adoptRuntimeTurns(project, sessionId, transcript, routeTurn = async () => ({})) {
+    if (transcript.sessionId !== sessionId) throw new HttpError(400, "invalid_agent_run", "Runtime transcript identity does not match.");
+    const binding = await this.researchSessions.get(project, sessionId);
+    const turns = (transcript.turns ?? []).map((turn) => ({
+      ...turn,
+      inputs: transcript.messages.filter((message) => message.turnStartSeq === turn.startSeq && message.role === "user" && message.source === "user"),
+    })).filter((turn) => turn.inputs.length > 0);
+    const knownRuns = await this.list(project);
+    const notifiedLegacy = new Set();
+    for (const [index, turn] of turns.entries()) {
+      const first = turn.inputs[0];
+      const requestIds = turn.inputs.map((message) => message.sourceRequestId).filter((id) => typeof id === "string" && id);
+      let run = knownRuns.find((item) => item.sessionId === sessionId && (
+        item.nativeTurn?.startSeq === turn.startSeq || requestIds.some((id) => (item.kernelRequestIds ?? []).includes(id))
+      ));
+      if (!run) {
+        const legacyOrdinary = knownRuns.filter((item) => item.sessionId === sessionId && item.dispatchId && !item.kernelRequestIds?.length);
+        const legacyBaseline = (item) => {
+          if (item.baselineCursor === null) return turns.some((candidate) => candidate.turn === 1) ? -1 : null;
+          const cursor = /^seq_(\d+)$/.test(item.baselineCursor ?? "") ? Number(item.baselineCursor.slice(4)) : null;
+          return cursor != null && transcript.messages.some((message) => message.seq === cursor) ? cursor : null;
+        };
+        const unknownLegacy = legacyOrdinary.some((item) => legacyBaseline(item) == null);
+        const matches = legacyOrdinary.filter((item) => {
+          const cursor = legacyBaseline(item);
+          return cursor != null && turns.find((candidate) => candidate.startSeq > cursor)?.startSeq === turn.startSeq;
+        });
+        if (matches.length === 1 && requestIds.length && !unknownLegacy) {
+          run = await this.bindLegacyKernelRequests(project, matches[0].id, requestIds);
+          knownRuns[knownRuns.findIndex((item) => item.id === run.id)] = run;
+        } else if (matches.length > 1 || unknownLegacy) {
+          const notice = "Native replay could not be attributed because a legacy ordinary run has no unique verifiable input boundary.";
+          for (const item of legacyOrdinary) if (!item.qualityNotices?.includes(notice) && !notifiedLegacy.has(item.id)) {
+            await this.appendQualityNotices(project, item.id, [notice], { unchecked: true });
+            notifiedLegacy.add(item.id);
+          }
+          continue;
+        }
+      }
+      if (!run) {
+        // The pre-turn ledger adopted exactly the first input of a session.
+        // Bind that historical row once instead of replaying it as new work.
+        const legacy = index === 0 ? knownRuns.find((item) => item.sessionId === sessionId && !item.nativeTurn
+          && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
+        const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
+        const routed = legacy ? {} : await routeTurn(question);
+        const reservation = await this.reserveRun(project, binding ?? {
+          sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null,
+        }, {
+          baselineCursor: `seq_${first.seq}`,
+          nativeTurn: { startSeq: turn.startSeq, userSeq: first.seq },
+          startedAt: turn.time > 0 ? new Date(turn.time).toISOString() : null,
+          kernelRequestIds: requestIds,
+          legacyRunId: legacy?.id,
+          question: questionPreview(question),
+          effectiveAgentId: routed.effectiveAgentId ?? binding?.agentId ?? null,
+          effectiveAgentVersion: routed.effectiveAgentVersion ?? binding?.agentVersion ?? null,
+          effectiveRuntimeAgent: routed.effectiveRuntimeAgent ?? binding?.runtimeAgent ?? null,
+          effectiveRouteReason: `${adoptedRouteReason}${routed.effectiveRouteReason ? `:${routed.effectiveRouteReason}` : ""}`.slice(0, 64),
+        });
+        run = reservation.run;
+        const knownIndex = knownRuns.findIndex((item) => item.id === run.id);
+        if (knownIndex >= 0) knownRuns[knownIndex] = run;
+        else knownRuns.push(run);
+        if (reservation.owner && !run.effectiveRuntimeAgent) {
+          await this.appendQualityNotices(project, run.id, ["The native input could not be assigned a deliverable contract; its delivery checks are unchecked."], { unchecked: true });
+        }
+      }
+      if (run.status === "running" && !(run.dispatchStatus === "dispatching" && this.dispatchOwners.has(run.id))) {
+        await this.reconcileSession(project, sessionId, run.id);
+        this.scheduleMonitor(project, run.id);
+      }
+    }
+    const active = (await this.list(project)).filter((run) => run.sessionId === sessionId && run.status === "running");
+    return active.sort((a, b) => (b.nativeTurn?.startSeq ?? -1) - (a.nativeTurn?.startSeq ?? -1))[0] ?? null;
   }
 
   async adoptRunningRuns(projects) {
