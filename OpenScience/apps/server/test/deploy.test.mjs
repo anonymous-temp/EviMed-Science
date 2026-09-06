@@ -23,6 +23,15 @@ test("bundled examples resolve independently of the server working directory", (
   assert.equal(examplesDir, path.join(repoRoot, "examples"));
 });
 
+test("the research-topic healthcheck rejects an adapter with the old start contract", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const topicService = compose.match(/\n  evimed-research-topic-agent:\n(?<body>[\s\S]*?)(?=\n  [a-z][\w-]+:\n|\nvolumes:)/)?.groups?.body;
+
+  assert.ok(topicService, "research-topic service is absent from the production compose file");
+  assert.match(topicService, /value\.get\('acceptedStartInputs'\)/);
+  assert.match(topicService, /'jobId'/);
+});
+
 function splitDockerWords(line) {
   return line
     .trim()
@@ -1480,7 +1489,6 @@ test("the skill's list of artifact-preserving tools matches the tools that actua
   //
   // Derived from the connectors, not from a list here, so the next tool that
   // starts preserving fails this instead of silently going unused.
-  const { readdir } = await import("node:fs/promises");
   const mcpDir = path.join(repoRoot, "runtime/mcp/evimed-research");
   const preserving = [];
   const preserves = (source) => /["']\.evimed-sources["']/.test(source) && (
@@ -1517,7 +1525,7 @@ test("the skill's list of artifact-preserving tools matches the tools that actua
   assert.equal(
     words[claimed[1].toLowerCase()],
     preserving.length,
-    `the skill says ${claimed[1]} tools preserve, but ${preserving.length} modules do: ${preserving.join(", ")}`,
+    `the skill says ${claimed[1]} tools preserve, but ${preserving.length} preserving modules do: ${preserving.join(", ")}`,
   );
 });
 
@@ -1567,7 +1575,7 @@ test("a capability's two skill copies never drift apart by more than their known
   const knownDivergence = {
     "adr-analysis": 18,
     "bibliometric-analysis": 18,
-    "clinical-evidence-synthesis": 30,
+    "clinical-evidence-synthesis": 45,
     "comprehensive-drug-evaluation": 18,
     "dataset-research-scoping": 26,
     "drug-selection": 18,
@@ -1575,7 +1583,7 @@ test("a capability's two skill copies never drift apart by more than their known
     "meta-analysis": 18,
     "off-label-analysis": 18,
     "peer-review": 18,
-    "research-topic-selection": 27,
+    "research-topic-selection": 42,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

@@ -207,7 +207,7 @@ test("no plugin holds a regular expression or a threshold of its own", async () 
   }
 });
 
-test("the run domain declares four tables and no claims table", () => {
+test("the run domain stays on its deployed schema because DSH has no domain migration", () => {
   assert.deepEqual(Object.keys(RUN_DOMAIN_SPEC.tables).sort(), ["evidence", "gate_runs", "plan_index", "run_mirror"]);
   // The medium's own rule, asserted here rather than discovered at boot: the
   // harness validates the domain name and every table name against this
@@ -708,6 +708,10 @@ test("a preserved full text is ready even though its path lives on the outcome, 
         route: "europe-pmc-xml",
         markdownPath: ".evimed-sources/PMC4548722/fulltext.md",
         xmlPath: ".evimed-sources/PMC4548722/fulltext.xml",
+        artifactSha256s: {
+          ".evimed-sources/PMC4548722/fulltext.md": "a".repeat(64),
+          ".evimed-sources/PMC4548722/fulltext.xml": "b".repeat(64),
+        },
       },
       sources: [{
         id: "PMC4548722",
@@ -725,6 +729,7 @@ test("a preserved full text is ready even though its path lives on the outcome, 
   assert.equal(records.length, 1);
   assert.equal(records[0].status, "ready", "a preserved artifact on disk must not be recorded as merely queued");
   assert.equal(records[0].artifactPath, ".evimed-sources/PMC4548722/fulltext.md");
+  assert.equal(Object.hasOwn(records[0], "artifactDigest"), false, "final source SHA proof stays in authenticated kernel history, not the unmigrated run domain");
 
   // Control 1: the same shape from a non-preserving tool stays a lead. A
   // search result naming a file it did not write must not read as readable.
@@ -893,12 +898,19 @@ test("the run-state projection is total and orders gate runs by attempt", () => 
   const projection = projectRunState({
     run: { runId: "r1", sessionId: "s1", budget: { maxSteps: 100, maxTokens: 10, maxChildren: 3 }, steps: 4, tokens: 9, children: 1 },
     planIndex: { revision: 2, items: [{ id: "d1", status: "accepted" }] },
-    evidence: [{ status: "ready" }, { status: "queued" }, { status: "queued" }],
+    evidence: [
+      { runId: "r1", status: "ready", tool: "open_access_full_text", artifactPath: ".evimed-sources/PMC1/fulltext.md", artifactDigest: "a".repeat(64), recordedAt: "2026-08-23T00:00:00Z" },
+      { runId: "r1", status: "queued" },
+      { runId: "r1", status: "queued" },
+    ],
     gateRuns: [{ attempt: 3 }, { attempt: 1 }, { attempt: 2 }],
     now: "2026-08-23T00:00:00Z",
   });
   assert.deepEqual(projection.gateRuns.map((run) => run.attempt), [1, 2, 3]);
-  assert.deepEqual(projection.evidence, { total: 3, byStatus: { ready: 1, queued: 2 } });
+  assert.deepEqual(projection.evidence, {
+    total: 3,
+    byStatus: { ready: 1, queued: 2 },
+  });
   assert.equal(projection.budget.limits.maxChildren, 3);
   const empty = projectRunState({ run: undefined, planIndex: undefined, evidence: [], gateRuns: [], now: "t" });
   assert.equal(empty.runId, "");

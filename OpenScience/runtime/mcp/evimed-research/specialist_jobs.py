@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -110,6 +111,21 @@ class SpecialistJobError(Exception):
 
 def _now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _job_id(arguments, spec):
+    requested = arguments.get("jobId")
+    if requested is None:
+        return "%s%s-%s" % (spec["prefix"], time.strftime("%Y%m%d%H%M%S"), secrets.token_hex(6))
+    if (
+        not isinstance(requested, str)
+        or not re.fullmatch(re.escape(spec["prefix"]) + r"[a-z0-9-]{8,80}", requested)
+    ):
+        raise SpecialistJobError(
+            "specialist_job_id_invalid",
+            "jobId must use the specialist prefix and contain only lowercase letters, numbers, and hyphens.",
+        )
+    return requested
 
 
 def _atomic_json(path, value):
@@ -367,6 +383,8 @@ def capabilities(tool_name):
             "thinking": True,
             "execution": "managed-background-job",
             "supportedActions": ["capabilities", "start", "status"],
+            **({"acceptedStartInputs": [*spec["inputs"], "jobId"]}
+               if tool_name == "research_topic_selection" else {}),
             "python": python.name,
         },
         "sources": [{"id": "%s:local" % spec["id"], "source": spec["label"], "retrievedAt": _now()}],
@@ -375,9 +393,12 @@ def capabilities(tool_name):
 
 def start_job(tool_name, arguments):
     spec = SPECS[tool_name]
+    allowed = {"action", *spec["inputs"]}
     if tool_name == "research_topic_selection":
-        if set(arguments) - {"action", *spec["inputs"]}:
-            raise SpecialistJobError("specialist_input_invalid", "request contains unsupported fields")
+        allowed.add("jobId")
+    if set(arguments) - allowed:
+        raise SpecialistJobError("specialist_input_invalid", "request contains unsupported fields")
+    if tool_name == "research_topic_selection":
         for key, limit in (("researchDirection", 4000), ("availableData", 4000), ("population", 1000), ("studySetting", 1000)):
             if key in arguments and (not isinstance(arguments[key], str) or not arguments[key].strip() or len(arguments[key]) > limit):
                 raise SpecialistJobError("specialist_input_invalid", f"{key} must be a nonempty string of at most {limit} characters")
@@ -397,15 +418,17 @@ def start_job(tool_name, arguments):
     request = {key: arguments.get(key) for key in spec["inputs"] if arguments.get(key) is not None}
     if tool_name == "peer_review":
         request["manuscript"] = str(_workspace_file(workspace, request["manuscript"], {".pdf", ".docx", ".txt", ".md"}))
-    job_id = "%s%s-%s" % (spec["prefix"], time.strftime("%Y%m%d%H%M%S"), secrets.token_hex(6))
+    job_id = _job_id(arguments, spec)
     run_root = workspace / spec["directory"]
     _ensure_directory(workspace, run_root)
     _ensure_directory(workspace, run_root / ".jobs")
     job_root = run_root / job_id
+    _, state_path, _ = _paths(spec, job_id)
+    if job_root.exists() or state_path.exists():
+        raise SpecialistJobError("specialist_job_id_conflict", "jobId already exists in this project workspace.")
     _ensure_directory(workspace, job_root)
     output_root = job_root / "output"
     _ensure_directory(workspace, output_root)
-    _, state_path, _ = _paths(spec, job_id)
     state = {
         "schemaVersion": 1,
         "tool": tool_name,

@@ -479,9 +479,11 @@ test("the two runtime capability settings reach the container, and the default d
 
   const capsuleOn = argvFor({ stateStore: "postgres" });
   assert.ok(capsuleOn.includes("EVIMED_CAPSULE_GATEWAY_URL=http://127.0.0.1:8787/internal/capsules/v1"));
+  assert.ok(capsuleOn.includes("EVIMED_REVISION_AUTHORIZE_URL=http://127.0.0.1:8787/internal/revisions/v1/authorize"));
   assert.ok(capsuleOn.includes("EVIMED_CAPSULE_ACTIVE=1"));
   const capsuleOff = argvFor({ stateStore: "postgres", evimedWorkloadSigningSecret: "" });
   assert.ok(capsuleOff.includes("EVIMED_CAPSULE_GATEWAY_URL="));
+  assert.ok(capsuleOff.includes("EVIMED_REVISION_AUTHORIZE_URL="));
   assert.ok(capsuleOff.includes("EVIMED_CAPSULE_ACTIVE=0"));
 
   // The shipped defaults must be the behaviour that was already shipping.

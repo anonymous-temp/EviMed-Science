@@ -55,6 +55,7 @@ import { AutopilotService } from "./autopilotService.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
+import { REVISION_GATEWAY_PATH, createRevisionGatewayHandler } from "./revisionGateway.mjs";
 import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
@@ -286,7 +287,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/files/download/")) return "/api/files/download/:path";
   if (pathname === "/api/files/upload") return pathname;
   if (pathname.startsWith("/api/")) return "/api/:route";
-  // The four internal gateways carry the runtime's entire outbound traffic —
+  // The internal gateways carry the runtime's entire outbound traffic —
   // every model call, every source fetch, every search, every probe. They used
   // to fall through to "/static", so a provider 401 storm and a wave of images
   // were the same line on the dashboard. The probe keeps its own label rather
@@ -296,7 +297,8 @@ function routePattern(pathname) {
     pathname === MODEL_GATEWAY_PATH ||
     pathname === PUBLIC_SOURCE_GATEWAY_PATH ||
     pathname === WEB_SEARCH_GATEWAY_PATH ||
-    pathname === GEO_PROBE_GATEWAY_PATH
+    pathname === GEO_PROBE_GATEWAY_PATH ||
+    pathname === REVISION_GATEWAY_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -691,6 +693,7 @@ export function createWebApiApp(overrides = {}) {
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
+    runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     // A run's own state changes ride the same stream as the kernel's events,
     // because from a user's point of view they are one story: "it is running",
     // "the second deliverable came back with three fixes", "it finished".
@@ -1028,6 +1031,7 @@ export function createWebApiApp(overrides = {}) {
     });
   }
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService });
+  const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
@@ -1132,6 +1136,8 @@ export function createWebApiApp(overrides = {}) {
       ? capsuleGatewayHandler
       : pathname === MODEL_GATEWAY_PATH
       ? modelGatewayHandler
+      : pathname === REVISION_GATEWAY_PATH
+        ? revisionGatewayHandler
       : pathname === PUBLIC_SOURCE_GATEWAY_PATH
         ? publicSourceGatewayHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH

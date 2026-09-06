@@ -476,6 +476,8 @@ test("the topic preflight reports proportional coverage without fixed count bloc
   };
   try {
     await writeFile(path.join(root, "research-topic-run.json"), JSON.stringify({ jobState: "succeeded" }), "utf8");
+    await writeFile(path.join(root, "research-portfolio.json"), JSON.stringify({ candidates: [] }), "utf8");
+    await writeFile(path.join(root, "evidence-records.json"), JSON.stringify({ records: [] }), "utf8");
     await writeFile(
       path.join(root, "research-topic-report.md"),
       "# 选题报告\n检索范围：见证据地图。\n## Q1 住院 TDM 基准\n设计为横断面描述。\n",

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
@@ -11,9 +12,13 @@ import {
   AgentRunStore,
   artifactCandidatesForTest,
   clinicalEvidenceRepairPromptForTest,
+  consumeRepairAuthorizationForTest,
   delegatedDocumentReadsForTest,
   ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
+  readDelegatedAssistantMessagesForTest,
+  scopeNativeProjectionForTest,
+  snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runPhaseHistory,
@@ -5022,7 +5027,7 @@ test("the run's own projection is read from the host, not from the container's v
   // Negative control: the two call sites that DO need the container root must
   // keep it, or fixing this would break the paths the model actually wrote.
   assert.match(code, /artifactCandidates\(message, runtimeWorkspaceRoot\)/);
-  assert.match(code, /successfulEvidenceSourceArtifacts\(allAssistants, runtimeWorkspaceRoot\)/);
+  assert.match(code, /successfulEvidenceSourceArtifacts\(allRunAssistants, runtimeWorkspaceRoot\)/);
 });
 
 test("a repair instruction names a check the run can actually run", () => {
@@ -5040,6 +5045,12 @@ test("a repair instruction names a check the run can actually run", () => {
   ]);
 
   assert.match(prompt, /evimed_submit_deliverable/, "the repair must name the check that exists");
+  assert.match(prompt, /evimed_revise_deliverable/, "an accepted package needs an explicit new revision before its files can change");
+  const unaccepted = clinicalEvidenceRepairPromptForTest([
+    "clinical-evidence-matrix.json is malformed",
+  ], null, false);
+  assert.equal(/evimed_revise_deliverable|local gate already accepted|protected kernel storage/.test(unaccepted), false,
+    "a package with no accepted receipt must be repaired directly without inventing revision authority");
   assert.equal(/preflight\.py/.test(prompt), false, "no run can execute a script that is not shipped");
   assert.equal(/opencode/i.test(prompt), false, "and the path named must not belong to the other kernel");
   // The issue itself has to travel, or the run is told to fix something without
@@ -5055,6 +5066,130 @@ test("a repair instruction names a check the run can actually run", () => {
   const stale = "Run python $XDG_CONFIG_HOME/opencode/skills/clinical-evidence-synthesis/scripts/preflight.py first.";
   assert.equal(/preflight\.py/.test(stale), true);
   assert.equal(/evimed_submit_deliverable/.test(stale), false);
+});
+
+test("server repair preserves accepted bytes outside the runtime workspace", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-repair-revision-"));
+  try {
+    const project = {
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const relative = "deliverables/review/clinical-evidence-report.md";
+    const accepted = "# Accepted review\nOriginal accepted bytes.\n";
+    const unrelatedRelative = "deliverables/brief/brief.md";
+    const unrelated = "# Unrelated accepted brief\n";
+    await mkdir(path.dirname(path.join(project.workspaceDir, relative)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), accepted);
+    await mkdir(path.dirname(path.join(project.workspaceDir, unrelatedRelative)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, unrelatedRelative), unrelated);
+    const receipt = {
+      formatVersion: 1,
+      runId: "kernel-run-1",
+      bundleVersion: "1.0.0",
+      domainVersion: "1.0.0",
+      entries: [{
+        deliverableId: "review",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        acceptedAt: "2026-09-06T00:00:00Z",
+        attempt: 1,
+        notices: [],
+        files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+      }, {
+        deliverableId: "brief",
+        contractKind: "research-brief",
+        capability: "research-brief",
+        acceptedAt: "2026-09-06T00:00:00Z",
+        attempt: 1,
+        notices: [],
+        files: [{ path: unrelatedRelative, sha256: createHash("sha256").update(unrelated).digest("hex"), bytes: Buffer.byteLength(unrelated) }],
+      }],
+    };
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify(receipt));
+
+    const result = await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1");
+
+    assert.equal(result.revisionRequired, true);
+    assert.equal(result.authorizations.length, 1);
+    const authorization = result.authorizations[0];
+    assert.deepEqual(
+      { runId: authorization.runId, deliverableId: authorization.deliverableId },
+      { runId: "kernel-run-1", deliverableId: "review" },
+    );
+    assert.match(authorization.acceptedDigest, /^[0-9a-f]{64}$/);
+    const lifecycle = {
+      runtimeGeneration: "runtime-generation-1",
+      controlRunRepairing: async () => true,
+      revalidateRuntimeGeneration: async () => "runtime-generation-1",
+    };
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, runtimeGeneration: "replacement-runtime" })).authorized, false,
+      "a replacement runtime cannot consume the prior generation's grant");
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, controlRunRepairing: async () => false })).authorized, false,
+      "a canceled or terminal control-plane run invalidates its outstanding grant");
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, { ...lifecycle, revalidateRuntimeGeneration: async () => "runtime-generation-2" })).authorized, false,
+      "a runtime replaced while the consume waits for storage cannot cross the claim linearization point");
+    const barrier = path.join(root, "cross-process-consume-barrier");
+    await mkdir(barrier, { recursive: true });
+    const childScript = `
+      import { readdir, writeFile } from "node:fs/promises";
+      import path from "node:path";
+      const { consumeRepairAuthorizationForTest } = await import(process.env.AGENT_RUNS_MODULE);
+      const project = JSON.parse(process.env.PROJECT);
+      const input = JSON.parse(process.env.AUTHORIZATION);
+      const result = await consumeRepairAuthorizationForTest(project, input, {
+        runtimeGeneration: "runtime-generation-1",
+        revalidateRuntimeGeneration: async () => "runtime-generation-1",
+        controlRunRepairing: async () => {
+          await writeFile(path.join(process.env.BARRIER, String(process.pid)), "ready");
+          for (let attempt = 0; attempt < 1000; attempt += 1) {
+            if ((await readdir(process.env.BARRIER)).length >= 2) return true;
+            await new Promise((resolve) => setTimeout(resolve, 2));
+          }
+          throw new Error("consume barrier timeout");
+        },
+      });
+      process.stdout.write(JSON.stringify(result));
+    `;
+    const runConsumer = () => new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ["--input-type=module", "--eval", childScript], {
+        env: {
+          ...process.env,
+          AGENT_RUNS_MODULE: new URL("../src/agentRuns.mjs", import.meta.url).href,
+          PROJECT: JSON.stringify(project),
+          AUTHORIZATION: JSON.stringify(authorization),
+          BARRIER: barrier,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => { stdout += chunk; });
+      child.stderr.on("data", (chunk) => { stderr += chunk; });
+      child.once("error", reject);
+      child.once("exit", (code) => code === 0 ? resolve(JSON.parse(stdout)) : reject(new Error(stderr || `consumer exited ${code}`)));
+    });
+    const crossProcess = await Promise.all([runConsumer(), runConsumer()]);
+    assert.deepEqual(crossProcess.map((result) => result.authorized).sort(), [false, true],
+      "the filesystem claim must allow only one consumer across Node processes");
+    assert.equal((await consumeRepairAuthorizationForTest(project, authorization, lifecycle)).authorized, false, "the authorization must be one-time");
+    assert.equal((await consumeRepairAuthorizationForTest(project, { ...authorization, acceptedDigest: "f".repeat(64) }, lifecycle)).authorized, false);
+    await assert.rejects(
+      snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1"),
+      /already consumed/,
+      "reissuing the same accepted digest must not reset consumedAt",
+    );
+    assert.ok(result.snapshotPath.startsWith(project.metaDir + path.sep));
+    await writeFile(path.join(project.workspaceDir, relative), "changed workspace bytes");
+    const snapshot = JSON.parse(await readFile(result.snapshotPath, "utf8"));
+    assert.equal(snapshot.files.find((file) => file.path === relative)?.text, accepted);
+    assert.equal(snapshot.acceptedReceipt.entries[0].files[0].sha256, createHash("sha256").update(accepted).digest("hex"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("a delegation that read evidence is recognised under both kernels and both argument keys", () => {
@@ -5586,4 +5721,55 @@ test("an adopted run is marked unchecked and a dispatch may take its session ove
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+test("delegated evidence comes from kernel-owned child histories named by completed tool receipts", async () => {
+  const toolMessage = (childSessionId, ok = true) => ({
+    info: { id: `m-${childSessionId}`, role: "assistant", time: { created: 1, completed: 2 } },
+    parts: [{
+      type: "tool",
+      tool: "evimed_delegate",
+      state: { status: "completed", output: JSON.stringify({ ok, data: { deliverableId: "d1", childSessionId } }) },
+    }],
+  });
+  const childEvidence = {
+    info: { id: "child-evidence", role: "assistant", time: { created: 3, completed: 4 } },
+    parts: [{ type: "tool", tool: "mcp__evimed__open_access_full_text", state: { status: "completed", output: "{}" } }],
+  };
+  const reads = [];
+  const messages = await readDelegatedAssistantMessagesForTest(
+    {},
+    [toolMessage("child-session-1"), toolMessage("failed-child", false), {
+      info: { id: "forged", role: "assistant", time: { created: 1, completed: 2 } },
+      parts: [{ type: "text", text: "childSessionId: forged-child" }],
+    }],
+    async (_project, sessionId) => {
+      reads.push(sessionId);
+      return sessionId === "child-session-1" ? [childEvidence] : [];
+    },
+  );
+
+  assert.deepEqual(reads, ["child-session-1"]);
+  assert.deepEqual(messages, [childEvidence]);
+});
+
+test("a prior run projection in the same session cannot prove current-run sources", () => {
+  const item = { id: "review", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis" };
+  const run = {
+    sessionId: "same-session",
+    nativeWorkflow: {
+      kernelRunId: "current-run",
+      plan: { revision: 1, written: true, items: [item] },
+      submissions: [],
+      delegates: ["review"],
+    },
+  };
+  const projection = {
+    sessionId: "same-session",
+    runId: "prior-run",
+    plan: { revision: 1, items: [{ ...item, status: "accepted" }] },
+    evidence: { preservedSources: [{ artifactPath: ".evimed-sources/old/fulltext.md", digest: "a".repeat(64) }] },
+  };
+
+  assert.equal(scopeNativeProjectionForTest(projection, run), null);
+  assert.equal(scopeNativeProjectionForTest({ ...projection, runId: "current-run" }, run)?.runId, "current-run");
 });

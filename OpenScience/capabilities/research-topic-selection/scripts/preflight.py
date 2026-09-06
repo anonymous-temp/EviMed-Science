@@ -26,7 +26,9 @@ from evidence_floor import (  # noqa: E402  - resolved from this script's own di
 
 REPORT = "research-topic-report.md"
 RUN_RECEIPT = "research-topic-run.json"
-REQUIRED_OUTPUTS = (REPORT, EVIDENCE_MAP, RUN_RECEIPT)
+PORTFOLIO = "research-portfolio.json"
+EVIDENCE_RECORDS = "evidence-records.json"
+REQUIRED_OUTPUTS = (REPORT, EVIDENCE_MAP, RUN_RECEIPT, PORTFOLIO, EVIDENCE_RECORDS)
 PROSE_OUTPUTS = (REPORT, EVIDENCE_MAP)
 # A candidate question, as the report is asked to head them. Counting headings
 # rather than novelty lines keeps the two independent: the count of questions
