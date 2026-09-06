@@ -1029,6 +1029,16 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
   ].join("\n");
 }
 
+/** @param {readonly string[]} deliverableIds */
+function clinicalEvidenceResubmitPrompt(deliverableIds) {
+  return [
+    "The server-side clinical evidence gate accepted the current bytes, but the run ended without a local delivery receipt.",
+    "Do not edit, rewrite, rename, or delete any deliverable file. The package already passed on the bytes now on disk.",
+    `Call evimed_submit_deliverable once for each of ${deliverableIds.join(", ")} so the run-side gate can write the missing receipt.`,
+    "If that submission accepts, call evimed_complete_run without partial mode and finish. If it rejects, follow only the returned issue and preserve the current files.",
+  ].join("\n");
+}
+
 function artifactCandidates(message, runtimeWorkspaceRoot) {
   const candidates = [];
   const runtimeRoot = path.resolve(runtimeWorkspaceRoot);
@@ -3231,6 +3241,36 @@ export class AgentRunStore {
         if (completion.qualityUnchecked) terminal.verification = "unchecked";
         if (Array.isArray(completion.qualityNotices) && completion.qualityNotices.length > 0) {
           terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...completion.qualityNotices];
+        }
+        // The model can spend its last local attempt, repair the returned issue
+        // in place, and then discover that the ceiling prevents the corrected
+        // bytes from writing a receipt. The server has just run the same domain
+        // gate over those current bytes and accepted them; failing the run now
+        // would discard a valid package over missing bookkeeping. Send one
+        // bounded, same-run request whose only job is to submit unchanged bytes.
+        const repairSender = this.clinicalRepairSenders.get(run.id);
+        const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
+        const currentReceipt = await readDeliveryReceipt(project, run);
+        const projection = await readRunStateProjection(project, project.workspaceDir, run);
+        const unaccepted = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
+          ? projection.projection.plan.items.filter((item) => item?.status !== "accepted" && Number(item?.attempts ?? 0) > 0)
+          : [];
+        const canResubmit = run.effectiveAgentId === "clinical-evidence-synthesis"
+          && completion.artifacts.length > 0
+          && !currentReceipt
+          && unaccepted.length > 0
+          && repairAttempts < this.maxClinicalRepairAttempts
+          && typeof repairSender === "function";
+        if (canResubmit) {
+          this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+          this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
+          try {
+            const repair = await repairSender(clinicalEvidenceResubmitPrompt(unaccepted.map((item) => String(item.id))));
+            if (repair?.accepted !== false) return run;
+          } catch { /* a refused resubmission remains a fail-closed outcome */ }
+          terminal.status = "failed";
+          terminal.errorCode = "specialist_evidence_repair_failed";
+          terminal.qualityNotices = ["The server accepted the current package, but the run-side receipt resubmission could not be dispatched."];
         }
       }
     }
