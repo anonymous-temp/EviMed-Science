@@ -663,10 +663,10 @@ export function sourceArtifactPaths(records, runId) {
   const paths = []
   const seen = new Set()
   for (const record of records ?? []) {
-    // A row carrying no runId predates the mirror latching one; it belongs to
-    // this run by virtue of being in this run's table. Dropping it would be
-    // the same empty-map failure in a narrower form.
-    if (runId && record?.runId && record.runId !== runId) continue
+    // An unstamped row has unknown ownership. It may be inspected only by an
+    // unscoped diagnostic caller; it can never satisfy a named run's citation
+    // gate, because two concurrent roots could otherwise both claim it.
+    if (runId && record?.runId !== runId) continue
     const artifactPath = String(record?.artifactPath ?? '')
     if (!artifactPath || seen.has(artifactPath)) continue
     seen.add(artifactPath)

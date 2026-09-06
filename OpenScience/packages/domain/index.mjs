@@ -60,7 +60,7 @@ export {
   isRegulatedContractKind,
 } from './src/contractKinds.mjs'
 
-// workspaceLayout — 14 exports
+// workspaceLayout — 15 exports
 export {
   BRIEF_DIR,
   CAPSULE_DIR,
@@ -76,6 +76,7 @@ export {
   isGateImplementationPath,
   isProtectedWritePath,
   normalizeWorkspacePath,
+  runStateFileFor,
   workspaceLayout,
 } from './src/workspaceLayout.mjs'
 

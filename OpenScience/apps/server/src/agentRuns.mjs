@@ -35,6 +35,7 @@ import {
   transition as domainTransition,
   transitionEvents,
   validateDeliveryReceipt,
+  runStateFileFor,
   workspaceLayout,
 } from "@evimed/domain";
 
@@ -1359,6 +1360,9 @@ async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
   const loaded = successfullyLoadedSkills(assistantMessages);
   const read = await readRunStateProjection(project, project.workspaceDir, run);
   if (read.state !== "read") return loaded;
+  // A skill receipt is completion authority, so unlike display-only legacy
+  // projections it must identify this exact control-plane run.
+  if (run && read.projection?.runId !== run.id) return loaded;
   for (const name of injectedSkills(read.projection)) loaded.add(name);
   return loaded;
 }
@@ -2080,7 +2084,13 @@ async function consumeRepairAuthorization(project, input, {
 async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
   try {
-    text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, workspaceLayout.runStateFile), "");
+    const relative = run && !run.nativeTurn ? runStateFileFor(run.id) : workspaceLayout.runStateFile;
+    text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, relative), "");
+    // Compatibility with a runtime image from before per-run projections. The
+    // run-id check below still rejects another run's shared file.
+    if (!text && run && !run.nativeTurn) {
+      text = await readTextFileNoFollow(workspaceRoot, path.join(workspaceRoot, workspaceLayout.runStateFile), "");
+    }
   } catch {
     // Unreadable for any reason the filesystem gives — including absent, which
     // `readTextFileNoFollow` reports as an empty string rather than a throw.
@@ -2090,7 +2100,10 @@ async function readRunStateProjection(project, workspaceRoot, run = null) {
   try {
     const projection = JSON.parse(text);
     if (!projection || typeof projection !== "object" || Array.isArray(projection)) return { state: "unreadable" };
-    if (!run?.nativeTurn) return { state: "read", projection };
+    if (!run?.nativeTurn) {
+      if (run && projection.runId && projection.runId !== run.id) return { state: "unattributed" };
+      return { state: "read", projection };
+    }
     const scoped = scopeNativeProjection(projection, run);
     return scoped ? { state: "read", projection: scoped } : { state: "unattributed" };
   } catch {
@@ -4015,8 +4028,8 @@ export class AgentRunStore {
 
 /** Test seam: the skill check's two routes, without a whole run around them.
  *  @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>} */
-export function loadedOrInjectedSkillsForTest(project, assistantMessages) {
-  return loadedOrInjectedSkills(project, assistantMessages);
+export function loadedOrInjectedSkillsForTest(project, assistantMessages, run = null) {
+  return loadedOrInjectedSkills(project, assistantMessages, run);
 }
 
 /** Test seam: the authenticated tool transcript binds one projection to one native run.
