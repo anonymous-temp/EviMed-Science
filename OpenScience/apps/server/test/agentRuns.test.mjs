@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1464,7 +1464,13 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40 } = {}) {
     runtimeWorkspaceRoot: () => root,
     onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
   });
-  const writeProjection = (value) => writeFile(path.join(root, ".evimed-run", "state.json"), typeof value === "string" ? value : JSON.stringify(value), "utf8");
+  let projectionWrites = 0;
+  const writeProjection = async (value) => {
+    const target = path.join(root, ".evimed-run", "state.json");
+    const temporary = `${target}.${projectionWrites += 1}.tmp`;
+    await writeFile(temporary, typeof value === "string" ? value : JSON.stringify(value), "utf8");
+    await rename(temporary, target);
+  };
   return { root, project, store, frames, writeProjection };
 }
 
@@ -1476,14 +1482,15 @@ test("a run whose subagents are working is not judged stalled because its root s
   // and the real clinical questions — the ones that delegate most — were the
   // ones most likely to be killed by it.
   const { project, store, writeProjection } = await delegatingRunFixture(t);
-  let evidence = 1;
-  await writeProjection({ evidence: { total: evidence, byStatus: { ready: evidence } }, budget: { children: 2 } });
+  await writeProjection({ evidence: { total: 1, byStatus: { ready: 1 } }, budget: { children: 2 } });
   const run = await store.start(project, { sessionId: "ses_deleg" });
 
-  // Children keep ingesting evidence while the root says nothing at all.
+  // The authenticated event pump keeps seeing the child's session advance
+  // while the root says nothing at all.
+  let seq = 1;
   const ticking = setInterval(() => {
-    evidence += 1;
-    void writeProjection({ evidence: { total: evidence, byStatus: { ready: evidence } }, budget: { children: 2 } });
+    store.noteKernelActivity(project, run.id, { sessionId: "ses_child", seq });
+    seq += 1;
   }, 2);
   await store.monitors.get(run.id)?.promise;
   clearInterval(ticking);
@@ -1505,10 +1512,27 @@ test("a running-subagent label without child activity does not keep a stalled ru
     subagents: [{ deliverableId: "d1", capability: "research-brief", status: "running" }],
   });
   const run = await store.start(project, { sessionId: "ses_deleg" });
+  store.noteKernelActivity({ ...project, id: "another-project" }, run.id, { sessionId: "ses_child", seq: 1 });
   await store.monitors.get(run.id)?.promise;
 
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_stalled", "a silent child must still reach the stall threshold");
+});
+
+test("changing model-writable projection counters cannot keep a stalled run alive", async (t) => {
+  const { project, store, writeProjection } = await delegatingRunFixture(t, { stallPolls: 3, maxPolls: 80 });
+  let step = 1;
+  await writeProjection({ evidence: { total: step, byStatus: { ready: step } }, budget: { steps: step, children: 1 } });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  const ticking = setInterval(() => {
+    step += 1;
+    void writeProjection({ evidence: { total: step, byStatus: { ready: step } }, budget: { steps: step, children: 1 } });
+  }, 2);
+  await store.monitors.get(run.id)?.promise;
+  clearInterval(ticking);
+
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_stalled", "workspace counters are display data, not a trusted heartbeat");
 });
 
 test("a run-side projection that will not parse is a named notice, never evidence of a stall", async (t) => {

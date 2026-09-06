@@ -136,10 +136,6 @@ function recordSubagent(ctx, key, record) {
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** Per-session state. A run is one session, and the sessions in one host are separate runs. */
   const state = new Map()
-  /** Child session id -> its kernel-owned parent session id. */
-  const sessionParents = new Map()
-  /** Child session id -> the root run id that owned it when it started. */
-  const sessionOwnerRuns = new Map()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
   const sessionState = (sessionId) => {
@@ -222,36 +218,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => onSessionEvent(ctx, (session, event) => {
     if (event.type !== 'assistant/message') return
     const entry = sessionState(session.sessionId)
-    const usage = toUsage(event.data?.usage)
-    entry.budget = accumulateBudget(entry.budget, usage)
-    if (session.parentSessionId) {
-      sessionParents.set(session.sessionId, session.parentSessionId)
-      if (!sessionOwnerRuns.has(session.sessionId)) {
-        const inheritedRunId = sessionOwnerRuns.get(session.parentSessionId) ?? state.get(session.parentSessionId)?.runId
-        if (inheritedRunId) sessionOwnerRuns.set(session.sessionId, inheritedRunId)
-      }
-    }
-
-    // A root waits while a delegated child is doing the work, so the root's
-    // own history is intentionally quiet. The control plane watches this
-    // mirror to distinguish that wait from a dead run. Charge and mirror the
-    // child's real model messages on the owning root: unlike a timer or the
-    // model-writable projection timestamp, an assistant/message event is
-    // kernel-owned evidence that the child actually advanced. If the child
-    // itself delegated, walk the recorded kernel lineage to the first session
-    // that owns a run rather than keeping only the immediate child alive.
-    let ownerId = session.sessionId
-    const seen = new Set()
-    while (sessionParents.has(ownerId) && !seen.has(ownerId)) {
-      seen.add(ownerId)
-      ownerId = sessionParents.get(ownerId)
-    }
-    const owner = state.get(ownerId)
-    const boundRunId = sessionOwnerRuns.get(session.sessionId)
-    if (owner && owner !== entry && owner.runId && !owner.completed && (!boundRunId || boundRunId === owner.runId)) {
-      owner.budget = accumulateBudget(owner.budget, usage)
-      void putRunMirror(ctx, owner, config.bundleVersion)
-    }
+    entry.budget = accumulateBudget(entry.budget, toUsage(event.data?.usage))
     // Mirrored here as well, because this is the only event that happens on
     // every run. The other three call sites hang off a turn ending or a
     // deliverable being submitted, and a run that does neither — the shape of
@@ -520,18 +487,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         }
         entry.budget.children += 1
         Object.assign(item, advancePlanItem(item, 'delegate'))
-        const childSessionId = String(run?.id ?? '')
-        if (childSessionId) {
-          sessionParents.set(childSessionId, call.sessionId)
-          if (entry.runId) sessionOwnerRuns.set(childSessionId, entry.runId)
-        }
-        recordSubagent(ctx, item.id, {
-          deliverableId: item.id,
-          capability: item.capability,
-          skills: injected,
-          status: 'running',
-          ...(childSessionId ? { childSessionId } : {}),
-        })
+        recordSubagent(ctx, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
         await putPlanIndex(store(), entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
         const outcome = toSubagentOutcome(run, await run.result)
