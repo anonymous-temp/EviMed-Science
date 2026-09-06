@@ -19,13 +19,13 @@ export class ProductJobs {
   constructor(database) { this.database = database; }
 
   /** @param {string} userId @param {string} kind @param {Record<string,any>} payload
-   * @param {{ idempotencyKey: string, projectId?: string|null, maxAttempts?: number, runAfter?: Date, rearmFailed?:boolean }} options */
-  async enqueue(userId, kind, payload, { idempotencyKey, projectId = null, maxAttempts = 3, runAfter = new Date(), rearmFailed = false }) {
+   * @param {{ idempotencyKey: string, projectId?: string|null, maxAttempts?: number, runAfter?: Date, rearmFailed?:boolean, transactionClient?:any }} options */
+  async enqueue(userId, kind, payload, { idempotencyKey, projectId = null, maxAttempts = 3, runAfter = new Date(), rearmFailed = false, transactionClient = null }) {
     productInteger(maxAttempts, 1, 10);
     const values = [randomUUID(), productId(userId, "user"), productKind(kind, PRODUCT_JOB_KINDS), productPayload(payload),
       productId(idempotencyKey, "idempotency key"), projectId == null ? null : productId(projectId, "project"), maxAttempts, productTime(runAfter), rearmFailed];
-    await migrateProductStore(this.database);
-    const result = await this.database.query(`INSERT INTO evimed_product.jobs(id,user_id,kind,payload,idempotency_key,project_id,max_attempts,run_after)
+    if (!transactionClient) await migrateProductStore(this.database);
+    const result = await (transactionClient ?? this.database).query(`INSERT INTO evimed_product.jobs(id,user_id,kind,payload,idempotency_key,project_id,max_attempts,run_after)
       VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8)
       ON CONFLICT(user_id,idempotency_key) DO UPDATE SET id=jobs.id,
         status=CASE WHEN $9::boolean AND jobs.status='failed' THEN 'queued' ELSE jobs.status END,

@@ -116,7 +116,9 @@
   config:
     gatewayUrl: !!js process.env.EVIMED_PUBLIC_SOURCE_GATEWAY_URL
     tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
-    timeoutMs: 15000
+    enabled: !!js process.env.EVIMED_CITE_ENABLED !== '0'
+    timeoutMs: !!js Number(process.env.EVIMED_CITE_TIMEOUT_MS || 15000)
+    revision: !!js Number(process.env.EVIMED_CITE_CONFIG_REVISION || 0)
 
 # --- framework tools the model needs to do the work -------------------------
 - id: tool-bash

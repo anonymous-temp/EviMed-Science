@@ -1,3 +1,4 @@
+import { validatePluginConfig } from "./pluginService.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -507,7 +508,10 @@ export function createRuntimeController(overrides = {}) {
     ) {
       throw controllerFailure(400, "runtime_controller_source_gateway_invalid", "The public-source endpoint must match the configured gateway.");
     }
-    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl });
+    const pluginConfig = payload.pluginConfig;
+    if (!pluginConfig || Object.keys(pluginConfig).sort().join(",") !== "enabled,revision,settings") throw new HttpError(400, "plugin_config_invalid", "Fixed plugin settings are required.");
+    validatePluginConfig({ expectedRevision: pluginConfig.revision, enabled: pluginConfig.enabled, settings: pluginConfig.settings }, config.publicSourceGatewayTimeoutMs ?? 15000);
+    const plan = buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig });
     await cleanupRuntime(project);
     reserveRuntimeCapacity(project);
     let child;
@@ -702,7 +706,7 @@ export function createRuntimeController(overrides = {}) {
         }
         const payload = await readJson(req, config.maxJsonBytes);
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig"]
           : url.pathname === "/v1/kernel/run"
             ? ["userId", "projectId", "activeWorkspace", "language", "code"]
             : ["userId", "projectId", "activeWorkspace"];

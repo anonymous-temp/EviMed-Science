@@ -139,13 +139,13 @@ export class ProductDocuments {
 
   /** expectedRevision=0 creates; every update names the version the caller read.
    * @param {string} userId @param {string} kind @param {string} id @param {Record<string,any>} payload
-   * @param {{ expectedRevision: number, projectId?: string|null }} options */
-  async put(userId, kind, id, payload, { expectedRevision, projectId = null }) {
+   * @param {{ expectedRevision: number, projectId?: string|null, transactionClient?: any }} options */
+  async put(userId, kind, id, payload, { expectedRevision, projectId = null, transactionClient = null }) {
     const values = [productId(userId, "user"), productKind(kind), productId(id), productPayload(payload)];
     productInteger(expectedRevision, 0, 2_147_483_646);
     if (projectId != null) productId(projectId, "project");
-    await migrateProductStore(this.database);
-    return this.database.transaction(async (client) => {
+    if (!transactionClient) await migrateProductStore(this.database);
+    const operation = async (client) => {
       const result = expectedRevision === 0
         ? await client.query(`INSERT INTO evimed_product.documents(user_id,kind,id,payload,project_id)
             VALUES ($1,$2,$3,$4::jsonb,$5) ON CONFLICT DO NOTHING RETURNING *`, [...values, projectId])
@@ -154,7 +154,8 @@ export class ProductDocuments {
       if (!result.rows[0]) throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
       await saveRevision(client, result.rows[0]);
       return record(result.rows[0]);
-    });
+    };
+    return transactionClient ? operation(transactionClient) : this.database.transaction(operation);
   }
 
   /** @param {string} userId @param {string} kind @param {string} id @param {number} expectedRevision */

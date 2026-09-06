@@ -740,3 +740,5 @@ async function probeSandbox(ctx, required) {
     return { error: `sandbox probe failed: ${errorMessage(error)}`, enforcement: 'none' }
   }
 }
+
+export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion } from './src/pluginProbe.mjs'

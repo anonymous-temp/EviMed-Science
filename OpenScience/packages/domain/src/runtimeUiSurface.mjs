@@ -55,6 +55,7 @@
  *                run leaves this deployment except through the gateways
  */
 export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
+  "evimedPlugins",
   "settings",
   "credentials",
   "llm",

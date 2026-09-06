@@ -12,7 +12,7 @@ test('the bridge registers the five original tools once in the pinned native too
   const ctx = new Context()
   ctx.provide('systemPrompt', { tools: () => () => {} })
   const runtime = new ToolRuntime(ctx)
-  apply(ctx, { gatewayUrl: '', tokenFile: '', timeoutMs: 2000 })
+  await apply(ctx, { gatewayUrl: '', tokenFile: '', timeoutMs: 2000 })
   const names = buildCiteTools(resolveConfig({})).map((tool) => tool.name)
   assert.deepEqual([...runtime.view().visible.keys()].sort(), names.sort())
   assert.equal((await runtime.get('cite_health').execute({}, {})).ok, false, 'unconfigured is not reported ready')

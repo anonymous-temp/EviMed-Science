@@ -4,7 +4,7 @@ export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
   "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
 ]);
-export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index"]);
+export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "plugin-apply"]);
 const migrations = new WeakMap();
 
 const sql = `
@@ -110,13 +110,36 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
     WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'
-      AND pg_get_constraintdef(c.oid) LIKE '%memory-index%'
+      AND pg_get_constraintdef(c.oid) LIKE '%plugin-apply%'
   ) THEN
     ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
     ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
       CHECK (kind IN (${PRODUCT_JOB_KINDS.map((x) => `'${x}'`).join(",")}));
   END IF;
 END $migration$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-06-plugin-apply-v1') ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS evimed_product.plugin_prompt_admissions (
+  id text PRIMARY KEY,
+  user_id text NOT NULL,
+  project_id text NOT NULL,
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS plugin_prompt_admissions_project_idx ON evimed_product.plugin_prompt_admissions(user_id,project_id);
+CREATE TABLE IF NOT EXISTS evimed_product.plugin_application_state (
+  user_id text NOT NULL,
+  kind text NOT NULL DEFAULT 'plugin' CHECK (kind='plugin'),
+  id text NOT NULL,
+  desired_revision integer NOT NULL,
+  phase text NOT NULL CHECK (phase IN ('saved','pending','applying','effective','rolled_back','unavailable','failed')),
+  effective jsonb,
+  last_good jsonb,
+  runtime_generation text,
+  error text,
+  updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id,id),
+  FOREIGN KEY (user_id,kind,id) REFERENCES evimed_product.documents(user_id,kind,id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS evimed_product.memory_index_state (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   capsule_id text NOT NULL,

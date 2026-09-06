@@ -457,6 +457,8 @@ test("capsule, revision and citation settings survive the manager to isolated co
         runtimeQuotaCheckIntervalMs: 0,
       });
       const manager = new RuntimeManager(webConfig);
+      const pluginConfig = { revision: 3, enabled: false, settings: { timeoutMs: 4000 } };
+      manager.pluginOverrides.set(manager.key(project), pluginConfig);
       try {
         await controller.listen();
         await manager.start(project);
@@ -468,6 +470,9 @@ test("capsule, revision and citation settings survive the manager to isolated co
         const expectedRevisionUrl = scenario.active === "1" ? `${new URL(scenario.gateway).origin}/internal/revisions/v1/authorize` : "";
         assert.ok(args.includes(`EVIMED_CAPSULE_GATEWAY_URL=${expectedUrl}`), "the final container must receive the caller's capsule endpoint");
         assert.ok(args.includes(`EVIMED_REVISION_AUTHORIZE_URL=${expectedRevisionUrl}`), "the isolated controller must preserve the web process's revision endpoint decision");
+        assert.ok(args.includes("EVIMED_CITE_ENABLED=0"));
+        assert.ok(args.includes("EVIMED_CITE_TIMEOUT_MS=4000"));
+        assert.ok(args.includes("EVIMED_CITE_CONFIG_REVISION=3"));
         assert.ok(args.includes("EVIMED_PUBLIC_SOURCE_GATEWAY_URL=https://sources.example:9443/internal/sources/v1/fetch"), "the citation plugin must receive the managed source endpoint");
         assert.ok(args.includes("EVIMED_MODEL_GATEWAY_TOKEN_FILE=/runtime/dsh-home/model-gateway.token"), "citation must use the model token, not the workload token");
         assert.ok(args.includes(`EVIMED_CAPSULE_ACTIVE=${scenario.active}`), "the plugin flag must agree with the endpoint");
@@ -713,6 +718,7 @@ test("runtime controller cleans a runtime when the start client disconnects", as
         capsuleGatewayUrl: "",
         revisionGatewayUrl: "",
         publicSourceGatewayUrl: "",
+        pluginConfig: { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
       },
       { signal: abort.signal },
     );
@@ -1203,7 +1209,7 @@ test("production readiness verifies the isolated controller and runtime image pr
     });
     const address = await app.listen(0, "127.0.0.1");
     const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     const readiness = (await response.json()).data;
     assert.equal(readiness.checks.runtime.ok, true);
     assert.equal(readiness.checks.runtime.controlPlane, "controller_socket");

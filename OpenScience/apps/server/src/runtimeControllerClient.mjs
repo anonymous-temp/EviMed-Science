@@ -4,8 +4,8 @@ import http from "node:http";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
 
-// Version 5 also carries the validated public-source endpoint for citation tools.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 5;
+// Version 6 also carries fixed per-project plugin settings and the validated public-source endpoint for citation tools.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 6;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -181,7 +181,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "") {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -189,6 +189,7 @@ export class RuntimeControllerClient {
       capsuleGatewayUrl,
       revisionGatewayUrl,
       publicSourceGatewayUrl,
+      pluginConfig,
     });
   }
 
