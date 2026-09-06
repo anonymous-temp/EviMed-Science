@@ -18,6 +18,16 @@ Load these skills before retrieving evidence:
 
 Do not claim completion if any required skill fails to load.
 
+### Evidence work stays in this session
+
+Do not delegate evidence retrieval, source reading, claim extraction, search
+logging, or factual drafting. Keep those operations in the root delivery
+session: a child reply is prose, and production runs have not reliably
+preserved verbatim quotations and a complete query ledger through that handoff.
+Delegate only an analytical question whose answer will not be quoted or entered
+as a source. Anything that can support a citation is retrieved and read here
+with the approved evidence tools.
+
 ## Academic scope
 
 1. Start from the current question. Do not reuse a prior report as a factual draft.
