@@ -1483,13 +1483,25 @@ test("the skill's list of artifact-preserving tools matches the tools that actua
   const { readdir } = await import("node:fs/promises");
   const mcpDir = path.join(repoRoot, "runtime/mcp/evimed-research");
   const preserving = [];
+  const preserves = (source) => /["']\.evimed-sources["']/.test(source) && (
+    /^\s+_(?:official_)?atomic_write\s*\(/m.test(source)
+    || (/^from immutable_capture import [^\n]*\bpreserve\s*$/m.test(source)
+      && /^\s+\w+\s*=\s*preserve\(workspace\s*,/m.test(source))
+  );
   for (const entry of await readdir(mcpDir, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith(".py")) continue;
     const source = await readFile(path.join(mcpDir, entry.name), "utf8");
     // A module preserves when it builds a path under .evimed-sources AND
-    // writes to it. Naming the directory in a comment is not preserving.
-    if (/["']\.evimed-sources["']/.test(source) && /_atomic_write\s*\(/.test(source)) {
+    // calls its writer or the imported immutable capture helper. A writer
+    // definition or helper import alone does not preserve an artifact.
+    if (preserves(source)) {
       preserving.push(entry.name);
+    }
+    if (/^from immutable_capture import /m.test(source)) {
+      assert.equal(preserves(source.replace(/^from immutable_capture import .*$/m, "")), false,
+        `${entry.name} must call the reviewed imported helper`);
+      assert.equal(preserves(source.replace(/^(\s*\w+\s*=\s*preserve\(.*)$/gm, "# $1")), false,
+        `${entry.name} must actually invoke preservation, not merely define or mention it`);
     }
   }
   assert.ok(preserving.length >= 2, `expected the preserving modules, found ${preserving.join(", ") || "none"}`);
