@@ -647,3 +647,46 @@ return T          # 每个 S_t 是一轮任务；T 是任务链
 ### 14.10 门禁
 
 服务端 2005 项（1860 通过 / 0 失败 / 145 跳过，基线 1823 通过）、domain 135、socket 88、harness-port 77；lint 与 typecheck 全绿。
+
+## 15. 探针 V-1 / V-2 的答案（2026-09-07，腾讯云主机，对钉住的那份二进制）
+
+两个探针都记作"需活线核实"，前提是"上游是开发者预览，文档承诺会变"。核实用的不是文档，是**我们生产镜像里那一份内核源码**——`evimed-runtime-dsh:evimed-20260907-fd5657b`，`/usr/local/lib/node_modules/@deepseek-ai/dsh`，即线上正在跑的那个二进制。一次性容器（`--network=none`，不挂生产卷、不碰 compose 栈）读出来的。
+
+### 15.1 V-2：`compactRegion` 在 `agent/pre-step` 内可以调用 —— 引擎自己就在那里调
+
+`@deepseek-ai/dsh-compaction-basic/lib/index.js`：
+
+- **782 行** `ctx.on("agent/pre-step", async ({ agent, signal }, next) => {`
+- **784 行** 该处理器内 `await this.compactIfNeeded(agent, "pressure", signal)`
+- **857 行** `compactIfNeeded` → **877 / 899 行** `this.compactRegion(range.start, range.end, agent, signal)`
+- **914 行** `compactRegion` → `compactSurfaceRegion(..., { owner: "current-turn", stability: "whole-surface" }, signal)`
+
+`owner: "current-turn"` 是判定性的：这个方法**就是为轮内调用设计的**。方案原文担心的"拒绝活动中"其实不是它的语义——真正的约束在 **430 行**：`"compactRegion: no open turn — automatic compaction events must be enclosed in a turn"`。**必须有一个打开的 turn**，而 pre-step 里正好有。会抛错的是相反的情形：空闲时调它。
+
+唯一的真冲突点是 **881 行** 的 `assertNoActiveCompaction(agent.session, "automatic pressure compaction")`——同一会话上不能有两个压缩同时进行。同一 hook 上的处理器是 waterfall 串行的，所以我们的标记触发的压缩与引擎自己的压力压缩不会重叠，但实现时必须显式尊重这条。
+
+`compactNow` 走 `agent.runMaintenance`（**920 行**起），确认方案对它"活动中抛 busy"的判断成立——那是空闲维护路径，与 pre-step 无关。
+
+**结论**：V-2 为真。`evimed_compact_request` 的落法（标记 → pre-step 读标记 → `compactRegion([首个可压 seq, 最近平衡 seq])` → 清标记）在这份二进制上成立。仍未验的只剩"真实 token 压力下、引擎自己那次压缩之后我们再压一次"的实跑行为。
+
+### 15.2 V-1：托管面运行中追加提示受支持，而且有两种语义
+
+`@deepseek-ai/dsh-api-session-controller/lib/index.js` 的 `prompt(request)`（**731 行**）：
+
+- **757 行**：`if (request.mode === "steer") agent.steer(message); else agent.followup(message);`
+- **762 行**：只有底层抛错才转成 `RemoteError("session/agent-busy", "prompt rejected")`
+- **815 行**：另有队列改写 API，`steer` 在 `agent.status !== "running"` 时报 `session/steer-unavailable`
+
+客户端侧的词表在 `dsh-client-ui-conversation`：`BUSY_ENTER_BEHAVIORS = ["queue", "steer"]`，默认 `queue`。
+
+两种语义要分清：**`followup`（默认/queue）在当前轮结束后投递**；**`steer` 注入正在跑的那一轮**。
+
+而且我们这边已经通了：`runtimeManager.dispatchPrompt` 在 **3456 行** 就发着 `mode: "queue"`，且它按 `sessionId` 定位会话——对同一个会话再调一次就是"运行中追加"。
+
+**结论**：V-1 为真。§6.3.3 第 6 条的"晚到纠正"难度变体可以实现：`queue` 是"下一轮才看到的纠正"，`steer` 是"当场打断的纠正"，两者是不同的题，值得各出一个变体。
+
+### 15.3 这次核实的性质，以及还缺什么
+
+读的是线上那份二进制的实现，不是文档——这正好避开了方案原本担心的那类失效。仍然没有验的是**真实一轮里的运行时行为**：需要一次带模型调用的实跑。在生产主机上做这件事要花钱且触及生产，属于需要研究者点头的动作，因此留作未决。
+
+在实跑确认之前，`evimed_compact_request` 保持默认关闭——但它现在的状态是"机制已确认、等一次实跑"，不再是"不知道能不能做"。
