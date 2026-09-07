@@ -41,9 +41,10 @@ ORDER BY n.nspname,c.relname
 class BackupError(Exception):
     """A bounded operational code; command output never becomes a diagnostic."""
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, details=None):
         super().__init__(code)
         self.code = code
+        self.details = details or {}
 
 
 def now() -> str:
@@ -449,11 +450,31 @@ def publish_recovery_files(source: PinnedDirectory, files: list[tuple[str, str]]
     try:
         for source_name, destination_name in files:
             descriptor = source.open_file(source_name, os.O_RDONLY)
-            with os.fdopen(descriptor, "rb") as stream:
-                os.fsync(stream.fileno())
-            os.link(source_name, destination_name, src_dir_fd=source.descriptor,
-                    dst_dir_fd=destination.descriptor, follow_symlinks=False)
-            published.append(destination_name)
+            try:
+                source_metadata = os.fstat(descriptor)
+                os.fsync(descriptor)
+                os.link(source_name, destination_name, src_dir_fd=source.descriptor,
+                        dst_dir_fd=destination.descriptor, follow_symlinks=False)
+                published.append(destination_name)
+                destination_descriptor = destination.open_file(destination_name, os.O_RDONLY)
+                try:
+                    destination_metadata = os.fstat(destination_descriptor)
+                    current_source = os.fstat(descriptor)
+                    stable_source = (source_metadata.st_dev, source_metadata.st_ino, source_metadata.st_mode,
+                                     source_metadata.st_uid, source_metadata.st_gid, source_metadata.st_size,
+                                     source_metadata.st_mtime_ns)
+                    stable_current = (current_source.st_dev, current_source.st_ino, current_source.st_mode,
+                                      current_source.st_uid, current_source.st_gid, current_source.st_size,
+                                      current_source.st_mtime_ns)
+                    if ((destination_metadata.st_dev, destination_metadata.st_ino)
+                            != (source_metadata.st_dev, source_metadata.st_ino)
+                            or stable_current != stable_source):
+                        raise BackupError("postgres_recovery_publish_identity_changed")
+                    os.fsync(destination_descriptor)
+                finally:
+                    os.close(destination_descriptor)
+            finally:
+                os.close(descriptor)
         os.fsync(destination.descriptor)
     except Exception:
         for destination_name in reversed(published):
@@ -646,18 +667,6 @@ def clone_oid(sql: list[str], target: str) -> str:
     return value
 
 
-def clear_created_clone(base: list[str], sql: list[str], role: str, database: str, target: str,
-                        expected_oid: str, expected_source_identity: dict) -> bool:
-    current = source_identity(command(sql + [SOURCE_IDENTITY_SQL], capture=True, timeout=60), database)
-    if current != expected_source_identity or clone_oid(sql, target) != expected_oid:
-        return False
-    command(base + ["dropdb", "--if-exists", "--force", "-U", role, target], timeout=60)
-    absent = command(sql + [f"SELECT count(*) FROM pg_database WHERE datname='{target}';"], capture=True, timeout=60)
-    if absent.strip() != "0":
-        raise BackupError("postgres_restore_cleanup_failed")
-    return True
-
-
 def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) -> dict:
     root = RecoveryRoot()
     receipt_parent = None
@@ -732,13 +741,15 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
             atomic_new_json(receipt_parent, receipt_name, result)
             return result
         except Exception as error:
-            if creation_confirmed and created_oid is not None:
-                try:
-                    clear_created_clone(base, sql, role, database, target_database, created_oid, identity)
-                except Exception:
-                    # The operation error remains authoritative. Cleanup never
-                    # broadens from the exact OID and source-system proof.
-                    pass
+            if creation_confirmed:
+                operation_code = error.code if isinstance(error, BackupError) else "postgres_restore_operation_failed"
+                raise BackupError("postgres_restore_cleanup_required", {
+                    "cleanupRequired": {
+                        "targetDatabase": target_database,
+                        "targetDatabaseOid": created_oid,
+                    },
+                    "operationErrorCode": operation_code,
+                }) from None
             if isinstance(error, BackupError):
                 raise
             raise BackupError("postgres_restore_operation_failed") from None
@@ -950,5 +961,8 @@ if __name__ == "__main__":
         raise SystemExit(main(sys.argv[1:]))
     except Exception as error:
         code = error.code if isinstance(error, BackupError) else "postgres_backup_operation_failed"
-        print(json.dumps({"status": "failed", "errorCode": code}), file=sys.stderr)
+        payload = {"status": "failed", "errorCode": code}
+        if isinstance(error, BackupError):
+            payload.update(error.details)
+        print(json.dumps(payload), file=sys.stderr)
         raise SystemExit(1)
