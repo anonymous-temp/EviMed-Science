@@ -1,9 +1,13 @@
 /**
  * The compaction service, replaced rather than extended.
  *
- * Hidden knowledge: this is a provider swap, not a new agent-face plugin. It
- * registers no tool, adds no prompt and changes no seam the model can see —
- * the model cannot tell this row from the one it replaces. What it changes is
+ * Hidden knowledge: this is a provider swap first and, since the V-2 probe
+ * settled, the home of exactly one tool. The swap changes no seam the model can
+ * see; `evimed_compact_request` is the one thing it does show, and it lives
+ * here rather than in `run-policy` — where the plan first put it — because the
+ * engine mounted by this file is its only possible consumer. A tool registered
+ * where its consumer might not be is a tool that silently does nothing, which
+ * is the failure this codebase keeps paying for. What it changes is
  * what survives a compaction: the base engine writes a good prose summary and
  * loses the handles the run needs to carry on (the plan file, the source
  * ledger, the deliverable paths and their digests, the issue currently being
@@ -30,9 +34,12 @@ import {
   COMPACTION_POLICIES,
   compactionConfigFromEnv,
   configSchema,
+  defineTool,
   loadEvimedCompactionEngine,
   openDomain,
+  registerTool,
 } from '@evimed/harness-port'
+import { SOCKET_TOOL_NAMES } from '@evimed/domain'
 import { RUN_DOMAIN_SPEC, projectRunState } from '../src/runMirror.mjs'
 
 const Schema = await configSchema()
@@ -89,8 +96,21 @@ export async function apply(ctx, config) {
     planIndex: domain.table('plan_index'),
     evidence: domain.table('evidence'),
   }
+  // In-memory and per session. The marker is a request about *this* turn: a
+  // durable one would outlive the turn it was written for and compact a
+  // conversation nobody asked to shrink. Keeping it in the process also spares
+  // a storage read on every step of every run, for a flag that is almost always
+  // absent.
+  /** @type {Map<string, {reason: string, at: number}>} */
+  const requests = new Map()
   const Engine = await loadEvimedCompactionEngine({
     readHandles: (agent) => readRunHandles(tables, agent),
+    // Through the factory, not through a third `ctx.plugin` argument: cordis
+    // constructs a class plugin as `new Plugin(ctx, config)` and anything after
+    // the config is simply not passed on. A dependency handed that way is not a
+    // wiring mistake that fails — it is one that leaves the tool registered,
+    // the marker written, and nothing on the other end reading it.
+    takeCompactRequest: (agent) => takeRequest(requests, agent),
     observe: (observation) => {
       // The kernel's own observation bus is the only thing the control plane
       // can hear from in here. A degradation that is not emitted is a policy
@@ -106,6 +126,59 @@ export async function apply(ctx, config) {
       : { retainTokens: derived.config.retainTokens }),
     maxTokens: derived.config.maxTokens,
   })
+
+  const compactTool = await defineTool({
+    name: SOCKET_TOOL_NAMES.compactRequest,
+    description: [
+      '当上下文已经很长、而你判断前面的检索与试错细节不再需要逐字保留时，请求压缩一次。',
+      '压缩会在下一步开始前发生，保留计划、证据台账与交付路径等句柄，其余压成摘要。',
+      '这不是必需的步骤：只在你确实感到上下文拥挤时使用，且一轮里不要反复请求。',
+    ].join(' '),
+    parameters: {
+      reason: { type: 'string', required: true, description: '为什么现在需要压缩，一句话。给读日志的人看的。' },
+    },
+    concurrencySafe: true,
+    async execute(/** @type {any} */ args, /** @type {any} */ toolCtx) {
+      const sessionId = sessionKey(toolCtx ?? ctx)
+      if (!sessionId) {
+        return { ok: false, code: 'compact_request_unavailable', issues: [{ code: 'compact_request_unavailable', severity: 'advisory', message: '当前没有可压缩的会话。' }] }
+      }
+      requests.set(sessionId, { reason: String(args?.reason ?? '').slice(0, 400), at: Date.now() })
+      // Deliberately not "compacted". The tool runs inside a step; the
+      // compaction happens at the next step boundary, because that is the one
+      // place the region compactor may run. Saying otherwise would have the
+      // model plan around room it does not have yet.
+      return { ok: true, data: { requested: true, servedAt: 'next-step' } }
+    },
+  })
+  ctx.effect(() => registerTool(ctx, compactTool))
+}
+
+/** The session a tool call or an agent belongs to, as a marker key. */
+export function sessionKey(source) {
+  const session = source?.session ?? source?.agent?.session ?? source
+  const id = session?.id ?? session?.sessionId
+  return typeof id === 'string' && id ? id : ''
+}
+
+/**
+ * Read and clear one session's request.
+ *
+ * Consuming rather than peeking is the whole contract: a marker that survived
+ * the compaction it asked for would compact again at every following step until
+ * the session had nothing left to give.
+ *
+ * @param {Map<string, {reason: string, at: number}>} requests
+ * @param {any} agent
+ * @returns {{reason: string} | null}
+ */
+export function takeRequest(requests, agent) {
+  const key = sessionKey(agent)
+  if (!key) return null
+  const request = requests.get(key)
+  if (!request) return null
+  requests.delete(key)
+  return { reason: request.reason }
 }
 
 /**

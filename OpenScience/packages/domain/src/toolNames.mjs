@@ -112,6 +112,7 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
   capsuleNote: 'evimed_capsule_note',
   screenBatch: 'evimed_screen_batch',
   reviewRun: 'evimed_review_run',
+  compactRequest: 'evimed_compact_request',
 })
 
 /** Flat list of socket tool names. */
