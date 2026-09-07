@@ -1,7 +1,9 @@
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
 export interface AgendaPayload { title: string; topics: string[]; taskTypes: string[]; dailyBudgetCny: number; weeklyBudgetCny: number;
-  maxEpisodeCny: number; scheduleHour: number; timeZone: string; enabled: boolean; status: string; pauseReason: string | null; outcomes: unknown[] }
+  maxEpisodeCny: number; scheduleHour: number; timeZone: string; enabled: boolean; status: string; pauseReason: string | null; outcomes: unknown[];
+  userSignal?: { score: number; decided: number; rejected: boolean } | null;
+  followUps?: Array<{ digestId: string; claimId: string; note: string; at: string; consumedBy?: string }> }
 export interface DigestClaim { id: string; statement: string }
 export interface DigestPayload { date: string; costCny: number; headlines: DigestClaim[]; leads: DigestClaim[];
   openedAt?: string | null; decisions: Array<{ action: string; claimId: string; note: string }> }

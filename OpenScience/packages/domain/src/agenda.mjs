@@ -95,6 +95,34 @@ export const ALLOWED_EFFECT_MEASURES = Object.freeze([
 export const USER_SIGNALS = Object.freeze({ followUp: 1, adopt: 0.6, upvote: 0.3, reject: -1 })
 
 /**
+ * The net signal a researcher's digest decisions send about a direction.
+ *
+ * Each decision is scored on the USER_SIGNALS scale; a `question` is a
+ * follow-up, the strongest positive signal, because it asks for more of this
+ * direction. `rejected` is the one bit directionVerdict consumes: the user
+ * has decided on at least one finding and the net weight is negative. One
+ * rejection outweighs one adoption on purpose — the spec's "驳回 → 置底" rule —
+ * but three adoptions outweigh one rejection, so rejecting a single lead as
+ * out of scope does not park a direction the user is otherwise following.
+ *
+ * @param {Array<{ action?: string }> | undefined} decisions
+ * @returns {{ score: number, decided: number, rejected: boolean }}
+ */
+export function userSignalScore(decisions) {
+  const weights = /** @type {Readonly<Record<string, number>>} */ (USER_SIGNALS)
+  let score = 0
+  let decided = 0
+  for (const decision of Array.isArray(decisions) ? decisions : []) {
+    const action = decision?.action === 'question' ? 'followUp' : decision?.action
+    const weight = typeof action === 'string' && Object.hasOwn(weights, action) ? weights[action] : null
+    if (weight == null) continue
+    score += weight
+    decided += 1
+  }
+  return { score: Math.round(score * 100) / 100, decided, rejected: decided > 0 && score < 0 }
+}
+
+/**
  * Whether a claim may lead the morning digest.
  *
  * Only a reproduced result or a direct claim that survived refutation. An
