@@ -2196,6 +2196,47 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // A correction to a run that is already going.
+      //
+      // Deliberately its own route rather than an exemption in the dispatch
+      // rule. A dispatch creates a run, a run binds a deliverable contract, and
+      // one research session may have one active run — so relaxing
+      // `agent_run_active` would have produced two runs, two contracts and two
+      // verdicts for one conversation. A correction is input to the run that is
+      // already going: same run, same contract, same gate, and the ledger says
+      // how many corrections it took.
+      if (pathname.startsWith("/api/agent-runs/") && pathname.endsWith("/steer") && req.method === "POST") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length, -"/steer".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const ctx = await context(req, res);
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run correction");
+        const unknown = Object.keys(body).filter((field) => field !== "text");
+        if (unknown.length > 0) {
+          throw new HttpError(400, "invalid_payload", `Unknown correction field(s): ${unknown.sort().join(", ")}.`);
+        }
+        const text = assertString(body.text, "text", { max: 4000 });
+        if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
+        const run = (await agentRuns.list(ctx.project)).find((item) => item.id === runId);
+        if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+        const correctionRequestId = randomId("req_");
+        // Recorded before the kernel is told, like the repair path: a request
+        // id the ledger has not seen cannot be matched to the run it belongs to.
+        const updated = await agentRuns.recordCorrection(ctx.project, runId, correctionRequestId);
+        await runtimeManager.dispatchPrompt(ctx.project, run.sessionId, {
+          // Marked, so a compaction can carry it as a handle rather than
+          // summarising away one half of a modified instruction — the failure
+          // the published implementations of this feature all name.
+          text: `<evimed-correction>${text}</evimed-correction>`,
+          runId,
+          requestId: correctionRequestId,
+          mode: "steer",
+          strictContext: true,
+        });
+        sendJson(res, 202, { data: { id: runId, corrections: updated?.corrections ?? 0 } });
+        return;
+      }
+
       if (pathname === "/api/account/usage" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
         // This month, because that is the period a person is asked to pay for

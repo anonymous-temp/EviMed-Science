@@ -17,6 +17,7 @@ import {
   ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
   readDelegatedAssistantMessagesForTest,
+  MAX_RUN_CORRECTIONS,
   scopeNativeProjectionForTest,
   snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
@@ -6147,4 +6148,126 @@ test("a prior run projection in the same session cannot prove current-run source
 
   assert.equal(scopeNativeProjectionForTest(projection, run), null);
   assert.equal(scopeNativeProjectionForTest({ ...projection, runId: "current-run" }, run)?.runId, "current-run");
+});
+
+/* ------------------------------------------------ a correction to a run already going */
+
+// The design question this settles: a researcher who realises part-way through
+// that the question was wrong. The obvious move is to let a second dispatch
+// through on a session that already has a running run, and it is the wrong one
+// — a dispatch creates a run, a run binds a deliverable contract, and one
+// session with two runs is one conversation with two verdicts. Every published
+// implementation of mid-run steering reaches the same conclusion from the other
+// side: a steered message belongs to the response it steers, not to a turn of
+// its own, because splitting it off is what lets a later compaction summarise
+// away one half of a modified instruction.
+//
+// So `agent_run_active` stays exactly as it is — the test above at
+// "a session may hold one active run" still holds it — and a correction is a
+// different operation on the run that is already going.
+/** A throwaway project directory, in the shape the run store expects. */
+async function withProject(body) {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-correct-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, ".evimed"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    await body(project);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("a correction belongs to the run it corrects, and is counted on it", async () => {
+  await withProject(async (project) => {
+    const binding = { sessionId: "ses_correct", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 1000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+    });
+    const run = await store.start(project, { sessionId: binding.sessionId });
+    assert.equal(run.status, "running");
+    assert.equal(run.corrections ?? 0, 0);
+
+    const first = await store.recordCorrection(project, run.id, "req_correction_1");
+    assert.equal(first.corrections, 1);
+    assert.ok(first.kernelRequestIds.includes("req_correction_1"),
+      "the request id is on the run before the kernel is told, or nothing can match the reply to it");
+    assert.equal((await store.list(project)).length, 1, "a correction must not create a run");
+
+    // A repair's request is recorded through the same event and is not a
+    // correction: the gate asking for a fix and a researcher changing their
+    // mind are different facts about a run.
+    const repaired = await store.recordKernelRequest(project, run.id, "req_repair_1");
+    assert.equal(repaired.corrections, 1);
+    assert.ok(repaired.kernelRequestIds.includes("req_repair_1"));
+  });
+});
+
+test("corrections are bounded, and a run that is not running takes none", async () => {
+  await withProject(async (project) => {
+    const binding = { sessionId: "ses_correct_cap", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 1000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+    });
+    const run = await store.start(project, { sessionId: binding.sessionId });
+
+    for (let index = 1; index <= MAX_RUN_CORRECTIONS; index += 1) {
+      assert.equal((await store.recordCorrection(project, run.id, `req_c_${index}`)).corrections, index);
+    }
+    // An unbounded stream of corrections keeps a run alive for as long as
+    // somebody keeps typing, which is a budget the dispatch-time limits cannot
+    // see.
+    await assert.rejects(
+      () => store.recordCorrection(project, run.id, "req_c_over"),
+      (error) => error?.code === "agent_run_correction_limit",
+    );
+    await assert.rejects(
+      () => store.recordCorrection(project, "run_missing", "req_c_x"),
+      (error) => error?.code === "agent_run_not_running",
+    );
+
+    // Once the run is over there is nothing left to correct, and saying so by
+    // name is what stops a late correction from looking like it landed.
+    await store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+    await assert.rejects(
+      () => store.recordCorrection(project, run.id, "req_c_late"),
+      (error) => error?.code === "agent_run_not_running",
+    );
+  });
+});
+
+test("the correction route takes a text and nothing else, and names what it cannot find", async () => {
+  await withApp(async ({ base }) => {
+    const missing = await fetch(`${base}/api/agent-runs/run_does_not_exist/steer`, {
+      method: "POST", headers: projectHeaders("default", true), body: JSON.stringify({ text: "只看随机对照试验" }),
+    });
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, "agent_run_not_found");
+
+    for (const [label, body] of [
+      ["empty text", { text: "   " }],
+      // The delivery mode is the control plane's decision, not the client's: a
+      // caller that could choose `queue` here would be dispatching a second
+      // turn through a route that promises not to.
+      ["a chosen mode", { text: "x", mode: "queue" }],
+      ["no text at all", {}],
+    ]) {
+      const response = await fetch(`${base}/api/agent-runs/run_x/steer`, {
+        method: "POST", headers: projectHeaders("default", true), body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 400, label);
+    }
+  });
 });

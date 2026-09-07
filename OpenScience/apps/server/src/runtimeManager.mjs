@@ -3399,7 +3399,14 @@ export class RuntimeManager {
    * revision as a first-class logged message before the corresponding step.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean }} input
+   * `mode` is the kernel's own delivery vocabulary. `queue` hands the message
+   * to `agent.followup`, which the agent reads after the turn it is in; `steer`
+   * hands it to `agent.steer`, which the running turn reads at its next
+   * boundary. Both are accepted while the agent is busy — that was verified on
+   * the pinned kernel rather than read from its documentation.
+   *
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, input) {
@@ -3412,7 +3419,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3453,7 +3460,11 @@ export class RuntimeManager {
             // sending; other callers use the per-call default above.
             requestId: safeId(requestId, "runtime request id"),
             sessionId,
-            mode: "queue",
+            // `queue` unless the caller is correcting a turn that is already
+            // running. The kernel routes the two to different methods and the
+            // difference is visible to the model: a queued message arrives
+            // after the current turn, a steered one inside it.
+            mode: mode === "steer" ? "steer" : "queue",
             content: [{ type: "text", text }],
           },
         }, signal),

@@ -97,6 +97,9 @@ import { loadHarnessModule } from '../index.mjs'
  * @property {string} sessionId the session the compaction belongs to, or `''`
  * @property {number} handles how many handles were required
  * @property {string[]} missing the handles that did not survive, in packet order
+ * @property {string} [note] the model's own words, when the observation is about
+ *   something it asked for; for a reader judging whether the request was sensible
+ * @property {string} [detail] a failure message, truncated
  * @property {number} attempts how many augmented summarisation calls were made
  */
 
@@ -110,12 +113,25 @@ export const COMPACTION_POLICIES = Object.freeze(['basic', 'structured'])
 export const STATE_HANDLE_KINDS = Object.freeze([
   'plan',
   'projection',
+  'correction',
   'source',
   'deliverable',
   'repair',
   'method',
   'budget',
 ])
+
+/** How a mid-run correction is marked in the conversation.
+ *
+ *  The control plane wraps a researcher's correction in this tag before handing
+ *  it to the kernel, and this engine lifts it back out into a handle. The
+ *  published implementations of mid-run steering all warn about the same
+ *  failure: a steered instruction that is treated as an ordinary user message
+ *  can be summarised away while the assistant turn it modified is kept, and
+ *  what the model then reads is the original task with the correction removed.
+ *  A run that loses a correction does not fail — it confidently does the thing
+ *  it was told to stop doing. */
+const CORRECTION_MARKER = /<evimed-correction>([\s\S]{1,4000}?)<\/evimed-correction>/g
 
 /** The named failure a lost handle produces. It is a reason code on an
  *  observation and never a thrown error: see the module note. */
@@ -243,6 +259,40 @@ export const COMPACTION_ENV_KEYS = Object.freeze({
  * @param {StateHandle[]} handles
  * @returns {string}
  */
+/**
+ * The corrections a conversation carries, as handles the summary must keep.
+ *
+ * Read off the messages rather than from the run mirror, because a correction
+ * is not a durable project fact — it is a thing said in this conversation, and
+ * the conversation is the only place that knows it was said. Deterministic:
+ * a closed marker the control plane writes, never a judgement about which
+ * sentences look like corrections.
+ *
+ * @param {readonly any[] | undefined} messages
+ * @returns {StateHandle[]}
+ */
+export function correctionHandles(messages) {
+  /** @type {StateHandle[]} */
+  const handles = []
+  const seen = new Set()
+  for (const message of messages ?? []) {
+    for (const block of message?.content ?? []) {
+      const text = typeof block === 'string' ? block : block?.text
+      if (typeof text !== 'string' || !text.includes('<evimed-correction>')) continue
+      CORRECTION_MARKER.lastIndex = 0
+      for (const match of text.matchAll(CORRECTION_MARKER)) {
+        const body = match[1].trim()
+        if (!body || seen.has(body)) continue
+        seen.add(body)
+        // Numbered in the order they were given: a resuming model reading two
+        // corrections needs to know which one came second.
+        handles.push({ kind: 'correction', id: `correction-${handles.length + 1}`, detail: body.slice(0, 400) })
+      }
+    }
+  }
+  return handles
+}
+
 export function buildStateHandlePacket(handles) {
   const lines = [STATE_HANDLE_HEADING, STATE_HANDLE_PREAMBLE, '']
   for (const handle of canonicalHandles(handles)) {
@@ -552,7 +602,7 @@ export function createEvimedCompactionEngine(BaseCompactionEngine, deps = {}) {
      * @returns {Promise<any>}
      */
     async summarize(input, agent, signal) {
-      const handles = await this.#handles(agent, signal)
+      const handles = [...correctionHandles(input?.messages), ...await this.#handles(agent, signal)]
       if (!handles.length) return this.#summarise(input, agent, signal)
 
       const packet = buildStateHandlePacket(handles)

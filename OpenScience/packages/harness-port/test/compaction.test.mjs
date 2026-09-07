@@ -13,6 +13,7 @@ import {
   COMPACTION_ENV_KEYS,
   COMPACTION_HANDLE_LOST,
   COMPACTION_OBSERVATIONS,
+  correctionHandles,
   COMPACTION_PLUGIN,
   COMPACTION_POLICIES,
   buildStateHandlePacket,
@@ -563,4 +564,49 @@ test("a consumer that throws, and a sink that throws, are both survivable", asyn
   engine.compactIfNeeded = async () => ({ shadowedSeqs: [1] });
   assert.equal(await fire2(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } }), "next",
     "a metrics sink must not be able to fail a step");
+});
+
+/* ---------------------------------------------- a correction survives a compaction */
+
+test("a mid-run correction is lifted out of the conversation and into the packet", () => {
+  // The failure every published mid-run-steering implementation names: a
+  // steered instruction treated as an ordinary user message gets summarised
+  // away while the assistant turn it modified is kept, and the model then reads
+  // the original task with the correction removed. A run that loses a
+  // correction does not fail — it confidently does the thing it was told to
+  // stop doing.
+  const handles = correctionHandles([
+    { role: "user", content: [{ type: "text", text: "review the evidence on empagliflozin" }] },
+    { role: "assistant", content: [{ type: "text", text: "searching" }] },
+    { role: "user", content: [{ type: "text", text: "<evimed-correction>only randomised trials, drop the registries</evimed-correction>" }] },
+    { role: "user", content: [{ type: "text", text: "<evimed-correction>and cap it at 2020 onwards</evimed-correction>" }] },
+  ]);
+  assert.deepEqual(handles, [
+    { kind: "correction", id: "correction-1", detail: "only randomised trials, drop the registries" },
+    { kind: "correction", id: "correction-2", detail: "and cap it at 2020 onwards" },
+  ], "numbered in the order they were given, because which came second is the operative one");
+
+  // Repeated because the conversation replays it, not because it was said twice.
+  const once = correctionHandles([
+    { content: [{ text: "<evimed-correction>same words</evimed-correction>" }] },
+    { content: [{ text: "<evimed-correction>same words</evimed-correction>" }] },
+  ]);
+  assert.equal(once.length, 1);
+
+  // Nothing to find is not an error, and unmarked prose is never a correction.
+  assert.deepEqual(correctionHandles([]), []);
+  assert.deepEqual(correctionHandles(undefined), []);
+  assert.deepEqual(correctionHandles([{ content: [{ text: "please correct course and drop the registries" }] }]), []);
+  assert.deepEqual(correctionHandles([{ content: [{ text: "<evimed-correction>   </evimed-correction>" }] }]), []);
+});
+
+test("a correction reaches the summary packet ahead of the sources it constrains", async () => {
+  const { engine, calls } = engineWith({ summarise: async () => ({ text: "summary" }), handles: [] });
+  await engine.summarize({
+    ...INPUT,
+    messages: [{ role: "user", content: [{ type: "text", text: "<evimed-correction>randomised trials only</evimed-correction>" }] }],
+  }, AGENT);
+  const packet = appendedText(calls[0]);
+  assert.match(packet, /randomised trials only/, "a run with no other handles still carries its corrections");
+  assert.match(packet, /correction/);
 });
