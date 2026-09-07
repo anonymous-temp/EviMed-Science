@@ -271,7 +271,7 @@ export {
   outputBelowFloor,
 } from './src/analysis.mjs'
 
-// agenda — 15 exports
+// agenda — 16 exports
 export {
   AGENDA_ITEM_TYPES,
   ALLOWED_EFFECT_MEASURES,
@@ -287,6 +287,7 @@ export {
   digestPlacement,
   directionVerdict,
   tierRaiseAllowed,
+  userSignalScore,
   validateAgendaClaim,
 } from './src/agenda.mjs'
 

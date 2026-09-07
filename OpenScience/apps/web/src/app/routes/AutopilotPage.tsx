@@ -7,8 +7,23 @@ import { decideDigest, getDigest, listAgendas, listDigests, markDigestOpened, sc
 import { productErrorMessage } from "@/lib/productClient";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { MemorySkeleton } from "@/components/cards/Skeletons";
+
+function pendingFollowUps(agenda: AgendaRecord): number {
+  return (agenda.payload.followUps ?? []).filter((item) => !item.consumedBy).length;
+}
+
+/** What the researcher last said about a finding; a rejection is echoed back as the promise it makes. */
+function decisionLabel(digest: DigestRecord, claimId: string): string | null {
+  const last = [...(digest.payload.decisions ?? [])].reverse().find((decision) => decision.claimId === claimId);
+  if (!last) return null;
+  if (last.action === "adopt") return "已采纳";
+  if (last.action === "reject") return "已记住：不再按这个方向";
+  if (last.action === "question") return `已追问：${last.note}`;
+  return null;
+}
 
 export function AutopilotPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -18,6 +33,7 @@ export function AutopilotPage() {
   const [selectedDigest, setSelectedDigest] = useState<DigestRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
+  const [followUp, setFollowUp] = useState<{ digestId: string; claimId: string; note: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   const digestView = useRef(0);
@@ -85,6 +101,7 @@ export function AutopilotPage() {
         hint={`${agenda.payload.status === "active" ? "运行中" : "已暂停"} · ${agenda.payload.topics.join("、")}`}><div className="space-y-3">
         <p className="text-ui-sm text-muted">每日 ¥{agenda.payload.dailyBudgetCny} · 每周 ¥{agenda.payload.weeklyBudgetCny} · 单回合 ¥{agenda.payload.maxEpisodeCny}</p>
         {agenda.payload.pauseReason && <p className="text-ui-sm text-muted">{agenda.payload.pauseReason}</p>}
+        {pendingFollowUps(agenda) > 0 && <p className="text-ui-sm text-muted">下一回合先回答 {pendingFollowUps(agenda)} 条追问。</p>}
         <div className="flex flex-wrap gap-2">
           {agenda.payload.status === "active" ? <><Button size="sm" disabled={busy} onClick={() => void mutate(() => scheduleAgenda(agenda.id, today))}><Sparkles size={13} />立即运行一回合</Button>
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => void mutate(() => stopAgenda(agenda.id, agenda.revision))}><PauseCircle size={13} />停止</Button></>
@@ -96,8 +113,19 @@ export function AutopilotPage() {
           {selectedDigest?.id !== digest.id ? <Button size="sm" variant="ghost" onClick={() => setSearchParams({ digest: digest.id })}>查看简报</Button>
             : [...digest.payload.headlines.map((claim) => ({ claim, kind: "重点发现" })), ...digest.payload.leads.map((claim) => ({ claim, kind: "待验证线索" }))].map(({ claim, kind }) => <div key={claim.id} className="rounded-input bg-surface-2 p-3">
             <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
-            <div className="mt-2 flex gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "adopt", claimId: claim.id, note: "" }))}>采纳</Button>
-              <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "reject", claimId: claim.id, note: "" }))}>驳回</Button></div>
+            {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
+            <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "adopt", claimId: claim.id, note: "" }))}>采纳</Button>
+              <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "reject", claimId: claim.id, note: "" }))}>驳回</Button>
+              <Button size="sm" variant="ghost" aria-label={`追问${claim.statement}`} disabled={busy} onClick={() => setFollowUp(followUp?.claimId === claim.id && followUp.digestId === digest.id ? null : { digestId: digest.id, claimId: claim.id, note: "" })}>追问</Button></div>
+            {followUp?.digestId === digest.id && followUp.claimId === claim.id && <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => {
+              event.preventDefault();
+              const note = followUp.note.trim();
+              if (!note) return;
+              void mutate(async () => { await decideDigest(digest.id, { action: "question", claimId: claim.id, note }); setFollowUp(null); });
+            }}>
+              <Input className="min-w-0 flex-1" label="追问" placeholder="想让下一回合先回答什么？" value={followUp.note} onChange={(event) => setFollowUp({ ...followUp, note: event.target.value })} />
+              <Button size="sm" type="submit" disabled={busy || !followUp.note.trim()}>发送追问</Button>
+            </form>}
           </div>)}</div></Card>)}</section>
   </div></main>;
 }

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, tierRaiseAllowed, validateAgendaClaim } from "@evimed/domain";
+import { AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /** @param {unknown} value @param {string} field @param {number} max */
@@ -34,6 +34,9 @@ function daysWithoutActivity(agenda, now) {
     createdAt].map((value) => Date.parse(value)).filter(Number.isFinite);
   return timestamps.length ? Math.max(0, Math.floor((now.getTime() - Math.max(...timestamps)) / 86_400_000)) : Infinity;
 }
+
+/** The researcher's verdict on a direction, from the decisions they made since they last started it. */
+function userRejected(agenda) { return agenda.payload.userSignal?.rejected === true; }
 
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
@@ -136,8 +139,8 @@ export class AutopilotService {
       const agenda = await this.get(userId, agendaId);
       if (!agenda.payload.enabled || agenda.payload.status !== "active") return agenda;
       const verdict = directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0,
-        daysSinceDigestOpened: daysWithoutActivity(agenda, this.now()), userRejected: false });
-      if (verdict.action !== "pause-thread") return agenda;
+        daysSinceDigestOpened: daysWithoutActivity(agenda, this.now()), userRejected: userRejected(agenda) });
+      if (!["pause-thread", "park"].includes(verdict.action)) return agenda;
       try {
         return await this.documents.put(userId, "agenda", agenda.id, {
           ...agenda.payload, enabled: false, status: "paused", pauseReason: verdict.reason,
@@ -317,7 +320,7 @@ export class AutopilotService {
     const agenda = await this.get(userId, agendaId);
     this.revision(agenda, input.expectedRevision);
     return this.documents.put(userId, "agenda", agenda.id, {
-      ...agenda.payload, enabled: true, status: "active", pauseReason: null,
+      ...agenda.payload, enabled: true, status: "active", pauseReason: null, userSignal: null,
       consecutiveFailures: 0, lastStartedAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
     }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
   }
@@ -430,19 +433,26 @@ export class AutopilotService {
     const index = Number.parseInt(hash(`${agenda.id}:${date}`).slice(0, 8), 16) % agenda.payload.taskTypes.length;
     const taskType = agenda.payload.taskTypes[index];
     const budgetCny = Math.min(agenda.payload.maxEpisodeCny, agenda.payload.dailyBudgetCny);
+    // A follow-up the researcher asked on a digest is tomorrow's first task.
+    // It rides exactly one brief: the episode this call creates, never one
+    // that already existed when the question was asked.
+    const followUps = (agenda.payload.followUps ?? []).filter((item) => !item.consumedBy).slice(-5);
     const prompt = [
       `Run the ${taskType} proactive research episode for agenda "${agenda.payload.title}".`,
       `Episode ID: ${episodeId}. Use this exact value as provenance.episodeId in agenda-delta.json.`,
       `Topics: ${agenda.payload.topics.join(", ")}.`,
       `Maximum episode budget: CNY ${budgetCny.toFixed(2)}.`,
+      ...(followUps.length ? [`Researcher follow-up questions to answer first: ${followUps.map((item, position) => `(${position + 1}) ${item.note}`).join(" ")}`] : []),
       "Use the ordinary capability contract and delivery gate. Do not send anything externally. Stop when the budget or two-hour wall clock limit is reached.",
     ].join("\n");
     let episode;
+    let createdEpisode = false;
     try {
       episode = await this.documents.put(userId, "episode", episodeId, {
         schemaVersion: 1, agendaId: agenda.id, taskType, date, budgetCny, prompt, status: "queued",
         runId: null, claims: [], createdAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
       }, { expectedRevision: 0, projectId: agenda.projectId });
+      createdEpisode = true;
     } catch (error) {
       if (!isConflict(error)) throw error;
       episode = await this.documents.get(userId, "episode", episodeId);
@@ -451,9 +461,15 @@ export class AutopilotService {
     const job = await this.jobs.enqueue(userId, "episode", { agendaId: agenda.id, episodeId, taskType, budgetCny, prompt }, {
       idempotencyKey: `episode:${agenda.id}:${date}`, projectId: agenda.projectId, maxAttempts: 10,
     });
-    if (agenda.payload.lastScheduledDate !== date) {
-      await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload, lastScheduledDate: date, updatedAt: this.now().toISOString() },
-        { expectedRevision: agenda.revision, projectId: agenda.projectId }).catch((error) => { if (!isConflict(error)) throw error; });
+    const consumeFollowUps = createdEpisode && followUps.length > 0;
+    if (agenda.payload.lastScheduledDate !== date || consumeFollowUps) {
+      await this.documents.put(userId, "agenda", agenda.id, {
+        ...agenda.payload, lastScheduledDate: date,
+        followUps: consumeFollowUps
+          ? (agenda.payload.followUps ?? []).map((item) => item.consumedBy || !followUps.includes(item) ? item : { ...item, consumedBy: episodeId })
+          : agenda.payload.followUps ?? [],
+        updatedAt: this.now().toISOString(),
+      }, { expectedRevision: agenda.revision, projectId: agenda.projectId }).catch((error) => { if (!isConflict(error)) throw error; });
     }
     return { episode, job };
   }
@@ -472,7 +488,7 @@ export class AutopilotService {
       const failures = status === "failed" ? Number(agenda.payload.consecutiveFailures ?? 0) + 1 : 0;
       const without = gatedClaims === 0 ? Number(agenda.payload.episodesWithoutGatedClaim ?? 0) + 1 : 0;
       const daysSinceDigestOpened = daysWithoutActivity(agenda, this.now());
-      const verdict = directionVerdict({ episodesWithoutGatedClaim: without, consecutiveFailures: failures, daysSinceDigestOpened, userRejected: false });
+      const verdict = directionVerdict({ episodesWithoutGatedClaim: without, consecutiveFailures: failures, daysSinceDigestOpened, userRejected: userRejected(agenda) });
       const paused = ["pause-type", "pause-thread", "park"].includes(verdict.action);
       try {
         return await this.documents.put(userId, "agenda", agenda.id, {
@@ -532,13 +548,47 @@ export class AutopilotService {
     if (![...(digest.payload.headlines ?? []), ...(digest.payload.leads ?? [])].some((claim) => claim.id === claimId)) {
       throw new HttpError(404, "autopilot_claim_not_found", "Digest claim is unavailable.");
     }
-    return this.documents.put(userId, "digest", digest.id, {
+    const note = input.note == null ? "" : String(input.note).slice(0, 1000).trim();
+    if (action === "question" && !note) throw new HttpError(400, "autopilot_payload_invalid", "A follow-up question needs its text.");
+    const decision = { action, claimId, note, at: this.now().toISOString() };
+    const saved = await this.documents.put(userId, "digest", digest.id, {
       ...digest.payload,
-      decisions: [...(digest.payload.decisions ?? []), {
-        action, claimId, note: input.note == null ? "" : String(input.note).slice(0, 1000), at: this.now().toISOString(),
-      }],
+      decisions: [...(digest.payload.decisions ?? []), decision],
       updatedAt: this.now().toISOString(),
     }, { expectedRevision: digest.revision, projectId: digest.projectId });
+    await this.recordUserSignal(userId, saved, decision);
+    return saved;
+  }
+
+  /**
+   * Every decision is a signal about the direction, not only a note on a claim.
+   * The agenda keeps the net verdict over the decisions made since the
+   * researcher last started it, so a rejection parks the direction at its next
+   * episode and a follow-up question becomes that episode's first task.
+   * @param {string} userId @param {any} digest @param {{action:string,claimId:string,note:string,at:string}} decision
+   */
+  async recordUserSignal(userId, digest, decision) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const agenda = await this.documents.get(userId, "agenda", digest.payload.agendaId);
+      if (!agenda) return;
+      const since = Date.parse(agenda.payload.lastStartedAt);
+      const counted = (digest.payload.decisions ?? []).filter((item) => !Number.isFinite(since) || Date.parse(item.at) >= since);
+      const followUps = decision.action === "question"
+        ? [...(agenda.payload.followUps ?? []), { digestId: digest.id, claimId: decision.claimId, note: decision.note, at: decision.at }].slice(-20)
+        : agenda.payload.followUps ?? [];
+      try {
+        await this.documents.put(userId, "agenda", agenda.id, {
+          ...agenda.payload,
+          userSignal: { ...userSignalScore(counted), digestId: digest.id, at: decision.at },
+          followUps,
+          updatedAt: this.now().toISOString(),
+        }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        return;
+      } catch (error) {
+        if (!isConflict(error)) throw error;
+      }
+    }
+    throw new HttpError(409, "autopilot_activity_conflict", "Research activity changed repeatedly; reopen the digest to retry.");
   }
 
   revision(record, expected) {

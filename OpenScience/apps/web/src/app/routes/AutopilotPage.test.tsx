@@ -47,6 +47,21 @@ describe("AutopilotPage", () => {
     await waitFor(() => expect(mocks.decideDigest).toHaveBeenCalledWith("digest-one", { action: "reject", claimId: "claim-two", note: "" }));
   });
 
+  it("sends a follow-up question with its text and shows what was already decided", async () => {
+    const decided = { ...digest, payload: { ...digest.payload, decisions: [{ action: "reject", claimId: "claim-two", note: "" }] } };
+    mocks.listDigests.mockResolvedValue({ items: [decided], nextCursor: null });
+    mocks.getDigest.mockResolvedValue(decided); mocks.decideDigest.mockResolvedValue(decided);
+    render();
+    expect(await screen.findByText("已记住：不再按这个方向")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "追问新增直接证据" }));
+    const send = screen.getByRole("button", { name: "发送追问" });
+    expect(send).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("追问"), "在 HFpEF 里也成立吗？");
+    await userEvent.click(send);
+    await waitFor(() => expect(mocks.decideDigest).toHaveBeenCalledWith("digest-one", { action: "question", claimId: "claim-one", note: "在 HFpEF 里也成立吗？" }));
+    expect(mocks.decideDigest).toHaveBeenCalledTimes(1);
+  });
+
   it("records opening only after the selected digest loads and uses its actual owned project", async () => {
     let finish!: (value: typeof digest) => void;
     mocks.getDigest.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));

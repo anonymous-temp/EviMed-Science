@@ -400,6 +400,19 @@ test("a claim cannot grade itself, and only a reproduced or refuter-tested direc
   assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 8, userRejected: false }).action, "pause-thread");
   assert.equal(directionVerdict({ episodesWithoutGatedClaim: 3, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: false }).action, "halve");
   assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: false }).action, "run");
+  assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: true }).action, "park");
+});
+
+test("a researcher's digest decisions score the direction, and one rejection outweighs one adoption but not three", async () => {
+  const { userSignalScore, USER_SIGNALS } = await import("../index.mjs");
+  assert.deepEqual(userSignalScore(undefined), { score: 0, decided: 0, rejected: false });
+  assert.deepEqual(userSignalScore([{ action: "adopt" }]), { score: USER_SIGNALS.adopt, decided: 1, rejected: false });
+  assert.equal(userSignalScore([{ action: "adopt" }, { action: "reject" }]).rejected, true);
+  assert.equal(userSignalScore([{ action: "adopt" }, { action: "adopt" }, { action: "adopt" }, { action: "reject" }]).rejected, false);
+  // a question asks for more of the direction: the strongest positive signal
+  assert.equal(userSignalScore([{ action: "question" }, { action: "reject" }]).rejected, false);
+  // unknown actions are not signals, and a list of them is not a decision
+  assert.deepEqual(userSignalScore([{ action: "opened" }, {}]), { score: 0, decided: 0, rejected: false });
 });
 
 test("triage picks a depth for a reason it can state, and indexing is complete by construction", async () => {

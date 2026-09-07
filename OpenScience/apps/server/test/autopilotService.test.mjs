@@ -266,6 +266,78 @@ test("a digest separates headlines from leads and records user decisions", async
   assert.equal(decision.payload.decisions[0].claimId, "claim-two");
 });
 
+test("a net-negative digest decision parks the direction before its next episode, and restarting overrides it", async () => {
+  let at = new Date("2026-09-06T01:00:00.000Z");
+  const { service, jobs } = fixture({ now: () => at });
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  at = new Date("2026-09-06T02:00:00.000Z");
+  const digest = await service.createDigest("user-one", active.id, {
+    date: "2026-09-06", episodeIds: ["episode-one"], costCny: 1,
+    claims: [
+      { id: "claim-one", statement: "Direct finding", type: "direct", tier: "gated", refutation: "stands" },
+      { id: "claim-two", statement: "Unverified lead", type: "synthesized", tier: "unverified", what_would_change: "New trial" },
+    ],
+  });
+  await service.decide("user-one", digest.id, { action: "adopt", claimId: "claim-one" });
+  let agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.userSignal.rejected, false, "one adoption is not a rejection");
+  await service.decide("user-one", digest.id, { action: "reject", claimId: "claim-two", note: "Wrong direction" });
+  agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.userSignal.rejected, true);
+  assert.equal(agenda.payload.userSignal.decided, 2);
+  await assert.rejects(() => service.schedule("user-one", active.id, { date: "2026-09-07" }), { code: "autopilot_paused" });
+  agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.status, "paused");
+  assert.match(agenda.payload.pauseReason, /驳回/);
+  assert.equal(jobs.items.length, 0, "a parked direction must not enqueue an episode");
+
+  // Restarting is the researcher overriding their own rejection: only
+  // decisions made after the restart count again.
+  at = new Date("2026-09-06T03:00:00.000Z");
+  const restarted = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  assert.equal(restarted.payload.userSignal, null);
+  await service.decide("user-one", digest.id, { action: "adopt", claimId: "claim-one" });
+  agenda = await service.get("user-one", restarted.id);
+  assert.equal(agenda.payload.userSignal.rejected, false, "the pre-restart rejection is not counted again");
+  const scheduled = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(scheduled.episode.payload.status, "queued");
+  assert.equal(jobs.items.length, 1);
+});
+
+test("a follow-up question needs its text and is carried into the next new episode's brief exactly once", async () => {
+  const { service } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const digest = await service.createDigest("user-one", active.id, {
+    date: "2026-09-06", episodeIds: ["episode-one"], costCny: 1,
+    claims: [{ id: "claim-one", statement: "Direct finding", type: "direct", tier: "gated", refutation: "stands" }],
+  });
+  await assert.rejects(() => service.decide("user-one", digest.id, { action: "question", claimId: "claim-one", note: "  " }),
+    { code: "autopilot_payload_invalid" });
+  await service.decide("user-one", digest.id, { action: "question", claimId: "claim-one", note: "Does this hold in HFpEF?" });
+  let agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.userSignal.rejected, false);
+  assert.equal(agenda.payload.followUps.length, 1);
+  assert.equal(agenda.payload.followUps[0].consumedBy, undefined);
+
+  const first = await service.schedule("user-one", active.id, { date: "2026-09-07" });
+  assert.match(first.episode.payload.prompt, /follow-up questions to answer first: \(1\) Does this hold in HFpEF\?/);
+  agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.followUps[0].consumedBy, first.episode.id);
+
+  // Re-scheduling the same date returns the existing episode and consumes nothing new.
+  await service.decide("user-one", digest.id, { action: "question", claimId: "claim-one", note: "And in older adults?" });
+  const same = await service.schedule("user-one", active.id, { date: "2026-09-07" });
+  assert.equal(same.episode.id, first.episode.id);
+  agenda = await service.get("user-one", active.id);
+  assert.equal(agenda.payload.followUps[1].consumedBy, undefined, "an existing episode cannot carry a question asked after it was written");
+
+  const second = await service.schedule("user-one", active.id, { date: "2026-09-08" });
+  assert.match(second.episode.payload.prompt, /And in older adults\?/);
+  assert.doesNotMatch(second.episode.payload.prompt, /HFpEF/, "a consumed follow-up does not ride a second brief");
+});
+
 test("a completed episode admits only contract-valid claims tied to accepted run artifacts", async () => {
   const { service } = fixture();
   const created = await service.create("user-one", agendaInput);
