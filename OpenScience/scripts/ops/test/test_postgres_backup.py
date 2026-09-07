@@ -255,10 +255,16 @@ class PostgresBackupTests(unittest.TestCase):
                 raise AssertionError(args)
 
             with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
-                    patch.object(MODULE, "command", side_effect=command), self.assertRaises(MODULE.BackupError):
-                MODULE.restore_clone(archive, target, receipt)
+                    patch.object(MODULE, "command", side_effect=command):
+                with self.assertRaises(MODULE.BackupError) as raised:
+                    MODULE.restore_clone(archive, target, receipt)
+            self.assertEqual(raised.exception.code, "postgres_restore_cleanup_required")
             self.assertNotIn("dropdb", tools)
-            self.assertFalse(receipt.exists())
+            durable = json.loads(receipt.read_text())
+            self.assertEqual(durable["status"], "cleanup_required")
+            self.assertEqual(durable["targetDatabase"], target)
+            self.assertIsNone(durable["targetDatabaseOid"])
+            self.assertEqual(durable["markerState"], "creation-unconfirmed")
 
     def test_marker_failure_reports_orphan_without_non_atomic_name_drop(self):
         for marker_mode in ["comment-failure", "marker-mismatch", "interrupted"]:
