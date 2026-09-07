@@ -96,6 +96,11 @@ test("the counters have a producer, which is the whole difference between wired 
   assert.match(serverSource, /learningService\.recordEligible\(/, "no producer for the denominator");
   assert.match(serverSource, /runMethodObservations\(\{ run, projection, methods, sessions \}\)/);
   assert.match(serverSource, /methodsLoaded: derived\.methodsLoaded/, "the ledger's mounted-method receipt has no writer");
+  // The read-without-delegation signal is derived and then fed to the audit
+  // ledger. Derived and unfed would be the open-domain line looking unused
+  // again, which is the state this signal was added to end.
+  assert.match(serverSource, /if \(derived\.invokedWithoutMount\.length\) \{[\s\S]*?securityAudit\(config, "learning\.observation\.record", "unmounted"/,
+    "a method the run read without delegating leaves no trace");
 
   // Fed from the same terminal hook that captured the transcript, and inside
   // the tracked write: it reads the run's projection and the sessions, both of
