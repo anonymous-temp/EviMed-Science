@@ -258,6 +258,67 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertNotIn("dropdb", tools)
             self.assertFalse(receipt.exists())
 
+    def test_marker_failure_cleans_only_the_successfully_created_clone_with_the_same_oid(self):
+        for cleanup_oid, should_drop in [("24680", True), ("99999", False)]:
+            with self.subTest(cleanup_oid=cleanup_oid), tempfile.TemporaryDirectory() as root:
+                directory = Path(root).resolve()
+                output = directory / "member"
+                output.mkdir()
+                archive = output / "postgres.dump.enc"
+                archive.write_bytes(b"synthetic encrypted archive")
+                archive.with_name(archive.name + ".sha256").write_text(
+                    f"{MODULE.digest(archive)}  {archive.name}\n"
+                )
+                expected = [{"schema": "public", "table": "memo", "rows": "2"}]
+                identity = {"database": "evimed", "databaseOid": "16384", "systemIdentifier": "12345"}
+                archive.with_name(archive.name + ".capture.json").write_text(json.dumps({
+                    "schemaVersion": 1, "status": "captured", "archive": archive.name,
+                    "archiveSha256": MODULE.digest(archive), "database": "evimed",
+                    "encryption": "aes-256-cbc-pbkdf2-sha256-250000", "snapshotId": "0001-0001-1",
+                    "sourceIdentity": identity, "tables": expected,
+                    "tablesSha256": MODULE.table_digest(expected),
+                }))
+                receipt = directory / "restore.json"
+                target_database = "evimed_restore_20260907T120000Z_123456abcdef"
+                tools = []
+                oid_results = iter(["24680", cleanup_oid])
+
+                def command(args, *, source=None, target=None, timeout=900, capture=False):
+                    tool = args[args.index("exec") + 3] if "exec" in args else args[0]
+                    tools.append(tool)
+                    if args[-1:] == ["--version"]:
+                        return f"{tool} (PostgreSQL) 16.14"
+                    if tool == "openssl":
+                        target.write(b"plain")
+                        return ""
+                    if tool == "pg_restore" and "--list" in args:
+                        return ""
+                    if tool == "createdb":
+                        return ""
+                    if tool == "dropdb":
+                        return ""
+                    if tool == "psql":
+                        sql = args[-1]
+                        if sql == MODULE.SOURCE_IDENTITY_SQL:
+                            return json.dumps(identity)
+                        if "SELECT oid::text" in sql:
+                            return next(oid_results) + "\n"
+                        if sql.startswith("COMMENT ON DATABASE"):
+                            raise MODULE.BackupError("postgres_command_failed")
+                        if "shobj_description" in sql:
+                            return "\n"
+                        if "count(*) FROM pg_database" in sql:
+                            return "0\n"
+                    raise AssertionError(args)
+
+                with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
+                        patch.object(MODULE, "command", side_effect=command):
+                    with self.assertRaises(MODULE.BackupError) as raised:
+                        MODULE.restore_clone(archive, target_database, receipt)
+                self.assertEqual(raised.exception.code, "postgres_command_failed")
+                self.assertEqual("dropdb" in tools, should_drop)
+                self.assertFalse(receipt.exists())
+
     def test_main_fallback_preserves_the_current_persisted_drill_intent(self):
         with tempfile.TemporaryDirectory() as root:
             directory = Path(root).resolve()
