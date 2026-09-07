@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -428,7 +429,7 @@ def recovery_config() -> tuple[list[str], str, str, Path, list[str]]:
     return base, database, role, passphrase, crypto
 
 
-def atomic_receipt_json(directory: PinnedDirectory, name: str, value: dict) -> None:
+def receipt_candidate(directory: PinnedDirectory, value: dict) -> str:
     temporary = ".restore-receipt-" + uuid.uuid4().hex + ".tmp"
     descriptor = directory.open_file(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     try:
@@ -437,29 +438,86 @@ def atomic_receipt_json(directory: PinnedDirectory, name: str, value: dict) -> N
             output.write("\n")
             output.flush()
             os.fsync(output.fileno())
-        os.rename(temporary, name, src_dir_fd=directory.descriptor, dst_dir_fd=directory.descriptor)
-        os.fsync(directory.descriptor)
-    finally:
+        return temporary
+    except Exception:
         try:
             os.unlink(temporary, dir_fd=directory.descriptor)
         except FileNotFoundError:
             pass
+        raise
+
+
+def atomic_new_receipt(directory: PinnedDirectory, name: str, value: dict) -> None:
+    temporary = receipt_candidate(directory, value)
+    try:
+        try:
+            os.link(temporary, name, src_dir_fd=directory.descriptor,
+                    dst_dir_fd=directory.descriptor, follow_symlinks=False)
+        except FileExistsError:
+            raise BackupError("postgres_recovery_receipt_exists") from None
+        os.fsync(directory.descriptor)
+    finally:
+        os.unlink(temporary, dir_fd=directory.descriptor)
+
+
+def atomic_replace_receipt(directory: PinnedDirectory, name: str, value: dict, operation_id: str) -> None:
+    if value.get("operationId") != operation_id:
+        raise BackupError("postgres_recovery_receipt_owner_mismatch")
+    current = directory.open_file(name, os.O_RDONLY)
+    try:
+        metadata = os.fstat(current)
+        with os.fdopen(os.dup(current), "r", encoding="utf-8") as input_stream:
+            persisted = json.load(input_stream)
+        current_name = os.stat(name, dir_fd=directory.descriptor, follow_symlinks=False)
+        if (persisted.get("operationId") != operation_id
+                or (metadata.st_dev, metadata.st_ino) != (current_name.st_dev, current_name.st_ino)):
+            raise BackupError("postgres_recovery_receipt_owner_mismatch")
+        temporary = receipt_candidate(directory, value)
+        try:
+            if descriptor_identity(os.fstat(current)) != descriptor_identity(metadata):
+                raise BackupError("postgres_recovery_receipt_owner_mismatch")
+            os.rename(temporary, name, src_dir_fd=directory.descriptor, dst_dir_fd=directory.descriptor)
+            os.fsync(directory.descriptor)
+        finally:
+            try:
+                os.unlink(temporary, dir_fd=directory.descriptor)
+            except FileNotFoundError:
+                pass
+    finally:
+        os.close(current)
 
 
 def cleanup_required_receipt(bundle, source: dict, target: str, target_oid, marker_state: str,
-                             operation_code: str) -> dict:
+                             marker_digest, operation_code: str, operation_id: str) -> dict:
     return {
         "schemaVersion": 1,
         "status": "cleanup_required",
+        "operationId": operation_id,
         "archive": bundle.archive_name,
         "archiveSha256": bundle.receipt["archiveSha256"],
         "sourceIdentity": source,
         "targetDatabase": target,
         "targetDatabaseOid": target_oid,
         "markerState": marker_state,
+        "ownershipMarkerSha256": marker_digest,
         "operationErrorCode": operation_code,
         "recordedAt": now(),
     }
+
+
+def validate_cleanup_authority(receipt: dict, marker: str) -> tuple[str, str]:
+    target = receipt.get("targetDatabase")
+    target_oid = receipt.get("targetDatabaseOid")
+    operation_id = receipt.get("operationId")
+    expected = receipt.get("ownershipMarkerSha256")
+    actual = hashlib.sha256(marker.encode()).hexdigest()
+    if (receipt.get("status") != "cleanup_required" or receipt.get("markerState") != "established"
+            or not isinstance(target, str) or not RESTORE_NAME.fullmatch(target)
+            or not isinstance(target_oid, str) or not re.fullmatch(r"[0-9]{1,20}", target_oid)
+            or not isinstance(operation_id, str) or not re.fullmatch(r"[a-f0-9]{32}", operation_id)
+            or not isinstance(expected, str) or not hmac.compare_digest(expected, actual)):
+        raise BackupError("postgres_restore_cleanup_authority_invalid")
+    return target, target_oid
 
 
 def publish_recovery_files(source: PinnedDirectory, files: list[tuple[str, str]], destination: PinnedDirectory) -> None:
@@ -693,9 +751,9 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
     try:
         base, database, role, _passphrase, crypto = recovery_config()
         validate_restore_database(database, target_database)
+        lock = root.lock()
         receipt_parent, receipt_name = root.parent_for(receipt_path, new=True)
         bundle = load_capture_receipt(root, archive_path, database)
-        lock = root.lock()
         capture_receipt, expected = bundle.receipt, bundle.expected
         temporary = receipt_parent.workspace(".postgres-restore-")
         encrypted = temporary.open_file("snapshot.dump.enc", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
@@ -719,28 +777,34 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
         if exists.strip() != "0":
             raise BackupError("postgres_restore_target_exists")
         marker = "evimed-recovery-owner:" + uuid.uuid4().hex
+        marker_digest = None
+        operation_id = uuid.uuid4().hex
         creation_confirmed = False
         created_oid = None
         marker_state = "creation-pending"
-        atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
-            bundle, identity, target_database, None, marker_state, "postgres_restore_in_progress"
+        atomic_new_receipt(receipt_parent, receipt_name, cleanup_required_receipt(
+            bundle, identity, target_database, None, marker_state, marker_digest,
+            "postgres_restore_in_progress", operation_id
         ))
         try:
             command(base + ["createdb", "--template=template0", "-U", role, target_database], timeout=60)
             creation_confirmed = True
             created_oid = clone_oid(sql, target_database)
             marker_state = "not-established"
-            atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
-                bundle, identity, target_database, created_oid, marker_state, "postgres_restore_in_progress"
-            ))
+            atomic_replace_receipt(receipt_parent, receipt_name, cleanup_required_receipt(
+                bundle, identity, target_database, created_oid, marker_state, marker_digest,
+                "postgres_restore_in_progress", operation_id
+            ), operation_id)
             command(sql + [f"COMMENT ON DATABASE {target_database} IS '{marker}';"], timeout=60)
             marker_state = "mismatch"
             if clone_marker(sql, target_database) != marker:
                 raise BackupError("postgres_restore_ownership_unverified")
             marker_state = "established"
-            atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
-                bundle, identity, target_database, created_oid, marker_state, "postgres_restore_in_progress"
-            ))
+            marker_digest = hashlib.sha256(marker.encode()).hexdigest()
+            atomic_replace_receipt(receipt_parent, receipt_name, cleanup_required_receipt(
+                bundle, identity, target_database, created_oid, marker_state, marker_digest,
+                "postgres_restore_in_progress", operation_id
+            ), operation_id)
             plain = temporary.open_file("restore.dump", os.O_RDONLY)
             with os.fdopen(plain, "rb") as source:
                 command(base + ["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-acl", "--no-comments",
@@ -758,26 +822,28 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
             result = {
                 "schemaVersion": 1,
                 "status": "verified",
+                "operationId": operation_id,
                 "archive": bundle.archive_name,
                 "archiveSha256": capture_receipt["archiveSha256"],
                 "sourceIdentity": identity,
                 "targetDatabase": target_database,
                 "targetDatabaseOid": created_oid,
-                "ownershipToken": marker,
+                "ownershipMarkerSha256": marker_digest,
                 "tables": restored,
                 "expectedTablesSha256": table_digest(expected),
                 "restoredTablesSha256": table_digest(restored),
                 "verifiedAt": now(),
             }
-            atomic_receipt_json(receipt_parent, receipt_name, result)
+            atomic_replace_receipt(receipt_parent, receipt_name, result, operation_id)
             return result
         except Exception as error:
             operation_code = error.code if isinstance(error, BackupError) else "postgres_restore_operation_failed"
             if not creation_confirmed:
                 marker_state = "creation-unconfirmed"
-            atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
-                bundle, identity, target_database, created_oid, marker_state, operation_code
-            ))
+            atomic_replace_receipt(receipt_parent, receipt_name, cleanup_required_receipt(
+                bundle, identity, target_database, created_oid, marker_state, marker_digest,
+                operation_code, operation_id
+            ), operation_id)
             raise BackupError("postgres_restore_cleanup_required", {
                 "cleanupRequired": {
                     "targetDatabase": target_database,
