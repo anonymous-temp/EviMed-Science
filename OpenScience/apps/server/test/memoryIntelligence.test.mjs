@@ -420,3 +420,14 @@ test("the capsule's own profile cannot re-enter as an observation of itself", as
   assert.deepEqual(result.excluded, [{ reason: "injected", count: 1 }],
     "and the run says how much of its own transcript it refused to read");
 });
+
+test("what the extractor refused reaches the run's audit line and its quality notice", async () => {
+  const serverSource = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
+  // `conversationMemorySources` returns its refusals instead of dropping them.
+  // This is the assertion that somebody reads them: without a reader, "twenty
+  // messages and nothing extracted" collapses back into the one number that
+  // cannot tell an empty conversation from a transcript that was mostly our
+  // own injection.
+  assert.match(serverSource, /excluded=\$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the audit ledger");
+  assert.match(serverSource, /未读取 \$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the zero-extraction notice");
+});
