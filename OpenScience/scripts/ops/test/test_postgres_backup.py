@@ -143,6 +143,8 @@ class PostgresBackupTests(unittest.TestCase):
                         return "0\n"
                     if sql == MODULE.SOURCE_IDENTITY_SQL:
                         return json.dumps(identity)
+                    if "SELECT oid::text" in sql:
+                        return "24680\n"
                     if sql.startswith("COMMENT ON DATABASE"):
                         ownership_marker["value"] = sql.split(" IS '", 1)[1][:-2]
                         return ""
@@ -259,8 +261,12 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertFalse(receipt.exists())
 
     def test_marker_failure_cleans_only_the_successfully_created_clone_with_the_same_oid(self):
-        for cleanup_oid, should_drop in [("24680", True), ("99999", False)]:
-            with self.subTest(cleanup_oid=cleanup_oid), tempfile.TemporaryDirectory() as root:
+        for cleanup_oid, cleanup_system, should_drop in [
+            ("24680", "12345", True),
+            ("99999", "12345", False),
+            ("24680", "54321", False),
+        ]:
+            with self.subTest(cleanup_oid=cleanup_oid, cleanup_system=cleanup_system), tempfile.TemporaryDirectory() as root:
                 directory = Path(root).resolve()
                 output = directory / "member"
                 output.mkdir()
@@ -282,6 +288,7 @@ class PostgresBackupTests(unittest.TestCase):
                 target_database = "evimed_restore_20260907T120000Z_123456abcdef"
                 tools = []
                 oid_results = iter(["24680", cleanup_oid])
+                identity_results = iter([identity, {**identity, "systemIdentifier": cleanup_system}])
 
                 def command(args, *, source=None, target=None, timeout=900, capture=False):
                     tool = args[args.index("exec") + 3] if "exec" in args else args[0]
@@ -300,7 +307,7 @@ class PostgresBackupTests(unittest.TestCase):
                     if tool == "psql":
                         sql = args[-1]
                         if sql == MODULE.SOURCE_IDENTITY_SQL:
-                            return json.dumps(identity)
+                            return json.dumps(next(identity_results))
                         if "SELECT oid::text" in sql:
                             return next(oid_results) + "\n"
                         if sql.startswith("COMMENT ON DATABASE"):
