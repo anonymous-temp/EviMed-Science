@@ -90,7 +90,8 @@ per-project workspace + JSONL provenance.
   cookie's name from the `Host` header, so a cookie minted for another authority
   is not a weaker credential — it is one the kernel never looks for. `dshMux.mjs`
   is where that lives; the frame vocabulary there was transcribed from a running
-  0.1.2-alpha.3 binary, not inferred.
+  0.1.2-alpha.3 binary, not inferred (the pin has since moved to
+  0.1.2-rc.1, which is alpha.5 retagged; the wire is unchanged).
 - **`@deepseek-ai/*` may be imported in `packages/harness-port` and nowhere else** —
   including in a JSDoc `import()` type. The port owns its own types and converts
   shapes, so a rename upstream is one file. `seam-manifest.json` lists every
