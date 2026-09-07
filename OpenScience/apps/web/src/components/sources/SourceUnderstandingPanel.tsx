@@ -150,7 +150,7 @@ function UnderstandingContent({ understanding: item, historical }: { understandi
       {item.run && <div className="flex flex-wrap items-center gap-2"><a className={buttonClasses({ variant: "ghost", size: "sm" })}
         href={`/app/chat/${encodeURIComponent(item.run.sessionId)}`}>查看研究会话</a><span className="break-all text-ui-sm text-muted">运行：{item.run.id}</span></div>}
     </div>
-    <div className="rounded-input bg-surface-2 p-3 text-ui-sm"><p className="font-medium">遗漏尚未审计</p><p className="mt-1 text-muted">{item.omissionAudit.reason}</p></div>
+    <OmissionAudit audit={item.omissionAudit} />
     <div className="space-y-3"><h3 className="font-medium">结构化理解</h3>
       {Object.entries(item.slots).length === 0 && <p className="text-ui-sm text-muted">暂无结构化条目。</p>}
       <dl className="space-y-3">{Object.entries(item.slots).map(([key, slot]) => <div key={key} className="rounded-input border border-border p-3">
@@ -177,6 +177,27 @@ function UnderstandingContent({ understanding: item, historical }: { understandi
 function MethodList({ label, items }: { label: string; items: string[] }) {
   return <div><h4 className="text-ui-sm font-medium">{label}</h4>{items.length ? <ol className="mt-1 list-decimal space-y-1 pl-5">{items.map((item, index) => <li key={index}>{item}</li>)}</ol>
     : <p className="text-ui-sm text-muted">资料未提供。</p>}</div>;
+}
+
+/** The audit answers "what did the analysis miss", which a coverage percentage
+ *  cannot: coverage counts the units that parsed, not the ones nothing said
+ *  anything about. A record written before the audit existed, and any run that
+ *  did not sample, still reads `not_run` — which is not the same as zero. */
+function OmissionAudit({ audit }: { audit: SourceUnderstanding["omissionAudit"] }) {
+  if (audit.status !== "audited") {
+    return <div className="rounded-input bg-surface-2 p-3 text-ui-sm"><p className="font-medium">遗漏尚未审计</p>
+      <p className="mt-1 text-muted">{audit.reason}</p></div>;
+  }
+  const missed = audit.samples.filter((sample) => !sample.represented);
+  const rate = audit.omissionRate;
+  return <div className="rounded-input bg-surface-2 p-3 text-ui-sm">
+    <p className="font-medium">遗漏审计：抽查 {audit.samples.length} 个单元，{missed.length} 个未被理解覆盖
+      {typeof rate === "number" ? ` · 遗漏率 ${Math.round(rate * 1000) / 10}%` : ""}</p>
+    {audit.reason && <p className="mt-1 text-muted">{audit.reason}</p>}
+    {missed.length > 0 && <ul className="mt-2 space-y-1 text-muted">
+      {missed.map((sample) => <li key={sample.unitId}>未覆盖单元 {sample.unitId}{sample.note ? `：${sample.note}` : ""}</li>)}
+    </ul>}
+  </div>;
 }
 
 function Evidence({ anchors, understanding }: { anchors: SourceAnchor[]; understanding: SourceUnderstanding }) {

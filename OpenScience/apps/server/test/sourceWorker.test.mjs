@@ -122,3 +122,34 @@ test("an expired lease never publishes a parsed artifact", async () => {
   assert.equal(calls.some((call) => call.method === "discard"), true);
   assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
 });
+
+test("a folder sync runs on the existing ingest lease and finishes with its own summary", async () => {
+  const { calls, job, sources, worker } = fixture();
+  job.payload = { action: "source-folder-sync", folderId: "srcdir_one", run: 1, page: 1 };
+  sources.consumeFolderSync = async (...args) => { calls.push({ method: "consumeFolderSync", args }); return { folderId: "srcdir_one", registered: 2, complete: true }; };
+  await worker.tick();
+  assert.deepEqual(calls.map((call) => call.method), ["consumeFolderSync", "finish"], "no source row is read or parsed for a folder job");
+  assert.equal(calls[0].args[0].id, "job-one");
+  assert.deepEqual(calls[1].args[3], { folderId: "srcdir_one", registered: 2, complete: true });
+  assert.equal(worker.status().lastError, null);
+  assert.ok(worker.status().lastCompletedAt);
+});
+
+test("a folder that no longer exists stops instead of retrying forever", async () => {
+  const { calls, job, sources, worker } = fixture();
+  job.payload = { action: "source-folder-sync", folderId: "srcdir_gone", run: 1, page: 1 };
+  sources.consumeFolderSync = async () => { throw Object.assign(new Error("gone"), { code: "source_folder_not_found" }); };
+  await worker.tick();
+  const failed = calls.find((call) => call.method === "fail");
+  assert.equal(failed.args[3].code, "source_folder_not_found");
+  assert.equal(failed.args[4].retry, false, "a deleted folder is terminal, not a retry loop");
+  assert.equal(calls.some((call) => call.method === "recordFailure"), false, "a folder job owns no source manifest to fail");
+});
+
+test("an unconfigured folder connector is retried, not written off", async () => {
+  const { calls, job, sources, worker } = fixture();
+  job.payload = { action: "source-folder-sync", folderId: "srcdir_one", run: 1, page: 1 };
+  sources.consumeFolderSync = async () => { throw Object.assign(new Error("unconfigured"), { code: "source_folder_connector_unavailable" }); };
+  await worker.tick();
+  assert.equal(calls.find((call) => call.method === "fail").args[4].retry, true);
+});

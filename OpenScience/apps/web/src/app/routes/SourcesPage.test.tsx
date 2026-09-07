@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   listSources: vi.fn(), overrideSource: vi.fn(), retrySource: vi.fn(), cancelSource: vi.fn(), removeSource: vi.fn(),
   browseOpenList: vi.fn(), importOpenListSource: vi.fn(),
   getSourceUnderstanding: vi.fn(), listSourceUnderstandingHistory: vi.fn(),
+  getSourceFamily: vi.fn(), listSourceFolders: vi.fn(), registerSourceFolder: vi.fn(), syncSourceFolder: vi.fn(),
+  setSourceFolderStatus: vi.fn(), listDuplicateCandidates: vi.fn(), decideDuplicateGroup: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ projectId: "project-one" }));
 
@@ -38,6 +40,14 @@ describe("SourcesPage", () => {
     mocks.removeSource.mockResolvedValue(source);
     mocks.getSourceUnderstanding.mockResolvedValue({ sourceId: "source-one", generation: 3, depth: "deep", status: "needs_attention", current: null });
     mocks.listSourceUnderstandingHistory.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.getSourceFamily.mockResolvedValue({ sourceId: "source-one", familyId: "fam_one", currentVersion: 2, items: [], nextCursor: null });
+    mocks.listSourceFolders.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.registerSourceFolder.mockResolvedValue({ folder: { id: "srcdir_one" }, created: true });
+    mocks.syncSourceFolder.mockResolvedValue({ folder: { id: "srcdir_one" } });
+    mocks.setSourceFolderStatus.mockResolvedValue({ folder: { id: "srcdir_one" } });
+    mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
+    mocks.decideDuplicateGroup.mockResolvedValue({ id: "srcdup_one" });
+    mocks.browseOpenList.mockResolvedValue({ entries: [], nextCursor: null });
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -113,6 +123,148 @@ describe("SourcesPage", () => {
     expect(screen.getByLabelText("分析深度")).toHaveValue("structured");
     await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
     expect(mocks.listSources).toHaveBeenCalledTimes(2);
+  });
+
+
+  it("no longer offers a local analysis agent this deployment does not ship", async () => {
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
+    expect(await screen.findByText(/未提供 SHA-256 的存储请改用平台上传/)).toBeInTheDocument();
+    expect(screen.queryByText(/本地分析代理/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/本地代理/)).not.toBeInTheDocument();
+  });
+
+  it("registers an explicitly chosen folder for sync and shows what the last run did", async () => {
+    mocks.browseOpenList.mockResolvedValue({ entries: [
+      { path: "/papers", name: "papers", size: 0, mtime: null, entryType: "dir", providerHash: null },
+    ], nextCursor: null });
+    mocks.listSourceFolders.mockResolvedValue({ items: [{
+      id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
+        sync: { run: 3, page: 1 }, entries: {}, createdAt: "", updatedAt: "",
+        lastSync: { at: "", run: 2, startPage: 1, endPage: 1, complete: true, scanned: 12, registered: 2, updated: 1,
+          unchanged: 9, directories: 0, tracked: 12, skipped: [{ path: "/papers/legacy.pdf", reason: "provider_hash_unsupported" }],
+          skippedCount: 1, removedPaths: [], removedCount: 0, removalCheck: "full" },
+      },
+    }], nextCursor: null });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
+    await userEvent.click(await screen.findByRole("button", { name: "浏览" }));
+    await userEvent.click(await screen.findByRole("button", { name: "同步" }));
+    await waitFor(() => expect(mocks.registerSourceFolder).toHaveBeenCalledWith("project-one", "/papers"));
+    expect(await screen.findByText(/新增 2 · 更新 1 · 未变化 9/)).toBeInTheDocument();
+    expect(screen.getByText(/网盘未提供 SHA-256/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "立即同步" }));
+    await waitFor(() => expect(mocks.syncSourceFolder).toHaveBeenCalledWith("srcdir_one", 5));
+    await userEvent.click(screen.getByRole("button", { name: "暂停同步" }));
+    await waitFor(() => expect(mocks.setSourceFolderStatus).toHaveBeenCalledWith("srcdir_one", 5, "paused"));
+  });
+
+  it("reports how many entries a run skipped and lost, not how many it named", async () => {
+    // The service caps both lists at twenty examples and records the totals
+    // separately. The card must state the totals, or a folder that skipped five
+    // hundred files tells the researcher it skipped twenty.
+    mocks.listSourceFolders.mockResolvedValue({ items: [{
+      id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
+        sync: { run: 3, page: 1 }, entries: {}, createdAt: "", updatedAt: "",
+        lastSync: { at: "", run: 2, startPage: 1, endPage: 1, complete: true, scanned: 900, registered: 0, updated: 0,
+          unchanged: 380, directories: 0, tracked: 380,
+          skipped: Array.from({ length: 20 }, (_, index) => ({ path: `/papers/skip-${index}.pdf`, reason: "entry_budget_exhausted" })),
+          skippedCount: 500,
+          removedPaths: Array.from({ length: 20 }, (_, index) => `/papers/gone-${index}.pdf`),
+          removedCount: 137, removalCheck: "full" },
+      },
+    }], nextCursor: null });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
+    expect(await screen.findByText(/跳过 500 项/)).toBeInTheDocument();
+    expect(screen.queryByText(/跳过 20 项/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/网盘里已不见 137 个文件/)).toBeInTheDocument();
+    expect(screen.queryByText(/网盘里已不见 20 个文件/)).not.toBeInTheDocument();
+  });
+
+  it("states a skip reason in Chinese and says syncing is something the researcher triggers", async () => {
+    mocks.listSourceFolders.mockResolvedValue({ items: [{
+      id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
+        sync: { run: 3, page: 1 }, entries: {}, createdAt: "", updatedAt: "",
+        lastSync: { at: "", run: 2, startPage: 1, endPage: 1, complete: true, scanned: 3, registered: 1, updated: 0,
+          unchanged: 0, directories: 0, tracked: 1, skipped: [
+            { path: "/papers/very-long.pdf", reason: "source_payload_invalid" },
+            { path: "/papers/unknown.pdf", reason: "source_teleported_away" },
+          ], skippedCount: 2, removedPaths: [], removedCount: 0, removalCheck: "full" },
+      },
+    }], nextCursor: null });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
+    // The reason the sync's own path check produces, and an unmapped code, are
+    // both sentences a researcher can read.
+    expect(await screen.findByText(/文件路径或属性不合规/)).toBeInTheDocument();
+    expect(screen.getByText(/这一项无法入库/)).toBeInTheDocument();
+    expect(screen.queryByText(/source_payload_invalid/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/source_teleported_away/)).not.toBeInTheDocument();
+    // An active folder syncs when a researcher asks it to; nothing polls it.
+    expect(screen.getByText("已启用同步")).toBeInTheDocument();
+    expect(screen.queryByText("同步中")).not.toBeInTheDocument();
+  });
+
+  it("offers no merge on a group that names a single source", async () => {
+    mocks.listDuplicateCandidates.mockResolvedValue({ scanned: 2, truncated: false, items: [{
+      kind: "shared-content", groupKey: "shared-content:abc", label: "knowledge-base/研究方案.docx",
+      sourceIds: ["source-one"], decision: null,
+      members: [{ sourceId: "source-one", version: 1, familyId: "fam_one", status: "complete", docType: "research-protocol",
+        paths: ["knowledge-base/研究方案.docx", "openlist/papers/研究方案.docx"], size: 4096, sha256: "a", connectorType: "openlist", updatedAt: "" }],
+    }] });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "疑似重复" }));
+    expect(await screen.findByText("同样内容出现在多个路径")).toBeInTheDocument();
+    // One source under two paths is already one source. There is nothing to merge.
+    expect(screen.queryByRole("button", { name: "标记为同一份" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "不是重复" })).toBeInTheDocument();
+  });
+
+  it("shows the version chain a source belongs to instead of only its own version number", async () => {
+    mocks.getSourceFamily.mockResolvedValue({ sourceId: "source-one", familyId: "fam_one", currentVersion: 2, nextCursor: null, items: [
+      { id: "source-one", projectId: "project-one", revision: 3, createdAt: "", updatedAt: "", deletedAt: null,
+        payload: { ...source.payload, version: 2, status: "complete" } },
+      { id: "source-old", projectId: "project-one", revision: 1, createdAt: "", updatedAt: "", deletedAt: null,
+        payload: { ...source.payload, version: 1, status: "complete", paths: ["knowledge-base/研究方案.docx"] } },
+    ] });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "查看版本链" }));
+    await waitFor(() => expect(mocks.getSourceFamily).toHaveBeenCalledWith("source-one"));
+    expect(await screen.findByText(/第 2 版 .* 当前查看/)).toBeInTheDocument();
+    expect(screen.getByText(/第 1 版/)).toBeInTheDocument();
+  });
+
+  it("lists deterministic duplicate candidates and records an explicit decision", async () => {
+    mocks.listDuplicateCandidates.mockResolvedValue({ scanned: 4, truncated: false, items: [{
+      kind: "version-family", groupKey: "version-family:abc", label: "knowledge-base/研究方案.docx",
+      sourceIds: ["source-one", "source-old"], decision: null,
+      members: [
+        { sourceId: "source-one", version: 2, familyId: "fam_one", status: "complete", docType: "research-protocol",
+          paths: ["knowledge-base/研究方案.docx"], size: 4096, sha256: "a", connectorType: "openlist", updatedAt: "" },
+        { sourceId: "source-old", version: 1, familyId: "fam_one", status: "complete", docType: "research-protocol",
+          paths: ["knowledge-base/研究方案.docx"], size: 2048, sha256: "b", connectorType: "openlist", updatedAt: "" },
+      ],
+    }] });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "疑似重复" }));
+    expect(await screen.findByText("同一路径的多个版本")).toBeInTheDocument();
+    expect(screen.getByText(/第 2 版 · 研究方案.docx · 4 KB/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "标记为同一份" }));
+    await waitFor(() => expect(mocks.decideDuplicateGroup).toHaveBeenCalledWith({
+      projectId: "project-one", groupKey: "version-family:abc", sourceIds: ["source-one", "source-old"], decision: "linked",
+    }));
+  });
+
+  it("states the omission verdict the understanding contract actually returned", async () => {
+    mocks.listSources.mockResolvedValue({ items: [{ ...source, payload: { ...source.payload,
+      omissionAudit: { status: "audited", reason: "Question-based audit ran.", omissionRate: 0.12 } } }], nextCursor: null });
+    render(<SourcesPage />);
+    expect(await screen.findByText("理解遗漏 12%")).toBeInTheDocument();
+    expect(screen.queryByText("理解遗漏尚未审计")).not.toBeInTheDocument();
   });
 
   it("discards a previous project's late inventory response", async () => {
