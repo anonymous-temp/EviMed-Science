@@ -648,45 +648,61 @@ return T          # 每个 S_t 是一轮任务；T 是任务链
 
 服务端 2005 项（1860 通过 / 0 失败 / 145 跳过，基线 1823 通过）、domain 135、socket 88、harness-port 77；lint 与 typecheck 全绿。
 
-## 15. 探针 V-1 / V-2 的答案（2026-09-07，腾讯云主机，对钉住的那份二进制）
+## 15. 探针 V-1 / V-2 的答案（2026-09-07，腾讯云主机，实跑）
 
-两个探针都记作"需活线核实"，前提是"上游是开发者预览，文档承诺会变"。核实用的不是文档，是**我们生产镜像里那一份内核源码**——`evimed-runtime-dsh:evimed-20260907-fd5657b`，`/usr/local/lib/node_modules/@deepseek-ai/dsh`，即线上正在跑的那个二进制。一次性容器（`--network=none`，不挂生产卷、不碰 compose 栈）读出来的。
+两个探针都做了两段核实：先读**生产镜像里那份内核二进制**（`evimed-runtime-dsh:evimed-20260907-fd5657b`，即线上正在跑的那个），再在生产上**实跑**。两段结论不同——这正是方案当初坚持要活线核实的理由。
 
-### 15.1 V-2：`compactRegion` 在 `agent/pre-step` 内可以调用 —— 引擎自己就在那里调
+### 15.1 V-1：内核支持，**我们自己的托管面拒绝**
 
-`@deepseek-ai/dsh-compaction-basic/lib/index.js`：
+**源码侧**（`@deepseek-ai/dsh-api-session-controller/lib/index.js`）：
 
-- **782 行** `ctx.on("agent/pre-step", async ({ agent, signal }, next) => {`
-- **784 行** 该处理器内 `await this.compactIfNeeded(agent, "pressure", signal)`
-- **857 行** `compactIfNeeded` → **877 / 899 行** `this.compactRegion(range.start, range.end, agent, signal)`
-- **914 行** `compactRegion` → `compactSurfaceRegion(..., { owner: "current-turn", stability: "whole-surface" }, signal)`
+- **757 行** `if (request.mode === "steer") agent.steer(message); else agent.followup(message);`
+- **762 行** 只有底层抛错才转 `RemoteError("session/agent-busy", "prompt rejected")`
+- **815 行** 队列改写 API；`steer` 在 `agent.status !== "running"` 时报 `session/steer-unavailable`
+- 客户端词表（`dsh-client-ui-conversation`）：`BUSY_ENTER_BEHAVIORS = ["queue", "steer"]`，默认 `queue`
 
-`owner: "current-turn"` 是判定性的：这个方法**就是为轮内调用设计的**。方案原文担心的"拒绝活动中"其实不是它的语义——真正的约束在 **430 行**：`"compactRegion: no open turn — automatic compaction events must be enclosed in a turn"`。**必须有一个打开的 turn**，而 pre-step 里正好有。会抛错的是相反的情形：空闲时调它。
+**实跑**（`scripts/ops/probe-session-append.mjs`，同一会话连发两次派发）：
 
-唯一的真冲突点是 **881 行** 的 `assertNoActiveCompaction(agent.session, "automatic pressure compaction")`——同一会话上不能有两个压缩同时进行。同一 hook 上的处理器是 waterfall 串行的，所以我们的标记触发的压缩与引擎自己的压力压缩不会重叠，但实现时必须显式尊重这条。
+```
+first  dispatch: 202  run_d6e026c0… running
+second dispatch: 409  agent_run_active
+```
 
-`compactNow` 走 `agent.runMaintenance`（**920 行**起），确认方案对它"活动中抛 busy"的判断成立——那是空闲维护路径，与 pre-step 无关。
+**只读源码会得出"V-1 支持"，而那在要紧的层面是错的。** 拒绝来自我们自己：`apps/server/src/agentRuns.mjs:2674`——会话已有 `running` 运行即 409，只对"被领养的占位运行"与 `nativeTurn` 开口。
 
-**结论**：V-2 为真。`evimed_compact_request` 的落法（标记 → pre-step 读标记 → `compactRegion([首个可压 seq, 最近平衡 seq])` → 清标记）在这份二进制上成立。仍未验的只剩"真实 token 压力下、引擎自己那次压缩之后我们再压一次"的实跑行为。
+**但机制在生产里天天在用**：修复回路的 `clinicalRepairSenders`（`agentRuns.mjs:2784`）通过 `recordKernelRequest` + `sendPrompt` 在 `running` 的运行上追加提示。
 
-### 15.2 V-1：托管面运行中追加提示受支持，而且有两种语义
+**结论**：§6.3.3 第 6 条的"晚到纠正"变体可以做，路径是修复式内部通道，或给评测派发在 2674 行开一个具名口子——**不是**公开的 `/api/agent-runs/dispatch`。两种语义各值一个变体：`queue`（下一轮才看到的纠正）与 `steer`（打断当前轮的纠正）。
 
-`@deepseek-ai/dsh-api-session-controller/lib/index.js` 的 `prompt(request)`（**731 行**）：
+### 15.2 V-2：`compactRegion` 确实在 `agent/pre-step` 内执行——实跑观测到
 
-- **757 行**：`if (request.mode === "steer") agent.steer(message); else agent.followup(message);`
-- **762 行**：只有底层抛错才转成 `RemoteError("session/agent-busy", "prompt rejected")`
-- **815 行**：另有队列改写 API，`steer` 在 `agent.status !== "running"` 时报 `session/steer-unavailable`
+**源码侧**（`@deepseek-ai/dsh-compaction-basic/lib/index.js`）：**782** 注册 `agent/pre-step` → **784** `compactIfNeeded` → **877/899** `compactRegion` → **914** `compactSurfaceRegion(..., owner: "current-turn")`。方案担心的"拒绝活动中"是反的：**430 行**要求**必须有打开的 turn**，pre-step 里正好有。唯一冲突点是 **881 行** `assertNoActiveCompaction`。
 
-客户端侧的词表在 `dsh-client-ui-conversation`：`BUSY_ENTER_BEHAVIORS = ["queue", "steer"]`，默认 `queue`。
+**实跑**：把该项目运行时的 `contextWindow` 临时从 1,000,000 降到 8,000（阈值比 `DEFAULT_THRESHOLD_RATIO = .8` → 触发点 6,400），重启运行时使内核重读，派发一次普通提问。会话日志（`sessions/--workspace--/ses_probe_v2_mtrab757/session.jsonl.zstd`，129 个 zstd 帧、182 条事件）：
 
-两种语义要分清：**`followup`（默认/queue）在当前轮结束后投递**；**`steer` 注入正在跑的那一轮**。
+```
+seq 766  step/end
+seq 768  compaction/start          ← 两个 step 之间，即 agent/pre-step 的位置
+seq 769  compaction/end
+seq 770  step/start
+seq 871  compaction/start
+seq 872  compaction/summary        range 8→771, 9960 tokens, 5 nodes shadowed
+seq 875  compaction/start          ← compactIfNeeded 的重试循环（压完仍超阈值）
+seq 876  compaction/summary        range 873→873, 1215 tokens, 1 node
+seq 878  compaction/end
+seq 879  step/start
+```
 
-而且我们这边已经通了：`runtimeManager.dispatchPrompt` 在 **3456 行** 就发着 `mode: "queue"`，且它按 `sessionId` 定位会话——对同一个会话再调一次就是"运行中追加"。
+压缩三次、跨真实区间、运行**成功结束**。这是 `compactRegion` 在 `agent/pre-step` 内真实执行的直接观测。
 
-**结论**：V-1 为真。§6.3.3 第 6 条的"晚到纠正"难度变体可以实现：`queue` 是"下一轮才看到的纠正"，`steer` 是"当场打断的纠正"，两者是不同的题，值得各出一个变体。
+**结论**：V-2 为真。`evimed_compact_request` 的落法（标记 → pre-step 读标记 → `compactRegion([首个可压 seq, 最近平衡 seq])` → 清标记）在这份二进制上成立，实现时必须尊重 881 行的 `assertNoActiveCompaction`，并注意引擎自己的压力压缩可能在同一 hook 内已经跑过。
 
-### 15.3 这次核实的性质，以及还缺什么
+### 15.3 顺带查实的一件事：生产里压缩从未触发过
 
-读的是线上那份二进制的实现，不是文档——这正好避开了方案原本担心的那类失效。仍然没有验的是**真实一轮里的运行时行为**：需要一次带模型调用的实跑。在生产主机上做这件事要花钱且触及生产，属于需要研究者点头的动作，因此留作未决。
+生产 `/runtime/dsh-home/control-plane-patch.yml:20` 是 `contextWindow: 1000000`（部署版 `runtimeManager.mjs:1673` 硬编码），阈值比 0.8 → **触发点 800,000 token**。容器 `EVIMED_MAX_TOKENS=0`（未设运行上限），所以不是数学上不可达，而是**实际从未接近**——探针前的日志与会话里 `compaction/*` 事件为零。
 
-在实跑确认之前，`evimed_compact_request` 保持默认关闭——但它现在的状态是"机制已确认、等一次实跑"，不再是"不知道能不能做"。
+本分支 SE5 把它改为 `runtimeContextWindow || runMaxTokens || 400_000`，触发点降到 320,000。更正 SE5 记录里的措辞：当时写"1,000,000 对 400,000 预算 = 触发不可达"，准确说法是**理论可达、实际从未发生**。
+
+### 15.4 这次实跑的成本与痕迹
+
+三次派发（V-1 两次，其中第二次被 409 挡在模型之前；V-2 一次），一个测试账号项目 `c1-x7w0sn` 下留下三个会话与两条运行记录，未删——探针不该抹掉自己产生的证据。`contextWindow` 已复原为 1,000,000 并重启核验；生产栈其余部分未改动。
