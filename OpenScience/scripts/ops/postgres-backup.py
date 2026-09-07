@@ -638,13 +638,24 @@ def clone_marker(sql: list[str], target: str) -> str:
     return command(sql + [query], capture=True, timeout=60).strip()
 
 
-def clear_owned_clone(base: list[str], sql: list[str], role: str, target: str, marker: str) -> None:
-    if clone_marker(sql, target) != marker:
-        raise BackupError("postgres_restore_cleanup_ownership_mismatch")
+def clone_oid(sql: list[str], target: str) -> str:
+    value = command(sql + [f"SELECT oid::text FROM pg_database WHERE datname='{target}';"],
+                    capture=True, timeout=60).strip()
+    if not re.fullmatch(r"[0-9]{1,20}", value):
+        raise BackupError("postgres_restore_target_identity_invalid")
+    return value
+
+
+def clear_created_clone(base: list[str], sql: list[str], role: str, database: str, target: str,
+                        expected_oid: str, expected_source_identity: dict) -> bool:
+    current = source_identity(command(sql + [SOURCE_IDENTITY_SQL], capture=True, timeout=60), database)
+    if current != expected_source_identity or clone_oid(sql, target) != expected_oid:
+        return False
     command(base + ["dropdb", "--if-exists", "--force", "-U", role, target], timeout=60)
     absent = command(sql + [f"SELECT count(*) FROM pg_database WHERE datname='{target}';"], capture=True, timeout=60)
     if absent.strip() != "0":
         raise BackupError("postgres_restore_cleanup_failed")
+    return True
 
 
 def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) -> dict:
@@ -682,14 +693,14 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
         if exists.strip() != "0":
             raise BackupError("postgres_restore_target_exists")
         marker = "evimed-recovery-owner:" + uuid.uuid4().hex
-        owned = False
+        creation_confirmed = False
+        created_oid = None
         try:
             command(base + ["createdb", "--template=template0", "-U", role, target_database], timeout=60)
-            try:
-                command(sql + [f"COMMENT ON DATABASE {target_database} IS '{marker}';"], timeout=60)
-            finally:
-                owned = clone_marker(sql, target_database) == marker
-            if not owned:
+            creation_confirmed = True
+            created_oid = clone_oid(sql, target_database)
+            command(sql + [f"COMMENT ON DATABASE {target_database} IS '{marker}';"], timeout=60)
+            if clone_marker(sql, target_database) != marker:
                 raise BackupError("postgres_restore_ownership_unverified")
             plain = temporary.open_file("restore.dump", os.O_RDONLY)
             with os.fdopen(plain, "rb") as source:
@@ -703,7 +714,6 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
             if restored != expected:
                 raise BackupError("restore_application_mismatch")
             if clone_marker(sql, target_database) != marker:
-                owned = False
                 raise BackupError("postgres_restore_ownership_unverified")
             result = {
                 "schemaVersion": 1,
@@ -712,6 +722,7 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
                 "archiveSha256": capture_receipt["archiveSha256"],
                 "sourceIdentity": identity,
                 "targetDatabase": target_database,
+                "targetDatabaseOid": created_oid,
                 "ownershipToken": marker,
                 "tables": restored,
                 "expectedTablesSha256": table_digest(expected),
@@ -721,16 +732,13 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
             atomic_new_json(receipt_parent, receipt_name, result)
             return result
         except Exception as error:
-            if not owned:
+            if creation_confirmed and created_oid is not None:
                 try:
-                    owned = clone_marker(sql, target_database) == marker
+                    clear_created_clone(base, sql, role, database, target_database, created_oid, identity)
                 except Exception:
-                    owned = False
-            if owned:
-                try:
-                    clear_owned_clone(base, sql, role, target_database, marker)
-                except Exception:
-                    raise BackupError("postgres_restore_cleanup_failed") from None
+                    # The operation error remains authoritative. Cleanup never
+                    # broadens from the exact OID and source-system proof.
+                    pass
             if isinstance(error, BackupError):
                 raise
             raise BackupError("postgres_restore_operation_failed") from None
