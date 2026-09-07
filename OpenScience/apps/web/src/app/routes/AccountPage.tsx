@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { ShieldCheck, UserRound } from "lucide-react";
+import { ShieldCheck, UserRound, WalletMinimal } from "lucide-react";
 import { useNavigate } from "react-router";
-import { fetchWebMe } from "@/lib/apiClient";
+import { describeWebUsageBudget, fetchWebMe, lastWebUsageBudgetRefusal } from "@/lib/apiClient";
 import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
 import { WebAccountCard } from "@/components/settings/WebAccountCard";
 import { UsageCard } from "@/components/settings/UsageCard";
@@ -14,6 +14,9 @@ export function AccountPage() {
     tenantId: "",
     projectId: "default",
   });
+  // Read once on entry. The refusal happened on whatever page tried to spend;
+  // nothing on this page spends, so there is nothing to keep watching for.
+  const [budgetRefusal] = useState(lastWebUsageBudgetRefusal);
 
   useEffect(() => {
     void fetchWebMe().then((me) => {
@@ -50,6 +53,31 @@ export function AccountPage() {
             </div>
           </div>
         </Card>
+
+        {/* The ledger measures spend over rolling windows (`created_at >= now
+            - interval '24 hours' / '7 days'`), so nothing resets at midnight:
+            each charge frees its own share once it ages past its window. A
+            hint promising a reset tomorrow would be a claim the ledger cannot
+            support. */}
+        {budgetRefusal && (
+          <Card
+            className="mt-5"
+            title="额度已达上限"
+            hint="本次会话中最近一次被额度拦下的请求。额度按滚动窗口计算：每笔支出分别在满 24 小时或满 7 天后自动腾出，不在固定时间重置。"
+          >
+            <div className="flex items-start gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-warn/10 text-warn">
+                <WalletMinimal size={17} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-ui text-text">{describeWebUsageBudget(budgetRefusal)}</p>
+                <p className="mt-1 text-caption text-muted">
+                  记录于 {new Date(budgetRefusal.observedAt).toLocaleString("zh-CN")}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <UsageCard />
 

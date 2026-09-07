@@ -234,19 +234,22 @@ export {
   validateCapsuleManifest,
 } from './src/capsule.mjs'
 
-// metering — 13 exports
+// metering — 16 exports
 export {
   CREDIT_REASONS,
   NOTICE_PRIORITY,
   NOTICE_TYPES,
   OFF_PEAK_MULTIPLIER,
   PEAK_WINDOWS_UTC,
+  PRICE_LIST_VERSIONS,
   REFERENCE_PRICE_LIST,
   RESOURCE_TYPES,
   RETENTION_DAYS,
   SPEND_ALERTS,
   estimateCost,
   isPeak,
+  priceListAt,
+  priceListFor,
   priceUsage,
   spendingPermission,
 } from './src/metering.mjs'
@@ -328,4 +331,25 @@ export {
 /** @typedef {import('./src/runTranscript.mjs').TranscriptToolCall} TranscriptToolCall */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
-export { SOURCE_UNDERSTANDING_VERSION, SOURCE_UNDERSTANDING_MAX_CHARS, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE, SOURCE_UNDERSTANDING_SCHEMAS, normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput } from './src/sourceUnderstanding.mjs'
+// sourceUnderstanding — 15 exports
+// Written one per line so `no two modules export the same name, and the root
+// re-exports every one of them` covers this module: the omission audit's names
+// were defined here, tested here, and left out of this list, which made them
+// unimportable from the control plane while looking finished.
+export {
+  SOURCE_UNDERSTANDING_AUDIT_MAX_SAMPLES,
+  SOURCE_UNDERSTANDING_AUDIT_NOTE_MAX_CHARS,
+  SOURCE_UNDERSTANDING_AUDIT_SAMPLE_FRACTION,
+  SOURCE_UNDERSTANDING_AUDIT_STATUSES,
+  SOURCE_UNDERSTANDING_FILE,
+  SOURCE_UNDERSTANDING_INPUT_FILE,
+  SOURCE_UNDERSTANDING_MAX_CHARS,
+  SOURCE_UNDERSTANDING_SCHEMAS,
+  SOURCE_UNDERSTANDING_VERSION,
+  normalizeSourceText,
+  projectSourceUnderstandingOutput,
+  sourceUnderstandingAuditSample,
+  sourceUnderstandingOmissionNotice,
+  sourceUnderstandingSchema,
+  validateSourceUnderstanding,
+} from './src/sourceUnderstanding.mjs'

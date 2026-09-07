@@ -9,15 +9,18 @@ import {
   HttpError,
   appendJsonLineNoFollow,
   assertNoSymlinkPath,
+  errorDetailShapes,
   openScopedDirectoryNoFollow,
   readFileNoFollow,
   readTextFileNoFollow,
   resolveScopedPath,
   safeId,
+  sendError,
   directorySize,
   writeFileAtomicNoFollow,
   writeFileExclusiveNoFollow,
 } from "../src/security.mjs";
+import { UsageLedger } from "../src/usageLedger.mjs";
 
 test("text fallback treats a missing parent directory as a missing file", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-web-text-fallback-"));
@@ -282,4 +285,283 @@ test("Linux descriptor checks do not accept a live file named like an unlinked o
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+/** A response double that records exactly what sendError put on the wire. */
+function captureResponse() {
+  const captured = { status: 0, headers: {}, body: "" };
+  return {
+    captured,
+    writeHead(status, headers) {
+      captured.status = status;
+      captured.headers = { ...headers };
+    },
+    end(body) {
+      captured.body = String(body ?? "");
+    },
+  };
+}
+
+// A budget refusal knows which of the three ceilings stopped the request, and
+// the researcher cannot act without it: the 24-hour ceiling frees itself as
+// spend ages out of the window, the 7-day one takes a week to.
+// The ledger already built that answer and the boundary used to drop it, so a
+// weekly cap and a daily blip arrived as the same sentence.
+test("a budget refusal tells the client which ceiling it hit", () => {
+  const res = captureResponse();
+  sendError(res, new HttpError(402, "usage_budget_exceeded", "This request exceeds the account spending limit.", {
+    window: "week", limit: 12, committed: 12.4, requested: 0.3, currency: "CNY",
+  }), { requestId: "req_1" });
+
+  assert.equal(res.captured.status, 402);
+  assert.deepEqual(JSON.parse(res.captured.body), {
+    error: "This request exceeds the account spending limit.",
+    code: "usage_budget_exceeded",
+    requestId: "req_1",
+    details: { window: "week", limit: 12, committed: 12.4, requested: 0.3, currency: "CNY" },
+  });
+});
+
+// The admission check names no `requested` amount because it refuses before
+// pricing anything. An absent key is omitted, not sent as null.
+test("a budget refusal without a requested amount omits the key", () => {
+  const res = captureResponse();
+  sendError(res, new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.", {
+    window: "day", limit: 5, committed: 5, currency: "CNY",
+  }));
+
+  assert.deepEqual(JSON.parse(res.captured.body).details, { window: "day", limit: 5, committed: 5, currency: "CNY" });
+});
+
+// Every other error must answer exactly what it answered before this channel
+// existed, key for key, so a client parsing today's shape keeps working.
+test("an error whose code declares no details answers the unchanged three-key envelope", () => {
+  const quota = captureResponse();
+  // The same bag a budget refusal carries, on a code that declared no shape.
+  sendError(quota, new HttpError(413, "project_quota_exceeded", "Project storage quota exceeded.", {
+    window: "week", limit: 12, committed: 12.4, currency: "CNY",
+  }), { requestId: "req_2" });
+  assert.equal(quota.captured.body, '{"error":"Project storage quota exceeded.","code":"project_quota_exceeded","requestId":"req_2"}');
+
+  const rate = captureResponse();
+  sendError(rate, new HttpError(429, "too_many_requests", "Too many requests.", { retryAfterSeconds: 7 }));
+  assert.equal(rate.captured.body, '{"error":"Too many requests.","code":"too_many_requests","requestId":null}');
+  assert.equal(rate.captured.headers["Retry-After"], "7");
+
+  const raw = captureResponse();
+  sendError(raw, new Error("boom"));
+  assert.equal(raw.captured.body, '{"error":"boom","code":"internal_error","requestId":null}');
+
+  // Readiness and profile checks build plain Errors that carry a `details`
+  // property for internal reporting. Those are not HttpErrors and must not
+  // start riding out to the browser now that the envelope has a slot for them.
+  const readiness = captureResponse();
+  sendError(readiness, Object.assign(new Error("check_failed"), { details: { field: "OPEN_SCIENCE_DATA_DIR" } }));
+  assert.equal(readiness.captured.body, '{"error":"check_failed","code":"internal_error","requestId":null}');
+});
+
+/** A value shaped exactly like a live API key — the `sk-` prefix plus enough
+ *  key material for a scanner to classify it as one — assembled at run time so
+ *  that no such literal sits in the source tree. `pnpm audit:source-secrets`
+ *  (step 2 of `pnpm ci:web`) refuses a credential-shaped literal even inside a
+ *  test written to prove such a value never travels, and it is right to: a
+ *  scanner cannot read intent. Assembling it here keeps the injected value
+ *  byte-identical to what a real leak would look like. */
+const credentialShapedValue = ["sk", "live", "a1b2c3d4e5f6a7b8c9d0e1f2"].join("-");
+
+// The channel's safety is structural: a value reaches the wire only if the
+// declared shape names its key and the declared acceptor returns it, and every
+// acceptor yields a finite number or a member of a closed set written in the
+// module. This pins that a call site cannot smuggle anything else out.
+test("a details bag cannot carry an Error, a function, a getter or an unexpected key", () => {
+  const bag = {
+    window: "week",
+    limit: 12,
+    committed: 12.4,
+    currency: "CNY",
+    cause: new Error("ENOENT: open '/srv/evimed/.evimed-local/secrets/deepseek.api-key'"),
+    retry: () => "callable",
+    sql: "SELECT reserved_cost FROM evimed_usage.model_requests WHERE user_id=$1",
+    apiKey: credentialShapedValue,
+    stack: new Error("boom").stack,
+  };
+  // A getter on a declared key must not be invoked, and must not contribute.
+  Object.defineProperty(bag, "requested", { enumerable: true, get: () => 999 });
+
+  const error = new HttpError(402, "usage_budget_exceeded", "This request exceeds the account spending limit.", bag);
+  const res = captureResponse();
+  sendError(res, error);
+
+  const body = JSON.parse(res.captured.body);
+  assert.deepEqual(Object.keys(body.details).sort(), ["committed", "currency", "limit", "window"]);
+  for (const leaked of ["deepseek.api-key", credentialShapedValue, "SELECT", "evimed_usage", "callable", "999", "/srv/"]) {
+    assert.equal(res.captured.body.includes(leaked), false, `${leaked} reached the client`);
+  }
+});
+
+// The vocabularies are closed. A window the UI has no name for, a limit that is
+// not a finite number and a currency the price list does not use are dropped
+// rather than passed through for the browser to interpret.
+test("a details bag is filtered to the declared vocabulary and number types", () => {
+  const error = new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.", {
+    window: "month", limit: Number.NaN, committed: "12.4", requested: Number.POSITIVE_INFINITY, currency: "USD",
+  });
+  assert.equal(error.details, undefined);
+
+  const res = captureResponse();
+  sendError(res, error);
+  assert.equal(res.captured.body, '{"error":"This account reached its spending limit.","code":"usage_budget_exceeded","requestId":null}');
+});
+
+// The bag is read by own data property only, so a prototype cannot supply one.
+test("a details bag does not inherit values from a prototype", () => {
+  const error = new HttpError(402, "usage_budget_exceeded", "Over budget.", Object.create({ window: "run", limit: 3 }));
+  assert.equal(error.details, undefined);
+});
+
+// `details` is an ordinary writable property, so the guarantee above has to be
+// a property of the send and not of the constructor. Readiness and profile
+// checks already build errors carrying an internal `details` bag — a path, a
+// failing field, a stack — and the day one of them raises an HttpError instead
+// of a plain Error, the filter is the only thing standing between that bag and
+// the browser.
+test("a details bag assigned after construction is filtered again at the wire", () => {
+  const undeclared = new HttpError(500, "internal_error", "Readiness check failed.");
+  undeclared.details = {
+    path: "/srv/evimed/.evimed-local/secrets/deepseek.api-key",
+    stack: new Error("boom").stack,
+  };
+  const first = captureResponse();
+  sendError(first, undeclared);
+  assert.equal(first.captured.body, '{"error":"Readiness check failed.","code":"internal_error","requestId":null}');
+
+  // A declared code is filtered the same way: the two keys it declares survive,
+  // the smuggled ones do not.
+  const declared = new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.");
+  declared.details = {
+    window: "day", limit: 5, committed: 5, currency: "CNY",
+    stack: new Error("boom").stack, apiKey: credentialShapedValue,
+  };
+  const second = captureResponse();
+  sendError(second, declared);
+  assert.deepEqual(JSON.parse(second.captured.body).details, { window: "day", limit: 5, committed: 5, currency: "CNY" });
+  assert.equal(second.captured.body.includes(credentialShapedValue), false);
+  assert.equal(second.captured.body.includes("/srv/"), false);
+});
+
+// The comment on `errorDetailShapes` says every acceptor yields a finite number
+// or a member of a closed set written in that module. Nothing enforced that:
+// adding `reason: (value) => (typeof value === "string" ? value : undefined)`
+// to a declared shape would put arbitrary caller strings on the wire with the
+// whole suite green. This is the test that fails instead.
+test("every declared acceptor is a finite number or a closed set, never a free string", () => {
+  const hostile = [
+    new Error("boom").stack,
+    "/srv/evimed/.evimed-local/secrets/deepseek.api-key",
+    credentialShapedValue,
+    "SELECT reserved_cost FROM evimed_usage.model_requests WHERE user_id=$1",
+    "usr_alice@example.com",
+    "postgres://control-plane.internal:5432",
+  ];
+  const codes = Object.entries(errorDetailShapes);
+  assert.ok(codes.length > 0, "no code declares a shape, so this test proves nothing");
+
+  for (const [code, shape] of codes) {
+    const keys = Object.entries(shape);
+    assert.ok(keys.length > 0, `${code} declares an empty shape`);
+    for (const [key, accept] of keys) {
+      assert.ok(
+        accept.kind === "finite-number" || accept.kind === "closed-set",
+        `${code}.${key} uses an acceptor that is neither vocabulary, so what it lets through is unknown`,
+      );
+      if (accept.kind === "closed-set") {
+        assert.ok(accept.allowed.length > 0, `${code}.${key} declares an empty closed set`);
+        for (const member of accept.allowed) assert.equal(accept(member), member);
+      }
+      // Through the boundary, not just the acceptor: a hostile value placed on
+      // this key by a call site must not appear in the response body.
+      for (const value of hostile) {
+        assert.equal(accept(value), undefined, `${code}.${key} accepted a caller string`);
+        const res = captureResponse();
+        sendError(res, new HttpError(402, code, "Refused.", { [key]: value }));
+        assert.equal(res.captured.body.includes(value), false, `${code}.${key} carried a caller string to the client`);
+      }
+    }
+  }
+});
+
+/** A database double answering only the three questions these two refusals ask:
+ *  the advisory lock, the reservation lookup, and the spend totals. It runs the
+ *  real ledger code path without Postgres, which is what lets the refusal the
+ *  browser actually receives be built by the ledger rather than by this test. */
+function ledgerDatabase(totals) {
+  const query = async (sql) => (String(sql).includes("day_settled")
+    ? { rows: [{ day_settled: 0, week_settled: 0, day_open: 0, week_open: 0, run_committed: 0, ...totals }], rowCount: 1 }
+    : { rows: [], rowCount: 0 });
+  return { query, transaction: (run) => run({ query }) };
+}
+
+// The declared shape and the ledger that fills it live in different files, and
+// a key renamed on one side fails nothing on its own: the boundary drops it,
+// the browser rejects a bag missing a required key, and the account page goes
+// quiet again — which is the state this whole change exists to end. So the
+// refusal is built by the real ledger and read off the real wire.
+//
+// This is the admission check, the one budget refusal that reaches a browser
+// today (server.mjs dispatches a prompt through it, and its HttpError travels
+// to the single sendError at the boundary).
+test("the ledger's admission refusal reaches the client with every key it built", async () => {
+  const ledger = new UsageLedger(ledgerDatabase({ week_settled: 12.4 }));
+  const refusal = await ledger.assertWithinLimits("usr_alice", { dailyLimit: 20, weeklyLimit: 12 })
+    .then(() => null, (error) => error);
+  assert.ok(refusal instanceof HttpError, "the ledger did not refuse, so this test proves nothing");
+  assert.equal(refusal.status, 402);
+
+  const res = captureResponse();
+  sendError(res, refusal, { requestId: "req_3" });
+  assert.deepEqual(JSON.parse(res.captured.body), {
+    error: "This account reached its spending limit.",
+    code: "usage_budget_exceeded",
+    requestId: "req_3",
+    details: { window: "week", limit: 12, committed: 12.4, currency: "CNY" },
+  });
+});
+
+// The reservation refusal is richer — it prices the request, so it names the
+// amount asked for and can refuse a single run's budget. It is answered by the
+// model gateway's own envelope today rather than by `sendError`, so what this
+// pins is that the boundary is ready for it: every key the ledger builds is
+// declared, and none is dropped on the way out.
+test("the ledger's reservation refusal survives the boundary whole", async () => {
+  const ledger = new UsageLedger(ledgerDatabase({ day_settled: 4.9 }));
+  const refusal = await ledger.reserveModel({
+    id: "usage_1", userId: "usr_alice", projectId: "prj_default", model: "deepseek-chat",
+    priceVersion: "2026-01-01", currency: "CNY", requestFingerprint: "a".repeat(64),
+    estimatedCost: 0.3, dailyLimit: 5, weeklyLimit: 40,
+  }).then(() => null, (error) => error);
+  assert.ok(refusal instanceof HttpError, "the ledger did not refuse, so this test proves nothing");
+
+  const res = captureResponse();
+  sendError(res, refusal);
+  assert.deepEqual(JSON.parse(res.captured.body).details, {
+    window: "day", limit: 5, committed: 4.9, requested: 0.3, currency: "CNY",
+  });
+});
+
+// The client parses this channel with its own copy of the two closed sets, and
+// a set that drifts is invisible: the server would send a window the browser
+// discards, and the account page would fall back to a sentence that names no
+// ceiling. Until the vocabulary lives in `@evimed/domain` (it does not — the
+// registry there has no `usage_budget_exceeded` entry at all), the two copies
+// are compared here, at the boundary that declares them.
+test("the browser accepts exactly the vocabulary this module declares", async () => {
+  const client = await readFile(new URL("../../web/src/lib/apiClient.ts", import.meta.url), "utf8");
+  const declared = (name) => {
+    const block = new RegExp(`const ${name}: WebUsageBudget\\w+\\[\\] = \\[([^\\]]*)\\]`).exec(client);
+    assert.ok(block, `${name} was not found in apiClient.ts — this test cannot conclude anything`);
+    return [...block[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  };
+  const shape = errorDetailShapes.usage_budget_exceeded;
+  assert.deepEqual(declared("usageBudgetWindows").sort(), [...shape.window.allowed].sort());
+  assert.deepEqual(declared("usageBudgetCurrencies").sort(), [...shape.currency.allowed].sort());
 });
