@@ -87,6 +87,17 @@ const routeReasonPattern = /^[a-z][a-z0-9_.:-]{0,63}$/;
 // `reserveRun` both look at.
 const adoptedRouteReason = "adopted:runtime-ui";
 
+/**
+ * How many mid-run corrections one run accepts.
+ *
+ * A bound rather than a preference. Every correction is another instruction the
+ * run has to hold in a context it is already spending, and an unbounded stream
+ * of them keeps a run alive for as long as somebody keeps typing — which is a
+ * budget the dispatch-time limits cannot see. Three is generous for the thing
+ * this exists for: noticing part-way through that the question was wrong.
+ */
+export const MAX_RUN_CORRECTIONS = 3;
+
 function invalid(message) {
   return new HttpError(400, "invalid_agent_run", message);
 }
@@ -332,6 +343,11 @@ function foldEvents(events) {
       if (!current) throw corrupt("Runtime input refers to an unknown run.");
       runs.set(id, Object.freeze({ ...current,
         ...(event.event === "runtime-turn" ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
+        // A field on an existing event rather than an event kind of its own.
+        // `foldEvents` throws on a kind it does not know, so a new kind means a
+        // ledger an older control plane cannot read at all; an unknown *field*
+        // is simply not folded, which costs the count and nothing else.
+        ...(event.kind === "steer" ? { corrections: (current.corrections ?? 0) + 1 } : {}),
         kernelRequestIds: [...new Set([...(current.kernelRequestIds ?? []), ...(event.requestIds ?? []).map(storedKernelRequestId)])],
       }));
       continue;
@@ -4119,6 +4135,46 @@ export class AgentRunStore {
       ], { unchecked: true });
     }
     return (await this.list(project)).find((item) => item.id === run.id) ?? run;
+  }
+
+  /**
+   * Record a researcher's mid-run correction, before the kernel is told.
+   *
+   * Hidden knowledge: this is deliberately *not* a second dispatch. A dispatch
+   * creates a run, a run binds a deliverable contract, and one research session
+   * may have one active run — which is why `agent_run_active` refuses a second
+   * one and why that refusal stays exactly as it is. A correction is input to
+   * the run that is already going, attributed to it, graded by the contract it
+   * already has. The published implementations of this feature agree on the
+   * same shape: a steered message belongs to the response it steers, not to a
+   * turn of its own, because splitting it off is what makes a later compaction
+   * summarise away one half of a modified instruction.
+   *
+   * Bounded per run. A client that could correct without limit could keep a
+   * run alive indefinitely, and every correction is another thing the run must
+   * hold in a context it is already spending.
+   *
+   * Written before the prompt is sent, like the repair path: a request id the
+   * ledger has not seen cannot be matched to the run it belongs to.
+   *
+   * @param {any} project @param {string} runId @param {string} requestId
+   */
+  async recordCorrection(project, runId, requestId) {
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run || run.status !== "running") {
+        throw new HttpError(409, "agent_run_not_running", "The run is no longer accepting corrections.");
+      }
+      if ((run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) {
+        throw new HttpError(409, "agent_run_correction_limit", `A run accepts at most ${MAX_RUN_CORRECTIONS} corrections.`);
+      }
+      const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)] };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, updated);
+      return updated;
+    });
   }
 
   /** Persist a repair's native request identity before sending it. */
