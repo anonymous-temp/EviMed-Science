@@ -13,20 +13,24 @@ if (databaseUrl) {
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 const owner = `usage_${randomUUID()}`;
 const other = `usage_${randomUUID()}`;
+// A third account kept out of the shared fixtures above: the windowing and
+// reconciliation tests assert exact open-cost totals, which the accumulated
+// reservations of the other tests would make unreadable.
+const stale = `usage_${randomUUID()}`;
 let database;
 let ledger;
 
 before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 8, databaseConnectionTimeoutMs: 2_000 });
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development')", [owner, other]);
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576)", [owner, other]);
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Usage owner','development'),($2,'Other owner','development'),($3,'Stale owner','development')", [owner, other, stale]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Usage',1048576),($2,'default','Other',1048576),($3,'default','Stale',1048576)", [owner, other, stale]);
   ledger = new UsageLedger(database);
 });
 
 after(async () => {
   if (!database) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other]]);
+  await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other, stale]]);
   await database.close();
 });
 
@@ -196,4 +200,140 @@ test("run receipts flag incomplete historical settled token accounting", options
   const result = await ledger.summaryRun(owner, runId);
   assert.equal(result.settledCalls, 1);
   assert.equal(result.incompleteUsageCalls, 1);
+});
+
+test("an uncertain reservation leaves the rolling budget window instead of holding it forever", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.6 }));
+  await ledger.markUncertain(stale, request.id, "response_usage_missing", { providerRequestId: "provider-truncated" });
+  // Fresh: the account is still paying for a call that may have been charged.
+  await assert.rejects(ledger.assertWithinLimits(stale, { dailyLimit: 0.5 }), { code: "usage_budget_exceeded" });
+  await assert.rejects(ledger.assertWithinLimits(stale, { weeklyLimit: 0.5 }), { code: "usage_budget_exceeded" });
+  // Two days old: outside the 24h window, still inside the 7d one.
+  await database.query("UPDATE evimed_usage.model_requests SET created_at=now()-interval '2 days' WHERE id=$1", [request.id]);
+  assert.deepEqual(await ledger.assertWithinLimits(stale, { dailyLimit: 0.5 }), { allowed: true });
+  await assert.rejects(ledger.assertWithinLimits(stale, { weeklyLimit: 0.5 }), { code: "usage_budget_exceeded" });
+  // Eight days old: outside both, so the budget it held comes back.
+  await database.query("UPDATE evimed_usage.model_requests SET created_at=now()-interval '8 days' WHERE id=$1", [request.id]);
+  assert.deepEqual(await ledger.assertWithinLimits(stale, { dailyLimit: 0.5, weeklyLimit: 0.5 }), { allowed: true });
+  const reserved = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.4, dailyLimit: 0.5, weeklyLimit: 0.5 }));
+  assert.equal(reserved.status, "reserved");
+  await ledger.release(stale, reserved.id, "test_cleanup");
+});
+
+test("an expired reservation is reconciled to uncertain rather than left stranded", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.2 }));
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 minute' WHERE id=$1", [request.id]);
+  assert.ok((await ledger.health()).expiredReservations >= 1, "health must see the stuck reservation");
+  const first = await ledger.reconcileExpiredReservations({ limit: 100 });
+  assert.ok(first.reconciled >= 1);
+  assert.equal(first.failedAccounts, 0, "a healthy sweep skips no account");
+  const row = (await database.query("SELECT status,error_code,revision,settled_at,actual_cost FROM evimed_usage.model_requests WHERE id=$1", [request.id])).rows[0];
+  assert.equal(row.status, "uncertain", "the provider may already have charged, so it is uncertain and never released");
+  assert.equal(row.error_code, "reservation_expired");
+  assert.equal(Number(row.revision), request.revision + 1);
+  assert.ok(row.settled_at);
+  assert.equal(row.actual_cost, null);
+  const stuck = await database.query(`SELECT count(*)::integer AS n FROM evimed_usage.model_requests
+    WHERE id=$1 AND status='reserved' AND reservation_expires_at<=now()`, [request.id]);
+  assert.equal(stuck.rows[0].n, 0);
+  assert.equal((await ledger.reconcileExpiredReservations({ limit: 100 })).reconciled, 0, "the sweep is idempotent");
+});
+
+test("a reconciled reservation is charged only while it is inside the window", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.9 }));
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 minute' WHERE id=$1", [request.id]);
+  await ledger.reconcileExpiredReservations({ limit: 100 });
+  await assert.rejects(ledger.assertWithinLimits(stale, { dailyLimit: 0.8 }), { code: "usage_budget_exceeded" });
+  await database.query("UPDATE evimed_usage.model_requests SET created_at=now()-interval '8 days' WHERE id=$1", [request.id]);
+  assert.deepEqual(await ledger.assertWithinLimits(stale, { dailyLimit: 0.8, weeklyLimit: 0.8 }), { allowed: true });
+});
+
+test("the sweep waits behind an in-flight settlement on the same account", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.3 }));
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 minute' WHERE id=$1", [request.id]);
+  const blocker = await database.pool.connect();
+  await blocker.query("BEGIN");
+  await blocker.query("SELECT id FROM evimed_usage.model_requests WHERE id=$1 FOR UPDATE", [request.id]);
+  const settlement = ledger.settleModel(stale, request.id, {
+    usage: { cacheHitTokens: 1, cacheMissTokens: 2, completionTokens: 3 }, actualCost: 0.25, priced: true,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const sweep = ledger.reconcileExpiredReservations({ limit: 100 });
+  try {
+    const early = await Promise.race([
+      sweep.then(() => "swept", () => "rejected"),
+      new Promise((resolve) => setTimeout(() => resolve("waiting"), 100)),
+    ]);
+    assert.equal(early, "waiting", "the sweep must take the same account lock the settlement holds");
+  } finally {
+    await blocker.query("COMMIT");
+    blocker.release();
+  }
+  assert.equal((await settlement).status, "settled");
+  await sweep;
+  const row = (await database.query("SELECT status,error_code FROM evimed_usage.model_requests WHERE id=$1", [request.id])).rows[0];
+  assert.equal(row.status, "settled", "a settlement that won the race is never overwritten by the sweep");
+  assert.equal(row.error_code, null);
+});
+
+test("the sweep batch is bounded and reports what it left behind", options, async () => {
+  const ids = [];
+  for (let index = 0; index < 3; index += 1) {
+    const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.01 }));
+    ids.push(request.id);
+  }
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 minute' WHERE id=ANY($1::text[])", [ids]);
+  const partial = await ledger.reconcileExpiredReservations({ limit: 1 });
+  assert.equal(partial.reconciled, 1);
+  assert.ok(partial.remaining >= 2, "a bounded sweep reports the rows still waiting");
+  const rest = await ledger.reconcileExpiredReservations({ limit: 100 });
+  assert.ok(rest.reconciled >= 2);
+  const remainingOwn = await database.query(`SELECT count(*)::integer AS n FROM evimed_usage.model_requests
+    WHERE id=ANY($1::text[]) AND status<>'uncertain'`, [ids]);
+  assert.equal(remainingOwn.rows[0].n, 0);
+  await assert.rejects(ledger.reconcileExpiredReservations({ limit: 0 }), { code: "product_parameter_invalid" });
+});
+
+test("a late genuine cause replaces the sweep's placeholder without moving the money", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.05 }));
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 minute' WHERE id=$1", [request.id]);
+  assert.ok((await ledger.reconcileExpiredReservations({ limit: 100 })).reconciled >= 1);
+  const late = await ledger.markUncertain(stale, request.id, "response_usage_missing", { providerRequestId: "provider-late" });
+  assert.equal(late.status, "uncertain");
+  assert.equal(late.errorCode, "response_usage_missing", "the real cause must survive the sweep's placeholder");
+  assert.equal(late.revision, request.revision + 2, "the sweep wrote once and the late call once");
+  // No longer a placeholder: the row has a concrete cause, so it is terminal again.
+  await assert.rejects(ledger.release(stale, request.id, "provider_refused"), { code: "usage_settlement_conflict" });
+  const settled = await ledger.settleModel(stale, request.id, {
+    usage: { cacheHitTokens: 1, cacheMissTokens: 1, completionTokens: 1 }, actualCost: 0.05, priced: true,
+  });
+  assert.equal(settled.status, "settled", "a settlement that finally arrives is still accepted");
+  assert.equal(settled.errorCode, null);
+});
+
+test("a late release of a swept reservation keeps the state the sweep reported", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.05 }));
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=now()-interval '1 minute' WHERE id=$1", [request.id]);
+  await ledger.reconcileExpiredReservations({ limit: 100 });
+  const released = await ledger.release(stale, request.id, "provider_refused");
+  assert.equal(released.status, "uncertain",
+    "the provider may already have charged, and a late report does not undo that — only the cause is written");
+  assert.equal(released.errorCode, "provider_refused");
+  const row = (await database.query("SELECT status,error_code FROM evimed_usage.model_requests WHERE id=$1", [request.id])).rows[0];
+  assert.equal(row.status, "uncertain");
+  assert.equal(row.error_code, "provider_refused");
+});
+
+test("the sweep decides expiry on the database clock, not the process instant", options, async () => {
+  const request = await ledger.reserveModel(reservation(stale, { estimatedCost: 0.05, ttlMs: 60_000 }));
+  // Expires in the database's own future-by-a-hair: a sweep that bound a Node
+  // instant taken before this statement would still be eligible to take it.
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1", [request.id]);
+  assert.equal((await ledger.reconcileExpiredReservations({ limit: 100 })).reconciled, 0,
+    "a reservation the database still considers live is never swept");
+  await database.query("UPDATE evimed_usage.model_requests SET reservation_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", [request.id]);
+  assert.ok((await ledger.reconcileExpiredReservations({ limit: 100 })).reconciled >= 1);
+  const row = (await database.query("SELECT status,error_code FROM evimed_usage.model_requests WHERE id=$1", [request.id])).rows[0];
+  assert.equal(row.status, "uncertain");
+  assert.equal(row.error_code, "reservation_expired");
 });
