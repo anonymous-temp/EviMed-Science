@@ -170,3 +170,48 @@ test("the shape is the one the real normalizer produces, not the one this file a
   const found = invokedSkillsBySession([{ sessionId: "s1", transcript }]);
   assert.deepEqual([...(found.get("s1") ?? [])], [skill], "the normalizer's own output must be readable here");
 });
+
+test("a method read without a delegation is reported, attributed to nothing, and not 'passed over'", () => {
+  // The open-domain answer line never delegates, so it has no subagent receipt
+  // and every loop keyed to one skips it. Before this the module said the run
+  // used no methods *and* that both approved methods had been available and
+  // passed over — a denominator moving in the wrong direction on every run of a
+  // whole product line.
+  const skill = toSkillName("triage", "capsule");
+  const derived = runMethodObservations({
+    run,
+    projection: { plan: { items: [] }, subagents: [] },
+    methods: METHODS,
+    sessions: [session("root", [skill])],
+  });
+  assert.deepEqual(derived.observations, [], "no mounted digest and no verdict is no attribution");
+  assert.deepEqual(derived.methodsLoaded, [], "the receipt records the mount, and there was none");
+  assert.deepEqual(derived.invokedWithoutMount, ["triage"]);
+  assert.deepEqual(derived.eligible, ["method:learned:quoting"],
+    "quoting was passed over; triage was read, so counting it as passed over is a false denominator");
+});
+
+test("a run that ends early still counts every verdict it reached, and invents none", () => {
+  // The guarantee MemOS's plugins get from writing only on a completed turn,
+  // this module gets per deliverable instead — and more strictly, because a
+  // deliverable's verdict is recorded by the gate rather than inferred from how
+  // the run ended. Nothing pinned it, so it was one `deliverableOutcome` branch
+  // away from a cancelled run becoming evidence against every mounted method.
+  const cancelled = projection({
+    plan: {
+      items: [
+        { id: "d1", status: "accepted", attempts: 1 },   // adjudicated before the stop
+        { id: "d2", status: "delegated", attempts: 0 },  // in flight when it stopped
+        { id: "d3", status: "planned", attempts: 0 },    // never started
+      ],
+    },
+  });
+  for (const status of ["cancelled", "failed", "succeeded"]) {
+    const derived = runMethodObservations({ run: { ...run, status }, projection: cancelled, methods: METHODS });
+    assert.deepEqual(
+      derived.observations.map((entry) => [entry.observation.family, entry.observation.outcome]),
+      [["run_1:d1", "accepted"]],
+      `${status}: only the deliverable that reached a verdict is evidence`,
+    );
+  }
+});
