@@ -17,10 +17,32 @@ from pathlib import Path
 
 
 class RecoveryError(Exception):
-    pass
+    def __init__(self, code: str, *, installed: bool = False):
+        super().__init__(code)
+        self.code = code
+        self.installed = installed
 
 
 IDENTITY_FIELDS = ("st_dev", "st_ino", "st_mode", "st_uid", "st_gid", "st_size", "st_mtime_ns", "st_ctime_ns")
+REQUIRED_LINUX_CAPABILITIES = sum(1 << bit for bit in (0, 1, 2, 3))
+
+
+class RecoveryLimits:
+    defaults = {
+        "compressed": ("OPEN_SCIENCE_RECOVERY_MAX_COMPRESSED_BYTES", 64 * 1024**3, 1024**5),
+        "members": ("OPEN_SCIENCE_RECOVERY_MAX_MEMBERS", 1_000_000, 10_000_000),
+        "depth": ("OPEN_SCIENCE_RECOVERY_MAX_DEPTH", 128, 1024),
+        "path": ("OPEN_SCIENCE_RECOVERY_MAX_PATH_BYTES", 4096, 65535),
+        "file": ("OPEN_SCIENCE_RECOVERY_MAX_FILE_BYTES", 64 * 1024**3, 1024**5),
+        "expanded": ("OPEN_SCIENCE_RECOVERY_MAX_EXPANDED_BYTES", 512 * 1024**3, 1024**5),
+    }
+
+    def __init__(self):
+        for attribute, (name, default, maximum) in self.defaults.items():
+            value = os.environ.get(name, str(default))
+            if not value.isdigit() or not 1 <= int(value) <= maximum:
+                raise RecoveryError("recovery_limit_invalid")
+            setattr(self, attribute, int(value))
 
 
 def identity(metadata):
@@ -97,7 +119,8 @@ def open_archive(argument: str, *, cwd_fd=None) -> OpenedArchive:
         raise
 
 
-def copy_verified_archive(opened: OpenedArchive, output) -> str:
+def copy_verified_archive(opened: OpenedArchive, output, limits=None) -> str:
+    limits = limits or RecoveryLimits()
     checksum_before = os.fstat(opened.checksum_fd)
     os.lseek(opened.checksum_fd, 0, os.SEEK_SET)
     checksum_bytes = os.read(opened.checksum_fd, 4096)
@@ -113,6 +136,8 @@ def copy_verified_archive(opened: OpenedArchive, output) -> str:
         raise RecoveryError("recovery_archive_identity_invalid")
 
     before = os.fstat(opened.archive_fd)
+    if before.st_size > limits.compressed:
+        raise RecoveryError("recovery_limit_exceeded")
     os.lseek(opened.archive_fd, 0, os.SEEK_SET)
     digest = hashlib.sha256()
     while True:
@@ -127,6 +152,10 @@ def copy_verified_archive(opened: OpenedArchive, output) -> str:
     return digest.hexdigest()
 
 
+def linux_capabilities_sufficient(effective: int) -> bool:
+    return effective & REQUIRED_LINUX_CAPABILITIES == REQUIRED_LINUX_CAPABILITIES
+
+
 def validate_privilege() -> None:
     if os.geteuid() != 0:
         raise RecoveryError("numeric_owner_requires_root")
@@ -134,7 +163,7 @@ def validate_privilege() -> None:
     if status_path.exists():
         effective = next((line.split()[1] for line in status_path.read_text().splitlines()
                           if line.startswith("CapEff:")), "0")
-        if int(effective, 16) & 1 == 0:
+        if not linux_capabilities_sufficient(int(effective, 16)):
             raise RecoveryError("numeric_owner_requires_root")
 
 
@@ -164,17 +193,21 @@ def ensure_directory(root_fd: int, parts: list[str]) -> int:
         raise
 
 
-def extract_archive(archive_fd: int, staging_fd: int) -> None:
+def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
+    limits = limits or RecoveryLimits()
     seen = set()
     directory_metadata = []
     root_metadata = None
-    with os.fdopen(os.dup(archive_fd), "rb") as raw, tarfile.open(fileobj=raw, mode="r:gz") as archive:
-        members = archive.getmembers()
-        if not members:
-            raise RecoveryError("numeric_owner_archive_invalid")
-        for member in members:
+    member_count = 0
+    expanded = 0
+    with os.fdopen(os.dup(archive_fd), "rb") as raw, tarfile.open(fileobj=raw, mode="r|gz") as archive:
+        for member in archive:
+            member_count += 1
             parts = archive_member_parts(member.name)
             normalized = "/".join(parts) if parts else "."
+            path_bytes = len(normalized.encode("utf-8"))
+            if member_count > limits.members or len(parts) > limits.depth or path_bytes > limits.path:
+                raise RecoveryError("recovery_limit_exceeded")
             if (normalized in seen or not (member.isfile() or member.isdir())
                     or not 0 <= member.uid <= 0xffffffff or not 0 <= member.gid <= 0xffffffff
                     or member.mode < 0 or member.mode > 0o7777
@@ -192,6 +225,9 @@ def extract_archive(archive_fd: int, staging_fd: int) -> None:
                 continue
             if not parts:
                 raise RecoveryError("numeric_owner_archive_invalid")
+            if member.size > limits.file or expanded + member.size > limits.expanded:
+                raise RecoveryError("recovery_limit_exceeded")
+            expanded += member.size
             parent = ensure_directory(staging_fd, parts[:-1])
             try:
                 descriptor = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -217,7 +253,7 @@ def extract_archive(archive_fd: int, staging_fd: int) -> None:
                 os.fchmod(descriptor, member.mode)
             finally:
                 os.close(descriptor)
-    if root_metadata is None:
+    if member_count == 0 or root_metadata is None:
         raise RecoveryError("numeric_owner_archive_invalid")
     for parts, uid, gid, mode in sorted(directory_metadata, key=lambda value: len(value[0]), reverse=True):
         descriptor = ensure_directory(staging_fd, parts)
@@ -249,11 +285,26 @@ def validate_blank_target(parent_fd: int, target_name: str) -> None:
 
 def commit_staging(parent_fd: int, staging_name: str, target_name: str) -> None:
     validate_blank_target(parent_fd, target_name)
+    staging_fd = os.open(staging_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    staging_identity = identity(os.fstat(staging_fd))[:2]
     try:
         os.rename(staging_name, target_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
     except OSError:
+        os.close(staging_fd)
         raise RecoveryError("numeric_owner_target_changed") from None
-    os.fsync(parent_fd)
+    target_fd = None
+    try:
+        target_fd = os.open(target_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+        if identity(os.fstat(target_fd))[:2] != staging_identity:
+            raise RecoveryError("numeric_owner_durability_unknown", installed=True)
+        try:
+            os.fsync(parent_fd)
+        except (OSError, InterruptedError):
+            raise RecoveryError("numeric_owner_durability_unknown", installed=True) from None
+    finally:
+        os.close(staging_fd)
+        if target_fd is not None:
+            os.close(target_fd)
 
 
 def remove_tree(parent_fd: int, name: str) -> None:
@@ -303,6 +354,7 @@ def restore_numeric(archive_argument: str, target: Path, *, cwd_fd=None,
                     require_privilege: bool = True) -> None:
     if require_privilege:
         validate_privilege()
+    limits = RecoveryLimits()
     target_value = str(target)
     target_parts = safe_parts(target_value, absolute=True)
     opened = None
@@ -312,6 +364,8 @@ def restore_numeric(archive_argument: str, target: Path, *, cwd_fd=None,
     committed = False
     try:
         opened = open_archive(archive_argument, cwd_fd=cwd_fd)
+        if os.fstat(opened.archive_fd).st_size > limits.compressed:
+            raise RecoveryError("recovery_limit_exceeded")
         root_fd = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY)
         try:
             parent_fd = open_directory_at(root_fd, target_parts[:-1])
@@ -326,7 +380,7 @@ def restore_numeric(archive_argument: str, target: Path, *, cwd_fd=None,
                                0o600, dir_fd=staging_fd)
         try:
             with os.fdopen(immutable_fd, "wb", closefd=False) as output:
-                copy_verified_archive(opened, output)
+                copy_verified_archive(opened, output, limits)
                 output.flush()
                 os.fsync(output.fileno())
         finally:
@@ -339,7 +393,7 @@ def restore_numeric(archive_argument: str, target: Path, *, cwd_fd=None,
             extract_root_fd = os.open(extract_root_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                       dir_fd=staging_fd)
             try:
-                extract_archive(archive_fd, extract_root_fd)
+                extract_archive(archive_fd, extract_root_fd, limits)
             finally:
                 os.close(extract_root_fd)
         finally:
@@ -354,8 +408,13 @@ def restore_numeric(archive_argument: str, target: Path, *, cwd_fd=None,
         final_staging = f"{staging_name}-payload"
         os.rename(f"{staging_name}/payload", final_staging, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
         os.rmdir(staging_name, dir_fd=parent_fd)
-        commit_staging(parent_fd, final_staging, target_name)
-        committed = True
+        try:
+            commit_staging(parent_fd, final_staging, target_name)
+            committed = True
+        except RecoveryError as error:
+            if error.installed:
+                committed = True
+            raise
     finally:
         if opened is not None:
             opened.close()
@@ -369,6 +428,10 @@ def restore_numeric(archive_argument: str, target: Path, *, cwd_fd=None,
 
 
 def main(arguments: list[str]) -> int:
+    if arguments == ["check-privilege"]:
+        validate_privilege()
+        print("numeric owner privilege ok")
+        return 0
     if len(arguments) != 5 or arguments[0] != "restore" or arguments[1] != "--archive" or arguments[3] != "--target":
         raise RecoveryError("recovery_cli_invalid")
     restore_numeric(arguments[2], Path(arguments[4]))

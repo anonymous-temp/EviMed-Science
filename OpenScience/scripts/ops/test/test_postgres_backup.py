@@ -260,13 +260,9 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertNotIn("dropdb", tools)
             self.assertFalse(receipt.exists())
 
-    def test_marker_failure_cleans_only_the_successfully_created_clone_with_the_same_oid(self):
-        for cleanup_oid, cleanup_system in [
-            ("24680", "12345"),
-            ("99999", "12345"),
-            ("24680", "54321"),
-        ]:
-            with self.subTest(cleanup_oid=cleanup_oid, cleanup_system=cleanup_system), tempfile.TemporaryDirectory() as root:
+    def test_marker_failure_reports_orphan_without_non_atomic_name_drop(self):
+        for marker_mode in ["comment-failure", "marker-mismatch"]:
+            with self.subTest(marker_mode=marker_mode), tempfile.TemporaryDirectory() as root:
                 directory = Path(root).resolve()
                 output = directory / "member"
                 output.mkdir()
@@ -287,8 +283,7 @@ class PostgresBackupTests(unittest.TestCase):
                 receipt = directory / "restore.json"
                 target_database = "evimed_restore_20260907T120000Z_123456abcdef"
                 tools = []
-                oid_results = iter(["24680", cleanup_oid])
-                identity_results = iter([identity, {**identity, "systemIdentifier": cleanup_system}])
+                queries = []
 
                 def command(args, *, source=None, target=None, timeout=900, capture=False):
                     tool = args[args.index("exec") + 3] if "exec" in args else args[0]
@@ -303,17 +298,20 @@ class PostgresBackupTests(unittest.TestCase):
                     if tool == "createdb":
                         return ""
                     if tool == "dropdb":
-                        return ""
+                        raise AssertionError("orphan reporting must not perform a non-atomic name-based drop")
                     if tool == "psql":
                         sql = args[-1]
+                        queries.append(sql)
                         if sql == MODULE.SOURCE_IDENTITY_SQL:
-                            return json.dumps(next(identity_results))
+                            return json.dumps(identity)
                         if "SELECT oid::text" in sql:
-                            return next(oid_results) + "\n"
+                            return "24680\n"
                         if sql.startswith("COMMENT ON DATABASE"):
-                            raise MODULE.BackupError("postgres_command_failed")
+                            if marker_mode == "comment-failure":
+                                raise MODULE.BackupError("postgres_command_failed")
+                            return ""
                         if "shobj_description" in sql:
-                            return "\n"
+                            return "evimed-recovery-owner:another-attempt\n"
                         if "count(*) FROM pg_database" in sql:
                             return "0\n"
                     raise AssertionError(args)
@@ -328,9 +326,11 @@ class PostgresBackupTests(unittest.TestCase):
                         "targetDatabase": target_database,
                         "targetDatabaseOid": "24680",
                     },
-                    "operationErrorCode": "postgres_command_failed",
+                    "operationErrorCode": "postgres_command_failed" if marker_mode == "comment-failure"
+                    else "postgres_restore_ownership_unverified",
                 })
                 self.assertNotIn("dropdb", tools)
+                self.assertEqual(sum(query.startswith("SELECT oid::text FROM pg_database") for query in queries), 1)
                 self.assertFalse(receipt.exists())
 
     def test_main_fallback_preserves_the_current_persisted_drill_intent(self):
