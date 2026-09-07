@@ -23,6 +23,7 @@ import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
+import { persistExecutedToolEdges } from "./toolExecutionEdges.mjs";
 import { mountedMethodDigest } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
@@ -958,6 +959,26 @@ export function createWebApiApp(overrides = {}) {
             await securityAudit(config, "run.transcript.persist", "partial", {
               userId: project.userId, projectId: project.id, runId: run.id,
               code: receipt.missing[0]?.reason ?? "incomplete",
+            });
+          }
+          // What actually fed what, for the evaluation corpus.
+          //
+          // Every edge in all fifteen tool graphs is `via: "schema"` — a type
+          // that *could* flow — and only an executed edge may carry a task, so
+          // the brief generator honestly produced nothing. This is the receipt
+          // that was missing; it costs one pass over the transcript already in
+          // hand.
+          try {
+            const written = await persistExecutedToolEdges({ project, run, sessions });
+            if (written.edges) {
+              await securityAudit(config, "run.tool.edges", "ok", {
+                userId: project.userId, projectId: project.id, runId: run.id, code: `edges:${written.edges}`,
+              });
+            }
+          } catch (error) {
+            await securityAudit(config, "run.tool.edges", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "tool_edges_unavailable",
             });
           }
           // The counters the whole loop turns on.
@@ -2861,7 +2882,18 @@ export function createWebApiApp(overrides = {}) {
       // Before the runtimes and the store: a terminal hook still writing a
       // transcript is writing into the project directory this shutdown is about
       // to stop guarding.
-      await Promise.allSettled([...learningWrites]);
+      //
+      // Drained in a loop, not from one snapshot of the set. A run can reach
+      // its terminal hook while an earlier write is still being awaited, and
+      // `[...learningWrites]` taken once never sees it — which showed up as an
+      // intermittent `ENOTEMPTY` on a test's temp directory under load and, in
+      // production, is a write racing the runtime teardown it depends on. The
+      // bound is there because a drain that cannot finish should end the
+      // shutdown rather than hold it forever; no new runs are accepted by this
+      // point, so reaching it means something else is wrong.
+      for (let drain = 0; learningWrites.size && drain < 100; drain += 1) {
+        await Promise.allSettled([...learningWrites]);
+      }
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still

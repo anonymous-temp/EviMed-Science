@@ -68,6 +68,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/packages\/harness-port\/src\/compaction\.mjs$/,
+    why: "the compaction thresholds were read off this exact backend package; moving the version without re-reading them would claim defaults the named release never shipped",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/scripts\/ops\/check-kernel-defaults\.mjs$/,
     why: "records which version produced the stored --dump-config baseline; it moves when the baseline is re-recorded, not when the pin moves",
   },
@@ -136,7 +141,13 @@ export async function findOccurrences(version) {
   for (const pattern of spellings) {
     let stdout = "";
     try {
-      ({ stdout } = await run("git", ["grep", "-nI", "--fixed-strings", pattern], { cwd: workspaceRoot, maxBuffer: 32 * 1024 * 1024 }));
+      // `--untracked` because this gate exists to classify an occurrence
+      // *before* an upgrade, and a plain `git grep` sees only committed files.
+      // A branch with fifty new modules on it was invisible here until the
+      // moment it was committed, which is the moment the classification stops
+      // being cheap. Ignored files stay out: `--untracked` alone still honours
+      // the exclude rules, so `node_modules` and build output are not swept.
+      ({ stdout } = await run("git", ["grep", "-nI", "--untracked", "--fixed-strings", pattern], { cwd: workspaceRoot, maxBuffer: 32 * 1024 * 1024 }));
     } catch (error) {
       // git grep exits 1 for "no matches", which is an answer. Anything else
       // is a failure and must not be read as an empty tree.

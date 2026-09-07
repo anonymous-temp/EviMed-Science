@@ -632,6 +632,23 @@ class ClusteringTests(unittest.TestCase):
         family, source = runner.brief_family({"id": "g-1", "generated": {"chain": "chain-7"}}, "meta-analysis")
         self.assertEqual((family, source), ("meta-analysis:chain-7", "generated-chain"))
 
+        # One brief per chain means clustering on the chain id resamples
+        # singletons and reports an interval narrower than the evidence.
+        # Two chains from the same tool to the same tool are one task shape.
+        first = {"id": "g-1", "generated": {"chain": "c-1", "stages": [
+            ["mcp__evimed__literature_search"], ["mcp__evimed__evidence_deduplicate"], ["mcp__evimed__open_access_full_text"]]}}
+        second = {"id": "g-2", "generated": {"chain": "c-2", "stages": [
+            ["mcp__evimed__literature_search"], ["mcp__evimed__guideline_search"], ["mcp__evimed__open_access_full_text"]]}}
+        self.assertEqual(
+            runner.brief_family(first, "meta-analysis"),
+            ("meta-analysis:literature_search-to-open_access_full_text", "generated-shape"),
+        )
+        self.assertEqual(runner.brief_family(first, "meta-analysis"), runner.brief_family(second, "meta-analysis"))
+
+        # Unusable stages fall back to the chain id rather than to a guess.
+        for generated in ({"chain": "c-3", "stages": []}, {"chain": "c-3", "stages": [[]]}, {"chain": "c-3", "stages": "x"}):
+            self.assertEqual(runner.brief_family({"id": "g", "generated": generated}, "m")[1], "generated-chain")
+
     def test_the_report_names_how_every_cluster_was_decided(self):
         stack = tempfile.TemporaryDirectory()
         self.addCleanup(stack.cleanup)

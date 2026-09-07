@@ -67,6 +67,7 @@
     "check:composition-references": "node scripts/ops/verify-composition-references.mjs",
     "check:capabilities": "node scripts/build/generate-capability-manifests.mjs --check",
     "check:tool-graph": "node scripts/dev/build-tool-graph.mjs --check",
+    "collect:tool-edges": "node scripts/dev/collect-executed-edges.mjs",
     "test:contracts": "pnpm --filter @evimed/contracts test",
     "verify:seams": "node scripts/ops/verify-harness-seams.mjs",
     "test:domain": "pnpm --filter @evimed/domain test",

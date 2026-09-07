@@ -628,7 +628,7 @@ function digestOf(value) {
  * @returns {string}
  */
 function edgeKey(edge) {
-  return `${edge.from} ${edge.to} ${edge.type} ${edge.via}`;
+  return `${edge.from}\u0000${edge.to}\u0000${edge.type}\u0000${edge.via}`;
 }
 
 /**

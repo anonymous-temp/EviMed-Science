@@ -331,3 +331,74 @@ test("the committed graphs are what the builder would produce today", () => {
   const checked = run(buildScript, ["--check"]);
   assert.equal(checked.status, 0, `evals/tool-graph has drifted:\n${checked.stderr}`);
 });
+
+/* --------------------------------------------------- collecting real receipts */
+
+// The corpus had no producer. `executed-edges.jsonl` was committed empty, every
+// edge in all fifteen graphs was `via: "schema"`, and only an executed edge may
+// carry a task — so the brief generator honestly produced nothing and would
+// have gone on producing nothing forever. The control plane now writes one
+// receipt file per finished run into the project's own meta directory, and this
+// script is the deliberate, human-run step that merges them into the corpus.
+test("the collector merges run receipts, keeps the first run that proved a pair, and refuses the unprovable", async () => {
+  const { mergeReceipts, serializeCorpus } = await import("../../../scripts/dev/collect-executed-edges.mjs");
+  const line = (edge) => JSON.stringify(edge);
+  const { edges, skipped } = mergeReceipts([
+    [
+      line({ capability: "adr-analysis", from: "a", to: "b", type: "parameter", validatedBy: "run_1", matchedIdentifiers: ["doi:10.1001/x"] }),
+      line({ capability: "adr-analysis", from: "a", to: "b", type: "parameter", validatedBy: "run_9" }),
+    ].join("\n"),
+    [
+      line({ capability: "adr-analysis", from: "b", to: "c", type: "parameter", validatedBy: "run_2" }),
+      // No run id: nothing proves this pair ever ran, and `executed` is the one
+      // source a task may be built on.
+      line({ capability: "adr-analysis", from: "c", to: "d", type: "parameter" }),
+      "{ not json",
+      "",
+    ].join("\n"),
+  ]);
+  assert.deepEqual(edges.map((edge) => [edge.from, edge.to, edge.validatedBy]), [
+    ["a", "b", "run_1"],
+    ["b", "c", "run_2"],
+  ], "the first run to prove a pair keeps its name, so a reader can still go and check it");
+  assert.equal(skipped.length, 2);
+  assert.deepEqual(edges[0].matchedIdentifiers, ["doi:10.1001/x"]);
+
+  // One capability at a time, when asked.
+  const filtered = mergeReceipts([line({ capability: "other", from: "a", to: "b", type: "parameter", validatedBy: "r" })], { capability: "adr-analysis" });
+  assert.deepEqual(filtered.edges, []);
+
+  assert.equal(serializeCorpus([]), "");
+  assert.match(serializeCorpus(edges), /\n$/);
+});
+
+test("a collected receipt becomes a sampleable edge, which is the whole point", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "tdg-collect-"));
+  try {
+    const { mergeReceipts, serializeCorpus } = await import("../../../scripts/dev/collect-executed-edges.mjs");
+    const { sampleableEdges } = await import("@evimed/domain");
+    await writeFixtureCapability(root, FIXTURE_TOOLS);
+    // Exactly what `persistExecutedToolEdges` writes for a run that searched and
+    // then fetched.
+    const { edges } = mergeReceipts([JSON.stringify({
+      capability: "probe-capability",
+      from: MCP("literature_search"),
+      to: MCP("open_access_full_text"),
+      type: "parameter",
+      validatedBy: "run_real_1",
+      matchedIdentifiers: ["doi:10.1001/x"],
+    })]);
+    await writeSideFiles(root, []);
+    await writeFile(path.join(root, "executed-edges.jsonl"), serializeCorpus(edges), "utf8");
+
+    const built = run(buildScript, buildArgs(root));
+    assert.equal(built.status, 0, built.stderr);
+    const graph = JSON.parse(await readFile(path.join(root, "graphs", "tdg.probe-capability.json"), "utf8"));
+    const executed = graph.edges.filter((edge) => edge.via === "executed");
+    assert.equal(executed.length, 1, "the receipt reached the graph");
+    assert.equal(executed[0].validatedBy, "run_real_1", "and carries the run that proved it");
+    assert.equal(sampleableEdges(graph).length, 1, "which is the first sampleable edge the corpus has ever had");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
