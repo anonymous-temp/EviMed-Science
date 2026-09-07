@@ -226,6 +226,27 @@ export function indexCompleteness(ledger, expectedUnits) {
  * misses on purpose — a question the source answers and the distillation cannot
  * is exactly the omission being looked for.
  *
+ * Its caller is the source-understanding contract
+ * (`sourceUnderstanding.mjs`): `sourceUnderstandingOmissionNotice` derives the
+ * omission rate of a delivered understanding from the deterministic unit sample
+ * and the anchors that output carries, and returns the whole verdict for
+ * display and metering. The projection stores that derived rate.
+ *
+ * Nothing about this measurement is a gate, and that is a decision rather than
+ * an oversight. `withinTarget` compares against 5% and 15% targets written from
+ * first principles that have never been compared against an observed
+ * distribution of real sources; the development principles say a new check
+ * ships as a notice or a metric until it has one, and blocking points are
+ * budgeted at six system-wide. So no caller may turn a false `withinTarget`
+ * into a refused delivery — an over-target audit is a package delivered with a
+ * measured shortfall recorded against it, which is the entire point of
+ * measuring. `validateSourceUnderstanding` deliberately does not call this
+ * function at all. Making any of it block is a separate, budgeted decision.
+ *
+ * An empty audit is `withinTarget` because nothing was measured, which is not
+ * the same as nothing being missing — that is why the contract keeps `not_run`
+ * and `omissionRate: null` distinct from an audited rate of zero.
+ *
  * @param {readonly { unitId: string, answered: boolean }[]} audits
  * @param {string} depth
  * @returns {{ omissionRate: number, target: number, withinTarget: boolean, audited: number }}
