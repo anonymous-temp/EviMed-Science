@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { constants as fsConstants, lstatSync } from "node:fs";
+import { constants as fsConstants, lstatSync, readdirSync } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -11,12 +11,14 @@ import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
 } from "./dockerMounts.mjs";
+import { capsuleMethodsDirName, materializeCapsuleMethods } from "./capsuleMethods.mjs";
 import { supportedDeepSeekModels } from "./modelGateway.mjs";
 import { startMockDshRuntime } from "./mockDshRuntime.mjs";
 import { proxyRuntimeUiMux } from "./runtimeUiMuxProxy.mjs";
 import { rebaseRuntimeUiDocument } from "./runtimeUiDocument.mjs";
 import { browserSessionCookie, generateBrowserSessionSecret } from "./dshBrowserAuth.mjs";
 import { renderCredentialsFile, renderProfilePatch, runtimeEnvironment } from "./dshProfilePatch.mjs";
+import { PLUGIN_ID, pluginEntry } from "./pluginService.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import {
@@ -705,6 +707,7 @@ function publicRuntimeStatus(runtime, fields = {}) {
     skillsCopied: Number.isSafeInteger(fields.skillsCopied) ? fields.skillsCopied : null,
     agentSkillsCopied: Number.isSafeInteger(fields.agentSkillsCopied) ? fields.agentSkillsCopied : null,
     agentsGenerated: Number.isSafeInteger(fields.agentsGenerated) ? fields.agentsGenerated : null,
+    capsuleMethodsMounted: Number.isSafeInteger(fields.capsuleMethodsMounted) ? fields.capsuleMethodsMounted : null,
     error: fields.error ?? null,
   };
 }
@@ -726,6 +729,7 @@ function publicRuntimeStatusFromState(state) {
     skillsCopied: Number.isSafeInteger(state?.skillsCopied) ? state.skillsCopied : null,
     agentSkillsCopied: Number.isSafeInteger(state?.agentSkillsCopied) ? state.agentSkillsCopied : null,
     agentsGenerated: Number.isSafeInteger(state?.agentsGenerated) ? state.agentsGenerated : null,
+    capsuleMethodsMounted: Number.isSafeInteger(state?.capsuleMethodsMounted) ? state.capsuleMethodsMounted : null,
     error: typeof state?.error === "string" ? state.error : wasRunning ? "runtime_not_attached" : null,
   };
 }
@@ -768,6 +772,13 @@ async function writeRuntimeState(project, event, fields = {}) {
     skillsCopied: Number.isSafeInteger(fields.skillsCopied) ? fields.skillsCopied : null,
     agentSkillsCopied: Number.isSafeInteger(fields.agentSkillsCopied) ? fields.agentSkillsCopied : null,
     agentsGenerated: Number.isSafeInteger(fields.agentsGenerated) ? fields.agentsGenerated : null,
+    // How many capsule methods this launch actually mounted. Recorded because
+    // "the feature is dark" is otherwise invisible from outside the container:
+    // an unassigned `capsuleService`, a capsule whose entries are all
+    // candidates and a working mount all look identical from the API, and the
+    // sibling plugin `guidance.mjs` reports the same class of fact through
+    // `evimedDiagnostics.degrade` for the same reason.
+    capsuleMethodsMounted: Number.isSafeInteger(fields.capsuleMethodsMounted) ? fields.capsuleMethodsMounted : null,
     error: fields.error ?? null,
   };
   await writeJsonFileAtomicNoFollow(project.rootDir, file, state);
@@ -1662,10 +1673,15 @@ export function revisionGatewayProviderUrl(config) {
  * preset's rows. Deriving both from this function is what keeps the halves from
  * describing different deployments.
  *
+ * Exported for one reason: a test can then hold this half and the `--env` list
+ * built in `buildRuntimeLaunchPlan` to the same value. They are the pair whose
+ * disagreement this function exists to prevent, and a disagreement is invisible
+ * from either side alone.
+ *
  * @param {any} config @param {any} project @param {any} plan @param {string} model @param {string} workloadTokenPath
  * @returns {import("./dshProfilePatch.mjs").ProfilePatchInput}
  */
-function dshProfileInput(config, project, plan, model, workloadTokenPath) {
+export function dshProfileInput(config, project, plan, model, workloadTokenPath) {
   return {
     modelGatewayUrl: modelGatewayProviderUrl(config),
     model,
@@ -1686,7 +1702,10 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
     capabilitySkillsDir: "/opt/evimed/capability-skills",
-    capsuleMethodsDir: "",
+    // The same rule the launch plan's `--env` list used, applied to the same
+    // plan: the methods the container mounts and the methods the profile names
+    // are one directory or the feature is dark in whichever half is wrong.
+    capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
     capsuleGatewayUrl: capsuleGatewayProviderUrl(config),
     revisionGatewayUrl: revisionGatewayProviderUrl(config),
     publicSourceGatewayUrl: publicSourceGatewayProviderUrl(config),
@@ -1867,6 +1886,92 @@ function dshWorkloadTokenRuntimePath(plan) {
     : dshWorkloadTokenHostPath(plan);
 }
 
+/** What a plugin proof has to have registered, read from the registry entry.
+ *
+ *  No tool name is written here. There used to be one list, for the case this
+ *  file could not derive: `deploy/web/Dockerfile` does not copy
+ *  `runtime/skills/community/` into the web image, so a released control plane
+ *  derives its registry from `PLUGIN_SUPPORT_SNAPSHOT`, and that snapshot
+ *  carried no tools. It carries them now -- `pluginService.test.mjs` holds
+ *  every field of the snapshot equal to the record -- so both deployment
+ *  shapes state a bundle's tools and the fallback is gone with the copy.
+ *
+ *  A plugin whose tools this deployment cannot state is still not a plugin
+ *  whose proof it can check: it fails the probe it is being asked to certify
+ *  rather than passing on an empty expectation.
+ *  @param {any} entry @returns {string[]} */
+export function expectedPluginTools(entry) {
+  if (entry.tools.length) return [...entry.tools];
+  throw new HttpError(502, "plugin_probe_invalid", "The runtime did not prove the expected plugin configuration.");
+}
+
+/**
+ * The settings a kernel proof restates.
+ *
+ * `evimedPlugins/verify` takes no arguments and has one implementation --
+ * `verifyCitationAgent` in `packages/harness-port/src/pluginProbe.mjs` -- and
+ * the proof it returns is one fixed shape: a binary version, an enabled bit, a
+ * revision, a `timeoutMs` and a tool list. `timeoutMs` is therefore the only
+ * per-project setting anything reads back out of a container, so it is the only
+ * one a proof can be held to.
+ */
+const PROVEN_PLUGIN_SETTINGS = Object.freeze(["timeoutMs"]);
+
+/**
+ * The settings of one plugin this deployment can hold a proof to -- or no
+ * verdict at all.
+ *
+ * The names come from the registry entry rather than from the comparison
+ * itself, so a schema edited in `pluginService.mjs` moves the probe with it.
+ * The refusal is the honest half of that: this probe covers exactly the plugins
+ * declaring the settings the proof restates, and a plugin declaring others --
+ * more, fewer, or different -- gets `plugin_probe_invalid` instead of a
+ * verdict. With no `timeoutMs` of its own, the `timeoutMs` the kernel proves
+ * belongs to some other registration, and certifying it would report a
+ * configuration this plugin was never given.
+ *
+ * Nothing that used to pass now fails: the line this replaced compared
+ * `proof.timeoutMs` against an `expected.settings.timeoutMs` such a plugin does
+ * not have, so it already refused every one of them. What is new is that the
+ * refusal is stated, carries its own reason, and happens before the kernel is
+ * asked to prove something this control plane could not read. Widening it means
+ * teaching the kernel's proof first, which is the point.
+ *
+ * @param {any} entry @returns {string[]}
+ */
+export function provenPluginSettings(entry) {
+  const declared = Object.keys(entry.settings);
+  if (declared.length !== PROVEN_PLUGIN_SETTINGS.length || declared.some((name) => !PROVEN_PLUGIN_SETTINGS.includes(name))) {
+    throw new HttpError(502, "plugin_probe_invalid",
+      `This deployment can prove only ${PROVEN_PLUGIN_SETTINGS.join(", ")}, and this plugin declares ${declared.join(", ") || "no settings"}.`);
+  }
+  return declared;
+}
+
+/**
+ * One plugin's configuration per launch plan, deliberately.
+ *
+ * Not generalised to every enabled plugin, because nothing downstream of this
+ * function could carry a second one: `runtimeEnvironment` names exactly three
+ * per-project variables and they are dsh-cite's (`EVIMED_CITE_ENABLED`,
+ * `_TIMEOUT_MS`, `_CONFIG_REVISION`); the only preset row that reads them is
+ * `evimed-citation-bridge` in `packages/socket/presets/evimed-universal/agent.cordis.yml`;
+ * the privileged controller's `startRuntime` takes one `pluginConfig` and
+ * refuses any object whose keys are not exactly `enabled,revision,settings`;
+ * and `evimedPlugins/verify` is a parameterless wire method returning a proof
+ * with no plugin id in it. A `pluginConfigs` map here would be a plan the
+ * container cannot read, a controller call that 400s and a proof that names
+ * the wrong bundle.
+ *
+ * `runtimeManager.test.mjs` pins the narrow fact rather than a count of
+ * registered plugins: the environment this plan renders carries dsh-cite's
+ * three variables, moves only those three when the one configuration changes,
+ * and refuses a configuration shaped like a second bundle's -- which, with
+ * `PLUGIN_SETTINGS_SCHEMAS` naming dsh-cite alone, is one with no settings at
+ * all. Whether a second bundle may be registered is not this file's to say:
+ * `APPLY_PATH_PLUGIN_IDS` in `pluginService.mjs` refuses such a record
+ * outright, and `pluginService.test.mjs` is where that is held.
+ */
 export function buildRuntimeLaunchPlan(config, project, port, {
   capsuleGatewayUrl = capsuleGatewayProviderUrl(config),
   revisionGatewayUrl = revisionGatewayProviderUrl(config),
@@ -1919,8 +2024,13 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     if (releasePolicy) {
       throw new HttpError(503, releasePolicy.code, "Runtime release provenance is missing or does not match deployment configuration.");
     }
-    const runtimeRoot = path.join(project.runtimeDir, "container-runtime");
+    const runtimeRoot = containerRuntimeRoot(project);
     const xdgConfigDir = path.join(runtimeRoot, "xdg-config");
+    // Written by the control plane before either side builds a plan; read here
+    // so the hosted controller, which builds its own, reaches the same answer.
+    const capsuleMethodsDir = capsuleMethodsHostDir(project);
+    const capsuleMethodCount = mountedCapsuleMethodCount(capsuleMethodsDir);
+    const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount });
     const isolatedControlMount = Boolean(config.runtimeDataVolume);
     const controlDir = isolatedControlMount
       ? path.join(
@@ -1972,6 +2082,16 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         dockerWorkspaceMount(config, project),
         "--mount",
         dockerRuntimeMount(config, runtimeRoot),
+        // Only when something was written. `--mount type=bind` refuses a source
+        // that does not exist -- `docker run` fails before the kernel starts --
+        // and a project with no approved method has no directory, so the mount
+        // is conditional on the same count the plugin's directory name is.
+        ...(capsuleMethodCount > 0
+          ? [
+              "--mount",
+              `${dockerRuntimeMount(config, capsuleMethodsDir, runtimeCapsuleMethodsDir)},readonly`,
+            ]
+          : []),
         ...(isolatedControlMount
           ? [
               "--mount",
@@ -2049,7 +2169,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
           capabilitiesDir: "/opt/evimed/capabilities",
           capabilitySkillsDir: "/opt/evimed/capability-skills",
-          capsuleMethodsDir: "",
+          capsuleMethodsDir: capsuleMethodsRuntimeDir,
           capsuleGatewayUrl,
           revisionGatewayUrl,
           publicSourceGatewayUrl,
@@ -2089,6 +2209,10 @@ export function buildRuntimeLaunchPlan(config, project, port, {
       // plane writes the generated profile patch and credentials file here,
       // host-side, before the container ever starts.
       dshHomeDir: path.join(runtimeRoot, "dsh-home"),
+      // The count this argv was built from, so `dshProfileInput` derives the
+      // other half of the deployment -- the directory the profile names -- from
+      // the same number that decided whether anything is mounted at all.
+      capsuleMethodCount,
       runtimeDirs: [
         runtimeRoot,
         controlDir,
@@ -2175,6 +2299,81 @@ export const runtimeDshHome = "/runtime/dsh-home";
  *  bound rather than a capacity one. Both spill writers resolve from
  *  `os.tmpdir()`, so one variable moves both. */
 export const runtimeTmpDir = "/runtime/tmp";
+
+/**
+ * Where the active capsules' work-style methods are mounted, read-only.
+ *
+ * Under `/runtime` because that is where the runtime's own state already lives,
+ * and a container path is a naming choice: the mount decides what is really
+ * there. `--mount type=bind,...,readonly` is the only way in, so the run reads
+ * its methods and can never write one -- a method the model could edit is a
+ * method the user never approved.
+ */
+export const runtimeCapsuleMethodsDir = `/runtime/${capsuleMethodsDirName}`;
+
+/** Host directory of the container's `/runtime` mount. */
+function containerRuntimeRoot(project) {
+  return path.join(project.runtimeDir, "container-runtime");
+}
+
+/**
+ * Host directory the control plane materializes the project's methods into.
+ *
+ * Beside the container's runtime root, not inside it. Inside it, the same
+ * directory would also be reachable at `/runtime/capsule-methods` through the
+ * read-write `/runtime` mount, and on a launch that mounts nothing -- a project
+ * whose capsules hold no approved method -- nothing would shadow it: the design
+ * says read-only and the run would have a writable path to it. Outside that
+ * root there is exactly one way in, and it is the read-only bind.
+ */
+export function capsuleMethodsHostDir(project) {
+  return path.join(project.runtimeDir, capsuleMethodsDirName);
+}
+
+/**
+ * How many methods this project has mounted, read from the directory rather
+ * than passed in.
+ *
+ * The privileged runtime controller builds its own launch plan from a payload
+ * whose field list is fixed by `RUNTIME_CONTROLLER_PROTOCOL_VERSION`, so a
+ * count carried as an argument would be present on the direct-Docker path and
+ * absent on the hosted one -- the deployment that has capsules would be the
+ * deployment where they never load, and nothing would say so. The control plane
+ * writes this directory before either side builds a plan (it owns the database;
+ * the controller does not), exactly as it already writes the profile patch and
+ * the credentials both sides rely on.
+ *
+ * `withFileTypes` reports a symlink as a symlink, so only real directories
+ * count.
+ *
+ * @param {string} directory @returns {number}
+ */
+function mountedCapsuleMethodCount(directory) {
+  try {
+    return readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
+  } catch {
+    // No directory is the ordinary case: a project with no capsule has never
+    // had one written.
+    return 0;
+  }
+}
+
+/**
+ * The directory the capsule plugin is told to read, from one rule.
+ *
+ * Two values, not three: the container path when something was materialized,
+ * and the empty string when nothing was -- the plugin's schema default and its
+ * documented "no capsule is mounted" value. There is no host-path form because
+ * there is no host-run form: `buildRuntimeLaunchPlan` refuses every sandbox mode
+ * but `docker` by name (`invalid_runtime_sandbox`), so a branch for one would be
+ * a branch no launch can reach and a claim that a mode still exists.
+ *
+ * @param {{ capsuleMethodCount?: number }} plan
+ * @returns {string}
+ */
+export function capsuleMethodsRuntimePath(plan) {
+  return plan.capsuleMethodCount ? runtimeCapsuleMethodsDir : "";
+}
 
 /** `sockaddr_un.sun_path` is a fixed 108-byte field on Linux, NUL included, so
  *  a socket path at or past that length cannot be connected to. Not a limit
@@ -2264,6 +2463,25 @@ export class RuntimeManager {
   } = {}) {
     this.config = config;
     /** @type {any} */ this.pluginService = null;
+    /**
+     * The account's memory capsules — the seam this manager reads a project's
+     * approved work-style methods through.
+     *
+     * The composition root must assign it: `server.mjs` builds the
+     * `CapsuleService` and owns the product database, and this class must not
+     * reach for either. One line, beside the plugin service it already writes:
+     * `runtimeManager.capsuleService = capsuleService;`. Nothing else in this
+     * file sets it, so an unassigned field is a deployment whose capsules are
+     * never mounted — which is why `startKernel` records the mounted count on
+     * the runtime ledger row rather than leaving that state invisible.
+     *
+     * Null is a supported value, not a bug: a deployment without a product
+     * database has no capsules, and a runtime there starts with no methods
+     * mounted instead of failing to start.
+     *
+     * @type {any}
+     */
+    this.capsuleService = null;
     this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
@@ -2292,6 +2510,27 @@ export class RuntimeManager {
 
   usesRuntimeController() {
     return this.runtimeController != null;
+  }
+
+  /**
+   * Materialize the approved work-style methods of this project's active
+   * capsules, so the runtime can read them.
+   *
+   * The whole point of a work-style pack: it is exported, signed, encrypted,
+   * transferred, imported and approved, and until this ran it was never
+   * executed, because the directory the plugin loads methods from was the empty
+   * string at every launch site.
+   *
+   * Reads `this.capsuleService`, which only the composition root assigns.
+   *
+   * @param {any} project @returns {Promise<{ directory: string, count: number, bytes: number }>}
+   */
+  async syncCapsuleMethods(project) {
+    return materializeCapsuleMethods({
+      capsules: this.capsuleService,
+      project,
+      directory: capsuleMethodsHostDir(project),
+    });
   }
 
   activateModelGatewayRuntime(project, runtime) {
@@ -2660,6 +2899,11 @@ export class RuntimeManager {
     }
     const pluginConfig = this.pluginOverrides?.get(key) ?? (this.pluginService ? (await this.pluginService.get(project.userId, project)).desired
       : { revision: 0, enabled: true, settings: { timeoutMs: 15000 } });
+    // Before the plan, because the plan reads the result: both this side and
+    // the privileged controller decide whether to mount the directory by
+    // looking at it. Rebuilt every launch, so a method retired between two runs
+    // is gone from the next one.
+    const capsuleMethodsMounted = (await this.syncCapsuleMethods(project)).count;
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
     plan.pluginConfig = pluginConfig;
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
@@ -2701,6 +2945,7 @@ export class RuntimeManager {
           skillsCopied: 0,
           agentSkillsCopied: 0,
           agentsGenerated: 0,
+          capsuleMethodsMounted,
           error: "runtime_cleanup_failed",
         });
         throw new HttpError(502, "runtime_cleanup_failed", "Runtime container cleanup failed before startup.");
@@ -2771,6 +3016,7 @@ export class RuntimeManager {
         skillsCopied,
         agentSkillsCopied,
         agentsGenerated,
+        capsuleMethodsMounted,
         mcpServersCopied: mcpSync.copied,
         mcpServersConfigured: mcpSync.configured,
         error: "runtime_bootstrap_failed",
@@ -2798,6 +3044,7 @@ export class RuntimeManager {
       skillsCopied,
       agentSkillsCopied,
       agentsGenerated,
+      capsuleMethodsMounted,
       mcpServersCopied: mcpSync.copied,
       mcpServersConfigured: mcpSync.configured,
     }, this.config);
@@ -2813,6 +3060,7 @@ export class RuntimeManager {
       skillsCopied,
       agentSkillsCopied,
       agentsGenerated,
+      capsuleMethodsMounted,
       mcpServersCopied: mcpSync.copied,
       mcpServersConfigured: mcpSync.configured,
     });
@@ -2883,6 +3131,7 @@ export class RuntimeManager {
       skillsCopied,
       agentSkillsCopied,
       agentsGenerated,
+      capsuleMethodsMounted,
       workloadTokenFile: mcpSync.workloadTokenFile,
       workloadTokenRefreshMs: mcpSync.workloadTokenRefreshMs,
       modelGatewayToken: modelGatewaySync.token,
@@ -2929,6 +3178,7 @@ export class RuntimeManager {
         skillsCopied: runtime.skillsCopied,
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
+        capsuleMethodsMounted: runtime.capsuleMethodsMounted,
         error: err instanceof Error ? err.message : String(err),
       });
     });
@@ -2998,6 +3248,7 @@ export class RuntimeManager {
         skillsCopied: runtime.skillsCopied,
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
+        capsuleMethodsMounted: runtime.capsuleMethodsMounted,
       });
     });
     try {
@@ -3015,6 +3266,7 @@ export class RuntimeManager {
         skillsCopied: runtime.skillsCopied,
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
+        capsuleMethodsMounted: runtime.capsuleMethodsMounted,
       }, this.config);
       await recordRuntimeState(project, "started", {
         running: true,
@@ -3028,6 +3280,7 @@ export class RuntimeManager {
         skillsCopied: runtime.skillsCopied,
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
+        capsuleMethodsMounted: runtime.capsuleMethodsMounted,
       });
     } catch (err) {
       this.deactivateModelGatewayRuntime(runtime);
@@ -3050,6 +3303,7 @@ export class RuntimeManager {
         skillsCopied: runtime.skillsCopied,
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
+        capsuleMethodsMounted: runtime.capsuleMethodsMounted,
         error: err instanceof Error ? err.message : String(err),
       });
       throw err;
@@ -3155,6 +3409,7 @@ export class RuntimeManager {
         skillsCopied: runtime.skillsCopied,
         agentSkillsCopied: runtime.agentSkillsCopied,
         agentsGenerated: runtime.agentsGenerated,
+        capsuleMethodsMounted: runtime.capsuleMethodsMounted,
       });
     }
     const state = await readRuntimeState(project);
@@ -3601,14 +3856,36 @@ export class RuntimeManager {
     } finally { this.pluginOverrides.delete(key); }
   }
 
-  async probePlugin(project, expected) {
+  /** The live proof that the plugin the apply path named is the plugin the
+   *  container is running, at the configuration it was told to run.
+   *
+   *  The binary version, the tool names and the settings compared all come
+   *  from the registry entry -- `plugin-support.json` is the record the runtime
+   *  image's install line is asserted equal to, so a version bump is one edit
+   *  there and not two. A released web image has no record to read, and its
+   *  fallback is `PLUGIN_SUPPORT_SNAPSHOT`, which states the same fields.
+   *
+   *  What this deliberately cannot do is certify a plugin whose configuration
+   *  the kernel's proof does not restate. `evimedPlugins/verify` is
+   *  parameterless and answers in one fixed shape, so `provenPluginSettings`
+   *  covers plugins declaring exactly the settings that shape carries -- today
+   *  `timeoutMs`, which is dsh-cite -- and refuses a verdict for any other
+   *  rather than certifying another bundle's registration under its name.
+   *  Both that refusal and an unregistered id are answered before the kernel is
+   *  asked. The plugin id defaults to dsh-cite, which is what every existing
+   *  caller passes by passing nothing.
+   *  @param {any} project @param {any} expected @param {string} pluginId */
+  async probePlugin(project, expected, pluginId = PLUGIN_ID) {
     const runtime = this.runtimes.get(this.key(project));
     const generation = this.runtimeGeneration(project);
     if (!runtime || !generation) throw new HttpError(409, "plugin_runtime_unavailable", "The runtime is unavailable.");
+    const entry = this.pluginService ? this.pluginService.entry(pluginId) : pluginEntry(pluginId);
+    const tools = expectedPluginTools(entry);
+    const settings = provenPluginSettings(entry);
     const proof = await this.callKernel(runtime, project, "evimedPlugins/verify", {}, AbortSignal.timeout(45000));
-    const tools = ["cite_lookup", "cite_format", "cite_bibtex", "cite_check", "cite_health"];
-    if (this.runtimeGeneration(project) !== generation || proof?.binaryVersion !== "0.3.2"
-      || proof.revision !== expected.revision || proof.enabled !== expected.enabled || proof.timeoutMs !== expected.settings.timeoutMs
+    if (this.runtimeGeneration(project) !== generation || proof?.binaryVersion !== entry.version
+      || proof.revision !== expected.revision || proof.enabled !== expected.enabled
+      || settings.some((name) => proof[name] !== expected.settings[name])
       || !Array.isArray(proof.tools) || JSON.stringify([...proof.tools].sort()) !== JSON.stringify(expected.enabled ? tools.sort() : [])) {
       throw new HttpError(502, "plugin_probe_invalid", "The runtime did not prove the expected plugin configuration.");
     }
