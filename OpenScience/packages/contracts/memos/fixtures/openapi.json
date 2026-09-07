@@ -251,6 +251,88 @@
           }
         }
       }
+    },
+    "/product/create_cube": {
+      "post": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Create a new memory cube",
+        "operationId": "create_cube_product_create_cube_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCubeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateCubeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/product/feedback": {
+      "post": {
+        "tags": [
+          "Server API"
+        ],
+        "summary": "Feedback memories",
+        "operationId": "feedback_memories_product_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APIFeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -377,7 +459,7 @@
               }
             ],
             "title": "Info",
-            "description": "Additional metadata for the add request. All keys can be used as filters in search. Example: {'agent_id': 'xxxxxx', 'app_id': 'xxxx', 'source_type': 'web', 'source_url': 'https://www.baidu.com', 'source_content': '\u897f\u6e56\u662f\u676d\u5dde\u6700\u8457\u540d\u7684\u666f\u70b9'}."
+            "description": "Additional metadata for the add request. All keys can be used as filters in search. Example: {'agent_id': 'xxxxxx', 'app_id': 'xxxx', 'source_type': 'web', 'source_url': 'https://www.baidu.com', 'source_content': '西湖是杭州最著名的景点'}."
           },
           "messages": {
             "anyOf": [
@@ -1817,6 +1899,272 @@
         ],
         "title": "StatusResponseItem",
         "description": "Individual task status item."
+      },
+      "APIFeedbackRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "User ID"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Session ID for soft-filtering memories",
+            "default": "default_session"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id",
+            "description": "Task ID for monitoring async tasks"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionSystemMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionUserMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionAssistantMessageParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionToolMessageParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History",
+            "description": "Chat history"
+          },
+          "retrieved_memory_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieved Memory Ids",
+            "description": "Retrieved memory ids at last turn"
+          },
+          "feedback_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Content",
+            "description": "Feedback content to process"
+          },
+          "feedback_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback Time",
+            "description": "Feedback time"
+          },
+          "writable_cube_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Writable Cube Ids",
+            "description": "List of cube IDs user can write for multi-cube add"
+          },
+          "async_mode": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async"
+            ],
+            "title": "Async Mode",
+            "description": "feedback mode: sync or async",
+            "default": "async"
+          },
+          "corrected_answer": {
+            "type": "boolean",
+            "title": "Corrected Answer",
+            "description": "Whether need return corrected answer",
+            "default": false
+          },
+          "info": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Info",
+            "description": "Additional metadata for the add request. All keys can be used as filters in search. Example: {'agent_id': 'xxxxxx', 'app_id': 'xxxx', 'source_type': 'web', 'source_url': 'https://www.baidu.com', 'source_content': 'West Lake is the most famous scenic spot in Hangzhou'}."
+          },
+          "mem_cube_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mem Cube Id",
+            "description": "(Deprecated) Single cube ID to search in. Prefer `readable_cube_ids` for multi-cube search."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "history",
+          "feedback_content"
+        ],
+        "title": "APIFeedbackRequest",
+        "description": "Request model for processing feedback info."
+      },
+      "CreateCubeRequest": {
+        "properties": {
+          "cube_name": {
+            "type": "string",
+            "title": "Cube Name",
+            "description": "Human-readable name for the memory cube"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id",
+            "description": "User ID of the cube owner"
+          },
+          "cube_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cube Path",
+            "description": "File system path where cube data will be stored"
+          },
+          "cube_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cube Id",
+            "description": "Custom unique identifier for the cube. If not provided, one will be generated. Note: cube_id is also referred to as mem_cube_id throughout the API."
+          }
+        },
+        "type": "object",
+        "required": [
+          "cube_name",
+          "owner_id"
+        ],
+        "title": "CreateCubeRequest",
+        "description": "Request model for creating a new memory cube."
+      },
+      "CreateCubeResponse": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "Response status code",
+            "default": 200
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "Cube created successfully"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreateCubeResponseData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Response data"
+          }
+        },
+        "type": "object",
+        "title": "CreateCubeResponse",
+        "description": "Response model for cube creation."
+      },
+      "CreateCubeResponseData": {
+        "properties": {
+          "cube_id": {
+            "type": "string",
+            "title": "Cube Id",
+            "description": "The created cube ID (also called mem_cube_id)"
+          },
+          "cube_name": {
+            "type": "string",
+            "title": "Cube Name",
+            "description": "Name of the created cube"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id",
+            "description": "Owner user ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cube_id",
+          "cube_name",
+          "owner_id"
+        ],
+        "title": "CreateCubeResponseData",
+        "description": "Data model for cube creation response."
       }
     }
   }

@@ -3,7 +3,7 @@
   "sourceCommit": "b41c8996a8dcb9df81998cced68d11457ce950c3",
   "sourceUrl": "https://github.com/MemTensor/MemOS/tree/b41c8996a8dcb9df81998cced68d11457ce950c3",
   "observedAt": "2026-09-05",
-  "openapiEvidence": "Read-only /openapi.json of the existing MemOS server; reduced to adapter endpoints and their transitive schemas. API schema version 1.0.1 is not the package version.",
+  "openapiEvidence": "Read-only /openapi.json of the existing MemOS server; reduced to adapter endpoints and their transitive schemas. API schema version 1.0.1 is not the package version. The /product/create_cube and /product/feedback entries were added later and were NOT captured from a running server: see derivedEndpoints.",
   "fixtureEvidence": "Health was observed read-only. Add/search/export/delete examples contain only synthetic data and follow the exact response constructors in the listed upstream source files; no existing memory was read or changed.",
   "sourceFiles": [
     "pyproject.toml",
@@ -15,7 +15,10 @@
     "src/memos/multi_mem_cube/single_cube.py",
     "src/memos/api/handlers/formatters_handler.py",
     "src/memos/graph_dbs/neo4j.py",
-    "src/memos/api/handlers/scheduler_handler.py"
+    "src/memos/api/handlers/scheduler_handler.py",
+    "src/memos/api/routers/server_router.py",
+    "src/memos/api/handlers/cube_handler.py",
+    "src/memos/api/handlers/feedback_handler.py"
   ],
   "runtimeLimitations": [
     "Running image is locally built memos-dev-memos, not a verified memtensor/memos:2.0.30 image.",
@@ -26,20 +29,38 @@
     "Upstream add logs full request bodies; remove/redact that logging before production use.",
     "Deletion response reports success/failure but no deletion count.",
     "get_memory exports text memories and optional types, not complete database/user/cube administrative state.",
-    "The adapter uses async add to preserve the supplied task_id; task status is checked separately. A missing task is an error, not proof of completion."
+    "The adapter uses async add to preserve the supplied task_id; task status is checked separately. A missing task is an error, not proof of completion.",
+    "create_cube validates owner_id against upstream's own UserManager and answers 400 for an owner it does not know. memOsNamespace derives an opaque owner id that nothing registers, so this call fails against a real engine until the migration registers users first. add does not perform that check and materializes the cube implicitly today.",
+    "Async feedback returns data: [[]] — an empty process record the handler still wraps in a list — and upstream logs and swallows a failed scheduler submission while returning that same body. An accepted feedback and a dropped one are indistinguishable in the response; only the task id can separate them afterwards.",
+    "feedback resolves cube ids to [user_id] when writable_cube_ids is absent, which is outside our namespace. The adapter always sends the list; an omission upstream would be a silent cross-scope write."
   ],
   "runtimeSourceHashes": {
     "src/memos/api/handlers/memory_handler.py": "5a4449f0cd647715824e3b1881636abc294784a3ca0e82d6e0a48b0bf04072c4",
-    "src/memos/api/product_models.py": "2c52d881402182650e72bec6c8d64132ae49bf886390dc20eadd1769e3c12ee4"
+    "src/memos/api/product_models.py": "2c52d881402182650e72bec6c8d64132ae49bf886390dc20eadd1769e3c12ee4",
+    "src/memos/api/routers/server_router.py": "8538dacfe91db699828241b6b574c109adb994bc11f33b8a02b8d7ffb7bb4c9e",
+    "src/memos/api/handlers/cube_handler.py": "c23e1c56c108d9d0760587b4165d5be25eb24e869af11a50108ad16af30c4311",
+    "src/memos/api/handlers/feedback_handler.py": "60d4885024741f927a3ab5df8c19079f125eea5639706bef833fd48d74d364a1"
   },
-  "runtimeSourceHashEvidence": "These two SHA-256 values matched the checked-out upstream source and the running container; this is not image attestation.",
+  "runtimeSourceHashEvidence": "The first two SHA-256 values matched the checked-out upstream source and the running container; this is not image attestation. The three added for the derived endpoints were taken from the tarball at sourceCommit only — no container was running when they were read — and the two container-verified hashes in the same tarball still match, which is what ties the tarball to the observed server.",
   "deploymentAcceptance": [
     "Deploy a dedicated engine from an attested 2.0.30 source/image, with immutable source and no reload flag.",
     "Use a private network reachable only by the EviMed control plane, excluding all DSH runtime containers. The raw API has no authentication.",
     "Provision persistent graph/vector stores, scheduler Redis, writable local file storage, and model endpoints; validate actual selected backends and dimensions against src/memos/api/config.py.",
     "Remove full request-body logging in upstream AddHandler and SingleCubeView before processing user memory.",
     "Run the opt-in disposable live contract only after authorization for embedding/model calls. It verifies storage, task completion, provenance, cross-account/project isolation, scoped deletion, account-wide deletion, and cleanup.",
-    "Before migrating retained product documents, reconcile every product entryId/provenanceId with engine IDs, including failures and partial writes; verify restart persistence and backup/restore separately."
+    "Before migrating retained product documents, reconcile every product entryId/provenanceId with engine IDs, including failures and partial writes; verify restart persistence and backup/restore separately.",
+    "Register each derived owner id with the engine's UserManager before calling create_cube, and decide whether the migration creates cubes explicitly or keeps relying on implicit creation by add.",
+    "Confirm on a live engine that a feedback task id appears in /product/scheduler/status, since the feedback response itself cannot report a dropped submission."
   ],
-  "liveContractCommand": "EVIMED_MEMOS_LIVE_CONTRACT=disposable EVIMED_MEMOS_LIVE_ALLOW_MODEL_CALLS=yes EVIMED_MEMOS_LIVE_BASE_URL=<private-engine-origin> node --test packages/contracts/memos/live.test.mjs"
+  "liveContractCommand": "EVIMED_MEMOS_LIVE_CONTRACT=disposable EVIMED_MEMOS_LIVE_ALLOW_MODEL_CALLS=yes EVIMED_MEMOS_LIVE_BASE_URL=<private-engine-origin> node --test packages/contracts/memos/live.test.mjs",
+  "derivedEndpoints": {
+    "paths": [
+      "/product/create_cube",
+      "/product/feedback"
+    ],
+    "observedAt": "2026-09-07",
+    "method": "Generated by FastAPI from the pinned revision's own Pydantic models (CreateCubeRequest/CreateCubeResponse, APIFeedbackRequest/MemoryResponse), imported from the source tarball at sourceCommit, with the route decorators copied from src/memos/api/routers/server_router.py (prefix /product, tags [Server API]).",
+    "equivalenceCheck": "All 18 schemas shared between the generated document and the captured one compared byte-identical, so the local generator reproduces this server's OpenAPI output rather than approximating it. product_models.py and memory_handler.py in the downloaded tarball also matched runtimeSourceHashes, which were taken from the running container — the models these schemas come from are the same bytes the server is serving.",
+    "notCovered": "Response bodies for these two paths are synthetic, like every other fixture here. No live request was made to either endpoint."
+  }
 }

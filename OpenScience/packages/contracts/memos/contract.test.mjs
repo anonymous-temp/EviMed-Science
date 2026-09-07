@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import http from "node:http";
 import test from "node:test";
 import { MemOsClient, memOsNamespace } from "../../../apps/server/src/memOsEngineClient.mjs";
-import { addResponse, deleteResponse, exampleRecord, healthResponse, searchResponse } from "./fixtures/wire.mjs";
+import { addResponse, createCubeResponse, deleteResponse, exampleRecord, feedbackResponse, healthResponse, searchResponse } from "./fixtures/wire.mjs";
 
 const readJson = async path => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
 const versions = await readJson("../../../deps-version.json");
@@ -40,6 +40,18 @@ test("MemTensor pin and captured source identity agree", () => {
   assert.equal(openapi.info.title, "MemOS Server REST APIs");
   assert.equal(openapi.info.version, "1.0.1");
   assert.equal(openapi.components.securitySchemes, undefined);
+  // Every path is either captured from the running server or declared as
+  // derived from the pinned source, and there is no third way to be in here.
+  // Without this, a path added by hand reads exactly like a captured one.
+  for (const path of Object.keys(openapi.paths)) {
+    if (provenance.derivedEndpoints.paths.includes(path)) continue;
+    assert.ok(provenance.openapiEvidence.startsWith("Read-only /openapi.json"), path);
+  }
+  assert.match(provenance.derivedEndpoints.method, /pinned revision's own Pydantic models/);
+  assert.match(provenance.derivedEndpoints.equivalenceCheck, /byte-identical/);
+  for (const file of Object.keys(provenance.runtimeSourceHashes)) {
+    assert.ok(provenance.sourceFiles.includes(file), `${file} is hashed but not listed as read`);
+  }
 });
 
 test("real adapter serialization and normalization satisfy the observed MemOS contract", async t => {
@@ -64,16 +76,24 @@ test("real adapter serialization and normalization satisfy the observed MemOS co
         if (path === "/product/add") taskId = body.task_id;
       }
       if (path === "/product/delete_memory") deleted = true;
-      const result = path === "/health" ? healthResponse
-        : path === "/product/add" ? addResponse(scope.cubeId)
-          : path === "/product/search" ? searchResponse(scope.userId, scope.cubeId)
-            : path === "/product/get_memory" ? (() => {
-                const response = searchResponse(scope.userId, scope.cubeId, { total: deleted ? 0 : 1 });
-                if (deleted) response.data.text_mem[0].memories = [];
-                return response;
-              })()
-              : path === "/product/scheduler/status" ? { code: 200, message: "Memory get status successfully", data: [{ task_id: taskId, status: "waiting" }] }
-                : deleteResponse;
+      // A table rather than a ternary chain: with eight endpoints the chain was
+      // already unreadable, and the assertion at the end of this test is that
+      // every path in the captured spec appears here exactly once.
+      const responses = {
+        "/health": () => healthResponse,
+        "/product/create_cube": () => createCubeResponse(scope.userId, scope.cubeId),
+        "/product/add": () => addResponse(scope.cubeId),
+        "/product/search": () => searchResponse(scope.userId, scope.cubeId),
+        "/product/get_memory": () => {
+          const response = searchResponse(scope.userId, scope.cubeId, { total: deleted ? 0 : 1 });
+          if (deleted) response.data.text_mem[0].memories = [];
+          return response;
+        },
+        "/product/feedback": () => feedbackResponse,
+        "/product/scheduler/status": () => ({ code: 200, message: "Memory get status successfully", data: [{ task_id: taskId, status: "waiting" }] }),
+        "/product/delete_memory": () => deleteResponse,
+      };
+      const result = responses[path]();
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(result));
     } catch (error) {
@@ -85,11 +105,22 @@ test("real adapter serialization and normalization satisfy the observed MemOS co
   t.after(() => { server.closeAllConnections(); server.close(); });
   const client = new MemOsClient({ memOsBaseUrl: `http://127.0.0.1:${server.address().port}` });
   await client.health();
+  // Before the first write, because that is the order the substrate migration
+  // will have to use: `add` materializes a cube it has never seen today, and
+  // nothing upstream promises it will keep doing so.
+  assert.equal((await client.createCube("contract-account", options)).cubeId, scope.cubeId);
   const added = await client.add("contract-account", [exampleRecord], options);
   assert.equal(added.records[0].entryId, exampleRecord.entryId);
   assert.equal((await client.search("contract-account", "methods", options))[0].entryId, exampleRecord.entryId);
   assert.equal((await client.export("contract-account", options)).complete, true);
   assert.equal((await client.getTaskStatus("contract-account", added.records[0].taskId, options)).status, "waiting");
+  // The return path of the recall loop: what a person decided about what was
+  // recalled. Async upstream, so the receipt is a task id and nothing more.
+  assert.equal((await client.feedback("contract-account", {
+    history: [{ role: "user", content: "只看随机对照试验" }, { role: "assistant", content: "已按此检索。" }],
+    feedbackContent: "这条记忆已经过时，请不要再召回。",
+    retrievedMemoryIds: ["memory-one"],
+  }, options)).status, "accepted");
   await client.deleteRecord("contract-account", "memory-one", options);
   assert.equal(requestFailure, undefined);
   assert.deepEqual(new Set(calls), new Set(Object.keys(openapi.paths)));
