@@ -1,4 +1,5 @@
 import { projectSourceManifestRecord } from "./sourceService.mjs";
+import { openListSourceInput } from "./openListSourceConnector.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
@@ -14,6 +15,14 @@ async function bodyOf(req, limit, allowed) {
 /** Account-authenticated source inventory and user corrections.
  * @param {{store:any,service:any,openList?:any,maxJsonBytes:number}} dependencies */
 export function createSourceRoutes({ store, service, openList = null, maxJsonBytes }) {
+  // The composition builds one OpenList connector for the browser's namespace and
+  // shares this SourceService instance with the ingestion worker. Handing the
+  // connector to the service here is what lets the leased folder sync page the
+  // same namespace; there is no second client and no second credential.
+  if (service && openList) service.useConnector("openlist", openList);
+  // A queued job carries worker-only identity (the account generation it was cut
+  // against). The browser needs to know a sync is scheduled, not what it holds.
+  const folderReply = ({ folder, job, ...rest }) => ({ folder, ...rest, scheduled: Boolean(job) });
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -43,18 +52,57 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
       await store.requireProject(user, projectId);
       const item = await openList.stat(user.id, selected);
       if (item.entryType !== "file") throw new HttpError(400, "openlist_file_required", "Select a file to import.");
-      const match = /^sha256:([a-f0-9]{64})$/i.exec(String(item.providerHash ?? ""));
-      if (!match) throw new HttpError(409, "openlist_sha256_required", "This OpenList storage must expose a SHA-256 hash; use platform upload or the local agent for this file.");
-      return reply(await service.register(user.id, {
-        projectId,
-        connector: { type: "openlist", id: selected },
-        path: `openlist/${selected.replace(/^\/+/, "")}`,
-        size: item.size,
-        mtime: item.mtime ?? new Date().toISOString(),
-        mimeType: "application/octet-stream",
-        sha256: match[1].toLowerCase(),
-        providerHash: item.providerHash,
-      }), 201);
+      // Register the path the connector resolved, not the one the browser typed:
+      // the folder sync registers the same resolved paths, and the two must land
+      // in one version family rather than two.
+      return reply(await service.register(user.id, openListSourceInput(projectId, item)), 201);
+    }
+    if (url.pathname === "/api/sources/folders" && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      await store.requireProject(user, projectId);
+      return reply(await service.listFolders(user.id, { projectId,
+        limit: Number(url.searchParams.get("limit") ?? 50), cursor: url.searchParams.get("cursor") }));
+    }
+    if (url.pathname === "/api/sources/folders" && method === "POST") {
+      if (!openList) throw new HttpError(503, "openlist_unavailable", "OpenList is not configured for this deployment.");
+      const input = await bodyOf(req, maxJsonBytes, ["projectId", "path"]);
+      const projectId = typeof input.projectId === "string" ? input.projectId : "";
+      await store.requireProject(user, projectId);
+      // Refuse a folder the account cannot even browse, so a registration never
+      // promises a sync the namespace would reject on every run.
+      const selected = typeof input.path === "string" ? input.path : "";
+      const item = await openList.stat(user.id, selected);
+      if (item.entryType !== "dir") throw new HttpError(400, "source_folder_invalid", "Select a folder to sync.");
+      return reply(folderReply(await service.registerFolder(user.id, { projectId, connectorType: "openlist", path: item.path })), 201);
+    }
+    if (url.pathname.startsWith("/api/sources/folders/")) {
+      let segments;
+      try { segments = url.pathname.slice("/api/sources/folders/".length).split("/").filter(Boolean).map(decodeURIComponent); }
+      catch { throw new HttpError(400, "source_folder_invalid", "Invalid folder path."); }
+      if (segments.length < 1 || segments.length > 2) throw new HttpError(404, "not_found", "Source route not found.");
+      const [folderId, folderAction] = segments;
+      const folder = await service.getFolder(user.id, folderId);
+      await store.requireProject(user, folder.projectId);
+      if (segments.length === 1 && method === "GET") return reply(folder);
+      if (segments.length === 1 && method === "PATCH") {
+        return reply(folderReply(await service.setFolderStatus(user.id, folderId, await bodyOf(req, maxJsonBytes, ["expectedRevision", "status"]))));
+      }
+      if (folderAction === "sync" && method === "POST") {
+        return reply(folderReply(await service.syncFolder(user.id, folderId, await bodyOf(req, maxJsonBytes, ["expectedRevision"]))));
+      }
+      throw new HttpError(404, "not_found", "Source route not found.");
+    }
+    if (url.pathname === "/api/sources/duplicates" && method === "GET") {
+      const projectId = url.searchParams.get("projectId");
+      if (!projectId) throw new HttpError(400, "project_required", "A project is required.");
+      await store.requireProject(user, projectId);
+      return reply(await service.duplicateCandidates(user.id, { projectId, limit: Number(url.searchParams.get("limit") ?? 50) }));
+    }
+    if (url.pathname === "/api/sources/duplicates" && method === "POST") {
+      const input = await bodyOf(req, maxJsonBytes, ["projectId", "groupKey", "sourceIds", "decision", "note"]);
+      await store.requireProject(user, typeof input.projectId === "string" ? input.projectId : "");
+      return reply(await service.decideDuplicate(user.id, input), 201);
     }
     let parts;
     try { parts = url.pathname.slice("/api/sources".length).split("/").filter(Boolean).map(decodeURIComponent); }
@@ -67,6 +115,7 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
       return reply(await service.list(user.id, {
         projectId,
         status: url.searchParams.get("status"),
+        familyId: url.searchParams.get("familyId"),
         limit: Number(url.searchParams.get("limit") ?? 50),
         cursor: url.searchParams.get("cursor"),
       }));
@@ -75,6 +124,9 @@ export function createSourceRoutes({ store, service, openList = null, maxJsonByt
     const [sourceId, action] = parts;
     const source = await service.get(user.id, sourceId, { includeDeleted: method === "DELETE" });
     await store.requireProject(user, source.projectId);
+    if (action === "family" && method === "GET" && parts.length === 2) {
+      return reply(await service.family(user.id, sourceId, { limit: Number(url.searchParams.get("limit") ?? 50) }));
+    }
     if (action === "understanding" && method === "GET") {
       if (parts.length === 2) return reply(await service.getUnderstanding(user.id, sourceId));
       if (parts[2] === "history") return reply(await service.understandingHistory(user.id, sourceId, {

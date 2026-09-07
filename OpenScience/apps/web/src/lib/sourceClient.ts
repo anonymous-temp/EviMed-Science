@@ -41,7 +41,12 @@ export interface SourceUnderstanding {
     evidence: SourceAnchor[];
     status: "draft";
   }>;
-  omissionAudit: { status: "not_run"; reason: string; omissionRate: null };
+  // The contract now delivers a real verdict. A record written before the audit
+  // existed, and any run that did not audit, still projects as `not_run`.
+  omissionAudit:
+    | { status: "not_run"; reason?: string; omissionRate: null }
+    | { status: "audited"; reason?: string; omissionRate: number | null;
+        samples: Array<{ unitId: string; represented: boolean; note?: string }> };
   units: Array<{ id: string; unitType: "chunk"; start: number; end: number; text: string; status: string }>;
 }
 export interface SourceUnderstandingResult {
@@ -57,8 +62,10 @@ export interface SourcePayload {
   docType: string;
   depth: SourceDepth;
   version: number;
+  familyId?: string;
   generation?: number;
   analysis?: { phase?: string };
+  omissionAudit?: { status: string; reason?: string; omissionRate: number | null };
   reasons: string[];
   valueVector: Record<string, number>;
   coverage: null | {
@@ -103,6 +110,90 @@ export function cancelSource(id: string, expectedRevision: number) {
 }
 export function removeSource(id: string, expectedRevision: number) {
   return productRequest<SourceRecord>(`/sources/${encodeURIComponent(id)}`, "DELETE", { expectedRevision });
+}
+export interface SourceFamily {
+  sourceId: string;
+  familyId: string | null;
+  currentVersion: number | null;
+  items: SourceRecord[];
+  nextCursor: string | null;
+}
+export interface SourceFolderSync {
+  at: string;
+  run: number;
+  startPage: number;
+  endPage: number;
+  complete: boolean;
+  scanned: number;
+  registered: number;
+  updated: number;
+  unchanged: number;
+  directories: number;
+  tracked: number;
+  // `skipped` and `removedPaths` are bounded example lists; the counts are the
+  // totals. A run that skipped five hundred entries names twenty of them.
+  skipped: Array<{ path: string; reason: string }>;
+  skippedCount: number;
+  removedPaths: string[];
+  removedCount: number;
+  removalCheck: "full" | "partial";
+}
+export interface SourceFolderPayload {
+  recordType: "source-folder";
+  connector: { type: string; id: string };
+  status: "active" | "paused";
+  recursive: false;
+  sync: { run: number; page: number };
+  entries: Record<string, { providerHash: string; sourceId: string; version: number; size: number }>;
+  lastSync: SourceFolderSync | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export type SourceFolderRecord = ProductRecord<SourceFolderPayload> & { projectId: string };
+export type DuplicateGroupKind = "version-family" | "shared-content" | "similar-name";
+export interface DuplicateMember {
+  sourceId: string;
+  version: number;
+  familyId: string | null;
+  status: SourceStatus;
+  docType: string;
+  paths: string[];
+  size: number;
+  sha256: string | null;
+  connectorType: string | null;
+  updatedAt: string;
+}
+export interface DuplicateGroup {
+  kind: DuplicateGroupKind;
+  groupKey: string;
+  label: string;
+  members: DuplicateMember[];
+  sourceIds: string[];
+  decision: { decision: "linked" | "dismissed"; note: string; at: string } | null;
+}
+
+export function getSourceFamily(id: string) {
+  return productRequest<SourceFamily>(`/sources/${encodeURIComponent(id)}/family`);
+}
+export function listSourceFolders(projectId: string) {
+  const query = new URLSearchParams({ projectId });
+  return productRequest<ProductPage<SourceFolderRecord>>(`/sources/folders?${query}`);
+}
+export function registerSourceFolder(projectId: string, path: string) {
+  return productRequest<{ folder: SourceFolderRecord; created: boolean; scheduled: boolean }>("/sources/folders", "POST", { projectId, path });
+}
+export function syncSourceFolder(id: string, expectedRevision: number) {
+  return productRequest<{ folder: SourceFolderRecord; scheduled: boolean }>(`/sources/folders/${encodeURIComponent(id)}/sync`, "POST", { expectedRevision });
+}
+export function setSourceFolderStatus(id: string, expectedRevision: number, status: "active" | "paused") {
+  return productRequest<{ folder: SourceFolderRecord; scheduled: boolean }>(`/sources/folders/${encodeURIComponent(id)}`, "PATCH", { expectedRevision, status });
+}
+export function listDuplicateCandidates(projectId: string) {
+  const query = new URLSearchParams({ projectId });
+  return productRequest<{ items: DuplicateGroup[]; scanned: number; truncated: boolean }>(`/sources/duplicates?${query}`);
+}
+export function decideDuplicateGroup(input: { projectId: string; groupKey: string; sourceIds: string[]; decision: "linked" | "dismissed" }) {
+  return productRequest<ProductRecord<{ groupKey: string; decision: string }>>("/sources/duplicates", "POST", input);
 }
 export function browseOpenList(projectId: string, path: string) {
   const query = new URLSearchParams({ projectId, path });

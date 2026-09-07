@@ -34,6 +34,41 @@ describe("SourceUnderstandingPanel", () => {
   });
   afterEach(() => { vi.useRealTimers(); });
 
+  it("reports an audited omission rate and names the units nothing covered, and keeps not_run distinct from zero", async () => {
+    // A coverage percentage says which units parsed. The audit says which of
+    // them nothing in the understanding actually represents — so "not audited"
+    // and "audited, nothing missed" must never render the same way.
+    const unaudited = render(<SourceUnderstandingPanel {...props} />);
+    expect(await screen.findByText("遗漏尚未审计")).toBeInTheDocument();
+    expect(unaudited.container.textContent).not.toMatch(/遗漏率/);
+    unaudited.unmount();
+
+    mocks.getSourceUnderstanding.mockResolvedValue({
+      ...result(),
+      current: {
+        ...understanding,
+        omissionAudit: {
+          status: "audited", reason: "按确定性抽样核对。", omissionRate: 0.25,
+          samples: [
+            { unitId: "chunk-1", represented: true },
+            { unitId: "chunk-2", represented: true },
+            { unitId: "chunk-3", represented: true },
+            { unitId: "chunk-4", represented: false, note: "讨论了停药后随访，理解里没有对应条目。" },
+          ],
+        },
+      },
+    });
+    const audited = render(<SourceUnderstandingPanel {...props} />);
+    await screen.findByText(understanding.summary);
+    const text = () => audited.container.textContent ?? "";
+    await waitFor(() => expect(text()).toMatch(/抽查 4 个单元，1 个未被理解覆盖/));
+    expect(text()).toMatch(/遗漏率 25%/);
+    expect(text()).toMatch(/未覆盖单元 chunk-4：讨论了停药后随访/);
+    expect(text()).not.toMatch(/遗漏尚未审计/);
+    // the three represented units are not listed as gaps
+    expect(text()).not.toMatch(/未覆盖单元 chunk-1/);
+  });
+
   it("shows anchored slots, unknown reasons, draft methods, actual cost and the existing session route", async () => {
     render(<SourceUnderstandingPanel {...props} />);
     expect(await screen.findByText(understanding.summary)).toBeInTheDocument();
