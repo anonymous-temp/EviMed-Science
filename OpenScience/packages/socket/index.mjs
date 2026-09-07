@@ -23,7 +23,7 @@ export function apply() {}
 
 /** The plugin row ids this bundle owns. The `--dump-config` snapshot test walks it. */
 export const HOST_PLUGIN_IDS = Object.freeze(['evimed-runtime-ui', 'evimed-plugin-probe', 'evimed-seam-probe', 'evimed-evidence-store'])
-export const AGENT_PLUGIN_IDS = Object.freeze(['evimed-guidance', 'evimed-run-policy', 'evimed-evidence', 'evimed-capsule', 'evimed-screening', 'evimed-review', 'evimed-citation-bridge'])
+export const AGENT_PLUGIN_IDS = Object.freeze(['evimed-guidance', 'evimed-run-policy', 'evimed-evidence', 'evimed-capsule', 'evimed-screening', 'evimed-review', 'evimed-citation-bridge', 'evimed-compaction'])
 
 /** The single composition. There is no second one, and adding one is a design change. */
 export const PRESET_NAME = 'evimed-universal'
@@ -41,6 +41,7 @@ export const PLUGIN_SPECIFIERS = Object.freeze({
   'evimed-screening': './plugins/screening.mjs',
   'evimed-review': './plugins/review.mjs',
   'evimed-citation-bridge': './plugins/citation-bridge.mjs',
+  'evimed-compaction': './plugins/compaction.mjs',
 })
 
 export { buildGuidanceText, GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER } from './src/guidanceText.mjs'

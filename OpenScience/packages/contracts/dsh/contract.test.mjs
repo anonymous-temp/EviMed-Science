@@ -62,7 +62,7 @@ test("an upgrade may not skip the peer range, so a mismatched bundle refuses to 
 });
 
 test("every package the manifest names is classified, and none is a private subpath", () => {
-  const roles = new Set(["peer", "dependency", "config-row", "types-only", "re-exported"]);
+  const roles = new Set(["peer", "dependency", "config-row", "types-only", "re-exported", "provider-base"]);
   for (const [name, role] of Object.entries(SEAMS.packages)) {
     assert.ok(roles.has(role), `${name} has an unknown role "${role}"`);
     assert.ok(name.startsWith("@deepseek-ai/"), `${name} is not a harness package`);

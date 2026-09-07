@@ -14,7 +14,8 @@
     "./seam-manifest.json": "./seam-manifest.json",
     "./package.json": "./package.json",
     "./runtime-ui-transport": "./src/runtimeUiTransport.mjs",
-    "./runtime-ui-bridge": "./src/runtimeUiBridge.mjs"
+    "./runtime-ui-bridge": "./src/runtimeUiBridge.mjs",
+    "./compaction": "./src/compaction.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

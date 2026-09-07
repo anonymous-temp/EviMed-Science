@@ -1098,6 +1098,63 @@ export function loadConfig(overrides = {}) {
     autopilotEnabled: overrides.autopilotEnabled ?? boolEnv("OPEN_SCIENCE_AUTOPILOT_ENABLED", production),
     autopilotPollMs: Number(overrides.autopilotPollMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_POLL_MS ?? 1_000),
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
+    // The learning loop's own knobs.
+    //
+    // Off by default, including in production. Every other subsystem here
+    // defaults on in production because a deployment without it is missing a
+    // product feature; a deployment without distillation is missing nothing a
+    // researcher asked for, and turning it on costs model calls against the
+    // same budget their runs use. It goes on when a deployment has decided to
+    // spend that, not because it was installed.
+    learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", false),
+    learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
+    learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),
+    // Two, because the learning worker shares a 15 GB machine with the
+    // production control plane and every job it claims starts a container.
+    learningConcurrency: Number(overrides.learningConcurrency ?? process.env.OPEN_SCIENCE_LEARNING_CONCURRENCY ?? 2),
+    // The off-peak window, which is an economic argument rather than a
+    // scheduling preference: `priceUsage` halves a model call outside peak
+    // hours, so a loop that only ever runs at night costs half as much as the
+    // same loop run whenever a job happens to be queued.
+    learningWindow: String(overrides.learningWindow ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW ?? "22:00-09:00"),
+    learningDailyLimitCny: Number(overrides.learningDailyLimitCny
+      ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 5),
+    learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
+      ?? process.env.OPEN_SCIENCE_LEARNING_WEEKLY_LIMIT_CNY ?? 20),
+    learningRunLimitCny: Number(overrides.learningRunLimitCny
+      ?? process.env.OPEN_SCIENCE_LEARNING_RUN_LIMIT_CNY ?? 1),
+    // How the nightly job runs a paired evaluation, if a deployment wants it to.
+    //
+    // Empty by default, and an `evaluate` job then fails by name rather than
+    // succeeding without evaluating. That default is deliberate: the harness
+    // dispatches hundreds of real runs (100 briefs x 2 arms x 3 repeats), and a
+    // timer on a shared box is the wrong place to start that. An operator who
+    // has the capacity points this at `evals/method-quality/run_paired.py`.
+    learningEvaluationCommand: String(overrides.learningEvaluationCommand
+      ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND ?? ""),
+    transcriptRetentionDays: Number(overrides.transcriptRetentionDays
+      ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
+    // `basic` is the kernel's own engine; `structured` is ours, which preserves
+    // the run's durable handles across a compaction. It stays `basic` until the
+    // context-fidelity report has a real distribution to argue from (§6.5).
+    runtimeCompactionPolicy: String(overrides.runtimeCompactionPolicy
+      ?? process.env.OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY ?? "basic"),
+    // The context window the kernel is told it has.
+    //
+    // It was the literal 1,000,000 while a run's own budget was 400,000, and
+    // the two are not independent: pressure compaction fires at
+    // thresholdRatio x contextWindow, which put the trigger at 800,000 — inside
+    // a window that never opens. Compaction has therefore never fired in this
+    // deployment, and no measurement could have told us that apart from the
+    // absence of any compaction record at all.
+    //
+    // Defaulting it to the run budget makes the trigger reachable (0.8 x
+    // 400,000 = 320,000) without this file asserting a vendor context size it
+    // has no way to verify. A deployment that knows its model's real window
+    // sets it explicitly.
+    runtimeContextWindow: Number(overrides.runtimeContextWindow
+      ?? process.env.OPEN_SCIENCE_RUNTIME_CONTEXT_WINDOW
+      ?? overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 400_000),
     requireInbox: overrides.requireInbox ?? boolEnv("OPEN_SCIENCE_REQUIRE_INBOX", production),
     // How long a run may produce no new message and no new tool call before it
     // is treated as stalled. A ledger of start/dispatch/finish cannot tell a

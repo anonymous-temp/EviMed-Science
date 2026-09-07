@@ -94,8 +94,10 @@ export const EXTRACTION_FLOORS = {
 
 /** Roles in seam-manifest.json that mean "harness-port imports this, so it is installed here". */
 const INSTALLED_ROLES = new Set(["peer", "dependency", "re-exported", "types-only"]);
-/** The role that means "named in a composition, installed only inside the runtime image". */
-const COMPOSITION_ROLE = "config-row";
+/** The roles that mean "named in a composition, installed only inside the runtime image".
+ *  `provider-base` is one of them: harness-port subclasses `dsh-compaction-basic`, but it
+ *  does so lazily and only inside the image, so this checker resolves it the same way. */
+const COMPOSITION_ROLES = new Set(["config-row", "provider-base"]);
 
 // ---------------------------------------------------------------------------
 // Extraction
@@ -762,7 +764,7 @@ export async function verifyCompositionReferences(options = {}) {
         specifier: reference.specifier,
         detail: `installed ${installed.version}, ${target.source} says ${target.version}`,
       });
-    } else if (reference.role && reference.role !== COMPOSITION_ROLE) {
+    } else if (reference.role && !COMPOSITION_ROLES.has(reference.role)) {
       problems.push({
         kind: "extraction-drift",
         file: reference.file,
