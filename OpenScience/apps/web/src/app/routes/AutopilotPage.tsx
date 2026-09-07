@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router";
 import { CalendarClock, PauseCircle, PlayCircle, Sparkles } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
 import { decideDigest, getDigest, listAgendas, listDigests, markDigestOpened, scheduleAgenda, startAgenda, stopAgenda,
-  type AgendaRecord, type DigestRecord } from "@/lib/autopilotClient";
+  type AgendaRecord, type DigestClaim, type DigestRecord } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,40 @@ import { MemorySkeleton } from "@/components/cards/Skeletons";
 
 function pendingFollowUps(agenda: AgendaRecord): number {
   return (agenda.payload.followUps ?? []).filter((item) => !item.consumedBy).length;
+}
+
+/**
+ * How far a finding has been checked, and by whom.
+ *
+ * The tier is what separates "我们发现" from "看起来", so the reader is told which
+ * one they are looking at rather than left to infer it from the position on the
+ * page. A refutation is said out loud: a claim the digest offered yesterday and
+ * an independent re-check overturned today is the one sentence a reader most
+ * needs and would least expect to find.
+ */
+function verificationLabel(claim: DigestClaim): { text: string; refuted: boolean } | null {
+  if (claim.refutation === "refuted") return { text: "独立复核未能复现，已降级为线索", refuted: true };
+  if (claim.refutation === "weakened") return { text: "独立复核只能部分支持", refuted: false };
+  if (claim.tier === "reproduced") return { text: "独立复核已复现", refuted: false };
+  if (claim.refutation === "stands") return { text: "独立复核未能推翻", refuted: false };
+  if (claim.verification?.status === "queued") return { text: "独立复核排队中", refuted: false };
+  if (claim.verification?.status === "unavailable") return { text: "独立复核未完成，仍停留在门禁通过", refuted: false };
+  // A claim that was never scheduled is not a claim awaiting its turn. The
+  // service records the two separately on purpose, and a reader who cannot tell
+  // them apart is waiting for something that is never coming.
+  if (claim.verification?.status === "unscheduled") {
+    return { text: claim.verification.reason === "verification_budget_unavailable"
+      ? "本轮预算不足以安排独立复核" : "本轮复核名额已满，未安排独立复核", refuted: false };
+  }
+  if (claim.tier === "gated") return { text: "已通过交付门禁，尚未独立复核", refuted: false };
+  if (claim.tier === "unverified") return { text: "尚未通过任何验证", refuted: false };
+  return null;
+}
+
+function ClaimVerification({ claim }: { claim: DigestClaim }) {
+  const label = verificationLabel(claim);
+  if (!label) return null;
+  return <p className={label.refuted ? "mt-1 text-caption text-error" : "mt-1 text-caption text-muted"}>{label.text}</p>;
 }
 
 /** What the researcher last said about a finding; a rejection is echoed back as the promise it makes. */
@@ -113,6 +147,7 @@ export function AutopilotPage() {
           {selectedDigest?.id !== digest.id ? <Button size="sm" variant="ghost" onClick={() => setSearchParams({ digest: digest.id })}>查看简报</Button>
             : [...digest.payload.headlines.map((claim) => ({ claim, kind: "重点发现" })), ...digest.payload.leads.map((claim) => ({ claim, kind: "待验证线索" }))].map(({ claim, kind }) => <div key={claim.id} className="rounded-input bg-surface-2 p-3">
             <p className="text-caption text-muted">{kind}</p><p className="mt-1 text-ui text-text">{claim.statement}</p>
+            <ClaimVerification claim={claim} />
             {decisionLabel(digest, claim.id) && <p className="mt-1 text-ui-sm text-muted">{decisionLabel(digest, claim.id)}</p>}
             <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="ghost" aria-label={`采纳${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "adopt", claimId: claim.id, note: "" }))}>采纳</Button>
               <Button size="sm" variant="ghost" aria-label={`驳回${claim.statement}`} disabled={busy} onClick={() => void mutate(() => decideDigest(digest.id, { action: "reject", claimId: claim.id, note: "" }))}>驳回</Button>

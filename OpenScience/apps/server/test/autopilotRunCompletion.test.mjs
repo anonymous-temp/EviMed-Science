@@ -78,3 +78,22 @@ test("unavailable ownership evidence cannot authorize completion or runtime rele
   assert.equal(f.calls.filter(call => call[0] === "audit").length, 1);
   assert.equal(f.calls.filter(call => call[0] !== "audit").length, 0);
 });
+
+test("an independent verification run is not an episode result and cannot be folded as one", async () => {
+  // A verification carries its own bounded scope and folds into one claim.
+  // `autopilot-verify` is deliberately not `autopilot:`, so a prefix check
+  // loosened to `startsWith("autopilot")` would let the episode completion
+  // claim it, release the verification's runtime under an episode's name and
+  // fold a verdict artifact as an agenda delta.
+  // Both route reasons a verification run can carry: the one the caller asks
+  // for, and "session-binding", which is what `AgentRunStore.dispatch` actually
+  // records for a specialist-bound session and therefore what production sees.
+  for (const routeReason of ["autopilot-verify", "session-binding"]) {
+    const f = fixture();
+    f.dependencies.service.episodeForRun = async () => null;
+    f.run.effectiveRouteReason = routeReason;
+    f.run.dispatchId = "episode-abcdef01234567890123456789012345-v0";
+    assert.equal(await completeOwnedAutopilotRun(f.dependencies, f.project, f.run), false);
+    assert.deepEqual(f.calls, [], "a verification run must not reach the episode fold, the usage scope or the runtime release");
+  }
+});
