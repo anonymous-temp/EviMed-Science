@@ -135,6 +135,34 @@ describe("AutopilotPage", () => {
     await waitFor(() => expect(screen.queryByText(/阅读记录未保存/)).not.toBeInTheDocument());
   });
 
+  it("says how far each finding was checked, and says so out loud when a re-check overturned one", async () => {
+    // A digest whose headline was independently reproduced and whose lead was
+    // refuted after the researcher had already been shown it. Without this the
+    // page presents both in the same voice, which is the exact confusion the
+    // tiers exist to prevent.
+    const verified = { ...digest, payload: { ...digest.payload,
+      headlines: [{ id: "claim-one", statement: "新增直接证据", tier: "reproduced", refutation: "stands" }],
+      leads: [
+        { id: "claim-two", statement: "待验证线索", tier: "unverified", refutation: "refuted",
+          verification: { status: "recorded", verdict: "refuted" } },
+        { id: "claim-three", statement: "尚未复核的线索", tier: "gated", verification: { status: "queued" } },
+        { id: "claim-four", statement: "名额之外的线索", tier: "gated",
+          verification: { status: "unscheduled", reason: "verification_cap" } },
+      ] } };
+    mocks.listDigests.mockResolvedValue({ items: [verified], nextCursor: null });
+    mocks.getDigest.mockResolvedValue(verified);
+    render();
+    expect(await screen.findByText("独立复核已复现")).toBeInTheDocument();
+    expect(screen.getByText("独立复核未能复现，已降级为线索")).toBeInTheDocument();
+    expect(screen.getByText("独立复核排队中")).toBeInTheDocument();
+    // The refutation is the one line that must not read like the others.
+    expect(screen.getByText("独立复核未能复现，已降级为线索").className).toContain("text-error");
+    expect(screen.getByText("独立复核排队中").className).toContain("text-muted");
+    // A claim the cap left out is not a claim waiting its turn, and a reader
+    // who cannot tell them apart waits for something that is never coming.
+    expect(screen.getByText("本轮复核名额已满，未安排独立复核")).toBeInTheDocument();
+  });
+
   it("ignores an older digest's open failure after navigating to another digest", async () => {
     let rejectOpening!: (error: Error) => void;
     const other = { ...digest, id: "digest-other", payload: { ...digest.payload,
