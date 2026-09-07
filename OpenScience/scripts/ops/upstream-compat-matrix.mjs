@@ -32,6 +32,15 @@
  *
  * Usage:
  *   node scripts/ops/upstream-compat-matrix.mjs [--dep dsh] [--out compat-matrix.json] [--offline]
+ *   node scripts/ops/upstream-compat-matrix.mjs [--plugins-out plugin-availability.json] [--plugin-probe <command>]
+ *
+ * The second lane is the per-plugin one. It answers a different question from
+ * the dependency lane — not "is the pin behind" but "does this bundle still
+ * load against the pinned kernel" — and it writes the file the control plane
+ * reads when a project asks whether a plugin has an update. That file is the
+ * only reason `availableUpdate` can be answered at all: a control plane does
+ * not name an external host while answering a browser, so availability is
+ * something a scheduled job records and the request path reads.
  */
 
 import { execFile } from "node:child_process";
@@ -191,6 +200,131 @@ async function runContractTests(name, pin) {
   }
 }
 
+/**
+ * Where the per-plugin lane gets its facts.
+ *
+ * `runtime/skills/community/plugin-support.json` records, per community
+ * bundle, whether it was installed, found incompatible, or rejected — and that
+ * record is what the control plane's registry is derived from. This lane
+ * re-checks the part of it that can go stale: whether the bundle still loads
+ * against the pinned kernel, and whether upstream has published a newer one.
+ */
+const pluginSupportPath = path.join(repoRoot, "runtime/skills/community/plugin-support.json");
+
+/**
+ * Whether a bundle loads against the pinned kernel.
+ *
+ * There is no in-process way to answer this: loading a plugin means starting
+ * the kernel with the profile the runtime image builds, which needs that image
+ * and a container runtime. So the probe is a command an operator supplies, and
+ * without one the answer is "not probed" — which is a distinct outcome from
+ * "compatible", and the whole reason this function exists rather than a
+ * hard-coded `true`. A lane that reports green because it could not look is a
+ * lane that reports green forever.
+ *
+ * @param {Record<string, any>} bundle @param {string} command
+ * @returns {Promise<{loaded: boolean | null, reason: string}>}
+ */
+async function probePluginLoad(bundle, command) {
+  if (!command) return { loaded: null, reason: "no plugin probe configured (--plugin-probe or EVIMED_PLUGIN_PROBE); loading a bundle needs the runtime image and a container runtime" };
+  try {
+    const { stdout } = await execFileAsync(command, [String(bundle.name), String(bundle.version)], { cwd: repoRoot, timeout: 300_000 });
+    return { loaded: true, reason: `probe: ${stdout.trim().slice(-200) || "loaded"}` };
+  } catch (error) {
+    return { loaded: false, reason: `probe failed: ${`${error?.stderr ?? ""}${error?.message ?? error}`.trim().slice(-200)}` };
+  }
+}
+
+/**
+ * One row of the per-plugin lane.
+ *
+ * Pure, and exported, for the same reason `selectReleaseVersion` is: the
+ * defect worth testing here is that an unprobed plugin must never read as a
+ * compatible one, and reproducing that needs no kernel.
+ *
+ * @param {Record<string, any>} bundle a `communityToolBundles` entry
+ * @param {{kernel?: string, probe?: {loaded: boolean | null, reason: string} | null, latest?: string | null, latestSource?: string | null}} observed
+ */
+export function pluginCompatibilityRow(bundle, { kernel = "", probe = null, latest = null, latestSource = null } = {}) {
+  const declaredStatus = String(bundle?.status ?? "unknown");
+  const declaredVersion = String(bundle?.version ?? "");
+  const loaded = probe?.loaded ?? null;
+  const loadsAgainstPin = loaded === null ? "not-probed" : loaded ? "pass" : "fail";
+  const behind = Boolean(latest && declaredVersion && latest !== declaredVersion);
+  return {
+    plugin: String(bundle?.name ?? ""),
+    declaredStatus,
+    declaredVersion,
+    kernel,
+    latest,
+    latestSource,
+    behind,
+    loadsAgainstPin,
+    probeReason: probe?.reason ?? "no plugin probe configured; the recorded status is the only evidence",
+    verdict: loadsAgainstPin === "not-probed" ? "not-probed"
+      : loadsAgainstPin === "fail" ? "fails-to-load"
+        : behind ? "upgrade-candidate" : latest ? "current" : "unknown-upstream",
+  };
+}
+
+/**
+ * The availability record `pluginService.mjs` reads.
+ *
+ * Only installed bundles: a bundle the record refuses is not something a
+ * project can be offered an update to. `available: null` is the honest value
+ * for "the job could not observe a version", and the reader turns it into
+ * `unknown` rather than into "up to date".
+ *
+ * @param {readonly Record<string, any>[]} rows @param {string} at
+ */
+export function pluginAvailabilityRecord(rows, at) {
+  return {
+    schemaVersion: 1,
+    generatedAt: String(at),
+    plugins: rows.filter((row) => row.declaredStatus === "installed").map((row) => ({
+      id: row.plugin,
+      installedVersion: row.declaredVersion,
+      available: row.latest ?? null,
+      source: row.latestSource ?? "not-observed",
+      ...(row.latest ? {} : { reason: row.latestSource ?? "not-observed" }),
+      loadsAgainstPin: row.loadsAgainstPin,
+    })),
+  };
+}
+
+/**
+ * @param {Record<string, any>} args @param {boolean} offline
+ * @returns {Promise<{rows: Record<string, any>[], unread: string | null}>}
+ */
+async function pluginLane(args, offline) {
+  let support;
+  try {
+    support = JSON.parse(await readFile(pluginSupportPath, "utf8"));
+  } catch (error) {
+    // The web image carries `scripts/ops` but not `runtime/skills/community`,
+    // so the one host where running this job would land the availability file
+    // exactly where the control plane reads it is the host where its input is
+    // missing. That must not take the dependency lane down with it, and it must
+    // not overwrite a real observation with an empty one either.
+    return { rows: [], unread: `plugin support record unreadable at runtime/skills/community/plugin-support.json: ${error?.message ?? error}` };
+  }
+  const bundles = Array.isArray(support.communityToolBundles) ? support.communityToolBundles : [];
+  const command = String(args["plugin-probe"] ?? process.env.EVIMED_PLUGIN_PROBE ?? "");
+  const rows = [];
+  for (const bundle of bundles) {
+    // A bundle names its upstream coordinate or it is not looked up. Guessing
+    // a package name from a bundle name is how a matrix ends up reporting
+    // another product's version as this one's.
+    const pin = { npmPackage: bundle.npmPackage, githubRepo: bundle.githubRepo, releaseTagPattern: bundle.releaseTagPattern };
+    const upstream = pin.npmPackage || pin.githubRepo
+      ? await latestVersion(String(bundle.name), pin, offline)
+      : { latest: null, reason: "no machine-readable release feed configured" };
+    const probe = bundle.status === "installed" ? await probePluginLoad(bundle, command) : null;
+    rows.push(pluginCompatibilityRow(bundle, { kernel: String(support.kernel ?? ""), probe, latest: upstream.latest, latestSource: upstream.latest ? upstream.reason : null }));
+  }
+  return { rows, unread: null };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const offline = Boolean(args.offline);
@@ -240,8 +374,25 @@ async function main() {
       .map((row) => `${row.dependency} ${row.pinned} → tag ${row.upstreamTag} (npm still ${row.latest})`),
   };
 
+  const { rows: pluginRows, unread } = await pluginLane(args, offline);
+  matrix.plugins = pluginRows;
+  // Not probed is not a failure — it is the absence of evidence, and it is
+  // listed separately so nobody reads the plugin lane as a green one.
+  matrix.pluginsNotProbed = pluginRows.filter((row) => row.loadsAgainstPin === "not-probed").map((row) => `${row.plugin}: ${row.probeReason}`);
+  matrix.pluginsFailingToLoad = pluginRows.filter((row) => row.loadsAgainstPin === "fail").map((row) => `${row.plugin}: ${row.probeReason}`);
+  if (unread) matrix.pluginsUnread = unread;
+
   const out = String(args.out ?? "");
   if (out) await writeFile(path.resolve(repoRoot, out), `${JSON.stringify(matrix, null, 2)}\n`, "utf8");
+  // The availability half is rewritten on every run that had something to look
+  // at, because the control plane treats an old file exactly as it treats a
+  // missing one. A run that could not read the support record writes nothing:
+  // it has no observation to record, and erasing the last one would be a claim.
+  const pluginsOut = String(args["plugins-out"] ?? "plugin-availability.json");
+  if (!unread) {
+    const availability = pluginAvailabilityRecord(pluginRows, matrix.generatedAt);
+    await writeFile(path.resolve(repoRoot, pluginsOut), `${JSON.stringify(availability, null, 2)}\n`, "utf8");
+  }
   process.stdout.write(`${JSON.stringify(matrix, null, 2)}\n`);
   // Only a contract failing at the pinned version fails the job. Being behind
   // upstream is information, not a defect — treating it as one trains everyone
@@ -249,4 +400,6 @@ async function main() {
   if (matrix.failures.length) process.exitCode = 1;
 }
 
-await main();
+// Only when run as a command. The pure parts above are imported by tests, and
+// importing this file used to run the whole matrix as a side effect.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();

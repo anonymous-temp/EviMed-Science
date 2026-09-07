@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "note": "Placeholder record shipped inside the web image so the control plane always has something to read at this path. It is deliberately dated 1970, so every plugin reads as `unknown` — never `current` — until `pnpm matrix:upstream` overwrites it or a deployment bind-mounts a fresher one over it. An absent file and this file mean the same thing to pluginAvailability(); shipping it keeps the image self-contained and keeps the read path off a missing-file branch in production.",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "plugins": []
+}
