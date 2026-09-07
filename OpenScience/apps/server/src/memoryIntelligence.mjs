@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mcpToolBaseName } from "@evimed/domain";
+import { MEMORY_PROMOTION_MIN_OCCURRENCES, MEMORY_PROMOTION_MIN_RUNS, mcpToolBaseName } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 const candidateKinds = new Set([
@@ -33,8 +33,8 @@ const sensitivePattern = /(?:password|passcode|api[ _-]?key|access[ _-]?token|se
  * that may carry an identifier or a credential, and recalling such text into a
  * later prompt without a person having seen it is the one mistake a memory
  * store cannot take back. `inferred` is the model's own guess, which earns
- * activation from three independent observations (see recordRun) rather than
- * from one. Naming a rule is not softening it.
+ * activation from repeat observations across separate runs (see recordRun)
+ * rather than from one. Naming a rule is not softening it.
  *
  * The status expression below is derived from this function rather than written
  * beside it, so "which records are demoted" and "what we say about it" cannot
@@ -52,7 +52,8 @@ function demotionReason(sensitive, origin) {
 /** What each reason means, for the person reading the run. */
 const demotionReasonText = Object.freeze({
   sensitive: "内容命中敏感词表（含病历号、患者姓名等医学研究中的常用词），需本人确认后才会被再次调用",
-  inferred: "由模型推断而非你明确要求记住，需累积三次独立观察或本人确认后才会转为生效",
+  inferred: `由模型推断而非你明确要求记住，需在至少 ${MEMORY_PROMOTION_MIN_RUNS} 次不同运行中累计 `
+    + `${MEMORY_PROMOTION_MIN_OCCURRENCES} 次独立观察，或经本人确认后才会转为生效`,
   sensitive_and_inferred: "既由模型推断，又命中敏感词表，需本人确认后才会被再次调用",
 });
 
@@ -265,7 +266,8 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
       sourceType: "conversation_message",
       sourceRef,
       quote,
-      observedAt: new Date().toISOString(),
+      // The run, not the clock: see runObservationStamp.
+      observedAt: runObservationStamp(run),
       weight: source.role === "user" ? 1 : 0.8,
     },
   };
@@ -306,11 +308,158 @@ function canonicalKey(record) {
   return [record.scope, record.scopeId ?? "", record.kind, record.key].join("\u0000");
 }
 
+/**
+ * When an observation happened: the run it happened in, not the moment the
+ * extractor got round to it.
+ *
+ * This is what makes "distinct runs" decidable. The memory service fingerprints
+ * an evidence entry by (sourceType, sourceRef, quote) — never by time — so a
+ * later run re-quoting the same message still adds nothing, and the entries a
+ * record does accumulate each carry the terminal timestamp of the run that
+ * first contributed them. Counting distinct stamps therefore counts distinct
+ * runs, without touching the dedup that keeps one message from being counted
+ * twice. Putting a run id in the `sourceRef` instead would have done the
+ * opposite: it is inside the fingerprint, so every re-quote would have become a
+ * fresh observation and one conversation could have promoted itself.
+ *
+ * One run has exactly one stamp, so the direction that matters cannot fail: a
+ * single conversation can never look like several. Two runs that end in the
+ * same second would look like one, which delays a promotion the person can
+ * still make by hand — the safe direction of an unsafe-either-way choice. A
+ * second, not a millisecond: the memory service stores an evidence time as
+ * `ObservedTime.AsTime().Unix()` and reads it back with `time.Unix(ts, 0)`, so
+ * whatever precision is sent here, whole seconds are what round-trip.
+ *
+ * Evidence written before this existed carries the extractor's own clock, one
+ * distinct value per candidate, so a record that already holds three such
+ * entries still satisfies the run rule from a single pre-change conversation.
+ * That is deliberate: nothing rewrites history here, the drift ages out as
+ * those records are re-observed, and no reachable path re-promotes an already
+ * active memory.
+ *
+ * @param {any} run
+ */
+function runObservationStamp(run) {
+  const stamp = run?.finishedAt ?? run?.startedAt ?? null;
+  const time = stamp ? new Date(stamp) : new Date();
+  return Number.isFinite(time.getTime()) ? time.toISOString() : new Date().toISOString();
+}
+
+/**
+ * How many separate runs contributed this record's evidence.
+ *
+ * `evidenceCount` alone was the whole promotion rule, and three observations
+ * inside one conversation satisfied it — which is not independence, it is one
+ * conversation repeating itself. A record whose evidence list is unavailable
+ * counts as zero runs: the safe answer to "can this be proven independent" is
+ * no, and the person can still confirm it by hand.
+ *
+ * @param {any} record
+ */
+function distinctObservationRuns(record) {
+  const stamps = new Set();
+  for (const item of record?.evidence ?? []) if (item?.observedAt) stamps.add(item.observedAt);
+  return stamps.size;
+}
+
+/** Case, width and whitespace are not a change of mind. */
+function normalizedValue(value) {
+  return String(value ?? "").normalize("NFKC").replace(/\s+/gu, " ").trim().toLowerCase();
+}
+
+/**
+ * The memories that steer every later run, whatever the question is.
+ *
+ * The same four kinds `memosClient`'s `DURABLE_RECALL_KINDS` recalls
+ * unconditionally. That is the reason for the boundary rather than a
+ * coincidence: an episodic fact legitimately changes between projects, while a
+ * contradiction in these four is carried into every future prompt.
+ */
+const DURABLE_PERSON_KINDS = new Set(["profile", "preference", "behavior", "correction"]);
+
+/** The origins that mean the user said it: extraction of a statement, a
+ *  confirmation of a pending inference, or a hand edit. */
+const USER_STATED_ORIGINS = new Set(["explicit", "manual"]);
+
+/**
+ * The one thing about a preference conflict that code is allowed to decide:
+ * that there is one.
+ *
+ * Decidable: the same canonical key acquiring a materially different value,
+ * where "materially" is normalized string inequality and nothing else. Whether
+ * two sentences contradict each other in meaning is a language judgement, and
+ * code does not make it.
+ *
+ * What follows from a contradiction is a notice, never a refusal. The first
+ * version of this parked the new value under a key of its own and left the
+ * confirmed record untouched — which reads well, and meant that a researcher
+ * who says "from now on answer in English" would be answered in Chinese
+ * forever: their own statement was diverted to a proposal nobody had asked
+ * them to approve, and the inbox action that would have applied it has no
+ * handler anywhere. Before that change the same statement simply took effect.
+ * Refusing what used to succeed is a blocking point, the budget for those is
+ * six system-wide, and a new one ships as a notice first with an observed
+ * distribution behind it. So the write lands exactly as it did before, the
+ * value it replaced is named in the record's own revision history, and the
+ * contradiction is reported: on the run, and in the inbox.
+ *
+ * The narrowness is still the point. Only an active memory the user themselves
+ * stated or confirmed can be contradicted at all: overwriting the model's own
+ * unconfirmed guess is how an inference is supposed to be corrected, and
+ * saying so about it would be noise.
+ *
+ * `candidate.origin` rides along because it is what a future case for parking
+ * would have to be made of. "The user restated it" and "the model inferred
+ * something else over what the user confirmed" are one string comparison and
+ * two completely different events, and only the second is a candidate for ever
+ * being held back.
+ *
+ * @param {any} current @param {any} candidate
+ */
+function contradictedValue(current, candidate) {
+  if (!current || current.status !== "active") return null;
+  if (!DURABLE_PERSON_KINDS.has(current.kind)) return null;
+  if (!USER_STATED_ORIGINS.has(current.origin)) return null;
+  const before = normalizedValue(current.value);
+  const after = normalizedValue(candidate.value);
+  if (!before || !after || before === after) return null;
+  return {
+    origin: candidate.origin,
+    // Excerpts, not the values: a memory value may be 100 KB, and everything
+    // downstream of this is a sentence a person reads.
+    previousValue: excerpt(current.value),
+    nextValue: excerpt(candidate.value),
+    // The identity of the contradiction, digested from the whole values rather
+    // than from what is shown, so two long values that begin alike are still
+    // two contradictions. The origin is in it because the notice says which of
+    // the two this was, and a key that does not distinguish what its own text
+    // distinguishes is the idempotency conflict. Everything else the notice
+    // carries is fixed for the record it is about; nothing in it comes from
+    // the run.
+    identity: createHash("sha256").update(JSON.stringify([candidate.origin, before, after])).digest("hex").slice(0, 16),
+  };
+}
+
+/** Enough of a value to recognize it, in a sentence a person reads. */
+function excerpt(value) {
+  return String(value ?? "").replace(/\s+/gu, " ").trim().slice(0, 120);
+}
+
 export class MemoryIntelligence {
-  constructor(config, memosClient, { fetchImpl = globalThis.fetch } = {}) {
+  /** @param {any} config @param {any} memosClient
+   *  @param {{fetchImpl?:any,notifications?:any,audit?:any}} dependencies */
+  constructor(config, memosClient, { fetchImpl = globalThis.fetch, notifications = null, audit = null } = {}) {
     this.config = config;
     this.memosClient = memosClient;
     this.fetchImpl = fetchImpl;
+    // Optional: a deployment without a product database has no inbox, and a
+    // contradiction is still recorded on the record and still reported on the
+    // run.
+    this.notifications = notifications;
+    // `securityAudit` lives in the composition root, so it arrives as a
+    // dependency, the way `autopilotRunCompletion` takes it. A failure that
+    // must not reach the researcher still has to reach the ledger.
+    this.audit = typeof audit === "function" ? audit : async () => {};
     this.enabled = config.memoryExtractionEnabled !== false;
     this.timeoutMs = Math.max(1_000, Math.min(120_000, Number(config.memoryExtractionTimeoutMs ?? 30_000)));
     // Extraction is a short structured-output task, not a reasoning one, and it
@@ -326,7 +475,7 @@ export class MemoryIntelligence {
     if (sources.length === 0) {
       return {
         runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0,
-        rejectionReasons: [], pending: 0, pendingReasons: [], extractionError: null,
+        rejectionReasons: [], pending: 0, pendingReasons: [], conflicts: [], extractionError: null,
       };
     }
 
@@ -361,8 +510,14 @@ export class MemoryIntelligence {
     let activated = 0;
     /** Reason -> how many records this run parked for it. */
     const pendingReasons = new Map();
+    /** Confirmed memories this conversation changed: for the run's own notice,
+     *  the inbox and the audit line. A record of a write, never a refusal of one. */
+    const conflicts = [];
     for (const candidate of candidates.slice(0, 12)) {
       const previous = known.get(canonicalKey(candidate));
+      // Detected before the write and reported after it. The write itself is
+      // untouched by the detection: see contradictedValue.
+      const contradiction = contradictedValue(previous, candidate);
       if (previous?.status === "active" && candidate.origin === "inferred" && !candidate.sensitive) {
         candidate.status = "active";
         // Re-confirming a memory that is already active is not a demotion, so
@@ -382,6 +537,10 @@ export class MemoryIntelligence {
           // a parked record's history said only that it had been written.
           reason: [
             previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
+            // The value this write replaced, in the one place that outlives the
+            // write: the record's own revision history. It is what makes the
+            // change reversible by hand, which is what lets it land at all.
+            ...(contradiction ? [`replaced the value the user had confirmed: 「${contradiction.previousValue}」`] : []),
             ...(candidate.statusReason ? [demotionReasonAudit[candidate.statusReason]] : []),
           ].join("; "),
         });
@@ -395,6 +554,7 @@ export class MemoryIntelligence {
           // The retry writes the same record, so it carries the same reason.
           reason: [
             "conversation evidence retried after a concurrent memory update",
+            ...(contradiction ? [`replaced the value the user had confirmed: 「${contradiction.previousValue}」`] : []),
             ...(candidate.statusReason ? [demotionReasonAudit[candidate.statusReason]] : []),
           ].join("; "),
         });
@@ -407,12 +567,14 @@ export class MemoryIntelligence {
         stored.origin === "inferred"
         && stored.status === "pending"
         && !stored.sensitive
-        && stored.evidenceCount >= 3
+        && stored.evidenceCount >= MEMORY_PROMOTION_MIN_OCCURRENCES
+        && distinctObservationRuns(stored) >= MEMORY_PROMOTION_MIN_RUNS
         && stored.revisions.length === 0
       ) {
         stored = await this.memosClient.upsertRecord(project.userId, { ...stored, status: "active" }, null, {
           expectedVersion: stored.version,
-          reason: "three independent observations activated an inferred memory",
+          reason: `${MEMORY_PROMOTION_MIN_OCCURRENCES} observations across at least `
+            + `${MEMORY_PROMOTION_MIN_RUNS} runs activated an inferred memory`,
         });
         activated += 1;
         // It was counted as parked a moment ago and is not parked any more.
@@ -421,6 +583,14 @@ export class MemoryIntelligence {
         else pendingReasons.delete(candidate.statusReason);
       }
       known.set(canonicalKey(stored), stored);
+      if (contradiction) {
+        // After the write, never before it: a notice that names a change the
+        // upsert then failed to make would be the same lie in the other
+        // direction.
+        const conflict = { recordId: stored.id, key: stored.key, kind: stored.kind, scope: stored.scope, version: stored.version, ...contradiction };
+        conflicts.push(conflict);
+        await this.#reportReplacedValue(project, conflict);
+      }
     }
     return {
       runSummary, extracted, activated, source, proposed,
@@ -431,8 +601,61 @@ export class MemoryIntelligence {
       // could be silent at all.
       pending: [...pendingReasons.values()].reduce((total, count) => total + count, 0),
       pendingReasons: [...pendingReasons].map(([reason, count]) => ({ reason, count, text: demotionReasonText[reason] })),
+      conflicts,
       extractionError,
     };
+  }
+
+  /**
+   * "This conversation changed a memory you had confirmed."
+   *
+   * A notice, not a question. The new value is already in force, so there is
+   * nothing left to ask before it, and an inbox item may only offer actions
+   * something implements: the earlier 「改用新说法」 button had no handler
+   * anywhere — `NotificationService.resolve` stamps an action id and no code
+   * reads it — so the one thing the researcher could click did nothing at all.
+   * Both values are in the body instead, because the way back is for the person
+   * to say so in memory management, and they cannot say so about text they
+   * cannot see.
+   *
+   * The identity is the contradiction, not the run. The first version keyed on
+   * the record and the parked key while sending `source: {type:"run"}` and the
+   * current project — and those are exactly the fields `NotificationService`
+   * compares when a key repeats, so the second observation of one contradiction
+   * would have raised `notification_idempotency_conflict` against the real
+   * service, which this method then swallowed whole. Now every field the notice
+   * carries comes from the record, the two values and which kind of change it
+   * was, and the key digests the same three things the body distinguishes.
+   *
+   * Best effort, but never silent: an unreachable inbox must not cost the run
+   * its memory, and it must not be invisible either.
+   *
+   * @param {any} project @param {any} conflict
+   */
+  async #reportReplacedValue(project, conflict) {
+    if (!this.notifications || !conflict) return null;
+    try {
+      return await this.notifications.create(project.userId, {
+        noticeType: "notify",
+        title: "一条你确认过的记忆已被本次对话改写",
+        body: `记忆「${conflict.key}」原本记的是「${conflict.previousValue}」，`
+          + `本次对话把它改为「${conflict.nextValue}」，现在生效的是后者。`
+          + (conflict.origin === "inferred"
+            ? "这次改写来自模型对本次对话的推断，你并没有明确要求。"
+            : "这次改写来自你在本次对话里的说法。")
+          + "原值保留在这条记忆的修订记录中，如果不是你要的结果，可在记忆管理中改回。",
+        // A user-scoped memory belongs to no project, and naming the project
+        // the run happened in would make the same contradiction look like
+        // different content each time it is observed from somewhere else. A
+        // project-scoped memory's project is the record's own and does not
+        // vary, so both cases are stable under the key above.
+        projectId: conflict.scope === "user" ? null : project.id,
+        idempotencyKey: `memory-value-replaced:${conflict.recordId}:${conflict.identity}`,
+      });
+    } catch (error) {
+      await this.audit("notification.memory_conflict.create", error);
+      return null;
+    }
   }
 
   async #recordRunSummary(project, run, sources) {
@@ -534,7 +757,7 @@ export class MemoryIntelligence {
                 "profile, preference and behavior describe the person and MUST use scope \"user\" and cite a user message: profile is who they are and what they work on, preference is how they want work done, behavior is how they habitually work.",
                 "project_fact, analysis and decision belong to one project and use scope \"project\". follow_up uses scope \"project\" or \"session\". correction records something the user told you was wrong and uses scope \"user\" for a general rule or \"project\" for a local one.",
                 "Allowed origins: explicit, inferred, system. explicit and inferred must cite a user message; system must cite an assistant message and is only for assistant-grounded analysis, decisions, follow-ups, or corrections.",
-                "Use explicit when the user stated it outright, inferred when it follows from what they did; an inferred candidate stays provisional until three independent observations agree, so record it rather than withholding it.",
+                `Use explicit when the user stated it outright, inferred when it follows from what they did; an inferred candidate stays provisional until ${MEMORY_PROMOTION_MIN_OCCURRENCES} observations across at least ${MEMORY_PROMOTION_MIN_RUNS} separate runs agree, so record it rather than withholding it.`,
                 "Sources with role \"tool\" are results the platform computed or retrieved. They hold what prose loses: the search that worked, the identifier a term resolved to, the effect estimate and its interval. Record those as analysis or project_fact with origin \"system\", quoting the tool source exactly, and keep the numbers rather than describing them.",
                 "evidenceQuote must be a short exact substring of the referenced source, copied character for character. Do not infer identity, health, beliefs, demographics, or preferences without direct evidence.",
                 "Store durable facts and compact analytical essentials: dataset or artifact reference, population/filter, parameter, unit, method, result, decision, and unresolved follow-up.",

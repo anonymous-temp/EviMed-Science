@@ -5,6 +5,27 @@ export const PRODUCT_KINDS = Object.freeze([
   "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
 ]);
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "plugin-apply"]);
+
+/**
+ * What the researcher did, as a closed vocabulary.
+ *
+ * These live here rather than in `feedbackEvents.mjs` for the same reason
+ * `PRODUCT_KINDS` does: the CHECK constraint below is generated from the list,
+ * so the database and the code cannot hold two different vocabularies, and the
+ * module that writes the rows imports the list from the module that creates the
+ * table rather than the other way round.
+ */
+export const FEEDBACK_EVENT_TRIGGERS = Object.freeze([
+  "memory-inference-accepted",
+  "memory-value-edited",
+  "memory-rejected",
+  "deliverable-adopted",
+  "deliverable-edited",
+]);
+
+/** What a feedback event can be about. */
+export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable"]);
+
 const migrations = new WeakMap();
 
 const sql = `
@@ -211,6 +232,23 @@ BEGIN
       FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
 END $foreign_keys$;
+CREATE TABLE IF NOT EXISTS evimed_product.feedback_events (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  project_id text,
+  run_id text,
+  trigger_kind text NOT NULL CONSTRAINT feedback_events_trigger_check CHECK (trigger_kind IN (${FEEDBACK_EVENT_TRIGGERS.map((x) => `'${x}'`).join(",")})),
+  subject_type text NOT NULL CONSTRAINT feedback_events_subject_check CHECK (subject_type IN (${FEEDBACK_SUBJECT_TYPES.map((x) => `'${x}'`).join(",")})),
+  subject_id text NOT NULL CHECK (length(subject_id) BETWEEN 1 AND 400),
+  detail jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(detail) = 'object'),
+  occurred_at timestamptz(3) NOT NULL,
+  recorded_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  FOREIGN KEY (user_id,project_id) REFERENCES evimed_control.projects(user_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS feedback_events_subject_idx ON evimed_product.feedback_events(user_id,subject_type,subject_id,occurred_at DESC,id);
+CREATE INDEX IF NOT EXISTS feedback_events_owner_idx ON evimed_product.feedback_events(user_id,occurred_at DESC,id);
+CREATE INDEX IF NOT EXISTS feedback_events_project_fk_idx ON evimed_product.feedback_events(user_id,project_id);
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-feedback-events-v1') ON CONFLICT DO NOTHING;
 ALTER TABLE evimed_product.memory_index_state ADD COLUMN IF NOT EXISTS verified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp();
 CREATE OR REPLACE FUNCTION evimed_product.enqueue_memory_index_job() RETURNS trigger
 LANGUAGE plpgsql AS $function$

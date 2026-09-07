@@ -633,3 +633,53 @@ test("evidence is trimmed to what the memory service accepts, and never sent emp
   assert.equal(sent.at(-1).evidence, undefined, "empty evidence is omitted rather than sent and refused");
   assert.ok(sent.at(-1).memoryRecord, "and the record itself is still written");
 });
+
+// The feedback ledger is durable, account-scoped state, so it lives in the
+// shared product store and a deployment without one has no ledger. What must
+// not happen is the route disappearing: a 404 tells a client the feature does
+// not exist, and this feature does exist — it is the store that is missing.
+test("the feedback routes are reachable and name the dependency they need", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-feedback-routes-"));
+  const fake = fakeMemosService();
+  const app = createWebApiApp({
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true, ...clientConfig(), memosFetch: fake.fetchImpl,
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    assert.equal(app.feedbackEvents, null, "a file-backed control plane has no product ledger to append to");
+    assert.equal(app.methodDistillWorker, null, "and therefore nothing to distil from");
+
+    for (const request of [
+      { method: "GET", body: undefined },
+      { method: "POST", body: JSON.stringify({ trigger: "deliverable-adopted", runId: "run_1", path: "reports/evidence.md" }) },
+    ]) {
+      const response = await fetch(`${base}/api/feedback/events`, {
+        method: request.method, headers: { "Content-Type": "application/json" }, body: request.body,
+      });
+      const payload = await response.json();
+      assert.equal(response.status, 503, `${request.method} /api/feedback/events answered ${response.status}`);
+      assert.equal(payload.code, "feedback_unavailable");
+    }
+
+    // And the memory routes that write to it are unaffected by its absence: the
+    // researcher's own action must never fail because a ledger is missing.
+    const me = (await (await fetch(`${base}/api/me`)).json()).data;
+    const client = new MemosClient(clientConfig(), { fetchImpl: fake.fetchImpl });
+    const record = await client.upsertRecord(me.user.id, {
+      scope: "user", kind: "preference", key: "response.evidence_depth", value: "优先给原始证据",
+      summary: "原始证据优先", origin: "inferred", status: "pending", confidence: 0.7, importance: 0.9, sensitive: false,
+    });
+    const confirm = await fetch(`${base}/api/memory/records/${record.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedVersion: record.version, status: "active" }),
+    });
+    assert.equal(confirm.status, 200);
+    assert.equal((await confirm.json()).data.origin, "explicit");
+    const removed = await fetch(`${base}/api/memory/records/${record.id}`, { method: "DELETE" });
+    assert.equal(removed.status, 200);
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
