@@ -327,3 +327,38 @@ def test_optional_receipt_never_overflows_protected_terminal_state(tmp_path, mon
     assert result["status"] == "success"
     assert "auditReceipt" not in result["data"]
     assert len(state_path.read_bytes()) <= 256 * 1024
+
+
+@pytest.mark.parametrize("analysis_success", [True, False])
+def test_cleanup_error_is_visible_without_changing_analysis_result(tmp_path, monkeypatch, analysis_success):
+    setup = setup_audit(tmp_path, monkeypatch)
+    service = setup[0]
+    if not analysis_success:
+        runner = tmp_path / "agent/evimed_runner.py"
+        runner.write_text(runner.read_text().replace("'status':'succeeded'", "'status':'failed','error':'deliberate-analysis-failure'"))
+    original = service._mr_job
+    diagnostic = {"code": "mr_analysis_cleanup_failed", "message": "Temporary analysis data could not be fully removed."}
+
+    def wrapped(root):
+        jobs = original(root)
+        execute = jobs.execute
+
+        def with_cleanup_error(*args, **kwargs):
+            outcome = execute(*args, **kwargs)
+            outcome["cleanupError"] = diagnostic
+            return outcome
+
+        jobs.execute = with_cleanup_error
+        return jobs
+
+    monkeypatch.setattr(service, "_mr_job", wrapped)
+    state, job_id = start_job(setup, monkeypatch)
+    assert service.run_job(str(state)) == (0 if analysis_success else 1)
+    result = service._status({"jobId": job_id}, setup[3])
+    assert result["status"] == ("success" if analysis_success else "error")
+    assert result["data"]["cleanupError"] == diagnostic
+    assert result["data"]["jobStatus"] == ("succeeded" if analysis_success else "failed")
+    assert "auditReceipt" not in result["data"]
+    assert service._read_state(state)["cleanupError"] == diagnostic
+    if not analysis_success:
+        assert "deliberate-analysis-failure" in json.dumps(result)

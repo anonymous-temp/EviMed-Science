@@ -682,14 +682,18 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             worker.wait(timeout=1)
         except subprocess.TimeoutExpired:
             _WORKERS[job_id] = worker
+    cleanup = state.get("cleanupError") if _kind() == "mendelian-randomization" else None
     if job_status == "failed":
         message = str(state.get("error") or f"{_spec()['label']} execution failed.")
         if _kind() == "mendelian-randomization":
-            return _error(
+            response = _error(
                 state.get("errorCode") or "specialist_execution_failed",
                 message,
                 bool(state.get("retryable")),
             )
+            if cleanup:
+                response["data"] = {"jobId": job_id, "jobStatus": "failed", "cleanupError": cleanup}
+            return response
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
@@ -700,9 +704,11 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         "status": "success",
         "summary": f"{_spec()['label']} job {job_id} completed.",
         "data": {"jobId": job_id, "jobStatus": "succeeded",
+                 **({"cleanupError": cleanup} if cleanup else {}),
                  **({"auditReceipt": state["auditReceipt"]} if state.get("auditReceipt") else {})},
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
+        **({"warnings": [cleanup["message"]]} if cleanup else {}),
     }
 
 
@@ -802,6 +808,8 @@ def _run_isolated_mr(
         except audit_receipt.AuditReceiptUnavailable:
             raise helper.MRInputError("mr_input_isolation_unavailable", "Signed MR audit requires isolated analysis permissions.") from None
         outcome = jobs.execute(helper, job, environment, analysis_credentials=credentials)
+        if outcome.get("cleanupError"):
+            state["cleanupError"] = outcome["cleanupError"]
         if state.get("sourceEvidence") != _source_evidence(root):
             raise helper.MRInputError(
                 "mr_input_changed", "Managed MR source changed during execution."
@@ -828,11 +836,13 @@ def _run_isolated_mr(
                 raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
         if not success:
             state["error"] = str(result.get("error") or "The fixed MR runner failed.")
-            if str(result.get("errorCode", "")).startswith("mr_input_"):
+            if str(result.get("errorCode", "")).startswith(("mr_input_", "mr_analysis_")):
                 state["errorCode"] = result["errorCode"]
         _write_state(state_path, state)
         return 0 if success else outcome["returnCode"] or 1
     except helper.MRInputError as error:
+        if getattr(error, "cleanup_error", None):
+            state["cleanupError"] = error.cleanup_error
         state.update(
             status="failed",
             finishedAt=_now(),
