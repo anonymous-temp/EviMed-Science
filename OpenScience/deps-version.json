@@ -15,7 +15,7 @@
     "version": "2.0.30",
     "image": "memtensor/memos",
     "contractDir": "packages/contracts/memos",
-    "notes": "MemTensor/MemOS 2.0 Stardust, self-hosted. Not the vendored usememos note app, which is retired.",
+    "notes": "MemTensor/MemOS 2.0 Stardust, self-hosted. Not the vendored usememos-derived service under 记忆模块/, which still serves the user-facing memory records; MemOS is the opt-in semantic index behind capsule recall (docker-compose.memos-engine.yml overlay) until the memory base actually moves.",
     "githubRepo": "MemTensor/MemOS",
     "sourceRevision": "b41c8996a8dcb9df81998cced68d11457ce950c3",
     "tokenizer": "gpt2",
