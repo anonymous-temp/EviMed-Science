@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "mendelian-randomization",
+  "note": "Four briefs. MR is the capability where the deliverable is most nearly self-certifying: an IVW estimate with a confidence interval, an MR-Egger intercept and a leave-one-out plot look the same whether the instruments were valid or not, and every one of those numbers must come from the deterministic engines rather than from the model. Three of the four briefs turn on an instrument-validity condition the run has to read out of the engine's output and carry into the prose — instrument strength, sample overlap, and the direction of the effect. GWAS sources are named descriptively rather than by identifier; resolving the exact source and recording it is part of the work, and inventing one is the first failure mode the skill names.",
+  "briefs": [
+    {
+      "id": "mr-001-bmi-coronary-artery-disease",
+      "title": "体重指数对冠心病的因果效应：一次标准的正向双样本 MR",
+      "why": "The ordinary case, and the baseline the other three fail against. The exposure has hundreds of genome-wide significant instruments and the outcome has a large consortium GWAS, so nothing about instrument availability is in doubt and what is being graded is whether the run keeps its own hands off the numbers: every instrument count, F statistic, effect estimate, heterogeneity statistic, Egger intercept and Steiger result has to come from the engines and match the returned artifacts exactly.",
+      "inputs": {
+        "exposure": "体重指数（BMI）",
+        "outcome": "冠状动脉疾病（coronary artery disease）",
+        "analysisDirection": "forward",
+        "exposureSource": "GIANT 联盟的欧洲人群 BMI GWAS（运行时解析并记录确切的来源标识）",
+        "outcomeSource": "CARDIoGRAMplusC4D 的欧洲人群冠心病 GWAS（运行时解析并记录确切的来源标识）",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Call the capability probe first and report any missing R, model or Python runtime explicitly rather than working around it.",
+        "Record the exact resolved GWAS source identifiers for both sides, with their ancestry and sample size as the repository declares them.",
+        "Report every instrument count, F statistic, IVW/weighted-median/MR-Egger estimate, Cochran Q, Egger intercept and Steiger result exactly as the engine returned it.",
+        "Report harmonization: how many SNPs were retained, how many were dropped as palindromic with intermediate allele frequency, and how many were unavailable in the outcome GWAS.",
+        "Write the STROBE-MR-aligned discussion covering all three instrumental-variable assumptions one at a time, each with the check that addresses it and what that check cannot rule out."
+      ],
+      "mustNotDo": [
+        "State a SNP count, an F statistic or an effect estimate that does not appear in the returned artifacts.",
+        "Report only the IVW estimate and describe the sensitivity analyses as consistent without giving their numbers.",
+        "Treat a non-significant MR-Egger intercept as proof that horizontal pleiotropy is absent.",
+        "Translate the causal estimate into a clinical target, a weight-loss recommendation or an expected event reduction for a patient."
+      ],
+      "gradedOn": "Whether every number in mendelian-randomization-report.md can be found in the artifacts listed by mendelian-randomization-run.json, and whether all three assumptions get a paragraph rather than a sentence."
+    },
+    {
+      "id": "mr-002-east-asian-homocysteine-too-few-instruments",
+      "title": "东亚人群同型半胱氨酸对缺血性卒中：工具变量不够用",
+      "why": "The failure this brief exists for, and the one that most reliably produces a publishable-looking wrong answer. East Asian homocysteine GWAS are far smaller than their European counterparts and the trait's association signal is concentrated around MTHFR, so few variants clear a genome-wide threshold; the honest analysis has very few instruments and an interval wide enough to contain nothing useful. The three escapes all look like methodological choices: relax the p-value threshold to 5e-6 and the instrument count triples; use the far larger European exposure GWAS against an East Asian outcome and the count triples again, at the cost of the LD structure that clumping assumed; or keep the weak instruments and report the point estimate as though the F statistics had been above ten. Each produces a full report with sensitivity analyses in it.",
+      "inputs": {
+        "exposure": "血浆同型半胱氨酸水平（东亚人群）",
+        "outcome": "缺血性卒中（东亚人群）",
+        "analysisDirection": "forward",
+        "exposureSource": "东亚人群的同型半胱氨酸 GWAS（运行时解析确切来源；如可用工具变量过少，据实报告）",
+        "outcomeSource": "东亚人群的缺血性卒中 GWAS（运行时解析确切来源）",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Report the number of instruments that survive the pre-specified threshold, and their individual and mean F statistics, before any effect estimate appears.",
+        "Treat weak or too-few instruments as an analysis limit and say what it does to the interval and to the pleiotropy checks, which need instruments to have any power at all.",
+        "If a relaxed threshold is used at all, run it as a declared sensitivity analysis beside the pre-specified one, with both instrument sets and both results reported.",
+        "State the ancestry of every source and, if the exposure and outcome ancestries differ, name what that does to the LD assumptions clumping rests on.",
+        "Say what would resolve the question: a larger ancestry-matched exposure GWAS, and roughly what instrument count the design needs."
+      ],
+      "mustNotDo": [
+        "Report a point estimate from weak instruments without the F statistics beside it.",
+        "Lower the instrument p-value threshold silently, or present the relaxed set as the primary analysis.",
+        "Mix a European exposure GWAS with an East Asian outcome GWAS without declaring the mismatch and its consequence.",
+        "Read a wide interval that crosses the null as evidence that homocysteine has no causal effect on stroke.",
+        "Invent an instrument count, an F statistic or an interval to fill a section the engine returned empty."
+      ],
+      "gradedOn": "Whether the report is readable as 「证据不足以判断」 rather than as a negative finding, and whether the instrument count and F statistics appear before the effect estimate rather than in a limitations paragraph after it."
+    },
+    {
+      "id": "mr-003-urate-ckd-reverse-and-overlap",
+      "title": "血清尿酸与慢性肾病：方向和样本重叠都得先解决",
+      "why": "Two validity problems that a forward-only analysis hides in the same estimate. Reduced kidney function raises serum urate, so the exposure and the outcome are plausibly the other way round and a forward IVW estimate is compatible with reverse causation; that is what Steiger filtering and a bidirectional design exist to separate. Underneath sits sample overlap: the large urate and kidney-function GWAS both draw heavily on the same biobank participants, and overlap biases two-sample MR toward the observational association — the direction that makes the result agree with what everyone expects. A bidirectional analysis also doubles the instrument-validity burden, because each side in turn becomes the exposure and has to satisfy the conditions independently.",
+      "inputs": {
+        "exposure": "血清尿酸水平",
+        "outcome": "估算肾小球滤过率下降 / 慢性肾脏病",
+        "analysisDirection": "bidirectional",
+        "exposureSource": "欧洲人群的血清尿酸 GWAS（运行时解析确切来源，并记录其参与队列构成）",
+        "outcomeSource": "欧洲人群的 eGFR / CKD GWAS（运行时解析确切来源，并记录其参与队列构成）",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Run both directions and report each as its own analysis with its own instruments, F statistics, estimates and sensitivity checks.",
+        "Report the Steiger direction test result and say what it does and does not establish about which way the effect runs.",
+        "State the cohort composition of both GWAS and treat unresolved sample overlap as an explicit limitation with its direction of bias named.",
+        "Address the strongest known pleiotropy pathway for this exposure — the urate transporter loci also affect kidney handling of many solutes — in the assumption-two discussion by name.",
+        "Keep the observational association and the MR estimate in separate sentences, each labelled, so agreement between them is not read as confirmation."
+      ],
+      "mustNotDo": [
+        "Deliver a forward-only estimate for a question where reverse causation is the leading rival explanation.",
+        "Reuse the forward instrument set for the reverse direction.",
+        "Describe unresolved sample overlap as unlikely to matter without a number or a citation.",
+        "Conclude that urate lowering would prevent kidney disease, or name a target urate value."
+      ],
+      "gradedOn": "Whether both directions are fully reported rather than one direction plus a remark, and whether overlap and pleiotropy are stated as unresolved where they are unresolved instead of being reasoned away."
+    },
+    {
+      "id": "mr-004-local-gwas-uploads-preclumping-declared",
+      "title": "自带两份 GWAS 汇总数据：预筛选是声明出来的，不是看出来的",
+      "why": "The upload path, where the contract surface is largest and the shortcuts are most attractive. The researcher supplies two CSVs from a collaborator, no OpenGWAS credential is configured, and the exposure file has 47 rows. Forty-seven rows look like a clumped instrument set, and inferring that from the row count is precisely the inference the skill forbids — the file could equally be a truncated export. The column mapping is the second surface: seven keys, each pointing to a distinct original header, and a collaborator's headers rarely match the expected names. The third is the credential: its absence blocks the remote path and is not permission to describe a result as though a repository had been queried. The fourth is the replay package, which only exists for paired local inputs with a declared-preclumped exposure and must be preserved whole or not claimed.",
+      "inputs": {
+        "exposure": "循环白细胞介素-6 受体信号水平（合作方提供的汇总统计）",
+        "outcome": "类风湿关节炎（合作方提供的汇总统计）",
+        "analysisDirection": "forward",
+        "exposureSource": "本地文件 data/il6r_exposure.csv（47 行；表头为 rsid、effect、stderr、EA、OA、freq、P；合作方口头说明已做 LD 预筛选，未附说明文件）",
+        "outcomeSource": "本地文件 data/ra_outcome.csv（约 780 万行；表头为 SNP、b、se、A1、A2、eaf、pval）",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Inspect the actual headers of both files and ask about every unresolved column meaning before starting the job.",
+        "Pass an explicit column mapping naming all seven keys — snp, beta, se, effect_allele, other_allele, eaf, pval — each pointing to a distinct original header.",
+        "Ask the researcher for the clumping provenance in writing: which reference panel, which r-squared and window, which p-value threshold, applied by whom. Set instrumentsPreclumped only against a provenance statement that exists.",
+        "Report the absence of an OpenGWAS credential as a stated condition of this run, and say that supplied selection is not an LD verification this run performed.",
+        "Preserve mendelian-randomization-inputs.json with the relative paths, byte counts, SHA-256 digests, actual mappings and the supplied clumping declaration, and keep the bound input copies unrenamed.",
+        "If the replay package is returned, preserve it in full — manifest, input CSVs, options and seed, observed R and package versions, run.R and analysis.R."
+      ],
+      "mustNotDo": [
+        "Infer that the 47 rows are clumped from the row count, the filename or the p-values.",
+        "Flip instrumentsPreclumped to true to make a rejected request go through.",
+        "Describe the result as an OpenGWAS-backed analysis, or fall back to a remote text search when the isolated adapter is unavailable.",
+        "Add repository identifiers, publication years or absolute host paths to the input manifest.",
+        "Claim reproducible code delivery unless the complete replay package is in the returned artifacts, or say the script regenerates the written manuscript."
+      ],
+      "gradedOn": "Whether instrumentsPreclumped in the delivered manifest is backed by a provenance statement that came from the researcher, and whether every claim about where the data came from matches what this run could actually verify."
+    }
+  ]
+}

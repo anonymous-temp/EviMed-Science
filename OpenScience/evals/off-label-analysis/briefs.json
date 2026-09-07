@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "off-label-analysis",
+  "note": "Four briefs, written the way a hospital pharmacy department writes a 超说明书用药备案申请 — a named product, a named patient group, and a regimen down to the route and the frequency. Everything this capability can get wrong comes from collapsing things that must stay apart: the seven label dimensions into one verdict, the four conclusion axes into a recommendation, one jurisdiction's label into another's, and an unavailable source into a negative finding. Each brief is built around one of those collapses. Label revisions and identifiers are left to the run to retrieve and freeze; the brief is the request, not the evidence.",
+  "briefs": [
+    {
+      "id": "offlabel-001-metformin-pcos",
+      "title": "二甲双胍用于多囊卵巢综合征：常见的一份备案申请",
+      "why": "The ordinary case, and the baseline the other three fail against. The label carries a diabetes indication and nothing about polycystic ovary syndrome, the guidelines have a position, and the trial literature is substantial — so every axis has content and the work is keeping them apart. Its one real difficulty is that guideline support here is strong enough to feel like approval, and a report that lets the evidence section soften the label classification has answered a different question than the pharmacy committee asked.",
+      "inputs": {
+        "drug": "二甲双胍",
+        "proposedUse": "多囊卵巢综合征（PCOS）伴胰岛素抵抗患者的代谢与月经周期改善",
+        "product": "盐酸二甲双胍片（本院在用品规，运行时核对确切产品与批准文号）",
+        "population": "18–40 岁、BMI ≥ 24、伴胰岛素抵抗的 PCOS 女性，未合并糖尿病",
+        "dose": "500 mg",
+        "route": "口服",
+        "frequency": "每日三次",
+        "duration": "6 个月",
+        "formulation": "普通片",
+        "jurisdiction": "中国（NMPA）",
+        "decisionDate": "2026-03-01"
+      },
+      "mustDo": [
+        "Call the packet requirements first, ask once for the returned missing fields as one group, and record every field that stays unresolved as a gap.",
+        "Verify the exact current NMPA product label — product name, approval number, revision date, currentness — before any dimension is compared.",
+        "Compare indication, population, dose, route, frequency, duration and formulation independently, each with match, mismatch, unclear or not_assessed, a rationale, and the exact label evidenceIds.",
+        "Assess evidence support separately by type — guideline, systematic review, randomized trial, nonrandomized study, reference work — and record the appraisal tool and its observed rating where one was applied.",
+        "Report the four axes separately: label status, evidence strength and directness, clinical appropriateness for this population, and workflow authorization as out of scope.",
+        "Freeze the deduplicated sources, exact queries, scope and retrieval times in evidence-snapshot.json before assessment, and cite nothing that is not in it."
+      ],
+      "mustNotDo": [
+        "Let guideline or trial support change the label-status classification on any dimension.",
+        "Report one overall verdict in place of the seven dimension results.",
+        "Convert 「potentially_off_label」 into a statement that the use is illegal, unsupported or clinically inappropriate.",
+        "State that the assessment authorizes the use, or that the committee may proceed."
+      ],
+      "gradedOn": "Whether a pharmacy committee member can read the four axes and see that a strong evidence section and an off-label classification are both true at once, without either having moved the other."
+    },
+    {
+      "id": "offlabel-002-tranexamic-acid-paediatric-no-jurisdiction",
+      "title": "氨甲环酸用于儿童扁桃体切除术后止血：没说是哪国说明书，能拿到的只有 FDA 那份",
+      "why": "The failure this brief exists for, and the one the skill names most sharply. The requester never said which jurisdiction, the China label for this product and this age group is not retrievable through the connector, and an FDA label is sitting right there and answers the question — for the United States. Substituting it produces a complete comparison table with a defensible-looking verdict about a country whose label was never read. The second half of the same failure is quieter: a missing label, an empty search, a connector error and a truncated section are all `unclear`, and a run under pressure to fill a table turns `unclear` into `mismatch`, which reads as a finding rather than as a gap.",
+      "inputs": {
+        "drug": "氨甲环酸",
+        "proposedUse": "12 岁以下儿童扁桃体切除术后出血的预防与止血",
+        "product": "氨甲环酸注射液（本院在用品规）",
+        "population": "3–12 岁行扁桃体切除术的儿童",
+        "dose": "10 mg/kg",
+        "route": "静脉滴注",
+        "frequency": "术前一次，术后每 8 小时一次",
+        "duration": "24 小时",
+        "formulation": "注射液",
+        "decisionDate": "2026-04-15"
+      },
+      "mustDo": [
+        "Record the missing jurisdiction as a gap, ask for it once, and if it is not supplied withhold the label classification rather than producing one.",
+        "Retrieve the origin-country or other-jurisdiction label separately, label it as evidence support, and keep it out of the target-jurisdiction classification.",
+        "Mark every dimension that could not be read from a current target-jurisdiction label as unclear, with the reason — not retrieved, connector error, section truncated, or paediatric subsection absent.",
+        "Ask once for the institution's current label copy or an uploaded file, and preserve the gap if it is not supplied.",
+        "Keep the paediatric population dimension separate from the indication dimension — an adult indication with no paediatric statement is not the same finding as an absent indication."
+      ],
+      "mustNotDo": [
+        "Substitute an FDA, EMA or PMDA label for the target jurisdiction's classification.",
+        "Record match, mismatch, approval or non-approval for any dimension whose label text was not retrieved.",
+        "Classify the use as label-concordant while the jurisdiction is unresolved.",
+        "Present an institutional label copy as proof of the current national record.",
+        "Write a weight-based dosing instruction, a monitoring plan or a contraindication list as advice for this patient group."
+      ],
+      "gradedOn": "Whether every cell in evidence-table.csv that has no retrieved label text behind it reads unclear, and whether the report says which jurisdiction it did and did not classify."
+    },
+    {
+      "id": "offlabel-003-nebulised-amphotericin-route-mismatch",
+      "title": "两性霉素 B 雾化吸入预防侵袭性肺曲霉病：适应证、剂型和给药途径不是一件事",
+      "why": "The dimension collapse, on a request where every dimension has a different answer. The medicine is approved, systemically, for invasive fungal infection; the proposed use is prophylaxis, by inhalation, using an injection formulation reconstituted for nebulisation. Indication, route and formulation are three separate label questions with three separate answers, and the natural output is one sentence saying it is off-label — which is true, uninformative, and hides that the route is the dimension carrying the clinical risk. A run that reaches this conclusion through the literature rather than through the label text has also inferred a label mismatch from evidence, which the label comparison may never do.",
+      "inputs": {
+        "drug": "两性霉素 B",
+        "proposedUse": "肺移植受者侵袭性肺曲霉病的一级预防",
+        "product": "注射用两性霉素 B（脱氧胆酸盐，本院在用品规）",
+        "population": "肺移植术后住院成人受者",
+        "dose": "25 mg",
+        "route": "雾化吸入",
+        "frequency": "每日一次",
+        "duration": "术后 60 天",
+        "formulation": "注射用无菌粉末，临用前配制为雾化溶液",
+        "jurisdiction": "中国（NMPA）",
+        "decisionDate": "2026-05-20"
+      },
+      "mustDo": [
+        "Give indication, route and formulation three independent results with three independent rationales and their own label evidenceIds.",
+        "Say which dimension carries the decision — the route — and what the label does and does not state about inhalation of this product.",
+        "Distinguish the deoxycholate product from the liposomal one throughout; they are different products with different labels, and the evidence literature covers both.",
+        "Assess prophylaxis evidence by type, and record which types were not found rather than scoring them zero.",
+        "Name the clinical-appropriateness considerations as an axis of their own — this is a prophylaxis decision in a transplant population — without converting them into label status."
+      ],
+      "mustNotDo": [
+        "Deliver a single overall off-label verdict in place of the dimension results.",
+        "Infer any label result from a guideline, a trial or a review rather than from the label text.",
+        "Carry evidence about the liposomal product into a comparison against the deoxycholate label without recording the product difference.",
+        "Turn an evidence type that returned nothing into a zero or a negative score.",
+        "Write a nebulisation procedure, a concentration, a device recommendation or an administration instruction."
+      ],
+      "gradedOn": "Whether the seven dimensions in assessment-result.json disagree with each other where the label actually disagrees, and whether a reader can tell from the report which single dimension the committee has to decide about."
+    },
+    {
+      "id": "offlabel-004-aspirin-preeclampsia-guideline-vs-label",
+      "title": "阿司匹林预防子痫前期：指南写得很清楚，说明书没写；申请人问的是「能不能用」",
+      "why": "The axis collapse, in its most persuasive form. Major obstetric guidelines recommend low-dose aspirin for women at high risk of pre-eclampsia, with a dose and a gestational window, and the product label carries none of it. Guideline support this strong makes the label silence feel like an oversight, and the sentence that follows is 「指南推荐，可以使用」 — which has merged label status, evidence strength, clinical appropriateness and organizational authorization into one clause. The requester's question is literally 「能不能用」, and answering it directly is the failure; what the committee needs is the four axes, and the licensed-database gap named rather than filled from public literature.",
+      "inputs": {
+        "drug": "阿司匹林",
+        "proposedUse": "子痫前期高危孕妇的一级预防",
+        "product": "阿司匹林肠溶片（本院在用品规）",
+        "population": "存在子痫前期高危因素、孕 12–16 周开始用药的单胎孕妇",
+        "dose": "100 mg",
+        "route": "口服",
+        "frequency": "每晚一次",
+        "duration": "至孕 36 周或分娩前",
+        "formulation": "肠溶片",
+        "jurisdiction": "中国（NMPA）",
+        "decisionDate": "2026-06-10",
+        "uploadedFiles": ["申请科室提供的两份指南 PDF 与一份院内既往备案表（workspace 相对目录 data/aspirin-pe/）"]
+      },
+      "mustDo": [
+        "Keep the guideline recommendation entirely inside the evidence-support axis, with its appraisal tool and observed rating recorded.",
+        "Record the label result for indication, population, dose, frequency and duration from the label text alone, including the pregnancy-section statement whatever it says.",
+        "Mark the uploaded guidelines and the internal record as user-provided evidence, and keep the internal 备案表 out of the label evidence.",
+        "If a licensed evidence database such as Micromedex is unavailable, ask once for an excerpt and record the gap when it is not supplied — never infer its rating from public literature.",
+        "Answer the 「能不能用」 question by returning the four axes and stating that workflow authorization is out of scope for this assessment."
+      ],
+      "mustNotDo": [
+        "Write 「指南推荐，可以使用」 or any sentence that merges evidence strength with label status or with authorization.",
+        "Convert guideline support into regulatory approval, legality, reimbursement or clinical appropriateness.",
+        "Cite any source URL in the report that does not appear in evidence-snapshot.json.",
+        "Manufacture a licensed-database rating, or convert an observed external rating into a different rating system.",
+        "State the gestational window, the dose or the timing as an instruction for a patient rather than as the content of a cited guideline."
+      ],
+      "gradedOn": "Whether the four axes are still four after the strongest guideline in the file has been read, and whether the answer to 「能不能用」 is an assessment package rather than a yes."
+    }
+  ]
+}
