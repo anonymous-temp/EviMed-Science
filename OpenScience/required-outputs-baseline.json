@@ -6,7 +6,9 @@
     "clinical-evidence-report": "7 required on 2026-07-23; question-coverage.json made it 8 on 2026-08-15",
     "appraisal-table": "5 required on 2026-09-02, the contract's opening count",
     "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution",
-    "source-understanding": "2 required on 2026-09-07, the opening contract for approved ING04/06: typed understanding and its frozen input copy. Control-plane publication independently validates against the canonical capture."
+    "source-understanding": "2 required on 2026-09-07, the opening contract for approved ING04/06: typed understanding and its frozen input copy. Control-plane publication independently validates against the canonical capture.",
+    "method-candidate": "2 required on 2026-09-07, the opening count for the distillation contract: the proposed method and the record of what it rests on. distillation-notes.md ships `required: false` deliberately — the backstage channel is where the reflection goes, and making it required would be a blocking point nobody has an observed distribution for.",
+    "method-relations": "1 required on 2026-09-07, the opening count for the consolidation contract. The screen, the analyser's assignments and the builder's revisions are three actions of one file, so there is one required output and revision-notes.md stays optional."
   },
   "contracts": {
     "adr-analysis-report": {
@@ -470,6 +472,33 @@
         },
         {
           "path": "source-understanding-input.json",
+          "required": true,
+          "addedOn": "2026-09-07"
+        }
+      ]
+    },
+    "method-candidate": {
+      "capability": "method-distillation",
+      "requiredCount": 2,
+      "outputs": [
+        {
+          "path": "SKILL.md",
+          "required": true,
+          "addedOn": "2026-09-07"
+        },
+        {
+          "path": "method-candidate.json",
+          "required": true,
+          "addedOn": "2026-09-07"
+        }
+      ]
+    },
+    "method-relations": {
+      "capability": "method-relations",
+      "requiredCount": 1,
+      "outputs": [
+        {
+          "path": "method-relations.json",
           "required": true,
           "addedOn": "2026-09-07"
         }

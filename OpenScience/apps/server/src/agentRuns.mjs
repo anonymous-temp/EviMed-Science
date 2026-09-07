@@ -410,6 +410,46 @@ function foldEvents(events) {
       }));
       continue;
     }
+    // What the run left behind for the learning loop: where its transcript was
+    // written, which methods were mounted and which were actually called, how
+    // many repair rounds it took, and what the kernel compacted.
+    //
+    // Observational like `progress`, and for the same reason: none of it may
+    // change a run's status, so a malformed one is dropped rather than
+    // corrupting the ledger. It is also a *gauge* — `serializeNext` supersedes
+    // the previous row for the same run — which is why every writer sends the
+    // whole cumulative value rather than a delta. A history row here would grow
+    // once per repair round and once per compaction, on a file with a 1 MiB
+    // ceiling that has already been hit once.
+    //
+    // DEPLOYMENT CONSTRAINT, because `foldEvents` throws on an event kind it
+    // does not know: once a project ledger has a `learning` row, a control
+    // plane older than this branch cannot read that ledger at all — `list`,
+    // `recover`, every dispatch and every monitor poll fail together with
+    // `agent_runs_corrupt`, permanently, because the server cannot remove the
+    // row. Rolling back past this change therefore requires either keeping this
+    // branch's reader or removing the rows. The writer is unconditional on
+    // purpose (the compaction distribution §6.5 needs measuring before any
+    // policy changes), so this applies to a deployment that never turns the
+    // learning loop on.
+    if (event.event === "learning") {
+      const id = safeStoredId(event.id, "id");
+      const current = runs.get(id);
+      if (!current) continue;
+      const repairRounds = normalizeRepairRounds(event.repairRounds);
+      runs.set(id, Object.freeze({
+        ...current,
+        ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
+        ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
+        ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
+        // `attempts` has been published to the browser since the repair loop
+        // shipped and has always been 0, because nothing ever folded it. The
+        // repair count is the number it was always meant to carry.
+        ...(repairRounds ? { repairRounds, attempts: repairRounds.content + repairRounds.structural } : {}),
+        ...(event.compaction ? { compaction: normalizeCompactionRecords(event.compaction) } : {}),
+      }));
+      continue;
+    }
     // A finding that arrived after the delivery decision was made. It appends
     // to what the reader is told and may admit that a layer went unchecked; it
     // can never change a run's status, its error code or its artifacts, and it
@@ -433,6 +473,71 @@ function foldEvents(events) {
     throw corrupt("Agent run ledger contains an unsupported event.");
   }
   return runs;
+}
+
+/** How many method mounts and calls one run may record. The mount cap is the
+ *  capsule's own (32); a run that reports more is reporting something else. */
+const maxLearningMethods = 64;
+const maxCompactionRecords = 64;
+
+/** @param {any} value @returns {{path: string, completeness: string, bytes: number, sha256: string, messages: number} | undefined} */
+function normalizeTranscriptReceipt(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const completeness = String(value.completeness ?? "");
+  if (!["complete", "partial", "unavailable"].includes(completeness)) return undefined;
+  if (typeof value.path !== "string" || !value.path || value.path.length > 512) return undefined;
+  if (typeof value.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.sha256)) return undefined;
+  return {
+    path: value.path,
+    completeness,
+    bytes: Number.isSafeInteger(value.bytes) && value.bytes >= 0 ? value.bytes : 0,
+    sha256: value.sha256,
+    messages: Number.isSafeInteger(value.messages) && value.messages >= 0 ? value.messages : 0,
+  };
+}
+
+/** @param {any} value @returns {{name: string, digest: string, seq?: number}[] | undefined} */
+function normalizeMethodDigests(value) {
+  if (!Array.isArray(value)) return undefined;
+  /** @type {{name: string, digest: string, seq?: number}[]} */
+  const entries = [];
+  for (const item of value.slice(0, maxLearningMethods)) {
+    if (!item || typeof item.name !== "string" || !item.name) continue;
+    if (typeof item.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(item.digest)) continue;
+    entries.push({
+      name: item.name.slice(0, 128),
+      digest: item.digest,
+      ...(Number.isSafeInteger(item.seq) && item.seq >= 0 ? { seq: item.seq } : {}),
+    });
+  }
+  return entries;
+}
+
+/** @param {any} value @returns {{content: number, structural: number} | undefined} */
+function normalizeRepairRounds(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const content = Number.isSafeInteger(value.content) && value.content >= 0 ? value.content : 0;
+  const structural = Number.isSafeInteger(value.structural) && value.structural >= 0 ? value.structural : 0;
+  return { content, structural };
+}
+
+/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number, policy: string}[] | undefined} */
+function normalizeCompactionRecords(value) {
+  if (!Array.isArray(value)) return undefined;
+  /** @type {{at: string, seq: number, replaced: number, tokens: number, policy: string}[]} */
+  const entries = [];
+  for (const item of value.slice(-maxCompactionRecords)) {
+    if (!item || typeof item !== "object") continue;
+    if (!Number.isSafeInteger(item.seq) || item.seq < 0) continue;
+    entries.push({
+      at: typeof item.at === "string" ? item.at.slice(0, 40) : "",
+      seq: item.seq,
+      replaced: Number.isSafeInteger(item.replaced) && item.replaced >= 0 ? item.replaced : 0,
+      tokens: Number.isSafeInteger(item.tokens) && item.tokens >= 0 ? item.tokens : 0,
+      policy: typeof item.policy === "string" ? item.policy.slice(0, 32) : "",
+    });
+  }
+  return entries;
 }
 
 function safeStoredId(value, label) {
@@ -548,7 +653,11 @@ function serializeNext(events, event, maxBytes) {
   const keep = [...events, event];
   for (let index = keep.length - 1; index >= 0; index -= 1) {
     const item = keep[index];
-    if (item?.event !== "progress" && item?.event !== "native-workflow") continue;
+    // `learning` joins the gauges: every writer sends the whole cumulative
+    // receipt, so only the last one is worth keeping. Adding it to the history
+    // side instead would put one row per repair round and one per compaction on
+    // a file that has already hit its ceiling once.
+    if (item?.event !== "progress" && item?.event !== "native-workflow" && item?.event !== "learning") continue;
     const key = `${item.event}:${item.id}`;
     if (superseded.has(key)) keep[index] = null;
     else superseded.add(key);
@@ -2776,6 +2885,97 @@ export class AgentRunStore {
     });
   }
 
+  /**
+   * The run's own account of what it did, scoped to this run.
+   *
+   * `readRunStateProjection` already refuses another run's file, an
+   * unparseable one, and — for a native-workflow run — one whose plan revision
+   * or item identities do not match the tool calls this run actually made. The
+   * terminal hook needs exactly that guarantee: it attributes method outcomes
+   * to deliverables, and a projection belonging to a different run would
+   * attribute them confidently to the wrong ones.
+   *
+   * Null for every unreadable state rather than a throw, because the only
+   * caller runs beside a finished run's real work.
+   * @param {any} project @param {Record<string, any>} run
+   * @returns {Promise<Record<string, any> | null>}
+   */
+  async runWorkflowProjection(project, run) {
+    try {
+      const read = await readRunStateProjection(project, project.workspaceDir, run);
+      return read.state === "read" ? (read.projection ?? null) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Record what a run left for the learning loop.
+   *
+   * Merge semantics, not replace: the row is a gauge, so the last one written
+   * is the only one kept, and a caller that sent only `compaction` must not
+   * erase the transcript receipt a different caller wrote a second earlier.
+   * Four independent writers reach this — the terminal hook (transcript,
+   * mounted methods, invoked methods), the repair loop (rounds), the event pump
+   * (compaction) and the reconciler — and none of them holds the others' facts.
+   *
+   * Returns null rather than throwing for an unknown run: every caller is on a
+   * best-effort path beside the run's real work, and none of them may be the
+   * reason a run fails.
+   * @param {any} project
+   * @param {string} rawRunId
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
+   */
+  async recordLearning(project, rawRunId, patch) {
+    const runId = safeId(rawRunId, "agent run id");
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(runId);
+      if (!current) return null;
+      const compaction = patch.appendCompaction
+        ? [...(current.compaction ?? []), patch.appendCompaction]
+        : patch.compaction;
+      const event = {
+        event: "learning",
+        id: runId,
+        at: this.now().toISOString(),
+        ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
+        ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
+        ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
+        ...(patch.repairRounds
+          ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }
+          : current.repairRounds ? { repairRounds: current.repairRounds } : {}),
+        ...(compaction ? { compaction } : {}),
+      };
+      // Nothing but the timestamp to write means nothing to write.
+      if (Object.keys(event).length <= 3) return current;
+      const text = serializeNext(events, event, this.maxBytes);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, updated);
+      return updated;
+    });
+  }
+
+  /**
+   * Persist the repair counts the loop has been keeping in memory.
+   *
+   * The five repair maps on this store are lost on a control-plane restart,
+   * which is how an adopted run silently gets a fresh repair budget. Writing
+   * the count each time it moves does not fix that — the budget still lives in
+   * memory — but it does make the number durable for the distiller, which needs
+   * "this package took two rounds to pass" as its strongest signal that
+   * something is worth learning.
+   * @param {any} project @param {string} runId
+   */
+  async recordRepairRounds(project, runId) {
+    const content = this.clinicalRepairAttempts.get(runId) ?? 0;
+    const structural = this.clinicalStructuralRepairAttempts?.get(runId) ?? 0;
+    if (!content && !structural) return null;
+    // isolated: evimed_agent_run_learning_write_failed_total
+    return this.recordLearning(project, runId, { repairRounds: { content, structural } }).catch(() => null);
+  }
+
   /** Wait for every coverage judgement still in flight. Shutdown and tests
    *  only — no request path may call this, which is the whole point of D2. */
   async settleCoverageJudgements() {
@@ -3199,6 +3399,12 @@ export class AgentRunStore {
           if (revision) {
             if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
             else this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+            // The count has to reach the ledger here rather than at the end: the
+            // maps are deleted in `finishInternal`, so a run that finishes takes
+            // the only record of how hard it was with it. It is also the signal
+            // the distiller cares about most — a package that passed on the
+            // second attempt is a lesson, one that passed first time is not.
+            void this.recordRepairRounds(project, run.id);
             this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
           // Record the report's size on the way into each repair. A repair that
           // answers with a whole-file write regenerates the report from what is

@@ -18,6 +18,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
+import fixtures
+
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_GATEWAY_CONFIG_BYTES = 1024 * 1024
@@ -228,6 +230,17 @@ def _direct_credential(credential_profile):
 
 
 def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=None, credential_profile=None):
+    # Replay, when this process is replaying. Keyed on the *upstream* request
+    # rather than on whichever envelope carries it, so a fixture recorded
+    # through the server gateway answers a direct call and the other way round.
+    # A miss raises rather than falling through: an evaluation that is
+    # reproducible for some requests and live for others is not reproducible.
+    if fixtures.fixtures_dir():
+        body = json.dumps(json_body) if (method == "POST" and json_body is not None) else ""
+        try:
+            return fixtures.load_fixture(method, url, body)
+        except fixtures.FixtureMissing as missing:
+            raise PublicSourceError(fixtures.FIXTURE_MISSING_CODE, str(missing))
     gateway = _gateway_settings()
     if gateway is None:
         direct_credential = _direct_credential(credential_profile) if credential_profile else None

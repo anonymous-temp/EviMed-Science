@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
+import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
@@ -1669,7 +1670,7 @@ function dshProfileInput(config, project, plan, model, workloadTokenPath) {
   return {
     modelGatewayUrl: modelGatewayProviderUrl(config),
     model,
-    contextWindow: 1_000_000,
+    contextWindow: Number(config.runtimeContextWindow) || Number(config.runMaxTokens) || 400_000,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
@@ -2057,6 +2058,17 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           modelGatewayTokenFile: `${runtimeDshHome}/${modelGatewayTokenFileName}`,
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
+          // Derived once, out here, from the same definitions the preset row
+          // reads inside the container. A compaction knob that is not on this
+          // list does nothing and says nothing.
+          compaction: compactionRuntimeEnv(compactionConfigFromEnv({
+            ...process.env,
+            OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: String(config.runtimeCompactionPolicy ?? "basic"),
+          })),
+          // `retainTokens` is a port-level option with no row to read it, so it
+          // never crosses the boundary. Sending it would put a name on the
+          // container's env that nothing reads, which is the same defect as a
+          // row reading a name nobody sends, pointing the other way.
           flags: {
             hosted: Boolean(config.production),
             // Same two settings as `dshProfileInput`; see there.

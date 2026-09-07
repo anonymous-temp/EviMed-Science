@@ -403,7 +403,7 @@ function presetRows(input) {
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'>} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string> }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -444,6 +444,17 @@ export function runtimeEnvironment(input) {
     EVIMED_MAX_TOKENS: String(integer(input.limits.maxTokens, 400_000)),
     EVIMED_EVIDENCE_STALE_MINUTES: String(integer(input.limits.evidenceStaleMinutes, 10)),
     EVIMED_SCREENING_BATCH_SIZE: String(integer(input.limits.screeningBatchSize, 50)),
+    // The compaction rows read these four with `!!js`, so all four are always
+    // sent. Written out rather than spread from the caller for the reason this
+    // whole function exists: the preset and this map are one contract in two
+    // files, and a name that appears only when a caller happens to pass it is a
+    // plugin left on its schema default while the deployment believes it
+    // configured one. A test walks the preset's `process.env` names against
+    // these keys in both directions.
+    EVIMED_COMPACTION_POLICY: String(input.compaction?.EVIMED_COMPACTION_POLICY ?? "basic"),
+    EVIMED_COMPACTION_THRESHOLD_RATIO: String(input.compaction?.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8),
+    EVIMED_COMPACTION_RETAIN_RATIO: String(input.compaction?.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16),
+    EVIMED_COMPACTION_MAX_TOKENS: String(integer(Number(input.compaction?.EVIMED_COMPACTION_MAX_TOKENS), 8192)),
   };
 }
 

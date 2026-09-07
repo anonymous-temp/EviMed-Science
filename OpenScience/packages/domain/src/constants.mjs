@@ -37,6 +37,40 @@ export const MEMORY_PROMOTION_MIN_RUNS = 2
 /** Successful trajectories sharing a routine before it is induced into a method (AWM). */
 export const METHOD_INDUCTION_MIN_TRAJECTORIES = 3
 
+/**
+ * How many trajectories a method needs before its contribution may retire it.
+ *
+ * The published recipe uses 100 trials before a skill is eligible for
+ * outcome-driven retirement. Ours is lower on purpose: nothing reaches
+ * `approved` here without a paired evaluation against a frozen baseline, so a
+ * method arrives with evidence a library that admits on synthesis alone does
+ * not have, and 100 more trajectories of a method that is actively hurting is a
+ * hundred packages paying for the delay.
+ */
+export const METHOD_CONTRIBUTION_MIN_TRIALS = 20
+
+/**
+ * The contribution below which a method is proposed for retirement.
+ *
+ * `(successes - failures) / trials`, so 0 is "as often as not" and -0.10 is the
+ * published threshold, kept as published: it is the one number in the recipe
+ * with a measured result behind it, and moving it without our own distribution
+ * would be inventing a number that looks like evidence.
+ */
+export const METHOD_CONTRIBUTION_RETIRE_AT = -0.1
+
+/**
+ * How many methods one account's library may hold as effective.
+ *
+ * The failure this bounds is not cost, it is silence: an unbounded library
+ * degrades retrieval and injects the wrong method into runs that would have
+ * been fine, and nothing in the run says so. The published cap is 50 and there
+ * is no reason ours should differ — what differs is that we evict by proposal
+ * rather than by deletion, so passing it costs the researcher a notice, never a
+ * capability they were relying on.
+ */
+export const MAX_ACTIVE_LEARNED_METHODS = 50
+
 /** Resident capsule profile budget, in tokens (§19.7). */
 export const CAPSULE_PROFILE_TOKEN_BUDGET = 1500
 

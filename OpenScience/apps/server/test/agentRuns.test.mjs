@@ -232,7 +232,10 @@ test("starts immutable open-domain and specialist run identities from research-s
     const identity = events.filter((event) => event.event === "started" || event.event === "dispatch");
     assert.deepEqual(identity.map((event) => event.event), ["started", "dispatch", "started", "dispatch"]);
     for (const event of events) {
-      assert.ok(["started", "dispatch", "progress", "notice", "finished"].includes(event.event), `unknown ledger event ${event.event}`);
+      // `learning` joined the vocabulary when a finished run began writing its
+      // transcript down: the receipt is folded onto the run record, so every
+      // run that produced a readable session leaves one.
+      assert.ok(["started", "dispatch", "progress", "notice", "finished", "learning"].includes(event.event), `unknown ledger event ${event.event}`);
     }
     assert.equal(ledger.includes("prompt"), false);
     assert.equal(ledger.includes("content"), false);

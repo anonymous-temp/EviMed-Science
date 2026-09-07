@@ -77,8 +77,13 @@ test("every setting the runtime depends on still holds in the composition the im
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
-  assert.equal(report.counts.presetRows, 24, "the preset includes the managed citation bridge as well as grouped native tools");
+  // 25 since 2026-09-07: the compaction group gained `evimed-compaction`, the
+  // provider swap that preserves a run's durable handles across a compaction.
+  // It sits beside the kernel's own engine rather than replacing the row,
+  // because it registers nothing at all on the default policy.
+  assert.equal(report.counts.presetRows, 25, "the preset includes the managed citation bridge, the compaction provider, and grouped native tools");
   const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
+  assert.equal(preset.rows.filter(row => row.id === "evimed-compaction").length, 1);
   assert.equal(preset.rows.filter(row => row.id === "evimed-citation-bridge").length, 1);
   assert.equal(preset.byId.get("evimed-citation-bridge").name, "@evimed/dsh-socket/plugins/citation-bridge");
   assert.ok(report.invariants.length >= 20, `only ${report.invariants.length} invariants were derived`);

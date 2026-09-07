@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS } from "@evimed/harness-port";
-import { CONTRACT_KINDS, workspaceLayout } from "@evimed/domain";
+import { CONTRACT_KINDS, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
 
 import {
   AGENT_PLUGIN_IDS,
@@ -972,4 +972,33 @@ test("an empty or unconfigured capability catalogue says so instead of disabling
   Object.defineProperty(empty, "fs", { get: () => workspaceFs, configurable: true });
   assert.deepEqual(await loadCapabilities(empty, "/opt/evimed/capabilities"), []);
   assert.ok(said.some((line) => /catalogue is empty/.test(line)), `empty directory said: ${said}`);
+});
+
+test("the tool-result pruner's thresholds are the domain constant, not a hand copy of it", async () => {
+  // The three numbers lived in two places with nothing holding them equal: the
+  // preset row the plugin actually reads, and `TOOL_RESULT_PRUNER` in
+  // `@evimed/domain`, which is what the control plane reasons about when it
+  // decides how much of a tool result a distillation excerpt may carry. A copy
+  // that drifts here does not fail — it makes the control plane's idea of what
+  // the run saw quietly wrong.
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  const row = /- id: tool-result-pruner[\s\S]*?config:\n([\s\S]*?)\n\n/.exec(preset);
+  assert.ok(row, "the tool-result-pruner row is gone; this test is now checking nothing");
+  for (const [key, value] of Object.entries(TOOL_RESULT_PRUNER)) {
+    assert.match(row[1], new RegExp(`${key}:\\s*${value}\\b`), `${key} in the preset is not ${value}`);
+  }
+});
+
+test("exactly one compaction engine can be active at a time", async () => {
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  // Both rows are mounted, which is deliberate — the kernel's engine is the
+  // default and ours is a swap — so the invariant cannot be "only one row".
+  // It is that the swap declines unless the policy asks for it, in the one
+  // place that decides.
+  assert.match(preset, /- id: compaction-basic/);
+  assert.match(preset, /- id: evimed-compaction/);
+  const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
+  assert.match(plugin, /derived\.policy === 'basic'\)\s*\{[\s\S]*?return\n?\s*\}/,
+    "the compaction plugin no longer returns early on the default policy, so two engines would register");
+  assert.ok(!/from\s+['"]@deepseek-ai\//.test(plugin), "the base engine must stay lazily resolved; it is not installed here");
 });

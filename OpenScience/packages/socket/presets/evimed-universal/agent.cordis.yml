@@ -185,10 +185,30 @@
     compaction: true
     toolResultPruner: true
   config:
+    # The kernel's engine stays mounted and stays the default. `evimed-compaction`
+    # is a provider swap that only takes effect when the policy says
+    # `structured`; on `basic` it registers nothing and this group is exactly
+    # what it was. Two engines are never both active — the row below returns
+    # early rather than registering a second one — and a consistency test says so.
     - id: compaction-basic
       name: '@deepseek-ai/dsh-compaction-basic'
+      config:
+        thresholdRatio: !!js Number(process.env.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8)
+        retainRatio: !!js Number(process.env.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16)
+        maxTokens: !!js Number(process.env.EVIMED_COMPACTION_MAX_TOKENS ?? 8192)
+    - id: evimed-compaction
+      name: '@evimed/dsh-socket/plugins/compaction'
+      config:
+        policy: !!js process.env.EVIMED_COMPACTION_POLICY ?? 'basic'
+        thresholdRatio: !!js Number(process.env.EVIMED_COMPACTION_THRESHOLD_RATIO ?? 0.8)
+        retainRatio: !!js Number(process.env.EVIMED_COMPACTION_RETAIN_RATIO ?? 0.16)
+        maxTokens: !!js Number(process.env.EVIMED_COMPACTION_MAX_TOKENS ?? 8192)
     - id: tool-result-pruner
       name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      # These three are mirrored in `@evimed/domain`'s TOOL_RESULT_PRUNER, which
+      # had no binding to this row at all — a hand copy that a test now holds
+      # equal, because the constant is what the control plane reasons about and
+      # this row is what actually runs.
       config:
         thresholdChars: 8192
         headChars: 4096

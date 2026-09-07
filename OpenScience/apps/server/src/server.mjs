@@ -3,7 +3,7 @@ import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createServer } from "node:http";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -15,6 +15,15 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
+import { collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
+import { resolveGatewayFetch } from "./recordedGateway.mjs";
+import { LearningService } from "./learningService.mjs";
+import { createLearningRuntime } from "./learningRuntime.mjs";
+import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
+import { MethodConsolidation } from "./methodConsolidation.mjs";
+import { LearningWorker } from "./learningWorker.mjs";
+import { runMethodObservations } from "./methodObservations.mjs";
+import { mountedMethodDigest } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -33,6 +42,7 @@ import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usag
 import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
+import { createLearningRoutes } from "./learningRoutes.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -495,6 +505,87 @@ export function createWebApiApp(overrides = {}) {
   const memoryIndexWorker = memoryIndexing
     ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, pollMs: config.memoryIndexPollMs,
       leaseMs: config.memoryIndexLeaseMs, reconcileMs: config.memoryIndexReconcileMs }) : null;
+  const learningService = productDocuments
+    ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService })
+    : null;
+  const learningRoutes = createLearningRoutes({ store, service: learningService, maxJsonBytes: config.maxJsonBytes });
+  // Terminal-hook writes still in flight.
+  //
+  // `onRunFinished` fires from the run store's own monitor, so a transcript
+  // write can land after the process has been asked to stop — and in a test
+  // that is a write racing the temp directory's removal. Held here so `close`
+  // can wait for them, the way it already waits for the capsule cleanup and the
+  // inbox default pass.
+  /** @type {Set<Promise<unknown>>} */
+  const learningWrites = new Set();
+  /** @param {Promise<unknown>} work @returns {Promise<unknown>} */
+  const trackLearningWrite = (work) => {
+    const tracked = work.finally(() => learningWrites.delete(tracked));
+    learningWrites.add(tracked);
+    return tracked;
+  };
+  /**
+   * Fold one finished run into the counters of every method it was given.
+   *
+   * Best effort and self-auditing, like everything else in the terminal hook: a
+   * counter that could not be written must not be the reason a run reports
+   * failure, and must not be silent either.
+   *
+   * @param {{project: any, run: any, sessions: readonly any[]}} input
+   * @returns {Promise<void>}
+   */
+  /** @param {string} text @returns {string} */
+  const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+  const recordMethodUse = async ({ project, run, sessions }) => {
+    if (!learningService || !config.learningEnabled) return;
+    const projection = await agentRuns.runWorkflowProjection(project, run);
+    if (!projection) return;
+    const approved = await learningService.approvedMethods(project.userId, { projectId: project.id });
+    const accountWide = await learningService.approvedMethods(project.userId, { projectId: null });
+    /** @type {{id: string, name: string, digest: string}[]} */
+    const methods = [];
+    for (const document of [...approved, ...accountWide]) {
+      if (methods.some((method) => method.id === document.id)) continue;
+      const name = String(document.payload?.frontmatter?.name ?? "");
+      if (!name) continue;
+      methods.push({ id: String(document.id), name, digest: mountedMethodDigest(document.payload, sha256Hex) });
+    }
+    const derived = runMethodObservations({ run, projection, methods, sessions });
+    if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
+      await agentRuns.recordLearning(project, run.id, {
+        methodsLoaded: derived.methodsLoaded,
+        methodsInvoked: derived.methodsInvoked,
+      });
+    }
+    if (!methods.length) return;
+    for (const { methodId, observation } of derived.observations) {
+      await learningService.recordObservation(project.userId, methodId, observation).catch(async (error) => {
+        await securityAudit(config, "learning.observation.record", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "method_observation_failed",
+        });
+      });
+    }
+    for (const methodId of derived.eligible) {
+      await learningService.recordEligible(project.userId, methodId).catch(() => {});
+    }
+    // A mounted digest that is not the stored one is worth a line. It is not an
+    // error — a method amended mid-run is legitimate — but it is the one way
+    // this producer can silently record nothing while everything looks healthy,
+    // which is the failure the whole module exists to have ended.
+    if (derived.mismatched.length) {
+      await securityAudit(config, "learning.observation.record", "stale", {
+        userId: project.userId, projectId: project.id, runId: run.id,
+        code: `digest_moved:${derived.mismatched.length}`,
+      });
+    }
+  };
+  // Constructed after the runtime exists, and left null when the loop is off
+  // so that a deployment that has not opted in has no claimer for the two
+  // learning job kinds rather than a claimer that declines every job.
+  let learningRuntime = null;
+  /** @type {any} */
+  let learningWorker = null;
   const capsuleService = productDocuments ? new CapsuleService(productDocuments, { indexing: memoryIndexing }) : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
@@ -695,6 +786,23 @@ export function createWebApiApp(overrides = {}) {
     // sequence directly to the stall monitor; the model's workspace
     // projection remains useful UI detail, but is not the heartbeat.
     onRunActivity: (project, runId, activity) => agentRuns?.noteKernelActivity(project, runId, activity),
+    // Recorded, not merely published: the browser shows a compaction card and
+    // forgets it, while "does compaction ever fire, and what does it cost"
+    // needs the ledger. Today the answer is expected to be "never" — the
+    // control plane declares a 1,000,000-token window against a 400,000-token
+    // run budget — and an empty column is exactly the measurement §6.5 asks for
+    // before any threshold is touched.
+    onCompaction: (project, runId, record) => {
+      void agentRuns?.recordLearning(project, runId, {
+        appendCompaction: {
+          at: new Date().toISOString(),
+          seq: record.seq,
+          replaced: record.replaced,
+          tokens: record.tokens,
+          policy: config.runtimeCompactionPolicy ?? "basic",
+        },
+      }).catch(() => {});
+    },
   });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
@@ -829,6 +937,76 @@ export function createWebApiApp(overrides = {}) {
           });
         }
       }
+      // Write the run down before anything else can decide not to.
+      //
+      // This is the only moment the conversation is still readable: the
+      // container is alive because the terminal write has not released it yet,
+      // and `sessionTranscript` starts answering `runtime_not_running` shortly
+      // afterwards. It sits above the Memos branch deliberately — that branch
+      // returns early on a deployment with no memory service, and a deployment
+      // without Memos is still a deployment whose runs should be learnable.
+      //
+      // Best effort, and it audits its own failure: a throw in this callback is
+      // caught by `finishInternal` and then caught again, so a step that does
+      // not report for itself fails invisibly.
+      await trackLearningWrite((async () => {
+        try {
+          const sessions = await collectRunTranscripts(runtimeManager, project, run);
+          const receipt = await persistRunTranscript({ project, run, sessions });
+          await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          if (receipt.completeness !== "complete") {
+            await securityAudit(config, "run.transcript.persist", "partial", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: receipt.missing[0]?.reason ?? "incomplete",
+            });
+          }
+          // The counters the whole loop turns on.
+          //
+          // This is the producer `recordObservation` never had. Without it the
+          // ledger's `learning` row records what was mounted and nothing about
+          // what came of it, `learning.counts` stays at zero for every method,
+          // and no inferred method can ever reach a paired evaluation — a
+          // library that only ever grows candidates, which is indistinguishable
+          // from a library with nothing worth promoting.
+          //
+          // It runs inside the transcript write on purpose: it needs the same
+          // sessions, and both must finish before the run's container is let go.
+          await recordMethodUse({ project, run, sessions });
+        } catch (error) {
+          await securityAudit(config, "run.transcript.persist", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "run_transcript_unavailable",
+          });
+        }
+      })());
+      // Queue the run for distillation when it is worth learning from.
+      //
+      // Trigger (b) of the plan's three: a package that needed at least one
+      // repair round and was then accepted. That is the cheapest honest signal
+      // the system has — the run was wrong in a specific, recorded way and then
+      // became right — and unlike the other two triggers it needs no feedback
+      // event, so it works on the day this ships.
+      //
+      // A run with no repair rounds is not queued. A loop that learns from
+      // every success learns mostly that things usually work.
+      if (learningWorker && productJobs && run.status === "succeeded") {
+        const rounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
+        if (rounds >= 1 && run.transcript?.completeness === "complete") {
+          await productJobs.enqueue(project.userId, "distill", {
+            runId: run.id,
+            trigger: "repair_accepted",
+            repairRounds: run.repairRounds,
+          }, {
+            idempotencyKey: `distill:${run.id}:repair_accepted`,
+            projectId: project.id,
+          }).catch(async (error) => {
+            await securityAudit(config, "learning.distill.enqueue", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
+            });
+          });
+        }
+      }
       if (!memosClient.configured) {
         if (config.requireMemos) {
           /** @type {Error & Record<string, any>} */
@@ -940,6 +1118,74 @@ export function createWebApiApp(overrides = {}) {
         sourceId: match[1], generation: Number(match[2]), jobIds: [match[3]], attemptId: match[4] }));
     },
   });
+  if (learningService && productJobs && config.learningEnabled) {
+    learningRuntime = createLearningRuntime({
+      config, store, agentRuns, runtimeManager, researchSessions,
+      registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
+    });
+    const dispatchLearningRun = (request) => learningRuntime.dispatch(request);
+    const readLearningResult = (identity) => learningRuntime.readResult(identity);
+    const distillation = new MethodDistillationRuns({
+      dispatch: dispatchLearningRun,
+      readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
+      learning: learningService, jobs: productJobs, notifications: notificationService,
+    });
+    const consolidation = new MethodConsolidation({
+      dispatch: dispatchLearningRun,
+      readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
+      learning: learningService, jobs: productJobs, notifications: notificationService,
+      // A paired evaluation dispatches hundreds of real runs, so it is opt-in:
+      // with no command configured an `evaluate` job fails by name rather than
+      // succeeding without having evaluated anything. When an operator does
+      // configure one, it is spawned as its own process with the job's own
+      // budget, and its stdout is expected to be the report the runner writes.
+      evaluate: config.learningEvaluationCommand
+        ? (request) => runPairedEvaluation(config.learningEvaluationCommand, request)
+        : null,
+    });
+    learningWorker = new LearningWorker({
+      jobs: productJobs, distillation, consolidation,
+      enabled: config.learningEnabled,
+      window: config.learningWindow,
+      pollMs: config.learningPollMs,
+      leaseMs: config.learningLeaseMs,
+      resolveProject: async (job) => {
+        const user = await store.userById(job.userId);
+        return user ? store.requireProject(user, job.projectId) : null;
+      },
+      resolveRun: async (project, job) => {
+        if (!project) return null;
+        const runId = String(job.payload?.runId ?? "");
+        return (await agentRuns.list(project)).find((run) => run.id === runId) ?? null;
+      },
+      // Transcript retention, which `config.transcriptRetentionDays` promised
+      // and nothing delivered: `pruneRunTranscripts` had no caller, so the knob
+      // read like a policy and behaved like a comment.
+      maintain: async () => {
+        await store.loadUsers();
+        for (const user of [...store.users.values()]) {
+          // One project's unreadable directory must not stop the sweep: the
+          // point of a retention policy is that it runs, and a policy that
+          // stops at the first awkward project is a policy that protects the
+          // projects nobody looks at least of all.
+          const projects = await store.listProjects(user).catch(() => []);
+          for (const summary of projects) {
+            try {
+              const project = await store.requireProject(user, summary.id);
+              const { removed } = await pruneRunTranscripts(project, { retentionDays: config.transcriptRetentionDays });
+              if (removed.length) {
+                await securityAudit(config, "run.transcript.prune", "ok", {
+                  userId: user.id, projectId: project.id, code: `removed:${removed.length}`,
+                });
+              }
+            } catch {
+              // isolated: evimed_run_transcript_prune_failed_total
+            }
+          }
+        }
+      },
+    });
+  }
   if (autopilotService && config.autopilotEnabled) {
     const episodeAgents = {
       "literature-sentinel": "clinical-evidence-synthesis",
@@ -1102,8 +1348,13 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
   });
+  // The evaluation corpus needs both arms to see byte-identical upstream
+  // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
+  // knob is set in production, and setting the replay one makes a miss a named
+  // failure rather than a live request.
+  const gatewayFetch = resolveGatewayFetch(process.env, overrides.publicSourceFetch ?? globalThis.fetch);
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
-    fetchImpl: overrides.publicSourceFetch ?? globalThis.fetch,
+    fetchImpl: gatewayFetch,
   });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
@@ -1157,6 +1408,7 @@ export function createWebApiApp(overrides = {}) {
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
           autopilotWorker?.status?.().running,
+          learningWorker?.status?.().running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -1335,6 +1587,7 @@ export function createWebApiApp(overrides = {}) {
       if (await pluginRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
+      if (await learningRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
 
@@ -2499,11 +2752,11 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
-    for (const worker of [memoryIndexWorker, sourceWorker, autopilotWorker]) {
+    for (const worker of [memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
       if (worker?.reconcileTimer) clearInterval(worker.reconcileTimer);
       if (worker) worker.reconcileTimer = null;
     }
@@ -2523,6 +2776,7 @@ export function createWebApiApp(overrides = {}) {
       memoryIndexWorker?.start();
       sourceWorker?.start();
       autopilotWorker?.start();
+      learningWorker?.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -2599,10 +2853,15 @@ export function createWebApiApp(overrides = {}) {
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await autopilotWorker?.close();
+      await learningWorker?.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
+      // Before the runtimes and the store: a terminal hook still writing a
+      // transcript is writing into the project directory this shutdown is about
+      // to stop guarding.
+      await Promise.allSettled([...learningWrites]);
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
@@ -3341,6 +3600,49 @@ function addHistogramMetric(lines, name, help, series) {
     lines.push(metricLine(`${name}_sum`, item.sum, item.labels));
     lines.push(metricLine(`${name}_count`, item.count, item.labels));
   }
+}
+
+/**
+ * Spawn the paired-evaluation harness for one candidate.
+ *
+ * Deliberately a subprocess and deliberately not part of this process: the
+ * harness is Python, it runs for hours, and it dispatches real runs through the
+ * same API a person would. What comes back is only the verdict and the path of
+ * the report it wrote — the control plane does not re-derive the statistics,
+ * because a second implementation of the analysis is a second answer.
+ * @param {string} command
+ * @param {{userId: string, projectId: string, methodId: string, candidateDigest: string, baselineDigest: string}} request
+ * @returns {Promise<{verdict: string, report: string, baselineDigest?: string}>}
+ */
+function runPairedEvaluation(command, request) {
+  return new Promise((resolve, reject) => {
+    const [program, ...args] = command.split(/\s+/).filter(Boolean);
+    const child = spawn(program, [...args,
+      "--method", request.methodId,
+      "--candidate-digest", request.candidateDigest,
+      ...(request.baselineDigest ? ["--baseline-digest", request.baselineDigest] : []),
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += String(chunk).slice(0, 64 * 1024); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk).slice(0, 8 * 1024); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        const error = new Error(`The paired evaluation exited ${code}: ${stderr.trim().slice(0, 300)}`);
+        /** @type {any} */ (error).code = "method_evaluation_failed";
+        reject(error);
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        const error = new Error("The paired evaluation printed no readable verdict.");
+        /** @type {any} */ (error).code = "method_evaluation_invalid";
+        reject(error);
+      }
+    });
+  });
 }
 
 async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands }) {

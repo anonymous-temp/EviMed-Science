@@ -17,6 +17,7 @@
 
 import { errorMessage } from '../src/runPolicy.mjs'
 import { configSchema, defineTool, listDirAt, readFileAt, registerSkill, registerTool, toSkillName } from '@evimed/harness-port'
+import { skillBodyDigestAsync } from '../src/digest.mjs'
 
 const Schema = await configSchema()
 
@@ -115,12 +116,16 @@ export async function apply(ctx, config) {
 }
 
 /**
+ * Each method carries the digest of its own body. Three places compute it —
+ * here, the delegation receipt, and the control plane's usage counters — and a
+ * method whose digest differed between them would reset its own counters on
+ * every run and could never cross the threshold that earns it an evaluation.
  * @param {any} ctx @param {string} directory
- * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string }[]>}
+ * @returns {Promise<{ name: string, description: string, whenToUse: string, body: string, digest: string }[]>}
  */
 async function loadMethods(ctx, directory) {
   if (!directory) return []
-  /** @type {{ name: string, description: string, whenToUse: string, body: string }[]} */
+  /** @type {{ name: string, description: string, whenToUse: string, body: string, digest: string }[]} */
   const methods = []
   for (const entry of await listDirAt(ctx, directory, '.')) {
     if (!entry.directory) continue
@@ -132,6 +137,7 @@ async function loadMethods(ctx, directory) {
       description: String(front.description ?? ''),
       whenToUse: String(front.whenToUse ?? ''),
       body,
+      digest: await skillBodyDigestAsync(body),
     })
   }
   return methods

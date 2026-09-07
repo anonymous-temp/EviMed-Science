@@ -35,6 +35,11 @@ const JSON_SHAPED = new Set([
   "reproducibility-pack",
   "surveillance-diff",
   "hypothesis-set",
+  // The two learning contracts. A method proposal cites the run it was induced
+  // from, not the literature, so citation coverage over it would be a hard 0.0
+  // reported about a package that has no citations to cover.
+  "method-candidate",
+  "method-relations",
 ]);
 
 /** Kinds that measure something else entirely, and say so in their own metrics. */
