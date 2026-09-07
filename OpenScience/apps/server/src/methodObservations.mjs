@@ -68,8 +68,10 @@ export function deliverableOutcome(item) {
  * one deliverable says nothing about a sibling deliverable that was handed the
  * same text and ignored it.
  *
- * This reads the same three fields `agentRuns` reads for its own skill scan —
- * a completed tool part named `skill` carrying `input.name`. A method reaches
+ * Reads the normalized transcript vocabulary — a completed tool part named
+ * `skill` carrying `input.name`. `agentRuns` scans for the same thing one level
+ * deeper because it reads ledger messages, which are a different shape of the
+ * same facts. A method reaches
  * the model twice: inlined into the child's prompt by the delegation, and
  * registered as a callable skill by the capsule plugin. Only the second leaves
  * a trace, so `invoked` means "the model went and read it deliberately", which
@@ -87,8 +89,14 @@ export function invokedSkillsBySession(sessions) {
     const names = bySession.get(sessionId) ?? new Set();
     for (const message of session?.transcript?.messages ?? []) {
       for (const part of message?.parts ?? []) {
-        if (part?.type !== "tool" || part?.tool !== "skill" || part?.state?.status !== "completed") continue;
-        const name = part?.state?.input?.name;
+        // The normalized `RunTranscript` shape, which is what
+        // `collectRunTranscripts` produces: `part.status` and `part.input`, not
+        // `part.state.*`. The nested spelling is the ledger's, built by
+        // `transcriptToLedgerMessages` for a different reader, and using it here
+        // matches nothing in any real run while a test written to the same
+        // wrong shape passes.
+        if (part?.type !== "tool" || part?.tool !== "skill" || part?.status !== "completed") continue;
+        const name = part?.input?.name;
         if (typeof name === "string" && name.trim()) names.add(name.trim());
       }
     }

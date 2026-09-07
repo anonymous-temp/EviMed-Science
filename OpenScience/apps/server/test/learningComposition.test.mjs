@@ -198,6 +198,12 @@ test("a terminal write in flight is waited for before the store it writes into g
   assert.match(close[0], /for \(let drain = 0; learningWrites\.size && drain < \d+; drain \+= 1\) \{/);
   const wait = close[0].indexOf("await Promise.allSettled([...learningWrites])");
   const runtimes = close[0].indexOf("await runtimeManager.closeAll()");
+  const store = close[0].indexOf("await agentRuns.closeAll()");
   assert.ok(wait > 0, "close no longer waits for terminal learning writes");
   assert.ok(wait < runtimes, "the wait moved after the runtimes it depends on");
+  // And after the store, because the store is what delivers terminal hooks: a
+  // drain that runs first drains a set its producer is still adding to, and the
+  // next hook writes into a directory that has already been removed.
+  assert.ok(store > 0 && store < wait,
+    "the run store must stop producing terminal hooks before the drain, or the drain proves nothing");
 });

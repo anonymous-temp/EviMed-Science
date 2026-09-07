@@ -212,6 +212,168 @@ export function synthesisRequest(options) {
 }
 
 /**
+ * Every golden trace a real run left for one capability.
+ *
+ * Absent directory is not an error: a deployment that has not run anything yet
+ * has no traces, and the drafts it produces are the same drafts with the trace
+ * field still null. Reporting that as a failure would teach a reader to stop
+ * looking at the one number that says whether the corpus is grounded.
+ * @param {string} dir @param {string} capability @returns {Promise<any[]>}
+ */
+export async function readTraces(dir, capability) {
+  /** @type {any[]} */
+  const traces = [];
+  const entries = await fs.readdir(dir).catch(() => []);
+  for (const entry of entries.sort()) {
+    if (!entry.endsWith(".json")) continue;
+    try {
+      const parsed = JSON.parse(await fs.readFile(path.join(dir, entry), "utf8"));
+      for (const trace of parsed?.traces ?? []) {
+        if (String(trace?.capability ?? "") === capability) traces.push(trace);
+      }
+    } catch {
+      // A corrupt trace file is skipped, not fatal: it costs one chain's
+      // grounding, and stopping the whole generation would cost every one.
+    }
+  }
+  return traces;
+}
+
+/**
+ * The capability's own contract: what the gate will actually enforce.
+ * @param {string} dir @param {string} capability @returns {Promise<any>}
+ */
+export async function readContract(dir, capability) {
+  try {
+    const manifest = JSON.parse(await fs.readFile(path.join(dir, `${capability}.json`), "utf8"));
+    const produces = Array.isArray(manifest?.produces) ? manifest.produces : [];
+    return produces[0] ?? { contractKind: "", outputs: [], checks: [] };
+  } catch {
+    return { contractKind: "", outputs: [], checks: [] };
+  }
+}
+
+/**
+ * The golden trace for one chain, out of the traces real runs left behind.
+ *
+ * Matched by run id, not by tool overlap. Every executed edge in the chain
+ * carries the run that established it, so the trace that belongs to a chain is
+ * the one from a run that appears in `goldenTraceSources` *and* exercised every
+ * tool the chain names. Matching on tools alone would pick a run that happens
+ * to use the same tools for a different task, and the resulting brief would
+ * describe work no recorded run ever did — an unsolvable question wearing the
+ * evidence of a solvable one.
+ *
+ * @param {{spec: import('@evimed/domain').ChainSpec, capability: string, sources: readonly {validatedBy?: string}[], traces: readonly any[]}} options
+ * @returns {any | null}
+ */
+export function traceForChain(options) {
+  const { spec, capability, sources, traces } = options;
+  const runIds = new Set(sources.map((source) => String(source?.validatedBy ?? "")).filter(Boolean));
+  const needed = new Set(spec.tools);
+  /** @type {any[]} */
+  const candidates = [];
+  for (const trace of traces ?? []) {
+    if (String(trace?.capability ?? "") !== capability) continue;
+    if (runIds.size && !runIds.has(String(trace?.runId ?? ""))) continue;
+    const used = new Set((trace.steps ?? []).map((step) => String(step?.tool ?? "")));
+    if (![...needed].every((tool) => used.has(tool))) continue;
+    candidates.push(trace);
+  }
+  if (!candidates.length) return null;
+  // The shortest qualifying trace: it is the one with least unrelated work in
+  // it, so the brief written from it describes the chain rather than the run.
+  candidates.sort((left, right) => left.steps.length - right.steps.length
+    || String(left.runId).localeCompare(String(right.runId)));
+  return candidates[0];
+}
+
+/**
+ * The hidden half of a brief: what a grader may know and a run may not.
+ *
+ * `hidden/` never reaches the runtime image, a distillation input, or any
+ * prompt — `hiddenLeakPaths` and the test beside it are what hold that, because
+ * the failure is silent in the direction that matters. A reference leaked into
+ * context does not error; it produces a run that scores well for the wrong
+ * reason, and every number measured afterwards is worthless without anything
+ * saying so.
+ *
+ * The expected artefacts come from the capability's own contract rather than
+ * from the run: the contract is what the gate will actually enforce, and a
+ * reference built from one run's output would pin the corpus to that run's
+ * incidental file set.
+ *
+ * @param {{briefId: string, capability: string, trace: any, contract: any}} options
+ * @returns {any}
+ */
+export function hiddenReference(options) {
+  const { briefId, capability, trace, contract } = options;
+  const outputs = Array.isArray(contract?.outputs) ? contract.outputs : [];
+  return {
+    schemaVersion: BRIEFS_SCHEMA_VERSION,
+    kind: "brief-hidden-reference",
+    briefId,
+    capability,
+    goldenTrace: trace ? { runId: trace.runId, steps: trace.steps } : null,
+    expectedArtifacts: outputs
+      .filter((output) => output?.required !== false)
+      .map((output) => ({ path: String(output.path), schema: String(contract.contractKind ?? "") })),
+    deterministicChecks: [
+      ...(Array.isArray(contract?.checks) ? contract.checks.map(String) : []),
+      // Read off the trace, so it is a claim about what happened rather than a
+      // wish: the run must reach the tools the chain is built on.
+      ...(trace ? [`toolsExercised:${[...new Set(trace.steps.map((step) => step.tool))].sort().join(",")}`] : []),
+    ],
+  };
+}
+
+/**
+ * What the grader is allowed to be told, which is not the reference.
+ * @param {{capability: string, contract: any, judgeRubricVersion?: string}} options
+ * @returns {any}
+ */
+export function graderDocument(options) {
+  const { capability, contract, judgeRubricVersion = "1" } = options;
+  return {
+    schemaVersion: BRIEFS_SCHEMA_VERSION,
+    kind: "brief-grader",
+    capability,
+    contractKind: String(contract?.contractKind ?? ""),
+    checks: Array.isArray(contract?.checks) ? contract.checks.map(String) : [],
+    judgeRubricVersion,
+  };
+}
+
+/**
+ * Whether a written brief may enter the corpus.
+ *
+ * The plan's step 4, as a rule rather than a procedure: the golden trace has to
+ * replay, and a teacher has to solve it at least once out of three attempts
+ * with the contract and the deterministic checks both passing. One pass out of
+ * three is deliberately weak — the question being asked is "is this solvable at
+ * all", not "is the model good at it", and a stricter bar would quietly select
+ * for easy tasks and report the resulting corpus as representative.
+ *
+ * @param {{replayed: boolean, teacherRuns: readonly {contractPassed?: boolean, checksPassed?: boolean}[], attempts?: number}} verdicts
+ * @returns {{accept: boolean, reason: string}}
+ */
+export function briefAcceptance(verdicts) {
+  const attempts = verdicts.attempts ?? 3;
+  if (!verdicts.replayed) {
+    return { accept: false, reason: "the golden trace did not replay, so the task is not known to be doable at all" };
+  }
+  const runs = verdicts.teacherRuns ?? [];
+  if (runs.length < attempts) {
+    return { accept: false, reason: `${runs.length} of ${attempts} teacher attempts recorded; an unfinished filter is not a passed one` };
+  }
+  const solved = runs.filter((run) => run?.contractPassed && run?.checksPassed).length;
+  if (!solved) {
+    return { accept: false, reason: `no teacher attempt passed both the contract and the deterministic checks in ${runs.length} tries` };
+  }
+  return { accept: true, reason: `${solved} of ${runs.length} teacher attempts solved it` };
+}
+
+/**
  * Everything a corpus diff needs to explain itself, including what is not covered.
  * @param {object} options
  * @param {any} options.graph
@@ -288,6 +450,8 @@ export async function main(argv) {
   const graphsDir = path.resolve(repoRoot, args.get("graphs")?.[0] || "evals/tool-graph");
   const outRoot = path.resolve(repoRoot, args.get("out")?.[0] || "evals/tool-graph/generated");
   const only = (args.get("capability") ?? []).filter(Boolean);
+  const tracesDir = path.resolve(repoRoot, args.get("traces")?.[0] || "evals/tool-graph/traces");
+  const manifestsDir = path.resolve(repoRoot, args.get("manifests")?.[0] || "deploy/runtime-dsh/capabilities");
   const parameters = {
     seed: args.get("seed")?.[0] || "evimed",
     chains: Number(args.get("chains")?.[0] ?? 5),
@@ -334,6 +498,8 @@ export async function main(argv) {
       return 1;
     }
     const capability = String(graph.capability ?? path.basename(file));
+    const traces = await readTraces(tracesDir, capability);
+    const contract = await readContract(manifestsDir, capability);
     const { walk, skipped } = walkableGraph(graph);
     const specs = chainSpecs(walk, parameters);
     const report = generationReport({ graph, skipped, walk, specs, parameters });
@@ -367,11 +533,29 @@ export async function main(argv) {
     await fs.writeFile(path.join(outDir, "generation-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
     const stale = (await fs.readdir(path.join(outDir, "requests")).catch(() => [])).filter((entry) => entry.endsWith(".request.json"));
     for (const entry of stale) await fs.rm(path.join(outDir, "requests", entry));
+    await fs.mkdir(path.join(outDir, "hidden"), { recursive: true });
+    const staleHidden = (await fs.readdir(path.join(outDir, "hidden")).catch(() => [])).filter((entry) => entry.endsWith(".reference.json"));
+    for (const entry of staleHidden) await fs.rm(path.join(outDir, "hidden", entry));
+    let traced = 0;
     for (const [index, spec] of specs.entries()) {
       const request = synthesisRequest({ graph, briefId: drafts[index].id, spec });
+      const trace = traceForChain({ spec, capability, sources: request.goldenTraceSources, traces });
+      if (trace) {
+        // The request is what the writing step reads, and it may see the trace:
+        // the brief is written *from* it. The hidden reference is what the
+        // grader reads, and no run may see that.
+        request.goldenTrace = { runId: trace.runId, steps: trace.steps };
+        request.stopReason = "The golden trace is attached; what remains is the prose, which needs a model.";
+        traced += 1;
+      }
       await fs.writeFile(path.join(outDir, "requests", `${spec.id}.request.json`), `${JSON.stringify(request, null, 2)}\n`, "utf8");
+      const reference = hiddenReference({ briefId: drafts[index].id, capability, trace, contract });
+      await fs.writeFile(path.join(outDir, "hidden", `${drafts[index].id}.reference.json`), `${JSON.stringify(reference, null, 2)}\n`, "utf8");
     }
-    process.stdout.write(`  written to ${displayPath(outDir)}\n`);
+    if (specs.length) {
+      await fs.writeFile(path.join(outDir, "hidden", "grader.json"), `${JSON.stringify(graderDocument({ capability, contract }), null, 2)}\n`, "utf8");
+    }
+    process.stdout.write(`  written to ${displayPath(outDir)}; ${traced}/${specs.length} chain(s) have a golden trace from a real run\n`);
   }
 
   process.stdout.write(

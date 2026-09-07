@@ -23,7 +23,7 @@ import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
-import { persistExecutedToolEdges } from "./toolExecutionEdges.mjs";
+import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
 import { mountedMethodDigest } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
@@ -970,9 +970,16 @@ export function createWebApiApp(overrides = {}) {
           // hand.
           try {
             const written = await persistExecutedToolEdges({ project, run, sessions });
-            if (written.edges) {
+            // The call sequence itself, not only the pairs it implies. The plan
+            // builds the corpus "execute first, write the task second", and the
+            // run that established the edges is the execution — so the golden
+            // trace it asks for is read off the transcript rather than waiting
+            // for a fixture harness that would only ever be a claim about it.
+            const traced = await persistGoldenTraces({ project, run, sessions });
+            if (written.edges || traced.traces) {
               await securityAudit(config, "run.tool.edges", "ok", {
-                userId: project.userId, projectId: project.id, runId: run.id, code: `edges:${written.edges}`,
+                userId: project.userId, projectId: project.id, runId: run.id,
+                code: `edges:${written.edges} traces:${traced.traces} steps:${traced.steps}`,
               });
             }
           } catch (error) {
@@ -2879,27 +2886,29 @@ export function createWebApiApp(overrides = {}) {
       await autopilotScheduleRun;
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
-      // Before the runtimes and the store: a terminal hook still writing a
-      // transcript is writing into the project directory this shutdown is about
-      // to stop guarding.
-      //
-      // Drained in a loop, not from one snapshot of the set. A run can reach
-      // its terminal hook while an earlier write is still being awaited, and
-      // `[...learningWrites]` taken once never sees it — which showed up as an
-      // intermittent `ENOTEMPTY` on a test's temp directory under load and, in
-      // production, is a write racing the runtime teardown it depends on. The
-      // bound is there because a drain that cannot finish should end the
-      // shutdown rather than hold it forever; no new runs are accepted by this
-      // point, so reaching it means something else is wrong.
-      for (let drain = 0; learningWrites.size && drain < 100; drain += 1) {
-        await Promise.allSettled([...learningWrites]);
-      }
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still
       // following makes it reconnect to a kernel that is going away.
       await runtimeEventPump.closeAll();
       await agentRuns.closeAll();
+      // After the run store, before the runtimes — and that order is the whole
+      // point rather than a detail.
+      //
+      // `onRunFinished` fires from the run store's own monitor, so draining
+      // before `agentRuns.closeAll()` drains a set the producer is still adding
+      // to: the wait finishes, the monitor delivers one more terminal hook, and
+      // that write lands after the directory it writes into has been removed.
+      // Looping over the set was not enough for the same reason. The store has
+      // to stop first. It still has to happen before `runtimeManager.closeAll()`
+      // because the write reads the run's sessions out of a live container.
+      //
+      // The bound ends a shutdown that cannot finish rather than holding it
+      // forever; no new runs are accepted by this point, so reaching it means
+      // something else is wrong.
+      for (let drain = 0; learningWrites.size && drain < 100; drain += 1) {
+        await Promise.allSettled([...learningWrites]);
+      }
       await runtimeManager.closeAll();
       await maintenanceService?.close();
       await new Promise((resolve, reject) => {

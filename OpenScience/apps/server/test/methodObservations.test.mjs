@@ -37,12 +37,19 @@ const projection = (overrides = {}) => ({
   ...overrides,
 });
 
-/** @param {string} sessionId @param {string[]} skills */
+/** One session's transcript in the normalized `RunTranscript` vocabulary.
+ *  Not `part.state.*`: that is the ledger's spelling of the same facts, and
+ *  reading it here matched nothing in any real run while these tests, written
+ *  to the same assumption, stayed green. The last test drives the real
+ *  normalizer so the shape is proven rather than restated.
+ *  @param {string} sessionId @param {string[]} skills */
 const session = (sessionId, skills) => ({
   sessionId,
   transcript: {
-    messages: skills.map((name) => ({
-      parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name } } }],
+    messages: skills.map((name, index) => ({
+      role: "tool",
+      turn: index,
+      parts: [{ type: "tool", tool: "skill", callId: `c${index}`, status: "completed", input: { name }, output: "", error: null }],
     })),
   },
 });
@@ -137,12 +144,29 @@ test("a run with no delegation and no projection yields nothing rather than gues
 
 test("only a completed skill call counts as an invocation", () => {
   const messages = [
-    { parts: [{ type: "tool", tool: "skill", state: { status: "running", input: { name: "capsule-a" } } }] },
-    { parts: [{ type: "tool", tool: "read", state: { status: "completed", input: { name: "capsule-b" } } }] },
+    { parts: [{ type: "tool", tool: "skill", callId: "a", status: "pending", input: { name: "capsule-a" }, output: "", error: null }] },
+    { parts: [{ type: "tool", tool: "read", callId: "b", status: "completed", input: { name: "capsule-b" }, output: "", error: null }] },
     { parts: [{ type: "text", text: "capsule-c" }] },
-    { parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name: " capsule-d " } } }] },
+    { parts: [{ type: "tool", tool: "skill", callId: "d", status: "completed", input: { name: " capsule-d " }, output: "", error: null }] },
   ];
   const found = invokedSkillsBySession([{ sessionId: "s1", transcript: { messages } }]);
   assert.deepEqual([...(found.get("s1") ?? [])], ["capsule-d"]);
   assert.deepEqual([...invokedSkillsBySession([{ transcript: { messages } }]).keys()], [], "a session with no id is not a session");
+});
+
+test("the shape is the one the real normalizer produces, not the one this file assumed", async () => {
+  // Same tooth as `toolExecutionEdges.test.mjs`, for the same reason: this
+  // module read the ledger's `part.state.input.name` while
+  // `collectRunTranscripts` hands it the normalized transcript, so `invoked`
+  // would have been false for every method in every run and nothing would have
+  // said so.
+  const { normalizeTranscript } = await import("../src/dshRuntimeAdapter.mjs");
+  const skill = toSkillName("triage", "capsule");
+  const transcript = normalizeTranscript("s1", [
+    { event: { type: "turn/start", seq: 1, time: 1, data: { turn: 0 } } },
+    { event: { type: "tool/call", seq: 2, time: 2, data: { turn: 0, name: "skill", callId: "c1", arguments: { name: skill } } } },
+    { event: { type: "tool/result", seq: 3, time: 3, data: { turn: 0, callId: "c1", message: { callId: "c1", name: "skill", content: [{ type: "text", text: "loaded" }] } } } },
+  ]);
+  const found = invokedSkillsBySession([{ sessionId: "s1", transcript }]);
+  assert.deepEqual([...(found.get("s1") ?? [])], [skill], "the normalizer's own output must be readable here");
 });

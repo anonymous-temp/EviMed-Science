@@ -15,18 +15,28 @@ import {
   serializeExecutedEdges,
 } from "../src/toolExecutionEdges.mjs";
 
+// The normalized `RunTranscript` vocabulary — the one `sessionTranscript`
+// returns and `collectRunTranscripts` collects. Written out rather than nested
+// under `state`, because the nested spelling is the ledger's and reading it
+// here found nothing in a real run while every test stayed green. The last test
+// in this file drives the real normalizer so the shape is proven, not restated.
 /** @param {string} tool @param {any} input @param {any} output @param {any} [extra] */
 const call = (tool, input, output, extra = {}) => ({
   type: "tool",
   tool,
-  state: { status: "completed", input, output, ...extra },
+  callId: `${tool}-${Math.random().toString(16).slice(2, 8)}`,
+  status: "completed",
+  input,
+  output: typeof output === "string" ? output : JSON.stringify(output),
+  error: null,
+  ...extra,
 });
 
 /** @param {string} capability @param {any[]} parts */
 const session = (capability, parts) => ({
   sessionId: `s:${capability}`,
   capability,
-  transcript: { messages: parts.map((part) => ({ parts: [part] })) },
+  transcript: { messages: parts.map((part, index) => ({ role: "tool", turn: index, parts: [part] })) },
 });
 
 test("identifiers are the ones the delivery gate already knows, plus artefact paths", () => {
@@ -88,7 +98,7 @@ test("a failed call neither produces nor consumes", () => {
   const failed = executedToolEdges({
     runId: "run_1",
     sessions: [session("c", [
-      call("search", { q: "x" }, { doi: "10.1001/abc" }, { status: "completed", error: "upstream timeout" }),
+      call("search", { q: "x" }, { doi: "10.1001/abc" }, { status: "error", error: { name: "UpstreamError", code: "upstream_timeout" } }),
       call("fetch", { doi: "10.1001/abc" }, { text: "..." }),
     ])],
   });
@@ -97,7 +107,7 @@ test("a failed call neither produces nor consumes", () => {
   const running = executedToolEdges({
     runId: "run_1",
     sessions: [session("c", [
-      { type: "tool", tool: "search", state: { status: "running", input: {}, output: { doi: "10.1001/abc" } } },
+      { type: "tool", tool: "search", callId: "c1", status: "pending", input: {}, output: JSON.stringify({ doi: "10.1001/abc" }), error: null },
       call("fetch", { doi: "10.1001/abc" }, { text: "..." }),
     ])],
   });
@@ -145,10 +155,10 @@ test("a session with no capability is skipped rather than filed under a guess", 
 test("calls are ordered by the kernel's sequence, not by where they sit in the list", () => {
   // "A then B" read off a list that is not in time order is not evidence.
   const parts = [
-    call("fetch", { doi: "10.1001/abc" }, { ok: true }, { status: "completed", completedSeq: 20 }),
-    call("search", { q: "x" }, { doi: "10.1001/abc" }, { status: "completed", completedSeq: 10 }),
+    call("fetch", { doi: "10.1001/abc" }, { ok: true }, { completedSeq: 20 }),
+    call("search", { q: "x" }, { doi: "10.1001/abc" }, { completedSeq: 10 }),
   ];
-  const ordered = completedToolCalls({ transcript: { messages: parts.map((part) => ({ parts: [part] })) } });
+  const ordered = completedToolCalls({ transcript: { messages: parts.map((part, index) => ({ turn: index, parts: [part] })) } });
   assert.deepEqual(ordered.map((entry) => entry.tool), ["search", "fetch"]);
   const edges = executedToolEdges({ runId: "run_1", sessions: [{ ...session("c", parts) }] });
   assert.deepEqual(edges.map((edge) => [edge.from, edge.to]), [["search", "fetch"]]);
@@ -174,4 +184,69 @@ test("the corpus form is one object per line, ordered so two runs compare", () =
   const lines = text.trim().split("\n").map((line) => JSON.parse(line));
   assert.deepEqual(lines.map((line) => line.capability), ["a", "b"]);
   assert.equal(serializeExecutedEdges([]), "");
+});
+
+test("the shape is the one the real normalizer produces, not the one this file assumed", async () => {
+  // The tooth for every fixture above. This module first read `part.state.status`
+  // and `part.state.input` — the *ledger's* spelling, built by
+  // `transcriptToLedgerMessages` for a different reader — while
+  // `collectRunTranscripts` hands it the normalized `RunTranscript` that
+  // `sessionTranscript` returns. Every test passed, because the fixtures were
+  // written to the same wrong assumption, and in production not one receipt
+  // would ever have been written.
+  //
+  // So this drives the real normalizer from kernel events. If the adapter's
+  // output shape moves, this fails here rather than silently in a deployment.
+  const { normalizeTranscript } = await import("../src/dshRuntimeAdapter.mjs");
+  const events = [
+    { event: { type: "turn/start", seq: 1, time: 1, data: { turn: 0 } } },
+    { event: { type: "tool/call", seq: 2, time: 2, data: { turn: 0, name: "search", callId: "c1", arguments: { query: "aspirin" } } } },
+    { event: { type: "tool/result", seq: 3, time: 3, data: { turn: 0, callId: "c1", message: { callId: "c1", name: "search", content: [{ type: "text", text: '{"hits":[{"doi":"10.1001/abc"}]}' }] } } } },
+    { event: { type: "tool/call", seq: 4, time: 4, data: { turn: 1, name: "fetch", callId: "c2", arguments: { doi: "10.1001/abc" } } } },
+    { event: { type: "tool/result", seq: 5, time: 5, data: { turn: 1, callId: "c2", message: { callId: "c2", name: "fetch", content: [{ type: "text", text: "full text" }] } } } },
+  ];
+  const transcript = normalizeTranscript("s1", events);
+  const calls = completedToolCalls({ transcript });
+  assert.deepEqual(calls.map((entry) => [entry.tool, entry.turn]), [["search", 0], ["fetch", 1]],
+    "the normalizer's own output must be readable by this module");
+  assert.deepEqual(calls[1].input, { doi: "10.1001/abc" });
+
+  const edges = executedToolEdges({ runId: "run_real", sessions: [{ sessionId: "s1", capability: "adr-analysis", transcript }] });
+  assert.deepEqual(edges.map((edge) => [edge.from, edge.to, edge.matchedIdentifiers]),
+    [["search", "fetch", ["doi:10.1001/abc"]]]);
+});
+
+/* ------------------------------------------------------------- golden traces */
+
+test("the golden trace is the run's own call sequence, with results reduced to digests", async () => {
+  const { goldenTraces } = await import("../src/toolExecutionEdges.mjs");
+  const traces = goldenTraces({
+    runId: "run_1",
+    sessions: [session("adr-analysis", [
+      call("search", { query: "aspirin" }, { hits: [{ doi: "10.1001/abc" }], total: 1 }),
+      call("fetch", { doi: "10.1001/abc" }, "plain text, not JSON"),
+    ])],
+  });
+  assert.equal(traces.length, 1);
+  assert.equal(traces[0].capability, "adr-analysis");
+  assert.equal(traces[0].runId, "run_1");
+  assert.deepEqual(traces[0].steps.map((step) => [step.tool, step.turn]), [["search", 0], ["fetch", 1]]);
+  assert.deepEqual(traces[0].steps[0].args, { query: "aspirin" });
+  // Digests, never the result text: a trace is committed to a corpus and tool
+  // results carry retrieved source material.
+  for (const step of traces[0].steps) {
+    assert.match(step.returnDigest, /^sha256:[a-f0-9]{64}$/);
+    assert.ok(!JSON.stringify(step).includes("10.1001/abc") || step.tool === "fetch");
+  }
+  assert.deepEqual(traces[0].steps[0].outputKeys, ["hits", "total"], "the shape a replay can be checked against");
+  assert.deepEqual(traces[0].steps[1].outputKeys, [], "a non-JSON result has no keys, and claiming some would be a lie");
+});
+
+test("a trace names its capability or is not written, and the same run twice digests the same", async () => {
+  const { goldenTraces } = await import("../src/toolExecutionEdges.mjs");
+  assert.deepEqual(goldenTraces({ runId: "run_1", sessions: [{ sessionId: "root", transcript: { messages: [] } }] }), []);
+  assert.deepEqual(goldenTraces({ runId: "", sessions: [] }), []);
+  const once = goldenTraces({ runId: "r", sessions: [session("c", [call("a", { x: 1 }, { y: 2 })])] });
+  const twice = goldenTraces({ runId: "r", sessions: [session("c", [call("a", { x: 1 }, { y: 2 })])] });
+  assert.deepEqual(once, twice, "a corpus artefact that changes between two reads of one run is not evidence");
 });
