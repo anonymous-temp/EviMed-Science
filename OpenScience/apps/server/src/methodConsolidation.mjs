@@ -63,6 +63,11 @@ export const CONSOLIDATION_LIMITS = Object.freeze({
   maxGroupSize: 8,
   minGroupSize: 2,
   maxBuilds: 6,
+  // How many pairs one SCREEN run may be shown. The shortlist is already
+  // ordered by overlap, so a cap takes the least plausible pairs off the end;
+  // an uncapped screen would grow with the square of the library and stop being
+  // the cheap step.
+  maxScreenPairs: 40,
 });
 
 /** @param {string} value @returns {string} */
@@ -96,6 +101,34 @@ export function candidatePairs(methods) {
     }
   }
   return pairs.sort((one, two) => two.overlap - one.overlap || one.a.localeCompare(two.a));
+}
+
+/**
+ * Apply one SCREEN answer to the shortlist it was given.
+ *
+ * Pure, so the rule is testable without a run. Only a pair the model kept
+ * survives, and only if it was on the shortlist: an id the answer invented
+ * names nothing the grouping budget accounted for, and a pair the answer
+ * reordered is the same pair.
+ *
+ * @param {readonly {a: string, b: string, overlap: number}[]} shortlist
+ * @param {any} output
+ * @returns {{a: string, b: string, overlap: number}[]}
+ */
+export function screenedPairs(shortlist, output) {
+  const answers = Array.isArray(output?.pairs) ? output.pairs : Array.isArray(output?.kept) ? output.kept : [];
+  /** @type {Set<string>} */
+  const keep = new Set();
+  for (const answer of answers) {
+    // `related: false` is an answer, not an absence, and a pair with no verdict
+    // at all was not screened — both drop.
+    if (answer?.related === false || answer?.keep === false) continue;
+    const a = String(answer?.a?.id ?? answer?.a ?? "");
+    const b = String(answer?.b?.id ?? answer?.b ?? "");
+    if (!a || !b) continue;
+    keep.add(a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
+  }
+  return shortlist.filter((pair) => keep.has(pair.a < pair.b ? `${pair.a}\u0000${pair.b}` : `${pair.b}\u0000${pair.a}`));
 }
 
 /**
@@ -171,10 +204,11 @@ export class MethodConsolidation {
     const page = await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: CONSOLIDATION_LIMITS.maxMethods });
     const methods = (page.items ?? []).filter((item) => item.payload?.status !== "retired");
     if (methods.length < CONSOLIDATION_LIMITS.minGroupSize) {
-      return { action: "sleep", methods: methods.length, groups: 0, relations: 0, builds: 0, promoted: [], queuedForEvaluation: [], retirements: [], graphIssues: [] };
+      return { action: "sleep", methods: methods.length, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], queuedForEvaluation: [], retirements: [], graphIssues: [] };
     }
 
-    const groups = groupPairs(candidatePairs(methods));
+    const screen = await this.screenPairs(job, candidatePairs(methods), methods);
+    const groups = groupPairs(screen.pairs);
     const byId = new Map(methods.map((method) => [method.id, method]));
     let relationCount = 0;
     let builds = 0;
@@ -243,6 +277,8 @@ export class MethodConsolidation {
       groups: groups.length,
       relations: relationCount,
       builds,
+      screened: screen.screened,
+      screenDropped: screen.dropped,
       promoted,
       queuedForEvaluation,
       retirements: retirements.map((entry) => entry.document.id),
@@ -348,6 +384,80 @@ export class MethodConsolidation {
       if (written) count += 1;
     }
     return count;
+  }
+
+  /**
+   * The SCREEN step: one bounded run that thins the deterministic shortlist.
+   *
+   * `candidatePairs` says in its own docstring that it is not the screen — "the
+   * model does that" — and nothing did it. So the pairs a lexical token overlap
+   * proposed went straight into grouping, which means two methods that share
+   * four ordinary words about evidence appraisal were grouped, reasoned about at
+   * DECIDE's price, and sometimes rewritten into each other. Word overlap is a
+   * proxy for relatedness and a bad one; "are these two methods about the same
+   * work" is a language judgment, and the principles put those on the model.
+   *
+   * Two constraints that make this cheap and safe:
+   *
+   *  - **One run for the whole shortlist**, not one per pair. The point of a
+   *    screen is to cost less than what it saves.
+   *  - **It may only remove.** A screen that could add pairs would have to see
+   *    every pair to be fair, which is the quadratic cost the shortlist exists
+   *    to avoid, and the grouping budget is sized on the shortlist. So the model
+   *    answers "which of these are real", and a pair it does not name survives
+   *    only if it was already there.
+   *
+   * A failed or unavailable screen returns the shortlist unchanged rather than
+   * nothing: consolidation degraded to the old behaviour is worse than the new
+   * one and much better than a night that silently consolidates nothing.
+   *
+   * @param {any} job @param {readonly {a: string, b: string, overlap: number}[]} pairs @param {readonly any[]} methods
+   * @returns {Promise<{pairs: {a: string, b: string, overlap: number}[], screened: boolean, dropped: number}>}
+   */
+  async screenPairs(job, pairs, methods) {
+    if (pairs.length < 2) return { pairs: [...pairs], screened: false, dropped: 0 };
+    const byId = new Map(methods.map((method) => [method.id, method]));
+    const shortlist = pairs.slice(0, CONSOLIDATION_LIMITS.maxScreenPairs);
+    const dispatchId = `method-relations-screen-${shortDigest(shortlist.map((pair) => `${pair.a} ${pair.b}`).join("\n"))}`;
+    /** @type {any} */
+    let result = null;
+    try {
+      const identity = await this.dispatch({
+        userId: job.userId,
+        projectId: job.projectId,
+        dispatchId,
+        job,
+        capabilityId: "method-relations",
+        contractKind: "method-relations",
+        input: {
+          schemaVersion: 1,
+          action: "screen",
+          // Names and descriptions only. SCREEN is the cheap step; handing it
+          // the bodies would make it cost what DECIDE costs and leave nothing
+          // for DECIDE to add.
+          pairs: shortlist.map((pair) => ({
+            a: { id: pair.a, name: byId.get(pair.a)?.payload?.frontmatter?.name, description: byId.get(pair.a)?.payload?.frontmatter?.description },
+            b: { id: pair.b, name: byId.get(pair.b)?.payload?.frontmatter?.name, description: byId.get(pair.b)?.payload?.frontmatter?.description },
+          })),
+        },
+        question: "Screen the pairs in method-relations-input.json with the method-relations capability using action `screen`. "
+          + "For each pair say whether the two methods plausibly describe related work, and drop the ones that merely share vocabulary. "
+          + "Keeping a pair costs a later, more expensive reading; keeping every pair is the same as not screening. "
+          + "You may only judge the pairs you are given — do not propose new ones.",
+      });
+      if (identity?.runId) {
+        result = await this.readResult({ ...identity, dispatchId, userId: job.userId, projectId: job.projectId });
+      }
+    } catch {
+      // isolated: evimed_learning_screen_failed_total
+    }
+    if (!result || result.status !== "succeeded") return { pairs: [...pairs], screened: false, dropped: 0 };
+    const kept = screenedPairs(shortlist, result.output ?? {});
+    // Everything past the shortlist was never shown to the screen, so it is
+    // dropped rather than kept: a pair nobody judged is not a screened pair,
+    // and letting it through would make the shortlist cap silently decide what
+    // gets consolidated.
+    return { pairs: kept, screened: true, dropped: pairs.length - kept.length };
   }
 
   /**
