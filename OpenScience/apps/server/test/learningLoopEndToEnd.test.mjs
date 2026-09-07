@@ -14,12 +14,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, promotionVerdict } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, methodContribution, promotionVerdict, retirementProposal } from "@evimed/domain";
 
 import { selectLearnedMethods } from "../src/learnedMethodMount.mjs";
 import { LearningService, methodRecordFrom } from "../src/learningService.mjs";
 import { MethodDistillationRuns } from "../src/methodDistillationRuns.mjs";
 import { runMethodObservations } from "../src/methodObservations.mjs";
+import { toSkillName } from "@evimed/harness-port";
 
 const BODY = [
   "## Purpose", "Quote before you conclude.", "",
@@ -136,6 +137,10 @@ async function foldRun(learning, finished, methods) {
     await learning.recordObservation("u1", methodId, observation);
   }
   for (const methodId of derived.eligible) await learning.recordEligible("u1", methodId);
+  // The third write the run finalizer makes, and the one that is not an
+  // attribution: a method the run read with no delegation to hang it on.
+  const readAt = new Date().toISOString();
+  for (const entry of derived.invokedWithoutMount) await learning.recordRead("u1", entry.id, readAt);
   return derived;
 }
 
@@ -168,7 +173,7 @@ test("a distilled candidate reaches effect through evidence, and nothing asserts
   await foldRun(learning, finishedRun("run_2", ["d1"], known[0]), known);
   document = await learning.getMethod("u1", methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, validated: 0 });
+    { eligible: 0, loaded: 3, invoked: 0, succeeded: 3, validated: 0, read: 0 });
 
   // Still not promotable: the trajectories are in, the measurement is not.
   let verdict = promotionVerdict(methodRecordFrom(document));
@@ -245,7 +250,7 @@ test("a rejected deliverable is evidence against, and amending the body starts t
   await foldRun(learning, failing, known);
   let document = await learning.getMethod("u1", methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 0, loaded: 1, invoked: 0, succeeded: 0, validated: 0 },
+    { eligible: 0, loaded: 1, invoked: 0, succeeded: 0, validated: 0, read: 0 },
     "a run the gate refused is a use and not a success");
 
   await foldRun(learning, finishedRun("run_2", ["d1", "d2"], known[0]), known);
@@ -260,7 +265,7 @@ test("a rejected deliverable is evidence against, and amending the body starts t
   });
   assert.equal(amended.payload.status, "candidate");
   assert.deepEqual(amended.payload.learning.counts,
-    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0 });
+    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
   assert.deepEqual(amended.payload.learning.observations, []);
 
   // And an observation carrying the old mount's digest cannot resurrect them.
@@ -269,6 +274,47 @@ test("a rejected deliverable is evidence against, and amending the body starts t
   ]);
   assert.deepEqual(stale.observations, []);
   assert.equal(stale.mismatched.length, 1);
+});
+
+test("a run that reads a method and delegates nothing keeps it out of the idle pile", async () => {
+  const { learning, distillation } = harness();
+  const applied = await distillation.applyCandidate(
+    { userId: "u1", projectId: "p1", payload: {} }, { id: "run_0" },
+    { candidate: { operation: "create" }, skill: SKILL },
+  );
+  const known = [{ id: applied.methodId, name: "quote-first", digest: "sha256:" + "d".repeat(64) }];
+
+  // The non-delegating answer line: one root session, no subagents, no
+  // deliverables — and a `skill` call on the learned method.
+  const derived = await foldRun(learning, {
+    run: { id: "run_1" },
+    projection: { plan: { items: [] }, subagents: [] },
+    sessions: [{
+      sessionId: "run_1:root",
+      transcript: { messages: [{ parts: [{ type: "tool", tool: "skill", status: "completed", input: { name: toSkillName("quote-first", "capsule") } }] }] },
+    }],
+  }, known);
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: applied.methodId, name: "quote-first" }]);
+  assert.deepEqual(derived.eligible, [], "it was read, so counting it as passed over would be a false denominator");
+
+  const document = await learning.getMethod("u1", applied.methodId);
+  assert.deepEqual(document.payload.learning.counts,
+    { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 1 });
+  assert.deepEqual(document.payload.learning.observations, [], "no verdict, so no attribution");
+  assert.equal(methodContribution(document.payload.learning), null, "and no movement in the success rate");
+
+  // The point of the counter: with a validated replacement in the library, the
+  // nightly job would otherwise propose this for retirement as unused, because
+  // every outcome-reading clause sees an empty record.
+  const record = methodRecordFrom(document);
+  const superseded = { ...record, learning: { ...record.learning, relations: [{ type: "supersedes", target: "m2", evidence: "merged", proposedBy: "job_1" }] } };
+  const nowMs = Date.parse(document.payload.learning.lastReadAt) + 86_400_000;
+  assert.equal(retirementProposal(superseded, { nowMs, isApproved: () => true }).propose, false);
+  assert.equal(
+    retirementProposal({ ...superseded, learning: { ...superseded.learning, lastReadAt: null } }, { nowMs, isApproved: () => true }).propose,
+    true,
+    "without the reading, this exact method is proposed for retirement",
+  );
 });
 
 test("a method that was available and not mounted gets the denominator, not a success", async () => {
@@ -282,5 +328,5 @@ test("a method that was available and not mounted gets the denominator, not a su
   await foldRun(learning, { run: { id: "run_1" }, projection: { plan: { items: [] }, subagents: [] }, sessions: [] }, known);
   const document = await learning.getMethod("u1", applied.methodId);
   assert.deepEqual(document.payload.learning.counts,
-    { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, validated: 0 });
+    { eligible: 1, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
 });

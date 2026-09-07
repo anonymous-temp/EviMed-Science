@@ -186,7 +186,8 @@ test("a method read without a delegation is reported, attributed to nothing, and
   });
   assert.deepEqual(derived.observations, [], "no mounted digest and no verdict is no attribution");
   assert.deepEqual(derived.methodsLoaded, [], "the receipt records the mount, and there was none");
-  assert.deepEqual(derived.invokedWithoutMount, ["triage"]);
+  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }],
+    "the id is what the ledger is keyed by; a name alone cannot be written back");
   assert.deepEqual(derived.eligible, ["method:learned:quoting"],
     "quoting was passed over; triage was read, so counting it as passed over is a false denominator");
 });

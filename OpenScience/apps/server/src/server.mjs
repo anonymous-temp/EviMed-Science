@@ -567,6 +567,21 @@ export function createWebApiApp(overrides = {}) {
         userId: project.userId, projectId: project.id, runId: run.id,
         code: `read_without_receipt:${derived.invokedWithoutMount.length}`,
       });
+      // And into the method's own ledger, which is where the loop reads it.
+      // The audit line alone showed the reading to an operator and hid it from
+      // `retirementProposal`, so a method the answer line opened daily still
+      // arrived at the nightly job with a strength of 0 and could be proposed
+      // for retirement as unused. One timestamp for the run, so several methods
+      // read by the same run are read at the same moment.
+      const readAt = new Date().toISOString();
+      for (const entry of derived.invokedWithoutMount) {
+        await learningService.recordRead(project.userId, entry.id, readAt).catch(async (error) => {
+          await securityAudit(config, "learning.observation.record", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "method_read_failed",
+          });
+        });
+      }
     }
     if (!methods.length) return;
     for (const { methodId, observation } of derived.observations) {

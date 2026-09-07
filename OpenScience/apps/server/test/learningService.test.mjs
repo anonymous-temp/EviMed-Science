@@ -117,7 +117,7 @@ test("a created method is a candidate, and there is no parameter that says other
   assert.equal(document.payload.status, "candidate");
   assert.equal(document.id, learnedMethodId("do-the-thing"));
   assert.equal(document.payload.contentDigest, methodContentDigest({ frontmatter: frontmatter(), body: BODY }, sha256));
-  assert.deepEqual(document.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0 });
+  assert.deepEqual(document.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
 
   // The API surface itself: nothing accepts a status.
   const created = await create(learning, { frontmatter: frontmatter({ name: "another-thing" }) });
@@ -165,7 +165,7 @@ test("amending the body resets everything measured about the old one", async () 
     provenance: { runId: "run_2" },
   });
   assert.equal(amended.payload.status, "candidate");
-  assert.deepEqual(amended.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0 });
+  assert.deepEqual(amended.payload.learning.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
   assert.notEqual(amended.payload.contentDigest, created.payload.contentDigest);
 
   // A stale revision loses, the way every other optimistic write here does.
@@ -216,6 +216,21 @@ test("retirement proposals never include a method that is still being used", asy
   await learning.retire("u1", created.id, { expectedRevision: created.revision });
   const proposals = await learning.retirementProposals("u1", { nowMs: Date.parse("2026-09-07T00:00:00.000Z") });
   assert.deepEqual(proposals, [], "a retired method is not proposed for retirement again");
+});
+
+test("a reading is recorded against the method, and is not an observation", async () => {
+  const { learning } = service();
+  const created = await create(learning);
+  const read = await learning.recordRead("u1", created.id, "2026-09-06T00:00:00.000Z");
+  assert.equal(read.payload.learning.counts.read, 1);
+  assert.equal(read.payload.learning.lastReadAt, "2026-09-06T00:00:00.000Z");
+
+  // The claim it does not make. A run that reads a method and delegates nothing
+  // produced no deliverable, so there is no verdict — and `loaded` is the
+  // denominator of the success rate the promotion and retirement rules read.
+  assert.deepEqual(read.payload.learning.observations, []);
+  assert.equal(read.payload.learning.counts.loaded, 0);
+  assert.equal(read.payload.learning.counts.succeeded, 0);
 });
 
 /* ------------------------------------------------------------------ the rule */

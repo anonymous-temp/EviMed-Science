@@ -392,6 +392,7 @@ export {
   foldEligible,
   foldEvaluation,
   foldObservation,
+  foldRead,
   foldRelation,
   methodLevel,
   methodStrength,
