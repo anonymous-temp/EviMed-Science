@@ -122,7 +122,7 @@ export function invokedSkillsBySession(sessions) {
  * @property {{name: string, digest: string}[]} methodsLoaded
  * @property {{name: string, digest: string}[]} methodsInvoked
  * @property {{name: string, mounted: string, current: string}[]} mismatched
- * @property {string[]} invokedWithoutMount
+ * @property {{id: string, name: string}[]} invokedWithoutMount
  */
 
 /**
@@ -203,16 +203,20 @@ export function runMethodObservations(input) {
   // It is not an attribution and never becomes one: with no receipt there is no
   // mounted digest, so there is no text to credit and no deliverable verdict to
   // credit it with. It is a name that was read, which is enough to say the
-  // method was not passed over.
+  // method was not passed over — and enough, through `foldRead`, to keep the
+  // retirement rule from reading a method the answer line uses daily as idle.
   const invokedAnywhere = new Set([...invokedBySession.values()].flatMap((names) => [...names]));
+  // Carries the id as well as the name, because the name is what the receipt
+  // speaks and the id is what the ledger is keyed by. Returning only the name
+  // is why this signal reached an audit line and stopped there.
   const invokedWithoutMount = (input.methods ?? [])
     .filter((method) => !loaded.has(method.name) && invokedAnywhere.has(toSkillName(method.name, "capsule")))
-    .map((method) => method.name);
+    .map((method) => ({ id: method.id, name: method.name }));
 
   // Available and not chosen. Counted once per run, because the mount is a
   // property of the run — every child of a run is handed the same directory —
   // so "not chosen" is a decision the selection made once, not per deliverable.
-  const used = new Set([...loaded.keys(), ...invokedWithoutMount]);
+  const used = new Set([...loaded.keys(), ...invokedWithoutMount.map((entry) => entry.name)]);
   const eligible = (input.methods ?? [])
     .filter((method) => !used.has(method.name))
     .map((method) => method.id);

@@ -101,6 +101,11 @@ test("the counters have a producer, which is the whole difference between wired 
   // again, which is the state this signal was added to end.
   assert.match(serverSource, /if \(derived\.invokedWithoutMount\.length\) \{[\s\S]*?securityAudit\(config, "learning\.observation\.record", "unmounted"/,
     "a method the run read without delegating leaves no trace");
+  // An audit line is visible to an operator and invisible to the loop. The
+  // ledger write is the half that keeps `retirementProposal` from reading a
+  // method the non-delegating answer line opens daily as idle.
+  assert.match(serverSource, /learningService\.recordRead\(project\.userId, entry\.id, readAt\)/,
+    "no producer for the read counter, so the reading never reaches the retirement rule");
 
   // Fed from the same terminal hook that captured the transcript, and inside
   // the tracked write: it reads the run's projection and the sessions, both of

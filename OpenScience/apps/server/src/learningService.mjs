@@ -37,6 +37,7 @@ import {
   foldEligible,
   foldEvaluation,
   foldObservation,
+  foldRead,
   foldRelation,
   methodContentDigest,
   libraryEvictions,
@@ -374,6 +375,20 @@ export class LearningService {
   async recordEligible(userId, methodId) {
     const document = await this.getMethod(userId, methodId);
     return this.#saveLearning(userId, methodId, document, foldEligible(document.payload.learning));
+  }
+
+  /**
+   * Count a run that read the body with no delegation to attribute it to.
+   *
+   * Separate from `recordObservation` because it has to be: an observation
+   * carries a deliverable's verdict, and these runs produce no deliverable.
+   * The only thing it may change is whether the retirement rule reads the
+   * method as idle.
+   * @param {string} userId @param {string} methodId @param {string} [at]
+   */
+  async recordRead(userId, methodId, at = new Date().toISOString()) {
+    const document = await this.getMethod(userId, methodId);
+    return this.#saveLearning(userId, methodId, document, foldRead(document.payload.learning, at));
   }
 
   /** @param {string} userId @param {string} methodId @param {any} evaluation */

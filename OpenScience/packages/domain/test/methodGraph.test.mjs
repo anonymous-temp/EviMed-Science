@@ -17,6 +17,7 @@ import {
   foldEligible,
   foldEvaluation,
   foldObservation,
+  foldRead,
   foldRelation,
   libraryEvictions,
   methodContribution,
@@ -75,7 +76,7 @@ test("a use is counted once per run family, and a failed run is not a use", () =
   learning = foldObservation(learning, { runId: "run_1", family: "fam_1", outcome: "accepted", at: daysAgo(1), invoked: true });
   // The retry is the same trajectory seen twice. EvoDS would count two.
   learning = foldObservation(learning, { runId: "run_1_retry", family: "fam_1", outcome: "accepted", at: daysAgo(1), invoked: true });
-  assert.deepEqual(learning.counts, { eligible: 0, loaded: 1, invoked: 1, succeeded: 1, validated: 0 });
+  assert.deepEqual(learning.counts, { eligible: 0, loaded: 1, invoked: 1, succeeded: 1, validated: 0, read: 0 });
   assert.deepEqual(successfulFamilies(learning), ["fam_1"]);
 
   learning = foldObservation(learning, { runId: "run_2", family: "fam_2", outcome: "rejected", at: daysAgo(1), invoked: true });
@@ -96,7 +97,7 @@ test("a use is counted once per run family, and a failed run is not a use", () =
 test("changing the body resets what was measured about the old one, but keeps the relations", () => {
   const learning = foldRelation(threeSuccesses(), { type: "subset", target: "m2", evidence: "e", proposedBy: "job_1" });
   const moved = resetLearningForDigest(learning, DIGEST_B);
-  assert.deepEqual(moved.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0 });
+  assert.deepEqual(moved.counts, { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 });
   assert.deepEqual(moved.observations, []);
   assert.deepEqual(moved.evaluations, []);
   assert.equal(moved.relations.length, 1, "where a method sits in the library did not change because its wording did");
@@ -367,6 +368,55 @@ test("contribution is outcomes over trials, and silence is not neutrality", () =
   assert.equal(methodContribution(emptyLearning(DIGEST_A)), null);
   assert.equal(methodContribution(foldEligible(emptyLearning(DIGEST_A))), null);
   assert.equal(methodContribution(undefined), null);
+});
+
+test("a method only ever read by a run that delegates nothing is not idle, and still retirable when it hurts", () => {
+  // The non-delegating answer line: it calls the `skill` tool, reads the body,
+  // and answers the researcher directly. No delegation means no mounted digest
+  // and no deliverable verdict, so every outcome-reading clause in the
+  // retirement rule sees an empty record and calls it idle.
+  const quiet = { ...emptyLearning(DIGEST_A), observations: [{ runId: "r", family: "f", outcome: "accepted", at: daysAgo(365) }] };
+  const superseded = { type: "supersedes", target: "m2", evidence: "merged", proposedBy: "job_1" };
+
+  // Without the reading this exact input is proposed for retirement — that is
+  // the assertion above this one, and it is what this counter has to change.
+  assert.equal(retirementProposal(method({ learning: foldRelation(quiet, superseded) }), { nowMs: NOW, isApproved: () => true }).propose, true);
+
+  const read = foldRelation(foldRead(quiet, daysAgo(2)), superseded);
+  assert.equal(read.counts.read, 1);
+  assert.equal(methodContribution(read), null, "a reading carries no verdict and may not move a success rate");
+  const kept = retirementProposal(method({ learning: read }), { nowMs: NOW, isApproved: () => true });
+  assert.equal(kept.propose, false);
+  assert.match(kept.reason, /delegated nothing/);
+  assert.ok(kept.strength < 0.5, "it is protected despite having no strength, which is the whole point");
+
+  // A reading older than the decay window stops protecting anything, so one
+  // ancient timestamp cannot pin a method in the library forever.
+  const stale = foldRelation(foldRead(quiet, daysAgo(200)), superseded);
+  assert.equal(retirementProposal(method({ learning: stale }), { nowMs: NOW, isApproved: () => true }).propose, true);
+
+  // Being read is evidence of not being idle, never evidence of being good: a
+  // method whose packages keep being refused is proposed however often it is
+  // read, because the contribution clause sits above this one.
+  const harmful = method({ status: "approved", learning: foldRead(record(24, 10), daysAgo(1)) });
+  const proposal = retirementProposal(harmful, { nowMs: NOW });
+  assert.equal(proposal.propose, true);
+  assert.match(proposal.reason, /24 trajectories at a contribution of -0\.17/);
+});
+
+test("a reading moves the timestamp forward only, and an unreadable one changes nothing", () => {
+  const once = foldRead(emptyLearning(DIGEST_A), daysAgo(5));
+  assert.equal(once.lastReadAt, daysAgo(5));
+
+  // An out-of-order write from a slow run must not make a method look staler
+  // than it is; the counter still moves, because the reading did happen.
+  const outOfOrder = foldRead(once, daysAgo(40));
+  assert.equal(outOfOrder.lastReadAt, daysAgo(5));
+  assert.equal(outOfOrder.counts.read, 2);
+
+  assert.equal(foldRead(outOfOrder, daysAgo(1)).lastReadAt, daysAgo(1));
+  assert.equal(foldRead(once, "not a date"), once, "an unparseable timestamp is not a reading");
+  assert.equal(foldRead(once, undefined).counts.read, 1);
 });
 
 test("a method that is used constantly and hurts is proposed, which decay alone can never do", () => {

@@ -70,11 +70,20 @@ export const METHOD_SUCCESS_OUTCOMES = Object.freeze(['accepted', 'repaired'])
 /** Where a method came from, which is what decides whether it needs a gate. */
 export const METHOD_ORIGINS = Object.freeze(['explicit', 'inferred'])
 
-/** The five counters, kept apart on purpose: "was available", "was mounted",
- *  "was actually invoked", "was in a run that succeeded", and "beat a baseline"
- *  are four different claims and collapsing them is how a library of unused
- *  methods looks busy. */
-export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'validated'])
+/** The six counters, kept apart on purpose: "was available", "was mounted",
+ *  "was actually invoked", "was in a run that succeeded", "beat a baseline" and
+ *  "was read with nothing to attribute it to" are six different claims and
+ *  collapsing them is how a library of unused methods looks busy.
+ *
+ *  `read` is the one that carries no outcome. A run that delegates nothing —
+ *  the whole open-domain answer line — can still call the `skill` tool and read
+ *  a method, but it produces no mounted digest and no deliverable verdict, so
+ *  there is nothing to judge the reading by. It is deliberately kept out of
+ *  `methodContribution`, whose denominator is `loaded`: a reading with no
+ *  verdict entering a success rate would move the rate without evidence, in
+ *  whichever direction the arithmetic happened to fall. What it does support is
+ *  the one claim it is: the method was not passed over. */
+export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked', 'succeeded', 'validated', 'read'])
 
 /**
  * @typedef {object} MethodObservation
@@ -105,11 +114,12 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
 /**
  * @typedef {object} MethodLearning
  * @property {string} digest
- * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, validated: number}} counts
+ * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, validated: number, read: number}} counts
  * @property {MethodObservation[]} observations
  * @property {MethodRelation[]} relations
  * @property {MethodEvaluation[]} evaluations
  * @property {number} level
+ * @property {string|null} [lastReadAt]  when a run last read the body with nothing to attribute it to
  */
 
 /**
@@ -138,11 +148,12 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
 export function emptyLearning(digest) {
   return {
     digest,
-    counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0 },
+    counts: { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, validated: 0, read: 0 },
     observations: [],
     relations: [],
     evaluations: [],
     level: 0,
+    lastReadAt: null,
   }
 }
 
@@ -204,6 +215,41 @@ export function foldObservation(learning, observation) {
 export function foldEligible(learning) {
   const current = learning ?? emptyLearning('')
   return { ...current, counts: { ...current.counts, eligible: current.counts.eligible + 1 } }
+}
+
+/**
+ * Count a run that read the body with nothing to attribute the reading to.
+ *
+ * Not an observation, and it must never become one. An observation carries a
+ * deliverable's verdict, and the runs this counter exists for produce no
+ * deliverable — they answer the researcher directly. Recording a verdict-less
+ * reading as an observation would put it in `methodContribution`'s denominator
+ * and move a success rate on no evidence.
+ *
+ * What it changes is the retirement question, and only the "unused" half of it.
+ * `methodStrength` decays successful observations, so a method that only ever
+ * reaches the non-delegating answer line has a strength of exactly 0 no matter
+ * how often it is read, and reads to `retirementProposal` as idle. It is not
+ * idle. A single timestamp rather than a list of them: the question this has to
+ * answer is "was this read lately", which the most recent reading settles, and
+ * a growing array of readings nobody can judge is a ledger that only gets
+ * heavier. The timestamp moves forward only, so an out-of-order write from a
+ * slow run cannot make a method look staler than it is.
+ *
+ * @param {MethodLearning} learning
+ * @param {string} at  ISO timestamp of the reading
+ * @returns {MethodLearning}
+ */
+export function foldRead(learning, at) {
+  const current = learning ?? emptyLearning('')
+  const readAt = Date.parse(at ?? '')
+  if (Number.isNaN(readAt)) return current
+  const previous = Date.parse(current.lastReadAt ?? '')
+  return {
+    ...current,
+    counts: { ...current.counts, read: Number(current.counts?.read ?? 0) + 1 },
+    lastReadAt: Number.isNaN(previous) || readAt > previous ? new Date(readAt).toISOString() : current.lastReadAt,
+  }
 }
 
 /**
@@ -519,6 +565,34 @@ export function retirementProposal(method, options) {
   const minStrength = options.minStrength ?? 0.5
   if (strength >= minStrength) {
     return { propose: false, immediate: false, reason: `still in use (strength ${strength.toFixed(2)})`, strength }
+  }
+  // Read lately, with nothing to show for it.
+  //
+  // Every clause above this one reads outcomes, and a run that delegates
+  // nothing produces none — so a method used exclusively by the non-delegating
+  // answer line arrives here with a strength of exactly 0 and is
+  // indistinguishable from one nobody has opened in a year. That is the whole
+  // reason `read` is counted separately, and this is the only place it is
+  // allowed to change an answer.
+  //
+  // Deliberately below the contribution clause, not above it: a method whose
+  // packages keep being refused must still be proposable no matter how often it
+  // is read. Being read is evidence of not being idle, never evidence of being
+  // good.
+  //
+  // The window is the strength decay's own, so "recently" means one thing in
+  // this module. A reading older than that stops protecting anything, which is
+  // what keeps a single ancient timestamp from pinning a method forever.
+  const tauDays = options.tauDays ?? MEMORY_STRENGTH_TAU_DAYS
+  const lastReadMs = Date.parse(learning.lastReadAt ?? '')
+  const readDays = Number.isNaN(lastReadMs) ? null : Math.max(0, (options.nowMs - lastReadMs) / 86_400_000)
+  if (readDays !== null && readDays <= tauDays) {
+    return {
+      propose: false,
+      immediate: false,
+      reason: `read ${readDays.toFixed(1)} days ago by a run that delegated nothing, so it has no outcomes and a strength of 0 without being idle`,
+      strength,
+    }
   }
   if (!replacement) {
     return { propose: false, immediate: false, reason: 'unused, but nothing validated replaces it; retiring it would remove a capability rather than a duplicate', strength }
