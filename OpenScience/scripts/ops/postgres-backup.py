@@ -58,28 +58,6 @@ def digest(path: Path) -> str:
     return result.hexdigest()
 
 
-def pinned_copy(source: Path, target: Path, expected_digest: str) -> None:
-    descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        with os.fdopen(descriptor, "rb") as input_stream, target.open("xb") as output_stream:
-            before = os.fstat(input_stream.fileno())
-            for chunk in iter(lambda: input_stream.read(1024 * 1024), b""):
-                output_stream.write(chunk)
-            after = os.fstat(input_stream.fileno())
-            output_stream.flush()
-            os.fsync(output_stream.fileno())
-    except Exception:
-        target.unlink(missing_ok=True)
-        raise
-    before_identity = (before.st_dev, before.st_ino, before.st_mode, before.st_uid,
-                       before.st_gid, before.st_size, before.st_mtime_ns)
-    after_identity = (after.st_dev, after.st_ino, after.st_mode, after.st_uid,
-                      after.st_gid, after.st_size, after.st_mtime_ns)
-    if before_identity != after_identity or digest(target) != expected_digest:
-        target.unlink(missing_ok=True)
-        raise BackupError("postgres_archive_changed")
-
-
 def validate_passphrase(path: Path) -> None:
     no_symlink_path(path)
     metadata = path.lstat()
@@ -307,46 +285,127 @@ def parse_cli(arguments: list[str]) -> tuple[str, dict]:
     raise BackupError("postgres_recovery_cli_invalid")
 
 
-def recovery_root() -> Path:
-    value = os.environ.get("EVIMED_RECOVERY_SET_STAGING_ROOT", "")
-    root = Path(value)
-    if not value or not root.is_absolute():
-        raise BackupError("postgres_recovery_path_invalid")
-    no_symlink_path(root)
-    try:
-        resolved = root.resolve(strict=True)
-    except OSError:
-        raise BackupError("postgres_recovery_path_invalid") from None
-    if resolved != root or not root.is_dir():
-        raise BackupError("postgres_recovery_path_invalid")
-    return root
+def descriptor_identity(metadata) -> tuple:
+    return (metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_uid, metadata.st_gid,
+            metadata.st_size, metadata.st_mtime_ns, metadata.st_ctime_ns)
 
 
-def recovery_path(path: Path, *, kind: str) -> Path:
-    root = recovery_root()
-    if not path.is_absolute():
-        raise BackupError("postgres_recovery_path_invalid")
-    no_symlink_path(path)
+def open_directory_chain(base: int, parts: list[str]) -> int:
+    current = os.dup(base)
     try:
-        normalized = path.resolve(strict=kind != "new-file")
-        normalized.relative_to(root)
-    except (OSError, ValueError):
-        raise BackupError("postgres_recovery_path_invalid") from None
-    if normalized != path:
-        raise BackupError("postgres_recovery_path_invalid")
-    if kind == "empty-directory":
-        if not path.is_dir() or any(path.iterdir()):
-            raise BackupError("postgres_recovery_output_not_empty")
-    elif kind == "file":
-        metadata = path.lstat()
-        if not stat.S_ISREG(metadata.st_mode):
+        for part in parts:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+            os.close(current)
+            current = child
+        return current
+    except Exception:
+        os.close(current)
+        raise
+
+
+class PinnedDirectory:
+    def __init__(self, descriptor: int, display_path: Path, parent=None, name=None):
+        self.descriptor = descriptor
+        self.display_path = display_path
+        self.parent = parent
+        self.name = name
+
+    def close(self) -> None:
+        if self.descriptor >= 0:
+            os.close(self.descriptor)
+            self.descriptor = -1
+
+    def open_file(self, name: str, flags: int, mode: int = 0o600) -> int:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", name) or name in {".", ".."}:
             raise BackupError("postgres_recovery_path_invalid")
-    elif kind == "new-file":
-        if path.exists() or not path.parent.is_dir():
-            raise BackupError("postgres_recovery_receipt_exists")
-    else:
-        raise BackupError("postgres_recovery_path_invalid")
-    return path
+        descriptor = os.open(name, flags | os.O_NOFOLLOW, mode, dir_fd=self.descriptor)
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            os.close(descriptor)
+            raise BackupError("postgres_recovery_path_invalid")
+        return descriptor
+
+    def workspace(self, prefix: str):
+        name = prefix + uuid.uuid4().hex
+        os.mkdir(name, 0o700, dir_fd=self.descriptor)
+        child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.descriptor)
+        return PinnedDirectory(child, self.display_path / name, self, name)
+
+    def cleanup(self) -> None:
+        if self.parent is None:
+            self.close()
+            return
+        for name in os.listdir(self.descriptor):
+            os.unlink(name, dir_fd=self.descriptor)
+        self.close()
+        os.rmdir(self.name, dir_fd=self.parent.descriptor)
+
+
+class RecoveryRoot(PinnedDirectory):
+    def __init__(self):
+        value = os.environ.get("EVIMED_RECOVERY_SET_STAGING_ROOT", "")
+        if not value or not os.path.isabs(value) or os.path.normpath(value) != value:
+            raise BackupError("postgres_recovery_path_invalid")
+        base = os.open(os.sep, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            descriptor = open_directory_chain(base, value.split(os.sep)[1:])
+        except Exception:
+            raise BackupError("postgres_recovery_path_invalid") from None
+        finally:
+            os.close(base)
+        super().__init__(descriptor, Path(value))
+        self.root_value = value
+
+    def parts(self, path: Path) -> list[str]:
+        value = str(path)
+        if not path.is_absolute() or os.path.normpath(value) != value:
+            raise BackupError("postgres_recovery_path_invalid")
+        try:
+            if os.path.commonpath([self.root_value, value]) != self.root_value:
+                raise BackupError("postgres_recovery_path_invalid")
+        except ValueError:
+            raise BackupError("postgres_recovery_path_invalid") from None
+        relative = os.path.relpath(value, self.root_value)
+        return [] if relative == "." else relative.split(os.sep)
+
+    def directory(self, path: Path, *, empty=False) -> PinnedDirectory:
+        try:
+            descriptor = open_directory_chain(self.descriptor, self.parts(path))
+        except Exception:
+            raise BackupError("postgres_recovery_path_invalid") from None
+        directory = PinnedDirectory(descriptor, path)
+        if empty and os.listdir(descriptor):
+            directory.close()
+            raise BackupError("postgres_recovery_output_not_empty")
+        return directory
+
+    def parent_for(self, path: Path, *, new=False) -> tuple[PinnedDirectory, str]:
+        parts = self.parts(path)
+        if not parts or not re.fullmatch(r"[A-Za-z0-9_.-]{1,160}", parts[-1]):
+            raise BackupError("postgres_recovery_path_invalid")
+        try:
+            descriptor = open_directory_chain(self.descriptor, parts[:-1])
+        except Exception:
+            raise BackupError("postgres_recovery_path_invalid") from None
+        parent = PinnedDirectory(descriptor, path.parent)
+        if new:
+            try:
+                os.stat(parts[-1], dir_fd=descriptor, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                parent.close()
+                raise BackupError("postgres_recovery_receipt_exists")
+        return parent, parts[-1]
+
+    def lock(self) -> int:
+        descriptor = os.open(".postgres-restore.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW,
+                             0o600, dir_fd=self.descriptor)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(descriptor)
+            raise BackupError("postgres_restore_already_running") from None
+        return descriptor
 
 
 def recovery_config() -> tuple[list[str], str, str, Path, list[str]]:
@@ -368,8 +427,8 @@ def recovery_config() -> tuple[list[str], str, str, Path, list[str]]:
     return base, database, role, passphrase, crypto
 
 
-def atomic_new_json(path: Path, value: dict) -> None:
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+def atomic_new_json(directory: PinnedDirectory, name: str, value: dict) -> None:
+    descriptor = directory.open_file(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as output:
             json.dump(value, output, sort_keys=True, separators=(",", ":"))
@@ -377,40 +436,73 @@ def atomic_new_json(path: Path, value: dict) -> None:
             output.flush()
             os.fsync(output.fileno())
     except Exception:
-        path.unlink(missing_ok=True)
+        try:
+            os.unlink(name, dir_fd=directory.descriptor)
+        except FileNotFoundError:
+            pass
         raise
-    sync_directory(path.parent)
+    os.fsync(directory.descriptor)
 
 
-def publish_recovery_files(files: list[tuple[Path, Path]], directory: Path) -> None:
+def publish_recovery_files(source: PinnedDirectory, files: list[tuple[str, str]], destination: PinnedDirectory) -> None:
     published = []
     try:
-        for source, destination in files:
-            with source.open("rb") as stream:
+        for source_name, destination_name in files:
+            descriptor = source.open_file(source_name, os.O_RDONLY)
+            with os.fdopen(descriptor, "rb") as stream:
                 os.fsync(stream.fileno())
-            os.link(source, destination)
-            published.append(destination)
-        sync_directory(directory)
+            os.link(source_name, destination_name, src_dir_fd=source.descriptor,
+                    dst_dir_fd=destination.descriptor, follow_symlinks=False)
+            published.append(destination_name)
+        os.fsync(destination.descriptor)
     except Exception:
-        for destination in reversed(published):
-            destination.unlink(missing_ok=True)
+        for destination_name in reversed(published):
+            try:
+                os.unlink(destination_name, dir_fd=destination.descriptor)
+            except FileNotFoundError:
+                pass
         raise
+
+
+def digest_descriptor(descriptor: int) -> str:
+    before = os.fstat(descriptor)
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    result = hashlib.sha256()
+    for chunk in iter(lambda: os.read(descriptor, 1024 * 1024), b""):
+        result.update(chunk)
+    after = os.fstat(descriptor)
+    if descriptor_identity(before) != descriptor_identity(after):
+        raise BackupError("postgres_archive_changed")
+    return result.hexdigest()
+
+
+def copy_descriptor(source: int, target: int, expected_digest: str) -> None:
+    before = os.fstat(source)
+    os.lseek(source, 0, os.SEEK_SET)
+    result = hashlib.sha256()
+    for chunk in iter(lambda: os.read(source, 1024 * 1024), b""):
+        view = memoryview(chunk)
+        while view:
+            view = view[os.write(target, view):]
+        result.update(chunk)
+    after = os.fstat(source)
+    os.fsync(target)
+    if descriptor_identity(before) != descriptor_identity(after) or result.hexdigest() != expected_digest:
+        raise BackupError("postgres_archive_changed")
 
 
 def capture_member(output_dir: Path) -> dict:
-    output = recovery_path(output_dir, kind="empty-directory")
-    base, database, role, _passphrase, crypto = recovery_config()
-    archive = output / "postgres.dump.enc"
-    checksum = output / "postgres.dump.enc.sha256"
-    receipt = output / "postgres.dump.enc.capture.json"
-    started = now()
-    with tempfile.TemporaryDirectory(prefix=".postgres-capture-", dir=output) as temporary_value:
-        temporary = Path(temporary_value)
-        plain = temporary / "snapshot.dump"
-        decrypted = temporary / "verified.dump"
-        candidate = temporary / archive.name
-        checksum_candidate = temporary / checksum.name
-        receipt_candidate = temporary / receipt.name
+    root = RecoveryRoot()
+    output = None
+    temporary = None
+    try:
+        output = root.directory(output_dir, empty=True)
+        base, database, role, _passphrase, crypto = recovery_config()
+        archive_name = "postgres.dump.enc"
+        checksum_name = archive_name + ".sha256"
+        receipt_name = archive_name + ".capture.json"
+        started = now()
+        temporary = output.workspace(".postgres-capture-")
         session = PsqlSession(base, role, database)
         try:
             session.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;")
@@ -421,20 +513,42 @@ def capture_member(output_dir: Path) -> dict:
             expected = table_rows(session.query(COUNTS_SQL))
             if not expected:
                 raise BackupError("postgres_source_application_empty")
-            with plain.open("xb") as dump:
+            descriptor = temporary.open_file("snapshot.dump", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+            with os.fdopen(descriptor, "wb") as dump:
                 command(base + ["pg_dump", "--format=custom", "--compress=9", "--no-owner", "--no-acl",
                                 "--lock-wait-timeout=30000", "--snapshot=" + snapshot,
                                 "-U", role, "-d", database], target=dump)
         finally:
             session.close()
-        with plain.open("rb") as source:
+        descriptor = temporary.open_file("snapshot.dump", os.O_RDONLY)
+        with os.fdopen(descriptor, "rb") as source:
             command(base + ["pg_restore", "--list"], source=source)
-        command(crypto + ["-salt", "-in", str(plain), "-out", str(candidate)])
-        encrypted_digest = digest(candidate)
-        command(crypto + ["-d", "-in", str(candidate), "-out", str(decrypted)])
-        if not encrypted_digest or digest(plain) != digest(decrypted):
+        plain = temporary.open_file("snapshot.dump", os.O_RDONLY)
+        candidate = temporary.open_file(archive_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        with os.fdopen(plain, "rb") as source, os.fdopen(candidate, "wb") as target:
+            command(crypto + ["-salt"], source=source, target=target)
+        candidate = temporary.open_file(archive_name, os.O_RDONLY)
+        try:
+            encrypted_digest = digest_descriptor(candidate)
+        finally:
+            os.close(candidate)
+        candidate = temporary.open_file(archive_name, os.O_RDONLY)
+        decrypted = temporary.open_file("verified.dump", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        with os.fdopen(candidate, "rb") as source, os.fdopen(decrypted, "wb") as target:
+            command(crypto + ["-d"], source=source, target=target)
+        plain = temporary.open_file("snapshot.dump", os.O_RDONLY)
+        decrypted = temporary.open_file("verified.dump", os.O_RDONLY)
+        try:
+            plain_digest = digest_descriptor(plain)
+            decrypted_digest = digest_descriptor(decrypted)
+        finally:
+            os.close(plain)
+            os.close(decrypted)
+        if not encrypted_digest or plain_digest != decrypted_digest:
             raise BackupError("postgres_backup_digest_mismatch")
-        checksum_candidate.write_text(f"{encrypted_digest}  {archive.name}\n", encoding="utf-8")
+        checksum = temporary.open_file(checksum_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        with os.fdopen(checksum, "w", encoding="utf-8") as output_stream:
+            output_stream.write(f"{encrypted_digest}  {archive_name}\n")
         capture_receipt = {
             "schemaVersion": 1,
             "status": "captured",
@@ -445,72 +559,141 @@ def capture_member(output_dir: Path) -> dict:
             "atomicAcrossComponents": False,
             "snapshotId": snapshot,
             "encryption": "aes-256-cbc-pbkdf2-sha256-250000",
-            "archive": archive.name,
+            "archive": archive_name,
             "archiveSha256": encrypted_digest,
             "tables": expected,
             "tablesSha256": table_digest(expected),
             "runnerSha256": digest(Path(__file__)),
         }
-        receipt_candidate.write_text(json.dumps(capture_receipt, sort_keys=True, separators=(",", ":")) + "\n",
-                                     encoding="utf-8")
-        publish_recovery_files([(candidate, archive), (checksum_candidate, checksum),
-                                (receipt_candidate, receipt)], output)
-    return {"status": "captured", "archive": str(archive), "receipt": str(receipt)}
+        receipt = temporary.open_file(receipt_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        with os.fdopen(receipt, "w", encoding="utf-8") as output_stream:
+            output_stream.write(json.dumps(capture_receipt, sort_keys=True, separators=(",", ":")) + "\n")
+        publish_recovery_files(temporary, [(archive_name, archive_name), (checksum_name, checksum_name),
+                                           (receipt_name, receipt_name)], output)
+        return {"status": "captured", "archive": str(output_dir / archive_name),
+                "receipt": str(output_dir / receipt_name)}
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+        if output is not None:
+            output.close()
+        root.close()
 
 
-def load_capture_receipt(archive: Path) -> tuple[dict, list[dict]]:
-    receipt_path = recovery_path(archive.with_name(archive.name + ".capture.json"), kind="file")
-    checksum_path = recovery_path(archive.with_name(archive.name + ".sha256"), kind="file")
+class CaptureBundle:
+    def __init__(self, parent: PinnedDirectory, archive_descriptor: int, archive_name: str,
+                 receipt: dict, expected: list[dict]):
+        self.parent = parent
+        self.archive_descriptor = archive_descriptor
+        self.archive_name = archive_name
+        self.receipt = receipt
+        self.expected = expected
+
+    def close(self) -> None:
+        os.close(self.archive_descriptor)
+        self.parent.close()
+
+
+def load_capture_receipt(root: RecoveryRoot, archive: Path, database: str) -> CaptureBundle:
+    parent, archive_name = root.parent_for(archive)
+    descriptors = []
     try:
-        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        archive_descriptor = parent.open_file(archive_name, os.O_RDONLY)
+        descriptors.append(archive_descriptor)
+        receipt_descriptor = parent.open_file(archive_name + ".capture.json", os.O_RDONLY)
+        descriptors.append(receipt_descriptor)
+        checksum_descriptor = parent.open_file(archive_name + ".sha256", os.O_RDONLY)
+        descriptors.append(checksum_descriptor)
+        with os.fdopen(receipt_descriptor, "r", encoding="utf-8") as input_stream:
+            receipt = json.load(input_stream)
+        descriptors.remove(receipt_descriptor)
         expected = table_rows([json.dumps(row) for row in receipt["tables"]])
-        archive_digest = digest(archive)
-        expected_checksum = f"{archive_digest}  {archive.name}\n"
+        archive_digest = digest_descriptor(archive_descriptor)
+        with os.fdopen(checksum_descriptor, "r", encoding="utf-8") as input_stream:
+            checksum_text = input_stream.read(4096)
+        descriptors.remove(checksum_descriptor)
+        expected_checksum = f"{archive_digest}  {archive_name}\n"
         if (not expected or receipt.get("schemaVersion") != 1 or receipt.get("status") != "captured"
-                or receipt.get("database") != os.environ.get("EVIMED_POSTGRES_DATABASE", "evimed")
+                or receipt.get("database") != database
                 or receipt.get("encryption") != "aes-256-cbc-pbkdf2-sha256-250000"
                 or not re.fullmatch(r"[0-9A-Fa-f]+-[0-9A-Fa-f]+-\d+", receipt.get("snapshotId", ""))
-                or receipt.get("archive") != archive.name
+                or receipt.get("archive") != archive_name
                 or receipt.get("archiveSha256") != archive_digest
                 or receipt.get("tablesSha256") != table_digest(expected)
-                or checksum_path.read_text(encoding="utf-8") != expected_checksum):
+                or checksum_text != expected_checksum):
             raise ValueError()
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        for descriptor in descriptors:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        parent.close()
         raise BackupError("postgres_capture_receipt_invalid") from None
-    return receipt, expected
+    return CaptureBundle(parent, archive_descriptor, archive_name, receipt, expected)
+
+
+def clone_marker(sql: list[str], target: str) -> str:
+    query = f"SELECT coalesce(shobj_description(oid,'pg_database'),'') FROM pg_database WHERE datname='{target}';"
+    return command(sql + [query], capture=True, timeout=60).strip()
+
+
+def clear_owned_clone(base: list[str], sql: list[str], role: str, target: str, marker: str) -> None:
+    if clone_marker(sql, target) != marker:
+        raise BackupError("postgres_restore_cleanup_ownership_mismatch")
+    command(base + ["dropdb", "--if-exists", "--force", "-U", role, target], timeout=60)
+    absent = command(sql + [f"SELECT count(*) FROM pg_database WHERE datname='{target}';"], capture=True, timeout=60)
+    if absent.strip() != "0":
+        raise BackupError("postgres_restore_cleanup_failed")
 
 
 def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) -> dict:
-    archive = recovery_path(archive_path, kind="file")
-    receipt_output = recovery_path(receipt_path, kind="new-file")
-    base, database, role, _passphrase, crypto = recovery_config()
-    validate_restore_database(database, target_database)
-    capture_receipt, expected = load_capture_receipt(archive)
-    identity = source_identity(capture_receipt.get("sourceIdentity")
-                               and json.dumps(capture_receipt["sourceIdentity"]), database)
-    sql = base + ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", role, "-d", database, "-c"]
-    current = source_identity(command(sql + [SOURCE_IDENTITY_SQL], capture=True, timeout=60), database)
-    if current != identity:
-        raise BackupError("postgres_restore_source_identity_mismatch")
-    # target_database is constrained to the owned restore namespace above.
-    exists = command(sql + [f"SELECT count(*) FROM pg_database WHERE datname='{target_database}';"],
-                     capture=True, timeout=60)
-    if exists.strip() != "0":
-        raise BackupError("postgres_restore_target_exists")
-    created = False
+    root = RecoveryRoot()
+    receipt_parent = None
+    bundle = None
+    temporary = None
+    lock = None
     try:
-        with tempfile.TemporaryDirectory(prefix=".postgres-restore-", dir=receipt_output.parent) as temporary_value:
-            temporary = Path(temporary_value)
-            encrypted = temporary / "snapshot.dump.enc"
-            plain = temporary / "restore.dump"
-            pinned_copy(archive, encrypted, capture_receipt["archiveSha256"])
-            command(crypto + ["-d", "-in", str(encrypted), "-out", str(plain)])
-            with plain.open("rb") as source:
-                command(base + ["pg_restore", "--list"], source=source)
-            created = True
+        base, database, role, _passphrase, crypto = recovery_config()
+        validate_restore_database(database, target_database)
+        receipt_parent, receipt_name = root.parent_for(receipt_path, new=True)
+        bundle = load_capture_receipt(root, archive_path, database)
+        lock = root.lock()
+        capture_receipt, expected = bundle.receipt, bundle.expected
+        temporary = receipt_parent.workspace(".postgres-restore-")
+        encrypted = temporary.open_file("snapshot.dump.enc", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        copy_descriptor(bundle.archive_descriptor, encrypted, capture_receipt["archiveSha256"])
+        os.close(encrypted)
+        encrypted = temporary.open_file("snapshot.dump.enc", os.O_RDONLY)
+        plain = temporary.open_file("restore.dump", os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        with os.fdopen(encrypted, "rb") as source, os.fdopen(plain, "wb") as target:
+            command(crypto + ["-d"], source=source, target=target)
+        plain = temporary.open_file("restore.dump", os.O_RDONLY)
+        with os.fdopen(plain, "rb") as source:
+            command(base + ["pg_restore", "--list"], source=source)
+        identity = source_identity(capture_receipt.get("sourceIdentity")
+                                   and json.dumps(capture_receipt["sourceIdentity"]), database)
+        sql = base + ["psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", role, "-d", database, "-c"]
+        current = source_identity(command(sql + [SOURCE_IDENTITY_SQL], capture=True, timeout=60), database)
+        if current != identity:
+            raise BackupError("postgres_restore_source_identity_mismatch")
+        exists = command(sql + [f"SELECT count(*) FROM pg_database WHERE datname='{target_database}';"],
+                         capture=True, timeout=60)
+        if exists.strip() != "0":
+            raise BackupError("postgres_restore_target_exists")
+        marker = "evimed-recovery-owner:" + uuid.uuid4().hex
+        owned = False
+        try:
             command(base + ["createdb", "--template=template0", "-U", role, target_database], timeout=60)
-            with plain.open("rb") as source:
-                command(base + ["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-acl",
+            try:
+                command(sql + [f"COMMENT ON DATABASE {target_database} IS '{marker}';"], timeout=60)
+            finally:
+                owned = clone_marker(sql, target_database) == marker
+            if not owned:
+                raise BackupError("postgres_restore_ownership_unverified")
+            plain = temporary.open_file("restore.dump", os.O_RDONLY)
+            with os.fdopen(plain, "rb") as source:
+                command(base + ["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-acl", "--no-comments",
                                 "-U", role, "-d", target_database], source=source)
             verifier = PsqlSession(base, role, target_database)
             try:
@@ -519,29 +702,48 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
                 verifier.close()
             if restored != expected:
                 raise BackupError("restore_application_mismatch")
+            if clone_marker(sql, target_database) != marker:
+                owned = False
+                raise BackupError("postgres_restore_ownership_unverified")
             result = {
                 "schemaVersion": 1,
                 "status": "verified",
-                "archive": archive.name,
+                "archive": bundle.archive_name,
                 "archiveSha256": capture_receipt["archiveSha256"],
                 "sourceIdentity": identity,
                 "targetDatabase": target_database,
+                "ownershipToken": marker,
                 "tables": restored,
                 "expectedTablesSha256": table_digest(expected),
                 "restoredTablesSha256": table_digest(restored),
                 "verifiedAt": now(),
             }
-            atomic_new_json(receipt_output, result)
+            atomic_new_json(receipt_parent, receipt_name, result)
             return result
-    except Exception as error:
-        if created:
-            try:
-                clear_drill(base, role, database, target_database, identity)
-            except Exception:
-                raise BackupError("postgres_restore_cleanup_failed") from None
-        if isinstance(error, BackupError):
-            raise
-        raise BackupError("postgres_restore_operation_failed") from None
+        except Exception as error:
+            if not owned:
+                try:
+                    owned = clone_marker(sql, target_database) == marker
+                except Exception:
+                    owned = False
+            if owned:
+                try:
+                    clear_owned_clone(base, sql, role, target_database, marker)
+                except Exception:
+                    raise BackupError("postgres_restore_cleanup_failed") from None
+            if isinstance(error, BackupError):
+                raise
+            raise BackupError("postgres_restore_operation_failed") from None
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+        if lock is not None:
+            os.close(lock)
+        if bundle is not None:
+            bundle.close()
+        if receipt_parent is not None:
+            receipt_parent.close()
+        root.close()
 
 
 def backup(backups: Path, state_file: Path, previous: dict) -> dict:

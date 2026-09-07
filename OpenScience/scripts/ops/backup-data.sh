@@ -39,7 +39,12 @@ trap cleanup EXIT
 # An explicit manifest names only included entries and their inode identities.
 # The archive writer reopens them through scoped, no-follow file descriptors;
 # it never asks tar to resolve these paths again after the inventory.
-if ! node - "$DATA_DIR" "$manifest" <<'NODE'
+if [ "$strict_backup" = true ]; then
+  if ! node "$SCRIPT_DIR/backup-archive.mjs" inventory "$DATA_DIR" "$manifest"; then
+    echo "Backup file inventory failed." >&2
+    exit 1
+  fi
+elif ! node - "$DATA_DIR" "$manifest" <<'NODE'
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(process.argv[2]);
@@ -98,13 +103,16 @@ fi
 # copy and no second path-based tar read that could follow a replacement link.
 set +e
 archive_stderr="$(mktemp)"
-node "$SCRIPT_DIR/backup-archive.mjs" "$DATA_DIR" "$manifest" "$tmp" 2> "$archive_stderr"
+node "$SCRIPT_DIR/backup-archive.mjs" "$DATA_DIR" "$manifest" "$tmp" "$strict_backup" 2> "$archive_stderr"
 archive_status=$?
 set -e
 if [ "$archive_status" -ne 0 ]; then
   unexpected="$(grep -v '^backup archive: file changed as we read it$' < "$archive_stderr" || true)"
   changed="$(grep -c '^backup archive: file changed as we read it$' < "$archive_stderr" || true)"
   if [ "$archive_status" -ne 1 ] || [ -n "$unexpected" ]; then
+    if [ "$strict_backup" = true ]; then
+      echo "strict backup refused a changing source or invalid member; no archive was published" >&2
+    fi
     echo "Backup archive failed (writer exit ${archive_status}):" >&2
     sed -n '1,20p' "$archive_stderr" >&2
     rm -f "$archive_stderr"

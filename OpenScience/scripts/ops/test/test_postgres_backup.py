@@ -61,9 +61,7 @@ class PostgresBackupTests(unittest.TestCase):
             if tool == "pg_restore" and "--list" in args:
                 return ""
             if tool == "openssl":
-                source_path = Path(args[args.index("-in") + 1])
-                target_path = Path(args[args.index("-out") + 1])
-                shutil.copyfile(source_path, target_path)
+                shutil.copyfileobj(source, target)
                 return ""
             raise AssertionError(args)
 
@@ -117,6 +115,7 @@ class PostgresBackupTests(unittest.TestCase):
             restore_receipt = directory / "restore.json"
             target = "evimed_restore_20260907T120000Z_0123456789ab"
             commands = []
+            ownership_marker = {"value": ""}
 
             class Session:
                 def __init__(self, _base, _role, database):
@@ -144,8 +143,13 @@ class PostgresBackupTests(unittest.TestCase):
                         return "0\n"
                     if sql == MODULE.SOURCE_IDENTITY_SQL:
                         return json.dumps(identity)
+                    if sql.startswith("COMMENT ON DATABASE"):
+                        ownership_marker["value"] = sql.split(" IS '", 1)[1][:-2]
+                        return ""
+                    if "shobj_description" in sql:
+                        return ownership_marker["value"]
                 if tool == "openssl":
-                    Path(args[args.index("-out") + 1]).write_bytes(b"synthetic plain dump")
+                    target.write(b"synthetic plain dump")
                     return ""
                 if tool in {"createdb", "pg_restore"}:
                     return ""
@@ -238,7 +242,7 @@ class PostgresBackupTests(unittest.TestCase):
                         return json.dumps(identity)
                     return "0\n"
                 if tool == "openssl":
-                    Path(args[args.index("-out") + 1]).write_bytes(b"plain")
+                    target.write(b"plain")
                     return ""
                 if tool == "pg_restore" and "--list" in args:
                     return ""

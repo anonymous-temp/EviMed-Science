@@ -1,16 +1,120 @@
 #!/usr/bin/env node
 // Stream the inventoried customer files through verified open descriptors.
-import { open, readFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 import { openScopedDirectoryNoFollow, openScopedFileNoFollow } from "../../apps/server/src/security.mjs";
 
-const [rootArgument, manifestPath, outputPath] = process.argv.slice(2);
+const arguments_ = process.argv.slice(2);
+const inventoryMode = arguments_[0] === "inventory";
+const [rootArgument, manifestPath, outputPath, strictArgument = "false"] = inventoryMode
+  ? [arguments_[1], arguments_[2], undefined, "true"] : arguments_;
 const root = path.resolve(rootArgument);
+const strict = strictArgument === "true";
 const octalMaximum = 0o77777777777;
 let outputCreated = false;
+
+const managedRuntimePrefix = ["users", null, "projects", null, "runtime", "container-runtime"];
+const managedRuntimeIncludedTree = ["dsh-home", "sessions"];
+
+function managedRuntimeDecision(parts) {
+  const managed = parts.length >= managedRuntimePrefix.length
+    && managedRuntimePrefix.every((part, index) => part === null || parts[index] === part);
+  if (!managed) return { managed: false, included: true };
+  const suffix = parts.slice(managedRuntimePrefix.length);
+  const included = suffix.slice(0, managedRuntimeIncludedTree.length)
+    .every((part, index) => managedRuntimeIncludedTree[index] === part);
+  return { managed: true, included };
+}
+
+function metadataFields(metadata) {
+  return {
+    dev: String(metadata.dev),
+    ino: String(metadata.ino),
+    size: String(metadata.size),
+    mtimeNs: String(metadata.mtimeNs),
+    ctimeNs: String(metadata.ctimeNs),
+    mode: String(metadata.mode),
+    uid: String(metadata.uid),
+    gid: String(metadata.gid),
+    nlink: String(metadata.nlink),
+  };
+}
+
+function completeIdentityMatches(metadata, entry) {
+  const fields = metadataFields(metadata);
+  return Object.entries(fields).every(([key, value]) => entry[key] === value);
+}
+
+async function digestHandle(handle, size) {
+  const digest = createHash("sha256");
+  let read = 0;
+  if (size > 0) {
+    for await (const chunk of handle.createReadStream({ start: 0, end: size - 1, autoClose: false })) {
+      read += chunk.length;
+      digest.update(chunk);
+    }
+  }
+  if (read !== size) throw new Error("Backup source changed during its bounded read.");
+  return digest.digest("hex");
+}
+
+async function createInventory() {
+  const entries = [];
+  async function collect(relative) {
+    const parts = relative ? relative.split("/") : [];
+    const decision = managedRuntimeDecision(parts);
+    if (!decision.included) return false;
+    const name = parts.at(-1) ?? "";
+    if (name === ".runtime-sockets" || name.endsWith(".sock")) return false;
+    const full = path.join(root, relative);
+    const pathMetadata = await lstat(full, { bigint: true });
+    if (pathMetadata.isSymbolicLink()) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
+    if (pathMetadata.isSocket()) return false;
+    if (pathMetadata.isDirectory()) {
+      const opened = await openScopedDirectoryNoFollow(root, full);
+      try {
+        const before = await opened.handle.stat({ bigint: true });
+        let retained = false;
+        for (const child of (await readdir(full)).sort()) {
+          if (await collect(relative ? `${relative}/${child}` : child)) retained = true;
+        }
+        const after = await opened.handle.stat({ bigint: true });
+        if (!completeIdentityMatches(after, { ...metadataFields(before) })) {
+          throw new Error("Backup source identity changed during inventory.");
+        }
+        if (decision.managed && parts.length < managedRuntimePrefix.length + managedRuntimeIncludedTree.length && !retained) {
+          return false;
+        }
+        entries.push({ path: relative || ".", type: "directory", ...metadataFields(before) });
+        return true;
+      } finally {
+        await opened.handle.close();
+      }
+    }
+    if (!pathMetadata.isFile()) throw new Error(`Refusing to back up a non-file data entry: ${full}`);
+    const opened = await openScopedFileNoFollow(root, full);
+    try {
+      const before = await opened.handle.stat({ bigint: true });
+      const size = Number(before.size);
+      if (!Number.isSafeInteger(size) || size < 0) throw new Error("Backup source is too large for an exact size.");
+      const sha256 = await digestHandle(opened.handle, size);
+      const after = await opened.handle.stat({ bigint: true });
+      if (!completeIdentityMatches(after, { ...metadataFields(before) })) {
+        throw new Error("Backup source identity changed during inventory.");
+      }
+      entries.push({ path: relative, type: "file", ...metadataFields(before), sha256 });
+      return true;
+    } finally {
+      await opened.handle.close();
+    }
+  }
+  await collect("");
+  await writeFile(manifestPath, JSON.stringify(entries), { mode: 0o600 });
+}
 
 function validateEntry(entry) {
   const parts = String(entry?.path ?? "").split("/");
@@ -20,6 +124,11 @@ function validateEntry(entry) {
       .every(value => typeof value === "string" && /^\d+$/.test(value))) {
     throw new Error("Invalid backup inventory entry.");
   }
+  if (strict && (!(typeof entry.ctimeNs === "string" && /^\d+$/.test(entry.ctimeNs))
+    || !(typeof entry.nlink === "string" && /^\d+$/.test(entry.nlink))
+    || (entry.type === "file" && !(typeof entry.sha256 === "string" && /^[a-f0-9]{64}$/.test(entry.sha256))))) {
+    throw new Error("Invalid strict backup inventory entry.");
+  }
 }
 
 async function openEntry(entry) {
@@ -28,8 +137,9 @@ async function openEntry(entry) {
     ? await openScopedDirectoryNoFollow(root, full) : await openScopedFileNoFollow(root, full);
   try {
     const metadata = await opened.handle.stat({ bigint: true });
-    if (String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino
-      || String(metadata.mode) !== entry.mode || String(metadata.uid) !== entry.uid || String(metadata.gid) !== entry.gid
+    if ((strict ? !completeIdentityMatches(metadata, entry)
+      : String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino
+        || String(metadata.mode) !== entry.mode || String(metadata.uid) !== entry.uid || String(metadata.gid) !== entry.gid)
       || (entry.type === "directory" ? !metadata.isDirectory() : !metadata.isFile())) {
       throw new Error("Backup source identity changed after inventory.");
     }
@@ -112,15 +222,15 @@ async function createArchive() {
   if (!Array.isArray(entries) || !entries.length) throw new Error("Backup inventory is empty.");
   entries.forEach(validateEntry);
   const directories = entries.filter(entry => entry.type === "directory");
-  const verifyDirectories = async () => {
-    for (const entry of directories) {
+  const verifyEntries = async (items) => {
+    for (const entry of items) {
       const opened = await openEntry(entry);
       await opened.handle.close();
     }
   };
   let changed = 0;
   async function* chunks() {
-    await verifyDirectories();
+    await verifyEntries(directories);
     for (const [index, entry] of entries.entries()) {
       const { handle, metadata } = await openEntry(entry);
       try {
@@ -128,9 +238,11 @@ async function createArchive() {
         if (entry.type === "directory") continue;
         const size = Number(metadata.size);
         let written = 0;
+        const contentDigest = strict ? createHash("sha256") : null;
         if (size > 0) {
           for await (const chunk of handle.createReadStream({ start: 0, end: size - 1, autoClose: false })) {
             written += chunk.length;
+            contentDigest?.update(chunk);
             yield chunk;
           }
         }
@@ -138,7 +250,8 @@ async function createArchive() {
         const after = await handle.stat({ bigint: true });
         if (after.nlink > 1n) throw new Error("Backup source became hard-linked while being read.");
         if (String(metadata.size) !== entry.size || String(metadata.mtimeNs) !== entry.mtimeNs
-          || after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs || after.nlink === 0n) changed++;
+          || after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs || after.nlink === 0n
+          || (strict && (contentDigest.digest("hex") !== entry.sha256 || !completeIdentityMatches(after, entry)))) changed++;
         yield padding(size);
       } finally {
         await handle.close();
@@ -146,7 +259,7 @@ async function createArchive() {
     }
     // No archive is accepted after a directory substitution, even if a file
     // descriptor safely retained the original bytes while its name moved.
-    await verifyDirectories();
+    await verifyEntries(strict ? entries : directories);
     yield Buffer.alloc(1024);
   }
   const output = await open(outputPath, "wx", 0o600);
@@ -160,8 +273,9 @@ async function createArchive() {
   process.exitCode = changed ? 1 : 0;
 }
 
-createArchive().catch(async (error) => {
+const operation = inventoryMode ? createInventory() : createArchive();
+operation.catch(async (error) => {
   if (outputCreated) await rm(outputPath, { force: true }).catch(() => {});
-  process.stderr.write(`${error.code ?? "backup_archive_failed"}: ${error.message}\n`);
+  process.stderr.write(`${error.code ?? (inventoryMode ? "backup_inventory_failed" : "backup_archive_failed")}: ${error.message}\n`);
   process.exitCode = 2;
 });
