@@ -6,21 +6,23 @@
 
 本计划是执行清单，不是设计文档。设计仍以 `docs/superpowers/specs/2026-08-22-evimed-dsh-plug-harness-design.md`（下称 SPEC）为准；与 SPEC 冲突之处由批次 0 的决策记录 #26 收口。
 
-## 1. 现状核对（2026-09-04 08:30Z，全部为实测事实）
+## 1. 现状核对（2026-09-04 08:30Z 实测；发布事实已于 2026-09-07 校正）
+
+> **校正（2026-09-07）**：本节是 2026-09-04 08:30Z 的实测快照，只有四处按当前仓库与现网重新核对过——现网版本、内核版本、前端壳的目录名、附 B 五棵树是否还在；其余数值未复测，仍按 08:30Z 读。现网为 `evimed-20260907-287cd59`（`OpenScience/PROGRESS.md` 的 2026-09-07 05:09 条：公网就绪独立确认 287cd59），内核为 `0.1.2-rc.1`（`OpenScience/deps-version.json` 的 `dsh.version`，即批次 1 的 T1.1 已执行）。改的是「部署了什么」「树上还有什么」这类事实，本计划的决策、任务与各批次的进度注一字未动。
 
 **现网**
 
-- 版本 `evimed-20260904-bf10ff35`，`/api/ready` 18/18，`saasProfile.profile = individual-saas`，`technicalSaas: true`，但两项是**声明未配置**而非达标：`oidc-identity`、`external-recovery`（`OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED`）。备份 `mode: local`。
+- 版本 `evimed-20260907-287cd59`（2026-09-07 公网就绪独立确认）。本行其余数值为 2026-09-04 08:30Z 在 `evimed-20260904-bf10ff35` 上的实测，未在当前版本复测：`/api/ready` 18/18，`saasProfile.profile = individual-saas`，`technicalSaas: true`，但两项是**声明未配置**而非达标：`oidc-identity`、`external-recovery`（`OPEN_SCIENCE_SAAS_PROFILE_UNCONFIGURED`）。备份 `mode: local`。
 - 身份：`OPEN_SCIENCE_AUTH_MODE=local`，仅一个 bootstrap 账号，无注册入口（`store.createUser` 存在但没有路由）。
-- 内核：`0.1.2-alpha.5`。
+- 内核：`0.1.2-rc.1`（`OpenScience/deps-version.json` 的 `dsh.version`；T1.1 的 alpha.5 → rc.1 换钉已执行）。
 - 入口：`https://82.156.128.153`，与另外十余个应用共用一台 nginx（`/etc/nginx/sites-enabled/cro-qa` 与 `evimed-science` 两个 server 块，十几个 include 片段）。裸根 `/` 被 `snippets/cro-demo.conf` 的 `location = /` 占用；EviMed 只拿到 `location /` 兜底。证书是 Let's Encrypt 的 IP 证书，6 天一续（`evimed-certbot-renew.timer` 在跑）。`evimed.com` 解析到阿里云（`101.201.39.91` 等），`science.evimed.com` / `app.evimed.com` 无解析。
 - 主机：4 核、15 GiB（已用 7.7 GiB）、磁盘 81%。
 
-**前端壳（`apps/desktop`，托管形态）**
+**前端壳（当时的 `apps/desktop`，已随 T2.4 改名为 `apps/web`；托管形态）**
 
 - 导航 5 项（新任务 / 知识库 / 科研笔记本 / 能力模板 / 运行记录 + 设置图标），SPEC §23.1 要求十项。
 - 会话页是 F0 最小版：`RunStreamSessionPage.tsx` 136 行 + `lib/runStream.ts` 722 行；`/api/me` 给的 `sessionView` 为 `run-stream`。这就是被评价为「交互太差」的那一页——它从未被要求超过 P0 验收所需。
-- 附 B 未删：`LiveSessionPage.tsx`、`lib/runtime.ts`、`packages/sdk`、`apps/desktop/src-tauri`、`runtime/harness` 都在；52 个源码文件仍提 OpenCode。
+- 附 B 未删：`LiveSessionPage.tsx`、`lib/runtime.ts`、`packages/sdk`、`apps/desktop/src-tauri`、`runtime/harness` 都在；52 个源码文件仍提 OpenCode。**（2026-09-07 复核：这五棵树已随 T2.4 删除，现在一棵都不在；OpenCode 字样的残留量未复测。）**
 - 项目选择藏在 `components/settings/WebProjectsCard.tsx` 与 `thread/WorkspaceChip.tsx`，没有顶层项目切换器。
 
 **DSH 网页（今日上线的部分）**
