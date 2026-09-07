@@ -1070,6 +1070,10 @@ export function createWebApiApp(overrides = {}) {
         await agentRuns.appendQualityNotices(project, run.id, [
           `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
           + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
+          // A third cause of the same zero: the transcript was mostly our own
+          // injected context, which the extractor refuses to read back as if
+          // the user had said it.
+          + `${memoryResult.excluded?.length ? `、未读取 ${memoryResult.excluded.map((item) => `${item.count} 条（${item.reason === "injected" ? "系统注入" : "回合未完成"}）`).join("")}` : ""}`
           + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
           + "。空对话与抽取失效在结果上一样，这行区分它们。",
         ], { unchecked: true }).catch(() => {});
@@ -1107,6 +1111,9 @@ export function createWebApiApp(overrides = {}) {
           `pending=${memoryResult.pending ?? 0}`,
           ...(memoryResult.pendingReasons?.length
             ? [`parked=${memoryResult.pendingReasons.map((item) => `${item.reason}:${item.count}`).join("|")}`]
+            : []),
+          ...(memoryResult.excluded?.length
+            ? [`excluded=${memoryResult.excluded.map((item) => `${item.reason}:${item.count}`).join("|")}`]
             : []),
           ...(memoryResult.rejectionReasons?.length ? [`why=${memoryResult.rejectionReasons.slice(0, 3).join("|")}`] : []),
           ...(memoryResult.extractionError ? [`error=${memoryResult.extractionError}`] : []),
