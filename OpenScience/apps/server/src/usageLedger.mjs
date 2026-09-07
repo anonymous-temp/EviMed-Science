@@ -5,6 +5,43 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 const moneyScale = 100_000_000;
 
+/** The rolling windows settled spend is measured over. Open cost is windowed the
+ *  same way, so the two halves of one limit answer to the same clock. Frozen
+ *  because it is spliced into SQL: the members are the only interval literals
+ *  this module will ever interpolate. */
+export const openCostWindows = Object.freeze({ day: "24 hours", week: "7 days" });
+
+/** @type {Set<string>} */
+const openCostWindowValues = new Set(Object.values(openCostWindows));
+const placeholderPattern = /^\$[1-9][0-9]*$/;
+
+/** Cost a new call must respect on top of settled spend: a reservation counts
+ *  until it expires, and an `uncertain` row counts while it is still inside the
+ *  rolling window. `uncertain` used to count forever, so one truncated provider
+ *  response removed that budget from the account permanently.
+ *  Written once because `reserveModel` and `assertWithinLimits` both ask this
+ *  question and a divergence between them is invisible until it costs money.
+ *
+ *  Both fragments it splices are checked rather than trusted: an interval
+ *  literal cannot be parameterized, so the only safe inputs are the frozen
+ *  window members and a bound-parameter name.
+ *
+ *  @param {string} window one of `openCostWindows`' values
+ *  @param {string} instantPlaceholder the bound parameter holding the decision
+ *    instant, e.g. `"$2"` — every caller must actually bind it there
+ */
+export function openCostPredicate(window, instantPlaceholder) {
+  if (!openCostWindowValues.has(window)) {
+    throw new HttpError(500, "usage_window_invalid", "Unknown open-cost window.");
+  }
+  if (!placeholderPattern.test(instantPlaceholder)) {
+    throw new HttpError(500, "usage_window_invalid", "Invalid open-cost instant placeholder.");
+  }
+  const at = `${instantPlaceholder}::timestamptz`;
+  return `((status='reserved' AND reservation_expires_at > ${at})`
+    + ` OR (status='uncertain' AND created_at >= ${at} - interval '${window}'))`;
+}
+
 /** @param {unknown} value @param {string} name @param {number} max */
 function text(value, name, max = 200) {
   if (typeof value !== "string" || !value.trim() || value.length > max || /[\0\r\n]/.test(value)) {
@@ -72,8 +109,21 @@ export class UsageLedger {
 
   async health() {
     await migrateUsageLedger(this.database);
-    const result = await this.database.query("SELECT count(*)::integer AS uncertain FROM evimed_usage.model_requests WHERE status='uncertain'");
-    return { connected: true, uncertain: Number(result.rows[0]?.uncertain ?? 0) };
+    // Expired reservations are reported next to the uncertain count so a
+    // reconciler that stopped running is visible on /api/ready instead of
+    // looking exactly like an account that simply spent nothing. Readiness runs
+    // this every 30 seconds, so it reads only the rows it can count: settled and
+    // released rows contribute 0 to both filters, and excluding them is what
+    // lets the status-partial index answer this instead of the whole table.
+    const result = await this.database.query(`SELECT
+      count(*) FILTER (WHERE status='uncertain')::integer AS uncertain,
+      count(*) FILTER (WHERE status='reserved' AND reservation_expires_at <= clock_timestamp())::integer AS expired_reservations
+      FROM evimed_usage.model_requests WHERE status IN ('reserved','uncertain')`);
+    return {
+      connected: true,
+      uncertain: Number(result.rows[0]?.uncertain ?? 0),
+      expiredReservations: Number(result.rows[0]?.expired_reservations ?? 0),
+    };
   }
 
   /** @param {{id:string,userId:string,projectId:string,runId?:string|null,model:string,priceVersion:string,currency:string,requestFingerprint:string,estimatedCost:number,dailyLimit?:number,weeklyLimit?:number,runLimit?:number,now?:Date,ttlMs?:number}} input */
@@ -109,14 +159,15 @@ export class UsageLedger {
         return record(existing.rows[0]);
       }
       const totals = await client.query(`SELECT
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '24 hours' THEN actual_cost ELSE 0 END),0) AS day_settled,
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '7 days' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN status IN ('reserved','uncertain') AND (status='uncertain' OR reservation_expires_at > $2::timestamptz) THEN reserved_cost ELSE 0 END),0) AS open_cost,
+        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
+        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open,
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
-          WHEN run_id=$3 AND status IN ('reserved','uncertain') AND (status='uncertain' OR reservation_expires_at > $2::timestamptz) THEN reserved_cost ELSE 0 END),0) AS run_committed
+          WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS run_committed
         FROM evimed_usage.model_requests WHERE user_id=$1`, [values.userId, values.now, values.runId]);
-      const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].open_cost);
-      const week = Number(totals.rows[0].week_settled) + Number(totals.rows[0].open_cost);
+      const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].day_open);
+      const week = Number(totals.rows[0].week_settled) + Number(totals.rows[0].week_open);
       const overDay = values.dailyLimit > 0 && day + values.estimatedCost > values.dailyLimit;
       const overWeek = values.weeklyLimit > 0 && week + values.estimatedCost > values.weeklyLimit;
       const runCommitted = Number(totals.rows[0].run_committed);
@@ -184,12 +235,86 @@ export class UsageLedger {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${productId(userId, "user")}`]);
       const current = await this.#locked(client, userId, id);
       if (current.status === status && current.error_code === code && current.provider_request_id === provider) return record(current);
-      if (current.status !== "reserved") throw new HttpError(409, "usage_settlement_conflict", "The request already reached another state.");
+      // `reservation_expired` is the sweep's placeholder cause, not a verdict:
+      // it means "the settle call never arrived", so a late call that finally
+      // names the real reason must be allowed to replace it. The money state
+      // the sweep already reported is kept — only the diagnosis is written,
+      // because the sweep decided `uncertain` for a reason that has not changed.
+      const sweptPlaceholder = current.status === "uncertain" && current.error_code === "reservation_expired";
+      if (current.status !== "reserved" && !sweptPlaceholder) {
+        throw new HttpError(409, "usage_settlement_conflict", "The request already reached another state.");
+      }
       const result = await client.query(`UPDATE evimed_usage.model_requests SET status=$2,revision=revision+1,
         error_code=$3,provider_request_id=$4,settled_at=clock_timestamp() WHERE id=$1 RETURNING *`,
-      [current.id, status, code, provider]);
+      [current.id, sweptPlaceholder ? current.status : status, code, provider]);
       return record(result.rows[0]);
     });
+  }
+
+  /** Move reservations whose settlement never arrived out of `reserved`.
+   *
+   *  A reservation whose settle call failed stays `reserved` forever: once its
+   *  expiry passes the budget predicate stops counting it, so the row is
+   *  stranded with no transition and no audit line. It becomes `uncertain`, not
+   *  `released`, because the provider may already have charged for the call —
+   *  `uncertain` is the honest state and is the one `health()` surfaces.
+   *
+   *  The database's `clock_timestamp()` is the authoritative clock here, the
+   *  same one `health()`'s `expiredReservations` counts against. Binding the
+   *  Node process instant instead would let the metric that exists to reveal a
+   *  stuck sweeper disagree with the sweeper itself. `now` overrides it for
+   *  tests only and is null in production.
+   *
+   *  @param {{now?:Date|null,limit?:number}} options
+   *  @returns {Promise<{reconciled:number,remaining:number,failedAccounts:number}>}
+   *    rows transitioned by this batch, rows still expired after it (a non-zero
+   *    remainder is the signal to run again, not an error), and accounts whose
+   *    own transaction failed and were skipped.
+   */
+  async reconcileExpiredReservations({ now = null, limit = 200 } = {}) {
+    const at = now == null ? null : instant(now, "reconciliation time");
+    const batch = productInteger(limit, 1, 1_000);
+    await migrateUsageLedger(this.database);
+    const candidates = await this.database.query(`SELECT user_id,id FROM evimed_usage.model_requests
+      WHERE status='reserved' AND reservation_expires_at <= coalesce($1::timestamptz,clock_timestamp())
+      ORDER BY reservation_expires_at,id LIMIT $2`, [at, batch]);
+    /** @type {Map<string,string[]>} */
+    const byAccount = new Map();
+    for (const row of candidates.rows) {
+      const ids = byAccount.get(row.user_id) ?? [];
+      ids.push(row.id);
+      byAccount.set(row.user_id, ids);
+    }
+    let reconciled = 0;
+    let failedAccounts = 0;
+    for (const [userId, ids] of byAccount) {
+      try {
+        const updated = await this.database.transaction(async (client) => {
+          // Bounded, because candidates always arrive in the same order: an
+          // account holding its advisory lock indefinitely would otherwise stall
+          // this batch and every batch after it at the same head of the queue.
+          await client.query("SET LOCAL lock_timeout = '5s'");
+          // The same per-account advisory lock every other mutation takes, so a
+          // sweep can never interleave with the settlement it is giving up on.
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${productId(userId, "user")}`]);
+          return client.query(`UPDATE evimed_usage.model_requests SET status='uncertain',revision=revision+1,
+            error_code='reservation_expired',settled_at=clock_timestamp()
+            WHERE user_id=$1 AND id=ANY($2::text[]) AND status='reserved'
+              AND reservation_expires_at <= coalesce($3::timestamptz,clock_timestamp())
+            RETURNING id`, [userId, ids, at]);
+        });
+        reconciled += updated.rowCount ?? updated.rows.length;
+      } catch {
+        // One account's deadlock, lock wait or dropped connection must not end
+        // the batch: the next account's expired rows are independent, and an
+        // abort here would strand them behind the same failing account on every
+        // later run. Counted and returned so a persistent failure is visible.
+        failedAccounts += 1;
+      }
+    }
+    const rest = await this.database.query(`SELECT count(*)::integer AS remaining FROM evimed_usage.model_requests
+      WHERE status='reserved' AND reservation_expires_at <= coalesce($1::timestamptz,clock_timestamp())`, [at]);
+    return { reconciled, remaining: Number(rest.rows[0]?.remaining ?? 0), failedAccounts };
   }
 
   /** @param {string} userId @param {{since?:Date}} options */
@@ -237,6 +362,9 @@ export class UsageLedger {
       count(*) FILTER (WHERE status='settled' AND (cache_hit_tokens IS NULL OR cache_miss_tokens IS NULL
         OR output_tokens IS NULL OR actual_cost IS NULL))::integer AS incomplete_usage_calls,
       coalesce(sum(actual_cost) FILTER (WHERE status='settled'),0) AS actual_cost,
+      -- Lifetime by design, not the windowed budget predicate reserveModel uses:
+      -- a finished run's receipt must not change as its rows age out of a
+      -- rolling window. This reports open cost, never charged cost.
       coalesce(sum(reserved_cost) FILTER (WHERE status IN ('reserved','uncertain')),0) AS open_cost,
       count(*) FILTER (WHERE status='uncertain')::integer AS uncertain,
       coalesce(sum(cache_hit_tokens + cache_miss_tokens) FILTER (WHERE status='settled'),0) AS input_tokens,
@@ -266,12 +394,13 @@ export class UsageLedger {
     return this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${user}`]);
       const result = await client.query(`SELECT
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '24 hours' THEN actual_cost ELSE 0 END),0) AS day_settled,
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '7 days' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN status IN ('reserved','uncertain') AND (status='uncertain' OR reservation_expires_at > $2::timestamptz) THEN reserved_cost ELSE 0 END),0) AS open_cost
+        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
+        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN reserved_cost ELSE 0 END),0) AS day_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN reserved_cost ELSE 0 END),0) AS week_open
         FROM evimed_usage.model_requests WHERE user_id=$1`, [user, at]);
-      const day = Number(result.rows[0].day_settled) + Number(result.rows[0].open_cost);
-      const week = Number(result.rows[0].week_settled) + Number(result.rows[0].open_cost);
+      const day = Number(result.rows[0].day_settled) + Number(result.rows[0].day_open);
+      const week = Number(result.rows[0].week_settled) + Number(result.rows[0].week_open);
       const exceeded = dayLimit > 0 && day >= dayLimit ? { window: "day", limit: dayLimit, committed: day }
         : weekLimit > 0 && week >= weekLimit ? { window: "week", limit: weekLimit, committed: week } : null;
       if (exceeded) throw new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.", { ...exceeded, currency: "CNY" });
