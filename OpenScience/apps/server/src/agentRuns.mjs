@@ -75,6 +75,7 @@ const maxDeliverableIssues = 40;
 const maxArtifacts = 64;
 const maxQualityNotices = 40;
 const maxQualityNoticeLength = 300;
+const maxObservedChildSessions = 64;
 
 // Which rule picked the agent: `matched:adr-analysis`, `matched:named:peer-review`
 // or `llm:0.83`. Recording the decision without the reason makes a wrong route
@@ -999,6 +1000,7 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     : [];
   return [
     "The server-side clinical evidence gate rejected the current package.",
+    "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files and preserved sources; do not delegate any file or source to another child.",
     ...measured,
     ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
@@ -1025,6 +1027,16 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     "After fixing the files, submit the package again with evimed_submit_deliverable.",
     "Fix every issue it returns and resubmit until it accepts, then read every required deliverable back before finishing:",
     bounded,
+  ].join("\n");
+}
+
+/** @param {readonly string[]} deliverableIds */
+function clinicalEvidenceResubmitPrompt(deliverableIds) {
+  return [
+    "The server-side clinical evidence gate accepted the current bytes, but the run ended without a local delivery receipt.",
+    "Do not edit, rewrite, rename, or delete any deliverable file. The package already passed on the bytes now on disk.",
+    `Call evimed_submit_deliverable once for each of ${deliverableIds.join(", ")} so the run-side gate can write the missing receipt.`,
+    "If that submission accepts, call evimed_complete_run without partial mode and finish. If it rejects, follow only the returned issue and preserve the current files.",
   ].join("\n");
 }
 
@@ -2336,6 +2348,7 @@ export class AgentRunStore {
     this.id = options.id ?? (() => randomId("run_"));
     this.readSessionHistory = options.readSessionHistory ?? (async () => []);
     this.readSessionStatus = options.readSessionStatus ?? (async () => "idle");
+    this.readChildSessionActivity = options.readChildSessionActivity ?? (async () => []);
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
     // Workflow-owned runs may retain a different workspace after a user changes
@@ -2351,6 +2364,10 @@ export class AgentRunStore {
     this.projectionNoticed = new Set();
     /** Trusted DSH event-pump activity, scoped by project and run. */
     this.kernelActivities = new Map();
+    /** Kernel-confirmed child sequence baselines/high-water marks per run. */
+    this.childKernelHeads = new Map();
+    /** Changes only when a bound child's sequence exceeds its own high-water. */
+    this.childKernelActivities = new Map();
     this.monitorIntervalMs = options.monitorIntervalMs ?? 500;
     this.monitorMaxPolls = options.monitorMaxPolls ?? 3600;
     // Consecutive polls with no new message and no new tool call before a run
@@ -2965,7 +2982,10 @@ export class AgentRunStore {
       this.deliverableDigests.delete(runId);
       this.projectionAdmissions.delete(runId);
       this.projectionNoticed.delete(runId);
-      this.kernelActivities.delete(`${project.userId}\0${project.id}\0${runId}`);
+      const kernelKey = `${project.userId}\0${project.id}\0${runId}`;
+      this.kernelActivities.delete(kernelKey);
+      this.childKernelHeads.delete(kernelKey);
+      this.childKernelActivities.delete(kernelKey);
       // The gate has already run by the time a run reaches a terminal state,
       // so the brief has done its work; keeping it would grow with every run.
       this.dispatchedBriefs.delete(runId);
@@ -3230,6 +3250,36 @@ export class AgentRunStore {
         if (Array.isArray(completion.qualityNotices) && completion.qualityNotices.length > 0) {
           terminal.qualityNotices = [...(terminal.qualityNotices ?? []), ...completion.qualityNotices];
         }
+        // The model can spend its last local attempt, repair the returned issue
+        // in place, and then discover that the ceiling prevents the corrected
+        // bytes from writing a receipt. The server has just run the same domain
+        // gate over those current bytes and accepted them; failing the run now
+        // would discard a valid package over missing bookkeeping. Send one
+        // bounded, same-run request whose only job is to submit unchanged bytes.
+        const repairSender = this.clinicalRepairSenders.get(run.id);
+        const repairAttempts = this.clinicalRepairAttempts.get(run.id) ?? 0;
+        const currentReceipt = await readDeliveryReceipt(project, run);
+        const projection = await readRunStateProjection(project, project.workspaceDir, run);
+        const unaccepted = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
+          ? projection.projection.plan.items.filter((item) => item?.status !== "accepted" && Number(item?.attempts ?? 0) > 0)
+          : [];
+        const canResubmit = run.effectiveAgentId === "clinical-evidence-synthesis"
+          && completion.artifacts.length > 0
+          && !currentReceipt
+          && unaccepted.length > 0
+          && repairAttempts < this.maxClinicalRepairAttempts
+          && typeof repairSender === "function";
+        if (canResubmit) {
+          this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+          this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
+          try {
+            const repair = await repairSender(clinicalEvidenceResubmitPrompt(unaccepted.map((item) => String(item.id))));
+            if (repair?.accepted !== false) return run;
+          } catch { /* a refused resubmission remains a fail-closed outcome */ }
+          terminal.status = "failed";
+          terminal.errorCode = "specialist_evidence_repair_failed";
+          terminal.qualityNotices = ["The server accepted the current package, but the run-side receipt resubmission could not be dispatched."];
+        }
       }
     }
     // Whatever the verdict, say if repair cost the report its substance. The
@@ -3404,7 +3454,7 @@ export class AgentRunStore {
    * them would mean reading it three times on three schedules.
    *
    * @param {any} project @param {Record<string, any>} run
-   * @returns {Promise<{ signature: string | null, unreadable: boolean }>}
+   * @returns {Promise<{ signature: string | null, unreadable: boolean, childSessionIds: string[] }>}
    */
   async readRunSideActivity(project, run) {
     // Read from the host, because that is where this process opens files.
@@ -3424,8 +3474,8 @@ export class AgentRunStore {
     // `successfulEvidenceSourceArtifacts` still take the container root, and
     // correctly: they relativise paths the model wrote.
     const read = await readRunStateProjection(project, project.workspaceDir, run);
-    if (read.state === "unattributed") return { signature: null, unreadable: true };
-    if (read.state === "missing") return { signature: null, unreadable: false };
+    if (read.state === "unattributed") return { signature: null, unreadable: true, childSessionIds: [] };
+    if (read.state === "missing") return { signature: null, unreadable: false, childSessionIds: [] };
     if (read.state === "unreadable") {
       // Said once per run, not once per poll: the monitor wakes on a fixed
       // interval and a notice per wake would bury the ledger in one repeated
@@ -3436,11 +3486,15 @@ export class AgentRunStore {
           "运行自述文件 .evimed-run/state.json 无法解析，本次运行的证据与预算明细不可见；运行本身不受影响。",
         ]).catch(() => {});
       }
-      return { signature: null, unreadable: true };
+      return { signature: null, unreadable: true, childSessionIds: [] };
     }
     const projection = read.projection ?? {};
     this.publishRunProjection(project, run, projection);
-    return { signature: runSideActivitySignature(projection), unreadable: false };
+    const childSessionIds = [...new Set((projection.subagents ?? [])
+      .filter((child) => child?.status === "running" && typeof child?.childSessionId === "string")
+      .map((child) => child.childSessionId.trim())
+      .filter(Boolean))].slice(0, 64);
+    return { signature: runSideActivitySignature(projection), unreadable: false, childSessionIds };
   }
 
   /**
@@ -3571,7 +3625,67 @@ export class AgentRunStore {
     // RuntimeEventPump's authenticated, project/run-attributed sequence below.
     const runSide = await this.readRunSideActivity(project, run);
     const activity = runSide.signature;
-    const kernelActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
+    const eventActivity = this.kernelActivities.get(`${project.userId}\0${project.id}\0${run.id}`) ?? null;
+    let childActivity = [];
+    let childActivityUnreadable = false;
+    if (runSide.childSessionIds.length > 0) {
+      try {
+        const observed = await this.readChildSessionActivity(project, run.sessionId, runSide.childSessionIds);
+        const allowed = new Set(runSide.childSessionIds);
+        childActivity = (Array.isArray(observed) ? observed : []).filter((child) =>
+          allowed.has(child?.sessionId)
+          && typeof child?.sessionId === "string"
+          && child.sessionId.length > 0
+          && child.sessionId.length <= 512
+          && Number.isSafeInteger(child?.asOfSeq)
+          && child.asOfSeq >= 0,
+        ).map((child) => ({
+          sessionId: child.sessionId,
+          asOfSeq: child.asOfSeq,
+          running: child.running === true,
+        })).slice(0, 256).sort((left, right) => left.sessionId.localeCompare(right.sessionId, "en"));
+      } catch {
+        // An unreadable catalogue is unknown activity, never proof of a stall
+        // and never permission to trust the projection's own counters.
+        childActivityUnreadable = true;
+      }
+    }
+    if (childActivityUnreadable) return null;
+    const kernelKey = `${project.userId}\0${project.id}\0${run.id}`;
+    const heads = this.childKernelHeads.get(kernelKey) ?? new Map();
+    let childAdvanced = false;
+    let runningChildBaselined = false;
+    for (const child of childActivity) {
+      const previous = heads.get(child.sessionId);
+      // First sight is the server-owned binding and baseline, not progress.
+      // Re-adding a historical child or changing its running flag therefore
+      // cannot reset the stall clock; only a later kernel sequence may.
+      if (previous === undefined && heads.size < maxObservedChildSessions) {
+        heads.set(child.sessionId, child.asOfSeq);
+        if (child.running) runningChildBaselined = true;
+      }
+      else if (child.asOfSeq > previous) {
+        heads.set(child.sessionId, child.asOfSeq);
+        childAdvanced = true;
+      }
+    }
+    this.childKernelHeads.set(kernelKey, heads);
+    // A newly authenticated running child is neither movement nor stillness:
+    // its current head is the baseline. Preserve the existing idle count for
+    // this poll so a retry that appears at N-1 does not die before its next
+    // kernel sequence, while the hard unique-child cap prevents churn from
+    // buying unbounded grace.
+    if (runningChildBaselined && !childAdvanced) return null;
+    if (childAdvanced) {
+      this.childKernelActivities.set(
+        kernelKey,
+        createHash("sha256").update(JSON.stringify([...heads].sort(([left], [right]) => left.localeCompare(right, "en")))).digest("hex"),
+      );
+    }
+    const childActivityDigest = this.childKernelActivities.get(kernelKey) ?? null;
+    const kernelActivity = eventActivity || childActivityDigest
+      ? createHash("sha256").update(JSON.stringify({ eventActivity, childActivity: childActivityDigest })).digest("hex")
+      : null;
 
     const stillByHistory = messages === (run.observedMessages ?? 0) && toolCalls === (run.observedToolCalls ?? 0);
     const stillByRunSide = activity === null || activity === (run.observedRunSideActivity ?? null);

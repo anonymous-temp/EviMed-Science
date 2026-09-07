@@ -573,8 +573,8 @@ test("mounting the run policy produces a run mirror row, not just the ability to
   assert.ok("cwd" in RUN_DOMAIN_SPEC.tables.run_mirror, "the field the projection reads must be declared");
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "" } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2 } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -602,7 +602,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     readText: async (/** @type {string} */ target) => target === "//runtime/revision-token" ? "test-workload-token" : target.endsWith(workspaceLayout.briefIndexFile) && briefId ? JSON.stringify({ runId: briefId }) : files.get(target) ?? null,
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
   });
-  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit: 3, structuralAttemptAllowance: 2, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
+  await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
   };
@@ -710,6 +710,228 @@ test("generic delegation cannot start an internal pipeline while direct native p
   assert.ok(submitted.value.issues.some((/** @type {any} */ issue) => issue.code === "required_output_missing"), "direct submission must still reach the source contract validator");
 });
 
+test("a capability child may submit only the parent plan item it owns", async () => {
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => ({ id: "child-owner", result: childResult }),
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA child-owned research brief.\n");
+  const child = {
+    id: "child-agent",
+    session: { id: "child-owner", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+  };
+  const submitted = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-submit",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(submitted.value?.ok, true, JSON.stringify(submitted));
+
+  const foreign = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-foreign-submit",
+    arguments: { deliverableId: "d2" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(foreign.value?.ok, false);
+  assert.equal(foreign.value?.code, "deliverable_not_owned");
+
+  settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
+  await pending;
+  const status = await f.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.items[0].status, "accepted");
+  const afterSettlement = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-submit-after-settlement",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(afterSettlement.value?.code, "deliverable_unknown", "a settled child binding must be released");
+});
+
+test("the root can repair and resubmit a capability child's accepted package", async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ authorized: true }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({
+    briefId: "repair-successor",
+    revisionAuthorizeUrl,
+    subagentStart: () => ({ id: "child-author", result: childResult }),
+  });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["A bounded research brief"],
+      deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+    });
+    const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const child = {
+      id: "child-agent",
+      session: { id: "child-author", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+    };
+    const path = "/workspace/deliverables/d1/brief.md";
+    f.files.set(path, "# Report\nChild-authored first version.\n");
+    const first = await f.ctx.tools.execute({
+      agent: child,
+      name: "evimed_submit_deliverable",
+      callId: "child-submit",
+      arguments: { deliverableId: "d1" },
+      signal: AbortSignal.timeout(2000),
+    });
+    assert.equal(first.value?.ok, true);
+    settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
+    await pending;
+
+    const opened = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Server provenance check requested a repair." });
+    assert.equal(opened.value?.ok, true);
+    f.files.set(path, "# Report\nRoot repair successor version.\n");
+    const repaired = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(repaired.value?.ok, true);
+    const status = await f.execute("evimed_plan", { action: "status" });
+    assert.equal(status.value.data.items[0].status, "accepted");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test("an accepted child delivery is not retried or downgraded by a later child error", async () => {
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  let starts = 0;
+  const f = await nativePolicyFixture({
+    briefId: "accepted-child-tail",
+    subagentStart: () => {
+      starts += 1;
+      if (starts > 1) throw new Error("an accepted package must not be retried");
+      return { id: "child-author", result: childResult };
+    },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted before the child tail failed.\n");
+  const child = {
+    id: "child-agent",
+    session: { id: "child-author", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+  };
+  const submitted = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-submit",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(submitted.value?.ok, true);
+  settle({ stopReason: "error", diagnostic: "structured tail did not match the output schema" });
+  const delegated = await pending;
+  assert.equal(delegated.value?.ok, true);
+  assert.equal(starts, 1, "an accepted package must not start a retry child");
+  const status = await f.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.items[0].status, "accepted");
+  assert.equal(JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`)).entries.length, 1);
+});
+
+test("a running delegation projects its child id before the child settles", async () => {
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const result = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => ({ id: "child-session-live", result }),
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const running = [...f.childRows.values()][0];
+  assert.equal(running.status, "running");
+  assert.equal(running.childSessionId, "child-session-live");
+  settle({ stopReason: "completed", output: "done" });
+  await pending;
+});
+
+test("a retry replaces the failed child with its running session id before settling", async () => {
+  /** @type {(value: any) => void} */
+  let settleRetry = () => {};
+  const retryResult = new Promise((resolve) => { settleRetry = resolve; });
+  let starts = 0;
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => {
+      starts += 1;
+      return starts === 1
+        ? { id: "child-first", result: Promise.resolve({ stopReason: "error", diagnostic: "temporary failure" }) }
+        : { id: "child-retry", result: retryResult };
+    },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ([...f.childRows.values()][0]?.childSessionId === "child-retry") break;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const running = [...f.childRows.values()][0];
+  assert.equal(running.status, "running");
+  assert.equal(running.childSessionId, "child-retry");
+  assert.equal(running.retried, true);
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA retry-owned brief.\n");
+  const staleChild = {
+    id: "stale-child-agent",
+    session: { id: "child-first", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+  };
+  const staleSubmit = await f.ctx.tools.execute({
+    agent: staleChild,
+    name: "evimed_submit_deliverable",
+    callId: "stale-child-submit",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(staleSubmit.value?.ok, false);
+  assert.equal(staleSubmit.value?.code, "deliverable_unknown", "the replaced child's binding must be released");
+  settleRetry({ stopReason: "completed", output: "done" });
+  await pending;
+});
+
 test("a native root without a brief gets one stable isolated workflow id, while a bound run keeps its id", async () => {
   const native = await nativePolicyFixture();
   await native.step(1);
@@ -794,6 +1016,113 @@ test("an accepted deliverable needs one control-plane authorization before a fre
   } finally {
     await new Promise((resolve) => server.close(() => resolve(undefined)));
   }
+});
+
+test("a control-plane-authorized revision gets one submission after the ordinary ceiling", async () => {
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ authorized: true }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  const f = await nativePolicyFixture({ briefId: "revision-owner", revisionAuthorizeUrl, deliveryAttemptLimit: 1 });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["A bounded report"],
+      deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+    });
+    const reportPath = "/workspace/deliverables/d1/brief.md";
+    f.files.set(reportPath, "# Report\nFirst accepted version.\n");
+    assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+
+    assert.equal((await f.execute("evimed_revise_deliverable", {
+      deliverableId: "d1",
+      reason: "The server gate requires one correction.",
+    })).value.ok, true);
+    f.files.delete(reportPath);
+    const unreadable = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(unreadable.value.ok, false, "a missing required file remains a structural rejection");
+    f.files.set(reportPath, "# Report\nServer-requested correction.\n");
+
+    const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
+    const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+    assert.equal(receipt.entries[0].attempt, 2, "the receipt preserves the total attempt count");
+    const replayed = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(replayed.error?.code, "GUARDED", "the revision authorization must grant exactly one extra submission");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test("rewriting the plan invalidates an unused revision submission grant", async () => {
+  const server = createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ authorized: true }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  const f = await nativePolicyFixture({ briefId: "revision-owner", revisionAuthorizeUrl, deliveryAttemptLimit: 1 });
+  try {
+    await f.step(1);
+    const deliverables = [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }];
+    await f.execute("evimed_plan", { action: "write", clarifications: ["Initial plan"], deliverables });
+    f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted bytes.\n");
+    assert.equal((await f.execute("evimed_submit_deliverable", { deliverableId: "d1" })).value.ok, true);
+    assert.equal((await f.execute("evimed_revise_deliverable", {
+      deliverableId: "d1",
+      reason: "The server gate requires one correction.",
+    })).value.ok, true);
+
+    assert.equal((await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["Rewritten plan"],
+      deliverables: [{ ...deliverables[0], title: "Replacement report" }],
+    })).value.ok, true);
+    const submitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(submitted.error?.code, "GUARDED", "a plan rewrite must not inherit the old revision authorization");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test("a same-run control-plane repair gets one submission after an unaccepted ceiling", async () => {
+  const f = await nativePolicyFixture({ deliveryAttemptLimit: 1, structuralAttemptAllowance: 0 });
+  const briefRoot = "/workspace/.evimed-brief/sessions/native-session";
+  f.files.set(`${briefRoot}/index.json`, JSON.stringify({ runId: "repair-run", contextRevision: "request-initial" }));
+  f.files.set(`${briefRoot}/context.md`, "<required-skills>research-brief</required-skills>");
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["Initial attempt"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Report", dependsOn: [] }],
+  });
+
+  const rejected = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(rejected.value.ok, false, "the first package is unaccepted at the ordinary ceiling");
+  assert.equal((await f.execute("evimed_complete_run", { partial: true })).value.ok, true);
+
+  f.files.set(`${briefRoot}/index.json`, JSON.stringify({ runId: "repair-run", contextRevision: "request-server-repair" }));
+  f.files.set(`${briefRoot}/context.md`, "<required-skills>research-brief</required-skills>\n<server-repair>repair the rejected package</server-repair>");
+  await f.step(2);
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nCorrected after the server repair.\n");
+
+  const resubmitted = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(resubmitted.value.ok, true, JSON.stringify(resubmitted.value));
+  const receipt = JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`));
+  assert.equal(receipt.entries[0].attempt, 2, "the repair keeps the total attempt count");
+  const replayed = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+  assert.equal(replayed.error?.code, "GUARDED", "the repair context grants exactly one extra submission");
 });
 
 test("a model cannot open an accepted revision before the control plane authorizes it", async () => {

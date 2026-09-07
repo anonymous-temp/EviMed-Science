@@ -13,6 +13,7 @@ import {
   RuntimeManager,
   buildRuntimeLaunchPlan,
   cleanupDockerContainer,
+  childSessionHeads,
   requestRuntime,
   runtimeContainerName,
   parseByteSize,
@@ -1710,6 +1711,20 @@ async function dshDispatchFixture() {
   const manager = new RuntimeManager({ runtimeMode: "mock", allowMockRuntime: true, production: false });
   return { rootDir, project, manager };
 }
+
+test("child activity accepts only kernel-confirmed direct children of the requested root", () => {
+  const rows = childSessionHeads([
+    { sessionId: "child-b", parentSessionId: "root", origin: "subagent", running: true, projections: { asOfSeq: 19 } },
+    { sessionId: "child-a", header: { parentSession: "root", origin: "subagent" }, running: false, asOfSeq: 7 },
+    { sessionId: "foreign-parent", parentSessionId: "other", origin: "subagent", running: true, projections: { asOfSeq: 200 } },
+    { sessionId: "not-child", origin: "user", running: true, projections: { asOfSeq: 300 } },
+    { sessionId: "bad-head", parentSessionId: "root", origin: "subagent", running: true, projections: { asOfSeq: -1 } },
+  ], "root", ["child-b", "child-a", "foreign-parent", "not-child", "bad-head", "not-listed"]);
+  assert.deepEqual(rows, [
+    { sessionId: "child-a", asOfSeq: 7, running: false },
+    { sessionId: "child-b", asOfSeq: 19, running: true },
+  ]);
+});
 
 test("dispatching a DSH prompt writes the run's own id into the workspace brief", async (t) => {
   const { rootDir, project, manager } = await dshDispatchFixture();
