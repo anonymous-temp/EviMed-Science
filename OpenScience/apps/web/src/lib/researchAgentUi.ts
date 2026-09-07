@@ -79,6 +79,41 @@ const translations: Record<string, AgentTranslation> = {
     description: "按研究类型审查方法学、统计、报告规范、完整性并给出可执行修改建议。",
     starterPrompts: ["审查我上传的论文，定位方法学、统计学、报告规范和完整性问题。"],
   },
+  "clinical-evidence-synthesis": {
+    code: "CS",
+    title: "临床证据深度分析",
+    category: "临床证据",
+    description: "把一个开放的临床问题做成可复现检索、逐条核验引文、主张可追溯的深度证据分析，并单独给出以安全为先的实践性回答。",
+    starterPrompts: ["分析急性胸闷胸痛的鉴别诊断，以及速效救心丸在其中的合理定位。"],
+  },
+  "evidence-appraisal": {
+    code: "EA",
+    title: "证据质量评价",
+    category: "临床证据",
+    description: "对你手上已有的一组研究逐篇评价设计、偏倚风险、间接性与不精确性，再按结局汇总成一个证据确定性判断，每次升降级都注明来自哪个领域。",
+    starterPrompts: ["这 9 篇是我准备写进综述的文献，帮我逐篇评一下质量，再给个整体证据确定性。"],
+  },
+  "geo-content": {
+    code: "GE",
+    title: "答案引擎内容优化",
+    category: "内容生产",
+    description: "先测量各消费级答案引擎当前如何回答一组真实问题，再产出可被后续测量对照的证据绑定内容块：结论、依据、适用条件、可解析引文、作者资质与 JSON-LD。",
+    starterPrompts: ["用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"],
+  },
+  "manuscript-support": {
+    code: "MS",
+    title: "论文章节写作",
+    category: "论文写作",
+    description: "在固定的资料集内起草或修改论文的一节（前言、方法、结果、讨论）：每条主张绑定主张台账，每条引文可在引文台账解析，写作过程说明只进修订说明而不进正文。",
+    starterPrompts: ["这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。"],
+  },
+  "research-grant-development": {
+    code: "GR",
+    title: "基金申报书开发",
+    category: "研究规划",
+    description: "把一份申报指南和一个研究方向转成具体目标、申报书大纲、里程碑表和面向评审的自查；引用的每条指南要求都逐字来自指南本身。",
+    starterPrompts: ["这是基金申报指南和我的研究方向，帮我把具体目标和里程碑写出来，并逐条对照评审要点自查。"],
+  },
 };
 
 export function researchAgentUi(agent: WebResearchAgent): WebResearchAgent & { code: string } {
