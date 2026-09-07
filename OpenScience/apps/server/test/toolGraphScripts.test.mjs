@@ -402,3 +402,172 @@ test("a collected receipt becomes a sampleable edge, which is the whole point", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+/* ----------------------------------------------- from a real run to a hidden reference */
+
+test("a run's own trace becomes the chain's golden trace, matched by the run that proved the edge", async () => {
+  const { traceForChain } = await import("../../../scripts/dev/generate-briefs.mjs");
+  const spec = { id: "c-1", tools: [MCP("literature_search"), MCP("open_access_full_text")], stages: [], seed: "s", n: 2 };
+  const sources = [{ from: MCP("literature_search"), to: MCP("open_access_full_text"), validatedBy: "run_real_1" }];
+  const step = (tool) => ({ turn: 0, tool, args: {}, returnDigest: `sha256:${"0".repeat(64)}`, outputKeys: [] });
+  const traces = [
+    // Right capability, right tools, wrong run: another task that happens to
+    // use the same two tools would describe work no recorded run ever did.
+    { capability: "probe-capability", runId: "run_other", steps: [step(MCP("literature_search")), step(MCP("open_access_full_text"))] },
+    { capability: "probe-capability", runId: "run_real_1", steps: [step(MCP("literature_search")), step(MCP("open_access_full_text")), step("read")] },
+    { capability: "probe-capability", runId: "run_real_1", steps: [step(MCP("literature_search"))] },
+    { capability: "other-capability", runId: "run_real_1", steps: [step(MCP("literature_search")), step(MCP("open_access_full_text"))] },
+  ];
+  const picked = traceForChain({ spec, capability: "probe-capability", sources, traces });
+  assert.equal(picked?.runId, "run_real_1");
+  assert.equal(picked.steps.length, 3, "the shortest qualifying trace, so the brief describes the chain not the run");
+
+  // A chain no run covers gets nothing rather than the nearest thing.
+  const uncovered = traceForChain({
+    spec: { ...spec, tools: [...spec.tools, MCP("adr_case_query")] },
+    capability: "probe-capability", sources, traces,
+  });
+  assert.equal(uncovered, null);
+});
+
+test("the hidden reference carries the contract's artefacts and the trace's tools, and the grader carries neither", async () => {
+  const { hiddenReference, graderDocument } = await import("../../../scripts/dev/generate-briefs.mjs");
+  const contract = {
+    contractKind: "adr-analysis-report",
+    outputs: [{ path: "safety-report.md", required: true }, { path: "signals.csv", required: true }, { path: "agenda-delta.json", required: false }],
+    checks: ["requiredOutputsExist", "citationsResolvable"],
+  };
+  const trace = {
+    runId: "run_1",
+    steps: [
+      { turn: 0, tool: "b", args: { doi: "10.1001/x" }, returnDigest: `sha256:${"1".repeat(64)}`, outputKeys: ["hits"] },
+      { turn: 1, tool: "a", args: {}, returnDigest: `sha256:${"2".repeat(64)}`, outputKeys: [] },
+    ],
+  };
+  const reference = hiddenReference({ briefId: "adr-tdg-001", capability: "adr-analysis", trace, contract });
+  assert.deepEqual(reference.expectedArtifacts, [
+    { path: "safety-report.md", schema: "adr-analysis-report" },
+    { path: "signals.csv", schema: "adr-analysis-report" },
+  ], "an optional output is not something a run must produce");
+  assert.deepEqual(reference.deterministicChecks, ["requiredOutputsExist", "citationsResolvable", "toolsExercised:a,b"]);
+  assert.equal(reference.goldenTrace.runId, "run_1");
+
+  // The grader is told what to check, never the answer.
+  const grader = graderDocument({ capability: "adr-analysis", contract });
+  const text = JSON.stringify(grader);
+  assert.ok(!text.includes("goldenTrace") && !text.includes("10.1001/x") && !text.includes("sha256:"));
+  assert.equal(grader.contractKind, "adr-analysis-report");
+  assert.equal(grader.judgeRubricVersion, "1");
+
+  // No trace yet is a reference that says so rather than one that invents one.
+  assert.equal(hiddenReference({ briefId: "x", capability: "c", trace: null, contract }).goldenTrace, null);
+});
+
+test("a brief enters the corpus only if it replayed and a teacher solved it at least once", async () => {
+  const { briefAcceptance } = await import("../../../scripts/dev/generate-briefs.mjs");
+  const solved = { contractPassed: true, checksPassed: true };
+  const failed = { contractPassed: false, checksPassed: false };
+  assert.equal(briefAcceptance({ replayed: true, teacherRuns: [failed, solved, failed] }).accept, true);
+  assert.match(briefAcceptance({ replayed: true, teacherRuns: [failed, solved, failed] }).reason, /1 of 3/);
+
+  // A run that passed the contract but not the deterministic checks did not
+  // solve it: the contract says the files are there, the checks say they are
+  // the right files.
+  assert.equal(briefAcceptance({ replayed: true, teacherRuns: [{ contractPassed: true, checksPassed: false }, failed, failed] }).accept, false);
+  assert.equal(briefAcceptance({ replayed: false, teacherRuns: [solved, solved, solved] }).accept, false,
+    "a task whose own reference solution does not replay is not solvable, whatever a teacher managed");
+  assert.match(briefAcceptance({ replayed: true, teacherRuns: [solved] }).reason, /1 of 3 teacher attempts recorded/);
+});
+
+test("the hidden directory reaches no runtime tree, no distillation input and no prompt", async () => {
+  // The leak this guards is silent in the only direction that matters: a
+  // reference in context does not error, it produces a run that scores well for
+  // the wrong reason, and every number after that is worthless with nothing
+  // saying so.
+  const generator = await readFile(path.join(repoRoot, "scripts", "dev", "generate-briefs.mjs"), "utf8");
+  assert.match(generator, /"hidden"/, "the generator no longer writes a hidden reference");
+
+  // Nothing that assembles context may name the directory.
+  for (const file of [
+    path.join(repoRoot, "apps", "server", "src", "methodDistillationRuns.mjs"),
+    path.join(repoRoot, "apps", "server", "src", "learningRuntime.mjs"),
+    path.join(repoRoot, "apps", "server", "src", "runtimeManager.mjs"),
+  ]) {
+    const source = await readFile(file, "utf8");
+    assert.ok(!/hidden\/|\.reference\.json/.test(source), `${path.basename(file)} names the hidden corpus`);
+  }
+  // And the generated tree is not committed, so it cannot ride into an image.
+  const ignore = await readFile(path.join(repoRoot, ".gitignore"), "utf8");
+  assert.match(ignore, /evals\/tool-graph\/generated\//);
+});
+
+test("one real run walks the whole way: transcript to edge, trace, graph, draft and reference", async () => {
+  // The seam test. Each half of this path had its own test and none crossed,
+  // which is exactly how the corpus shipped with a producer nobody had wired.
+  const { normalizeTranscript } = await import("../src/dshRuntimeAdapter.mjs");
+  const { executedToolEdges, goldenTraces } = await import("../src/toolExecutionEdges.mjs");
+  const { mergeReceipts, serializeCorpus } = await import("../../../scripts/dev/collect-executed-edges.mjs");
+  const { main: generate } = await import("../../../scripts/dev/generate-briefs.mjs");
+
+  const root = await mkdtemp(path.join(tmpdir(), "tdg-e2e-"));
+  try {
+    // 1. A run that searched, then fetched what the search returned.
+    const transcript = normalizeTranscript("s1", [
+      { event: { type: "turn/start", seq: 1, time: 1, data: { turn: 0 } } },
+      { event: { type: "tool/call", seq: 2, time: 2, data: { turn: 0, name: MCP("literature_search"), callId: "c1", arguments: { query: "aspirin" } } } },
+      { event: { type: "tool/result", seq: 3, time: 3, data: { turn: 0, callId: "c1", message: { callId: "c1", content: [{ type: "text", text: '{"hits":[{"doi":"10.1001/abc"}]}' }] } } } },
+      { event: { type: "tool/call", seq: 4, time: 4, data: { turn: 1, name: MCP("open_access_full_text"), callId: "c2", arguments: { identifier: "10.1001/abc" } } } },
+      { event: { type: "tool/result", seq: 5, time: 5, data: { turn: 1, callId: "c2", message: { callId: "c2", content: [{ type: "text", text: "full text" }] } } } },
+    ]);
+    const sessions = [{ sessionId: "s1", capability: "probe-capability", transcript }];
+
+    // 2. What the terminal hook derives, verbatim.
+    const edges = executedToolEdges({ runId: "run_real_1", sessions });
+    const traces = goldenTraces({ runId: "run_real_1", sessions });
+    assert.equal(edges.length, 1, "the run established one pair");
+    assert.equal(traces[0].steps.length, 2);
+
+    // 3. Collected into the corpus, and the graph rebuilt from it.
+    await writeFixtureCapability(root, FIXTURE_TOOLS);
+    await writeSideFiles(root, []);
+    await writeFile(path.join(root, "executed-edges.jsonl"), serializeCorpus(mergeReceipts([JSON.stringify(edges[0])]).edges), "utf8");
+    assert.equal(run(buildScript, buildArgs(root)).status, 0);
+
+    // 4. The trace store the generator reads, as the hook writes it.
+    await mkdir(path.join(root, "traces"), { recursive: true });
+    await writeFile(path.join(root, "traces", "run_real_1.json"),
+      JSON.stringify({ schemaVersion: "tool-trace/1", runId: "run_real_1", traces }), "utf8");
+    await mkdir(path.join(root, "manifests"), { recursive: true });
+    await writeFile(path.join(root, "manifests", "probe-capability.json"), JSON.stringify({
+      produces: [{ contractKind: "probe-report", outputs: [{ path: "report.md", required: true }], checks: ["requiredOutputsExist"] }],
+    }), "utf8");
+
+    // 5. The generator, now able to ground a draft in a run that really happened.
+    const code = await generate([
+      `--graphs=${path.join(root, "graphs")}`,
+      `--out=${path.join(root, "generated")}`,
+      `--traces=${path.join(root, "traces")}`,
+      `--manifests=${path.join(root, "manifests")}`,
+      "--min-stages=1",
+    ]);
+    assert.equal(code, 0);
+
+    const outDir = path.join(root, "generated", "probe-capability");
+    const draft = JSON.parse(await readFile(path.join(outDir, "briefs.draft.json"), "utf8"));
+    assert.ok(draft.briefs.length > 0, "an executed edge finally produced a draft");
+    assert.equal(draft.briefs[0].title, null, "the prose still waits for the writing step, which needs a model");
+
+    const requests = (await readdir(path.join(outDir, "requests"))).filter((entry) => entry.endsWith(".request.json"));
+    const request = JSON.parse(await readFile(path.join(outDir, "requests", requests[0]), "utf8"));
+    assert.equal(request.goldenTrace?.runId, "run_real_1", "the request is grounded in the run that proved the edge");
+    assert.deepEqual(request.goldenTrace.steps.map((step) => step.tool), [MCP("literature_search"), MCP("open_access_full_text")]);
+
+    const reference = JSON.parse(await readFile(path.join(outDir, "hidden", `${draft.briefs[0].id}.reference.json`), "utf8"));
+    assert.deepEqual(reference.expectedArtifacts, [{ path: "report.md", schema: "probe-report" }]);
+    assert.ok(reference.deterministicChecks.includes("requiredOutputsExist"));
+    const grader = JSON.parse(await readFile(path.join(outDir, "hidden", "grader.json"), "utf8"));
+    assert.equal(grader.contractKind, "probe-report");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -39,6 +39,7 @@
  * @module
  */
 
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 import { referenceIdentifiers } from "@evimed/domain/clinical-evidence";
@@ -100,25 +101,34 @@ export function carriedIdentifiers(value) {
  * session whose parts carry no ordering at all still yields transcript order,
  * which is the order the kernel wrote them in.
  *
+ * Reads the *normalized* `RunTranscript` vocabulary — `part.status`,
+ * `part.input`, `part.output`, `message.turn` — because that is what
+ * `runtimeManager.sessionTranscript` returns and therefore what
+ * `collectRunTranscripts` hands this module. The ledger's own shape nests the
+ * same fields under `part.state` (`transcriptToLedgerMessages` builds it), and
+ * reading that shape here finds no tool call in any real run while every test
+ * written against the same wrong assumption stays green. This module did
+ * exactly that until it was checked against the adapter.
+ *
  * @param {{transcript?: any}} session
- * @returns {{tool: string, input: unknown, output: unknown}[]}
+ * @returns {{tool: string, input: unknown, output: unknown, turn: number}[]}
  */
 export function completedToolCalls(session) {
-  /** @type {{tool: string, input: unknown, output: unknown, seq: number}[]} */
+  /** @type {{tool: string, input: unknown, output: unknown, turn: number, seq: number}[]} */
   const calls = [];
   let index = 0;
   for (const message of session?.transcript?.messages ?? []) {
     for (const part of message?.parts ?? []) {
       index += 1;
-      if (part?.type !== "tool" || part?.state?.status !== "completed") continue;
-      if (part?.state?.error) continue;
+      if (part?.type !== "tool" || part?.status !== "completed" || part?.error) continue;
       const tool = String(part?.tool ?? "");
       if (!tool) continue;
       calls.push({
         tool,
-        input: part.state.input,
-        output: part.state.output ?? part.state.result ?? null,
-        seq: Number(part.state.completedSeq) || index,
+        input: part.input,
+        output: part.output,
+        turn: Number(message?.turn) || 0,
+        seq: Number(part.completedSeq) || index,
       });
     }
   }
@@ -242,4 +252,113 @@ export async function persistExecutedToolEdges({ project, run, sessions }) {
     await writeFileAtomicNoFollow(project.rootDir, absolute, serializeExecutedEdges(receipts), { encoding: "utf8", mode: 0o600 });
   });
   return { path: path.relative(project.rootDir, absolute), edges: receipts.length };
+}
+
+/* ------------------------------------------------------------- golden traces */
+
+/**
+ * @typedef {object} GoldenTraceStep
+ * @property {number} turn
+ * @property {string} tool
+ * @property {Record<string, unknown>} args
+ * @property {string} returnDigest   sha256 of the result text, so a replay is checkable
+ * @property {string[]} outputKeys   the top-level keys of a structured result
+ */
+
+/**
+ * The call sequence a finished run actually performed, per capability.
+ *
+ * Hidden knowledge: the plan has the corpus built "execute first, write the
+ * task second", and `generate-briefs.mjs` says in its own header that it cannot
+ * execute — it needs a fixture environment and a live kernel. That was read as
+ * "the golden trace has to wait for an execution harness". It does not. The
+ * runs that established the executed edges *already performed the chain*, and
+ * the transcript records every call, its arguments and its result. A trace read
+ * off a real run is stronger evidence than one synthesised in a fixture
+ * environment, because a fixture environment is a claim about the world and a
+ * run is the world.
+ *
+ * `returnDigest` rather than the result itself: the trace is committed to a
+ * corpus, and tool results carry retrieved source text. A digest is enough to
+ * check a replay landed in the same place and carries nothing a reader of the
+ * corpus is not entitled to.
+ *
+ * Turns come from the normalized transcript's own `message.turn`, because the
+ * plan grades a turn as a unit — any dependency-compatible order inside one
+ * turn is equally correct — and a trace that flattened them would grade a
+ * legitimate reordering as a deviation.
+ *
+ * @param {{runId: string, sessions: readonly any[]}} input
+ * @returns {{capability: string, sessionId: string, runId: string, steps: GoldenTraceStep[]}[]}
+ */
+export function goldenTraces(input) {
+  const runId = String(input.runId ?? "");
+  if (!runId) return [];
+  /** @type {{capability: string, sessionId: string, runId: string, steps: GoldenTraceStep[]}[]} */
+  const traces = [];
+  for (const session of input.sessions ?? []) {
+    const capability = String(session?.capability ?? "");
+    if (!capability) continue;
+    /** @type {GoldenTraceStep[]} */
+    const steps = [];
+    for (const call of completedToolCalls(session)) {
+      const text = typeof call.output === "string" ? call.output : asText(call.output);
+      steps.push({
+        turn: call.turn,
+        tool: call.tool,
+        args: call.input && typeof call.input === "object" ? /** @type {Record<string, unknown>} */ (call.input) : {},
+        returnDigest: `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}`,
+        outputKeys: outputKeysOf(text),
+      });
+    }
+    if (steps.length) traces.push({ capability, sessionId: String(session.sessionId ?? ""), runId, steps });
+  }
+  return traces;
+}
+
+/**
+ * The top-level keys of a structured result, or none.
+ *
+ * A grader uses these to check a replay produced the same *shape* without
+ * comparing the values, which is what makes a check survive a source that
+ * legitimately returns different records for the same query.
+ * @param {string} text @returns {string[]}
+ */
+function outputKeysOf(text) {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed.startsWith("{")) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.keys(parsed).sort().slice(0, 24) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Where one project's golden traces live, beside its receipts. */
+export const TRACE_DIR_NAME = "tool-traces";
+
+/** @param {{ metaDir: string }} project @param {string} runId @returns {string} */
+export function tracePath(project, runId) {
+  return path.join(project.metaDir, TRACE_DIR_NAME, `${runId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`);
+}
+
+/**
+ * Write one run's golden traces beside its edge receipts.
+ * @param {{project: any, run: {id: string}, sessions: readonly any[]}} input
+ * @returns {Promise<{path: string | null, traces: number, steps: number}>}
+ */
+export async function persistGoldenTraces({ project, run, sessions }) {
+  const traces = goldenTraces({ runId: run.id, sessions });
+  if (!traces.length) return { path: null, traces: 0, steps: 0 };
+  const absolute = tracePath(project, run.id);
+  const text = `${JSON.stringify({ schemaVersion: "tool-trace/1", runId: run.id, traces }, null, 2)}\n`;
+  await withProjectStorageMutation(project, async () => {
+    await writeFileAtomicNoFollow(project.rootDir, absolute, text, { encoding: "utf8", mode: 0o600 });
+  });
+  return {
+    path: path.relative(project.rootDir, absolute),
+    traces: traces.length,
+    steps: traces.reduce((total, trace) => total + trace.steps.length, 0),
+  };
 }
