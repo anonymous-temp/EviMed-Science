@@ -167,6 +167,43 @@ class RecoveryVolumeTests(unittest.TestCase):
             self.assertFalse((root / "bomb-target").exists())
             self.assertFalse(any(path.name.startswith(".open-science-restore-") for path in root.iterdir()))
 
+    def test_directory_declaring_payload_bytes_consumes_budget_before_directory_creation(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value).resolve()
+            archive = root / "directory-payload.tar.gz"
+            payload = b"x" * 2048
+            with tarfile.open(archive, "w:gz") as output:
+                root_entry = tarfile.TarInfo(".")
+                root_entry.type = tarfile.DIRTYPE
+                root_entry.uid = os.getuid()
+                root_entry.gid = os.getgid()
+                output.addfile(root_entry)
+                directory = tarfile.TarInfo("malicious-directory")
+                directory.type = tarfile.DIRTYPE
+                directory.size = len(payload)
+                directory.uid = os.getuid()
+                directory.gid = os.getgid()
+                output.addfile(directory, io.BytesIO(payload))
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            archive.with_name(archive.name + ".sha256").write_text(f"{digest}  {archive.name}\n")
+            limits = {
+                "OPEN_SCIENCE_RECOVERY_MAX_COMPRESSED_BYTES": str(archive.stat().st_size),
+                "OPEN_SCIENCE_RECOVERY_MAX_MEMBERS": "4",
+                "OPEN_SCIENCE_RECOVERY_MAX_DEPTH": "4",
+                "OPEN_SCIENCE_RECOVERY_MAX_PATH_BYTES": "128",
+                "OPEN_SCIENCE_RECOVERY_MAX_FILE_BYTES": "4096",
+                "OPEN_SCIENCE_RECOVERY_MAX_EXPANDED_BYTES": "1024",
+            }
+            cwd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.dict(os.environ, limits, clear=False), self.assertRaises(MODULE.RecoveryError) as raised:
+                    MODULE.restore_numeric(archive.name, root / "directory-target", cwd_fd=cwd,
+                                           require_privilege=False)
+            finally:
+                os.close(cwd)
+            self.assertEqual(raised.exception.code, "recovery_limit_exceeded")
+            self.assertFalse((root / "directory-target").exists())
+
     def test_descriptor_held_archive_survives_ancestor_replacement_without_reading_the_link_target(self):
         with tempfile.TemporaryDirectory() as value:
             root = Path(value).resolve()
@@ -258,6 +295,44 @@ class RecoveryVolumeTests(unittest.TestCase):
                 self.assertTrue(raised.exception.installed)
                 self.assertEqual((root / "target/payload.txt").read_bytes(), b"installed payload\n")
                 self.assertFalse((root / "temporary").exists())
+
+    def test_every_post_rename_open_or_stat_failure_reports_installed_durability_unknown(self):
+        for probe in ["open", "stat"]:
+            with self.subTest(probe=probe), tempfile.TemporaryDirectory() as value:
+                root = Path(value).resolve()
+                parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                os.mkdir("temporary", dir_fd=parent_fd)
+                temporary_fd = os.open("temporary", os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
+                payload = os.open("payload.txt", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600,
+                                  dir_fd=temporary_fd)
+                os.write(payload, b"installed payload\n")
+                os.close(payload)
+                os.close(temporary_fd)
+                real_open = os.open
+                real_fstat = os.fstat
+                fstat_calls = {"count": 0}
+
+                def open_probe(name, *args, **kwargs):
+                    if probe == "open" and name == "target":
+                        raise OSError("synthetic target open failure")
+                    return real_open(name, *args, **kwargs)
+
+                def stat_probe(descriptor):
+                    fstat_calls["count"] += 1
+                    if probe == "stat" and fstat_calls["count"] == 2:
+                        raise OSError("synthetic target stat failure")
+                    return real_fstat(descriptor)
+
+                try:
+                    with patch.object(MODULE.os, "open", side_effect=open_probe), \
+                            patch.object(MODULE.os, "fstat", side_effect=stat_probe), \
+                            self.assertRaises(MODULE.RecoveryError) as raised:
+                        MODULE.commit_staging(parent_fd, "temporary", "target")
+                finally:
+                    os.close(parent_fd)
+                self.assertEqual(raised.exception.code, "numeric_owner_durability_unknown")
+                self.assertTrue(raised.exception.installed)
+                self.assertEqual((root / "target/payload.txt").read_bytes(), b"installed payload\n")
 
     def test_linux_capability_mask_requires_every_capability_used_by_restore(self):
         required = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3)

@@ -261,7 +261,7 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertFalse(receipt.exists())
 
     def test_marker_failure_reports_orphan_without_non_atomic_name_drop(self):
-        for marker_mode in ["comment-failure", "marker-mismatch"]:
+        for marker_mode in ["comment-failure", "marker-mismatch", "interrupted"]:
             with self.subTest(marker_mode=marker_mode), tempfile.TemporaryDirectory() as root:
                 directory = Path(root).resolve()
                 output = directory / "member"
@@ -307,8 +307,9 @@ class PostgresBackupTests(unittest.TestCase):
                         if "SELECT oid::text" in sql:
                             return "24680\n"
                         if sql.startswith("COMMENT ON DATABASE"):
-                            if marker_mode == "comment-failure":
-                                raise MODULE.BackupError("postgres_command_failed")
+                            if marker_mode in {"comment-failure", "interrupted"}:
+                                code = "postgres_backup_interrupted" if marker_mode == "interrupted" else "postgres_command_failed"
+                                raise MODULE.BackupError(code)
                             return ""
                         if "shobj_description" in sql:
                             return "evimed-recovery-owner:another-attempt\n"
@@ -326,12 +327,24 @@ class PostgresBackupTests(unittest.TestCase):
                         "targetDatabase": target_database,
                         "targetDatabaseOid": "24680",
                     },
-                    "operationErrorCode": "postgres_command_failed" if marker_mode == "comment-failure"
-                    else "postgres_restore_ownership_unverified",
+                    "operationErrorCode": "postgres_backup_interrupted" if marker_mode == "interrupted"
+                    else ("postgres_command_failed" if marker_mode == "comment-failure"
+                          else "postgres_restore_ownership_unverified"),
                 })
                 self.assertNotIn("dropdb", tools)
                 self.assertEqual(sum(query.startswith("SELECT oid::text FROM pg_database") for query in queries), 1)
-                self.assertFalse(receipt.exists())
+                durable = json.loads(receipt.read_text())
+                self.assertEqual(durable["status"], "cleanup_required")
+                self.assertEqual(durable["targetDatabase"], target_database)
+                self.assertEqual(durable["targetDatabaseOid"], "24680")
+                self.assertEqual(durable["archive"], archive.name)
+                self.assertEqual(durable["archiveSha256"], MODULE.digest(archive))
+                self.assertEqual(durable["sourceIdentity"], identity)
+                self.assertEqual(durable["operationErrorCode"], raised.exception.details["operationErrorCode"])
+                expected_marker_state = "mismatch" if marker_mode == "marker-mismatch" else "not-established"
+                self.assertEqual(durable["markerState"], expected_marker_state)
+                self.assertNotIn("ownershipToken", durable)
+                self.assertFalse(any(path.name.startswith(".restore-receipt-") for path in directory.iterdir()))
 
     def test_main_fallback_preserves_the_current_persisted_drill_intent(self):
         with tempfile.TemporaryDirectory() as root:
