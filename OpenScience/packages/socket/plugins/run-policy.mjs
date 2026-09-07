@@ -172,6 +172,8 @@ function revisionSubmissionGrantMatches(entry, item, grant) {
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
+  /** A child may submit only the one parent-plan item that created it. */
+  const childOwners = new Map()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
   const sessionState = (sessionId) => {
@@ -205,6 +207,37 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       state.set(sessionId, entry)
     }
     return entry
+  }
+
+  /** @param {string} sessionId @returns {{ entry: Record<string, any>, binding: Record<string, any>|null }} */
+  const ownedSessionState = (sessionId) => {
+    const binding = childOwners.get(sessionId)
+    if (!binding) return { entry: sessionState(sessionId), binding: null }
+    const entry = sessionState(binding.parentSessionId)
+    if (entry.runId !== binding.runId) {
+      childOwners.delete(sessionId)
+      return { entry: sessionState(sessionId), binding: null }
+    }
+    return { entry, binding }
+  }
+
+  /** @param {string} childSessionId @param {Record<string, any>} entry @param {Record<string, any>} item */
+  const bindChildOwner = (childSessionId, entry, item) => {
+    if (!childSessionId) return
+    childOwners.set(childSessionId, {
+      parentSessionId: entry.sessionId,
+      runId: entry.runId,
+      deliverableId: item.id,
+    })
+  }
+
+  /** @param {Record<string, any>} run @param {string} childSessionId */
+  const awaitOwnedSubagent = async (run, childSessionId) => {
+    try {
+      return toSubagentOutcome(run, await run.result)
+    } finally {
+      childOwners.delete(childSessionId)
+    }
   }
 
   const store = () => ctx.get('evimedRun')
@@ -299,7 +332,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
-    const entry = sessionState(call.sessionId)
+    const { entry } = ownedSessionState(call.sessionId)
     let writers = writersByRun.get(entry.runId)
     if (!writers) {
       writers = new Map()
@@ -332,8 +365,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   ctx.effect(() => guardTools(ctx, (call) => {
     if (call.name !== 'evimed_submit_deliverable') return undefined
-    const entry = sessionState(call.sessionId)
+    const { entry, binding } = ownedSessionState(call.sessionId)
     const id = String(call.args?.deliverableId ?? '')
+    if (binding && binding.deliverableId !== id) return undefined
     const attempts = entry.attempts.get(id) ?? 0
     const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === id)
     const revisionGrant = entry.revisionSubmissionGrants.get(id)
@@ -367,7 +401,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (call.name !== 'write' && call.name !== 'edit') return
     const path = String(call.args?.path ?? call.args?.file_path ?? '')
     if (!path) return
-    const entry = sessionState(call.sessionId)
+    const { entry } = ownedSessionState(call.sessionId)
     entry.producedTexts = entry.producedTexts.filter((/** @type {any} */ item) => item.path !== path)
     entry.producedTexts.push({ path, text: String(call.args?.content ?? call.args?.new_string ?? '') })
   }))
@@ -493,6 +527,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       description: [
         '把一件交付物委派给能力目录中的一项能力。子代理会带着这件能力的技能正文、工具集与人设启动，把文件写进 deliverables/<交付物 id>/ 并自行提交。',
         '依赖未满足时会排队，不需要你自己排序。',
+        '委派前不要替子代理检索、读取来源或预写交付文件；需要证据时，让同一个子代理完成完整证据链。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
@@ -548,12 +583,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             issues: [issue('subagent_start_failed', `分工没有启动：${detail}`)],
           }
         }
-        recordStartedSubagent(ctx, entry, item, injected, run)
+        const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run)
+        bindChildOwner(childSessionId, entry, item)
         entry.budget.children += 1
         Object.assign(item, advancePlanItem(item, 'delegate'))
         await putPlanIndex(store(), entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
-        const outcome = toSubagentOutcome(run, await run.result)
+        const outcome = await awaitOwnedSubagent(run, childSessionId)
         item.childSessionId = outcome.childSessionId
         recordSubagent(ctx, entry, item.id, {
           deliverableId: item.id,
@@ -562,6 +598,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           status: outcome.stopReason,
           childSessionId: outcome.childSessionId,
         })
+        // The gate receipt is the completion fact. A child can submit and then
+        // fail while formatting its final structured reply; retrying at that
+        // point cannot improve the frozen accepted bytes and can only lose the
+        // receipt or attempt an illegal accepted -> failed transition.
+        if (item.status === 'accepted') {
+          await putPlanIndex(store(), entry)
+          return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status } }
+        }
         const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
         if (settlement.action === 'redelegate') {
           entry.redelegated.add(item.id)
@@ -572,10 +616,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // after a child had already failed, which is why nothing ever saw it.
           const parent = ctx.get('agents')?.get?.(call.agentId)
           const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
-          recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true })
+          const retryChildSessionId = recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true })
+          bindChildOwner(retryChildSessionId, entry, item)
           await putPlanIndex(store(), entry)
           await putRunMirror(ctx, entry, config.bundleVersion)
-          const retried = toSubagentOutcome(retry, await retry.result)
+          const retried = await awaitOwnedSubagent(retry, retryChildSessionId)
           recordSubagent(ctx, entry, item.id, {
             deliverableId: item.id,
             capability: item.capability,
@@ -584,6 +629,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             childSessionId: retried.childSessionId,
             retried: true,
           })
+          if (item.status === 'accepted') {
+            await putPlanIndex(store(), entry)
+            return { ok: true, data: { deliverableId: item.id, childSessionId: retried.childSessionId, report: retried.structured ?? null, retried: true, status: item.status } }
+          }
           if (retried.stopReason !== 'completed') {
             Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
             await putPlanIndex(store(), entry)
@@ -613,9 +662,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
       },
       async execute(args, call) {
-        const entry = sessionState(call.sessionId)
+        const { entry, binding } = ownedSessionState(call.sessionId)
+        if (binding && binding.deliverableId !== args.deliverableId) {
+          return { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', `此能力子代理只负责交付物「${binding.deliverableId}」。`)] }
+        }
         const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
         if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
+        if (binding && item.childSessionId !== call.sessionId) {
+          return { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', '此能力子代理已不再是该交付物的当前负责人。')] }
+        }
         // Counted after the verdict, not before it: what a submission costs
         // depends on whether the gate could read it. See below.
         const attempts = (entry.attempts.get(item.id) ?? 0) + 1
