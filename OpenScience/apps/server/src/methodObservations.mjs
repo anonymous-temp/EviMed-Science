@@ -31,7 +31,10 @@
  *   keying exists to prevent;
  * - a name in the receipt that resolves to no approved method is another
  *   source's entry sharing the same mount directory, and is passed through to
- *   the ledger's receipt without being counted as anything.
+ *   the ledger's receipt without being counted as anything;
+ * - a method read in a session that produced no deliverable has no mounted
+ *   digest and no verdict, so it is reported as read and attributed to nothing.
+ *   It still counts as "not passed over", which is the one claim it supports.
  *
  * @module
  */
@@ -119,6 +122,7 @@ export function invokedSkillsBySession(sessions) {
  * @property {{name: string, digest: string}[]} methodsLoaded
  * @property {{name: string, digest: string}[]} methodsInvoked
  * @property {{name: string, mounted: string, current: string}[]} mismatched
+ * @property {string[]} invokedWithoutMount
  */
 
 /**
@@ -183,11 +187,34 @@ export function runMethodObservations(input) {
     }
   }
 
+  // Read in a session that produced no deliverable.
+  //
+  // The mount is recorded on the delegation receipt, so a run that never
+  // delegates has no receipt and every loop above skips it — while the root
+  // session may well have called the `skill` tool on a learned method and read
+  // it. The whole open-domain answer line works that way, and for it this
+  // module reported nothing at all *and* counted every approved method as
+  // "available and passed over", which is the opposite of what happened.
+  //
+  // MemOS's local plugin takes the same signal at the moment of the load, from
+  // `skill_get`, and calls it a use. Ours is read back off the transcript,
+  // which costs nothing extra and cannot be forgotten by a caller.
+  //
+  // It is not an attribution and never becomes one: with no receipt there is no
+  // mounted digest, so there is no text to credit and no deliverable verdict to
+  // credit it with. It is a name that was read, which is enough to say the
+  // method was not passed over.
+  const invokedAnywhere = new Set([...invokedBySession.values()].flatMap((names) => [...names]));
+  const invokedWithoutMount = (input.methods ?? [])
+    .filter((method) => !loaded.has(method.name) && invokedAnywhere.has(toSkillName(method.name, "capsule")))
+    .map((method) => method.name);
+
   // Available and not chosen. Counted once per run, because the mount is a
   // property of the run — every child of a run is handed the same directory —
   // so "not chosen" is a decision the selection made once, not per deliverable.
+  const used = new Set([...loaded.keys(), ...invokedWithoutMount]);
   const eligible = (input.methods ?? [])
-    .filter((method) => !loaded.has(method.name))
+    .filter((method) => !used.has(method.name))
     .map((method) => method.id);
 
   return {
@@ -196,5 +223,6 @@ export function runMethodObservations(input) {
     methodsLoaded: [...loaded.entries()].map(([name, digest]) => ({ name, digest })),
     methodsInvoked: [...invoked.entries()].map(([name, digest]) => ({ name, digest })),
     mismatched,
+    invokedWithoutMount,
   };
 }
