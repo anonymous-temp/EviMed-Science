@@ -1708,6 +1708,9 @@ async function dshDispatchFixture() {
     workspaceDir: path.join(rootDir, "workspace"),
     runtimeDir: path.join(rootDir, "runtime"),
   };
+  // A real project has its workspace directory from creation; the brief writer
+  // creates subdirectories inside that scope but never the scope root itself.
+  await mkdir(project.workspaceDir, { recursive: true, mode: 0o700 });
   const manager = new RuntimeManager({ runtimeMode: "mock", allowMockRuntime: true, production: false });
   return { rootDir, project, manager };
 }
