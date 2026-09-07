@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.mark.skipif(not os.getenv("EVIMED_AUDIT_CONTAINER_TEST_IMAGE"), reason="explicit cached Linux image required")
-@pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed", "preparation_failed"])
+@pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed", "preparation_failed", "succeeded_descendant", "failed_descendant", "signal_descendant", "timeout_descendant", "worker_signal_descendant"])
 def test_analysis_owned_private_directories_preserve_outcome_and_cleanup(mode):
     repo = Path(__file__).resolve().parents[3]
     script = r'''
@@ -20,13 +20,20 @@ sys.path[:0]=['/src/OpenScience/deploy/specialist-adapter','/src/项目代码/�
 from evimed_specialist_adapter import audit_receipt
 import evimed_mr_job as jobs
 import evimed_local_inputs as inputs
-mode=MODE
+requested_mode=MODE
+with_descendant=requested_mode.endswith("_descendant")
+mode=requested_mode.removesuffix("_descendant")
 key=Path('/run/test-key');key.write_bytes(b'test-only-key');key.chmod(0o400)
 os.environ['EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE']=str(key)
 workspace=Path('/data/users/u/projects/p/workspace');workspace.mkdir(parents=True)
 output=workspace/'mendelian-randomization-runs/mr-cleanup-test/output';output.mkdir(parents=True)
 runner=Path('/agent/evimed_runner.py')
-runner.write_text("import json,os,signal,sys,tempfile,time\nfrom pathlib import Path\nos.fchdir(int(sys.argv[-1]))\nassert os.getuid()==65532\nanalysis=Path(tempfile.mkdtemp(prefix='mr_analysis_'))\nassert analysis.stat().st_mode&0o777==0o700\n(analysis/'result.csv').write_text('estimate,pvalue\\n0.2,0.01\\n')\nmode="+repr(mode)+"\nif mode in {'timeout','worker_signal'}: time.sleep(60)\nif mode=='cleanup_failed': analysis.chmod(0o000)\nPath('result.json').write_text(json.dumps({'status':'failed','error':'deliberate-analysis-failure'} if mode=='failed' else {'status':'succeeded'}))\nif mode=='signal': os.kill(os.getpid(),signal.SIGTERM)\nsys.exit(7 if mode=='failed' else 0)\n")
+runner_body="import json,os,signal,subprocess,sys,tempfile,time\nfrom pathlib import Path\nos.fchdir(int(sys.argv[-1]))\nassert os.getuid()==65532\nanalysis=Path(tempfile.mkdtemp(prefix='mr_analysis_'))\nassert analysis.stat().st_mode&0o777==0o700\n(analysis/'result.csv').write_text('estimate,pvalue\\n0.2,0.01\\n')\nmode="+repr(mode)+"\n"
+if with_descendant:
+ descendant_code="import signal,time;from pathlib import Path;signal.signal(signal.SIGTERM,signal.SIG_IGN);Path('/tmp/descendant-ready').touch();time.sleep(60)"
+ runner_body+="child=subprocess.Popen([sys.executable,'-c',"+repr(descendant_code)+"])\nPath('/tmp/descendant-pid').write_text(str(child.pid));Path('/tmp/descendant-pid').chmod(0o644)\nwhile not Path('/tmp/descendant-ready').exists(): time.sleep(.01)\n"
+runner_body+="if mode in {'timeout','worker_signal'}: time.sleep(60)\nif mode=='cleanup_failed': analysis.chmod(0o000)\nPath('result.json').write_text(json.dumps({'status':'failed','error':'deliberate-analysis-failure'} if mode=='failed' else {'status':'succeeded'}))\nif mode=='signal': os.kill(os.getpid(),signal.SIGTERM)\nsys.exit(7 if mode=='failed' else 0)\n"
+runner.write_text(runner_body)
 request={'exposure':'BMI','outcome':'CHD'}
 if mode=='preparation_failed':
  source={'type':'local_file','columnMapping':{'snp':'SNP','beta':'beta','se':'se','effect_allele':'effect_allele','other_allele':'other_allele','eaf':'eaf','pval':'pval'},'sampleSize':10000,'instrumentsPreclumped':True,'clumpingProvenance':'Provided independent instruments; LD not rechecked.'}
@@ -38,7 +45,7 @@ job=jobs.Job(workspace=workspace,output_root=output,data_root=Path('/data'),requ
 if mode=='worker_signal':
  def interrupt():
   for _ in range(100):
-   if any(list(p.glob('mr_analysis_*')) for p in Path('/tmp').glob('evimed-mr-scratch-*')):
+   if (not with_descendant or Path('/tmp/descendant-ready').exists()) and any(list(p.glob('mr_analysis_*')) for p in Path('/tmp').glob('evimed-mr-scratch-*')):
     os.kill(os.getpid(),signal.SIGTERM);return
    time.sleep(.02)
   raise AssertionError('runner never started')
@@ -64,7 +71,12 @@ if mode=='cleanup_failed':
 else:
  assert not remaining,[(str(p),oct(p.stat().st_mode&0o777)) for p in remaining]
  assert 'cleanupError' not in outcome
-print('verified-cleanup-'+mode)
+if with_descendant:
+ descendant=int(Path('/tmp/descendant-pid').read_text())
+ proc=Path('/proc')/str(descendant)/'stat'
+ state=proc.read_text().rsplit(')',1)[1].split()[0] if proc.exists() else None
+ assert state in {None,'Z','X'}, {'descendantStillRunning':True,'state':state,'outcome':outcome}
+print('verified-cleanup-'+requested_mode)
 '''.replace("MODE", repr(mode))
     name = "evimed-mr-cleanup-test-" + uuid.uuid4().hex[:16]
     command = ["docker", "run", "--name", name, "--rm", "--pull", "never", "--network", "none", "--read-only",
