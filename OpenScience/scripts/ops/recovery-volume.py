@@ -214,8 +214,13 @@ def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
                     or any(key not in {"path", "size", "mtime", "uid", "gid"} for key in member.pax_headers)):
                 raise RecoveryError("numeric_owner_archive_invalid")
             seen.add(normalized)
+            if member.size < 0 or expanded + member.size > limits.expanded:
+                raise RecoveryError("recovery_limit_exceeded")
+            expanded += member.size
             metadata = (parts, member.uid, member.gid, member.mode)
             if member.isdir():
+                if member.size != 0:
+                    raise RecoveryError("numeric_owner_archive_invalid")
                 descriptor = ensure_directory(staging_fd, parts)
                 os.close(descriptor)
                 if parts:
@@ -225,9 +230,8 @@ def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
                 continue
             if not parts:
                 raise RecoveryError("numeric_owner_archive_invalid")
-            if member.size > limits.file or expanded + member.size > limits.expanded:
+            if member.size > limits.file:
                 raise RecoveryError("recovery_limit_exceeded")
-            expanded += member.size
             parent = ensure_directory(staging_fd, parts[:-1])
             try:
                 descriptor = os.open(parts[-1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -293,18 +297,25 @@ def commit_staging(parent_fd: int, staging_name: str, target_name: str) -> None:
         os.close(staging_fd)
         raise RecoveryError("numeric_owner_target_changed") from None
     target_fd = None
+    post_rename_failure = None
     try:
         target_fd = os.open(target_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
         if identity(os.fstat(target_fd))[:2] != staging_identity:
-            raise RecoveryError("numeric_owner_durability_unknown", installed=True)
-        try:
-            os.fsync(parent_fd)
-        except (OSError, InterruptedError):
-            raise RecoveryError("numeric_owner_durability_unknown", installed=True) from None
+            raise OSError("installed target identity changed")
+        os.fsync(parent_fd)
+    except BaseException as error:
+        post_rename_failure = error
     finally:
-        os.close(staging_fd)
-        if target_fd is not None:
-            os.close(target_fd)
+        for descriptor in (target_fd, staging_fd):
+            if descriptor is None:
+                continue
+            try:
+                os.close(descriptor)
+            except BaseException as error:
+                if post_rename_failure is None:
+                    post_rename_failure = error
+    if post_rename_failure is not None:
+        raise RecoveryError("numeric_owner_durability_unknown", installed=True) from None
 
 
 def remove_tree(parent_fd: int, name: str) -> None:

@@ -428,21 +428,38 @@ def recovery_config() -> tuple[list[str], str, str, Path, list[str]]:
     return base, database, role, passphrase, crypto
 
 
-def atomic_new_json(directory: PinnedDirectory, name: str, value: dict) -> None:
-    descriptor = directory.open_file(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+def atomic_receipt_json(directory: PinnedDirectory, name: str, value: dict) -> None:
+    temporary = ".restore-receipt-" + uuid.uuid4().hex + ".tmp"
+    descriptor = directory.open_file(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as output:
             json.dump(value, output, sort_keys=True, separators=(",", ":"))
             output.write("\n")
             output.flush()
             os.fsync(output.fileno())
-    except Exception:
+        os.rename(temporary, name, src_dir_fd=directory.descriptor, dst_dir_fd=directory.descriptor)
+        os.fsync(directory.descriptor)
+    finally:
         try:
-            os.unlink(name, dir_fd=directory.descriptor)
+            os.unlink(temporary, dir_fd=directory.descriptor)
         except FileNotFoundError:
             pass
-        raise
-    os.fsync(directory.descriptor)
+
+
+def cleanup_required_receipt(bundle, source: dict, target: str, target_oid, marker_state: str,
+                             operation_code: str) -> dict:
+    return {
+        "schemaVersion": 1,
+        "status": "cleanup_required",
+        "archive": bundle.archive_name,
+        "archiveSha256": bundle.receipt["archiveSha256"],
+        "sourceIdentity": source,
+        "targetDatabase": target,
+        "targetDatabaseOid": target_oid,
+        "markerState": marker_state,
+        "operationErrorCode": operation_code,
+        "recordedAt": now(),
+    }
 
 
 def publish_recovery_files(source: PinnedDirectory, files: list[tuple[str, str]], destination: PinnedDirectory) -> None:
@@ -704,13 +721,26 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
         marker = "evimed-recovery-owner:" + uuid.uuid4().hex
         creation_confirmed = False
         created_oid = None
+        marker_state = "creation-pending"
+        atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
+            bundle, identity, target_database, None, marker_state, "postgres_restore_in_progress"
+        ))
         try:
             command(base + ["createdb", "--template=template0", "-U", role, target_database], timeout=60)
             creation_confirmed = True
             created_oid = clone_oid(sql, target_database)
+            marker_state = "not-established"
+            atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
+                bundle, identity, target_database, created_oid, marker_state, "postgres_restore_in_progress"
+            ))
             command(sql + [f"COMMENT ON DATABASE {target_database} IS '{marker}';"], timeout=60)
+            marker_state = "mismatch"
             if clone_marker(sql, target_database) != marker:
                 raise BackupError("postgres_restore_ownership_unverified")
+            marker_state = "established"
+            atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
+                bundle, identity, target_database, created_oid, marker_state, "postgres_restore_in_progress"
+            ))
             plain = temporary.open_file("restore.dump", os.O_RDONLY)
             with os.fdopen(plain, "rb") as source:
                 command(base + ["pg_restore", "--exit-on-error", "--single-transaction", "--no-owner", "--no-acl", "--no-comments",
@@ -723,6 +753,7 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
             if restored != expected:
                 raise BackupError("restore_application_mismatch")
             if clone_marker(sql, target_database) != marker:
+                marker_state = "mismatch"
                 raise BackupError("postgres_restore_ownership_unverified")
             result = {
                 "schemaVersion": 1,
@@ -738,21 +769,22 @@ def restore_clone(archive_path: Path, target_database: str, receipt_path: Path) 
                 "restoredTablesSha256": table_digest(restored),
                 "verifiedAt": now(),
             }
-            atomic_new_json(receipt_parent, receipt_name, result)
+            atomic_receipt_json(receipt_parent, receipt_name, result)
             return result
         except Exception as error:
-            if creation_confirmed:
-                operation_code = error.code if isinstance(error, BackupError) else "postgres_restore_operation_failed"
-                raise BackupError("postgres_restore_cleanup_required", {
-                    "cleanupRequired": {
-                        "targetDatabase": target_database,
-                        "targetDatabaseOid": created_oid,
-                    },
-                    "operationErrorCode": operation_code,
-                }) from None
-            if isinstance(error, BackupError):
-                raise
-            raise BackupError("postgres_restore_operation_failed") from None
+            operation_code = error.code if isinstance(error, BackupError) else "postgres_restore_operation_failed"
+            if not creation_confirmed:
+                marker_state = "creation-unconfirmed"
+            atomic_receipt_json(receipt_parent, receipt_name, cleanup_required_receipt(
+                bundle, identity, target_database, created_oid, marker_state, operation_code
+            ))
+            raise BackupError("postgres_restore_cleanup_required", {
+                "cleanupRequired": {
+                    "targetDatabase": target_database,
+                    "targetDatabaseOid": created_oid,
+                },
+                "operationErrorCode": operation_code,
+            }) from None
     finally:
         if temporary is not None:
             temporary.cleanup()
