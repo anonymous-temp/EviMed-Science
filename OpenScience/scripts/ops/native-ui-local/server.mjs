@@ -75,6 +75,9 @@ app.runtimeManager.start = async project => {
     const child = spawn("/app/harness/node_modules/.bin/dsh", ["--profile", "evimed-runtime", "--patch", patchFile, "--no-open", "--port", String(port)], {
       cwd: project.workspaceDir, env: { ...process.env, DSH_HOME: runtimeHome, DSH_TELEMETRY_DISABLED: "1", NARB_DISABLE_NATIVE_CACHE: "1", DSH_PERMISSION_MODE: "workspace-write",
         EVIMED_PRESET_SKILLS_DIR: "/opt/evimed/skills", EVIMED_CAPABILITIES_DIR: "/opt/evimed/capabilities", EVIMED_CAPABILITY_SKILLS_DIR: "/opt/evimed/capability-skills",
+        // Deliberately empty here, and only here. `runtimeManager` materializes the active capsules' work-style methods into
+        // the project's runtime root and mounts that directory read-only; this fixture launches the kernel itself, with no
+        // product database behind it and therefore no capsule to mount. Empty is the plugin's documented "no capsule" value.
         EVIMED_CAPSULE_METHODS_DIR: "", EVIMED_CAPSULE_GATEWAY_URL: "", EVIMED_WORKLOAD_TOKEN_FILE: path.join(runtimeHome, "evimed-workload.token"), EVIMED_BUNDLE_VERSION: "0.1.0",
         EVIMED_ASK_USER: "0", EVIMED_CAPSULE_ACTIVE: "0", EVIMED_REVIEW_ENABLED: "0", EVIMED_MAX_STEPS: "3", EVIMED_MAX_TOKENS: "10000" }, stdio: ["ignore", "pipe", "pipe"] });
     processes.add(child);
