@@ -297,6 +297,12 @@ export class LearningService {
   /**
    * Retire a method. Unlike promotion this needs no evidence, because stopping
    * is always allowed and is always reversible by restoring a revision.
+   *
+   * There is no `revive`. There was, and it had no caller: `rollback` already
+   * restores an earlier revision, which is the reversal this docstring
+   * promises and the one the route exposes. Two ways to un-retire a method
+   * would have been two places for the status rules to drift, and the second
+   * one was reachable from nowhere.
    * @param {string} userId @param {string} methodId @param {{expectedRevision: number, reason?: string}} input
    */
   async retire(userId, methodId, input) {
@@ -307,12 +313,6 @@ export class LearningService {
       body: `${document.payload.frontmatter?.name}：${input.reason ?? "不再使用"}。`,
     });
     return updated;
-  }
-
-  /** @param {string} userId @param {string} methodId @param {{expectedRevision: number}} input */
-  async revive(userId, methodId, input) {
-    const document = await this.getMethod(userId, methodId);
-    return this.#setStatus(userId, methodId, "candidate", input.expectedRevision, document);
   }
 
   /**

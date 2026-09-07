@@ -193,7 +193,7 @@ test("rollback saves an earlier revision forward and never deletes the one it re
   );
 });
 
-test("retirement needs no evidence and says why, and reviving returns to candidate", async () => {
+test("retirement needs no evidence, says why, and is undone by the rollback the route exposes", async () => {
   const { learning, notices } = service();
   const created = await create(learning);
   const retired = await learning.retire("u1", created.id, { expectedRevision: created.revision, reason: "superseded by hand" });
@@ -201,8 +201,13 @@ test("retirement needs no evidence and says why, and reviving returns to candida
   assert.equal(retired.payload.statusReason, "superseded by hand");
   assert.equal(notices.length, 1);
   assert.match(notices[0].body, /superseded by hand/);
-  const revived = await learning.revive("u1", created.id, { expectedRevision: retired.revision });
-  assert.equal(revived.payload.status, "candidate");
+
+  // Un-retiring is a rollback, not a second verb. A `revive` existed here and
+  // had no caller anywhere: the route offers `retire` and `rollback`, and two
+  // ways to reach one status is two places for the rules to drift.
+  assert.equal(typeof (/** @type {any} */ (learning).revive), "undefined");
+  const restored = await learning.rollback("u1", created.id, { expectedRevision: retired.revision, targetRevision: created.revision });
+  assert.equal(restored.payload.status, "candidate");
 });
 
 test("retirement proposals never include a method that is still being used", async () => {
