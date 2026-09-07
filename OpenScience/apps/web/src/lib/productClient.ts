@@ -1,4 +1,4 @@
-import { fetchWithWebAuth, getWebProjectId, WebApiError, webApiBase } from "./apiClient";
+import { describeWebUsageBudget, fetchWithWebAuth, getWebProjectId, WebApiError, webApiBase } from "./apiClient";
 
 export interface ProductRecord<T> {
   id: string;
@@ -28,9 +28,9 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
     method,
     ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   });
-  const value = await response.json().catch(() => null) as { data?: T; error?: string; code?: string; requestId?: string } | null;
+  const value = await response.json().catch(() => null) as { data?: T; error?: string; code?: string; requestId?: string; details?: unknown } | null;
   if (!response.ok || !value || !("data" in value)) {
-    throw new WebApiError(value?.error ?? "The service response was unavailable.", { status: response.status, code: value?.code, requestId: value?.requestId });
+    throw new WebApiError(value?.error ?? "The service response was unavailable.", { status: response.status, code: value?.code, requestId: value?.requestId, details: value?.details });
   }
   return value.data as T;
 }
@@ -38,6 +38,9 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
 export function productErrorMessage(error: unknown): string {
   if (error instanceof WebApiError) {
     if (error.status === 401) return "登录已失效，请重新登录。";
+    // A budget refusal already says which ceiling stopped it and by how much.
+    // Answering "请重试" to a spent week is advice that cannot work.
+    if (error.details) return describeWebUsageBudget(error.details);
     if (error.status === 409) return "内容已发生变化，请刷新后再保存。";
     if (error.code === "product_state_unavailable") return "科研记忆服务暂时不可用，请稍后重试。";
     if (error.code === "capsule_payload_invalid") return "请检查名称和条目内容是否填写完整。";
