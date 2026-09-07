@@ -9,6 +9,8 @@ import copy
 import hashlib
 import json
 import os
+import signal
+import sys
 import stat
 import subprocess
 import tempfile
@@ -194,21 +196,128 @@ def _analysis_group(credentials):
             os.setegid(previous)
 
 
-def _analysis_access(inputs, directory):
+def _analysis_access(inputs, directory, *, owned_directories_only=False):
     # Only this private staging tree becomes accessible to the analysis group.
     # Root retains ownership; SETGID suffices, so CHOWN/DAC overrides stay absent.
     os.fchmod(directory, 0o770)
     for name in os.listdir(directory):
         info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if owned_directories_only and info.st_uid != os.geteuid():
+            continue
         if stat.S_ISDIR(info.st_mode):
             with inputs.directory_fd(directory, (name,)) as child:
-                _analysis_access(inputs, child)
-        else:
+                _analysis_access(inputs, child, owned_directories_only=owned_directories_only)
+        elif not owned_directories_only:
             with inputs._regular_file(directory, (name,)) as descriptor:
                 os.fchmod(descriptor, 0o660)
 
 
+class _AnalysisInterrupted(Exception):
+    def __init__(self, signum):
+        self.signum = signum
+
+
+@contextmanager
+def _worker_signals():
+    previous = {}
+    if threading.current_thread() is threading.main_thread():
+        def interrupted(signum, _frame):
+            raise _AnalysisInterrupted(signum)
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            previous[signum] = signal.signal(signum, interrupted)
+    try:
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+
+def _analysis_helper(credentials, operation, arguments, *, descriptors=()):
+    # This fixed helper imports no workspace code and receives no model/key env.
+    # Its own alarm bounds cleanup/stop without granting CAP_KILL to the owner.
+    return subprocess.run(
+        [sys.executable, "-I", str(Path(__file__).resolve()), operation, *map(str, arguments)],
+        env={"PATH": os.defpath}, pass_fds=descriptors,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        check=False, **credentials,
+    ).returncode == 0
+
+
+def _run_analysis(command, credentials, timeout, **kwargs):
+    if credentials is None:
+        return subprocess.run(command, timeout=timeout, check=False, **kwargs), None
+    with _worker_signals():
+        process = subprocess.Popen(command, start_new_session=True, **kwargs, **credentials)
+        try:
+            code = process.wait(timeout=timeout)
+            interruption = None
+            if code < 0:
+                interruption = {"status": "failed", "errorCode": "mr_analysis_interrupted",
+                                "error": "The analysis process was interrupted."}
+        except (subprocess.TimeoutExpired, _AnalysisInterrupted) as error:
+            # Only the same restricted UID can signal this owned process group.
+            stopped = _analysis_helper(credentials, "--stop-analysis", [process.pid])
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                stopped = False
+            timed_out = isinstance(error, subprocess.TimeoutExpired)
+            code = 124 if timed_out else 128 + error.signum
+            interruption = {"status": "failed",
+                "errorCode": "mr_analysis_timeout" if timed_out else "mr_analysis_interrupted",
+                "error": "The analysis timed out." if timed_out else "The analysis worker was interrupted."}
+            if not stopped:
+                interruption.update(errorCode="mr_analysis_stop_failed", error="The analysis process could not be stopped safely.")
+        return subprocess.CompletedProcess(command, code), interruption
+
+
+@contextmanager
+def _private_directories(inputs, credentials, cleanup_errors):
+    if credentials is None:
+        with (tempfile.TemporaryDirectory(prefix="evimed-mr-job-", dir="/tmp") as stage,
+              tempfile.TemporaryDirectory(prefix="evimed-mr-scratch-", dir="/tmp") as scratch):
+            yield stage, scratch
+        return
+    owned = []
+    try:
+        for prefix in ("evimed-mr-job-", "evimed-mr-scratch-"):
+            path = tempfile.mkdtemp(prefix=prefix, dir="/tmp")
+            owned.append(path)
+        yield tuple(owned)
+    finally:
+        for path in reversed(owned):
+            try:
+                with inputs.directory_fd(Path(path)) as directory:
+                    # Preparation can fail before group access is granted. The
+                    # owner adjusts only its own private directories, never
+                    # enters analysis-owned children or changes workspace/key access.
+                    _analysis_access(inputs, directory, owned_directories_only=True)
+                    if not _analysis_helper(credentials, "--cleanup-analysis", [directory], descriptors=(directory,)):
+                        cleanup_errors.append(True)
+                # Owner removes only the top-level directory it created.
+                os.rmdir(path)
+            except OSError:
+                cleanup_errors.append(True)
+
+
+def _cleanup_error():
+    return {"code": "mr_analysis_cleanup_failed", "message": "Temporary analysis data could not be fully removed."}
+
+
 def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_credentials=None) -> dict[str, Any]:
+    cleanup_errors = []
+    try:
+        outcome = _execute(inputs, job, environment, analysis_credentials, cleanup_errors)
+    except inputs.MRInputError as error:
+        if cleanup_errors:
+            error.cleanup_error = _cleanup_error()
+        raise
+    if cleanup_errors:
+        outcome["cleanupError"] = _cleanup_error()
+    return outcome
+
+
+def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_credentials, cleanup_errors) -> dict[str, Any]:
     """Run in the adapter's private mount and publish through the original FD."""
     parts = job.workspace.relative_to(job.data_root).parts
     output_parts = job.output_root.relative_to(job.workspace).parts
@@ -221,10 +330,7 @@ def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_cred
                     "mr_input_changed", "The workspace changed after MR admission."
                 )
             with inputs.directory_fd(workspace, output_parts) as output:
-                with (
-                    tempfile.TemporaryDirectory(prefix="evimed-mr-job-", dir="/tmp") as temporary,
-                    tempfile.TemporaryDirectory(prefix="evimed-mr-scratch-", dir="/tmp") as scratch,
-                ):
+                with _private_directories(inputs, analysis_credentials, cleanup_errors) as (temporary, scratch):
                     child_environment = {**environment, "TMPDIR": scratch}
                     if analysis_credentials is not None:
                         os.chmod(scratch, 0o770)
@@ -264,19 +370,16 @@ def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_cred
                                 "--working-directory-fd",
                                 str(stage),
                             ]
-                            completed = subprocess.run(
-                                command,
+                            completed, interruption = _run_analysis(
+                                command, analysis_credentials, job.timeout,
                                 cwd=str(job.runner.parent),
                                 env=child_environment,
                                 pass_fds=(proof, stage),
                                 stdin=subprocess.DEVNULL,
                                 stdout=log,
                                 stderr=subprocess.STDOUT,
-                                check=False,
-                                timeout=job.timeout,
-                                **(analysis_credentials or {}),
                             )
-                        result = _read_result(inputs, stage)
+                        result = interruption or _read_result(inputs, stage)
                         if completed.returncode != 0 or result.get("status") != "succeeded":
                             return {
                                 "returnCode": completed.returncode or 1,
@@ -310,3 +413,46 @@ def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_cred
         raise inputs.MRInputError(
             "mr_input_path_invalid", "The isolated MR job could not safely complete or publish."
         ) from None
+
+
+def _remove_directory_contents(directory):
+    """Restricted UID removes entries without following any child symlink."""
+    for name in os.listdir(directory):
+        info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if stat.S_ISDIR(info.st_mode):
+            child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            try:
+                _remove_directory_contents(child)
+            finally:
+                os.close(child)
+            os.rmdir(name, dir_fd=directory)
+        else:
+            os.unlink(name, dir_fd=directory)
+
+
+def _helper_main():
+    if len(sys.argv) != 3:
+        return 2
+    signal.alarm(10)
+    try:
+        value = int(sys.argv[2])
+        if sys.argv[1] == "--cleanup-analysis":
+            if not stat.S_ISDIR(os.fstat(value).st_mode):
+                return 2
+            _remove_directory_contents(value)
+        elif sys.argv[1] == "--stop-analysis" and value > 1:
+            try:
+                if os.getpgid(value) != value:
+                    return 2
+                os.killpg(value, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            return 2
+        return 0
+    except (OSError, ValueError):
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_helper_main())

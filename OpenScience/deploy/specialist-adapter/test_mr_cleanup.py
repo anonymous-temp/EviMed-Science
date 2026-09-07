@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.mark.skipif(not os.getenv("EVIMED_AUDIT_CONTAINER_TEST_IMAGE"), reason="explicit cached Linux image required")
-@pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed"])
+@pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed", "preparation_failed"])
 def test_analysis_owned_private_directories_preserve_outcome_and_cleanup(mode):
     repo = Path(__file__).resolve().parents[3]
     script = r'''
@@ -28,6 +28,11 @@ output=workspace/'mendelian-randomization-runs/mr-cleanup-test/output';output.mk
 runner=Path('/agent/evimed_runner.py')
 runner.write_text("import json,os,signal,sys,tempfile,time\nfrom pathlib import Path\nos.fchdir(int(sys.argv[-1]))\nassert os.getuid()==65532\nanalysis=Path(tempfile.mkdtemp(prefix='mr_analysis_'))\nassert analysis.stat().st_mode&0o777==0o700\n(analysis/'result.csv').write_text('estimate,pvalue\\n0.2,0.01\\n')\nmode="+repr(mode)+"\nif mode in {'timeout','worker_signal'}: time.sleep(60)\nif mode=='cleanup_failed': analysis.chmod(0o000)\nPath('result.json').write_text(json.dumps({'status':'failed','error':'deliberate-analysis-failure'} if mode=='failed' else {'status':'succeeded'}))\nif mode=='signal': os.kill(os.getpid(),signal.SIGTERM)\nsys.exit(7 if mode=='failed' else 0)\n")
 request={'exposure':'BMI','outcome':'CHD'}
+if mode=='preparation_failed':
+ source={'type':'local_file','columnMapping':{'snp':'SNP','beta':'beta','se':'se','effect_allele':'effect_allele','other_allele':'other_allele','eaf':'eaf','pval':'pval'},'sampleSize':10000,'instrumentsPreclumped':True,'clumpingProvenance':'Provided independent instruments; LD not rechecked.'}
+ for role in ('exposure','outcome'):
+  path=workspace/(role+'.csv');path.write_text('SNP,beta,se,effect_allele,other_allele,eaf,pval\n'+('rs1,0.2,0.01,A,G,0.2,1e-10\n' if role=='exposure' else ''))
+  request[role+'Source']={**source,'path':path.name}
 bindings=inputs.capture_bindings(workspace,request,Path('/data'))
 job=jobs.Job(workspace=workspace,output_root=output,data_root=Path('/data'),request=request,bindings=bindings,python=sys.executable,runner=runner,timeout=1 if mode=='timeout' else 10)
 if mode=='worker_signal':
@@ -38,7 +43,12 @@ if mode=='worker_signal':
    time.sleep(.02)
   raise AssertionError('runner never started')
  threading.Thread(target=interrupt,daemon=True).start()
-outcome=jobs.execute(inputs,job,{},analysis_credentials=audit_receipt.analysis_credentials())
+try:
+ outcome=jobs.execute(inputs,job,{},analysis_credentials=audit_receipt.analysis_credentials())
+except inputs.MRInputError as error:
+ assert mode=='preparation_failed'
+ assert not getattr(error,'cleanup_error',None)
+ outcome={'returnCode':1,'result':{'status':'failed'}}
 if mode in {'succeeded','cleanup_failed'}:
  assert outcome['returnCode']==0 and outcome['result']['status']=='succeeded',outcome
  assert json.loads((output/'result.json').read_text())['status']=='succeeded'

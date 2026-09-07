@@ -259,7 +259,7 @@ def produce(state, outcome, data_root):
         from cryptography.hazmat.primitives import serialization
         request, fixture, inputs, files = _fixture_contract(_load_manifest())
         if (state["status"] != "succeeded" or state["request"] != request
-                or outcome.get("analysisIsolated") is not True):
+                or outcome.get("analysisIsolated") is not True or outcome.get("cleanupError")):
             return None
         if _receipt_rows(outcome.get("inputReceipts")) != _receipt_rows(inputs):
             return None
