@@ -79,10 +79,15 @@ import { loadHarnessModule } from '../index.mjs'
  * `observe` receives {@link CompactionObservation}s. It may throw; a metrics
  * sink must not be able to fail a compaction.
  *
+ * `takeCompactRequest` is consulted once per step and must *consume* the
+ * request: a marker that survives the compaction it asked for would compact
+ * again on the next step, and again, until the session had nothing left.
+ *
  * @typedef {object} CompactionDeps
  * @property {(agent: any, signal?: AbortSignal) => StateHandle[] | Promise<StateHandle[]>} [readHandles]
  * @property {(input: any, agent: any, signal?: AbortSignal) => Promise<any>} [summarise]
  * @property {(observation: CompactionObservation) => void} [observe]
+ * @property {(agent: any) => {reason?: string} | null} [takeCompactRequest]
  */
 
 /**
@@ -122,7 +127,13 @@ export const COMPACTION_DEGRADATIONS = Object.freeze([
   'handles_unavailable',
   'summarizer_failed',
   'fallback_failed',
+  'request_failed',
 ])
+
+/** What a manager-requested compaction did. `nothing_to_compact` is the
+ *  ordinary answer on a short session and is not a failure: the request was
+ *  heard, and there was no safe range to give back. */
+export const COMPACTION_REQUEST_OUTCOMES = Object.freeze(['compacted', 'nothing_to_compact', 'request_failed'])
 
 /** Observation names. `preserved` is not noise: the policy grid in
  *  `evals/context-fidelity/` is chosen from the distribution of `attempts`, and
@@ -130,6 +141,7 @@ export const COMPACTION_DEGRADATIONS = Object.freeze([
 export const COMPACTION_OBSERVATIONS = Object.freeze({
   preserved: 'compaction/handles-preserved',
   degraded: 'compaction/policy-degraded',
+  requested: 'compaction/requested',
 })
 
 /** The plugin name stamped on the messages this engine appends, so the durable
@@ -446,6 +458,89 @@ export function createEvimedCompactionEngine(BaseCompactionEngine, deps = {}) {
     constructor(ctx, config, overrides) {
       super(ctx, config)
       this.#deps = { ...deps, ...overrides }
+      this.#registerRequestedCompaction(ctx)
+    }
+
+    /**
+     * Serve a compaction the manager asked for, at the one place it can be served.
+     *
+     * Registered *after* `super()` on purpose. The base registers its own
+     * `agent/pre-step` handler in its constructor, and a cordis waterfall runs
+     * handlers in registration order, so the base's pressure check has already
+     * finished by the time this one runs. That ordering is what keeps
+     * `assertNoActiveCompaction` from ever seeing two compactions at once on
+     * one session — the guard the base raises at its own pressure branch.
+     *
+     * Verified live on the pinned kernel (2026-09-07, probe V-2) rather than
+     * inferred: the base itself calls `compactRegion` from this hook, and
+     * `compactRegion` declares `owner: "current-turn"`. The constraint that
+     * looked like "refuses while active" is the opposite — the region compactor
+     * *requires* an open turn, which a pre-step has and an idle agent does not.
+     * That is why `compactNow` is the wrong method here: it goes through
+     * `agent.runMaintenance` and throws while a turn is in flight.
+     *
+     * `compactIfNeeded(agent, 'context-overflow', …)` rather than a hand-built
+     * range. That branch skips the pressure threshold — which is the whole
+     * point of an explicit request — retains nothing, and picks its own
+     * balanced boundaries through the base's `selectCompactableRange`. Choosing
+     * the boundaries here instead would mean reimplementing the balance rules
+     * the region compactor enforces, and getting them wrong is a throw in the
+     * middle of somebody's turn.
+     *
+     * @param {any} ctx
+     */
+    #registerRequestedCompaction(ctx) {
+      ctx.on(SEAMS.events.preStep, async (/** @type {any} */ payload, /** @type {any} */ next) => {
+        const { agent, signal } = payload ?? {}
+        const take = this.#deps.takeCompactRequest
+        // No consumer wired, or the step is already being abandoned: a
+        // compaction on an aborted step spends a summarizer call on a turn that
+        // is going away.
+        if (typeof take !== 'function' || !agent || signal?.aborted) return next()
+        /** @type {any} */
+        let request = null
+        try {
+          request = take(agent)
+        } catch {
+          request = null
+        }
+        if (!request) return next()
+        /** @type {string} */
+        let outcome = 'compacted'
+        /** @type {string} */
+        let detail = ''
+        try {
+          const result = await this.compactIfNeeded(agent, 'context-overflow', signal)
+          if (result === null) outcome = 'nothing_to_compact'
+        } catch (error) {
+          // A requested compaction that fails must not fail the step. The model
+          // asked for room; not getting it is the state it was already in.
+          outcome = 'request_failed'
+          detail = error instanceof Error ? error.message : String(error)
+        }
+        this.#observeRequest(agent, request, outcome, detail)
+        return next()
+      })
+    }
+
+    /** @param {any} agent @param {any} request @param {string} outcome @param {string} detail */
+    #observeRequest(agent, request, outcome, detail) {
+      try {
+        this.#deps.observe?.({
+          event: COMPACTION_OBSERVATIONS.requested,
+          reason: outcome,
+          sessionId: sessionIdOf(agent),
+          handles: 0,
+          missing: [],
+          attempts: 1,
+          // The model's own words for why, truncated: a reason is for a reader
+          // deciding whether the request was sensible, not a field to parse.
+          note: String(request?.reason ?? '').slice(0, 200),
+          ...(detail ? { detail: detail.slice(0, 200) } : {}),
+        })
+      } catch {
+        // A metrics sink must not be able to fail a compaction, or a step.
+      }
     }
 
     /**

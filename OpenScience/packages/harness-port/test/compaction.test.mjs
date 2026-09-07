@@ -62,14 +62,41 @@ function summaryNaming(handles) {
 /** @typedef {{ kind: string, id: string, detail?: string }} StateHandleLike */
 
 /**
- * @param {{ summarise: (input: any) => Promise<any>, handles?: StateHandleLike[] }} deps
- * @returns {{ engine: any, observed: any[], calls: any[] }}
+ * A cordis context stub with the one method the engine uses: `on`, which is how
+ * the requested-compaction handler reaches `agent/pre-step`. Deliberately not
+ * optional in the engine — a real context always has it, and a guard there
+ * would turn "the hook never registered" into silence, which is the failure
+ * this whole subsystem keeps being bitten by.
+ * @returns {{ ctx: any, hooks: Map<string, Function[]>, fire: (event: string, payload: any) => Promise<any> }}
+ */
+function fakeCtx() {
+  /** @type {Map<string, Function[]>} */
+  const hooks = new Map()
+  const ctx = {
+    on: (/** @type {string} */ event, /** @type {Function} */ handler) => {
+      hooks.set(event, [...(hooks.get(event) ?? []), handler])
+    },
+  }
+  const fire = async (/** @type {string} */ event, /** @type {any} */ payload) => {
+    let last
+    for (const handler of hooks.get(event) ?? []) last = await handler(payload, () => 'next')
+    return last
+  }
+  return { ctx, hooks, fire }
+}
+
+/**
+ * @param {{ summarise: (input: any) => Promise<any>, handles?: StateHandleLike[],
+ *   takeCompactRequest?: (agent: any) => any, compactIfNeeded?: (agent: any, trigger: string, signal: any) => Promise<any> }} deps
+ * @returns {{ engine: any, observed: any[], calls: any[], fire: (event: string, payload: any) => Promise<any>, hooks: Map<string, Function[]>, compactions: any[] }}
  */
 function engineWith(deps) {
   /** @type {any[]} */
   const observed = []
   /** @type {any[]} */
   const calls = []
+  /** @type {any[]} */
+  const compactions = []
   const Engine = createEvimedCompactionEngine(FakeBase, {
     readHandles: () => (deps.handles === undefined ? HANDLES : deps.handles),
     observe: (observation) => observed.push(observation),
@@ -77,8 +104,17 @@ function engineWith(deps) {
       calls.push(input)
       return deps.summarise(input)
     },
+    ...(deps.takeCompactRequest ? { takeCompactRequest: deps.takeCompactRequest } : {}),
   })
-  return { engine: new Engine({}, {}), observed, calls }
+  const { ctx, hooks, fire } = fakeCtx()
+  const engine = new Engine(ctx, {})
+  // The base's own `compactIfNeeded` is not present on the stub, so the test
+  // supplies one and records what the handler asked it for.
+  engine.compactIfNeeded = async (/** @type {any} */ agent, /** @type {string} */ trigger, /** @type {any} */ signal) => {
+    compactions.push({ trigger, signal })
+    return deps.compactIfNeeded ? deps.compactIfNeeded(agent, trigger, signal) : { shadowedSeqs: [1] }
+  }
+  return { engine, observed, calls, fire, hooks, compactions }
 }
 
 const AGENT = { session: { id: 'ses_compaction' } }
@@ -214,7 +250,7 @@ test('a handle reader that throws is a degradation, not a lost compaction', asyn
 
   // No `summarise` injected: this also proves `super.summarize` is what the
   // engine falls through to when the seam is left at its default.
-  const result = await new Engine({}, {}).summarize(INPUT, AGENT)
+  const result = await new Engine(fakeCtx().ctx, {}).summarize(INPUT, AGENT)
 
   assert.equal(summaryResultText(result), 'base summary with no handles in it')
   assert.deepEqual(observed.map((entry) => entry.reason), ['handles_unavailable'])
@@ -227,7 +263,7 @@ test('an observation sink that throws cannot fail the compaction it is recording
     summarise: async () => summaryOf(summaryNaming(HANDLES)),
   })
 
-  const result = await new Engine({}, {}).summarize(INPUT, AGENT)
+  const result = await new Engine(fakeCtx().ctx, {}).summarize(INPUT, AGENT)
 
   assert.equal(summaryResultText(result), summaryNaming(HANDLES))
 })
@@ -444,3 +480,87 @@ test('the probe reports the pinned backend when it is installed, and names it wh
   assert.equal(probe.checked, '@deepseek-ai/dsh-compaction-basic#BasicCompactionEngine.summarize')
   assert.deepEqual(probe.issues, [])
 })
+
+/* ------------------------------------------------- the manager's compaction request */
+
+test("a requested compaction runs at the step boundary and consumes its own marker", async () => {
+  // Verified live before it was written (probe V-2, 2026-09-07): the pinned
+  // engine calls `compactRegion` from this same hook, and the region compactor
+  // requires an *open turn* rather than an idle agent — which is why the
+  // request is served here and not through `compactNow`.
+  let taken = 0;
+  const { engine, fire, observed, compactions } = engineWith({
+    summarise: async () => ({ text: "unused" }),
+    takeCompactRequest: () => (taken++ === 0 ? { reason: "the plan and the ledger are all I still need" } : null),
+  });
+  assert.ok(engine);
+
+  await fire(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } });
+  assert.deepEqual(compactions.map((call) => call.trigger), ["context-overflow"],
+    "the on-demand branch: no pressure threshold, no retention, and it picks its own balanced range");
+  const requested = observed.filter((entry) => entry.event === COMPACTION_OBSERVATIONS.requested);
+  assert.equal(requested.length, 1);
+  assert.equal(requested[0].reason, "compacted");
+  assert.match(requested[0].note, /the plan and the ledger/);
+
+  // The marker is consumed, so the next step does not compact again — a request
+  // that survived what it asked for would compact until nothing was left.
+  await fire(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } });
+  assert.equal(compactions.length, 1);
+  assert.equal(taken, 2, "the consumer is still asked; it simply has nothing to give");
+});
+
+test("a step with no request, an aborted step, and no consumer all compact nothing", async () => {
+  for (const [label, deps, payload] of [
+    ["no request", { takeCompactRequest: () => null }, { agent: AGENT, signal: { aborted: false } }],
+    ["aborted step", { takeCompactRequest: () => ({ reason: "x" }) }, { agent: AGENT, signal: { aborted: true } }],
+    ["no consumer wired", {}, { agent: AGENT, signal: { aborted: false } }],
+    ["no agent", { takeCompactRequest: () => ({ reason: "x" }) }, { signal: { aborted: false } }],
+  ]) {
+    const { fire, compactions } = engineWith({ summarise: async () => ({ text: "unused" }), ...deps });
+    await fire(SEAMS.events.preStep, payload);
+    assert.equal(compactions.length, 0, label);
+  }
+});
+
+test("a compaction that finds nothing, or throws, still lets the step run", async () => {
+  const nothing = engineWith({
+    summarise: async () => ({ text: "unused" }),
+    takeCompactRequest: () => ({ reason: "please" }),
+    compactIfNeeded: async () => null,
+  });
+  const proceeded = await nothing.fire(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } });
+  assert.equal(proceeded, "next", "the waterfall continues");
+  assert.equal(nothing.observed.at(-1).reason, "nothing_to_compact",
+    "the request was heard and there was no safe range; that is an answer, not a failure");
+
+  const failing = engineWith({
+    summarise: async () => ({ text: "unused" }),
+    takeCompactRequest: () => ({ reason: "please" }),
+    compactIfNeeded: async () => { throw new Error("start seq 8 is not a balanced boundary"); },
+  });
+  const stillRan = await failing.fire(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } });
+  assert.equal(stillRan, "next", "a failed request must not fail somebody's turn");
+  assert.equal(failing.observed.at(-1).reason, "request_failed");
+  assert.match(failing.observed.at(-1).detail, /balanced boundary/);
+});
+
+test("a consumer that throws, and a sink that throws, are both survivable", async () => {
+  const { fire, compactions } = engineWith({
+    summarise: async () => ({ text: "unused" }),
+    takeCompactRequest: () => { throw new Error("mirror unavailable"); },
+  });
+  assert.equal(await fire(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } }), "next");
+  assert.equal(compactions.length, 0);
+
+  const Engine = createEvimedCompactionEngine(FakeBase, {
+    readHandles: () => HANDLES,
+    takeCompactRequest: () => ({ reason: "x" }),
+    observe: () => { throw new Error("metrics down"); },
+  });
+  const { ctx, fire: fire2 } = fakeCtx();
+  const engine = new Engine(ctx, {});
+  engine.compactIfNeeded = async () => ({ shadowedSeqs: [1] });
+  assert.equal(await fire2(SEAMS.events.preStep, { agent: AGENT, signal: { aborted: false } }), "next",
+    "a metrics sink must not be able to fail a step");
+});
