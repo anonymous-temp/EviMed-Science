@@ -261,10 +261,10 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertFalse(receipt.exists())
 
     def test_marker_failure_cleans_only_the_successfully_created_clone_with_the_same_oid(self):
-        for cleanup_oid, cleanup_system, should_drop in [
-            ("24680", "12345", True),
-            ("99999", "12345", False),
-            ("24680", "54321", False),
+        for cleanup_oid, cleanup_system in [
+            ("24680", "12345"),
+            ("99999", "12345"),
+            ("24680", "54321"),
         ]:
             with self.subTest(cleanup_oid=cleanup_oid, cleanup_system=cleanup_system), tempfile.TemporaryDirectory() as root:
                 directory = Path(root).resolve()
@@ -322,8 +322,15 @@ class PostgresBackupTests(unittest.TestCase):
                         patch.object(MODULE, "command", side_effect=command):
                     with self.assertRaises(MODULE.BackupError) as raised:
                         MODULE.restore_clone(archive, target_database, receipt)
-                self.assertEqual(raised.exception.code, "postgres_command_failed")
-                self.assertEqual("dropdb" in tools, should_drop)
+                self.assertEqual(raised.exception.code, "postgres_restore_cleanup_required")
+                self.assertEqual(raised.exception.details, {
+                    "cleanupRequired": {
+                        "targetDatabase": target_database,
+                        "targetDatabaseOid": "24680",
+                    },
+                    "operationErrorCode": "postgres_command_failed",
+                })
+                self.assertNotIn("dropdb", tools)
                 self.assertFalse(receipt.exists())
 
     def test_main_fallback_preserves_the_current_persisted_drill_intent(self):
@@ -377,6 +384,38 @@ class PostgresBackupTests(unittest.TestCase):
             with patch.object(MODULE.os, "link", side_effect=link), self.assertRaises(OSError):
                 MODULE.publish_archive(candidate, checksum_candidate, archive, checksum)
             self.assertEqual(sorted(p.name for p in directory.iterdir()), [prior.name])
+
+    def test_descriptor_publication_rejects_a_source_name_replaced_before_link(self):
+        with tempfile.TemporaryDirectory() as value:
+            root_path = Path(value).resolve()
+            source_path = root_path / "source"
+            destination_path = root_path / "destination"
+            source_path.mkdir()
+            destination_path.mkdir()
+            (source_path / "member").write_bytes(b"held source bytes")
+            (source_path / "replacement").write_bytes(b"attacker replacement")
+            with patch.dict(os.environ, {"EVIMED_RECOVERY_SET_STAGING_ROOT": str(root_path)}, clear=False):
+                root = MODULE.RecoveryRoot()
+                source = root.directory(source_path)
+                destination = root.directory(destination_path, empty=True)
+                real_link = os.link
+
+                def replace_then_link(source_name, destination_name, **kwargs):
+                    os.rename(source_name, "original", src_dir_fd=source.descriptor,
+                              dst_dir_fd=source.descriptor)
+                    os.rename("replacement", source_name, src_dir_fd=source.descriptor,
+                              dst_dir_fd=source.descriptor)
+                    return real_link(source_name, destination_name, **kwargs)
+
+                try:
+                    with patch.object(MODULE.os, "link", side_effect=replace_then_link), \
+                            self.assertRaises(MODULE.BackupError):
+                        MODULE.publish_recovery_files(source, [("member", "member")], destination)
+                    self.assertEqual(os.listdir(destination.descriptor), [])
+                finally:
+                    source.close()
+                    destination.close()
+                    root.close()
 
     def test_restore_target_never_accepts_source_or_unowned_database(self):
         for target in ["evimed", "postgres", "evimed_restore_other", "another_customer"]:
