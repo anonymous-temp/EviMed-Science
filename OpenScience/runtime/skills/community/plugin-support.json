@@ -22,6 +22,7 @@
       "name": "dsh-cite",
       "version": "0.3.2",
       "status": "installed",
+      "npmPackage": "dsh-cite",
       "tools": [
         "cite_lookup",
         "cite_format",
@@ -53,5 +54,6 @@
       "reason": "Dependency build scripts require an unreviewed pnpm approval."
     }
   ],
-  "updatePolicy": "Exact pins are upgraded only through the upstream matrix, dump-config review, image boot smoke and immutable release rollback."
+  "updatePolicy": "Exact pins are upgraded only through the upstream matrix, dump-config review, image boot smoke and immutable release rollback.",
+  "registryContract": "Bundles marked installed here are the plugin registry the control plane serves, capped by APPLY_PATH_PLUGIN_IDS in apps/server/src/pluginService.mjs to the ids its apply path can carry; anything else is unconfigurable by name, and marking a bundle installed before that path carries it is refused rather than served. npmPackage is the coordinate the runtime image installs from, and is what the nightly matrix polls for availability; a bundle without one is never looked up, so its availability stays unknown rather than guessed."
 }
