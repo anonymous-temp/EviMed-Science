@@ -2295,8 +2295,14 @@ const referenceEntryPattern = /^\s*(?:\[(\d{1,3})\]|(\d{1,3})[.、])\s+(\S.*)$/;
  *  itself across schemes. A DOI, a PMID and a Europe PMC URL are three names
  *  for one article, and a bibliography that lists it under two of them is
  *  citing it twice.
+ *
+ *  Exported because a second reader appeared: `toolExecutionEdges.mjs` asks
+ *  whether a value one tool produced is the value a later tool consumed, and
+ *  that is the same question under a different name. A private copy there would
+ *  be a second answer to "are these two strings the same article", and the two
+ *  would drift on the first scheme either side learned about.
  *  @param {string} text @returns {Set<string>} */
-function referenceIdentifiers(text) {
+export function referenceIdentifiers(text) {
   const found = new Set();
   for (const [, doi] of text.matchAll(/\b(10\.\d{4,9}\/[^\s)\],;"']+)/gi)) {
     found.add(`doi:${doi.toLowerCase().replace(/[.,;)]+$/, "")}`);

@@ -117,6 +117,27 @@ test("the projection the feed attributes against is the run's own, not whatever 
   assert.match(serverSource, /if \(!projection\) return;/);
 });
 
+test("the evaluation corpus has a producer, and the control plane is not it", async () => {
+  // Two halves that must stay apart. The run side writes receipts into the
+  // project's own meta directory on every finished run; the corpus file that
+  // decides what the paired evaluation may build tasks on is merged by hand.
+  // A server able to append to that file would be a system quietly widening
+  // what it is measured against.
+  assert.match(serverSource, /await persistExecutedToolEdges\(\{ project, run, sessions \}\)/);
+  assert.ok(!/executed-edges/.test(serverSource), "nothing in the running system may touch the corpus file");
+  const module = await readFile(new URL("../src/toolExecutionEdges.mjs", import.meta.url), "utf8");
+  // The corpus filename must not appear in any string the module evaluates.
+  // Checked against code rather than the whole file, because the module's own
+  // comment explains which corpus it feeds and that is exactly the sentence a
+  // reader needs; forbidding the words would have cost the explanation.
+  const code = module.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(!/executed-edges/.test(code), "the receipt writer must not know where the corpus lives");
+  assert.ok(!/evals/.test(code));
+  // And the claim it records is the decidable one. A `semantic` receipt would
+  // be a judgement filed as a measurement.
+  assert.ok(!/type: "semantic"/.test(module));
+});
+
 test("the retention knob has a caller, and it runs whether or not the loop is spending", async () => {
   // `TRANSCRIPT_RETENTION_DAYS` was configuration with no reader: a deployment
   // could set it and every project would still keep every conversation forever.
@@ -172,6 +193,9 @@ test("a terminal write in flight is waited for before the store it writes into g
   assert.match(serverSource, /await trackLearningWrite\(\(async \(\) => \{/);
   const close = /async close\(\) \{[\s\S]*?\n    \},/.exec(serverSource);
   assert.ok(close, "close is gone; this test now checks nothing");
+  // A loop, not one snapshot: a run reaching its terminal hook while an earlier
+  // write is being awaited is invisible to `[...learningWrites]` taken once.
+  assert.match(close[0], /for \(let drain = 0; learningWrites\.size && drain < \d+; drain \+= 1\) \{/);
   const wait = close[0].indexOf("await Promise.allSettled([...learningWrites])");
   const runtimes = close[0].indexOf("await runtimeManager.closeAll()");
   assert.ok(wait > 0, "close no longer waits for terminal learning writes");

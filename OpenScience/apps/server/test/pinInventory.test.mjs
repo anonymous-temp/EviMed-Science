@@ -14,6 +14,7 @@
 // string, which makes a fixture claim it was recorded off a binary it never
 // saw, and nothing downstream can tell.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { RULES, checkPinInventory, classify } from "../../../scripts/ops/check-pin-inventory.mjs";
@@ -31,6 +32,30 @@ test("every occurrence of the pin is classified", async () => {
   for (const kind of ["pin", "provenance", "history", "prose"]) {
     assert.ok(report.counts[kind] > 0, `no ${kind} occurrences; a whole category vanished from the sweep`);
   }
+});
+
+test("the sweep reaches work that is not committed yet, which is when classifying is still cheap", async () => {
+  // Found by committing. Fifty-one new modules sat on a branch for a whole
+  // build and this inventory saw none of them, because `git grep` reads the
+  // index; the first thing it noticed after the commit was a provenance
+  // comment it had never been shown. The gate's whole purpose is to force the
+  // decision *before* an upgrade, and it was structurally arriving late.
+  const source = await readFile(new URL("../../../scripts/ops/check-pin-inventory.mjs", import.meta.url), "utf8");
+  assert.match(source, /"--untracked"/, "the sweep only reads committed files again");
+  // Ignored paths must stay out, or the sweep drowns in dependencies and the
+  // report stops being read at all.
+  assert.ok(!/--no-exclude-standard/.test(source));
+});
+
+test("the compaction defaults are provenance, not a pin that may be moved with the rest", async () => {
+  // These thresholds were read off `@deepseek-ai/dsh-compaction-basic` at the
+  // named version. A batch replace that moved them forward would assert
+  // defaults the new release has never been checked for, and the assertion
+  // would look exactly like a deliberate re-recording.
+  const report = await checkPinInventory({});
+  const entry = report.occurrences.find((item) => item.file.includes("harness-port/src/compaction.mjs"));
+  assert.ok(entry, "the compaction backend record vanished from the sweep");
+  assert.equal(entry.verdict?.kind, "provenance");
 });
 
 test("a record of what a live kernel did outranks the prose rule that would swallow it", async () => {

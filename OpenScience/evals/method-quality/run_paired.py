@@ -274,9 +274,49 @@ def brief_family(brief: dict[str, Any], capability: str) -> tuple[str, str]:
     if isinstance(family, str) and family.strip():
         return family.strip(), "declared"
     generated = brief.get("generated")
-    if isinstance(generated, dict) and isinstance(generated.get("chain"), str) and generated["chain"].strip():
-        return f"{capability}:{generated['chain'].strip()}", "generated-chain"
+    if isinstance(generated, dict):
+        shape = generated_family_shape(generated)
+        if shape:
+            return f"{capability}:{shape}", "generated-shape"
+        chain = generated.get("chain")
+        if isinstance(chain, str) and chain.strip():
+            return f"{capability}:{chain.strip()}", "generated-chain"
     return str(brief.get("id", "")) or capability, "brief-id"
+
+
+def generated_family_shape(generated: dict[str, Any]) -> str | None:
+    """The task shape a generated chain has, coarser than the chain itself.
+
+    `chainSpecs` emits one brief per chain, so clustering on the chain id gives
+    one family per brief and the bootstrap resamples singletons — an interval
+    narrower than the evidence supports, reported without any sign that it is.
+    Two chains that start from the same tool and end at the same one are the
+    same kind of task however they wander in between, and grouping them is the
+    conservative error: over-grouping widens the interval, under-grouping
+    invents confidence.
+
+    Falls back to None rather than guessing when the stages are missing or
+    unusable, so the caller can drop to the chain id it already understands.
+    """
+    stages = generated.get("stages")
+    if not isinstance(stages, list) or not stages:
+        return None
+    flat: list[str] = []
+    for stage in stages:
+        if isinstance(stage, str):
+            flat.append(stage)
+        elif isinstance(stage, list):
+            flat.extend(str(tool) for tool in stage if isinstance(tool, str))
+    flat = [tool.strip() for tool in flat if isinstance(tool, str) and tool.strip()]
+    if len(flat) < 2:
+        return None
+    head, tail = short_tool_name(flat[0]), short_tool_name(flat[-1])
+    return f"{head}-to-{tail}" if head and tail else None
+
+
+def short_tool_name(tool: str) -> str:
+    """`mcp__evimed__literature_search` reads as `literature_search` in a report."""
+    return tool.rsplit("__", 1)[-1].strip()
 
 
 def brief_prompt(brief: dict[str, Any]) -> str:

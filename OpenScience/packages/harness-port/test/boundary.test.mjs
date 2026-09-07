@@ -117,7 +117,16 @@ test("the scan reaches the places a breach would actually happen", async () => {
 //
 // This lives beside the harness-boundary walk because it is the same kind of
 // rule — one about the repository as a whole that no single module can hold.
+//
+// It scans more roots than the boundary walk above, and that is the second
+// lesson rather than a detail. The rule shipped covering `apps` and `packages`,
+// and the next file to hide from grep was `scripts/dev/build-tool-graph.mjs` —
+// 977 lines, three raw NULs in one composite key, invisible to every search for
+// nine hundred of them. A rule that names the directories it protects protects
+// exactly those, and the gap is silent by construction: the tool you would use
+// to find the missed file is the tool it is hiding from.
 test("no source file reads as binary, because a file that does is a file nobody searches", async () => {
+  const BINARY_SWEEP_ROOTS = ["apps", "packages", "scripts", "evals", "runtime", "deploy", "examples"];
   /** @type {string[]} */
   const offenders = [];
   const walk = async (/** @type {any} */ dir) => {
@@ -136,7 +145,14 @@ test("no source file reads as binary, because a file that does is a file nobody 
   };
   /** @type {Set<string>} */
   const examined = new Set();
-  for (const root of SCANNED_ROOTS) await walk(path.join(repoRoot, root));
+  for (const root of BINARY_SWEEP_ROOTS) {
+    // A root that does not exist is skipped rather than fatal; a root that
+    // exists and cannot be read is not, because that is the case where the
+    // sweep would silently protect nothing.
+    await walk(path.join(repoRoot, root)).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
   // The walk must prove it walked, and the proof has to be a file actually
   // opened. Two weaker versions of this line were written first: one counted
   // the loop over roots rather than the reads, so deleting the `walk()` call
@@ -144,9 +160,14 @@ test("no source file reads as binary, because a file that does is a file nobody 
   // dressed as a check. Naming the file that motivated the rule proves the
   // sweep reached it — and that this file, which every binary-skipping search
   // tool used to drop, is now readable as text.
-  assert.ok(
-    examined.has(path.join("apps", "server", "src", "coverageJudge.mjs")),
-    `the sweep examined ${examined.size} files but not the one that motivated this rule`,
-  );
+  for (const proof of [
+    path.join("apps", "server", "src", "coverageJudge.mjs"),
+    // The second file to hide, and the one that proves the sweep now reaches
+    // past `apps` and `packages`. Without this line the widened root list could
+    // be deleted and nothing would notice.
+    path.join("scripts", "dev", "build-tool-graph.mjs"),
+  ]) {
+    assert.ok(examined.has(proof), `the sweep examined ${examined.size} files but not ${proof}`);
+  }
   assert.deepEqual(offenders, [], "write the byte as an escape; the value is the same and the file stays searchable");
 });
