@@ -3,7 +3,9 @@ import hashlib
 import importlib.util
 import io
 import os
+import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -87,6 +89,84 @@ class RecoveryVolumeTests(unittest.TestCase):
             self.assertEqual((target / "nested/payload.txt").read_bytes(),
                              b"synthetic descriptor-held payload\n")
 
+    def test_limits_are_enforced_incrementally_before_member_writes(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value).resolve()
+            archive = self.archive(root)
+            payload_size = len(b"synthetic descriptor-held payload\n")
+            exact = {
+                "OPEN_SCIENCE_RECOVERY_MAX_COMPRESSED_BYTES": str(archive.stat().st_size),
+                "OPEN_SCIENCE_RECOVERY_MAX_MEMBERS": "3",
+                "OPEN_SCIENCE_RECOVERY_MAX_DEPTH": "2",
+                "OPEN_SCIENCE_RECOVERY_MAX_PATH_BYTES": str(len("nested/payload.txt".encode())),
+                "OPEN_SCIENCE_RECOVERY_MAX_FILE_BYTES": str(payload_size),
+                "OPEN_SCIENCE_RECOVERY_MAX_EXPANDED_BYTES": str(payload_size),
+            }
+            cwd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.dict(os.environ, exact, clear=False), \
+                        patch.object(tarfile.TarFile, "getmembers", side_effect=AssertionError("must iterate")):
+                    MODULE.restore_numeric(archive.name, root / "boundary", cwd_fd=cwd, require_privilege=False)
+            finally:
+                os.close(cwd)
+            self.assertEqual((root / "boundary/nested/payload.txt").read_bytes(),
+                             b"synthetic descriptor-held payload\n")
+            over_limit = {
+                "compressed": ("OPEN_SCIENCE_RECOVERY_MAX_COMPRESSED_BYTES", archive.stat().st_size - 1),
+                "members": ("OPEN_SCIENCE_RECOVERY_MAX_MEMBERS", 2),
+                "depth": ("OPEN_SCIENCE_RECOVERY_MAX_DEPTH", 1),
+                "path": ("OPEN_SCIENCE_RECOVERY_MAX_PATH_BYTES", len("nested/payload.txt".encode()) - 1),
+                "file": ("OPEN_SCIENCE_RECOVERY_MAX_FILE_BYTES", payload_size - 1),
+                "expanded": ("OPEN_SCIENCE_RECOVERY_MAX_EXPANDED_BYTES", payload_size - 1),
+            }
+            for label, (name, limit) in over_limit.items():
+                target = root / f"over-{label}"
+                cwd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    with self.subTest(label=label), patch.dict(os.environ, {**exact, name: str(limit)}, clear=False), \
+                            self.assertRaises(MODULE.RecoveryError) as raised:
+                        MODULE.restore_numeric(archive.name, target, cwd_fd=cwd, require_privilege=False)
+                    self.assertEqual(raised.exception.code, "recovery_limit_exceeded")
+                    self.assertFalse(target.exists())
+                finally:
+                    os.close(cwd)
+
+    def test_high_ratio_expansion_is_rejected_before_payload_creation(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value).resolve()
+            archive = root / "compressed-small-expanded-large.tar.gz"
+            payload = b"\0" * (1024 * 1024)
+            with tarfile.open(archive, "w:gz") as output:
+                directory = tarfile.TarInfo(".")
+                directory.type = tarfile.DIRTYPE
+                directory.uid = os.getuid()
+                directory.gid = os.getgid()
+                output.addfile(directory)
+                item = tarfile.TarInfo("large.bin")
+                item.size = len(payload)
+                item.uid = os.getuid()
+                item.gid = os.getgid()
+                output.addfile(item, io.BytesIO(payload))
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            archive.with_name(archive.name + ".sha256").write_text(f"{digest}  {archive.name}\n")
+            limits = {
+                "OPEN_SCIENCE_RECOVERY_MAX_COMPRESSED_BYTES": str(archive.stat().st_size),
+                "OPEN_SCIENCE_RECOVERY_MAX_MEMBERS": "10",
+                "OPEN_SCIENCE_RECOVERY_MAX_DEPTH": "4",
+                "OPEN_SCIENCE_RECOVERY_MAX_PATH_BYTES": "128",
+                "OPEN_SCIENCE_RECOVERY_MAX_FILE_BYTES": str(len(payload)),
+                "OPEN_SCIENCE_RECOVERY_MAX_EXPANDED_BYTES": "1024",
+            }
+            cwd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch.dict(os.environ, limits, clear=False), self.assertRaises(MODULE.RecoveryError) as raised:
+                    MODULE.restore_numeric(archive.name, root / "bomb-target", cwd_fd=cwd, require_privilege=False)
+            finally:
+                os.close(cwd)
+            self.assertEqual(raised.exception.code, "recovery_limit_exceeded")
+            self.assertFalse((root / "bomb-target").exists())
+            self.assertFalse(any(path.name.startswith(".open-science-restore-") for path in root.iterdir()))
+
     def test_descriptor_held_archive_survives_ancestor_replacement_without_reading_the_link_target(self):
         with tempfile.TemporaryDirectory() as value:
             root = Path(value).resolve()
@@ -155,6 +235,50 @@ class RecoveryVolumeTests(unittest.TestCase):
                 os.close(parent_fd)
             self.assertEqual((saved / "target/payload.txt").read_bytes(), b"held target parent\n")
             self.assertEqual(list(attacker.iterdir()), [])
+
+    def test_rename_success_followed_by_parent_sync_failure_reports_installed_but_not_durable(self):
+        for failure in [OSError("synthetic fsync failure"), InterruptedError("synthetic interruption")]:
+            with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as value:
+                root = Path(value).resolve()
+                parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.mkdir("temporary", dir_fd=parent_fd)
+                    temporary_fd = os.open("temporary", os.O_RDONLY | os.O_DIRECTORY, dir_fd=parent_fd)
+                    payload = os.open("payload.txt", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600,
+                                      dir_fd=temporary_fd)
+                    os.write(payload, b"installed payload\n")
+                    os.close(payload)
+                    os.close(temporary_fd)
+                    with patch.object(MODULE.os, "fsync", side_effect=failure), \
+                            self.assertRaises(MODULE.RecoveryError) as raised:
+                        MODULE.commit_staging(parent_fd, "temporary", "target")
+                finally:
+                    os.close(parent_fd)
+                self.assertEqual(raised.exception.code, "numeric_owner_durability_unknown")
+                self.assertTrue(raised.exception.installed)
+                self.assertEqual((root / "target/payload.txt").read_bytes(), b"installed payload\n")
+                self.assertFalse((root / "temporary").exists())
+
+    def test_linux_capability_mask_requires_every_capability_used_by_restore(self):
+        required = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3)
+        self.assertTrue(MODULE.linux_capabilities_sufficient(required))
+        for bit in range(4):
+            with self.subTest(missing_bit=bit):
+                self.assertFalse(MODULE.linux_capabilities_sufficient(required & ~(1 << bit)))
+
+    @unittest.skipUnless(sys.platform.startswith("linux") and os.geteuid() == 0 and shutil.which("setpriv"),
+                         "requires a restricted Linux root/user-namespace runner")
+    def test_restricted_linux_capability_preflight_rejects_missing_fowner(self):
+        completed = subprocess.run(
+            ["setpriv", "--bounding-set=-fowner", sys.executable,
+             str(Path(__file__).parents[1] / "recovery-volume.py"), "check-privilege"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("numeric_owner_requires_root", completed.stderr)
 
     @unittest.skipUnless(os.geteuid() == 0, "requires a privileged root/user-namespace runner with CAP_CHOWN")
     def test_privileged_restore_applies_non_host_numeric_ownership(self):
