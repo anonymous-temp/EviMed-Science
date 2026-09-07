@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import os
 import shutil
@@ -15,6 +16,52 @@ SPEC.loader.exec_module(MODULE)
 
 
 class PostgresBackupTests(unittest.TestCase):
+    def test_restore_takes_recovery_lock_before_checking_receipt_absence(self):
+        events = []
+
+        class Root:
+            def lock(self):
+                events.append("lock")
+                return os.open(os.devnull, os.O_RDONLY)
+
+            def parent_for(self, _path, *, new=False):
+                events.append("receipt")
+                self.assert_new(new)
+
+            def assert_new(self, new):
+                if not new:
+                    raise AssertionError("receipt must use no-replace mode")
+                raise MODULE.BackupError("synthetic_stop")
+
+            def close(self):
+                pass
+
+        with patch.object(MODULE, "RecoveryRoot", return_value=Root()), \
+                patch.object(MODULE, "recovery_config", return_value=([], "evimed", "evimed", Path("/unused"), [])), \
+                self.assertRaises(MODULE.BackupError) as raised:
+            MODULE.restore_clone(Path("/staging/archive"),
+                                 "evimed_restore_20260907T120000Z_0123456789ab",
+                                 Path("/staging/receipt.json"))
+        self.assertEqual(raised.exception.code, "synthetic_stop")
+        self.assertEqual(events, ["lock", "receipt"])
+
+    def test_initial_receipt_creation_never_replaces_another_operation(self):
+        with tempfile.TemporaryDirectory() as value:
+            path = Path(value).resolve()
+            with patch.dict(os.environ, {"EVIMED_RECOVERY_SET_STAGING_ROOT": str(path)}, clear=False):
+                root = MODULE.RecoveryRoot()
+                directory = root.directory(path)
+                try:
+                    first = {"operationId": "11111111111111111111111111111111", "targetDatabase": "first"}
+                    second = {"operationId": "22222222222222222222222222222222", "targetDatabase": "second"}
+                    MODULE.atomic_new_receipt(directory, "restore.json", first)
+                    with self.assertRaises(MODULE.BackupError):
+                        MODULE.atomic_new_receipt(directory, "restore.json", second)
+                    self.assertEqual(json.loads((path / "restore.json").read_text()), first)
+                finally:
+                    directory.close()
+                    root.close()
+
     def recovery_environment(self, root):
         directory = Path(root).resolve()
         passphrase = directory / "passphrase"
@@ -267,7 +314,7 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertEqual(durable["markerState"], "creation-unconfirmed")
 
     def test_marker_failure_reports_orphan_without_non_atomic_name_drop(self):
-        for marker_mode in ["comment-failure", "marker-mismatch", "interrupted"]:
+        for marker_mode in ["comment-failure", "marker-mismatch", "interrupted", "post-marker-interrupted"]:
             with self.subTest(marker_mode=marker_mode), tempfile.TemporaryDirectory() as root:
                 directory = Path(root).resolve()
                 output = directory / "member"
@@ -290,6 +337,7 @@ class PostgresBackupTests(unittest.TestCase):
                 target_database = "evimed_restore_20260907T120000Z_123456abcdef"
                 tools = []
                 queries = []
+                ownership_marker = {"value": ""}
 
                 def command(args, *, source=None, target=None, timeout=900, capture=False):
                     tool = args[args.index("exec") + 3] if "exec" in args else args[0]
@@ -299,7 +347,11 @@ class PostgresBackupTests(unittest.TestCase):
                     if tool == "openssl":
                         target.write(b"plain")
                         return ""
-                    if tool == "pg_restore" and "--list" in args:
+                    if tool == "pg_restore":
+                        if "--list" in args:
+                            return ""
+                        if marker_mode == "post-marker-interrupted":
+                            raise MODULE.BackupError("postgres_backup_interrupted")
                         return ""
                     if tool == "createdb":
                         return ""
@@ -316,9 +368,12 @@ class PostgresBackupTests(unittest.TestCase):
                             if marker_mode in {"comment-failure", "interrupted"}:
                                 code = "postgres_backup_interrupted" if marker_mode == "interrupted" else "postgres_command_failed"
                                 raise MODULE.BackupError(code)
+                            ownership_marker["value"] = sql.split(" IS '", 1)[1][:-2]
                             return ""
                         if "shobj_description" in sql:
-                            return "evimed-recovery-owner:another-attempt\n"
+                            if marker_mode == "marker-mismatch":
+                                return "evimed-recovery-owner:another-attempt\n"
+                            return ownership_marker["value"] + "\n"
                         if "count(*) FROM pg_database" in sql:
                             return "0\n"
                     raise AssertionError(args)
@@ -333,7 +388,7 @@ class PostgresBackupTests(unittest.TestCase):
                         "targetDatabase": target_database,
                         "targetDatabaseOid": "24680",
                     },
-                    "operationErrorCode": "postgres_backup_interrupted" if marker_mode == "interrupted"
+                    "operationErrorCode": "postgres_backup_interrupted" if marker_mode in {"interrupted", "post-marker-interrupted"}
                     else ("postgres_command_failed" if marker_mode == "comment-failure"
                           else "postgres_restore_ownership_unverified"),
                 })
@@ -347,9 +402,17 @@ class PostgresBackupTests(unittest.TestCase):
                 self.assertEqual(durable["archiveSha256"], MODULE.digest(archive))
                 self.assertEqual(durable["sourceIdentity"], identity)
                 self.assertEqual(durable["operationErrorCode"], raised.exception.details["operationErrorCode"])
-                expected_marker_state = "mismatch" if marker_mode == "marker-mismatch" else "not-established"
+                expected_marker_state = ("mismatch" if marker_mode == "marker-mismatch" else
+                                         ("established" if marker_mode == "post-marker-interrupted" else "not-established"))
                 self.assertEqual(durable["markerState"], expected_marker_state)
                 self.assertNotIn("ownershipToken", durable)
+                if marker_mode == "post-marker-interrupted":
+                    expected_digest = hashlib.sha256(ownership_marker["value"].encode()).hexdigest()
+                    self.assertEqual(durable["ownershipMarkerSha256"], expected_digest)
+                    self.assertEqual(MODULE.validate_cleanup_authority(durable, ownership_marker["value"]),
+                                     (target_database, "24680"))
+                    with self.assertRaises(MODULE.BackupError):
+                        MODULE.validate_cleanup_authority(durable, "evimed-recovery-owner:wrong")
                 self.assertFalse(any(path.name.startswith(".restore-receipt-") for path in directory.iterdir()))
 
     def test_main_fallback_preserves_the_current_persisted_drill_intent(self):
