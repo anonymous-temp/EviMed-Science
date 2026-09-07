@@ -15,6 +15,7 @@ import stat
 import subprocess
 import tempfile
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -220,13 +221,16 @@ class _AnalysisInterrupted(Exception):
 @contextmanager
 def _worker_signals():
     previous = {}
+    state = {"defer": False, "signum": None}
     if threading.current_thread() is threading.main_thread():
         def interrupted(signum, _frame):
-            raise _AnalysisInterrupted(signum)
+            state["signum"] = signum
+            if not state["defer"]:
+                raise _AnalysisInterrupted(signum)
         for signum in (signal.SIGTERM, signal.SIGINT):
             previous[signum] = signal.signal(signum, interrupted)
     try:
-        yield
+        yield state
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)
@@ -243,31 +247,66 @@ def _analysis_helper(credentials, operation, arguments, *, descriptors=()):
     ).returncode == 0
 
 
+def _process_identity(pid):
+    directory = Path("/proc") / str(pid)
+    fields = (directory / "stat").read_text(errors="replace").rsplit(")", 1)[1].split()
+    return {"pid": pid, "state": fields[0], "pgid": int(fields[2]),
+            "session": int(fields[3]), "started": int(fields[19]),
+            "uid": directory.stat().st_uid}
+
+
+def _wait_without_reaping(process, timeout):
+    deadline = time.monotonic() + timeout
+    while True:
+        result = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        if result is not None:
+            return result.si_status if result.si_code == os.CLD_EXITED else -result.si_status
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        time.sleep(0.02)
+
+
 def _run_analysis(command, credentials, timeout, **kwargs):
     if credentials is None:
         return subprocess.run(command, timeout=timeout, check=False, **kwargs), None
-    with _worker_signals():
+    with _worker_signals() as signal_state:
         process = subprocess.Popen(command, start_new_session=True, **kwargs, **credentials)
+        identity = _process_identity(process.pid)
+        if identity["pgid"] != process.pid or identity["session"] != process.pid:
+            raise ValueError("The analysis process group is not isolated.")
         try:
-            code = process.wait(timeout=timeout)
+            # Retain the exited leader until its group is stopped. This pins
+            # the PID/PGID against reuse throughout this bounded stop window.
+            code = _wait_without_reaping(process, timeout)
             interruption = None
             if code < 0:
                 interruption = {"status": "failed", "errorCode": "mr_analysis_interrupted",
                                 "error": "The analysis process was interrupted."}
         except (subprocess.TimeoutExpired, _AnalysisInterrupted) as error:
-            # Only the same restricted UID can signal this owned process group.
-            stopped = _analysis_helper(credentials, "--stop-analysis", [process.pid])
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                stopped = False
             timed_out = isinstance(error, subprocess.TimeoutExpired)
             code = 124 if timed_out else 128 + error.signum
             interruption = {"status": "failed",
                 "errorCode": "mr_analysis_timeout" if timed_out else "mr_analysis_interrupted",
                 "error": "The analysis timed out." if timed_out else "The analysis worker was interrupted."}
-            if not stopped:
-                interruption.update(errorCode="mr_analysis_stop_failed", error="The analysis process could not be stopped safely.")
+        # Every terminal path uses the saved group identity. Defer further
+        # worker signals until group shutdown is confirmed and the leader reaped.
+        signal_state["defer"] = True
+        try:
+            stopped = _analysis_helper(credentials, "--stop-analysis", [identity["pgid"], identity["started"]])
+        except OSError:
+            stopped = False
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            stopped = False
+        if signal_state["signum"] and code == 0:
+            code = 128 + signal_state["signum"]
+            interruption = {"status": "failed", "errorCode": "mr_analysis_interrupted",
+                            "error": "The analysis worker was interrupted."}
+        if not stopped:
+            code = code or 1
+            interruption = {"status": "failed", "errorCode": "mr_analysis_stop_failed",
+                            "error": "The analysis process group could not be stopped safely."}
         return subprocess.CompletedProcess(command, code), interruption
 
 
@@ -285,19 +324,21 @@ def _private_directories(inputs, credentials, cleanup_errors):
             owned.append(path)
         yield tuple(owned)
     finally:
-        for path in reversed(owned):
-            try:
-                with inputs.directory_fd(Path(path)) as directory:
-                    # Preparation can fail before group access is granted. The
-                    # owner adjusts only its own private directories, never
-                    # enters analysis-owned children or changes workspace/key access.
-                    _analysis_access(inputs, directory, owned_directories_only=True)
-                    if not _analysis_helper(credentials, "--cleanup-analysis", [directory], descriptors=(directory,)):
-                        cleanup_errors.append(True)
-                # Owner removes only the top-level directory it created.
-                os.rmdir(path)
-            except OSError:
-                cleanup_errors.append(True)
+        # Keep private inputs intact if the process group was not confirmed stopped.
+        if "process_running" not in cleanup_errors:
+            for path in reversed(owned):
+                try:
+                    with inputs.directory_fd(Path(path)) as directory:
+                        # Preparation can fail before group access is granted. The
+                        # owner adjusts only its own private directories, never
+                        # enters analysis-owned children or changes workspace/key access.
+                        _analysis_access(inputs, directory, owned_directories_only=True)
+                        if not _analysis_helper(credentials, "--cleanup-analysis", [directory], descriptors=(directory,)):
+                            cleanup_errors.append(True)
+                    # Owner removes only the top-level directory it created.
+                    os.rmdir(path)
+                except OSError:
+                    cleanup_errors.append(True)
 
 
 def _cleanup_error():
@@ -379,6 +420,8 @@ def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_creden
                                 stdout=log,
                                 stderr=subprocess.STDOUT,
                             )
+                        if interruption and interruption.get("errorCode") == "mr_analysis_stop_failed":
+                            cleanup_errors.append("process_running")
                         result = interruption or _read_result(inputs, stage)
                         if completed.returncode != 0 or result.get("status") != "succeeded":
                             return {
@@ -430,23 +473,59 @@ def _remove_directory_contents(directory):
             os.unlink(name, dir_fd=directory)
 
 
+def _group_members(pgid, started):
+    members = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            member = _process_identity(int(entry.name))
+        except FileNotFoundError:
+            continue
+        if member["pgid"] == pgid and member["state"] not in {"Z", "X"}:
+            if (member["uid"] != os.geteuid() or member["session"] != pgid
+                    or member["started"] < started):
+                raise ValueError("Analysis process group ownership changed.")
+            members.append(member)
+    return members
+
+
+def _stop_analysis_group(pgid, started):
+    try:
+        leader = _process_identity(pgid)
+    except FileNotFoundError:
+        leader = None
+    if leader is not None and (leader["started"] != started or leader["pgid"] != pgid):
+        return False
+    # The saved PGID remains usable after the leader disappears. In the normal
+    # worker path WNOWAIT keeps that leader unreaped until this helper returns.
+    for signum, seconds in ((signal.SIGTERM, 1.0), (signal.SIGKILL, 2.0)):
+        if not _group_members(pgid, started):
+            return True
+        try:
+            os.killpg(pgid, signum)
+        except ProcessLookupError:
+            return not _group_members(pgid, started)
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if not _group_members(pgid, started):
+                return True
+            time.sleep(0.02)
+    return not _group_members(pgid, started)
+
+
 def _helper_main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in {3, 4}:
         return 2
     signal.alarm(10)
     try:
         value = int(sys.argv[2])
-        if sys.argv[1] == "--cleanup-analysis":
+        if sys.argv[1] == "--cleanup-analysis" and len(sys.argv) == 3:
             if not stat.S_ISDIR(os.fstat(value).st_mode):
                 return 2
             _remove_directory_contents(value)
-        elif sys.argv[1] == "--stop-analysis" and value > 1:
-            try:
-                if os.getpgid(value) != value:
-                    return 2
-                os.killpg(value, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        elif sys.argv[1] == "--stop-analysis" and len(sys.argv) == 4 and value > 1:
+            return 0 if _stop_analysis_group(value, int(sys.argv[3])) else 1
         else:
             return 2
         return 0

@@ -10,6 +10,7 @@ import copy
 import importlib
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,15 @@ def setup_audit(tmp_path, monkeypatch, *, simulate_isolation=True):
             # This non-root contract fixture cannot change UID. The separate
             # Linux probe executes the real boundary, including EACCES.
             monkeypatch.setattr(producer, "analysis_credentials", lambda: {} if os.getenv("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE") else None)
+            original_jobs = service._mr_job
+
+            def contract_jobs(root):
+                jobs = original_jobs(root)
+                jobs._run_analysis = lambda command, _credentials, timeout, **kwargs: (
+                    subprocess.run(command, timeout=timeout, check=False, **kwargs), None)
+                return jobs
+
+            monkeypatch.setattr(service, "_mr_job", contract_jobs)
     key = Ed25519PrivateKey.generate()
     pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                             serialization.NoEncryption())
@@ -239,7 +249,6 @@ def test_untrusted_or_unsafe_material_is_never_signed(tmp_path, monkeypatch, att
     setup = setup_audit(tmp_path, monkeypatch)
     service = setup[0]
     if attack == "hardlink_key":
-        import os
         os.link(setup[-1], setup[-1].with_suffix(".alias"))
     elif attack == "symlink_license":
         target = (setup[3] / setup[4]["exposureSource"]["path"]).parent / "LICENSE"
