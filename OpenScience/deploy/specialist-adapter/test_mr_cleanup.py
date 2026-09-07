@@ -10,7 +10,7 @@ import pytest
 
 
 @pytest.mark.skipif(not os.getenv("EVIMED_AUDIT_CONTAINER_TEST_IMAGE"), reason="explicit cached Linux image required")
-@pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed", "preparation_failed", "succeeded_descendant", "failed_descendant", "signal_descendant", "timeout_descendant", "worker_signal_descendant"])
+@pytest.mark.parametrize("mode", ["succeeded", "failed", "signal", "timeout", "worker_signal", "cleanup_failed", "preparation_failed", "succeeded_descendant", "failed_descendant", "signal_descendant", "timeout_descendant", "worker_signal_descendant", "stop_signal_descendant", "reaped_leader_descendant", "identity_check_descendant"])
 def test_analysis_owned_private_directories_preserve_outcome_and_cleanup(mode):
     repo = Path(__file__).resolve().parents[3]
     script = r'''
@@ -42,28 +42,41 @@ if mode=='preparation_failed':
   request[role+'Source']={**source,'path':path.name}
 bindings=inputs.capture_bindings(workspace,request,Path('/data'))
 job=jobs.Job(workspace=workspace,output_root=output,data_root=Path('/data'),request=request,bindings=bindings,python=sys.executable,runner=runner,timeout=1 if mode=='timeout' else 10)
-if mode=='worker_signal':
+if mode in {'worker_signal','stop_signal'}:
  def interrupt():
   for _ in range(100):
-   if (not with_descendant or Path('/tmp/descendant-ready').exists()) and any(list(p.glob('mr_analysis_*')) for p in Path('/tmp').glob('evimed-mr-scratch-*')):
+   ready=any(Path('/tmp').glob('evimed-mr-job-*/result.json')) if mode=='stop_signal' else any(list(p.glob('mr_analysis_*')) for p in Path('/tmp').glob('evimed-mr-scratch-*'))
+   if (not with_descendant or Path('/tmp/descendant-ready').exists()) and ready:
+    if mode=='stop_signal': time.sleep(.15)
     os.kill(os.getpid(),signal.SIGTERM);return
    time.sleep(.02)
   raise AssertionError('runner never started')
  threading.Thread(target=interrupt,daemon=True).start()
+if mode in {'reaped_leader','identity_check'}:
+ helper=jobs._analysis_helper
+ def observe_stop(credentials,operation,arguments,**kwargs):
+  if operation=='--stop-analysis':
+   if mode=='reaped_leader':
+    os.waitpid(arguments[0],0)
+    assert not (Path('/proc')/str(arguments[0])).exists()
+   else:
+    assert not helper(credentials,operation,[arguments[0],arguments[1]+1],**kwargs)
+  return helper(credentials,operation,arguments,**kwargs)
+ jobs._analysis_helper=observe_stop
 try:
  outcome=jobs.execute(inputs,job,{},analysis_credentials=audit_receipt.analysis_credentials())
 except inputs.MRInputError as error:
  assert mode=='preparation_failed'
  assert not getattr(error,'cleanup_error',None)
  outcome={'returnCode':1,'result':{'status':'failed'}}
-if mode in {'succeeded','cleanup_failed'}:
+if mode in {'succeeded','cleanup_failed','reaped_leader','identity_check'}:
  assert outcome['returnCode']==0 and outcome['result']['status']=='succeeded',outcome
  assert json.loads((output/'result.json').read_text())['status']=='succeeded'
 else:
  assert outcome['returnCode']!=0 and outcome['result']['status']=='failed',outcome
  if mode=='failed': assert outcome['returnCode']==7 and outcome['result']['error']=='deliberate-analysis-failure'
  if mode=='timeout': assert outcome['result']['errorCode']=='mr_analysis_timeout'
- if mode in {'signal','worker_signal'}: assert outcome['result']['errorCode']=='mr_analysis_interrupted'
+ if mode in {'signal','worker_signal','stop_signal'}: assert outcome['result']['errorCode']=='mr_analysis_interrupted'
 remaining=[*Path('/tmp').glob('evimed-mr-scratch-*'),*Path('/tmp').glob('evimed-mr-job-*')]
 if mode=='cleanup_failed':
  assert outcome['cleanupError']['code']=='mr_analysis_cleanup_failed',outcome
