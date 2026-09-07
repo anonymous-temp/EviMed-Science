@@ -5416,6 +5416,8 @@ test("a repair instruction names a check the run can actually run", () => {
 
   assert.match(prompt, /evimed_submit_deliverable/, "the repair must name the check that exists");
   assert.match(prompt, /evimed_revise_deliverable/, "an accepted package needs an explicit new revision before its files can change");
+  assert.match(prompt, /authenticated repair successor/, "a resumed root must know it owns the repair without delegating the package again");
+  assert.match(prompt, /do not delegate any file or source to another child/);
   const unaccepted = clinicalEvidenceRepairPromptForTest([
     "clinical-evidence-matrix.json is malformed",
   ], null, false);

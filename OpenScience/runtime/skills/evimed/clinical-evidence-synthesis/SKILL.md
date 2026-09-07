@@ -18,15 +18,23 @@ Load these skills before retrieving evidence:
 
 Do not claim completion if any required skill fails to load.
 
-### Evidence work stays in this session
+### One owner produces the initial evidence package
 
-Do not delegate evidence retrieval, source reading, claim extraction, search
-logging, or factual drafting. Keep those operations in the root delivery
-session: a child reply is prose, and production runs have not reliably
-preserved verbatim quotations and a complete query ledger through that handoff.
-Delegate only an analytical question whose answer will not be quoted or entered
-as a source. Anything that can support a citation is retrieved and read here
-with the approved evidence tools.
+Keep evidence retrieval, source reading, claim extraction, search logging, and
+factual drafting in the capability child that owns the initial package. The
+orchestrator delegates the question before any evidence-tool call; this child
+then performs all five operations and submits the package against the local
+gate. Never retrieve or read a document in the parent and hand it to a child,
+and never ask another child to inspect a document.
+
+A later server repair resumes the root session after that child has finished.
+The root is then the authenticated repair successor: patch the named files in
+place, read existing preserved sources when an issue requires it, and run any
+missing retrieval itself. Do not pass a file or source to another child. A
+child reply is prose, not a source record.
+
+Copy every `artifactPath` exactly as the preserving tool returns it. It starts
+with `.evimed-sources/`; never prefix it with `/workspace/`.
 
 ## Academic scope
 

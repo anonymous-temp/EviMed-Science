@@ -71,6 +71,16 @@ test("the composition mounts our five agent plugins and nothing we ruled out", a
   assert.equal(PRESET_NAME, "evimed-universal");
 });
 
+test("a specialist deliverable is delegated before the parent retrieves its evidence", async () => {
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  assert.match(preset, /把专业工作用 evimed_delegate 委派给能力目录中的能力/);
+  assert.match(preset, /先计划、立即委派，再由同一个能力子代理完成检索、原文阅读、证据台账与事实写作/);
+  assert.match(preset, /父代理不要在委派前调用检索或全文工具/);
+
+  const policy = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
+  assert.match(policy, /委派前不要替子代理检索、读取来源或预写交付文件/);
+});
+
 test("every plugin exports only the four named members and no default", async () => {
   const files = (await readdir(new URL("../plugins/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
   assert.equal(files.length, 8);

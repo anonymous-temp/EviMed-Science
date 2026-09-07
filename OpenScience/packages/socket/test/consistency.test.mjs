@@ -684,6 +684,158 @@ test("a successful delegation receipt exposes the kernel-owned child session id"
   assert.equal(result.value.data.childSessionId, "child-session-1");
 });
 
+test("a capability child may submit only the parent plan item it owns", async () => {
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => ({ id: "child-owner", result: childResult }),
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA child-owned research brief.\n");
+  const child = {
+    id: "child-agent",
+    session: { id: "child-owner", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+  };
+  const submitted = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-submit",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(submitted.value?.ok, true, JSON.stringify(submitted));
+
+  const foreign = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-foreign-submit",
+    arguments: { deliverableId: "d2" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(foreign.value?.ok, false);
+  assert.equal(foreign.value?.code, "deliverable_not_owned");
+
+  settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
+  await pending;
+  const status = await f.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.items[0].status, "accepted");
+  const afterSettlement = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-submit-after-settlement",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(afterSettlement.value?.code, "deliverable_unknown", "a settled child binding must be released");
+});
+
+test("the root can repair and resubmit a capability child's accepted package", async () => {
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ authorized: true }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const address = server.address();
+  const revisionAuthorizeUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/internal/revisions/v1/authorize`;
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  const f = await nativePolicyFixture({
+    briefId: "repair-successor",
+    revisionAuthorizeUrl,
+    subagentStart: () => ({ id: "child-author", result: childResult }),
+  });
+  try {
+    await f.step(1);
+    await f.execute("evimed_plan", {
+      action: "write",
+      clarifications: ["A bounded research brief"],
+      deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+    });
+    const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const child = {
+      id: "child-agent",
+      session: { id: "child-author", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+    };
+    const path = "/workspace/deliverables/d1/brief.md";
+    f.files.set(path, "# Report\nChild-authored first version.\n");
+    const first = await f.ctx.tools.execute({
+      agent: child,
+      name: "evimed_submit_deliverable",
+      callId: "child-submit",
+      arguments: { deliverableId: "d1" },
+      signal: AbortSignal.timeout(2000),
+    });
+    assert.equal(first.value?.ok, true);
+    settle({ stopReason: "completed", output: { deliverableId: "d1", submitted: true, summary: "done" } });
+    await pending;
+
+    const opened = await f.execute("evimed_revise_deliverable", { deliverableId: "d1", reason: "Server provenance check requested a repair." });
+    assert.equal(opened.value?.ok, true);
+    f.files.set(path, "# Report\nRoot repair successor version.\n");
+    const repaired = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
+    assert.equal(repaired.value?.ok, true);
+    const status = await f.execute("evimed_plan", { action: "status" });
+    assert.equal(status.value.data.items[0].status, "accepted");
+  } finally {
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
+test("an accepted child delivery is not retried or downgraded by a later child error", async () => {
+  /** @type {(value: any) => void} */
+  let settle = () => {};
+  const childResult = new Promise((resolve) => { settle = resolve; });
+  let starts = 0;
+  const f = await nativePolicyFixture({
+    briefId: "accepted-child-tail",
+    subagentStart: () => {
+      starts += 1;
+      if (starts > 1) throw new Error("an accepted package must not be retried");
+      return { id: "child-author", result: childResult };
+    },
+  });
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded research brief"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nAccepted before the child tail failed.\n");
+  const child = {
+    id: "child-agent",
+    session: { id: "child-author", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+  };
+  const submitted = await f.ctx.tools.execute({
+    agent: child,
+    name: "evimed_submit_deliverable",
+    callId: "child-submit",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(submitted.value?.ok, true);
+  settle({ stopReason: "error", diagnostic: "structured tail did not match the output schema" });
+  const delegated = await pending;
+  assert.equal(delegated.value?.ok, true);
+  assert.equal(starts, 1, "an accepted package must not start a retry child");
+  const status = await f.execute("evimed_plan", { action: "status" });
+  assert.equal(status.value.data.items[0].status, "accepted");
+  assert.equal(JSON.parse(f.files.get(`/workspace/${workspaceLayout.receiptFile}`)).entries.length, 1);
+});
+
 test("a running delegation projects its child id before the child settles", async () => {
   /** @type {(value: any) => void} */
   let settle = () => {};
@@ -736,6 +888,20 @@ test("a retry replaces the failed child with its running session id before settl
   assert.equal(running.status, "running");
   assert.equal(running.childSessionId, "child-retry");
   assert.equal(running.retried, true);
+  f.files.set("/workspace/deliverables/d1/brief.md", "# Report\nA retry-owned brief.\n");
+  const staleChild = {
+    id: "stale-child-agent",
+    session: { id: "child-first", header: { cwd: "/workspace", origin: "subagent", parentSession: "native-session" } },
+  };
+  const staleSubmit = await f.ctx.tools.execute({
+    agent: staleChild,
+    name: "evimed_submit_deliverable",
+    callId: "stale-child-submit",
+    arguments: { deliverableId: "d1" },
+    signal: AbortSignal.timeout(2000),
+  });
+  assert.equal(staleSubmit.value?.ok, false);
+  assert.equal(staleSubmit.value?.code, "deliverable_unknown", "the replaced child's binding must be released");
   settleRetry({ stopReason: "completed", output: "done" });
   await pending;
 });

@@ -1000,6 +1000,7 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     : [];
   return [
     "The server-side clinical evidence gate rejected the current package.",
+    "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files and preserved sources; do not delegate any file or source to another child.",
     ...measured,
     ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
     "Revise the named files in the existing academic package in place: clinical-evidence-report.md, clinical-evidence-matrix.json, clinical-evidence-search.json, citation-ledger.csv, references.bib, citation-audit.md, or clinical-evidence-run.json.",
