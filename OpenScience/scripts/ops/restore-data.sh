@@ -18,58 +18,11 @@ if [ -z "$ARCHIVE" ]; then
 fi
 
 if [ "$NUMERIC_OWNER" = true ]; then
-  if ! python3 - <<'PY'
-import os
-import pathlib
-
-if os.geteuid() != 0:
-    raise SystemExit(1)
-status = pathlib.Path("/proc/self/status")
-if status.exists():
-    effective = next((line.split()[1] for line in status.read_text().splitlines() if line.startswith("CapEff:")), "0")
-    if int(effective, 16) & 1 == 0:  # CAP_CHOWN
-        raise SystemExit(1)
-PY
-  then
-    echo "numeric_owner_requires_root" >&2
-    exit 1
+  if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 --numeric-owner BACKUP_ARCHIVE DATA_DIR" >&2
+    exit 2
   fi
-  if [ "${DATA_DIR#/}" = "$DATA_DIR" ]; then
-    echo "numeric_owner_target_must_be_absolute" >&2
-    exit 1
-  fi
-  # Numeric ownership is a recovery-set-only operation. Its parent must already
-  # exist, and every existing component must be a real directory rather than a
-  # link. This validation runs before decryption or target mutation.
-  if ! python3 - "$DATA_DIR" <<'PY'
-import os
-import stat
-import sys
-
-target = os.path.abspath(sys.argv[1])
-parent = os.path.dirname(target)
-current = os.path.sep
-for part in parent.split(os.path.sep)[1:]:
-    current = os.path.join(current, part)
-    try:
-        metadata = os.lstat(current)
-    except FileNotFoundError:
-        print("numeric_owner_target_parent_missing", file=sys.stderr)
-        raise SystemExit(1)
-    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
-        print("numeric_owner_target_path_invalid", file=sys.stderr)
-        raise SystemExit(1)
-try:
-    metadata = os.lstat(target)
-except FileNotFoundError:
-    raise SystemExit(0)
-if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or os.listdir(target):
-    print("numeric_owner_target_not_blank", file=sys.stderr)
-    raise SystemExit(1)
-PY
-  then
-    exit 1
-  fi
+  exec python3 "$SCRIPT_DIR/recovery-volume.py" restore --archive "$ARCHIVE" --target "$DATA_DIR"
 fi
 
 if [ ! -f "$ARCHIVE" ]; then
@@ -89,40 +42,6 @@ cleanup() {
   rm -rf "$decrypt_tmp_dir"
 }
 trap cleanup EXIT
-
-if [ "$NUMERIC_OWNER" = true ]; then
-  if [ "${ARCHIVE#/}" = "$ARCHIVE" ] || [ -L "$ARCHIVE" ] || [ ! -f "$checksum" ] || [ -L "$checksum" ]; then
-    echo "numeric_owner_archive_identity_invalid" >&2
-    exit 1
-  fi
-  if ! python3 - "$ARCHIVE" "$checksum" <<'PY'
-import hashlib
-import os
-import re
-import stat
-import sys
-
-archive, checksum = sys.argv[1:]
-for target in (archive, checksum):
-    metadata = os.lstat(target)
-    if not stat.S_ISREG(metadata.st_mode):
-        raise SystemExit(1)
-line = open(checksum, encoding="ascii").read()
-match = re.fullmatch(r"([0-9a-f]{64})  ([^/\n]+)\n", line)
-if not match or match.group(2) != os.path.basename(archive):
-    raise SystemExit(1)
-digest = hashlib.sha256()
-with open(archive, "rb") as stream:
-    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-        digest.update(chunk)
-if digest.hexdigest() != match.group(1):
-    raise SystemExit(1)
-PY
-  then
-    echo "numeric_owner_archive_identity_invalid" >&2
-    exit 1
-  fi
-fi
 
 if [ -f "$checksum" ]; then
   (
@@ -144,45 +63,6 @@ if head -n 1 "$ARCHIVE" | grep -qx "OPEN_SCIENCE_BACKUP_ENCRYPTED_V1"; then
   decrypted_archive="$decrypt_tmp_dir/archive.tar.gz"
   node "$SCRIPT_DIR/archive-crypto.mjs" decrypt "$ARCHIVE" "$decrypted_archive"
   archive_for_restore="$decrypted_archive"
-fi
-
-if [ "$NUMERIC_OWNER" = true ]; then
-  # Work from one private immutable copy. Validation and extraction therefore
-  # see the same bytes even if the caller's unencrypted archive is replaced.
-  if [ -z "$decrypt_tmp_dir" ]; then
-    decrypt_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/open-science-backup.XXXXXX")"
-    numeric_archive="$decrypt_tmp_dir/archive.tar.gz"
-    cp "$ARCHIVE" "$numeric_archive"
-    archive_for_restore="$numeric_archive"
-  fi
-  if ! python3 - "$archive_for_restore" <<'PY'
-import posixpath
-import sys
-import tarfile
-
-seen = set()
-try:
-    with tarfile.open(sys.argv[1], "r:gz") as archive:
-        members = archive.getmembers()
-        if not members:
-            raise ValueError("empty")
-        for member in members:
-            name = member.name.rstrip("/") or "."
-            normalized = posixpath.normpath(name)
-            if (not name or "\x00" in name or name.startswith("/") or normalized != name
-                    or normalized == ".." or normalized.startswith("../") or name in seen
-                    or not (member.isfile() or member.isdir())
-                    or not 0 <= member.uid <= 0xffffffff or not 0 <= member.gid <= 0xffffffff
-                    or member.mode < 0 or member.mode > 0o7777):
-                raise ValueError("entry")
-            seen.add(name)
-except (OSError, tarfile.TarError, ValueError):
-    print("numeric_owner_archive_invalid", file=sys.stderr)
-    raise SystemExit(1)
-PY
-  then
-    exit 1
-  fi
 fi
 
 if tar -tzf "$archive_for_restore" | awk '
@@ -211,9 +91,7 @@ else
 fi
 
 parent="$(dirname "$DATA_DIR")"
-if [ "$NUMERIC_OWNER" = false ]; then
-  mkdir -p "$parent"
-fi
+mkdir -p "$parent"
 parent="$(cd "$parent" && pwd)"
 target="$parent/$(basename "$DATA_DIR")"
 tmp="$parent/.open-science-restore.$$"
@@ -226,41 +104,20 @@ if [ -e "$target" ] && [ "${OPEN_SCIENCE_RESTORE_REPLACE:-}" != "true" ]; then
 fi
 
 mkdir -m 700 "$tmp"
-if [ "$NUMERIC_OWNER" = true ]; then
-  python3 - "$archive_for_restore" "$tmp" <<'PY'
-import sys
-import tarfile
-
-with tarfile.open(sys.argv[1], "r:gz") as archive:
-    archive.extractall(sys.argv[2], numeric_owner=True)
-PY
-else
-  # Runtime-created files can legitimately carry different numeric owners. The
-  # hardened backup container has no CAP_CHOWN, so legacy restores remain owned
-  # by the current user.
-  tar --no-same-owner -xzf "$archive_for_restore" -C "$tmp"
-fi
+# Runtime-created files can legitimately carry different numeric owners. The
+# hardened backup container has no CAP_CHOWN, so legacy restores remain owned
+# by the current user.
+tar --no-same-owner -xzf "$archive_for_restore" -C "$tmp"
 
 if find "$tmp" \( -type l -o \! -type d \! -type f \) -print -quit | grep -q .; then
   echo "Refusing to restore archive that extracted unsupported entries." >&2
   exit 1
 fi
 
-if [ "$NUMERIC_OWNER" = true ]; then
-  # os.rename replaces only an absent or empty directory on this filesystem. A
-  # target populated after preflight therefore fails instead of being deleted.
-  python3 - "$tmp" "$target" <<'PY'
-import os
-import sys
-
-os.rename(sys.argv[1], sys.argv[2])
-PY
-else
-  if [ -e "$target" ]; then
-    rm -rf "$target"
-  fi
-  mv "$tmp" "$target"
+if [ -e "$target" ]; then
+  rm -rf "$target"
 fi
+mv "$tmp" "$target"
 # `$tmp` has been moved, so cleanup must not remove it — but the decrypted
 # archive still has to go. Disarming the whole trap took `decrypt_tmp_dir` with
 # it, and only the SUCCESS path reaches this line: a failing restore exited with

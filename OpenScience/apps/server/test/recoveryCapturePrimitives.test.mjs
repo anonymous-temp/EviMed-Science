@@ -92,7 +92,7 @@ test("backup fails closed when entry metadata changes after inventory", async (t
   const wrapper = path.join(bin, "node");
   await writeFile(wrapper, `#!/usr/bin/env bash
 set -euo pipefail
-if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+if [[ "\${1:-}" == */backup-archive.mjs && "\${2:-}" != inventory ]]; then
   chmod 0600 "$EVIMED_TEST_MUTATE_PATH"
 fi
 exec "$EVIMED_TEST_REAL_NODE" "$@"
@@ -121,7 +121,7 @@ test("strict backup rejects a same-inode content change without publishing an ar
   const wrapper = path.join(bin, "node");
   await writeFile(wrapper, `#!/usr/bin/env bash
 set -euo pipefail
-if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+if [[ "\${1:-}" == */backup-archive.mjs && "\${2:-}" != inventory ]]; then
   "$EVIMED_TEST_REAL_NODE" -e 'const fs=require("node:fs"); const file=process.argv[1]; fs.writeFileSync(file,"synthetic changed member!\\n"); fs.utimesSync(file,new Date(1000),new Date(2000));' "$EVIMED_TEST_MUTATE_PATH"
 fi
 exec "$EVIMED_TEST_REAL_NODE" "$@"
@@ -159,7 +159,7 @@ test("strict backup binds ctime and content when a same-size rewrite restores th
   const wrapper = path.join(bin, "node");
   await writeFile(wrapper, `#!/usr/bin/env bash
 set -euo pipefail
-if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+if [[ "\${1:-}" == */backup-archive.mjs && "\${2:-}" != inventory ]]; then
   python3 -c 'import os,sys; p=sys.argv[1]; open(p,"wb").write(b"synthetic changed member!\\n"); os.utime(p, ns=(int(sys.argv[2]),int(sys.argv[3])))' "$EVIMED_TEST_MUTATE_PATH" "$EVIMED_TEST_ATIME_NS" "$EVIMED_TEST_MTIME_NS"
 fi
 exec "$EVIMED_TEST_REAL_NODE" "$@"
@@ -197,7 +197,7 @@ test("strict backup revalidates a file replaced after its bytes were read", asyn
   const wrapper = path.join(bin, "node");
   await writeFile(wrapper, `#!/usr/bin/env bash
 set -euo pipefail
-if [[ "\${1:-}" == */backup-archive.mjs ]]; then
+if [[ "\${1:-}" == */backup-archive.mjs && "\${2:-}" != inventory ]]; then
   python3 -c 'import os,sys,time; out,target,replacement,marker=sys.argv[1:]; deadline=time.time()+10
 while time.time()<deadline:
   try:
