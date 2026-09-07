@@ -11,7 +11,7 @@ import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA, renderMethodSkill } from "@evimed/domain";
 
-import { CONSOLIDATE_ACTIONS, MethodConsolidation, candidatePairs, groupPairs } from "../src/methodConsolidation.mjs";
+import { CONSOLIDATE_ACTIONS, MethodConsolidation, candidatePairs, groupPairs, screenedPairs } from "../src/methodConsolidation.mjs";
 
 const SECTIONS = (extra = "") => [
   "## Purpose", "Do a thing.", "",
@@ -167,20 +167,47 @@ test("a rewrite that only grows the checks is accepted", async () => {
   assert.equal(learning.amendments[0].input.provenance.consolidatedBy, "consolidate:job_1");
 });
 
-test("the two model steps run as separate bounded runs, in order, with the capability's own actions", async () => {
+test("a single candidate pair skips the screen, because screening one pair costs more than it saves", async () => {
   const learning = fakeLearning([doc("m1", "resolve-claim-span"), doc("m2", "resolve-claim-anchor")]);
   const { instance, dispatched } = consolidation({
     learning,
     readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }] } }),
   });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
-  assert.equal(dispatched.length, 2, "decide then build");
+  assert.equal(dispatched.length, 2, "decide then build, with no screen in front of them");
   assert.deepEqual(dispatched.map((call) => call.input.action), ["decide", "build"]);
   assert.deepEqual(new Set(dispatched.map((call) => call.capabilityId)), new Set(["method-relations"]));
   assert.deepEqual(new Set(dispatched.map((call) => call.contractKind)), new Set(["method-relations"]));
   // The decide step sees the bodies; the build step sees the assignments it may not change.
   assert.ok(dispatched[0].input.methods.every((entry) => typeof entry.body === "string"));
   assert.deepEqual(dispatched[1].input.assignments, [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }]);
+});
+
+test("the three model steps run as separate bounded runs, in order, with the capability's own actions", async () => {
+  // SCREEN was specified from the start — `candidatePairs` says in its own
+  // docstring that it is not the screen, "the model does that" — and nothing
+  // called it, so a lexical token overlap decided what got grouped, reasoned
+  // about at DECIDE's price, and sometimes rewritten into each other.
+  const learning = fakeLearning([
+    doc("m1", "resolve-claim-span"),
+    doc("m2", "resolve-claim-anchor"),
+    doc("m3", "resolve-claim-quote"),
+  ]);
+  const { instance, dispatched } = consolidation({
+    learning,
+    readResult: async (identity) => (String(identity.dispatchId ?? "").includes("screen")
+      ? { status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }
+      : { status: "succeeded", output: { relations: [], assignments: [{ ASSIGNMENT: "g1", relationType: "merge", SKILLS: ["m1", "m2"] }] } }),
+  });
+  const result = await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
+  assert.deepEqual(dispatched.map((call) => call.input.action), ["screen", "decide", "build"]);
+  assert.deepEqual(new Set(dispatched.map((call) => call.capabilityId)), new Set(["method-relations"]));
+
+  // The screen kept one of the three pairs, so only that pair was grouped.
+  assert.equal(result.screened, true);
+  assert.equal(result.screenDropped, 2);
+  assert.deepEqual(dispatched[1].input.methods.map((entry) => entry.id).sort(), ["m1", "m2"],
+    "the pairs the screen dropped never reached the expensive step");
 });
 
 test("a candidate that has earned an evaluation is queued for one instead of being promoted", async () => {
@@ -246,4 +273,86 @@ test("a library too small to compare does nothing and spends nothing", async () 
   const summary = await instance.sleep({ job: { id: "j", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
   assert.deepEqual(dispatched, []);
   assert.equal(summary.groups, 0);
+});
+
+/* --------------------------------------------------------------- the SCREEN step */
+
+test("a screen answer may only thin the shortlist it was given", () => {
+  const shortlist = [
+    { a: "m1", b: "m2", overlap: 5 },
+    { a: "m1", b: "m3", overlap: 4 },
+    { a: "m2", b: "m3", overlap: 3 },
+  ];
+  // Both spellings the capability may answer in, and both orders of a pair.
+  assert.deepEqual(
+    screenedPairs(shortlist, { pairs: [{ a: "m2", b: "m1" }, { a: { id: "m2" }, b: { id: "m3" } }] }).map((pair) => [pair.a, pair.b]),
+    [["m1", "m2"], ["m2", "m3"]],
+  );
+  assert.deepEqual(screenedPairs(shortlist, { kept: [{ a: "m1", b: "m3" }] }).map((pair) => pair.b), ["m3"]);
+
+  // A verdict of "not related" and no verdict at all both drop the pair: a pair
+  // nobody judged is not a screened pair.
+  assert.deepEqual(screenedPairs(shortlist, { pairs: [{ a: "m1", b: "m2", related: false }] }), []);
+  assert.deepEqual(screenedPairs(shortlist, { pairs: [{ a: "m1", b: "m2", keep: false }] }), []);
+  assert.deepEqual(screenedPairs(shortlist, {}), []);
+
+  // And it may not invent one. A screen that could add pairs would have to see
+  // every pair to be fair, which is the cost the shortlist exists to avoid.
+  assert.deepEqual(screenedPairs(shortlist, { pairs: [{ a: "m9", b: "m8" }, { a: "m1", b: "m9" }] }), []);
+});
+
+test("the screen runs once for the whole shortlist, and sees names rather than bodies", async () => {
+  /** @type {any[]} */
+  const dispatched = [];
+  const consolidation = new MethodConsolidation({
+    learning: { async listMethods() { return { items: [] }; } },
+    dispatch: async (input) => { dispatched.push(input); return { runId: "run_screen", sessionId: "s" }; },
+    readResult: async () => ({ status: "succeeded", output: { pairs: [{ a: "m1", b: "m2" }] } }),
+    jobs: { async enqueue() { return { id: "j" }; } },
+  });
+  const methods = ["m1", "m2", "m3"].map((id) => ({
+    id,
+    payload: { frontmatter: { name: id, description: `about ${id}` }, body: "SECRET BODY", contentDigest: `sha256:${"0".repeat(64)}` },
+  }));
+  const pairs = [{ a: "m1", b: "m2", overlap: 4 }, { a: "m1", b: "m3", overlap: 3 }];
+  const screened = await consolidation.screenPairs({ userId: "u1", projectId: "p1" }, pairs, methods);
+
+  assert.equal(dispatched.length, 1, "one run for the shortlist; a screen per pair costs more than it saves");
+  assert.equal(dispatched[0].input.action, "screen");
+  assert.equal(dispatched[0].input.pairs.length, 2);
+  assert.ok(!JSON.stringify(dispatched[0].input).includes("SECRET BODY"),
+    "the cheap step must stay cheap; bodies are DECIDE's to read");
+  assert.deepEqual(screened.pairs.map((pair) => [pair.a, pair.b]), [["m1", "m2"]]);
+  assert.equal(screened.screened, true);
+  assert.equal(screened.dropped, 1);
+});
+
+test("a screen that could not run leaves the shortlist alone rather than emptying it", async () => {
+  const methods = ["m1", "m2"].map((id) => ({ id, payload: { frontmatter: { name: id, description: id } } }));
+  const pairs = [{ a: "m1", b: "m2", overlap: 4 }, { a: "m1", b: "m3", overlap: 2 }];
+  for (const [label, overrides] of [
+    ["dispatch throws", { dispatch: async () => { throw new Error("no runtime"); } }],
+    ["no run identity", { dispatch: async () => ({}) }],
+    ["run did not succeed", { readResult: async () => ({ status: "failed" }) }],
+  ]) {
+    const consolidation = new MethodConsolidation({
+      learning: { async listMethods() { return { items: [] }; } },
+      dispatch: async () => ({ runId: "r", sessionId: "s" }),
+      readResult: async () => ({ status: "succeeded", output: { pairs: [] } }),
+      jobs: { async enqueue() { return { id: "j" }; } },
+      ...overrides,
+    });
+    const screened = await consolidation.screenPairs({ userId: "u1", projectId: "p1" }, pairs, methods);
+    assert.deepEqual(screened.pairs, pairs, `${label}: consolidation degraded is better than a silent no-op night`);
+    assert.equal(screened.screened, false, label);
+  }
+
+  // Too few pairs to be worth a run at all.
+  const tiny = new MethodConsolidation({
+    learning: { async listMethods() { return { items: [] }; } },
+    dispatch: async () => { throw new Error("must not dispatch"); },
+    readResult: async () => null,
+    jobs: { async enqueue() { return { id: "j" }; } },
+  });
+  assert.equal((await tiny.screenPairs({ userId: "u1" }, [{ a: "m1", b: "m2", overlap: 9 }], methods)).screened, false);
 });
