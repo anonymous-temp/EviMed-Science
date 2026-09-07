@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { MemoryIntelligence } from "../src/memoryIntelligence.mjs";
+import { MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
 
 class MemoryStoreDouble {
   constructor() {
@@ -313,4 +314,109 @@ test("a memory parked by the sensitive screen says why, and one that is not is u
   assert.match(parkedReason.reason, /parked as pending: the text matched the sensitive-vocabulary screen/);
   const activeReason = client.reasons.find((entry) => entry.key === "project.analysis.followup_window");
   assert.doesNotMatch(activeReason.reason, /parked as pending/, "a record that was not parked says nothing about parking");
+});
+
+// ---------------------------------------------------------------------------
+// Whose words these are.
+//
+// `injectContext` makes a plugin's text a first-class `user/message`, so the
+// brief, the capsule profile and the agenda arrive in the slot the person types
+// into. Reading the slot instead of the sender let the capsule's own rendering
+// of the user's preferences come back as a fresh observation of those same
+// preferences on every run that mounted it — three runs, three "independent"
+// observations, and an inferred guess activates itself.
+// ---------------------------------------------------------------------------
+
+test("the sender decides what the user said, and the recorded wire has four of them", async () => {
+  // Driven through the real normalizer and the real ledger projection, from
+  // frames recorded off the live wire — not a hand-written shape. The fixture
+  // carries `plugin` and `skill-catalog` beside `user` in the same slot, and
+  // `skill-catalog` is a kind the domain's own union does not list, which is
+  // exactly why this is an allow-list.
+  const { normalizeTranscript, transcriptToLedgerMessages } = await import("../src/dshRuntimeAdapter.mjs");
+  const frames = JSON.parse(await readFile(new URL("./fixtures/dsh/native-turn-frames.json", import.meta.url), "utf8"));
+  const kinds = new Set(frames.events
+    .filter((event) => event.type === "user/message")
+    .map((event) => event.data.source.kind));
+  assert.deepEqual([...kinds].sort(), ["plugin", "skill-catalog", "user"],
+    "the fixture must keep carrying more than one sender, or this test proves nothing");
+
+  const ledger = transcriptToLedgerMessages(normalizeTranscript("session_1", frames.events.map((event) => ({ event }))));
+  const { sources, excluded } = conversationMemorySources(ledger, "session_1");
+  const userTexts = sources.filter((source) => source.role === "user").map((source) => source.text);
+  assert.ok(userTexts.length > 0, "the person's own questions must survive the filter");
+  for (const text of userTexts) {
+    assert.doesNotMatch(text, /Synthetic injected context/, "injected context reached the extractor as user speech");
+  }
+  assert.equal(excluded.find((item) => item.reason === "injected")?.count, 2,
+    "both machine senders are refused, and the refusal is counted rather than silent");
+});
+
+test("an unfinished turn is not a fact, and a turn with no recorded ending still is", () => {
+  const aborted = [
+    { info: { id: "u1", role: "user", source: "user", turnStartSeq: 1 }, parts: [{ type: "text", text: "只看随机对照试验。" }] },
+    { info: { id: "a1", role: "assistant", turnStartSeq: 1, turnEnd: { kind: "aborted" } }, parts: [{ type: "text", text: "我认为——" }] },
+  ];
+  assert.deepEqual(conversationMemorySources(aborted, "s").sources, [],
+    "a turn the kernel cut short describes nothing durable");
+  assert.deepEqual(conversationMemorySources(aborted, "s").excluded, [{ reason: "unfinished", count: 2 }]);
+
+  const interrupted = [
+    { info: { id: "a1", role: "assistant", error: { name: "interrupted" } }, parts: [{ type: "text", text: "我认为——" }] },
+  ];
+  assert.deepEqual(conversationMemorySources(interrupted, "s").sources, []);
+
+  // No ending recorded at all is not the same claim as "ended badly". A rule
+  // that needed the metadata to be present in order to allow anything would
+  // stop the memory service learning the day a field went missing, silently.
+  const legacy = [
+    { info: { id: "u1", role: "user" }, parts: [{ type: "text", text: "只看随机对照试验。" }] },
+    { info: { id: "a1", role: "assistant" }, parts: [{ type: "text", text: "好的。" }] },
+  ];
+  assert.equal(conversationMemorySources(legacy, "s").sources.length, 2, "a transcript with no provenance still learns");
+  assert.deepEqual(conversationMemorySources(legacy, "s").excluded, []);
+
+  const completed = [
+    { info: { id: "u1", role: "user", source: "user", turnStartSeq: 1 }, parts: [{ type: "text", text: "只看随机对照试验。" }] },
+    { info: { id: "a1", role: "assistant", turnStartSeq: 1, turnEnd: { kind: "completed" } }, parts: [{ type: "text", text: "好的。" }] },
+  ];
+  assert.equal(conversationMemorySources(completed, "s").sources.length, 2);
+});
+
+test("the capsule's own profile cannot re-enter as an observation of itself", async () => {
+  // The end-to-end shape of the echo. The extractor here promotes whatever it
+  // is shown, so a stored record means the injected text reached it.
+  const client = new MemoryStoreDouble();
+  const capsuleProfile = "<evimed-capsule>\n用户偏好：只看随机对照试验，不看观察性研究。\n</evimed-capsule>";
+  const messages = [
+    { info: { id: "p1", role: "user", source: "plugin" }, parts: [{ type: "text", text: capsuleProfile }] },
+    { info: { id: "u1", role: "user", source: "user" }, parts: [{ type: "text", text: "帮我查一下二甲双胍的证据。" }] },
+    { info: { id: "a1", role: "assistant" }, parts: [{ type: "text", text: "已检索。" }] },
+  ];
+  let sourcesSeen = null;
+  const intelligence = new MemoryIntelligence(config, client, {
+    fetchImpl: async (_input, init) => {
+      sourcesSeen = JSON.parse(JSON.parse(String(init.body)).messages[1].content).sources;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        candidates: sourcesSeen.map((source, index) => ({
+          scope: "user", kind: "preference", key: `user.preference.echo_${index}`,
+          value: source.text.slice(0, 200), summary: source.text.slice(0, 120),
+          origin: "inferred", confidence: 0.9, importance: 0.6, sensitive: false,
+          sourceRef: source.sourceRef, evidenceQuote: source.text.slice(0, 60),
+        })),
+      }) } }] });
+    },
+  });
+
+  const result = await intelligence.recordRun(project(), run("run_echo"), messages);
+  for (const source of sourcesSeen) {
+    assert.doesNotMatch(source.text, /evimed-capsule/, "the extractor was shown its own injection");
+  }
+  const stored = await client.listRecords();
+  for (const record of stored) {
+    assert.doesNotMatch(String(record.value), /随机对照试验/,
+      "a preference the capsule injected became a new observation of that preference");
+  }
+  assert.deepEqual(result.excluded, [{ reason: "injected", count: 1 }],
+    "and the run says how much of its own transcript it refused to read");
 });

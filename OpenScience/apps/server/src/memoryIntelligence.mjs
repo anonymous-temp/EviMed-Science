@@ -128,13 +128,108 @@ function toolMemorySources(message, sessionId, messageId) {
   return sources;
 }
 
+
+/**
+ * Why the extractor must not read a message, or null when it may.
+ *
+ * Hidden knowledge: this is the difference between memory that learns from the
+ * researcher and memory that learns from itself. `injectContext` deliberately
+ * makes a plugin's text a first-class `user/message` — that is what keeps
+ * "model-visible ⟺ logged" true — so the brief, the capsule profile, the agenda
+ * and every budget notice arrive in the same slot the person types into. This
+ * module read the slot and not the sender, so `<evimed-capsule>`, which is a
+ * rendering of the user's stored preferences, came back as a fresh observation
+ * of the user's preferences on every run that mounted it. An `inferred` record
+ * earns activation from three independent observations; a fact that echoes
+ * itself supplies all three. The loop promotes a guess to a fact, and every
+ * promotion looks exactly like evidence.
+ *
+ * MemOS's own plugins close the same hole by peeling `<memos_context>` back off
+ * the user string before capture, because their host hands them no provenance.
+ * Ours does — `normalizeTranscript` records `source` on every user message — so
+ * this is a sender check rather than string surgery on text the model wrote.
+ *
+ * Two refusals:
+ *
+ * - `injected` — a user-slot message whose sender is named and is not `user`.
+ *   An allow-list, not a deny-list, and the recorded wire fixture is why: it
+ *   carries four sender kinds in that slot — `user`, `plugin`, `skill-catalog`
+ *   and (per the domain type) `system`/`subagent` — and `skill-catalog` is one
+ *   the domain's own union does not list. Every kind the kernel adds next lands
+ *   in the same slot, so a list of known machines is a list that goes stale
+ *   silently. `agentRuns`'s `actualUserMessage` has always spelled it this way;
+ *   this module was the one place that did not.
+ * - `unfinished` — the message was interrupted, or its turn ended in something
+ *   other than `completed`. A sentence the model was cut off mid-way through is
+ *   not a durable fact, which is why MemOS's cloud plugin writes only on a
+ *   completed turn.
+ *
+ * A message with no recorded sender at all, or in a turn with no recorded
+ * ending, is kept. Both are shapes an older transcript has, and unlike
+ * `actualUserMessage` — which is asking which turn belongs to which run, and
+ * may safely answer "none" — a rule here that needs metadata to be *present*
+ * before it allows anything is one missing field away from a memory service
+ * that quietly stops learning. That is the failure `demotionReason` above
+ * exists because we already shipped it once.
+ *
+ * @param {any} message @param {Map<any, string>} turnEndings
+ * @returns {"injected" | "unfinished" | null}
+ */
+export function memorySourceRejection(message, turnEndings = new Map()) {
+  const role = message?.info?.role ?? message?.role;
+  const source = message?.info?.source ?? message?.source;
+  if (role === "user" && typeof source === "string" && source !== "user") return "injected";
+  if (message?.info?.error?.name === "interrupted" || message?.interrupted === true) return "unfinished";
+  const ending = turnEndings.get(message?.info?.turnStartSeq ?? message?.turnStartSeq ?? null);
+  if (typeof ending === "string" && ending !== "completed") return "unfinished";
+  return null;
+}
+
+/**
+ * Each turn's ending, keyed the way its messages are keyed.
+ *
+ * `transcriptToLedgerMessages` puts `turnEnd` on the last message of a turn
+ * only, so a message in the middle of an aborted turn carries no sign of how
+ * that turn went. This is the lookup that gives it one.
+ *
+ * @param {readonly any[]} messages @returns {Map<any, string>}
+ */
+function turnEndingsByTurn(messages) {
+  /** @type {Map<any, string>} */
+  const endings = new Map();
+  for (const message of messages ?? []) {
+    const kind = message?.info?.turnEnd?.kind ?? message?.turnEnd?.kind;
+    if (typeof kind !== "string") continue;
+    endings.set(message?.info?.turnStartSeq ?? message?.turnStartSeq ?? null, kind);
+  }
+  return endings;
+}
+
+/**
+ * The conversation as extraction sources, with what was refused and why.
+ *
+ * Returns the refusals rather than dropping them silently: "twenty messages and
+ * none of them extractable" and "twenty messages, nineteen of them our own
+ * injection" are the same zero, and only one of them is a working run.
+ *
+ * @param {readonly any[]} messages @param {string} sessionId
+ * @returns {{sources: {sourceRef: string, role: string, text: string}[], excluded: {reason: string, count: number}[]}}
+ */
 export function conversationMemorySources(messages, sessionId) {
-  if (!Array.isArray(messages)) return [];
+  if (!Array.isArray(messages)) return { sources: [], excluded: [] };
+  const turnEndings = turnEndingsByTurn(messages);
   const sources = [];
+  /** @type {Map<string, number>} */
+  const excluded = new Map();
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
     const role = message?.info?.role ?? message?.role;
     if (!["user", "assistant"].includes(role)) continue;
+    const rejection = memorySourceRejection(message, turnEndings);
+    if (rejection) {
+      excluded.set(rejection, (excluded.get(rejection) ?? 0) + 1);
+      continue;
+    }
     const rawId = message?.info?.id ?? message?.id ?? String(index + 1);
     const safeId = String(rawId).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80) || String(index + 1);
     const text = messageText(message);
@@ -147,7 +242,10 @@ export function conversationMemorySources(messages, sessionId) {
     }
     sources.push(...toolMemorySources(message, sessionId, safeId));
   }
-  return sources.slice(-20);
+  return {
+    sources: sources.slice(-20),
+    excluded: [...excluded.entries()].map(([reason, count]) => ({ reason, count })),
+  };
 }
 
 function extractionUrl(baseUrl, production = false) {
@@ -321,12 +419,12 @@ export class MemoryIntelligence {
   }
 
   async recordRun(project, run, messages = []) {
-    const sources = conversationMemorySources(messages, run.sessionId);
+    const { sources, excluded } = conversationMemorySources(messages, run.sessionId);
     const runSummary = await this.#recordRunSummary(project, run, sources);
     if (sources.length === 0) {
       return {
         runSummary, extracted: 0, activated: 0, source: "none", proposed: 0, rejected: 0,
-        rejectionReasons: [], pending: 0, pendingReasons: [], extractionError: null,
+        rejectionReasons: [], pending: 0, pendingReasons: [], extractionError: null, excluded,
       };
     }
 
@@ -432,6 +530,11 @@ export class MemoryIntelligence {
       pending: [...pendingReasons.values()].reduce((total, count) => total + count, 0),
       pendingReasons: [...pendingReasons].map(([reason, count]) => ({ reason, count, text: demotionReasonText[reason] })),
       extractionError,
+      // What never reached the extractor. Rides the result rather than only the
+      // security ledger, because "the transcript was almost entirely our own
+      // injection" is a fact about the run that the run's own record should
+      // carry.
+      excluded,
     };
   }
 
