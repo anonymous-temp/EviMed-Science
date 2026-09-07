@@ -133,9 +133,47 @@ function recordSubagent(ctx, entry, key, record) {
   store.subagents.set(`${entry.runId}:${key}`, { ...record, runId: entry.runId })
 }
 
+/** Publish the kernel-owned child identity before waiting for its result.
+ * @param {any} ctx @param {Record<string, any>} entry @param {Record<string, any>} item
+ * @param {readonly string[]} skills @param {any} run @param {Record<string, any>} [extra]
+ * @returns {string}
+ */
+function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
+  const childSessionId = toSubagentOutcome(run, null).childSessionId
+  item.childSessionId = childSessionId || null
+  recordSubagent(ctx, entry, item.id, {
+    deliverableId: item.id,
+    capability: item.capability,
+    skills,
+    status: 'running',
+    childSessionId,
+    ...extra,
+  })
+  return childSessionId
+}
+
+/** Whether a one-shot submission grant still names this exact repair.
+ * @param {Record<string, any>} entry @param {Record<string, any>|undefined} item
+ * @param {Record<string, any>|undefined} grant @returns {boolean} */
+function revisionSubmissionGrantMatches(entry, item, grant) {
+  if (
+    !grant
+    || !item
+    || grant.planRevision !== entry.plan?.revision
+    || grant.contractKind !== item.contractKind
+    || grant.capability !== item.capability
+  ) return false
+  if (grant.kind === 'accepted-revision') return grant.revisionId === item.revisionId
+  return grant.kind === 'control-plane-repair'
+    && grant.contextRevision === entry.contextRevision
+    && item.status !== 'accepted'
+}
+
 export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   /** Per-session state. A later control-plane run resets the run-scoped fields. */
   const state = new Map()
+  /** A child may submit only the one parent-plan item that created it. */
+  const childOwners = new Map()
 
   /** @param {string} sessionId @returns {Record<string, any>} */
   const sessionState = (sessionId) => {
@@ -158,6 +196,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         attempts: new Map(),
         /** Submissions the gate could not read, budgeted apart from content repairs. */
         structuralAttempts: new Map(),
+        /** One-shot submissions granted by a control-plane-authorized revision. */
+        revisionSubmissionGrants: new Map(),
         redelegated: new Set(),
         producedTexts: [],
         finalReply: '',
@@ -167,6 +207,37 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       state.set(sessionId, entry)
     }
     return entry
+  }
+
+  /** @param {string} sessionId @returns {{ entry: Record<string, any>, binding: Record<string, any>|null }} */
+  const ownedSessionState = (sessionId) => {
+    const binding = childOwners.get(sessionId)
+    if (!binding) return { entry: sessionState(sessionId), binding: null }
+    const entry = sessionState(binding.parentSessionId)
+    if (entry.runId !== binding.runId) {
+      childOwners.delete(sessionId)
+      return { entry: sessionState(sessionId), binding: null }
+    }
+    return { entry, binding }
+  }
+
+  /** @param {string} childSessionId @param {Record<string, any>} entry @param {Record<string, any>} item */
+  const bindChildOwner = (childSessionId, entry, item) => {
+    if (!childSessionId) return
+    childOwners.set(childSessionId, {
+      parentSessionId: entry.sessionId,
+      runId: entry.runId,
+      deliverableId: item.id,
+    })
+  }
+
+  /** @param {Record<string, any>} run @param {string} childSessionId */
+  const awaitOwnedSubagent = async (run, childSessionId) => {
+    try {
+      return toSubagentOutcome(run, await run.result)
+    } finally {
+      childOwners.delete(childSessionId)
+    }
   }
 
   const store = () => ctx.get('evimedRun')
@@ -261,7 +332,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   // ---- policy: path guard, budget, attempt ceiling ------------------------
   ctx.effect(() => onToolPolicy(ctx, (call) => {
-    const entry = sessionState(call.sessionId)
+    const { entry } = ownedSessionState(call.sessionId)
     let writers = writersByRun.get(entry.runId)
     if (!writers) {
       writers = new Map()
@@ -294,10 +365,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
 
   ctx.effect(() => guardTools(ctx, (call) => {
     if (call.name !== 'evimed_submit_deliverable') return undefined
-    const entry = sessionState(call.sessionId)
+    const { entry, binding } = ownedSessionState(call.sessionId)
     const id = String(call.args?.deliverableId ?? '')
+    if (binding && binding.deliverableId !== id) return undefined
     const attempts = entry.attempts.get(id) ?? 0
-    if (attempts < config.deliveryAttemptLimit) return undefined
+    const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === id)
+    const revisionGrant = entry.revisionSubmissionGrants.get(id)
+    const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
+    if (revisionGrant && !grantMatches) entry.revisionSubmissionGrants.delete(id)
+    if (attempts < config.deliveryAttemptLimit || grantMatches) return undefined
     return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。请调用 evimed_complete_run{partial:true} 交付已完成的部分。`
   }))
 
@@ -325,7 +401,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (call.name !== 'write' && call.name !== 'edit') return
     const path = String(call.args?.path ?? call.args?.file_path ?? '')
     if (!path) return
-    const entry = sessionState(call.sessionId)
+    const { entry } = ownedSessionState(call.sessionId)
     entry.producedTexts = entry.producedTexts.filter((/** @type {any} */ item) => item.path !== path)
     entry.producedTexts.push({ path, text: String(call.args?.content ?? call.args?.new_string ?? '') })
   }))
@@ -431,6 +507,9 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // A revision keeps what was already accepted: re-planning must not undo
         // delivered work, or a model that adds one deliverable loses five.
         const previous = new Map(entry.items.map((/** @type {any} */ item) => [item.id, item]))
+        // A revision authorization belongs to the exact plan the control plane
+        // inspected. Even a same-id rewrite creates a new plan identity.
+        entry.revisionSubmissionGrants.clear()
         entry.plan = indexed
         entry.completed = false
         entry.steered = false
@@ -448,6 +527,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       description: [
         '把一件交付物委派给能力目录中的一项能力。子代理会带着这件能力的技能正文、工具集与人设启动，把文件写进 deliverables/<交付物 id>/ 并自行提交。',
         '依赖未满足时会排队，不需要你自己排序。',
+        '委派前不要替子代理检索、读取来源或预写交付文件；需要证据时，让同一个子代理完成完整证据链。',
       ].join(' '),
       parameters: {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
@@ -505,12 +585,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             issues: [issue('subagent_start_failed', `分工没有启动：${detail}`)],
           }
         }
+        const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run)
+        bindChildOwner(childSessionId, entry, item)
         entry.budget.children += 1
         Object.assign(item, advancePlanItem(item, 'delegate'))
-        recordSubagent(ctx, entry, item.id, { deliverableId: item.id, capability: item.capability, skills: injected, status: 'running' })
         await putPlanIndex(store(), entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
-        const outcome = toSubagentOutcome(run, await run.result)
+        const outcome = await awaitOwnedSubagent(run, childSessionId)
         item.childSessionId = outcome.childSessionId
         recordSubagent(ctx, entry, item.id, {
           deliverableId: item.id,
@@ -519,6 +600,14 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           status: outcome.stopReason,
           childSessionId: outcome.childSessionId,
         })
+        // The gate receipt is the completion fact. A child can submit and then
+        // fail while formatting its final structured reply; retrying at that
+        // point cannot improve the frozen accepted bytes and can only lose the
+        // receipt or attempt an illegal accepted -> failed transition.
+        if (item.status === 'accepted') {
+          await putPlanIndex(store(), entry)
+          return { ok: true, data: { deliverableId: item.id, childSessionId: outcome.childSessionId, report: outcome.structured ?? null, status: item.status } }
+        }
         const settlement = settleDelegation({ item, outcome, alreadyRetried: entry.redelegated.has(item.id) })
         if (settlement.action === 'redelegate') {
           entry.redelegated.add(item.id)
@@ -529,7 +618,11 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // after a child had already failed, which is why nothing ever saw it.
           const parent = ctx.get('agents')?.get?.(call.agentId)
           const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
-          const retried = toSubagentOutcome(retry, await retry.result)
+          const retryChildSessionId = recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true })
+          bindChildOwner(retryChildSessionId, entry, item)
+          await putPlanIndex(store(), entry)
+          await putRunMirror(ctx, entry, config.bundleVersion)
+          const retried = await awaitOwnedSubagent(retry, retryChildSessionId)
           recordSubagent(ctx, entry, item.id, {
             deliverableId: item.id,
             capability: item.capability,
@@ -538,6 +631,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             childSessionId: retried.childSessionId,
             retried: true,
           })
+          if (item.status === 'accepted') {
+            await putPlanIndex(store(), entry)
+            return { ok: true, data: { deliverableId: item.id, childSessionId: retried.childSessionId, report: retried.structured ?? null, retried: true, status: item.status } }
+          }
           if (retried.stopReason !== 'completed') {
             Object.assign(item, advancePlanItem(item, 'fail', { lastIssues: [issue('subagent_failed', settlement.reason)] }))
             await putPlanIndex(store(), entry)
@@ -567,9 +664,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         deliverableId: { type: 'string', required: true, description: '计划中的交付物 id。' },
       },
       async execute(args, call) {
-        const entry = sessionState(call.sessionId)
+        const { entry, binding } = ownedSessionState(call.sessionId)
+        if (binding && binding.deliverableId !== args.deliverableId) {
+          return { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', `此能力子代理只负责交付物「${binding.deliverableId}」。`)] }
+        }
         const item = entry.items.find((/** @type {any} */ candidate) => candidate.id === args.deliverableId)
         if (!item) return { ok: false, code: 'deliverable_unknown', issues: [issue('deliverable_unknown', `计划里没有交付物「${args.deliverableId}」。`)] }
+        if (binding && item.childSessionId !== call.sessionId) {
+          return { ok: false, code: 'deliverable_not_owned', issues: [issue('deliverable_not_owned', '此能力子代理已不再是该交付物的当前负责人。')] }
+        }
         // Counted after the verdict, not before it: what a submission costs
         // depends on whether the gate could read it. See below.
         const attempts = (entry.attempts.get(item.id) ?? 0) + 1
@@ -600,12 +703,19 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // reserved for repairing content.
         const unreadable = unreadableSubmission(verdict)
         const structural = (entry.structuralAttempts.get(item.id) ?? 0) + (unreadable ? 1 : 0)
-        if (unreadable && structural <= config.structuralAttemptAllowance) {
+        const structuralAllowanceApplies = unreadable && structural <= config.structuralAttemptAllowance
+        if (structuralAllowanceApplies) {
           entry.structuralAttempts.set(item.id, structural)
         } else {
           entry.attempts.set(item.id, attempts)
           item.attempts = attempts
         }
+        // A control-plane authorization promises one judgeable submission.
+        // An unreadable package within the separate structural allowance did
+        // not spend an ordinary attempt, so it must not spend this grant.
+        const revisionGrant = entry.revisionSubmissionGrants.get(item.id)
+        const grantMatches = revisionSubmissionGrantMatches(entry, item, revisionGrant)
+        if (!structuralAllowanceApplies && grantMatches) entry.revisionSubmissionGrants.delete(item.id)
         const charged = entry.attempts.get(item.id) ?? 0
         await recordGateRun(store(), entry, item, verdict, charged)
         // The attempt count the mirror carries is what the control plane reads
@@ -689,6 +799,13 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         if (!authorized) return { ok: false, code: 'deliverable_revision_unauthorized', issues: [issue('deliverable_revision_unauthorized', '控制面尚未为当前已接受字节创建可消费的修订授权，原版本继续冻结。')] }
         const revisionId = `${entry.runId}:${item.id}:${acceptedDigest}`
         Object.assign(item, advancePlanItem(item, 'revise', { revisionId, lastIssues: [] }))
+        entry.revisionSubmissionGrants.set(item.id, {
+          kind: 'accepted-revision',
+          revisionId,
+          planRevision: entry.plan?.revision ?? 0,
+          contractKind: item.contractKind,
+          capability: item.capability,
+        })
         entry.completed = false
         await putPlanIndex(runStore, entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
@@ -916,6 +1033,17 @@ async function injectBriefRevision(ctx, agent, entry, config) {
   // model-visible context revision while repeated steps remain de-duplicated.
   if (entry.contextInjected && (!contextRevision || contextRevision === entry.contextRevision)) return
   const indexedRunId = String(index?.runId ?? '')
+  // The control plane keeps a server-requested repair on the same run id and
+  // commits a new protected context revision after the prior turn completed.
+  // If no local receipt was accepted there is nothing to authorize through
+  // `evimed_revise_deliverable`, but the repaired bytes still need one bounded
+  // submission after the ordinary ceiling. A normal follow-up receives a new
+  // run id; an accepted package still needs the private-snapshot grant above.
+  const controlPlaneRepair = entry.contextInjected
+    && entry.completed
+    && Boolean(contextRevision)
+    && contextRevision !== entry.contextRevision
+    && indexedRunId === entry.runId
   if (contextRevision && indexedRunId && indexedRunId !== entry.runId) resetRunState(entry, indexedRunId)
   entry.contextInjected = true
   entry.contextRevision = contextRevision
@@ -923,6 +1051,19 @@ async function injectBriefRevision(ctx, agent, entry, config) {
   // context. A revision-bearing index is control-plane authority for the new
   // run; a legacy index keeps the native workflow's established identity.
   if (contextRevision || !entry.runId) entry.runId = indexedRunId
+  if (controlPlaneRepair) {
+    for (const item of entry.items) {
+      if (item.status === 'accepted' || (entry.attempts.get(item.id) ?? 0) < config.deliveryAttemptLimit) continue
+      entry.revisionSubmissionGrants.set(item.id, {
+        kind: 'control-plane-repair',
+        contextRevision,
+        planRevision: entry.plan?.revision ?? 0,
+        contractKind: item.contractKind,
+        capability: item.capability,
+      })
+    }
+    entry.completed = false
+  }
   entry.limits = {
     maxSteps: Number(index?.budget?.maxSteps ?? config.maxSteps) || 0,
     maxTokens: Number(index?.budget?.maxTokens ?? config.maxTokens) || 0,
@@ -962,6 +1103,7 @@ function resetRunState(entry, runId) {
   entry.budget = { steps: 0, tokens: 0, children: 0 }
   entry.attempts = new Map()
   entry.structuralAttempts = new Map()
+  entry.revisionSubmissionGrants = new Map()
   entry.redelegated = new Set()
   entry.producedTexts = []
   entry.finalReply = ''

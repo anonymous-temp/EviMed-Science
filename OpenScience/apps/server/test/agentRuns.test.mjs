@@ -262,7 +262,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
       agentId: null,
       runtimeAgent: null,
       effectiveAgentId: "clinical-evidence-synthesis",
-      effectiveAgentVersion: "2.10.0",
+      effectiveAgentVersion: "2.11.0",
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     });
     const workspace = path.join(dataDir, "users", "dev", "projects", "default", "workspace");
@@ -1467,7 +1467,7 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
 });
 
 /** A run fixture whose root history and run-side projection are both scriptable. */
-async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40 } = {}) {
+async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [] } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = {
@@ -1485,6 +1485,7 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40 } = {}) {
     // The root session never moves again after this: it delegated and is waiting.
     readSessionHistory: async () => [{ info: { id: "m1", role: "user" }, parts: [{ type: "text", text: "go" }] }],
     readSessionStatus: async () => "running",
+    readChildSessionActivity,
     runtimeWorkspaceRoot: () => root,
     onRunProjection: (_project, _run, type, data) => frames.push({ type, data }),
   });
@@ -1541,6 +1542,94 @@ test("a running-subagent label without child activity does not keep a stalled ru
 
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_stalled", "a silent child must still reach the stall threshold");
+});
+
+test("a kernel-confirmed child sequence keeps a delegated run alive", async (t) => {
+  let head = 10;
+  const calls = [];
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 3,
+    maxPolls: 8,
+    readChildSessionActivity: async (_project, parentSessionId, childSessionIds) => {
+      calls.push({ parentSessionId, childSessionIds });
+      head += 1;
+      return [{ sessionId: "child-live", asOfSeq: head, running: true }];
+    },
+  });
+  await writeProjection({
+    evidence: { total: 0, byStatus: {} },
+    budget: { children: 1 },
+    subagents: [{ deliverableId: "d1", capability: "research-brief", status: "running", childSessionId: "child-live" }],
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await store.monitors.get(run.id)?.promise;
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_timeout", "changing authenticated child heads must prevent a false stall");
+  assert.ok(calls.length >= 3);
+  assert.deepEqual(calls[0], { parentSessionId: "ses_deleg", childSessionIds: ["child-live"] });
+});
+
+test("a retry child's authenticated head replaces the failed child's stall signal", async (t) => {
+  let retryHead = 20;
+  let calls = 0;
+  const seen = [];
+  let publishRetry = async () => {};
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 3,
+    maxPolls: 8,
+    readChildSessionActivity: async (_project, _parentSessionId, childSessionIds) => {
+      calls += 1;
+      seen.push([...childSessionIds]);
+      const id = childSessionIds[0];
+      if (id === "child-first" && calls === 3) await publishRetry();
+      return id === "child-retry"
+        ? [{ sessionId: id, asOfSeq: retryHead += 1, running: true }]
+        : [{ sessionId: "child-first", asOfSeq: 10, running: true }];
+    },
+  });
+  await writeProjection({
+    subagents: [{ deliverableId: "d1", status: "running", childSessionId: "child-first" }],
+    evidence: {}, budget: { children: 1 },
+  });
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  publishRetry = () => writeProjection({
+    subagents: [{ deliverableId: "d1", status: "running", childSessionId: "child-retry", retried: true }],
+    evidence: {}, budget: { children: 2 },
+  });
+  await store.monitors.get(run.id)?.promise;
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_timeout");
+  assert.ok(seen.some((ids) => ids[0] === "child-retry"), "the monitor never switched to the retry child");
+});
+
+test("candidate and running-state churn cannot replace per-child sequence progress", async (t) => {
+  let calls = 0;
+  let mutate = async () => {};
+  const projection = (childSessionId, running) => ({
+    subagents: [{ deliverableId: "d1", status: "running", childSessionId }],
+    evidence: {}, budget: { children: 1 }, running,
+  });
+  const { project, store, writeProjection } = await delegatingRunFixture(t, {
+    stallPolls: 3,
+    maxPolls: 40,
+    readChildSessionActivity: async (_project, _parentSessionId, childSessionIds) => {
+      calls += 1;
+      const id = childSessionIds[0];
+      await mutate();
+      return [{ sessionId: id, asOfSeq: 10, running: calls % 2 === 0 }];
+    },
+  });
+  let next = "child-b";
+  mutate = async () => {
+    await writeProjection(projection(next, next === "child-a"));
+    next = next === "child-a" ? "child-b" : "child-a";
+  };
+  await writeProjection(projection("child-a", true));
+  const run = await store.start(project, { sessionId: "ses_deleg" });
+  await store.monitors.get(run.id)?.promise;
+  const [finished] = await store.list(project);
+  assert.equal(finished.errorCode, "runtime_monitor_stalled");
+  assert.ok(calls >= 3, "the fixture did not exercise repeated candidate churn");
 });
 
 test("changing model-writable projection counters cannot keep a stalled run alive", async (t) => {
@@ -2748,6 +2837,123 @@ test("a finding about the evidence itself still stamps the package unverified", 
   assert.equal(result.valid, false);
   assert.ok(result.blockingIssues.length > 0, "an absent quotation must be blocking");
   assert.match(result.blockingIssues.join("\n"), /not found in its preserved source artifact/);
+});
+
+test("server-valid clinical bytes without a local receipt get one resubmit-only repair", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-resubmit-valid-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_resubmit_valid", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const pkg = deepResearchPackage();
+    let history = [];
+    const repairPrompts = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "1.0.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          outputs: [
+            { path: "clinical-evidence-report.md", required: true },
+            { path: "clinical-evidence-matrix.json", required: true },
+            { path: "clinical-evidence-run.json", required: true },
+            { path: "clinical-evidence-search.json", required: true },
+            { path: "references.bib", required: true },
+            { path: "citation-ledger.csv", required: true },
+            { path: "citation-audit.md", required: true },
+            { path: "question-coverage.json", required: true },
+          ],
+          completionChecks: ["requiredOutputsExist", "citationsResolvable", "evidenceClaimsTraceable"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      maxClinicalRepairAttempts: 1,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_resubmit_valid",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async (_session, _record, repairText = null) => {
+      if (repairText) repairPrompts.push(repairText);
+      return { accepted: true };
+    });
+
+    const deliverables = new Map([
+      ["clinical-evidence-report.md", pkg.reportText],
+      ["clinical-evidence-matrix.json", JSON.stringify(pkg.matrix)],
+      ["clinical-evidence-run.json", JSON.stringify(pkg.runReceipt)],
+      ["clinical-evidence-search.json", pkg.searchLogText],
+      ["references.bib", pkg.referencesText],
+      ["citation-ledger.csv", pkg.citationLedgerText],
+      ["citation-audit.md", pkg.citationAuditText],
+      ["question-coverage.json", pkg.questionCoverageText],
+    ]);
+    for (const [relative, content] of deliverables) {
+      await writeFile(path.join(project.workspaceDir, relative), content, "utf8");
+    }
+    for (const [artifactPath, content] of Object.entries(pkg.sourceArtifacts)) {
+      await mkdir(path.join(project.workspaceDir, path.dirname(artifactPath)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, artifactPath), content, "utf8");
+    }
+    await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: run.id,
+      plan: { revision: 1, items: [{ id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", status: "rejected", attempts: 3 }] },
+      budget: { steps: 60, tokens: 1, children: 1, limits: {} },
+      evidence: { total: 1, byStatus: { ready: 1 } },
+      gateRuns: [],
+      subagents: [],
+      qualityNotices: [],
+      degraded: [],
+    }, null, 2), "utf8");
+
+    const retrievalParts = Object.entries(pkg.sourceArtifacts).map(([artifactPath, content]) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_open_access_full_text",
+      state: {
+        status: "completed",
+        output: JSON.stringify({ status: "success", artifacts: [artifactPath], data: { artifactSha256s: { [artifactPath]: createHash("sha256").update(content, "utf8").digest("hex") } } }),
+      },
+    }));
+    const searchParts = JSON.parse(pkg.searchLogText).queries.map((entry) => ({
+      type: "tool",
+      tool: "evimed-research_evimed_literature_search",
+      state: { status: "completed", input: { query: entry.query } },
+    }));
+    history = [{
+      info: { id: "msg_resubmit_valid", role: "assistant", time: { completed: Date.now() } },
+      parts: [
+        ...retrievalParts,
+        ...searchParts,
+        ...[...deliverables.keys()].map((filePath) => ({ type: "tool", tool: "write", state: { status: "completed", input: { filePath } } })),
+        { type: "text", text: "The corrected files are complete; the local submission ceiling was reached before this version could receive a receipt." },
+      ],
+    }];
+
+    const current = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(current.status, "running", "the server-valid current bytes need a receipt, not a terminal failure");
+    assert.equal(repairPrompts.length, 1, "one resubmit-only repair must be sent");
+    assert.match(repairPrompts[0], /evimed_submit_deliverable/);
+    assert.match(repairPrompts[0], /do not edit|不要修改/i);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("delivers a package whose only gap is bookkeeping, and does not stamp it unverified", async () => {
@@ -5210,6 +5416,8 @@ test("a repair instruction names a check the run can actually run", () => {
 
   assert.match(prompt, /evimed_submit_deliverable/, "the repair must name the check that exists");
   assert.match(prompt, /evimed_revise_deliverable/, "an accepted package needs an explicit new revision before its files can change");
+  assert.match(prompt, /authenticated repair successor/, "a resumed root must know it owns the repair without delegating the package again");
+  assert.match(prompt, /do not delegate any file or source to another child/);
   const unaccepted = clinicalEvidenceRepairPromptForTest([
     "clinical-evidence-matrix.json is malformed",
   ], null, false);

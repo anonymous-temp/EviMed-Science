@@ -19,6 +19,7 @@ import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
   OPEN_DOMAIN_ANSWER_AGENT_ID,
+  classifierFailureReason,
   routeNamedSpecialist,
   routeOpenDomainSpecialist,
 } from "./specialistRouting.mjs";
@@ -737,6 +738,8 @@ export function createWebApiApp(overrides = {}) {
     ),
     readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
+    readChildSessionActivity: (project, parentSessionId, childSessionIds) =>
+      runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     resolveRunProject: (project, run) => sourceUnderstandingRuntime
@@ -1818,7 +1821,7 @@ export function createWebApiApp(overrides = {}) {
             // this says so: one is the design working, the other is the design
             // not running.
             routedSpecialist = net && classifierTrace.failure
-              ? { ...net, reason: `${net.reason}(classifier:${classifierTrace.failure})` }
+              ? { ...net, reason: classifierFailureReason(net.reason, classifierTrace.failure) }
               : net;
           }
         }
@@ -1839,7 +1842,7 @@ export function createWebApiApp(overrides = {}) {
               // a batch cannot be read afterwards if a timed-out routing and a
               // genuinely open-domain question leave the same record.
               reason: classifierTrace.failure
-                ? `unrouted:open-domain(classifier:${classifierTrace.failure})`
+                ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure)
                 : "unrouted:open-domain",
             }
           : null);
