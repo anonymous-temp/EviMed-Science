@@ -51,6 +51,7 @@ const base = String(args.base ?? process.env.OPEN_SCIENCE_ACCEPTANCE_BASE_URL ??
 const username = String(process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "cdss-access");
 const capabilityId = String(args.capability ?? "");
 const briefId = String(args.brief ?? "");
+const attachRunId = typeof args.run === "string" ? args.run : "";
 // Production terminates TLS with a certificate issued to a bare IP, which no
 // trust store will validate by name. The flag is explicit so this can never be
 // the silent default on a host where the name does check out.
@@ -74,6 +75,24 @@ async function api(route, init = {}) {
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { body = { raw: text.slice(0, 400) }; }
   return { status: response.status, body, response };
+}
+
+/**
+ * A poll that survives the network.
+ *
+ * `fetch` throws on a dropped connection, and the first version let that throw
+ * end the whole script — so one blip 90 seconds into a 70-minute acceptance
+ * killed the watcher while the run itself carried on to completion on the
+ * server, unobserved. The run is the expensive part; the watcher is not, and it
+ * must not be the fragile one.
+ * @param {string} route
+ */
+async function pollApi(route) {
+  try {
+    return await api(route);
+  } catch (error) {
+    return { status: 0, body: null, response: null, error: String(error?.message ?? error) };
+  }
 }
 
 const stamp = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
@@ -185,32 +204,53 @@ async function main() {
   // Bind the session to the capability rather than letting the router pick.
   // An acceptance that depends on the classifier is measuring the classifier.
   const sessionId = String(args.session ?? `acc-${capabilityId.slice(0, 20)}-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
-  const bound = await api(`/api/research-sessions/${encodeURIComponent(sessionId)}`, {
-    method: "PUT",
-    body: JSON.stringify({ mode: "specialist", agentId: capabilityId, agentVersion: agent.version }),
-  });
-  if (bound.status !== 200) throw new Error(`session bind failed: ${bound.status} ${JSON.stringify(bound.body).slice(0, 300)}`);
-  say(`session=${sessionId} bound to ${capabilityId}@${agent.version}`);
-
-  const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
-  const dispatched = await api("/api/agent-runs/dispatch", {
-    method: "POST",
-    body: JSON.stringify({ sessionId, dispatchId, text }),
-  });
-  if (dispatched.status !== 202) {
-    throw new Error(`dispatch failed: ${dispatched.status} ${JSON.stringify(dispatched.body).slice(0, 400)}`);
+  if (!attachRunId) {
+    const bound = await api(`/api/research-sessions/${encodeURIComponent(sessionId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ mode: "specialist", agentId: capabilityId, agentVersion: agent.version }),
+    });
+    if (bound.status !== 200) throw new Error(`session bind failed: ${bound.status} ${JSON.stringify(bound.body).slice(0, 300)}`);
+    say(`session=${sessionId} bound to ${capabilityId}@${agent.version}`);
   }
-  const runId = String(dispatched.body.data.id);
-  say(`dispatched run=${runId} prompt=${text.length} chars`);
+
+  // `--run <id>` attaches to a run already in flight instead of starting one.
+  // A dispatched acceptance costs an hour of real model work, so losing the
+  // watcher must not mean losing the run — and re-running the script would be
+  // refused `agent_run_active` anyway, which reads as a failure rather than as
+  // "it is still going, come and watch".
+  let runId;
+  let run;
+  if (attachRunId) {
+    const list = await api("/api/agent-runs");
+    if (list.status !== 200) throw new Error(`could not list runs: ${list.status}`);
+    run = list.body.data.find((/** @type {any} */ entry) => entry.id === attachRunId);
+    if (!run) throw new Error(`no run ${attachRunId} in project ${projectId}`);
+    runId = attachRunId;
+    say(`attached to run=${runId} (${run.status})`);
+  } else {
+    const dispatchId = String(args["dispatch-id"] ?? `acc-${Date.now().toString(36)}`).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 64);
+    const dispatched = await api("/api/agent-runs/dispatch", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, dispatchId, text }),
+    });
+    if (dispatched.status !== 202) {
+      throw new Error(`dispatch failed: ${dispatched.status} ${JSON.stringify(dispatched.body).slice(0, 400)}`);
+    }
+    runId = String(dispatched.body.data.id);
+    run = dispatched.body.data;
+    say(`dispatched run=${runId} prompt=${text.length} chars`);
+  }
 
   const deadline = Date.now() + timeoutMs;
   const pending = new Set(["queued", "dispatching", "running"]);
-  let run = dispatched.body.data;
   let lastPhase = "";
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, pollMs));
-    const list = await api("/api/agent-runs");
-    if (list.status !== 200) { say(`poll returned ${list.status}; retrying`); continue; }
+    const list = await pollApi("/api/agent-runs");
+    if (list.status !== 200) {
+      say(list.error ? `poll could not reach the deployment (${list.error}); retrying` : `poll returned ${list.status}; retrying`);
+      continue;
+    }
     const found = list.body.data.find((/** @type {any} */ entry) => entry.id === runId);
     if (!found) { say("run not in the list yet"); continue; }
     run = found;

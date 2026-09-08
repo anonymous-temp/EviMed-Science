@@ -75,6 +75,13 @@ const SKIPPED_DIRS = new Set(["node_modules", ".git", "workspace"]);
 
 function ledgerHealth(root) {
   const ledgers = [];
+  // `errors.jsonl` sits beside `runs.jsonl` and records the refusals that never
+  // became runs — a spend ceiling, a bad credential, an unreachable source.
+  // Nothing read it on a schedule, so the only way anyone learned what it held
+  // was to go and aggregate it by hand after something had already gone wrong;
+  // that is how eighteen gateway refusals sat unexplained for five days. Same
+  // walk, because it is the same question asked one layer earlier.
+  const errorLedgers = [];
   const walk = (dir, depth) => {
     if (depth > 8) return;
     let entries;
@@ -82,6 +89,7 @@ function ledgerHealth(root) {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isFile() && entry.name === "runs.jsonl") ledgers.push(full);
+      else if (entry.isFile() && entry.name === "errors.jsonl") errorLedgers.push(full);
       // Dot directories are descended into, unlike the package walk above.
       // `runs.jsonl` lives in the project's `.openscience/` meta directory by
       // design, so skipping hidden names — which is right when hunting for
@@ -133,7 +141,30 @@ function ledgerHealth(root) {
   for (const row of rows) {
     row.review = row.rate > 0.5 ? "always-fires" : (row.daysSinceLast != null && row.daysSinceLast > 30 ? "silent-30d" : null);
   }
-  return { ledgers: ledgers.length, finished, emptyArtifacts, rows };
+  /** @type {Map<string, {count: number, lastMs: number}>} */
+  const refusals = new Map();
+  let refusalRows = 0;
+  for (const file of errorLedgers) {
+    let text;
+    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      let row;
+      try { row = JSON.parse(line); } catch { continue; }
+      refusalRows += 1;
+      const code = String(row.code ?? "(none)");
+      const at = Date.parse(row.createdAt ?? "");
+      const current = refusals.get(code) ?? { count: 0, lastMs: 0 };
+      refusals.set(code, { count: current.count + 1, lastMs: Math.max(current.lastMs, Number.isNaN(at) ? 0 : at) });
+    }
+  }
+  const refusalList = [...refusals].map(([code, v]) => ({
+    code,
+    count: v.count,
+    daysSinceLast: v.lastMs ? Math.floor((now - v.lastMs) / 86_400_000) : null,
+  })).sort((a, b) => b.count - a.count);
+
+  return { ledgers: ledgers.length, finished, emptyArtifacts, rows, errorLedgers: errorLedgers.length, refusalRows, refusals: refusalList };
 }
 
 if (ledgerRoot) {
@@ -145,6 +176,15 @@ if (ledgerRoot) {
     const flag = row.review ? `  <-- ${row.review}` : "";
     const last = row.daysSinceLast == null ? "never" : `${row.daysSinceLast}d ago`;
     console.log(`  ${String(row.count).padStart(4)}  ${(row.rate * 100).toFixed(1).padStart(5)}%  last ${last.padEnd(9)}  ${row.code}${flag}`);
+  }
+  if (health.refusalRows > 0) {
+    console.log(`\nHTTP refusals from ${health.errorLedgers} error ledger(s): ${health.refusalRows} rows`);
+    // Ten is enough to see a burst without turning a weekly summary into a log.
+    for (const row of health.refusals.slice(0, 10)) {
+      const last = row.daysSinceLast == null ? "never" : `${row.daysSinceLast}d ago`;
+      console.log(`  ${String(row.count).padStart(5)}  last ${last.padEnd(9)}  ${row.code}`);
+    }
+    if (health.refusals.length > 10) console.log(`  (${health.refusals.length - 10} more codes)`);
   }
   console.log(
     "\nThe two flags are principle #4, applied after the fact. `always-fires` is a"
