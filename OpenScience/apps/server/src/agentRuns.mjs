@@ -1166,6 +1166,66 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
   ].join("\n");
 }
 
+/**
+ * The repair prompt for the other fifteen capabilities.
+ *
+ * `canRepair` used to require `effectiveAgentId === "clinical-evidence-synthesis"`,
+ * so a bibliometric or dataset-scoping run whose contract rejected it failed
+ * outright — with the same actionable issue text the clinical loop repairs
+ * from. The issues were never clinical: `requiredSpecialistArtifacts` produces
+ * `specialist_required_output_missing` and `_stale` for every capability that
+ * declares required outputs, which is all of them.
+ *
+ * The clinical prompt could not simply be reused. It names
+ * `clinical-evidence-report.md`, the evidence matrix and the citation ledger by
+ * hand, so sending it to a bibliometric run would order that run to repair
+ * files it does not have and spend a bounded attempt discovering that — the
+ * same failure as the OpenCode `preflight.py` path this file already fixed
+ * once. What is shared is the part that is about repair rather than about
+ * clinical evidence, and that part is the whole of this function.
+ *
+ * The issue list leads and is verbatim. Structured feedback that carries
+ * position, observed value and an acceptable alternative raises repair success
+ * by 42–44 points, and the gain comes from the third element (arXiv 2607.14167);
+ * the gate's issues already have that shape, so restating them would only lose
+ * it.
+ *
+ * @param {any} agent the capability record, for its own required outputs
+ * @param {readonly string[]} issues
+ * @param {boolean} revisionRequired
+ */
+function specialistRepairPrompt(agent, issues, revisionRequired = false) {
+  const bounded = issues
+    .filter((issue) => typeof issue === "string" && issue.trim())
+    .slice(0, 40)
+    .map((issue) => `- ${issue.slice(0, 300)}`)
+    .join("\n");
+  // The capability's own manifest, not a list written here: `outputs` is what
+  // `requiredSpecialistArtifacts` checked against, so naming anything else
+  // would send the run after files the gate is not asking for.
+  const required = (agent?.outputs ?? [])
+    .filter((output) => output?.required && typeof output.path === "string" && output.path)
+    .map((output) => output.path)
+    .slice(0, 20);
+  return [
+    `The server-side delivery gate rejected this ${agent?.id ?? "capability"} package.`,
+    "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files; do not delegate any file to another child.",
+    ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
+    ...(required.length ? [`Revise the existing package in place. Its required deliverables are: ${required.join(", ")}.`] : ["Revise the existing package in place."]),
+    // Capability-independent, and measured: four production clinical repairs
+    // showed every whole-file rewrite losing content (1,863 and 4,125
+    // characters in two of them) while targeted edits held steady. Nothing in
+    // that mechanism is about clinical evidence — it is about regenerating a
+    // long document from a compressed recollection.
+    "Patch prose deliverables with the edit tool, changing only what the issues name. Do not rewrite a whole file with the write tool: replacing it regenerates it from what you still hold in context, which after a long run is a compressed recollection, so it comes back shorter and you cannot tell that it did. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
+    "Every JSON deliverable must remain strict JSON. Escape embedded quotation marks correctly instead of changing wording to work around JSON syntax.",
+    "Deleting content is the last resort, not the first: it satisfies the gate while making the work smaller. If you do drop something, say in your reply what went and why it could not be supported.",
+    "After fixing the files, submit the package again with evimed_submit_deliverable.",
+    "Fix every issue it returns and resubmit until it accepts, then read every required deliverable back before finishing:",
+    bounded,
+  ].join("\n");
+}
+
 /** @param {readonly string[]} deliverableIds */
 function clinicalEvidenceResubmitPrompt(deliverableIds) {
   return [
@@ -3601,7 +3661,33 @@ export class AgentRunStore {
         const structuralAttempts = this.clinicalStructuralRepairAttempts.get(run.id) ?? 0;
         const structuralRound = completion.qualityStructural === true
           && structuralAttempts < this.maxClinicalStructuralRepairAttempts;
-        const canRepair = run.effectiveAgentId === "clinical-evidence-synthesis"
+        // Every capability, not one.
+        //
+        // This required `effectiveAgentId === "clinical-evidence-synthesis"`,
+        // so the other fifteen went straight to `failed` on a rejection the
+        // clinical line repairs from — and the issues were never clinical:
+        // `requiredSpecialistArtifacts` raises `specialist_required_output_missing`
+        // and `_stale` for every capability that declares required outputs,
+        // which is all of them. Nothing else here was capability-specific
+        // either: the repair sender is registered for every dispatched run, and
+        // `snapshotAcceptedPackageForRepair` already answers
+        // `{revisionRequired: false}` when there is no accepted receipt to
+        // preserve, which is the ordinary shape of a package that never got
+        // past its required files.
+        //
+        // The prompt is chosen below, and that is the part that could not be
+        // shared: the clinical one names its own deliverables by hand.
+        //
+        // Bounded by `qualityFileDeliverable`, which is the answer line's
+        // absence rather than a capability name. An open-domain answer's
+        // deliverable *is* the reply, so there is no package to revise and no
+        // `evimed_submit_deliverable` to call — a repair prompt there would
+        // order a run to patch files it was never asked to write. That line
+        // already has the right behaviour for a citation it cannot vouch for:
+        // deliver the answer and mark it unverified.
+        const repairAgent = (await this.agentRegistry)?.get?.(run.effectiveAgentId);
+        const fileDeliverable = repairAgent?.completionChecks?.includes("requiredOutputsExist") === true;
+        const canRepair = fileDeliverable
           && repairableEvidencePackageErrorCodes.has(completion.errorCode)
           && Array.isArray(completion.qualityIssues)
           && completion.qualityIssues.length > 0
@@ -3644,7 +3730,9 @@ export class AgentRunStore {
               const previous = sizes.length > 0 && beforeRepair > 0 && beforeRepair < sizes[0]
                 ? { startSize: sizes[0], currentSize: beforeRepair, lost: sizes[0] - beforeRepair }
                 : null;
-              const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired));
+              const repair = await repairSender(run.effectiveAgentId === "clinical-evidence-synthesis"
+                ? clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired)
+                : specialistRepairPrompt(repairAgent, completion.qualityIssues, revision.revisionRequired));
               if (repair?.accepted !== false) return run;
             } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
             terminal.status = "failed";
