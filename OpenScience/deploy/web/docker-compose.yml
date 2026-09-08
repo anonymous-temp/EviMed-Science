@@ -173,6 +173,17 @@ services:
       OPEN_SCIENCE_REQUIRE_MEMOS: "true"
       OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
       OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000}
+      # Autopilot's levers belong to the base stack, not to an overlay. Compose
+      # passes environment item by item, and these were listed only in
+      # `docker-compose.ingestion.yml` — so on a deployment without that overlay
+      # the server still defaulted autopilot on in production while an operator
+      # setting `OPEN_SCIENCE_AUTOPILOT_ENABLED=false` in `.env` changed nothing
+      # and was told nothing. A lever that cannot turn a subsystem off is worse
+      # than no lever. The ingestion overlay still pins it to "true", because
+      # the source pipeline it composes needs it.
+      OPEN_SCIENCE_AUTOPILOT_ENABLED: ${OPEN_SCIENCE_AUTOPILOT_ENABLED:-true}
+      OPEN_SCIENCE_AUTOPILOT_POLL_MS: ${OPEN_SCIENCE_AUTOPILOT_POLL_MS:-1000}
+      OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ${OPEN_SCIENCE_AUTOPILOT_LEASE_MS:-300000}
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN:-}
       OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE: ${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE:-}
       OPEN_SCIENCE_BACKUP_MODE: ${OPEN_SCIENCE_BACKUP_MODE:-disabled}
