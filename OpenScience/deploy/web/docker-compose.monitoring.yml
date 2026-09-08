@@ -18,6 +18,11 @@ services:
     volumes:
       - ./monitoring/prometheus.json:/etc/prometheus/prometheus.json:ro
       - ./monitoring/open-science.rules.json:/etc/prometheus/rules/open-science.rules.json:ro
+      # Deployment-specific probe targets, written by `configure:monitoring`
+      # rather than committed: every other target in prometheus.json is a
+      # compose service name, and the public origin is the one thing that is not
+      # the same on two deployments.
+      - ./monitoring/targets:/etc/prometheus/targets:ro
       - prometheus-data:/prometheus
     secrets:
       - source: prometheus_operator_metrics_token
@@ -27,6 +32,7 @@ services:
     depends_on:
       - open-science-web
       - blackbox-exporter
+      - node-exporter
       - alertmanager
     restart: unless-stopped
 
@@ -37,6 +43,26 @@ services:
       - --config.file=/etc/blackbox/blackbox.json
     volumes:
       - ./monitoring/blackbox.json:/etc/blackbox/blackbox.json:ro
+    restart: unless-stopped
+
+  # Host metrics, for one question the rest of this stack cannot answer: how much
+  # disk is left. The production host reached 3.3 GB free on 2026-09-07 with
+  # nothing watching it, and the first symptom would have been a failed release
+  # build or a Postgres write error, neither of which names the cause.
+  node-exporter:
+    image: prom/node-exporter:${OPEN_SCIENCE_NODE_EXPORTER_VERSION:-v1.10.2}
+    profiles: ["monitoring"]
+    command:
+      - --path.rootfs=/host
+      # Only the filesystem collector. This exporter reads the host's /proc and
+      # its whole default collector set is a much larger surface than the one
+      # metric these alerts need.
+      - --collector.disable-defaults
+      - --collector.filesystem
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+|var/lib/kubelet/.+)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
     restart: unless-stopped
 
   alertmanager:

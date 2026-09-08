@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { DISTILL_TRIGGER } from "./feedbackEvents.mjs";
 
 import { CONSOLIDATE_ACTIONS } from "./methodConsolidation.mjs";
 
@@ -28,8 +27,7 @@ import { CONSOLIDATE_ACTIONS } from "./methodConsolidation.mjs";
 export class LearningWorker {
   /**
    * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
-   *          feedbackDistiller?: {distill: (job: any) => Promise<any>} | null,
- *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
+   *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
    *          enabled?: boolean, window?: string,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
    */
@@ -37,7 +35,6 @@ export class LearningWorker {
     jobs,
     distillation,
     consolidation,
-    feedbackDistiller = null,
     resolveProject = async () => null,
     resolveRun = async () => null,
     maintain = async () => {},
@@ -59,7 +56,6 @@ export class LearningWorker {
     this.jobs = jobs;
     this.distillation = distillation;
     this.consolidation = consolidation;
-    this.feedbackDistiller = feedbackDistiller;
     this.resolveProject = resolveProject;
     this.resolveRun = resolveRun;
     this.maintain = maintain;
@@ -69,6 +65,7 @@ export class LearningWorker {
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
     this.now = now;
+    this.kinds = ["distill", "consolidate"];
     this.workerId = `learning-${randomUUID()}`;
     // Named `timer` and `reconcileTimer` because `pauseRecurringWork` reaches
     // for those two fields by name to drain the system for maintenance. A
@@ -99,26 +96,6 @@ export class LearningWorker {
     return null;
   }
 
-  /**
-   * Whether this worker may take a job off the queue at all.
-   *
-   * Not the same question as `claimBlockedReason`, and the difference is a
-   * defect this had while there were two claimers to hide it. The window is an
-   * economic argument — model calls are half price at night — so it gates
-   * *spending*, not claiming. But this worker is the only claimer of `distill`
-   * while the loop is on, and the feedback ledger queues `distill` jobs that
-   * cost no model call and start no container. Declining to claim outside the
-   * window left those queued from 09:00 to 22:00 with nobody to take them,
-   * which is not thrift, it is a stall.
-   *
-   * So: the loop being off still means claim nothing. Outside the window it
-   * claims, and `#execute` runs the free work and puts the expensive work back.
-   * @returns {string | null}
-   */
-  pollBlockedReason() {
-    return this.enabled ? null : "learning_disabled";
-  }
-
   async tick() {
     if (this.running) return this.running;
     this.running = this.#tick().catch((error) => {
@@ -129,13 +106,13 @@ export class LearningWorker {
   }
 
   async #tick() {
-    const blocked = this.pollBlockedReason();
+    const blocked = this.claimBlockedReason();
     if (blocked) {
       this.lastSkippedReason = blocked;
       return null;
     }
-    this.lastSkippedReason = this.claimBlockedReason();
-    const job = await this.jobs.claim(["distill", "consolidate"], this.workerId, { leaseMs: this.leaseMs });
+    this.lastSkippedReason = null;
+    const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let leaseLost = false;
     const renewal = setInterval(() => {
@@ -145,17 +122,6 @@ export class LearningWorker {
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     try {
-      // Outside the window, spend nothing. A feedback-triggered distillation
-      // is free — no model call, no container — so it runs at any hour; every
-      // other job goes back with a delay rather than being worked at peak
-      // price. Deferred rather than failed: the job keeps its attempts and its
-      // identity, and the next tick inside the window picks it up.
-      if (this.claimBlockedReason() && !isFreeLearningJob(job)) {
-        await this.jobs.fail(job.userId, job.id, job.leaseToken,
-          { code: "outside_learning_window", message: "Deferred until the off-peak learning window." },
-          { retry: true, delayMs: this.#untilWindowOpensMs() });
-        return { state: "deferred", reason: "outside_learning_window" };
-      }
       const result = await this.#execute(job);
       // A run that has not finished yet is not a job that has: the bounded run
       // keeps its own identity, and re-claiming later adopts it by dispatch id
@@ -196,33 +162,8 @@ export class LearningWorker {
     }
   }
 
-  /** Milliseconds until the window opens, floored at one minute and capped at a
-   *  day. With no window configured there is nothing to wait for. */
-  #untilWindowOpensMs() {
-    if (!this.window) return 60_000;
-    const now = this.now();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    const start = this.window.startMinutes;
-    const delta = (start - minutes + 1440) % 1440;
-    return Math.min(86_400_000, Math.max(60_000, delta * 60_000));
-  }
-
   /** @param {any} job */
   async #execute(job) {
-    // A `distill` job queued by the feedback ledger — an adopted deliverable
-    // and the edit the researcher made to it — carries a different payload
-    // from one queued by the terminal hook, and a different producer knows
-    // how to read it. This worker is the only claimer of the kind while the
-    // loop is on, so the job has to be handed over here or it fails on
-    // arrival with a payload it was never meant to parse.
-    if (job.kind === "distill" && job.payload?.trigger === DISTILL_TRIGGER) {
-      if (!this.feedbackDistiller) {
-        const error = new Error("No producer is configured for a feedback-triggered distillation.");
-        /** @type {any} */ (error).code = "distill_trigger_unknown";
-        throw error;
-      }
-      return this.feedbackDistiller.distill(job);
-    }
     if (job.kind === "consolidate") {
       const action = String(job.payload?.action ?? "");
       if (!CONSOLIDATE_ACTIONS.includes(action)) {
@@ -294,28 +235,9 @@ export class LearningWorker {
 }
 
 /** Codes where another attempt would spend money to reach the same conclusion. */
-/**
- * Whether a job costs nothing to run, and may therefore run at any hour.
- *
- * Only one kind qualifies today: the feedback ledger's distillation, which
- * assembles a candidate method out of two events already on disk. It makes no
- * model call and starts no container, so deferring it to the off-peak window
- * would buy nothing and would leave a researcher's correction unlearned for
- * most of the day.
- * @param {any} job @returns {boolean}
- */
-function isFreeLearningJob(job) {
-  return job?.kind === "distill" && job?.payload?.trigger === DISTILL_TRIGGER;
-}
-
 const TERMINAL_LEARNING_ERRORS = new Set([
   "consolidate_action_invalid",
   "consolidate_payload_invalid",
-  // The feedback distiller's own refusals: a wrong shape or evidence that is
-  // gone will not become right by being retried.
-  "distill_trigger_unknown",
-  "distill_payload_invalid",
-  "distill_evidence_missing",
   "distillation_trigger_invalid",
   "distillation_run_unavailable",
   "method_candidate_invalid",

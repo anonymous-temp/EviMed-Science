@@ -6,7 +6,15 @@ import { AutopilotPage } from "./AutopilotPage";
 
 const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), createAgenda: vi.fn(), startAgenda: vi.fn(), stopAgenda: vi.fn(), scheduleAgenda: vi.fn(), listDigests: vi.fn(), decideDigest: vi.fn(), getDigest: vi.fn(), markDigestOpened: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
-vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => "project-one", WebApiError: class WebApiError extends Error {} }));
+// Partial: only the project identity is stubbed. A total mock listing two
+// exports by hand is a list that goes stale — it did, the moment the error
+// dictionary gained `webErrorMessage`, and this page stopped rendering at all
+// while the failure read as three missing strings. The real `webErrorMessage`
+// and the real `WebApiError` also mean an assertion here proves what the
+// shared registry says rather than what this file made up.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()),
+  getWebProjectId: () => "project-one",
+}));
 
 const agenda = { id: "agenda-one", projectId: "project-one", revision: 2, payload: { title: "心衰证据追踪", topics: ["heart failure"],
   taskTypes: ["evidence-update"], dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, scheduleHour: 1, timeZone: "Asia/Shanghai",

@@ -16,6 +16,7 @@ export class MemoryIndexWorker {
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
+    this.kinds = ["memory-index"];
     this.workerId = `memory-index-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
@@ -45,7 +46,7 @@ export class MemoryIndexWorker {
   }
 
   async #tick() {
-    const job = await this.jobs.claim(["memory-index"], this.workerId, { leaseMs: this.leaseMs });
+    const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let leaseLost = false;
     const renewal = setInterval(() => {

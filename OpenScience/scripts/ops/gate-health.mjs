@@ -32,7 +32,14 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validateClinicalEvidencePackage } from "@evimed/domain/clinical-evidence";
+// Imported where it is used, not at the top.
+//
+// The `--ledger` mode below reads `runs.jsonl` and needs no gate at all, and it
+// is the mode that runs on a deployment host — where `node_modules` is not
+// installed, because the release directory ships source and the dependencies
+// live inside the image. A static import made the whole script unusable there
+// with `ERR_MODULE_NOT_FOUND @evimed/domain`, which reads as a broken script
+// rather than as "this mode does not need that".
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const baselinePath = path.resolve(
@@ -42,8 +49,116 @@ const baselinePath = path.resolve(
 const args = process.argv.slice(2);
 const jsonAt = args.indexOf("--json");
 const jsonOut = jsonAt >= 0 ? args[jsonAt + 1] : null;
-const roots = args.filter((value, index) => value !== "--json" && index !== jsonAt + 1);
+const ledgerAt = args.indexOf("--ledger");
+const ledgerRoot = ledgerAt >= 0 ? args[ledgerAt + 1] : null;
+const roots = args.filter((value, index) => (
+  value !== "--json" && index !== jsonAt + 1 && value !== "--ledger" && index !== ledgerAt + 1
+));
 const searchRoots = roots.length ? roots : [path.join(repoRoot, "uploads")];
+
+/**
+ * What each check actually costs, measured on runs that happened.
+ *
+ * The replay above answers "would this package pass today"; this answers the
+ * question principle #4 asks and nothing was answering: how often does each
+ * check fire on real traffic. Both review flags come straight from that
+ * principle — a check firing on more than half of runs has stopped carrying
+ * information, and a check that has not fired in thirty days is either
+ * unnecessary or broken, and the two look identical from inside the code.
+ *
+ * Reads `runs.jsonl` files, which is the ledger `agentRuns.mjs` writes, so a
+ * deployment can be measured without a database and without a live model call.
+ *
+ * @param {string} root directory to search for run ledgers
+ */
+const SKIPPED_DIRS = new Set(["node_modules", ".git", "workspace"]);
+
+function ledgerHealth(root) {
+  const ledgers = [];
+  const walk = (dir, depth) => {
+    if (depth > 8) return;
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isFile() && entry.name === "runs.jsonl") ledgers.push(full);
+      // Dot directories are descended into, unlike the package walk above.
+      // `runs.jsonl` lives in the project's `.openscience/` meta directory by
+      // design, so skipping hidden names — which is right when hunting for
+      // report packages — found exactly zero ledgers on a host holding 41 of
+      // them, and said "0 finished runs" about a deployment with 179.
+      else if (entry.isDirectory() && !SKIPPED_DIRS.has(entry.name)) walk(full, depth + 1);
+    }
+  };
+  walk(root, 0);
+  // A scan that found nothing is not a healthy quiet deployment, and the two
+  // read identically in the output below: both print zero of everything. Say
+  // which one this is, and fail, so a wrong root or an unreadable directory
+  // cannot be mistaken for a clean bill of health.
+  if (ledgers.length === 0) {
+    console.error(`no runs.jsonl under ${root} — wrong root, or not readable by this user; nothing was measured`);
+    process.exit(2);
+  }
+
+  let finished = 0;
+  let emptyArtifacts = 0;
+  const now = Date.now();
+  /** @type {Map<string, {count: number, lastMs: number}>} */
+  const codes = new Map();
+  for (const file of ledgers) {
+    let text;
+    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      let event;
+      try { event = JSON.parse(line); } catch { continue; }
+      if (event.event !== "finished") continue;
+      finished += 1;
+      if (!Array.isArray(event.artifacts) || event.artifacts.length === 0) emptyArtifacts += 1;
+      if (event.status === "succeeded") continue;
+      const code = String(event.errorCode ?? "(none)");
+      const at = Date.parse(event.finishedAt ?? "");
+      const current = codes.get(code) ?? { count: 0, lastMs: 0 };
+      codes.set(code, { count: current.count + 1, lastMs: Math.max(current.lastMs, Number.isNaN(at) ? 0 : at) });
+    }
+  }
+  const rows = [...codes].map(([code, v]) => ({
+    code,
+    count: v.count,
+    // Share of *finished* runs, not of failures: a rate over failures only
+    // says which failure is commonest, which is never the question.
+    rate: finished ? v.count / finished : 0,
+    daysSinceLast: v.lastMs ? Math.floor((now - v.lastMs) / 86_400_000) : null,
+  })).sort((a, b) => b.count - a.count);
+  for (const row of rows) {
+    row.review = row.rate > 0.5 ? "always-fires" : (row.daysSinceLast != null && row.daysSinceLast > 30 ? "silent-30d" : null);
+  }
+  return { ledgers: ledgers.length, finished, emptyArtifacts, rows };
+}
+
+if (ledgerRoot) {
+  const health = ledgerHealth(ledgerRoot);
+  console.log(`gate health from ${health.ledgers} run ledger(s) under ${ledgerRoot}`);
+  console.log(`${health.finished} finished runs, ${health.emptyArtifacts} recorded no artifacts`);
+  if (!health.rows.length) console.log("no non-succeeded runs recorded");
+  for (const row of health.rows) {
+    const flag = row.review ? `  <-- ${row.review}` : "";
+    const last = row.daysSinceLast == null ? "never" : `${row.daysSinceLast}d ago`;
+    console.log(`  ${String(row.count).padStart(4)}  ${(row.rate * 100).toFixed(1).padStart(5)}%  last ${last.padEnd(9)}  ${row.code}${flag}`);
+  }
+  console.log(
+    "\nThe two flags are principle #4, applied after the fact. `always-fires` is a"
+    + "\ncheck that has stopped carrying information — every run trips it, so tripping"
+    + "\nit says nothing. `silent-30d` is a check that is either unnecessary or broken,"
+    + "\nand from inside the code those two look exactly alike.",
+  );
+  if (jsonOut) {
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(jsonOut, `${JSON.stringify(health, null, 2)}\n`, "utf8");
+    console.log(`\nwrote ${jsonOut}`);
+  }
+  process.exit(0);
+}
 
 const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
 const clinical = baseline.contracts["clinical-evidence-report"];
@@ -120,6 +235,7 @@ for (const dir of dirs) {
   // existed when it was written. `addedOn` in the baseline is what makes that
   // separable at all.
   const missing = clinical.outputs.filter((output) => output.required && !existsSync(path.join(dir, output.path)));
+  const { validateClinicalEvidencePackage } = await import("@evimed/domain/clinical-evidence");
   const result = validateClinicalEvidencePackage({
     reportText: read("clinical-evidence-report.md"),
     matrix,

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { FileSearch } from "lucide-react";
+import { FileSearch, FileX2 } from "lucide-react";
 import { getWebProjectId } from "@/lib/apiClient";
-import { getSourceUnderstanding, listSourceUnderstandingHistory, type SourceAnchor, type SourceUnderstanding, type SourceUnderstandingResult } from "@/lib/sourceClient";
+import { getSourceUnderstanding, listSourceUnderstandingHistory, sourceFailureMessage,
+  type SourceAnchor, type SourceUnderstanding, type SourceUnderstandingResult } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -24,8 +25,12 @@ function timestamp(value: string) {
   return Number.isFinite(date.getTime()) ? date.toLocaleString("zh-CN", { hour12: false }) : "时间未记录";
 }
 
-export function SourceUnderstandingPanel({ projectId, sourceId, sourceName, generation, onClose }: {
-  projectId: string; sourceId: string; sourceName: string; generation?: number; onClose: () => void;
+export function SourceUnderstandingPanel({ projectId, sourceId, sourceName, generation, error: failure = null, onClose }: {
+  projectId: string; sourceId: string; sourceName: string; generation?: number;
+  /** The source row's stored failure, so a generation that died can say why.
+   * The panel never fetches it: the page already holds the source record. */
+  error?: { code: string; message: string } | null;
+  onClose: () => void;
 }) {
   const [detail, setDetail] = useState<SourceUnderstandingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,11 +129,20 @@ export function SourceUnderstandingPanel({ projectId, sourceId, sourceName, gene
             aria-pressed={selected?.id === item.id} onClick={() => setSelected(item)}>第 {item.generation} 代 · {timestamp(item.createdAt)}</Button>)}</div>}
           {nextCursor && <Button size="sm" variant="ghost" loading={historyLoading} onClick={() => void loadHistory(nextCursor)}>加载更多历史</Button>}
         </div>}
-        {!shown && <EmptyState icon={FileSearch}
-          title={detail.depth === "skip" ? "此资料仅保留指纹" : detail.depth === "index_only" ? "此资料只建索引"
-            : active(detail.status) ? `第 ${detail.generation} 代理解正在生成` : "此代次尚无可用理解"}
-          description={detail.depth === "skip" || detail.depth === "index_only" ? "当前深度不生成结构化理解。可在整理台调整分析深度。"
-            : "已完成的旧版本可在理解历史中查看。"} />}
+        {/* A generation that FAILED and one that was never analysed both read
+            「此代次尚无可用理解」 until 2026-09-08, so a researcher could not tell a
+            dead parse from a queue — and re-uploaded the file, paying for the
+            parse a second time. The source's own status is what separates the
+            two; the stored error code is what names the cause. */}
+        {!shown && (detail.status === "failed"
+          ? <EmptyState icon={FileX2} title={`第 ${detail.generation} 代解析失败，因此这一代没有理解结果`}
+            description={<><p title={failure?.code}>{sourceFailureMessage(failure) ?? "系统没有记下这次失败的原因。"}</p>
+              <p className="mt-1">原件仍在知识库里。回到资料整理台点「重新分析」会新起一代，已完成的旧代次可在理解历史中查看。</p></>} />
+          : <EmptyState icon={FileSearch}
+            title={detail.depth === "skip" ? "此资料仅保留指纹" : detail.depth === "index_only" ? "此资料只建索引"
+              : active(detail.status) ? `第 ${detail.generation} 代理解正在生成` : "此代次尚无可用理解"}
+            description={detail.depth === "skip" || detail.depth === "index_only" ? "当前深度不生成结构化理解。可在整理台调整分析深度。"
+              : "已完成的旧版本可在理解历史中查看。"} />)}
         {shown && <UnderstandingContent key={shown.id} understanding={shown} historical={selected != null} />}
       </>}
     </div>

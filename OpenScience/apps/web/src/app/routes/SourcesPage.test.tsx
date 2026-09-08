@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { knownErrorCodeMessage } from "@evimed/domain";
 import { SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -12,10 +13,15 @@ const mocks = vi.hoisted(() => ({
 }));
 const context = vi.hoisted(() => ({ projectId: "project-one" }));
 
-vi.mock("@/lib/sourceClient", () => mocks);
-vi.mock("@/lib/apiClient", () => ({
+// Only the request functions are replaced. `sourceFailureMessage` is a pure
+// projection over the one error dictionary, and a test that stubbed it would
+// prove the page renders a string this file wrote rather than the registry's.
+vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()), ...mocks }));
+// Partial: only the project identity is stubbed. `webErrorMessage` and the
+// error-detail readers are the real ones, so a page assertion about a refusal
+// proves what the shared dictionary says rather than what this file made up.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()),
   getWebProjectId: () => context.projectId,
-  WebApiError: class WebApiError extends Error {},
 }));
 
 const source = {
@@ -265,6 +271,96 @@ describe("SourcesPage", () => {
     render(<SourcesPage />);
     expect(await screen.findByText("理解遗漏 12%")).toBeInTheDocument();
     expect(screen.queryByText("理解遗漏尚未审计")).not.toBeInTheDocument();
+  });
+
+  it("names why the analysis failed, from the one dictionary, not the reason the file was classified", async () => {
+    // `payload.error` was stored, served and typed all the way to this component
+    // and rendered by nothing, so a failed source showed 「分析失败」 next to
+    // `reasons[0]` — a classification rationale with nothing to do with the
+    // failure. The code is the fact; the sentence comes from `@evimed/domain`.
+    const failed = { ...source, payload: { ...source.payload, status: "failed",
+      error: { code: "source_unreadable", message: "Source analysis failed." } } };
+    mocks.listSources.mockResolvedValue({ items: [failed], nextCursor: null });
+    const view = render(<SourcesPage />);
+    const known = knownErrorCodeMessage("source_unreadable") as string;
+    expect(known).toBeTruthy();
+    expect(await screen.findByText(new RegExp("^解析失败："))).toHaveTextContent(`解析失败：${known}`);
+    // The stored message is the same English literal for every failure.
+    expect(view.container.textContent).not.toMatch(/Source analysis failed/);
+    // The classification reason survives, labelled as what it is.
+    expect(screen.getByText(/分类依据：/)).toBeInTheDocument();
+    view.unmount();
+
+    // A code the registry has no sentence for is still a Chinese sentence with
+    // the code kept as the one handle support can search on — never a bare
+    // English identifier standing alone in a Chinese interface.
+    mocks.listSources.mockResolvedValue({ items: [{ ...failed, payload: { ...failed.payload,
+      error: { code: "source_parser_timeout", message: "Source analysis failed." } } }], nextCursor: null });
+    render(<SourcesPage />);
+    const row = await screen.findByText(/^解析失败：/);
+    expect(row.textContent).not.toBe("source_parser_timeout");
+    expect(row).toHaveAttribute("title", "source_parser_timeout");
+  });
+
+  it("states the omission notice as an observation, in Chinese, and stays silent when it has nothing to say", async () => {
+    // `sourceUnderstandingOmissionNotice` returns blocking:false and its targets
+    // have never been checked against an observed distribution, so the card says
+    // out loud that nothing is being asked of the researcher.
+    const noticed = { ...source, payload: { ...source.payload,
+      omissionAudit: { status: "audited", reason: "", omissionRate: 0.32 },
+      omissionNotice: { status: "audited", omissionRate: 0.32, reportedRate: 0.1, target: 0.15,
+        withinTarget: false, audited: 25, planned: 25,
+        disagreements: ["The audit reports an omission rate of 0.1; the anchors this output carries imply 0.32."] } } };
+    mocks.listSources.mockResolvedValue({ items: [noticed], nextCursor: null });
+    const view = render(<SourcesPage />);
+    expect(await screen.findByText(/仅供参考，不影响这份资料入库/)).toBeInTheDocument();
+    expect(screen.getByText(/实测遗漏率 32%，高于当前分析深度的参考值 15%/)).toBeInTheDocument();
+    expect(screen.getByText(/至少有 1 处对不上/)).toBeInTheDocument();
+    // The disagreement lines are the control plane's own English diagnostics.
+    // They are a support handle, never body copy in a Chinese interface.
+    expect(view.container.textContent).not.toMatch(/The audit reports an omission rate/);
+    view.unmount();
+
+    mocks.listSources.mockResolvedValue({ items: [{ ...noticed, payload: { ...noticed.payload,
+      omissionNotice: { ...noticed.payload.omissionNotice, withinTarget: true, disagreements: [] } } }], nextCursor: null });
+    render(<SourcesPage />);
+    await screen.findByText("研究方案.docx");
+    expect(screen.queryByText(/遗漏审计提示/)).not.toBeInTheDocument();
+  });
+
+  it("says why a folder's sync is failing instead of showing only its last good run", async () => {
+    // `lastSync` is written only on the success path, so on its own it reports a
+    // folder that has been failing for a week as healthy, and a paused folder as
+    // a bare 「已暂停」 with no reason.
+    mocks.listSourceFolders.mockResolvedValue({ items: [{
+      id: "srcdir_one", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "paused", recursive: false,
+        sync: { run: 3, page: 1 }, entries: {}, createdAt: "", updatedAt: "",
+        lastError: { code: "connector_unauthorized", at: "2026-09-08T01:00:00Z" },
+        lastSync: { at: "", run: 2, startPage: 1, endPage: 1, complete: true, scanned: 12, registered: 2, updated: 1,
+          unchanged: 9, directories: 0, tracked: 12, skipped: [], skippedCount: 0, removedPaths: [], removedCount: 0, removalCheck: "full" },
+      },
+    }], nextCursor: null });
+    const view = render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
+    const failure = await screen.findByText(/上次同步失败/);
+    expect(failure.textContent).toContain(knownErrorCodeMessage("connector_unauthorized") as string);
+    expect(failure).toHaveAttribute("title", "connector_unauthorized");
+    expect(failure.textContent).toContain("同步已暂停");
+    // The successful run is still shown, but no longer as "the last sync".
+    expect(view.container.textContent).toContain("上次成功同步：");
+    view.unmount();
+
+    // A folder that has never failed reads exactly as it did before.
+    mocks.listSourceFolders.mockResolvedValue({ items: [{
+      id: "srcdir_two", projectId: "project-one", revision: 5, createdAt: "", updatedAt: "", deletedAt: null,
+      payload: { recordType: "source-folder", connector: { type: "openlist", id: "/papers" }, status: "active", recursive: false,
+        sync: { run: 3, page: 1 }, entries: {}, createdAt: "", updatedAt: "", lastSync: null },
+    }], nextCursor: null });
+    render(<SourcesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "连接网盘资料" }));
+    expect(await screen.findByText("尚未完成第一次同步。")).toBeInTheDocument();
+    expect(screen.queryByText(/上次同步失败/)).not.toBeInTheDocument();
   });
 
   it("discards a previous project's late inventory response", async () => {

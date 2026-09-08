@@ -52,7 +52,7 @@ import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSea
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
-import { FeedbackEvents, MethodDistillWorker, deliverableSubjectId } from "./feedbackEvents.mjs";
+import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
@@ -616,9 +616,17 @@ export function createWebApiApp(overrides = {}) {
   // What the researcher did, and the one producer that reads it back. Both
   // exist exactly when the product ledger does; without it the memory routes
   // below record nothing and say so by being null rather than by pretending.
-  const feedbackEvents = productDatabase ? new FeedbackEvents({ database: productDatabase, jobs: productJobs }) : null;
-  const methodDistillWorker = feedbackEvents && productDocuments && productJobs
-    ? new MethodDistillWorker({ jobs: productJobs, documents: productDocuments, feedback: feedbackEvents }) : null;
+  // The queue is handed over only when something will claim from it.
+  //
+  // `distill` has exactly one claimer, `LearningWorker`, and that worker is
+  // composed only when `learningEnabled`. Passing the queue unconditionally
+  // would enqueue a lesson per adopted-then-edited deliverable on a deployment
+  // that has nothing to run it — jobs that sit `queued` forever while
+  // `POST /api/feedback/events` reports a `distillJobId` for work that will
+  // never happen. With no queue the ledger still records the fact, which is the
+  // half of this that stands on its own, and answers `null` for the job.
+  const feedbackEvents = productDatabase
+    ? new FeedbackEvents({ database: productDatabase, jobs: config.learningEnabled ? productJobs : null }) : null;
   /** Optional infrastructure says so, rather than answering 500 to a valid request. */
   function requireFeedbackEvents() {
     if (!feedbackEvents) throw new HttpError(503, "feedback_unavailable", "Recording feedback requires the shared product store.");
@@ -893,6 +901,8 @@ export function createWebApiApp(overrides = {}) {
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
   let autopilotScheduleRun = null;
+  let consolidationScheduleTimer = null;
+  let consolidationScheduleRun = null;
   let capsuleCleanupTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
@@ -1440,10 +1450,6 @@ export function createWebApiApp(overrides = {}) {
     });
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
-      // The other producer of `distill` jobs. The learning worker is the only
-      // claimer while the loop is on, so a job the feedback ledger queued has
-      // to reach the code that knows its shape, or it fails on arrival.
-      feedbackDistiller: methodDistillWorker,
       enabled: config.learningEnabled,
       window: config.learningWindow,
       pollMs: config.learningPollMs,
@@ -2513,6 +2519,39 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // The accepted version of a package, before the repair loop touched it.
+      //
+      // Read-only, and the only reader these snapshots have ever had. The
+      // writer has existed since the repair loop was built; without this a run
+      // that was accepted and then edited left its accepted bytes on disk with
+      // no way to reach them, which is how 38 minutes of gate-clean work became
+      // unrecoverable on 2026-08-31.
+      if (pathname.startsWith("/api/agent-runs/") && pathname.endsWith("/repair-revisions") && req.method === "GET") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length, -"/repair-revisions".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const ctx = await context(req, res);
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        sendJson(res, 200, { data: await agentRuns.listRepairRevisions(ctx.project, runId) });
+        return;
+      }
+
+      if (pathname.startsWith("/api/agent-runs/") && pathname.includes("/repair-revisions/") && req.method === "GET") {
+        const rest = pathname.slice("/api/agent-runs/".length);
+        const [rawRunId, marker, rawDigest, ...extra] = rest.split("/");
+        if (!rawRunId || marker !== "repair-revisions" || !rawDigest || extra.length > 0) {
+          throw new HttpError(404, "not_found", "Route not found.");
+        }
+        const ctx = await context(req, res);
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const digest = decodeRouteComponent(rawDigest, "accepted digest");
+        // The path is a query parameter, not a path segment: it contains
+        // slashes by construction, and encoding them into one segment is the
+        // shape every route in this file refuses.
+        const relative = new URL(req.url ?? "/", "http://localhost").searchParams.get("path") ?? "";
+        sendJson(res, 200, { data: await agentRuns.readRepairRevisionFile(ctx.project, runId, digest, relative) });
+        return;
+      }
+
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
@@ -3294,6 +3333,68 @@ export function createWebApiApp(overrides = {}) {
     return autopilotScheduleRun;
   };
 
+  /**
+   * Enqueue one night's consolidation per project that has methods to consolidate.
+   *
+   * This did not exist, and its absence made the whole learning loop a one-way
+   * street. `MethodConsolidation.sleep` is the only code path that calls
+   * `learning.approve`, and `approve` is the only way a `candidate` method ever
+   * becomes `approved` — which is the only status `capsuleMethods.mjs` will
+   * mount. It is also the only caller of `retirementProposals`. Distillation
+   * therefore wrote candidates forever, nothing was ever promoted, nothing was
+   * ever retired, and every test of the promotion rule passed because they all
+   * call `sleep` directly. A producer nobody writes is invisible to unit tests
+   * by construction: there is no assertion to fail.
+   *
+   * Enqueued whenever the day turns over, not on a schedule of its own. The
+   * spending window is `LearningWorker`'s to enforce — it declines to claim
+   * outside it — so a job queued at noon simply waits for the evening rather
+   * than being dropped, and a deployment whose window never opens accumulates
+   * exactly one job per project per day instead of losing the day entirely.
+   *
+   * Per project rather than per user, because `sleep` reads and writes one
+   * project's library: `listMethods`, `approve` and `retirementProposals` are
+   * all scoped by `job.projectId`, so a single account-wide job would
+   * consolidate whichever project it happened to name and silently skip the
+   * rest.
+   */
+  const scheduleConsolidation = async () => {
+    if (!learningService || !productJobs || !config.learningEnabled || consolidationScheduleRun) {
+      return consolidationScheduleRun;
+    }
+    const schedule = async () => {
+      // Projects holding at least one method that is not already retired. A
+      // library of nothing has nothing to consolidate, and enqueueing for it
+      // would put a job on every project in the deployment every night.
+      const result = await productDatabase.query(`SELECT DISTINCT user_id,project_id FROM evimed_product.documents
+        WHERE kind='method' AND deleted_at IS NULL AND project_id IS NOT NULL
+          AND payload->>'status' IS DISTINCT FROM 'retired'
+        ORDER BY user_id,project_id LIMIT 200`);
+      const date = new Date().toISOString().slice(0, 10);
+      for (const row of result.rows) {
+        try {
+          await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
+            // One pass per project per day however often this timer fires.
+            idempotencyKey: `consolidate:sleep:${row.project_id}:${date}`,
+            projectId: row.project_id,
+          });
+        } catch (error) {
+          await securityAudit(config, "learning.consolidate.enqueue", "failed", {
+            userId: row.user_id, projectId: row.project_id,
+            code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
+          });
+        }
+      }
+    };
+    consolidationScheduleRun = maintenanceMutation(schedule)
+      .catch((error) => {
+        if (error?.code === "maintenance_active") return null;
+        throw error;
+      })
+      .finally(() => { consolidationScheduleRun = null; });
+    return consolidationScheduleRun;
+  };
+
   let usageReconcileTimer = null;
   let usageReconcileRun = null;
   // A reservation whose settlement never arrived would otherwise stay 'reserved'
@@ -3322,7 +3423,7 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, methodDistillWorker, learningWorker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -3332,10 +3433,12 @@ export function createWebApiApp(overrides = {}) {
     }
     if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
     if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
+    if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
     if (usageReconcileTimer) clearInterval(usageReconcileTimer);
     capsuleCleanupTimer = null;
     autopilotScheduleTimer = null;
+    consolidationScheduleTimer = null;
     notificationTimer = null;
     usageReconcileTimer = null;
   };
@@ -3348,14 +3451,7 @@ export function createWebApiApp(overrides = {}) {
       memoryIndexWorker?.start();
       sourceWorker?.start();
       autopilotWorker?.start();
-      // Exactly one claimer for `distill` at a time. When the learning loop is
-      // on, the learning worker owns both learning kinds and hands a
-      // feedback-triggered job to the feedback distiller; when it is off, the
-      // distiller claims those jobs itself, exactly as it did before the loop
-      // existed. Two claimers on one kind would each take the other's jobs and
-      // fail them by payload shape.
       learningWorker?.start();
-      if (!learningWorker) methodDistillWorker?.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -3367,6 +3463,13 @@ export function createWebApiApp(overrides = {}) {
       if (autopilotService && !autopilotScheduleTimer) {
         autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000);
         autopilotScheduleTimer.unref();
+      }
+      // Hourly, not minutely: the job it enqueues is idempotent per project per
+      // day, so the only thing a faster tick buys is 60 times the queries.
+      if (learningWorker && !consolidationScheduleTimer) {
+        consolidationScheduleTimer = setInterval(() => { void scheduleConsolidation(); }, 3_600_000);
+        consolidationScheduleTimer.unref();
+        void scheduleConsolidation();
       }
       await applyNotificationDefaults();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -3406,7 +3509,12 @@ export function createWebApiApp(overrides = {}) {
     // inbox dependency here left every test green and the notices dark.
     memoryIntelligence,
     feedbackEvents,
-    methodDistillWorker,
+    // The only claimer of `distill` and `consolidate`. Returned for the same
+    // reason as the line above it, and the absence was not theoretical: the
+    // composition assertion that `distill` has at most one claimer read
+    // `app.learningWorker`, got `undefined`, filtered it out and passed on an
+    // empty list — a test of a collision that could not see either side of it.
+    learningWorker,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -3444,10 +3552,11 @@ export function createWebApiApp(overrides = {}) {
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await autopilotWorker?.close();
-      await methodDistillWorker?.close();
       await learningWorker?.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
+      if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
+      await consolidationScheduleRun;
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       if (usageReconcileTimer) clearInterval(usageReconcileTimer);

@@ -41,6 +41,11 @@ const hostSideOnly = {
   OPEN_SCIENCE_PREFLIGHT_MONITORING: "scripts/ops/host-preflight.mjs",
   OPEN_SCIENCE_PREFLIGHT_OBJECT_STORAGE: "scripts/ops/host-preflight.mjs",
   OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR: "scripts/ops/configure-production-state.mjs",
+  // Read on the host before anything starts: it is written into
+  // monitoring/targets/tls.json, which Prometheus then discovers by file. The
+  // value never enters a container, so passing it through compose would be the
+  // pretence this test exists to refuse.
+  OPEN_SCIENCE_PUBLIC_HEALTH_URL: "scripts/ops/configure-monitoring.mjs",
 };
 
 /** The levers whose whole purpose is to be set at deploy time, and the services

@@ -1,4 +1,4 @@
-import { fetchWithWebAuth, WebApiError, webApiBase } from "./apiClient";
+import { fetchWithWebAuth, WebApiError, webApiBase, webErrorMessage, webRetryAfterSeconds } from "./apiClient";
 
 export interface InboxAction { id: string; label: string; style: "neutral" | "primary" | "danger" }
 export interface InboxItem {
@@ -29,6 +29,8 @@ async function request<T>(path: string, method = "GET", body?: unknown): Promise
   if (!response.ok || !value || !("data" in value)) {
     throw new WebApiError(value?.error ?? "The inbox response was unavailable.", {
       status: response.status, code: value?.code, requestId: value?.requestId,
+      // Same reason as `productClient`: the reset moment travels as a header.
+      retryAfterSeconds: webRetryAfterSeconds(response.headers),
     });
   }
   return value.data as T;
@@ -48,11 +50,20 @@ export function resolveInboxItem(id: string, actionId: string, expectedRevision:
   return request<InboxItem>(`/inbox/${encodeURIComponent(id)}/resolve`, "POST", { actionId, expectedRevision });
 }
 
+/**
+ * The inbox's own wording over the shared projection.
+ *
+ * Only the two sentences that talk about a 消息 rather than a 记录 stay local:
+ * a revision conflict and a deleted item are protocol facts no error code
+ * expresses. Everything else — the registry's sentence for the code, the spend
+ * ceilings with their amounts, the 401 — comes from the one dictionary, so the
+ * inbox and the pages it links to cannot describe the same refusal differently.
+ */
 export function inboxErrorMessage(error: unknown) {
-  if (error instanceof WebApiError) {
-    if (error.status === 401) return "登录已失效，请重新登录。";
-    if (error.status === 409) return "消息已发生变化，请刷新后重试。";
-    if (error.status === 404) return "这条消息已不存在。";
-  }
-  return "操作未完成，请重试。";
+  return webErrorMessage(error, {
+    statuses: {
+      409: "消息已发生变化，请刷新后重试。",
+      404: "这条消息已不存在。",
+    },
+  });
 }

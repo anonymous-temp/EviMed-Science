@@ -33,6 +33,7 @@ export class SourceIngestionWorker {
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
+    this.kinds = ["ingest"];
     this.workerId = `source-ingest-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
@@ -61,7 +62,7 @@ export class SourceIngestionWorker {
   }
 
   async #tick() {
-    const job = await this.jobs.claim(["ingest"], this.workerId, { leaseMs: this.leaseMs });
+    const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let leaseLost = false;
     let renewing = false;

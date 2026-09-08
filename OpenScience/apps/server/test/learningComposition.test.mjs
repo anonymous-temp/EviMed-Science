@@ -39,20 +39,6 @@ test("every learning module the loop needs is imported by the composition root",
   }
 });
 
-test("the two producers of distill jobs share one claimer at a time", () => {
-  // `MethodDistillWorker` (the feedback ledger's) and `LearningWorker` both
-  // claim `distill`. Started together they would each take the other's jobs
-  // and fail them by payload shape, so the start is exclusive: the learning
-  // worker when the loop is on, the distiller otherwise — and the learning
-  // worker is handed the distiller so the feedback-shaped jobs still reach the
-  // code that reads them.
-  assert.match(serverSource, /learningWorker\?\.start\(\);\n\s*if \(!learningWorker\) methodDistillWorker\?\.start\(\);/,
-    "the two distill claimers are started unconditionally, and will steal each other's jobs");
-  assert.match(serverSource, /feedbackDistiller: methodDistillWorker,/,
-    "the learning worker has no way to hand a feedback-shaped job to its producer");
-  assert.match(serverSource, /await methodDistillWorker\?\.close\(\);\n\s*await learningWorker\?\.close\(\);/);
-});
-
 test("the learning worker is in all four lists that decide whether it runs", () => {
   // Constructed, started, drained for maintenance, closed on shutdown, and
   // counted as background work. Missing from the drain list, it keeps claiming

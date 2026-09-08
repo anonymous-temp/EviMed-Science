@@ -131,3 +131,31 @@ test("the regex net says when it caught a request the model never judged", async
   // And the answer-line fallback keeps its own attribution.
   assert.match(source, /classifierFailureReason\("unrouted:open-domain", classifierTrace\.failure\)/);
 });
+
+// The ledger field that names what a refused run wrote, on both sides of the wire.
+//
+// The same failure as the frame types above, one layer down. The server side
+// and the browser side of this landed on separate branches, and the browser
+// hedged by reading two candidate names because "picking one and being wrong
+// makes the whole affordance render nothing and look exactly like it was never
+// built". It was right to hedge and the hedge is now gone, so this is what
+// keeps them from drifting apart again: a rename on either side is a red test
+// rather than a panel that silently shows a researcher nothing.
+test("the field that lists a refused run's files is spelled the same on both sides", async () => {
+  const serverSource = await readFile(new URL("../src/agentRuns.mjs", import.meta.url), "utf8");
+  const client = await readFile(new URL("../../web/src/lib/apiClient.ts", import.meta.url), "utf8");
+  const presentation = await readFile(new URL("../../web/src/lib/runPresentation.ts", import.meta.url), "utf8");
+  assert.ok(serverSource.length > 1_000 && client.length > 1_000 && presentation.length > 1_000,
+    "all three sources must actually have been read");
+
+  // The control plane writes it onto the terminal event and folds it back.
+  assert.match(serverSource, /unverifiedArtifacts: normalizeArtifacts\(terminal\.unverifiedArtifacts\)/,
+    "the terminal record must carry the field");
+  assert.match(serverSource, /unverifiedArtifacts: normalizeStoredArtifacts\(event\.unverifiedArtifacts \?\? \[\]\)/,
+    "and the fold must default it, because every row already on every production ledger predates it");
+
+  // The browser declares it and reads it.
+  assert.match(client, /unverifiedArtifacts\?: string\[\]/, "the run type must declare the field");
+  assert.match(presentation, /const UNDELIVERED_FILE_KEYS = \["unverifiedArtifacts"\] as const/,
+    "the reader must look for exactly this name, and only this name");
+});

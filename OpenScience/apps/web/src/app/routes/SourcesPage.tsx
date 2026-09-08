@@ -4,8 +4,8 @@ import { getWebProjectId } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { browseOpenList, cancelSource, decideDuplicateGroup, getSourceFamily, importOpenListSource, listDuplicateCandidates,
   listSourceFolders, listSources, overrideSource, registerSourceFolder, removeSource, retrySource, setSourceFolderStatus,
-  syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily, type SourceFolderRecord,
-  type SourceRecord } from "@/lib/sourceClient";
+  sourceFailureMessage, syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily,
+  type SourceFolderRecord, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { baseName } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
@@ -119,7 +119,7 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
         )}
         {selectedSource && <SourceUnderstandingPanel key={selectedSource.id} projectId={projectId} sourceId={selectedSource.id}
           sourceName={baseName(selectedSource.payload.paths[0] ?? selectedSource.id)} generation={selectedSource.payload.generation}
-          onClose={() => setUnderstandingId(null)} />}
+          error={selectedSource.payload.error} onClose={() => setUnderstandingId(null)} />}
         {editing && <EditSource source={editing} busy={busy} onCancel={() => setEditing(null)}
           onSave={(input) => void mutate(() => overrideSource(editing.id, input))} />}
       </div>
@@ -226,6 +226,12 @@ function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string
       ? <p className="text-ui-sm text-muted">还没有注册同步文件夹。在上面的网盘目录里点“同步”即可。</p>
       : <div className="space-y-3">{folders.map((folder) => {
         const sync = folder.payload.lastSync;
+        // `lastSync` is written only on the success path, so on its own it says a
+        // folder that has been failing for a week is healthy. `lastError` is what
+        // gives the failure and the pause a reason; absent (older records, and
+        // every record until the server side lands) the card degrades to exactly
+        // what it showed before.
+        const lastError = folder.payload.lastError;
         return <div key={folder.id} className="space-y-2 rounded-input border border-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-ui text-text">
             <Folder size={15} /><span className="flex-1 truncate">{folder.payload.connector.id}</span>
@@ -236,8 +242,10 @@ function SyncedFolders({ projectId, refreshToken, onError }: { projectId: string
               onClick={() => void mutate(() => setSourceFolderStatus(folder.id, folder.revision, folder.payload.status === "active" ? "paused" : "active"))}>
               {folder.payload.status === "active" ? <><Pause size={13} />暂停同步</> : <><Play size={13} />恢复同步</>}</Button>
           </div>
+          {lastError && <p className="text-ui-sm text-error" title={lastError.code}>上次同步失败：{sourceFailureMessage(lastError)}
+            {folder.payload.status === "paused" ? "同步已暂停，处理后点「恢复同步」。" : "已入库的资料不受影响，可点「立即同步」重试。"}</p>}
           <p className="text-ui-sm text-muted">{sync
-            ? `上次同步：新增 ${sync.registered} · 更新 ${sync.updated} · 未变化 ${sync.unchanged} · 已看到 ${sync.scanned} 项${sync.complete ? "" : "（本轮未走完，已排入后续任务）"}`
+            ? `上次成功同步：新增 ${sync.registered} · 更新 ${sync.updated} · 未变化 ${sync.unchanged} · 已看到 ${sync.scanned} 项${sync.complete ? "" : "（本轮未走完，已排入后续任务）"}`
             : "尚未完成第一次同步。"}</p>
           {/* The lists are bounded examples; the counts are what actually happened. */}
           {sync && sync.skippedCount > 0 && <p className="text-ui-sm text-muted">跳过 {sync.skippedCount} 项，例如：
@@ -321,6 +329,40 @@ function VersionChain({ sourceId }: { sourceId: string }) {
   </ul>;
 }
 
+/** A rate as a percentage the card can state without inventing precision the
+ * audit does not have: the notice's rates are fractions of a bounded sample. */
+function percent(value: number) { return `${Math.round(value * 1000) / 10}%`; }
+
+/** The omission audit's own reading of a *delivered* understanding.
+ *
+ * Observation phase, and shown as one. `sourceUnderstandingOmissionNotice`
+ * returns `blocking:false`, appears in no issue list, and its 5%/15% targets
+ * have never been checked against an observed distribution of real sources —
+ * per the development principles a new check ships as a notice first. So this
+ * says what was measured and says out loud that it changes nothing, rather than
+ * looking like a verdict the researcher has to clear.
+ *
+ * `disagreements` are the control plane's own English diagnostics and are
+ * capped at five lines by `boundedOmissionNotice`, so they are stated as a
+ * count ("at least"), in Chinese, with the raw lines kept in `title` for
+ * support. Putting English validator prose in front of a Chinese-reading
+ * researcher is the defect this whole pass exists to remove, not a shortcut to
+ * reuse here. */
+function OmissionNotice({ notice }: { notice?: SourceOmissionNotice | null }) {
+  if (!notice) return null;
+  const over = notice.withinTarget === false && typeof notice.omissionRate === "number" ? notice.omissionRate : null;
+  const disagreements = notice.disagreements?.length ?? 0;
+  if (over === null && !disagreements) return null;
+  return <div className="space-y-1 rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted">
+    <p className="text-text">遗漏审计提示 · 仅供参考，不影响这份资料入库，也不需要你处理</p>
+    {over !== null && <p>抽查了 {notice.audited} 个单元，实测遗漏率 {percent(over)}，高于当前分析深度的参考值 {percent(notice.target)}。想补齐可以提高分析深度后重新分析。</p>}
+    {/* Capped at five lines by `boundedOmissionNotice`, so the count is a floor,
+        not a total — the same discipline the skipped-entry list already keeps. */}
+    {disagreements > 0 && <p title={notice.disagreements.join("\n")}>
+      运行自报的审计与它实际交付的引用至少有 {disagreements} 处对不上；页面上的遗漏率按交付内容重算，不采用自报值。</p>}
+  </div>;
+}
+
 function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete, onUnderstanding }: {
   source: SourceRecord; busy: boolean; onEdit: () => void; onRetry: () => void; onCancel: () => void; onDelete: () => void; onUnderstanding: () => void;
 }) {
@@ -331,6 +373,7 @@ function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete, onUnder
   // The audit verdict comes from the understanding contract; the card states what
   // that contract said instead of asserting a fixed "not audited".
   const audit = source.payload.omissionAudit;
+  const failure = source.payload.error;
   const auditLabel = !audit || audit.status === "not_run" ? "理解遗漏尚未审计"
     : typeof audit.omissionRate === "number" ? `理解遗漏 ${Math.round(audit.omissionRate * 100)}%`
       : `理解遗漏审计：${audit.status}`;
@@ -343,7 +386,17 @@ function SourceCard({ source, busy, onEdit, onRetry, onCancel, onDelete, onUnder
         {coverage && <><span>·</span><span>解析处理成功 {coverage.percent}% · 处理台账 {accountedPercent}% · 失败单元 {coverage.failed}/{coverage.total}</span></>}
         <span>·</span><span>{auditLabel}</span>
       </div>
-      <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted"><FileSearch size={14} className="mr-1 inline" />{source.payload.reasons[0]}</div>
+      {/* The failure, before anything else. Until 2026-09-08 a failed source
+          showed only 「分析失败」 next to `reasons[0]`, which explains why the
+          document was *typed* the way it was and has nothing to do with why the
+          analysis died — the stored `error` was typed all the way to this
+          component and rendered by nothing. Key on the code, never on the stored
+          `message`: that is the literal English "Source analysis failed." for
+          every failure, while the code is the fact `@evimed/domain` translates. */}
+      {failure && <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-error" title={failure.code}>
+        <AlertCircle size={14} className="mr-1 inline" />解析失败：{sourceFailureMessage(failure)}原件已保留，「重新分析」会新起一代。</div>}
+      <div className="rounded-input bg-surface-2 px-3 py-2 text-ui-sm text-muted"><FileSearch size={14} className="mr-1 inline" />分类依据：{source.payload.reasons[0]}</div>
+      <OmissionNotice notice={source.payload.omissionNotice} />
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="ghost" onClick={onUnderstanding}><FileSearch size={13} />查看理解</Button>
         <Button size="sm" variant="ghost" onClick={() => setShowChain((value) => !value)}><GitBranch size={13} />查看版本链</Button>

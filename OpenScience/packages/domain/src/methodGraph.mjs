@@ -236,8 +236,16 @@ export function foldEligible(learning) {
  * heavier. The timestamp moves forward only, so an out-of-order write from a
  * slow run cannot make a method look staler than it is.
  *
- * @param {MethodLearning} learning
- * @param {string} at  ISO timestamp of the reading
+ * Both parameters admit `undefined` because both callers can supply it and the
+ * body already answers for it: the mount path folds a reading into whatever
+ * record the method has, which is nothing at all for a method mounted for the
+ * first time, and the timestamp arrives from an event whose field is optional.
+ * Declaring them required did not make them present — it only moved the
+ * absence past the type checker and into a `TypeError` at the one call site
+ * that matters.
+ *
+ * @param {MethodLearning | undefined} learning
+ * @param {string | undefined} at  ISO timestamp of the reading
  * @returns {MethodLearning}
  */
 export function foldRead(learning, at) {
@@ -356,7 +364,10 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  * "evidence that it is neutral" are different, and a rule that cannot tell them
  * apart retires everything new.
  *
- * @param {MethodLearning} learning
+ * `undefined` is admitted for the same reason the null is returned: a method
+ * with no learning record at all is the commonest input here, not an error.
+ *
+ * @param {MethodLearning | undefined} learning
  * @returns {number | null}
  */
 export function methodContribution(learning) {

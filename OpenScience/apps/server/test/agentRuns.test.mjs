@@ -920,11 +920,19 @@ test("a run whose files drifted from its receipt does not ship, container alive 
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "failed", "a package no gate has seen must not ship");
     assert.equal(run.errorCode, "specialist_receipt_digest_mismatch");
-    assert.deepEqual(run.artifacts, []);
+    // Not shipped is not deleted. The verdict above is the whole of "does not
+    // ship" — the run is `failed`, the package is not published as graded, and
+    // nothing downstream treats it as accepted. The files are still listed,
+    // marked unverified, because the alternative is telling a researcher whose
+    // report is sitting in the workspace that there is 「暂无交付物」.
+    assert.deepEqual(run.artifacts, [], "a package no gate has seen is not graded output");
+    assert.deepEqual(run.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.ok(
       (run.qualityNotices ?? []).some((line) => /digest the file no longer matches/.test(String(line))),
       "the verdict must say which file drifted",
     );
+    assert.ok((run.qualityNotices ?? []).some((line) => String(line).includes("未经核验")),
+      "and must label the files it lists as ungraded");
   });
 });
 
@@ -2748,6 +2756,8 @@ test("hosted dispatch survives a lost browser response and an idempotent repeat 
 
 test("requires an evidence agent's cited sources to all be recorded in its snapshot", async () => {
   for (const scenario of ["recorded", "unrecorded"]) {
+    /** @type {string[]} */
+    const repairs = [];
     const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-snapshot-${scenario}-`));
     try {
       const project = {
@@ -2793,7 +2803,7 @@ test("requires an evidence agent's cited sources to all be recorded in its snaps
         effectiveAgentId: "comprehensive-drug-evaluation",
         effectiveAgentVersion: "1.0.0",
         effectiveRuntimeAgent: "evimed-comprehensive-drug-evaluation",
-      }, async () => ({ accepted: true }));
+      }, async (_session, _record, repairText) => { if (repairText) repairs.push(repairText); return { accepted: true }; });
 
       const citedUrl = "https://www.nmpa.gov.cn/label/example-a";
       const recordedUrl = scenario === "recorded" ? citedUrl : "https://www.nmpa.gov.cn/label/example-b";
@@ -2822,8 +2832,26 @@ test("requires an evidence agent's cited sources to all be recorded in its snaps
       }];
       const finished = await store.reconcileSession(project, binding.sessionId);
       assert.equal(finished.id, run.id);
-      assert.equal(finished.status, scenario === "recorded" ? "succeeded" : "failed");
-      assert.equal(finished.errorCode, scenario === "recorded" ? null : "specialist_cited_source_unrecorded");
+      if (scenario === "recorded") {
+        assert.equal(finished.status, "succeeded");
+        assert.equal(finished.errorCode, null);
+        assert.deepEqual(repairs, [], "a package the gate accepts is not sent back for repair");
+      } else {
+        // The gate's finding is unchanged — the cited source is not in the
+        // snapshot — but this capability is no longer failed outright for it.
+        // The repair loop used to be reserved for `clinical-evidence-synthesis`
+        // while raising identical, actionable issues for the other fifteen, so
+        // this run now gets the round the clinical line always got.
+        assert.equal(finished.status, "running", "a repairable rejection sends the run back to fix it");
+        assert.equal(repairs.length, 1, "exactly one repair round is opened");
+        // The generic prompt, not the clinical one: this run has no
+        // clinical-evidence-report.md, and ordering it to repair one would
+        // spend a bounded attempt discovering that.
+        assert.match(repairs[0], /comprehensive-drug-evaluation package/);
+        assert.doesNotMatch(repairs[0], /clinical-evidence-report\.md/);
+        assert.match(repairs[0], /comprehensive-evaluation-report\.md/, "it must name this capability's own required outputs");
+        assert.match(repairs[0], /evidence-snapshot\.json/, "and carry the gate's issue verbatim");
+      }
       await store.closeProject(project, "canceled");
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -5136,6 +5164,7 @@ test("a run whose container is already gone is judged from its receipt, not fail
 
     assert.equal(finished?.status, "succeeded", "a receipt that verifies is a delivered run, whatever became of the container");
     assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.deepEqual(finished?.unverifiedArtifacts, [], "a delivered package has nothing ungraded to report");
     assert.deepEqual(finished?.qualityNotices, ["one advisory"]);
 
     // And the receipt reaches the browser, ahead of the terminal state.
@@ -5444,6 +5473,87 @@ test("a repair instruction names a check the run can actually run", () => {
   assert.equal(/evimed_submit_deliverable/.test(stale), false);
 });
 
+test("the preserved accepted bytes can be read back, and only by their own digest", async () => {
+  // The writer above has existed since the repair loop was built and had no
+  // reader at all. That is the second half of the aripiprazole failure: the run
+  // kept editing after its package was accepted, the receipt stopped matching,
+  // and the version that had passed the gate sat in `.openscience/repair-revisions/`
+  // with no route to it. A snapshot nobody can open is a backup that does not
+  // exist, so this test is the reader.
+  const root = await mkdtemp(path.join(tmpdir(), "os-repair-readback-"));
+  try {
+    const project = {
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const relative = "deliverables/review/clinical-evidence-report.md";
+    const accepted = "# Accepted review\n二甲双胍的原始已核验版本。\n";
+    await mkdir(path.dirname(path.join(project.workspaceDir, relative)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), accepted);
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify({
+      formatVersion: 1,
+      runId: "kernel-run-1",
+      bundleVersion: "1.0.0",
+      domainVersion: "1.0.0",
+      entries: [{
+        deliverableId: "review",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        acceptedAt: "2026-09-06T00:00:00Z",
+        attempt: 1,
+        notices: [],
+        files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+      }],
+    }));
+    await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1");
+
+    const store = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-pro", monitorIntervalMs: 60_000 });
+
+    const revisions = await store.listRepairRevisions(project, "run_control");
+    assert.equal(revisions.length, 1, "the snapshot the writer just made must be listable");
+    assert.match(revisions[0].acceptedDigest, /^[0-9a-f]{64}$/);
+    // Metadata only. A package is a dozen files of report prose, and a list
+    // endpoint that inlined all of them is the endpoint nobody calls.
+    assert.deepEqual(revisions[0].files.map((file) => file.path), [relative]);
+    assert.equal(Object.hasOwn(revisions[0].files[0], "text"), false, "the list must not carry file bodies");
+
+    const file = await store.readRepairRevisionFile(project, "run_control", revisions[0].acceptedDigest, relative);
+    assert.equal(file.text, accepted, "the bytes handed back must be the bytes the gate accepted");
+    assert.equal(file.sha256, createHash("sha256").update(accepted).digest("hex"));
+
+    // Another run cannot read this run's revisions, whatever digest it names.
+    assert.deepEqual(await store.listRepairRevisions(project, "run_other"), []);
+    await assert.rejects(
+      store.readRepairRevisionFile(project, "run_other", revisions[0].acceptedDigest, relative),
+      (error) => error.code === "repair_revision_not_found",
+    );
+    // And a file that is not in the revision is not served out of it.
+    await assert.rejects(
+      store.readRepairRevisionFile(project, "run_control", revisions[0].acceptedDigest, "deliverables/review/other.md"),
+      (error) => error.code === "repair_revision_file_not_found",
+    );
+
+    // The digest is re-derived from the text rather than trusted: the whole
+    // point of handing this back is that it is the version that passed, so
+    // "this is what passed" has to be provable here.
+    const snapshotName = (await readdir(path.join(project.metaDir, "repair-revisions")))
+      .find((name) => name.startsWith("run_control-"));
+    const snapshotPath = path.join(project.metaDir, "repair-revisions", snapshotName);
+    const tampered = JSON.parse(await readFile(snapshotPath, "utf8"));
+    tampered.files[0].text = "# 被改过的内容\n";
+    await writeFile(snapshotPath, JSON.stringify(tampered));
+    await assert.rejects(
+      store.readRepairRevisionFile(project, "run_control", revisions[0].acceptedDigest, relative),
+      (error) => error.code === "repair_revision_digest_mismatch",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("server repair preserves accepted bytes outside the runtime workspace", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-repair-revision-"));
   try {
@@ -5679,7 +5789,20 @@ test("a package written and never submitted is not reported as a stopped runtime
       abandoned?.qualityNotices?.some((line) => line.includes("d1") && line.includes("1")),
       `the verdict must name the deliverable and what was written: ${JSON.stringify(abandoned?.qualityNotices)}`,
     );
-    assert.deepEqual(abandoned?.artifacts, [], "ungraded files are still not deliverables");
+    // Ungraded is a label on the files, not a reason to hide them.
+    //
+    // This asserted `artifacts: []` — "ungraded files are still not
+    // deliverables" — and that was the whole defect, stated as an invariant. In
+    // production 28 of 179 finished runs ended here, at p90 58 minutes, with a
+    // complete package on disk and 「暂无交付物。」 on the screen. The verdict is
+    // unchanged and still `runtime_deliverable_never_submitted`; what changed is
+    // that the run no longer reports having produced nothing when it produced
+    // something.
+    assert.deepEqual(abandoned?.artifacts, [], "ungraded files are not graded output");
+    assert.deepEqual(abandoned?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"],
+      "but the run must still say what it wrote");
+    assert.ok(abandoned?.qualityNotices?.some((line) => line.includes("未经核验")),
+      `the files must be labelled unverified rather than passed off as graded: ${JSON.stringify(abandoned?.qualityNotices)}`);
 
     // Negative controls — the three ways this could lie.
     // 1. An item that was submitted and rejected wrote files too; that is a
@@ -5767,7 +5890,10 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
     const finished = (await store.list(project)).find((item) => item.id === started.id);
     assert.equal(finished?.status, "failed");
     assert.equal(finished?.errorCode, "specialist_receipt_digest_mismatch");
+    // Same rule on the container-gone path: refused, and still on disk.
     assert.deepEqual(finished?.artifacts, []);
+    assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.ok(finished?.qualityNotices?.some((line) => String(line).includes("未经核验")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

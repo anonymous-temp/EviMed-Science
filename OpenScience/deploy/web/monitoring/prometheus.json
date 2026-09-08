@@ -14,7 +14,9 @@
       {
         "static_configs": [
           {
-            "targets": ["alertmanager:9093"]
+            "targets": [
+              "alertmanager:9093"
+            ]
           }
         ]
       }
@@ -30,7 +32,9 @@
       },
       "static_configs": [
         {
-          "targets": ["open-science-web:8787"]
+          "targets": [
+            "open-science-web:8787"
+          ]
         }
       ]
     },
@@ -38,20 +42,28 @@
       "job_name": "open-science-health",
       "metrics_path": "/probe",
       "params": {
-        "module": ["http_2xx"]
+        "module": [
+          "http_2xx"
+        ]
       },
       "static_configs": [
         {
-          "targets": ["http://open-science-web:8787/api/health"]
+          "targets": [
+            "http://open-science-web:8787/api/health"
+          ]
         }
       ],
       "relabel_configs": [
         {
-          "source_labels": ["__address__"],
+          "source_labels": [
+            "__address__"
+          ],
           "target_label": "__param_target"
         },
         {
-          "source_labels": ["__param_target"],
+          "source_labels": [
+            "__param_target"
+          ],
           "target_label": "instance"
         },
         {
@@ -61,23 +73,67 @@
       ]
     },
     {
+      "job_name": "open-science-tls",
+      "metrics_path": "/probe",
+      "scrape_interval": "5m",
+      "params": {
+        "module": [
+          "https_2xx"
+        ]
+      },
+      "relabel_configs": [
+        {
+          "source_labels": [
+            "__address__"
+          ],
+          "target_label": "__param_target"
+        },
+        {
+          "source_labels": [
+            "__param_target"
+          ],
+          "target_label": "instance"
+        },
+        {
+          "target_label": "__address__",
+          "replacement": "blackbox-exporter:9115"
+        }
+      ],
+      "file_sd_configs": [
+        {
+          "files": [
+            "/etc/prometheus/targets/tls.json"
+          ],
+          "refresh_interval": "5m"
+        }
+      ]
+    },
+    {
       "job_name": "open-science-readiness",
       "metrics_path": "/probe",
       "params": {
-        "module": ["http_2xx"]
+        "module": [
+          "http_2xx"
+        ]
       },
       "static_configs": [
         {
-          "targets": ["http://open-science-web:8787/api/ready"]
+          "targets": [
+            "http://open-science-web:8787/api/ready"
+          ]
         }
       ],
       "relabel_configs": [
         {
-          "source_labels": ["__address__"],
+          "source_labels": [
+            "__address__"
+          ],
           "target_label": "__param_target"
         },
         {
-          "source_labels": ["__param_target"],
+          "source_labels": [
+            "__param_target"
+          ],
           "target_label": "instance"
         },
         {
@@ -90,7 +146,9 @@
       "job_name": "prometheus",
       "static_configs": [
         {
-          "targets": ["prometheus:9090"]
+          "targets": [
+            "prometheus:9090"
+          ]
         }
       ]
     },
@@ -98,7 +156,9 @@
       "job_name": "alertmanager",
       "static_configs": [
         {
-          "targets": ["alertmanager:9093"]
+          "targets": [
+            "alertmanager:9093"
+          ]
         }
       ]
     },
@@ -106,7 +166,20 @@
       "job_name": "blackbox-exporter",
       "static_configs": [
         {
-          "targets": ["blackbox-exporter:9115"]
+          "targets": [
+            "blackbox-exporter:9115"
+          ]
+        }
+      ]
+    },
+    {
+      "job_name": "node",
+      "scrape_interval": "1m",
+      "static_configs": [
+        {
+          "targets": [
+            "node-exporter:9100"
+          ]
         }
       ]
     }
