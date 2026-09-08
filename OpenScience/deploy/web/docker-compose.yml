@@ -244,6 +244,15 @@ services:
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-v4-pro}
       OPEN_SCIENCE_LLM_ROUTING_ENABLED:
       OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
+      # The learning loop's levers. It defaults on, which is exactly why these
+      # have to be here: compose passes environment item by item, so a knob
+      # missing from this list is a knob that does nothing and says nothing —
+      # an operator editing `.env` to turn the loop off would watch it keep
+      # running. The window and the concurrency ride along for the same reason:
+      # they are how a deployment bounds what "on" costs.
+      OPEN_SCIENCE_LEARNING_ENABLED:
+      OPEN_SCIENCE_LEARNING_WINDOW:
+      OPEN_SCIENCE_LEARNING_CONCURRENCY:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

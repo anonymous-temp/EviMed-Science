@@ -64,6 +64,14 @@ const operatorLevers = {
   // classifier off got the shipped default and no indication their setting had
   // been dropped on the floor.
   OPEN_SCIENCE_LLM_ROUTING_ENABLED: ["open-science-web"],
+  // The learning loop defaults on since 2026-09-08, which is what makes the
+  // off switch load-bearing: a deployment that decides not to spend on
+  // distillation edits `.env`, and if the variable never reaches the service
+  // the loop keeps running and nothing says so. The window and the concurrency
+  // are the other two knobs that bound what "on" costs.
+  OPEN_SCIENCE_LEARNING_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_LEARNING_WINDOW: ["open-science-web"],
+  OPEN_SCIENCE_LEARNING_CONCURRENCY: ["open-science-web"],
 };
 
 async function composeFiles() {
