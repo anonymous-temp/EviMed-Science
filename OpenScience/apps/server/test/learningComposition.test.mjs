@@ -201,11 +201,23 @@ test("the public-source gateway can be pointed at fixtures without changing the 
   assert.match(serverSource, /fetchImpl: gatewayFetch,/);
 });
 
-test("the learning loop is off unless a deployment turns it on", async () => {
+test("the learning loop is on by default, and every spend it can reach is still bounded", async () => {
   const config = await readFile(new URL("../src/config.mjs", import.meta.url), "utf8");
-  assert.match(config, /learningEnabled: overrides\.learningEnabled \?\? boolEnv\("OPEN_SCIENCE_LEARNING_ENABLED", false\)/,
-    "every other subsystem defaults on in production; this one costs model calls nobody asked for");
+  // It was off while it was a feature nobody had asked for. It is on now
+  // because its own counters are the production distribution that the
+  // retirement window and the contribution floor are meant to be calibrated
+  // against, and a knob that must be found before any evidence accumulates
+  // produces none.
+  assert.match(config, /learningEnabled: overrides\.learningEnabled \?\? boolEnv\("OPEN_SCIENCE_LEARNING_ENABLED", true\)/);
   assert.match(serverSource, /if \(learningService && productJobs && config\.learningEnabled\)/);
+
+  // On by default is only defensible while these three hold. Each is what
+  // keeps "on" from meaning "spends whatever it likes".
+  assert.match(config, /learningConcurrency: Number\(overrides\.learningConcurrency \?\? process\.env\.OPEN_SCIENCE_LEARNING_CONCURRENCY \?\? 2\)/,
+    "an unbounded concurrency would start a container per claimed job");
+  assert.match(config, /learningWindow/, "without an off-peak window the loop pays peak price");
+  assert.match(serverSource, /if \(rounds >= 1 && run\.transcript\?\.completeness === "complete"\)/,
+    "queueing every successful run would learn mostly that things usually work, at full price");
 });
 
 test("a terminal write in flight is waited for before the store it writes into goes away", () => {
