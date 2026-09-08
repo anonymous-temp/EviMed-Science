@@ -1533,8 +1533,11 @@ test("a run whose subagents are working is not judged stalled because its root s
   clearInterval(ticking);
 
   const [finished] = await store.list(project);
-  assert.notEqual(finished.errorCode, "runtime_monitor_stalled", "a delegating run was killed by the stall threshold");
   assert.equal(finished.errorCode, "runtime_monitor_timeout", "it should run out the window, not be judged dead");
+  // The stall signal must not even have fired: a delegating run whose children
+  // are working has observable progress, and telling the researcher it looks
+  // stuck would be as wrong as ending it was.
+  assert.doesNotMatch(finished.qualityNotices.join("\n"), /没有可观测的进展/);
 });
 
 test("a running-subagent label without child activity does not keep a stalled run alive", async (t) => {
@@ -1553,7 +1556,13 @@ test("a running-subagent label without child activity does not keep a stalled ru
   await store.monitors.get(run.id)?.promise;
 
   const [finished] = await store.list(project);
-  assert.equal(finished.errorCode, "runtime_monitor_stalled", "a silent child must still reach the stall threshold");
+  // The judgement is unchanged and still exactly this precise — a
+  // model-written "running" label is not a heartbeat. What changed is what the
+  // judgement does: it says so and the run carries on to the global clock,
+  // because a threshold is a guess about liveness and ending a run on a guess
+  // is what left finished work undelivered.
+  assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "a silent child must still reach the stall threshold");
+  assert.equal(finished.errorCode, "runtime_monitor_timeout", "the stall threshold must not end the run any more");
 });
 
 test("a kernel-confirmed child sequence keeps a delegated run alive", async (t) => {
@@ -1640,7 +1649,8 @@ test("candidate and running-state churn cannot replace per-child sequence progre
   const run = await store.start(project, { sessionId: "ses_deleg" });
   await store.monitors.get(run.id)?.promise;
   const [finished] = await store.list(project);
-  assert.equal(finished.errorCode, "runtime_monitor_stalled");
+  assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/);
+  assert.equal(finished.errorCode, "runtime_monitor_timeout");
   assert.ok(calls >= 3, "the fixture did not exercise repeated candidate churn");
 });
 
@@ -1657,7 +1667,8 @@ test("changing model-writable projection counters cannot keep a stalled run aliv
   clearInterval(ticking);
 
   const [finished] = await store.list(project);
-  assert.equal(finished.errorCode, "runtime_monitor_stalled", "workspace counters are display data, not a trusted heartbeat");
+  assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "workspace counters are display data, not a trusted heartbeat");
+  assert.equal(finished.errorCode, "runtime_monitor_timeout");
 });
 
 test("a run-side projection that will not parse is a named notice, never evidence of a stall", async (t) => {
@@ -1785,9 +1796,13 @@ test("a deliverable a run wrote under an unknown contract kind is published with
   store.monitors.get(run.id)?.cancel();
 });
 
-test("a run that stops making progress is failed instead of waiting out the timeout", async () => {
-  // start/dispatch/finish cannot distinguish a long run from a dead one, so a
-  // run that died early still held its slot for the whole monitor window.
+test("a run that stops making progress is told so, and is not ended on that guess", async () => {
+  // start/dispatch/finish cannot distinguish a long run from a dead one, so
+  // progress is recorded and a quiet stretch is detected. What that detection
+  // is allowed to do is the part that changed: it reports, and the global clock
+  // decides. Ending a run because a counter stopped moving is an inference
+  // about liveness, and the runs it was wrong about — the delegating clinical
+  // ones — were the ones with finished work in the workspace.
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stall-"));
   try {
     const project = {
@@ -1811,14 +1826,17 @@ test("a run that stops making progress is failed instead of waiting out the time
     });
     const run = await store.start(project, { sessionId: "ses_stall" });
 
-    // Move once, then go quiet: the run must be failed for stalling, not for timing out.
+    // Move once, then go quiet.
     history = [...history, { info: { id: "m2", role: "assistant" }, parts: [{ type: "tool", tool: "health" }] }];
     await store.monitors.get(run.id)?.promise;
 
     const [finished] = await store.list(project);
-    assert.equal(finished.status, "failed");
-    assert.equal(finished.errorCode, "runtime_monitor_stalled");
+    assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "the quiet stretch must still be detected and reported");
+    assert.equal(finished.errorCode, "runtime_monitor_timeout", "only the global clock ends a run");
     assert.ok(finished.observedToolCalls >= 1, "the progress it did make is recorded");
+    // Said once. A notice repeated every poll is a log, and the run row caps
+    // notices, so a chatty one would push the real findings off the end.
+    assert.equal(finished.qualityNotices.filter((notice) => /没有可观测的进展/.test(notice)).length, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
