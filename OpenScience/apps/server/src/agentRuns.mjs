@@ -3020,10 +3020,10 @@ export class AgentRunStore {
         // Two honest bounds, whichever is tighter: the last moment anything was
         // observed, and the monitor's own ceiling — past which this run would
         // have been ended, so it cannot have been working longer.
-        const startedAt = Date.parse(active.startedAt);
-        const observedUntil = active.lastProgressAt ? Date.parse(active.lastProgressAt) : startedAt;
+        const supersededStartedAt = Date.parse(active.startedAt);
+        const observedUntil = active.lastProgressAt ? Date.parse(active.lastProgressAt) : supersededStartedAt;
         const ceiling = this.monitorIntervalMs * this.monitorMaxPolls;
-        const worked = Math.max(0, observedUntil - startedAt);
+        const worked = Math.max(0, observedUntil - supersededStartedAt);
         events.push({
           event: "finished",
           id: active.id,
