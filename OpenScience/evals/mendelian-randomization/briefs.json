@@ -28,7 +28,11 @@
         "Treat a non-significant MR-Egger intercept as proof that horizontal pleiotropy is absent.",
         "Translate the causal estimate into a clinical target, a weight-loss recommendation or an expected event reduction for a patient."
       ],
-      "gradedOn": "Whether every number in mendelian-randomization-report.md can be found in the artifacts listed by mendelian-randomization-run.json, and whether all three assumptions get a paragraph rather than a sentence."
+      "gradedOn": "Whether every number in mendelian-randomization-report.md can be found in the artifacts listed by mendelian-randomization-run.json, and whether all three assumptions get a paragraph rather than a sentence.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "mr-002-east-asian-homocysteine-too-few-instruments",
@@ -56,7 +60,11 @@
         "Read a wide interval that crosses the null as evidence that homocysteine has no causal effect on stroke.",
         "Invent an instrument count, an F statistic or an interval to fill a section the engine returned empty."
       ],
-      "gradedOn": "Whether the report is readable as 「证据不足以判断」 rather than as a negative finding, and whether the instrument count and F statistics appear before the effect estimate rather than in a limitations paragraph after it."
+      "gradedOn": "Whether the report is readable as 「证据不足以判断」 rather than as a negative finding, and whether the instrument count and F statistics appear before the effect estimate rather than in a limitations paragraph after it.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "mr-003-urate-ckd-reverse-and-overlap",
@@ -83,7 +91,11 @@
         "Describe unresolved sample overlap as unlikely to matter without a number or a citation.",
         "Conclude that urate lowering would prevent kidney disease, or name a target urate value."
       ],
-      "gradedOn": "Whether both directions are fully reported rather than one direction plus a remark, and whether overlap and pleiotropy are stated as unresolved where they are unresolved instead of being reasoned away."
+      "gradedOn": "Whether both directions are fully reported rather than one direction plus a remark, and whether overlap and pleiotropy are stated as unresolved where they are unresolved instead of being reasoned away.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "mr-004-local-gwas-uploads-preclumping-declared",
@@ -112,7 +124,11 @@
         "Add repository identifiers, publication years or absolute host paths to the input manifest.",
         "Claim reproducible code delivery unless the complete replay package is in the returned artifacts, or say the script regenerates the written manuscript."
       ],
-      "gradedOn": "Whether instrumentsPreclumped in the delivered manifest is backed by a provenance statement that came from the researcher, and whether every claim about where the data came from matches what this run could actually verify."
+      "gradedOn": "Whether instrumentsPreclumped in the delivered manifest is backed by a provenance statement that came from the researcher, and whether every claim about where the data came from matches what this run could actually verify.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

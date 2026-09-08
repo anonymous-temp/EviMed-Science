@@ -9,18 +9,55 @@
         "question": "In adults with chronic kidney disease, what do the active EMPA-KIDNEY trial and its post-trial follow-up establish about the durability of empagliflozin's kidney and cardiovascular effects?",
         "reviewType": "systematic",
         "eligibility": {
-          "inclusionCriteria": ["Reports of EMPA-KIDNEY (NCT03594110) with clinical or kidney-function outcomes", "Current CKD guidance used only for practice context"],
-          "exclusionCriteria": ["Commentaries without new EMPA-KIDNEY outcome data", "Trials of different investigational medicines"]
+          "inclusionCriteria": [
+            "Reports of EMPA-KIDNEY (NCT03594110) with clinical or kidney-function outcomes",
+            "Current CKD guidance used only for practice context"
+          ],
+          "exclusionCriteria": [
+            "Commentaries without new EMPA-KIDNEY outcome data",
+            "Trials of different investigational medicines"
+          ]
         },
         "sources": [
-          {"identifier": "PMID 36331190", "url": "https://pubmed.ncbi.nlm.nih.gov/36331190/", "expectedStudyId": "NCT03594110", "role": "active randomized trial report"},
-          {"identifier": "PMID 39453837", "url": "https://pubmed.ncbi.nlm.nih.gov/39453837/", "expectedStudyId": "NCT03594110", "role": "post-trial follow-up report"},
-          {"identifier": "PMID 38061371", "url": "https://pubmed.ncbi.nlm.nih.gov/38061371/", "expectedStudyId": "NCT03594110", "role": "prespecified kidney-function analysis"},
-          {"identifier": "KDIGO 2024 CKD Guideline", "url": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf", "expectedStudyId": null, "role": "guideline context"}
+          {
+            "identifier": "PMID 36331190",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/36331190/",
+            "expectedStudyId": "NCT03594110",
+            "role": "active randomized trial report"
+          },
+          {
+            "identifier": "PMID 39453837",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/39453837/",
+            "expectedStudyId": "NCT03594110",
+            "role": "post-trial follow-up report"
+          },
+          {
+            "identifier": "PMID 38061371",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/38061371/",
+            "expectedStudyId": "NCT03594110",
+            "role": "prespecified kidney-function analysis"
+          },
+          {
+            "identifier": "KDIGO 2024 CKD Guideline",
+            "url": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+            "expectedStudyId": null,
+            "role": "guideline context"
+          }
         ]
       },
-      "mustDo": ["Declare the review design, actual searches, eligibility and protocol status.", "Keep three publications as separate reports but count NCT03594110 as one primary study.", "Keep the guideline outside the primary-study count and distinguish randomized from post-trial observation."],
-      "mustNotDo": ["Add the same randomized participants three times.", "Describe post-trial treatment exposure as randomized after the active trial ended."]
+      "mustDo": [
+        "Declare the review design, actual searches, eligibility and protocol status.",
+        "Keep three publications as separate reports but count NCT03594110 as one primary study.",
+        "Keep the guideline outside the primary-study count and distinguish randomized from post-trial observation."
+      ],
+      "mustNotDo": [
+        "Add the same randomized participants three times.",
+        "Describe post-trial treatment exposure as randomized after the active trial ended."
+      ],
+      "generated": {
+        "authoredAt": "2026-09-05",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "review-002-aripiprazole-sparse-safety",
@@ -28,16 +65,47 @@
         "question": "For adults receiving oral aripiprazole, is there direct prospective evidence that routine structured screening for impulse-control symptoms prevents patient harm?",
         "reviewType": "narrative",
         "sources": [
-          {"identifier": "DailyMed setid dbdc8fbe-c75f-4f17-a2cd-9f23802dcc5d", "url": "https://dailymed.nlm.nih.gov/dailymed/fda/fdaDrugXsl.cfm?setid=dbdc8fbe-c75f-4f17-a2cd-9f23802dcc5d&type=display", "accessLevel": "official_page", "role": "US label warning and management context"},
-          {"identifier": "PMID 38227009", "url": "https://pubmed.ncbi.nlm.nih.gov/38227009/", "accessLevel": "abstract", "role": "systematic review of case reports"}
+          {
+            "identifier": "DailyMed setid dbdc8fbe-c75f-4f17-a2cd-9f23802dcc5d",
+            "url": "https://dailymed.nlm.nih.gov/dailymed/fda/fdaDrugXsl.cfm?setid=dbdc8fbe-c75f-4f17-a2cd-9f23802dcc5d&type=display",
+            "accessLevel": "official_page",
+            "role": "US label warning and management context"
+          },
+          {
+            "identifier": "PMID 38227009",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/38227009/",
+            "accessLevel": "abstract",
+            "role": "systematic review of case reports"
+          }
         ],
         "replaySearches": [
-          {"database": "PubMed", "query": "aripiprazole structured impulse-control screening prevention prospective trial", "status": "searched", "resultsRetrieved": 0},
-          {"database": "ClinicalTrials.gov", "query": "aripiprazole impulse control screening prevention", "status": "unavailable", "reason": "Fixture simulates a registry gateway timeout; the run must retain the actual response when executed."}
+          {
+            "database": "PubMed",
+            "query": "aripiprazole structured impulse-control screening prevention prospective trial",
+            "status": "searched",
+            "resultsRetrieved": 0
+          },
+          {
+            "database": "ClinicalTrials.gov",
+            "query": "aripiprazole impulse control screening prevention",
+            "status": "unavailable",
+            "reason": "Fixture simulates a registry gateway timeout; the run must retain the actual response when executed."
+          }
         ]
       },
-      "mustDo": ["Keep the successful zero-hit query separate from unavailable registry access.", "State that label warnings and case reports do not establish the effectiveness of a screening programme.", "Name the prospective comparative evidence that would answer the prevention question."],
-      "mustNotDo": ["Interpret the registry timeout as proof that no trials exist.", "Convert post-marketing reports into an incidence estimate or a proven preventive effect."]
+      "mustDo": [
+        "Keep the successful zero-hit query separate from unavailable registry access.",
+        "State that label warnings and case reports do not establish the effectiveness of a screening programme.",
+        "Name the prospective comparative evidence that would answer the prevention question."
+      ],
+      "mustNotDo": [
+        "Interpret the registry timeout as proof that no trials exist.",
+        "Convert post-marketing reports into an incidence estimate or a proven preventive effect."
+      ],
+      "generated": {
+        "authoredAt": "2026-09-05",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "review-003-mimic-overlap-unknown",
@@ -45,14 +113,39 @@
         "question": "What prognostic models for mortality in adult sepsis have been evaluated with MIMIC-IV, and can their reported MIMIC-IV validation cohorts be treated as independent evidence?",
         "reviewType": "scoping",
         "sources": [
-          {"identifier": "PMID 36596836", "url": "https://pubmed.ncbi.nlm.nih.gov/36596836/", "accessLevel": "full_text", "role": "MIMIC-IV data descriptor"},
-          {"identifier": "PMID 41602009", "url": "https://pubmed.ncbi.nlm.nih.gov/41602009/", "accessLevel": "abstract", "role": "HALP mortality model with MIMIC-IV validation"},
-          {"identifier": "PMID 41146378", "url": "https://pubmed.ncbi.nlm.nih.gov/41146378/", "accessLevel": "abstract", "role": "intra-abdominal sepsis mortality model using MIMIC-IV and eICU"}
+          {
+            "identifier": "PMID 36596836",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/36596836/",
+            "accessLevel": "full_text",
+            "role": "MIMIC-IV data descriptor"
+          },
+          {
+            "identifier": "PMID 41602009",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/41602009/",
+            "accessLevel": "abstract",
+            "role": "HALP mortality model with MIMIC-IV validation"
+          },
+          {
+            "identifier": "PMID 41146378",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/41146378/",
+            "accessLevel": "abstract",
+            "role": "intra-abdominal sepsis mortality model using MIMIC-IV and eICU"
+          }
         ]
       },
-      "mustDo": ["Preserve each publication and its stated database role while leaving patient-cohort overlap unresolved when dates and cohort definitions cannot be verified.", "Record the two model publications as abstract-level evidence until full text is preserved.", "Explain which cohort dates, identifiers and eligibility definitions are needed to establish independence."],
-      "mustNotDo": ["Call the two model abstracts full text.", "Treat use of the same public database as either proof of identical cohorts or proof of independent cohorts."]
+      "mustDo": [
+        "Preserve each publication and its stated database role while leaving patient-cohort overlap unresolved when dates and cohort definitions cannot be verified.",
+        "Record the two model publications as abstract-level evidence until full text is preserved.",
+        "Explain which cohort dates, identifiers and eligibility definitions are needed to establish independence."
+      ],
+      "mustNotDo": [
+        "Call the two model abstracts full text.",
+        "Treat use of the same public database as either proof of identical cohorts or proof of independent cohorts."
+      ],
+      "generated": {
+        "authoredAt": "2026-09-05",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }
-

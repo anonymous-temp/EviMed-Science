@@ -14,7 +14,11 @@
         "At least one method draft preserves the source checks.",
         "Nothing is published as a capsule skill.",
         "The omission audit covers exactly the units the frozen input names in auditSample."
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "paper",
@@ -28,7 +32,11 @@
         "DOI and effectEstimates remain unknown with reasons.",
         "No method draft is produced at structured depth.",
         "The system records the configured actual model and CNY receipt."
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "notes",
@@ -42,7 +50,11 @@
         "The unresolved follow-up window is not converted into a decided value.",
         "No reusable method is invented from an incomplete fragment.",
         "Retry and history retain the frozen source generation."
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "audited-omission",
@@ -56,7 +68,11 @@
         "A sample is called represented only when a known slot, claim or method already anchors that unit; no anchor is copied into the sample.",
         "omissionRate equals the unrepresented fraction of the audited samples, to four decimal places; the control plane derives its own and records a disagreement rather than refusing the package.",
         "No anchor is invented to make a sampled unit look represented."
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "unaudited-omission",
@@ -70,7 +86,11 @@
         "No samples are attached to an audit that did not run.",
         "The rate is null rather than 0, because unmeasured is not the same as measured and clean.",
         "The package still delivers; a missing audit plan is not a delivery failure."
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ],
   "capability": "source-understanding",
