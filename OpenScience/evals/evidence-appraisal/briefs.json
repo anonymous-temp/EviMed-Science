@@ -11,7 +11,11 @@
         "question": "在射血分数保留的心衰（HFpEF）患者中，SGLT2 抑制剂能否降低心衰再住院？证据的确定性有多高？",
         "population": "射血分数 ≥ 40% 的慢性心衰成人",
         "intervention": "恩格列净、达格列净",
-        "outcomes": ["心衰再住院", "心血管死亡", "全因死亡"],
+        "outcomes": [
+          "心衰再住院",
+          "心血管死亡",
+          "全因死亡"
+        ],
         "studies": [
           "EMPEROR-Preserved（Anker 2021, N Engl J Med）",
           "DELIVER（Solomon 2022, N Engl J Med）",
@@ -34,7 +38,11 @@
         "Rate indirectness low without saying which of population, intervention, comparator and outcome was checked.",
         "Recommend a medicine, a dose or a switch anywhere in the appraisal."
       ],
-      "gradedOn": "Whether a methodologist reading only appraisal-table.csv can reconstruct each certainty from the rows above it."
+      "gradedOn": "Whether a methodologist reading only appraisal-table.csv can reconstruct each certainty from the rows above it.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "appraisal-002-tirzepatide-companion-papers",
@@ -44,7 +52,10 @@
         "question": "在无糖尿病的肥胖成人中，替尔泊肽对体重下降的证据确定性有多高？",
         "population": "BMI ≥ 30、无 2 型糖尿病的成人",
         "intervention": "替尔泊肽（tirzepatide）皮下注射",
-        "outcomes": ["72 周体重变化百分比", "停药后体重反弹"],
+        "outcomes": [
+          "72 周体重变化百分比",
+          "停药后体重反弹"
+        ],
         "studies": [
           "SURMOUNT-1 主要结果（Jastreboff 2022, N Engl J Med）",
           "SURMOUNT-1 的长期延续期报告（2024）",
@@ -65,7 +76,11 @@
         "Drop the single-centre cohort from the table because it is weak — appraise it and say so.",
         "Report a rebound estimate from SURMOUNT-4 as if it applied to the SURMOUNT-1 population without recording the indirectness."
       ],
-      "gradedOn": "Whether the delivered table contains four study rows and says so, rather than six rows that resolve correctly and count one trial three times."
+      "gradedOn": "Whether the delivered table contains four study rows and says so, rather than six rows that resolve correctly and count one trial three times.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "appraisal-003-suxiao-jiuxin-wan-formulary",
@@ -76,7 +91,11 @@
         "population": "慢性稳定型心绞痛成人门诊患者",
         "intervention": "速效救心丸（国药准字 Z12020025）",
         "comparator": "硝酸酯类，或常规治疗基础上加用",
-        "outcomes": ["心绞痛发作频率", "硝酸甘油用量", "运动耐量"],
+        "outcomes": [
+          "心绞痛发作频率",
+          "硝酸甘油用量",
+          "运动耐量"
+        ],
         "studies": [
           "一项 2008 年 Cochrane 系统评价（含中文数据库检索）",
           "四项 2010—2019 年中文期刊单中心随机对照试验（n=60—120，均未描述分配隐藏，两项写明「随机分为两组」）",
@@ -97,7 +116,11 @@
         "Convert the Cochrane review's own risk-of-bias language into this capability's rating words without recording the instrument and its verbatim level.",
         "Answer the 「可否进院」 half of the question. That is the committee's decision; the run supplies the certainty and stops."
       ],
-      "gradedOn": "Whether the delivered set is the set that was handed over, and whether the deliverable survives the gate at all — an appraisal that cannot be delivered because it names the medicine it appraises is a contract defect, not a run defect, and this brief is where it shows up."
+      "gradedOn": "Whether the delivered set is the set that was handed over, and whether the deliverable survives the gate at all — an appraisal that cannot be delivered because it names the medicine it appraises is a contract defect, not a run defect, and this brief is where it shows up.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "appraisal-004-nfl-primary-care-indirectness",
@@ -108,7 +131,10 @@
         "population": "社区／基层就诊、有主观记忆主诉但未经转诊的 60 岁以上人群",
         "intervention": "血清 NfL 检测（单一 cut-off）",
         "comparator": "常规认知量表筛查",
-        "outcomes": ["敏感度与特异度", "转诊后确诊率"],
+        "outcomes": [
+          "敏感度与特异度",
+          "转诊后确诊率"
+        ],
         "studies": [
           "三项记忆门诊队列的诊断准确性研究（2019—2023，均为已转诊人群）",
           "一项瑞典人群队列的巢式病例对照分析（2022）",
@@ -128,7 +154,11 @@
         "Downgrade for risk of bias and call that the indirectness problem — they are different domains and the reader needs both.",
         "Recommend a cut-off."
       ],
-      "gradedOn": "Whether indirectness carries the downgrade the answer actually rests on, with the population axis named, rather than the certainty arriving at the same level through risk of bias and imprecision."
+      "gradedOn": "Whether indirectness carries the downgrade the answer actually rests on, with the population axis named, rather than the certainty arriving at the same level through risk of bias and imprecision.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

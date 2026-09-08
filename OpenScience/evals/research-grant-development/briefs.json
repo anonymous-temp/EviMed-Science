@@ -23,7 +23,11 @@
         "Claim preliminary results or institutional resources not confirmed in the inputs.",
         "Write an aim whose design only makes sense after another aim succeeds."
       ],
-      "gradedOn": "Whether a reviewer holding the call can find every criterion answered."
+      "gradedOn": "Whether a reviewer holding the call can find every criterion answered.",
+      "generated": {
+        "authoredAt": "2026-08-31",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "grant-002-rule-from-another-call",
@@ -44,7 +48,11 @@
         "Design the team section around a ratio this call never asked for.",
         "Present an assumption as a requirement."
       ],
-      "gradedOn": "Whether every stated requirement can be traced to words in the call, and whether the silences are named rather than filled."
+      "gradedOn": "Whether every stated requirement can be traced to words in the call, and whether the silences are named rather than filled.",
+      "generated": {
+        "authoredAt": "2026-08-31",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "grant-003-feasibility-risk-that-survives",
@@ -65,7 +73,11 @@
         "Claim preliminary results from a dataset not yet accessible.",
         "Drop the risk from the audit because it was already mentioned in the approach."
       ],
-      "gradedOn": "Whether the audit still contains the two risks after the proposal has been polished — an unresolved risk that survives is worth more than one that disappears, because the second version surfaces during review instead."
+      "gradedOn": "Whether the audit still contains the two risks after the proposal has been polished — an unresolved risk that survives is worth more than one that disappears, because the second version surfaces during review instead.",
+      "generated": {
+        "authoredAt": "2026-08-31",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

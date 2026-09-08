@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "briefId": "review-002-aripiprazole-sparse-safety",
+  "capability": "clinical-evidence-synthesis",
+  "contractKind": "clinical-evidence-report",
+  "note": "Authored, not observed. The plan reads golden traces off real runs; no run of this brief exists yet, so `goldenTrace` is deliberately absent rather than invented — an invented trace would be scored against by turnCoverage and would pay a run for copying a path nobody has walked. What is here is the decidable half: which artifacts must exist, and which values must not survive.",
+  "leakConstraint": "Every `expected` value is under 8 characters, or is a string that appears nowhere in the brief. LeakGuardTransport treats any `expected`/`sha256`/`digest` value of 8 characters or more as a secret and refuses to transmit a body containing it — and the brief text IS transmitted. So an answer key phrased in the brief's own words (`very-low`, `0.66-0.92`, `ClinicalTrials.gov`) would not tighten the check, it would make every dispatch fail. That is why the certainty rating and the registry-vs-zero-hit distinction are left to the judge below rather than asserted here.",
+  "rationale": "A sparse-evidence brief with a simulated registry outage. Its decidable core is that the run delivers the full apparatus anyway — the search log and the coverage file in particular, because the distinction the brief is about (a search that ran and found nothing versus a source that could not be reached) lives in those two files and a run that skips them has not made the distinction at all. Whether the distinction is drawn correctly inside them is the judge's, because every string that would assert it appears verbatim in the brief and would block dispatch.",
+  "expectedArtifacts": [
+    {
+      "path": "clinical-evidence-report.md"
+    },
+    {
+      "path": "clinical-evidence-matrix.json"
+    },
+    {
+      "path": "clinical-evidence-search.json"
+    },
+    {
+      "path": "citation-ledger.csv"
+    },
+    {
+      "path": "references.bib"
+    },
+    {
+      "path": "citation-audit.md"
+    },
+    {
+      "path": "clinical-evidence-run.json"
+    },
+    {
+      "path": "question-coverage.json"
+    }
+  ],
+  "deterministicChecks": [
+    {
+      "id": "search-log-delivered",
+      "class": "completeness",
+      "kind": "artifact_exists",
+      "path": "clinical-evidence-search.json"
+    },
+    {
+      "id": "coverage-delivered",
+      "class": "completeness",
+      "kind": "artifact_exists",
+      "path": "question-coverage.json"
+    },
+    {
+      "id": "audit-delivered",
+      "class": "completeness",
+      "kind": "artifact_exists",
+      "path": "citation-audit.md"
+    },
+    {
+      "id": "delivered-at-all",
+      "class": "completeness",
+      "kind": "error_code_absent",
+      "expected": "deliverable_rejected_safety"
+    }
+  ],
+  "judgeOnly": [
+    "Is the zero-hit PubMed query recorded separately from the unreachable registry?",
+    "Does the report state that a label warning and a case-report review cannot establish that a screening programme prevents harm?",
+    "Does it name the prospective comparative design that would answer the question?",
+    "Does it anywhere treat the registry timeout as evidence that no trials exist?",
+    "Does it convert post-marketing reports into an incidence or a preventive effect?"
+  ],
+  "falsePositiveRisk": "None known; every check here is an existence or an error-code question."
+}

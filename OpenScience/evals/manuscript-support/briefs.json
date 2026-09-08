@@ -26,7 +26,11 @@
         "为了让某个选择显得合理而先说出它的结论。",
         "把检索、工具调用或文件路径写进正文。"
       ],
-      "gradedOn": "Whether a statistician holding only this section and the data could rebuild the analysis, and whether every STROBE item the section owns is answered rather than named."
+      "gradedOn": "Whether a statistician holding only this section and the data could rebuild the analysis, and whether every STROBE item the section owns is answered rather than named.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "ms-002-discussion-against-a-prior-evidence-package",
@@ -51,7 +55,11 @@
         "把「未检索到支持性研究」写成「无效」或「不推荐」。",
         "在讨论里出现结果一节没有的新数字。"
       ],
-      "gradedOn": "Whether every citation in the section resolves to a row the prior run preserved, and whether the discussion argues rather than repeats."
+      "gradedOn": "Whether every citation in the section resolves to a row the prior run preserved, and whether the discussion argues rather than repeats.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "ms-003-effect-estimate-corrected-late",
@@ -77,7 +85,11 @@
         "把推导结果当成测量值陈述（无〔推导〕标记）。",
         "把亚组排序沿用旧值下的顺序。"
       ],
-      "gradedOn": "Whether the old estimate survives anywhere in the deliverable, whether every dependent claim was re-derived rather than adjusted, and whether the sweep is recorded where the next person can read it."
+      "gradedOn": "Whether the old estimate survives anywhere in the deliverable, whether every dependent claim was re-derived rather than adjusted, and whether the sweep is recorded where the next person can read it.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "ms-004-revision-with-the-reply-in-the-wrong-file",
@@ -102,7 +114,11 @@
         "整篇重写：未被意见触及的段落应当逐字不变。",
         "在弱化结论的同时把限制条件也一并删掉。"
       ],
-      "gradedOn": "Whether the discussion reads as a discussion rather than as a reply, whether all three comments are answered in substance, and whether the untouched paragraphs are byte-identical to the draft."
+      "gradedOn": "Whether the discussion reads as a discussion rather than as a reply, whether all three comments are answered in substance, and whether the untouched paragraphs are byte-identical to the draft.",
+      "generated": {
+        "authoredAt": "2026-09-02",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }
