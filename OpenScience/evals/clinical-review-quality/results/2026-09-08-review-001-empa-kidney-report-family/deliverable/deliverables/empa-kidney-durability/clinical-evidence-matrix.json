@@ -1,0 +1,2285 @@
+{
+ "questionPico": {
+  "population": "Adults with chronic kidney disease at risk of progression (EMPA-KIDNEY trial population, eGFR 20–90 ml/min per 1.73 m² with entry criteria)",
+  "intervention": "Empagliflozin 10 mg once daily (active trial); observation off study drug with open-label SGLT2 inhibitor use allowed (post-trial follow-up)",
+  "comparator": "Placebo (randomised); original allocation groups compared by intention to treat in follow-up",
+  "outcome": "Durability of kidney and cardiovascular effects: kidney disease progression composite and components, eGFR slope, albuminuria, cardiovascular death / heart-failure hospitalisation / all-cause death, and safety across treatment and post-treatment periods"
+ },
+ "claims": [
+  {
+   "claimId": "CLM-005",
+   "claimType": "direct",
+   "claim": "In the primary results report of EMPA-KIDNEY, the composite of kidney disease progression or cardiovascular death occurred in 432 of 3304 participants (13.1%) in the empagliflozin group versus 558 of 3305 (16.9%) in the placebo group (hazard ratio 0.72, 95% CI 0.64–0.82, P<0.001) over a median follow-up of 2.0 years.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "During a median of 2.0 years follow-up, a primary outcome event occurred in 432 of 3304 patients (13.1%) in the empagliflozin group and in 558 of 3305 patients (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001)",
+   "applicability": "Adults with CKD at risk of progression meeting EMPA-KIDNEY eligibility (eGFR 20–<45 any ACR, or 45–<90 with ACR ≥200 mg/g).",
+   "uncertainty": "Effect estimate from a single randomised trial programme stopped early for efficacy at a median 2.0 years.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "horizon",
+     "forms": [
+      "中位 2.0 年",
+      "约 2 年暴露",
+      "2 年时间窗"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-004",
+   "claimType": "direct",
+   "claim": "EMPA-KIDNEY was stopped early for efficacy at its formal interim analysis and completed follow-up at a median of 2.0 years (interquartile range 1.5–2.4).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "On March 07 2022, the independent DSMB reported that based on 624 first primary outcomes, both conditions for stopping early for efficacy were met at the formal interim analysis. … Follow-up was completed on July 05 2022, at which time median follow-up was 2.0 years (interquartile range, 1.5 to 2.4 years).",
+   "applicability": "EMPA-KIDNEY trial as conducted.",
+   "uncertainty": "Duration of the randomised treatment period constrains all treatment-period durability statements.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "horizon",
+     "forms": [
+      "中位 2.0 年",
+      "约 2 年暴露",
+      "2 年时间窗"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-006",
+   "claimType": "direct",
+   "claim": "Kidney disease progression (the principal component of the composite) was reduced with hazard ratio 0.71 (95% CI 0.62–0.81) and cardiovascular death with hazard ratio 0.84 (95% CI 0.60–1.19).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "The hazard ratios for the comparison of empagliflozin with placebo on kidney disease progression and for death from cardiovascular causes separately were 0.71 (95% CI 0.62 to 0.81) and 0.84 (95% CI 0.60 to 1.19), respectively",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Component-level estimates; cardiovascular component underpowered.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-007",
+   "claimType": "direct",
+   "claim": "The composite of end-stage kidney disease or cardiovascular death was reduced with hazard ratio 0.73 (95% CI 0.59–0.89).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "For the composite of ESKD or death from cardiovascular causes, the hazard ratio was 0.73 (95% CI 0.59 to 0.89)",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "None beyond single-programme scope.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-011",
+   "claimType": "direct",
+   "claim": "Effects on the primary outcome were generally consistent across pre-specified subgroups, including participants with and without diabetes and across the range of eGFR at randomisation, with some evidence of a larger proportional reduction at higher baseline albuminuria.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "The effect of empagliflozin on the primary outcome was generally consistent across the prespecified subgroups. In particular, the benefits were consistent in patients with or without diabetes and regardless of eGFR at randomization.",
+   "applicability": "Subgroups defined in EMPA-KIDNEY.",
+   "uncertainty": "Early trial closure limits precision within low-event subgroups.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-012",
+   "claimType": "direct",
+   "claim": "Within the trial there was an acute drop in eGFR after starting treatment followed by slowing of the annual decline: between-group difference 0.75 (95% CI 0.54–0.96) ml/min per 1.73 m² per year for the total slope and 1.37 (95% CI 1.16–1.59) for the chronic slope (2 months to final follow-up).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "There was an acute drop in eGFR on commencing study treatment, followed by a slowing of the rate of annual decline. Overall, the between-group difference in total slope was 0.75 (95% CI 0.54 to 0.96) ml per minute per 1.73 m 2 per year. For chronic slopes (i.e. from 2 months to final follow-up), there was a between-group difference of 1.37 (95% CI 1.16 to 1.59) ml per minute per 1.73 m 2 per year",
+   "applicability": "EMPA-KIDNEY participants with eGFR measurements during the trial.",
+   "uncertainty": "Slope analyses are on-treatment surrogates; composite outcomes remain the primary evidence.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "dip",
+     "forms": [
+      "可逆的急性 eGFR 下降",
+      "停药后基本可逆",
+      "可逆的治疗效应",
+      "急性可逆 eGFR 下降"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-013",
+   "claimType": "direct",
+   "claim": "On treatment, geometric mean urinary ACR was reduced by 19% (95% CI 15–23%).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "The geometric mean urinary ACR was reduced by 19% (95% CI 15% to 23%).",
+   "applicability": "EMPA-KIDNEY participants with ACR measurements.",
+   "uncertainty": "Albuminuria is a surrogate; its durability off treatment is not reported.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-008",
+   "claimType": "direct",
+   "claim": "There was no statistically significant effect on hospitalisation for heart failure or cardiovascular death (hazard ratio 0.84, 95% CI 0.67–1.07; P=0.15) or on death from any cause (hazard ratio 0.87, 95% CI 0.70–1.08; P=0.21) within the trial.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "There was no statistically significant effect on the composite of hospitalization for heart failure or death from cardiovascular causes (hazard ratio, 0.84; 95% CI 0.67 to 1.07; P=0.15), or on death from any cause (hazard ratio, 0.87; 95% CI 0.70 to 1.08; P=0.21)",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Point estimates are numerically consistent with benefit but not statistically significant; event rate lower than expected.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "cvpower",
+     "forms": [
+      "心血管事件率低于预期",
+      "低心血管事件率"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-010",
+   "claimType": "direct",
+   "claim": "There was no significant effect on major cardiovascular events (hazard ratio 0.93, 95% CI 0.76–1.12).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "major cardiovascular events (hazard ratio, 0.93 95% CI 0.76-1.12)",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Low event rate limited power.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "cvpower",
+     "forms": [
+      "心血管事件率低于预期",
+      "低心血管事件率"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-009",
+   "claimType": "direct",
+   "claim": "First and subsequent hospitalisations from any cause were fewer with empagliflozin: 24.8 versus 29.2 hospitalisations per 100 patient-years (hazard ratio 0.86, 95% CI 0.78–0.95; P=0.003).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "After controlling the family-wise error rate for the three key secondary outcomes, there were significantly fewer first and subsequent hospitalizations from any cause in the empagliflozin group (24.8 versus 29.2 hospitalizations per 100 patient years: hazard ratio, 0.86; 95% CI 0.78 to 0.95, P=0.003)",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Rate per 100 patient-years including recurrent events; no post-trial hospitalisation data exist.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-052",
+   "claimType": "direct",
+   "claim": "The trial reports that a lower-than-expected cardiovascular event rate reduced statistical power for the cardiovascular secondary and tertiary outcomes.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "The trial has certain limitations, including the lower-than-expected cardiovascular event rate, which reduced statistical power to assess the secondary or tertiary cardiovascular outcomes.",
+   "applicability": "Interpretation of the cardiovascular results of EMPA-KIDNEY.",
+   "uncertainty": "Authors' own limitation statement.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "cvpower",
+     "forms": [
+      "心血管事件率低于预期",
+      "低心血管事件率"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-037",
+   "claimType": "direct",
+   "claim": "In the pre-specified slope analysis, the placebo-adjusted acute dip in eGFR in the first 2 months was 2.12 (95% CI 1.83–2.41) ml/min per 1.73 m², about 6% (95% CI 5–6%).",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "Between randomization and the 2 month follow-up visit, the placebo-adjusted ‘acute dip’ in eGFR with empagliflozin was 2.12 (95% CI 1.83–2.41) mL/min/1.73m 2 , or, in relative terms, 6% (5–6%).",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Acute dip magnitude averaged across subgroups; on-treatment haemodynamic effect.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "dip",
+     "forms": [
+      "可逆的急性 eGFR 下降",
+      "停药后基本可逆",
+      "可逆的治疗效应",
+      "急性可逆 eGFR 下降"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-038",
+   "claimType": "direct",
+   "claim": "From 2 months onward the chronic slope of eGFR decline was halved, from −2.75 to −1.37 ml/min per 1.73 m² per year (between-group difference 1.37, 95% CI 1.16–1.59; relative reduction 50%, 95% CI 42–58%), maintained to the end of the treatment period.",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "After this, it halved the chronic slope from -2.75 to -1.37 mL/min/1.73m 2 /year (relative difference 50%, 95% CI 42–58%). … Overall, allocation to empagliflozin slowed the rate of decline in eGFR from 2 months to final follow-up (the ‘chronic slope’) by 1·37 (95% CI 1·16–1·59) mL/min/1·73m 2 /year, which represented a 50% (42–58%) relative reduction in the mean chronic slope.",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Shared-parameter model estimates; slope is a surrogate for clinical progression.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-039",
+   "claimType": "direct",
+   "claim": "The total slope (baseline to final follow-up) difference was 0.75 (95% CI 0.54–0.96) ml/min per 1.73 m² per year, a 26% (95% CI 19–33%) relative reduction.",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "Overall, allocation to empagliflozin slowed the rate of decline in eGFR from baseline to final follow-up by 0.75 (95% CI 0.54-0.96) mL/min/1·73m 2 /year, which represents a 26% (19-33%) relative reduction in the mean total slope",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Total slope combines the acute dip and the chronic slope effects.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "dip",
+     "forms": [
+      "可逆的急性 eGFR 下降",
+      "停药后基本可逆",
+      "可逆的治疗效应",
+      "急性可逆 eGFR 下降"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-045",
+   "claimType": "direct",
+   "claim": "The acute dip was modest in all subgroups (on average less than 3 ml/min per 1.73 m² or <10% of baseline eGFR) and largely reversible when treatment was discontinued.",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "The acute dip in eGFR when empagliflozin was initiated in EMPA-KIDNEY was modest (in all participant subgroups it was on average less than 3 mL/min/1.73m 2 or <10% of baseline eGFR), and was largely reversible when treatment was discontinued.",
+   "applicability": "All EMPA-KIDNEY subgroups examined.",
+   "uncertainty": "Reversibility refers to cessation of treatment, documented below in the UK substudy.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "dip",
+     "forms": [
+      "可逆的急性 eGFR 下降",
+      "停药后基本可逆",
+      "可逆的治疗效应",
+      "急性可逆 eGFR 下降"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-043",
+   "claimType": "direct",
+   "claim": "Time-to-event analyses found no evidence against the proportional-hazards assumption for any time-to-event outcome.",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "Assessment of the proportional hazards assumption (by testing the significance of an interaction between treatment allocation and log[survival time]) found no evidence against proportionality for any of the time to event outcomes.",
+   "applicability": "All EMPA-KIDNEY time-to-event outcomes.",
+   "uncertainty": "Absence of evidence against proportionality is not proof of constancy of effect over very long horizons.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-041",
+   "claimType": "direct",
+   "claim": "Relative reductions in the chronic slope were larger in participants with diabetes than without (62%, 95% CI 50–73%, versus 40%, 95% CI 29–51%; P for heterogeneity 0.0074).",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "Overall, allocation to empagliflozin slowed the rate of decline in eGFR from 2 months to final follow-up (the ‘chronic slope’) by 1·37 (95% CI 1·16–1·59) mL/min/1·73m 2 /year, which represented a 50% (42–58%) relative reduction in the mean chronic slope. Larger relative effects were observed among those with diabetes than those without diabetes (62% [50–73%] vs 40% [29–51%] respectively, p for heterogeneity 0.0074, Figure 2 ).",
+   "applicability": "EMPA-KIDNEY participants by diabetes status.",
+   "uncertainty": "Absolute differences were comparable or larger in subgroups with faster progression; relative effect modification does not identify non-responders.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-042",
+   "claimType": "direct",
+   "claim": "Relative chronic-slope reductions were largest at the lowest albuminuria: 76% (95% CI 32–120%) at baseline ACR <30 mg/g versus 28% (95% CI 19–38%) at ACR ≥2000 mg/g (P for trend 0.0001).",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "when comparing the relative differences in chronic slope, this trend was reversed with those in the lowest uACR categories having the largest relative reduction in the chronic slope (relative reduction 76% [95% CI 32–120%] in those with uACR <30 mg/g compared with 28% [19–38%] in those with uACR ≥2000 mg/g, p for trend 0.0001",
+   "applicability": "EMPA-KIDNEY participants by baseline ACR.",
+   "uncertainty": "The PubMed-indexed abstract for this paper reports 86% (36–136%) and 29% (19–38%) for the same subgroups; this report uses the preserved full text (76% and 28%).",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-040",
+   "claimType": "direct",
+   "claim": "In a UK substudy with samples 4 weeks after the final follow-up visit, the acute dip had reversed: mean eGFR 29.8 ml/min per 1.73 m² (empagliflozin) versus 27.9 (placebo), difference 1.87 (95% CI 1.23–2.52).",
+   "referenceNumber": 2,
+   "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+   "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+   "identifier": "PMID:38061371",
+   "accessLevel": "full_text",
+   "supportQuote": "In the surviving UK participants with a 4-week post-final follow-up blood sample, this acute dip reversed when study treatment was discontinued, with mean eGFR at 4 weeks post-final follow-up being of 29.8 mL/min/1.73m 2 in the empagliflozin group and 27.9 mL/min/1.73m 2 in the placebo group (difference 1.87 [95% CI 1.23–2.52] mL/min/1.73m 2 )",
+   "applicability": "UK EMPA-KIDNEY participants with a post-final-follow-up sample.",
+   "uncertainty": "Substudy within one country; supports reversibility of the dip on cessation.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "dip",
+     "forms": [
+      "可逆的急性 eGFR 下降",
+      "停药后基本可逆",
+      "可逆的治疗效应",
+      "急性可逆 eGFR 下降"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-017",
+   "claimType": "direct",
+   "claim": "The post-trial follow-up was an optional substudy at 185 of the trial's 241 centres (77%) in 7 of the original 8 countries; all willing surviving participants at participating centres were eligible.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "Post-trial follow-up was an optional substudy conducted at 185 of the trial’s 241 centers (77%) in 7 of the original 8 countries. All willing surviving participants from participating centers were eligible for post-trial follow-up.",
+   "applicability": "Surviving, consenting EMPA-KIDNEY participants at participating centres (Japan excluded).",
+   "uncertainty": "Selective consent and exclusion of Japanese sites are addressed in the report's bias statements.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-018",
+   "claimType": "direct",
+   "claim": "At the end of the active trial all study drug was retrieved, participants and investigators remained blinded to allocation, and local doctors could prescribe open-label SGLT2 inhibitors where available and considered indicated.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "Investigators and participants remained blinded to treatment allocation, and no further study drug was provided to participants. Instead, local doctors were free to prescribe open-label SGLT2 inhibitors (where available and considered indicated)",
+   "applicability": "Post-trial period design.",
+   "uncertainty": "Open-label SGLT2 inhibitor use after the trial was permitted and measured; ~43% vs 40% actually used them.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-019",
+   "claimType": "direct",
+   "claim": "4891 of 6609 randomised participants (74%) entered the post-trial period and were followed for a median of 2.0 years (Q1–Q3 2.0–2.1); vital status was missing at the end for 86 of 4891 (1.8%), and 7 (0.1%) withdrew consent.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "4891 of 6609 randomized participants (74%) entered the post-trial period … These participants were followed post-trial for a median of 2.0 (Q1-Q3 2.0-2.1) years. … By the end of post-trial follow-up vital status was missing on or after 1 April 2024 for 86 of these 4891 participants (1.8%), and 7 (0.1%) withdrew consent during post-trial follow-up",
+   "applicability": "EMPA-KIDNEY participants entering post-trial follow-up.",
+   "uncertainty": "Follow-up was observational; 26% of randomised participants did not enter it.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-020",
+   "claimType": "direct",
+   "claim": "Average actual use of SGLT2 inhibitors was 90% (empagliflozin group) versus 2% (placebo) during the active trial and 43% versus 40% during post-trial follow-up.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "Average use of SGLT2 inhibitors during the active trial period was 90% in the empagliflozin group versus 2% in the placebo group. … During post-trial follow-up, average use was similar between groups (43% vs. 40%, respectively; Table 2 )",
+   "applicability": "EMPA-KIDNEY participants entering post-trial follow-up.",
+   "uncertainty": "Balanced open-label use keeps intention-to-treat comparisons interpretable by original allocation.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-034",
+   "claimType": "direct",
+   "claim": "The post-trial report warns that any comparison of outcomes between participants who did and did not use SGLT2 inhibitors post-trial would be confounded and unreliable.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "any comparison of outcomes between participants allocated empagliflozin who started an SGLT2 inhibitor post-trial versus those allocated placebo who remained off SGLT2 inhibition post-trial will be confounded, and hence unreliable.",
+   "applicability": "Actual-use (per-protocol-style) analyses of the post-trial period.",
+   "uncertainty": "Only intention-to-treat analyses by original allocation are presented as primary results.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-021",
+   "claimType": "direct",
+   "claim": "Over the entire follow-up (active trial plus post-trial observation), the primary composite occurred in 865 of 3304 participants (26.2%) in the empagliflozin group and 1001 of 3305 (30.3%) in the placebo group (hazard ratio 0.79, 95% CI 0.72–0.87).",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ).",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat by original allocation.",
+   "uncertainty": "Combined-period estimate; blinding was maintained in >99% of participants throughout.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-022",
+   "claimType": "direct",
+   "claim": "The combined-period effect comprised a 28% reduction during the active trial period (HR 0.72, 95% CI 0.64–0.82; 990 first outcomes) and a 13% reduction during the post-trial period (HR 0.87, 95% CI 0.76–0.99; 876 additional first outcomes).",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ). This comprised a 28% overall reduction in risk during the active trial period (0.72, 0.64-0.82; 990 outcomes) and a 13% reduction during the post-trial period (0.87, 0.76-0.99; 876 additional first primary outcomes).",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat.",
+   "uncertainty": "Post-trial hazard ratio is smaller than the in-trial hazard ratio, indicating attenuation.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-023",
+   "claimType": "direct",
+   "claim": "Post-trial benefit was front-loaded: hazard ratios for the first and second post-trial years were 0.76 (95% CI 0.60–0.96) and 0.90 (95% CI 0.75–1.07), with a hazard ratio of 0.60 (95% CI 0.38–0.93) for the first 6 months.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ). This comprised a 28% overall reduction in risk during the active trial period (0.72, 0.64-0.82; 990 outcomes) and a 13% reduction during the post-trial period (0.87, 0.76-0.99; 876 additional first primary outcomes). Much of the post-trial benefit on the primary outcome occurred early: hazard ratios for the first and second years of follow-up post-trial were 0.76 (0.60-0.96) and 0.90 (0.75-1.07) respectively, with the hazard ratio for first 6 months 0.60 (0.38-0.93) ( Figure 1B ).",
+   "applicability": "EMPA-KIDNEY participants in the post-trial period.",
+   "uncertainty": "Second-year estimate no longer excludes 1.0; single observational follow-up of one programme.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-024",
+   "claimType": "direct",
+   "claim": "Over the whole follow-up, kidney disease progression occurred in 23.5% versus 27.1% (HR 0.79, 95% CI 0.72–0.87) and ESKD in 9.0% versus 11.3% (HR 0.74, 95% CI 0.64–0.87); in the post-trial period alone the hazard ratios were 0.89 (95% CI 0.77–1.02) for progression and 0.80 (95% CI 0.66–0.98) for ESKD.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ). … The effect on the primary outcome during the entire follow-up period included a 21% reduction in the risk of the secondary outcomes of kidney disease progression (23.5% vs. 27.1%: 0.79, 0.72-0.87; Table 3 & Figure S3 ), and a 26% reduction in ESKD (9.0% vs. 11.3%: 0.74, 0.64-0.87; Table S5 ). During the post-trial period, the hazard ratios for kidney disease progression and ESKD were 0.89 (0.77-1.02) and 0.80 (0.66-0.98), respectively ( Figure S3 ).",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat.",
+   "uncertainty": "Post-trial progression estimate no longer significant; ESKD estimate remains significant but is a single observational-period estimate.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-028",
+   "claimType": "direct",
+   "claim": "Mean eGFR at the last local measurement among participants without ESKD was 31.4 (empagliflozin) versus 30.6 ml/min per 1.73 m² (placebo), an absolute difference of 0.8 (95% CI 0.1–1.4).",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "Mean eGFR at last local measurement among those without ESKD was 31.4 (±0.2) mL/min/1.73m 2 in the group originally allocated empagliflozin compared with 30.6 (±0.2) mL/min/1.73m 2 in the placebo group, i.e., an absolute difference of 0.8 (95% CI 0.1-1.4) mL/min/1.73m 2",
+   "applicability": "EMPA-KIDNEY participants without ESKD at last measurement.",
+   "uncertainty": "Local laboratory measurements; eGFR relative to baseline local values during follow-up.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-033",
+   "claimType": "direct",
+   "claim": "The post-trial report attributes residual post-trial kidney benefit to two mechanisms: reversal of the acute eGFR dip after cessation (which could contribute to eGFR-based progression components) and continuing protection against ESKD, which dip reversal cannot explain.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "The acute eGFR dip with SGLT2 inhibition reversed within 4 weeks after discontinuation … so some of the observed post-trial benefit on eGFR components of kidney disease progression could result from reversal of the acute eGFR dip after cessation of study drug. However, that does not explain continuing benefits on ESKD",
+   "applicability": "Interpretation offered by the post-trial report.",
+   "uncertainty": "Attribution of mechanisms is the authors' interpretation of the observed pattern.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "dip",
+     "forms": [
+      "可逆的急性 eGFR 下降",
+      "停药后基本可逆",
+      "可逆的治疗效应",
+      "急性可逆 eGFR 下降"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-026",
+   "claimType": "direct",
+   "claim": "Over the whole follow-up, cardiovascular death was reduced by 25% (3.8% vs 4.9%; HR 0.75, 95% CI 0.59–0.95), non-cardiovascular death was unaffected (5.3% vs 5.3%; HR 0.97, 95% CI 0.79–1.20), and all-cause death was 9.1% versus 10.2% (HR 0.86, 95% CI 0.74–1.01).",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ). … During the entire follow-up period, there was a reduction in the risk of death from a cardiovascular cause by 25% (3.8% vs. 4.9%: 0.75, 0.59-0.95) and no material effect on non-cardiovascular mortality (5.3% vs. 5.3%: 0.97, 0.79-1.20), meaning there were 301 (9.1%) vs. 336 (10.2%) deaths from any cause (0.86, 0.74-1.01; Table 3 and Figure S5 ).",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat.",
+   "uncertainty": "Non-cardiovascular death was the pre-specified post-trial safety outcome; cardiovascular death effect is a single-programme estimate.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-025",
+   "claimType": "direct",
+   "claim": "Over the whole follow-up, the composite of death from any cause or ESKD was reduced by 19% (16.9% vs 19.6%; HR 0.81, 95% CI 0.72–0.90), with a hazard ratio of 0.82 (95% CI 0.70–0.96) for the post-trial period.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ). … During the entire follow-up period, there was a 19% reduction in the risk of the key secondary composite outcome of death from any cause or ESKD (16.9% vs. 19.6%: 0.81, 0.72-0.90), including a hazard ratio of 0.82 (0.70-0.96) for the post-trial period.",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat.",
+   "uncertainty": "None beyond single-programme observational follow-up.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-027",
+   "claimType": "direct",
+   "claim": "In absolute terms there were 57 (SE 14) fewer participants per 1000 with a primary outcome at the end of the active trial and 45 (SE 14) fewer at the end of the whole follow-up.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "In absolute terms, compared with placebo there were 57 (SE14) fewer participants with a primary outcome per 1000 participants allocated to empagliflozin at the end of the active trial period, and 45 (14) fewer at the end of the entire follow-up period.",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat.",
+   "uncertainty": "Absolute differences illustrate attenuation of the benefit after cessation.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-029",
+   "claimType": "direct",
+   "claim": "Relative effects on the primary outcome over the whole follow-up were similar across subgroups by baseline diabetes status, eGFR, ACR and primary kidney disease.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "The relative effects on the primary outcome were similar in subgroup analyses by baseline diabetes status, eGFR, uACR and primary cause of kidney disease ( Figure 2 ).",
+   "applicability": "EMPA-KIDNEY subgroups during combined follow-up.",
+   "uncertainty": "Subgroup estimates limited by event numbers in the smaller strata.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-035",
+   "claimType": "direct",
+   "claim": "Hospitalisation effects after cessation were not assessed because the post-trial protocol deliberately did not collect hospitalisation data.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "The lack of additional data on hospitalizations - a deliberate decision to streamline post-trial follow-up as far as possible - prevented any assessment of any effects on hospitalization during the post-trial period.",
+   "applicability": "Post-trial period outcomes.",
+   "uncertainty": "Durability of hospitalisation benefits off treatment is not reported.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-036",
+   "claimType": "direct",
+   "claim": "Post-trial data collection was limited to efficacy outcomes and cause-specific mortality (death from non-cardiovascular causes was the pre-specified post-trial safety outcome); adverse events were not collected after the trial ended.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "Post-trial follow-up aimed to collect additional efficacy and cause-specific mortality outcome data. … Tertiary outcomes were death from any cause and, separately, death from cardiovascular and non-cardiovascular causes (the latter being the safety outcome for post-trial follow-up)",
+   "applicability": "Post-trial period.",
+   "uncertainty": "Absence of adverse-event data in follow-up means off-treatment safety is unmeasured.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "unmeasured-safety",
+     "forms": [
+      "未测量到迟发安全信号",
+      "试验结束后未收集不良事件",
+      "未测量到安全信号"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-031",
+   "claimType": "direct",
+   "claim": "The post-trial report concludes that empagliflozin continued to exert additional cardiorenal benefits for up to 12 months after it was discontinued in a broad range of patients with CKD.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "In a broad range of patients with chronic kidney disease, empagliflozin continued to exert additional cardiorenal benefits for up to 12 months after it was discontinued.",
+   "applicability": "EMPA-KIDNEY participants, intention-to-treat over combined follow-up.",
+   "uncertainty": "Statement covers the observed post-trial horizon; benefit beyond 12 months off treatment is not established.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-032",
+   "claimType": "direct",
+   "claim": "The post-trial report states that, although not demonstrated directly, these results suggest that maximising the cardiorenal benefits of SGLT2 inhibitors in CKD requires long-term treatment.",
+   "referenceNumber": 3,
+   "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+   "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+   "identifier": "PMID:39453837",
+   "accessLevel": "full_text",
+   "supportQuote": "Although not demonstrated directly, this suggests that to maximize the cardiorenal clinical benefits of SGLT2 inhibitors in CKD requires long-term treatment.",
+   "applicability": "Author-level inference from the post-trial results.",
+   "uncertainty": "Explicitly presented by the authors as an inference, not a direct demonstration.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-044",
+   "claimType": "direct",
+   "claim": "In the secondary analysis by primary kidney disease (2057 with diabetic kidney disease, 1669 with glomerular disease, 1445 with hypertensive or renovascular disease, 1438 with other or unknown causes), kidney disease progression was reduced overall by 29% (HR 0.71, 95% CI 0.62–0.81), with no evidence of heterogeneity by cause (P for heterogeneity 0.62).",
+   "referenceNumber": 4,
+   "sourceUrl": "https://europepmc.org/articles/PMC7618536",
+   "sourceTitle": "Impact of Primary Kidney Disease on the Effects of Empagliflozin in Patients with Chronic Kidney Disease: Secondary Analyses of the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7618536/497704f598250868e4ee47b292114bacce588f5a50f9769de5651bc01a3f2767/fulltext.md",
+   "identifier": "PMID:38061372",
+   "accessLevel": "full_text",
+   "supportQuote": "Pre-specified subgroupings by primary kidney disease included 2057 (31%) with diabetic kidney disease, 1669 (25%) with glomerular disease, 1445 (22%) with hypertensive or renovascular disease, and 1438 (22%) with other or unknown causes. … Overall, empagliflozin reduced the risk of kidney disease progression by 29% (empagliflozin 384/3304 vs placebo 504/3305; hazard ratio 0·71, 95% confidence interval [CI] 0·62-0·81), with no evidence that the relative effect size varied significantly by primary kidney disease (heterogeneity p=0.62).",
+   "applicability": "EMPA-KIDNEY participants grouped by primary kidney disease.",
+   "uncertainty": "Relative effects similar across causes; absolute effects depend on baseline risk.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-048",
+   "claimType": "direct",
+   "claim": "Relative reductions in the chronic eGFR slope were −59%, −62%, −40% and −42% for diabetic kidney disease, hypertensive or renovascular disease, glomerular disease and other or unknown causes respectively (P for heterogeneity across the four groups 0.11).",
+   "referenceNumber": 4,
+   "sourceUrl": "https://europepmc.org/articles/PMC7618536",
+   "sourceTitle": "Impact of Primary Kidney Disease on the Effects of Empagliflozin in Patients with Chronic Kidney Disease: Secondary Analyses of the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7618536/497704f598250868e4ee47b292114bacce588f5a50f9769de5651bc01a3f2767/fulltext.md",
+   "identifier": "PMID:38061372",
+   "accessLevel": "full_text",
+   "supportQuote": "This comprised -59%, -62%, -40% and -42% relative reductions in the chronic rate of eGFR decline in participants with diabetic kidney disease, hypertensive/renovascular disease, glomerular disease and other/unknown causes, respectively (P for heterogeneity across the 4 groups=0·11",
+   "applicability": "EMPA-KIDNEY participants grouped by primary kidney disease.",
+   "uncertainty": "Sign convention: negative numbers denote reductions in the rate of decline favouring empagliflozin.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-046",
+   "claimType": "direct",
+   "claim": "There was no significant effect on serious acute kidney injury overall (HR 0.78, 95% CI 0.60–1.00), with similar results across the four categories of primary kidney disease (P for heterogeneity 0.28).",
+   "referenceNumber": 4,
+   "sourceUrl": "https://europepmc.org/articles/PMC7618536",
+   "sourceTitle": "Impact of Primary Kidney Disease on the Effects of Empagliflozin in Patients with Chronic Kidney Disease: Secondary Analyses of the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7618536/497704f598250868e4ee47b292114bacce588f5a50f9769de5651bc01a3f2767/fulltext.md",
+   "identifier": "PMID:38061372",
+   "accessLevel": "full_text",
+   "supportQuote": "Overall, empagliflozin had no significant effects on risk of serious acute kidney injury (HR 0·78; 95% CI 0·60 to 1·00), with similar results across the four main categories of cause of kidney disease (P for heterogeneity=0·28",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Point estimate numerically favours empagliflozin but is not significant.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-047",
+   "claimType": "direct",
+   "claim": "The incidence of serious urinary tract infection, hyperkalaemia, serious or symptomatic dehydration, severe hypoglycaemia (mainly in diabetic kidney disease), liver injury and bone fractures was broadly similar between allocated groups, with findings unmodified by primary kidney disease.",
+   "referenceNumber": 4,
+   "sourceUrl": "https://europepmc.org/articles/PMC7618536",
+   "sourceTitle": "Impact of Primary Kidney Disease on the Effects of Empagliflozin in Patients with Chronic Kidney Disease: Secondary Analyses of the EMPA-KIDNEY Trial",
+   "artifactPath": ".evimed-sources/PMC7618536/497704f598250868e4ee47b292114bacce588f5a50f9769de5651bc01a3f2767/fulltext.md",
+   "identifier": "PMID:38061372",
+   "accessLevel": "full_text",
+   "supportQuote": "The incidence of serious urinary tract infection, hyperkalaemia, serious or symptomatic dehydration, severe hypoglycaemia (mainly in participants with diabetic kidney disease), liver injury and bone fractures were broadly similar between allocated treatment groups, with findings unmodified by primary kidney disease",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Qualitative statement from the report; event counts sit in supplementary tables not preserved here.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-014",
+   "claimType": "direct",
+   "claim": "Adherence was high (89.6% vs 90.3% taking more than 80% of study treatment at 12 months) and discontinuation of study treatment by final follow-up occurred in 557 (16.9%) versus 640 (19.4%) surviving participants.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "At 12 months of follow-up (the approximate midpoint), 2909 [89.6%] of the empagliflozin group and 2924 [90.3%] of the placebo group reported taking most (i.e. >80%) of their study treatment. … By final follow-up, study treatment was discontinued by 557 (16.9%) surviving participants allocated empagliflozin, and by 640 (19.4%) allocated placebo.",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Discontinuation reasons are not reported in the preserved text.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-015",
+   "claimType": "direct",
+   "claim": "Rates of serious adverse events were broadly similar between groups; the incidence of serious urinary tract infections, hyperkalaemia, acute kidney injuries, serious or symptomatic dehydrations, liver injuries and bone fractures was broadly similar in each group.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "The incidence of serious urinary tract infections, hyperkalemia, acute kidney injuries, serious or symptomatic dehydrations, liver injuries, and bone fractures were broadly similar in each group",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Similarity statements are qualitative in the preserved text; adjudicated counts in supplementary tables not preserved.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-016",
+   "claimType": "direct",
+   "claim": "Ketoacidosis occurred in 6 patients in the empagliflozin group versus 1 in the placebo group (0.09 vs 0.02 per 100 patient-years).",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "Ketoacidosis occurred in 6 patients in the empagliflozin group versus 1 patient in the placebo group (0.09 versus 0.02 per 100 patient-years).",
+   "applicability": "EMPA-KIDNEY participants.",
+   "uncertainty": "Rare event; five of six affected participants were on insulin and events mainly occurred in diabetic kidney disease.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-053",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 conveys a general 1A recommendation for SGLT2 inhibitor treatment of adults with chronic kidney disease.",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "However, in this guideline, we offer a more general 1A recommendation for adults with CKD. We also highlight practice points from the KDIGO Diabetes guideline for diabetes management in CKD, which are also relevant for people with CKD without diabetes: Recommendation 3.7.1: We recommend treating patients with type 2 diabetes (T2D), CKD, and an eGFR 20 ml/min per 1.73 m with an SGLT2i (1A).",
+   "applicability": "Adults with CKD (guideline context).",
+   "uncertainty": "Guideline recommendation grade, cited as practice context only.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-049",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 suggests treating adults with eGFR 20–45 ml/min per 1.73 m² and urine ACR below 200 mg/g with an SGLT2 inhibitor (Recommendation 3.7.3, grade 2B).",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "Recommendation 3.7.3: We suggest treating adults with eGFR 20 to 45 ml/min per 1.73 m2 with urine ACR <200 mg/g (<20 mg/mmol) with an SGLT2i (2B).",
+   "applicability": "Adults with CKD with eGFR 20–45 and ACR <200 mg/g (guideline context).",
+   "uncertainty": "Grade 2B reflects remaining uncertainty in this population; practice context only.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-050",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 advises that once an SGLT2 inhibitor is initiated it is reasonable to continue it even if eGFR falls below 20 ml/min per 1.73 m², unless it is not tolerated or kidney replacement therapy is initiated.",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "Practice Point 3.7.1: Once an SGLT2i is initiated, it is reasonable to continue an SGLT2i even if the eGFR falls below 20 ml/min per 1.73 m?, unless it is not tolerated or KRT is initiated.",
+   "applicability": "Adults with CKD already taking an SGLT2 inhibitor (guideline context).",
+   "uncertainty": "Practice point, not a graded recommendation; practice context only.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-054",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 advises (Practice Point 3.7.3) that SGLT2 inhibitor initiation or use does not necessitate a change in the frequency of CKD monitoring and that the reversible decrease in eGFR on initiation is generally not an indication to discontinue therapy.",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "Practice Point 3.7.3: sGLT2i initiation or use does not necessitate alteration of frequency of CKD monitoring and the reversible decrease in eGFR on initiation is generally. not an indication to discontinue therapy..",
+   "applicability": "Adults with CKD taking an SGLT2 inhibitor (guideline context).",
+   "uncertainty": "Practice point; the preserved text carries line-break artifacts rendered as full stops after 'generally' that do not alter meaning.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-055",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 practice points describe sick-day rules for acute dehydrating illness under which patients with CKD receive guidance to temporarily stop certain medications, including SGLT2 inhibitors.",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "Sick day rules have been endorsed as useful guidance to people with CKD in the setting of acute, dehydrating illness. Specifically, patients receive guidance to temporarily stop the following medications: sulfonylureas, ACEi, diuretics/direct renin inhibitors, metformin, ARBs, NSAIDs, and SGLT2i",
+   "applicability": "Adults with CKD during an acute dehydrating illness (guideline context).",
+   "uncertainty": "Practice point, not a graded recommendation; individual decisions about stopping and restarting require clinical guidance.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-056",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 cautions that mistakes in recognising dehydrating illness or in which drugs to stop, and when to restart them, carry potential harm under sick-day rules.",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "Instead, data suggest potential harm if people make mistakes in recognizing dehydrating illness or about which drugs to stop and when to restart.",
+   "applicability": "Implementation of sick-day rules in adults with CKD (guideline context).",
+   "uncertainty": "Practice caution; the most commonly reported problem is failure to restart the medication.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-057",
+   "claimType": "direct",
+   "claim": "KDIGO 2024 advises that if medications are discontinued during an acute illness, a clear plan of when to restart them should be communicated to the person with CKD and documented in the medical record.",
+   "referenceNumber": 5,
+   "sourceUrl": "https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf",
+   "sourceTitle": "KDIGO 2024 Clinical Practice Guideline for the Evaluation and Management of Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/evimed-guidelines/2160946d60faa052/guideline.md",
+   "identifier": "KDIGO-2024-CKD-Guideline",
+   "accessLevel": "official_page",
+   "supportQuote": "The most reported problem is failure to restart the medication. … The plan to restart medications should be detailed in the medical records and clearly communicated to the patients. … If medications are discontinued during an illness, a clear plan of when to restart the discontinued medications should be communicated to people with CKD and documented in the medical record.",
+   "applicability": "Adults with CKD in whom medicines are stopped during illness (guideline context).",
+   "uncertainty": "Practice point; communication of the restart plan is emphasised because failure to restart is the most commonly reported problem.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "not_applicable",
+   "requiredCaveats": [
+    {
+     "id": "practice-context",
+     "forms": [
+      "KDIGO 2024 指南",
+      "现行指南建议",
+      "指南亦推荐",
+      "实践要点属于指南而非结局证据",
+      "KDIGO 实践要点描述",
+      "指南同时告诫"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  },
+  {
+   "claimId": "CLM-058",
+   "claimType": "synthesized",
+   "claim": "Across the programme's reports, the kidney-protective effect of empagliflozin was durable during a median 2.0 years of continued treatment: a consistent 28% relative reduction in the composite of kidney disease progression or cardiovascular death (HR 0.72, 95% CI 0.64–0.82) and a chronic eGFR-slope effect (between-group difference 1.37, 95% CI 1.16–1.59 ml/min per 1.73 m² per year; 50% relative reduction) maintained from 2 months to the end of treatment.",
+   "referenceNumber": 1,
+   "referenceNumbers": [
+    1,
+    2
+   ],
+   "confidence": "high",
+   "applicability": "EMPA-KIDNEY participants while treated for a median of 2.0 years.",
+   "uncertainty": "Single randomised programme; follow-up truncated by early close-out at 2.0 years; slope is a surrogate endpoint.",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+     "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+     "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "During a median of 2.0 years follow-up, a primary outcome event occurred in 432 of 3304 patients (13.1%) in the empagliflozin group and in 558 of 3305 patients (16.9%) in the placebo group (hazard ratio, 0.72; 95% CI 0.64 to 0.82; P<0.001) … In this population of patients with a wide range of causes of CKD, GFR and levels of albuminuria, empagliflozin safely reduced the risk of the primary outcome of kidney disease progression or death from cardiovascular causes by about 28%."
+    },
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+     "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+     "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Overall, allocation to empagliflozin slowed the rate of decline in eGFR from 2 months to final follow-up (the ‘chronic slope’) by 1·37 (95% CI 1·16–1·59) mL/min/1·73m 2 /year, which represented a 50% (42–58%) relative reduction in the mean chronic slope."
+    }
+   ],
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily; off-drug observation post-trial",
+    "outcome": "durability of kidney and cardiovascular effects (kidney disease progression, eGFR slope, cardiovascular/mortality outcomes, safety)"
+   },
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "horizon",
+     "forms": [
+      "中位 2.0 年",
+      "约 2 年暴露",
+      "2 年时间窗"
+     ]
+    }
+   ]
+  },
+  {
+   "claimId": "CLM-059",
+   "claimType": "synthesized",
+   "claim": "After empagliflozin was stopped, benefits persisted in attenuated form for up to about 12 months and then weakened: post-trial hazard ratio for the primary composite 0.87 (95% CI 0.76–0.99), most benefit in the first 6 months (HR 0.60, 95% CI 0.38–0.93), first-year 0.76 (95% CI 0.60–0.96), second-year 0.90 (95% CI 0.75–1.07), while end-stage kidney disease remained reduced in the post-trial period (HR 0.80, 95% CI 0.66–0.98).",
+   "referenceNumber": 3,
+   "referenceNumbers": [
+    2,
+    3
+   ],
+   "confidence": "high",
+   "applicability": "EMPA-KIDNEY participants during a median 2.0 years of off-drug observation after ~2 years of treatment.",
+   "uncertainty": "Observational treatment context (no study drug, open-label SGLT2 inhibitor use 43% vs 40%); single programme; second-year and ESKD estimates are single estimates.",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+     "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+     "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "During the entire follow-up period (active trial plus post-trial observation periods together), progression of kidney disease or death from cardiovascular causes occurred in 865 of 3304 patients (26.2%) in the empagliflozin group and in 1001 of 3305 (30.3%) in the placebo group (HR=0.79, 95%CI 0.72-0.87; Figure 1A ). This comprised a 28% overall reduction in risk during the active trial period (0.72, 0.64-0.82; 990 outcomes) and a 13% reduction during the post-trial period (0.87, 0.76-0.99; 876 additional first primary outcomes). Much of the post-trial benefit on the primary outcome occurred early: hazard ratios for the first and second years of follow-up post-trial were 0.76 (0.60-0.96) and 0.90 (0.75-1.07) respectively, with the hazard ratio for first 6 months 0.60 (0.38-0.93) ( Figure 1B ). … The effect on the primary outcome during the entire follow-up period included a 21% reduction in the risk of the secondary outcomes of kidney disease progression (23.5% vs. 27.1%: 0.79, 0.72-0.87; Table 3 & Figure S3 ), and a 26% reduction in ESKD (9.0% vs. 11.3%: 0.74, 0.64-0.87; Table S5 ). During the post-trial period, the hazard ratios for kidney disease progression and ESKD were 0.89 (0.77-1.02) and 0.80 (0.66-0.98), respectively ( Figure S3 ). … In summary, post-trial follow up of our trial participants quantified more completely the total effects of a short period of two years of empagliflozin treatment, including any carry-over effect after stopping study drug. In a broad range of patients with chronic kidney disease, empagliflozin continued to exert additional cardiorenal benefits for up to 12 months after it was discontinued."
+    },
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7615591",
+     "sourceTitle": "Effects of Empagliflozin on Progression of Chronic Kidney Disease: A Pre-Specified Secondary Analysis from the EMPA-KIDNEY Trial",
+     "artifactPath": ".evimed-sources/PMC7615591/700f923028cb2244f82b77462957b0254d8a1885cad830196ad6cd05d2d3385a/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "In the surviving UK participants with a 4-week post-final follow-up blood sample, this acute dip reversed when study treatment was discontinued, with mean eGFR at 4 weeks post-final follow-up being of 29.8 mL/min/1.73m 2 in the empagliflozin group and 27.9 mL/min/1.73m 2 in the placebo group (difference 1.87 [95% CI 1.23–2.52] mL/min/1.73m 2 )"
+    }
+   ],
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily; off-drug observation post-trial",
+    "outcome": "durability of kidney and cardiovascular effects (kidney disease progression, eGFR slope, cardiovascular/mortality outcomes, safety)"
+   },
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "programme",
+     "forms": [
+      "EMPA-KIDNEY 单一试验项目",
+      "单一试验项目",
+      "单一试验项目（NCT03594110）",
+      "在 EMPA-KIDNEY 试验项目中",
+      "同一项目中",
+      "本试验项目",
+      "该项目"
+     ]
+    },
+    {
+     "id": "posttrial-design",
+     "forms": [
+      "试验后观察期",
+      "未再给予试验药物",
+      "开放标签 SGLT2 抑制剂使用率 43% 对 40%"
+     ]
+    }
+   ]
+  },
+  {
+   "claimId": "CLM-060",
+   "claimType": "synthesized",
+   "claim": "Across the programme no new or late safety hazard was measured: within the trial, rates of serious adverse events were broadly similar between groups, ketoacidosis was rare (6 vs 1 events; 0.09 vs 0.02 per 100 patient-years) and concentrated in insulin-treated participants with diabetes, serious acute kidney injury was not increased (HR 0.78, 95% CI 0.60–1.00), and lower-limb amputations were reported as event counts (28 vs 19; mainly in diabetic kidney disease) with too few events for reliable effect estimates outside diabetic kidney disease; in the post-trial period adverse events were not collected and the pre-specified safety outcome of non-cardiovascular death did not differ between groups (HR 0.97, 0.79–1.20).",
+   "referenceNumber": 1,
+   "referenceNumbers": [
+    1,
+    3,
+    4
+   ],
+   "confidence": "moderate",
+   "applicability": "EMPA-KIDNEY participants, in-trial and post-trial.",
+   "uncertainty": "In-trial safety outcomes robust; amputation events reported as counts with no significance test stated and too few events for reliable estimates in non-diabetic causes; post-trial absence of adverse-event capture means off-treatment safety is unmeasured rather than established.",
+   "supportingSources": [
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+     "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+     "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Ketoacidosis occurred in 6 patients in the empagliflozin group versus 1 patient in the placebo group (0.09 versus 0.02 per 100 patient-years). Lower limb amputations occurred in 28 patients in the empagliflozin group and 19 in the placebo group (0.43 versus 0.29 per 100 patient-years). The incidence of serious urinary tract infections, hyperkalemia, acute kidney injuries, serious or symptomatic dehydrations, liver injuries, and bone fractures were broadly similar in each group ( Tables 2 and S7 ). There was no apparent evidence that empagliflozin increased the incidence of serious adverse events overall, or in any particular MedDRA system organ class ( Table S8 )."
+    },
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7618536",
+     "sourceTitle": "Impact of Primary Kidney Disease on the Effects of Empagliflozin in Patients with Chronic Kidney Disease: Secondary Analyses of the EMPA-KIDNEY Trial",
+     "artifactPath": ".evimed-sources/PMC7618536/497704f598250868e4ee47b292114bacce588f5a50f9769de5651bc01a3f2767/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Overall, empagliflozin had no significant effects on risk of serious acute kidney injury (HR 0·78; 95% CI 0·60 to 1·00), with similar results across the four main categories of cause of kidney disease (P for heterogeneity=0·28; Supplementary Table 6 ). Ketoacidosis occurred in 6 participants allocated to empagliflozin (including five participants on insulin, one of whom had type 1 diabetes, and one participant without diabetes) and one allocated to placebo (who was not taking open-label SGLT2 inhibitor). There were 28 vs 19 lower-limb amputation events in the empagliflozin vs placebo groups, respectively (including 20 vs 14 toe amputations). These two safety outcomes mainly occurred among participants with diabetic kidney disease with too few events to provide reliable estimates of any effect in participants with non-diabetic causes of kidney disease."
+    },
+    {
+     "sourceUrl": "https://europepmc.org/articles/PMC7616743",
+     "sourceTitle": "Long-Term Effects of Empagliflozin in Patients with Chronic Kidney Disease",
+     "artifactPath": ".evimed-sources/PMC7616743/2688a4dd03bc25ba0de5a8e20d0a3c8eaee96bae6308b3fbc9a60b6da1796934/fulltext.md",
+     "accessLevel": "full_text",
+     "supportQuote": "Post-trial follow-up aimed to collect additional efficacy and cause-specific mortality outcome data. … Tertiary outcomes were death from any cause and, separately, death from cardiovascular and non-cardiovascular causes (the latter being the safety outcome for post-trial follow-up); and the primary outcome assessed by key subgroups of interest. … During the entire follow-up period, there was a reduction in the risk of death from a cardiovascular cause by 25% (3.8% vs. 4.9%: 0.75, 0.59-0.95) and no material effect on non-cardiovascular mortality (5.3% vs. 5.3%: 0.97, 0.79-1.20), meaning there were 301 (9.1%) vs. 336 (10.2%) deaths from any cause (0.86, 0.74-1.01; Table 3 and Figure S5 )."
+    }
+   ],
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily; off-drug observation post-trial",
+    "outcome": "durability of kidney and cardiovascular effects (kidney disease progression, eGFR slope, cardiovascular/mortality outcomes, safety)"
+   },
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "unmeasured-safety",
+     "forms": [
+      "未测量到迟发安全信号",
+      "试验结束后未收集不良事件",
+      "未测量到安全信号"
+     ]
+    }
+   ]
+  },
+  {
+   "claimId": "CLM-062",
+   "claimType": "direct",
+   "claim": "The main results report describes a randomized, double-blind, placebo-controlled trial whose analyses were performed on the intention-to-treat principle and included all randomized participants; on domain-level appraisal (randomization, blinding, missing outcome data, outcome measurement, selective reporting) no domain shows material risk of bias.",
+   "referenceNumber": 1,
+   "sourceUrl": "https://europepmc.org/articles/PMC7614055",
+   "sourceTitle": "Empagliflozin in Patients with Chronic Kidney Disease",
+   "artifactPath": ".evimed-sources/PMC7614055/3629ce30d7ffcb42c8420fb6e4ec28067ea83761de93d7a313bdebd084875d1d/fulltext.md",
+   "identifier": "PMID:36331190",
+   "accessLevel": "full_text",
+   "supportQuote": "We randomly assigned 6609 participants to empagliflozin (10mg once daily) versus matching placebo. … All analyses were performed according to the intention-to-treat principle and included data from all randomized participants including information collected between the formal interim analysis and final follow-up visits.",
+   "applicability": "EMPA-KIDNEY trial design and analysis, as reported in the main results report.",
+   "uncertainty": "The low-risk appraisal for missing outcome data and outcome measurement is the reviewer's judgement based on the design and analysis statements quoted; the trial reports near-complete follow-up for its primary outcome.",
+   "pico": {
+    "population": "adults with CKD at risk of progression (EMPA-KIDNEY-eligible)",
+    "intervention": "empagliflozin 10 mg once daily (in-trial); off-drug observation (post-trial)",
+    "outcome": "durability of kidney/cardiovascular effects or safety as reported"
+   },
+   "denominatorKind": "trial_enrollment_share",
+   "requiredCaveats": [
+    {
+     "id": "single-programme",
+     "forms": [
+      "该项目",
+      "单一试验项目"
+     ]
+    },
+    {
+     "id": "duration",
+     "forms": [
+      "中位 2.0 年",
+      "提前终止"
+     ]
+    }
+   ],
+   "picoMatch": {
+    "population": "same",
+    "intervention": "same",
+    "outcome": "same"
+   }
+  }
+ ]
+}

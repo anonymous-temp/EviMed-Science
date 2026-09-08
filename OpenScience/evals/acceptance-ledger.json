@@ -63,7 +63,7 @@
       "realDelivery": {
         "status": "failed",
         "evidence": "evals/clinical-review-quality/results/2026-09-08-review-001-empa-kidney-report-family",
-        "at": "2026-09-08T10:15:12",
+        "at": "2026-09-08T11:15:13",
         "surface": "http-api"
       },
       "relatedEvidence": [
@@ -75,7 +75,7 @@
         "PROGRESS.md@2026-09-07 03:22",
         "PROGRESS.md@2026-08-01 18:00"
       ],
-      "note": "Eight dated production attempts and no acceptance. The eighth, on 2026-09-08, is the informative one: a 70-minute run produced a complete synthesis with claim markers, effect sizes and citations, and the gate read it closely enough to return per-claim review findings — then failed it specialist_required_output_stale for a clinical-evidence-report.md left at the workspace root by a run in July, which readRequiredFile returned before looking in deliverables/<id>/ where this run's own package was. A false positive, fixed the same day; the re-run belongs on a release carrying that fix. The earlier seven exhausted their repair budget, tripped an exclusive-safety false positive, lost a parent/child submission binding, or stopped at HTTP 400 before any model work. Every failed package and workspace was retained. This is the most exercised capability in the product and the one with the clearest negative record."
+      "note": "Nine dated production attempts and no acceptance. The last two, both on 2026-09-08, separate a gate defect from a capability gap. The eighth ran 70 minutes and produced a complete synthesis that was failed specialist_required_output_stale for a clinical-evidence-report.md left at the workspace root by a run in July: readRequiredFile returned the root hit before looking in deliverables/<id>/ where this run's own package was. That was fixed and deployed the same day. The ninth, on the release carrying the fix, had its report and matrix accepted from deliverables/<id>/ — the false positive is gone — and failed for real reasons instead: it wrote 2 of the 8 required outputs in 24 minutes, and the gate returned 19 citation-integrity findings where a hazard ratio or confidence interval in a claim is absent from its quoted direct support, plus a numerical self-contradiction in the report body (it called 0.87 smaller than 0.72). Both packages were retained. Note that both runs reused a project whose workspace already held same-named files, so a required output the run never wrote reports as stale rather than missing; a clean project would be a truer test. This is the most exercised capability in the product and the one with the clearest negative record."
     },
     {
       "id": "comprehensive-drug-evaluation",
