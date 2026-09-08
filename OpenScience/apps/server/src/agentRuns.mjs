@@ -2981,6 +2981,21 @@ export class AgentRunStore {
         throw new HttpError(409, "agent_run_active", "This research session already has an active run.");
       }
       if (adopted) {
+        // How long it ran, not how long the record sat there.
+        //
+        // A superseded run is usually one the control plane lost track of —
+        // restarted, abandoned, left over from days ago — and the wall-clock
+        // difference to now describes the ledger, not the work. `durationMs`
+        // feeds the run list and every duration statistic read off it, where a
+        // three-day "run" is not an outlier to explain but a wrong number.
+        //
+        // Two honest bounds, whichever is tighter: the last moment anything was
+        // observed, and the monitor's own ceiling — past which this run would
+        // have been ended, so it cannot have been working longer.
+        const startedAt = Date.parse(active.startedAt);
+        const observedUntil = active.lastProgressAt ? Date.parse(active.lastProgressAt) : startedAt;
+        const ceiling = this.monitorIntervalMs * this.monitorMaxPolls;
+        const worked = Math.max(0, observedUntil - startedAt);
         events.push({
           event: "finished",
           id: active.id,
@@ -2988,7 +3003,7 @@ export class AgentRunStore {
           errorCode: "superseded_by_dispatch",
           artifacts: [],
           finishedAt: this.now().toISOString(),
-          durationMs: Math.max(0, Date.parse(this.now().toISOString()) - Date.parse(active.startedAt)),
+          durationMs: Number.isSafeInteger(ceiling) && ceiling > 0 ? Math.min(worked, ceiling) : worked,
         });
         runs.delete(active.id);
       }

@@ -124,7 +124,7 @@
 10. **生产者/消费者登记表测试（E 类）。** 接上 `reportWebDeliverableFeedback`（交付物"采纳/已编辑"按钮）、收件箱 action、`omissionNotice` 渲染、`phaseNotices` 进类型、`compareExpectation` 要么接线要么删；删 `price-list` 种类、`priceListAt`、`PRICE_LIST_VERSIONS`、`consolidate`（或给它生产者）。
 11. **收件箱的 `question` 可以在原地作答**（自由文本），并加回合中途的 `question` 生产者。
 12. **`OPEN_SCIENCE_AUTOPILOT_ENABLED` 进基础栈**（或文档写明 overlay 依赖）；控制器协议 6→7 让验证隔离在托管路径上成为真围栏。
-13. **静默跳过写原因；时长封顶**（陈旧运行按清扫时刻或监控上限记，不记墙钟差）。
+13. **静默跳过写原因**；~~时长封顶~~ **时长封顶已完成 2026-09-08**：被顶替的运行原本记 `now - startedAt`，而会被顶替的恰是「浏览器应用开了一个无人认领的会话」时建的占位运行——最容易被丢在那里好几天的那一种。现在取两个诚实上界里更紧的一个：最后一次观测到活动的时刻，以及监控自己的四小时上限（超过它平台早就终止了，所以不可能工作更久）。变异检查过。剩「静默跳过写原因」未做。
 14. **iframe 内的门禁可见性**：用真浏览器确认 DSH 原生界面如何渲染 `deliverable_rejected` 工具结果，以及能力模板预填（S498）的去向。
 15. **依赖**：DSH 0.1.3 到 rc 时活线探测；MemOS 2.0.32+ 适配器评估（P1-11 原样）；MinerU/OpenList 无动作。
 16. **插件生态收尾**：第二个插件的 apply 路径；CI 设 `EVIMED_PLUGIN_PROBE`。
