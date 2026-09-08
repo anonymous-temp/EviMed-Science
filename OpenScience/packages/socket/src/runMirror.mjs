@@ -148,7 +148,7 @@ export const RUN_STATE_FORMAT_VERSION = 1
  *   run: Record<string, any> | undefined,
  *   planIndex: Record<string, any> | undefined,
  *   evidence: readonly Record<string, any>[],
- *   gateRuns: readonly Record<string, any>[],
+ *   gateRuns?: readonly Record<string, any>[],
  *   subagents?: readonly Record<string, any>[],
  *   qualityNotices?: readonly string[],
  *   degraded?: readonly string[],

@@ -293,6 +293,11 @@ export function correctionHandles(messages) {
   return handles
 }
 
+/**
+ * The handle packet the compaction must reproduce verbatim.
+ * @param {StateHandle[] | any} handles
+ * @returns {string}
+ */
 export function buildStateHandlePacket(handles) {
   const lines = [STATE_HANDLE_HEADING, STATE_HANDLE_PREAMBLE, '']
   for (const handle of canonicalHandles(handles)) {

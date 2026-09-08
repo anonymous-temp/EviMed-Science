@@ -578,7 +578,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // never loaded for it.
         const skillDigests = await Promise.all(skillBodies.map(async (skill) => ({ name: skill.name, digest: await skillBodyDigestAsync(skill.body) })))
         const methodDigests = await Promise.all((ctx.get('evimedCapsuleMethods') ?? [])
-          .map(async (method) => ({ name: method.name, digest: method.digest ?? await skillBodyDigestAsync(method.body ?? '') })))
+          .map(async (/** @type {any} */ method) => ({ name: method.name, digest: method.digest ?? await skillBodyDigestAsync(method.body ?? '') })))
         let run
         try {
           run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), call.signal)

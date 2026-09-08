@@ -116,7 +116,12 @@ export async function apply(ctx, config) {
       // can hear from in here. A degradation that is not emitted is a policy
       // that cannot be measured, and this policy may not be changed again
       // until it has been.
-      ctx.emit?.(`compaction/${observation.kind}`, observation)
+      // `observation.event` is already a full `COMPACTION_OBSERVATIONS` topic
+      // ("compaction/handles-preserved"), and there is no `kind` field — so
+      // this emitted the literal topic "compaction/undefined" for every
+      // observation, on the one path the comment above calls the only way this
+      // policy can be measured.
+      ctx.emit?.(observation.event, observation)
     },
   })
   ctx.plugin(Engine, {
@@ -154,7 +159,8 @@ export async function apply(ctx, config) {
   ctx.effect(() => registerTool(ctx, compactTool))
 }
 
-/** The session a tool call or an agent belongs to, as a marker key. */
+/** The session a tool call or an agent belongs to, as a marker key.
+ *  @param {any} source @returns {string} */
 export function sessionKey(source) {
   const session = source?.session ?? source?.agent?.session ?? source
   const id = session?.id ?? session?.sessionId
@@ -193,10 +199,10 @@ export function takeRequest(requests, agent) {
  *
  * @param {{runMirror: any, planIndex: any, evidence: any}} tables
  * @param {any} agent
- * @returns {Promise<import('@evimed/harness-port').StateHandle[]>}
+ * @returns {Promise<{kind: string, id: string, note?: string}[]>}
  */
 export async function readRunHandles(tables, agent) {
-  /** @type {import('@evimed/harness-port').StateHandle[]} */
+  /** @type {{kind: string, id: string, note?: string}[]} */
   const handles = []
   /** @param {string} kind @param {unknown} id @param {string} [note] */
   const add = (kind, id, note) => {
