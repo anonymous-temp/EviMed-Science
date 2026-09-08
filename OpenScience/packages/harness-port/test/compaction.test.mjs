@@ -512,12 +512,17 @@ test("a requested compaction runs at the step boundary and consumes its own mark
 });
 
 test("a step with no request, an aborted step, and no consumer all compact nothing", async () => {
-  for (const [label, deps, payload] of [
+  // Annotated, because inference over a heterogeneous literal array widens each
+  // position to a union of every row's shape — after which `label` is not a
+  // string and `deps` is not spreadable.
+  /** @type {[string, Record<string, any>, Record<string, any>][]} */
+  const cases = [
     ["no request", { takeCompactRequest: () => null }, { agent: AGENT, signal: { aborted: false } }],
     ["aborted step", { takeCompactRequest: () => ({ reason: "x" }) }, { agent: AGENT, signal: { aborted: true } }],
     ["no consumer wired", {}, { agent: AGENT, signal: { aborted: false } }],
     ["no agent", { takeCompactRequest: () => ({ reason: "x" }) }, { signal: { aborted: false } }],
-  ]) {
+  ];
+  for (const [label, deps, payload] of cases) {
     const { fire, compactions } = engineWith({ summarise: async () => ({ text: "unused" }), ...deps });
     await fire(SEAMS.events.preStep, payload);
     assert.equal(compactions.length, 0, label);

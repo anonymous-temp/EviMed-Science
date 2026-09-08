@@ -1051,3 +1051,33 @@ test("the request tool exists only where its consumer does, and promises the ste
   assert.match(plugin, /servedAt: 'next-step'/);
   assert.ok(!/compactNow/.test(plugin), "compactNow goes through runMaintenance and throws while a turn is in flight");
 });
+
+test("every compaction observation is emitted under a topic the vocabulary defines", async () => {
+  // The plugin emitted `compaction/${observation.kind}`. There is no `kind` on
+  // a `CompactionObservation` — the field is `event`, and it already carries a
+  // whole topic — so every observation went out as the literal string
+  // "compaction/undefined", on the one channel the plugin's own comment calls
+  // the only way this policy can be measured. Nothing failed, nothing logged,
+  // and a subscriber would have seen a stream of identical unnamed events.
+  //
+  // Read from source rather than by driving the engine: the emit sits inside
+  // the `observe` callback the kernel invokes, and asserting on the topic is
+  // asserting on this line.
+  const [{ default: fs }, { COMPACTION_OBSERVATIONS }] = await Promise.all([
+    import("node:fs/promises"),
+    import("@evimed/harness-port"),
+  ]);
+  const plugin = await fs.readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
+  const emit = /ctx\.emit\?\.\(([^,]+),/.exec(plugin);
+  assert.ok(emit, "the observation emit is gone");
+  const topic = emit[1].trim();
+  assert.equal(topic, "observation.event",
+    `the emit topic must be the observation's own event, not ${topic}`);
+  // And the vocabulary it comes from really does hold full topics, so passing
+  // it through unchanged is right and re-prefixing it would be wrong.
+  const topics = Object.values(COMPACTION_OBSERVATIONS);
+  assert.ok(topics.length >= 3);
+  for (const value of topics) {
+    assert.match(value, /^compaction\//, `${value} is not a full topic, so the emit would need a prefix`);
+  }
+});
