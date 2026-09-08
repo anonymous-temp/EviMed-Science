@@ -2756,6 +2756,8 @@ test("hosted dispatch survives a lost browser response and an idempotent repeat 
 
 test("requires an evidence agent's cited sources to all be recorded in its snapshot", async () => {
   for (const scenario of ["recorded", "unrecorded"]) {
+    /** @type {string[]} */
+    const repairs = [];
     const root = await mkdtemp(path.join(tmpdir(), `os-agent-run-snapshot-${scenario}-`));
     try {
       const project = {
@@ -2801,7 +2803,7 @@ test("requires an evidence agent's cited sources to all be recorded in its snaps
         effectiveAgentId: "comprehensive-drug-evaluation",
         effectiveAgentVersion: "1.0.0",
         effectiveRuntimeAgent: "evimed-comprehensive-drug-evaluation",
-      }, async () => ({ accepted: true }));
+      }, async (_session, _record, repairText) => { if (repairText) repairs.push(repairText); return { accepted: true }; });
 
       const citedUrl = "https://www.nmpa.gov.cn/label/example-a";
       const recordedUrl = scenario === "recorded" ? citedUrl : "https://www.nmpa.gov.cn/label/example-b";
@@ -2830,8 +2832,26 @@ test("requires an evidence agent's cited sources to all be recorded in its snaps
       }];
       const finished = await store.reconcileSession(project, binding.sessionId);
       assert.equal(finished.id, run.id);
-      assert.equal(finished.status, scenario === "recorded" ? "succeeded" : "failed");
-      assert.equal(finished.errorCode, scenario === "recorded" ? null : "specialist_cited_source_unrecorded");
+      if (scenario === "recorded") {
+        assert.equal(finished.status, "succeeded");
+        assert.equal(finished.errorCode, null);
+        assert.deepEqual(repairs, [], "a package the gate accepts is not sent back for repair");
+      } else {
+        // The gate's finding is unchanged — the cited source is not in the
+        // snapshot — but this capability is no longer failed outright for it.
+        // The repair loop used to be reserved for `clinical-evidence-synthesis`
+        // while raising identical, actionable issues for the other fifteen, so
+        // this run now gets the round the clinical line always got.
+        assert.equal(finished.status, "running", "a repairable rejection sends the run back to fix it");
+        assert.equal(repairs.length, 1, "exactly one repair round is opened");
+        // The generic prompt, not the clinical one: this run has no
+        // clinical-evidence-report.md, and ordering it to repair one would
+        // spend a bounded attempt discovering that.
+        assert.match(repairs[0], /comprehensive-drug-evaluation package/);
+        assert.doesNotMatch(repairs[0], /clinical-evidence-report\.md/);
+        assert.match(repairs[0], /comprehensive-evaluation-report\.md/, "it must name this capability's own required outputs");
+        assert.match(repairs[0], /evidence-snapshot\.json/, "and carry the gate's issue verbatim");
+      }
       await store.closeProject(project, "canceled");
     } finally {
       await rm(root, { recursive: true, force: true });
