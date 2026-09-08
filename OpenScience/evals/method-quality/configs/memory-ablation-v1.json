@@ -1,0 +1,48 @@
+{
+  "id": "memory-ablation-v1",
+  "capability": "clinical-evidence-synthesis",
+  "briefsFile": "evals/clinical-review-quality/briefs.json",
+  "hiddenDir": "evals/clinical-review-quality/hidden",
+  "briefs": [
+    "review-001-empa-kidney-report-family",
+    "review-003-mimic-overlap-unknown"
+  ],
+  "repeats": 3,
+  "seed": 20260908,
+  "concurrency": 1,
+  "margin": 0.02,
+  "bootstrapSamples": 2000,
+  "timeoutMinutes": 45,
+  "pollSeconds": 5,
+  "budget": {
+    "costCap": 12.0,
+    "latencyCapMs": 2400000
+  },
+  "project": {
+    "id": "eval-memory-ablation-v1",
+    "name": "记忆消融配对评测"
+  },
+  "fixtures": [],
+  "judge": {
+    "enabled": true,
+    "model": "deepseek-v4-pro"
+  },
+  "baseline": {
+    "methodSnapshot": {
+      "id": "memory-off",
+      "records": [],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "candidate": {
+    "methodSnapshot": {
+      "id": "memory-on",
+      "records": [],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "_note": "The memory ablation, which is the one paired comparison runnable before any method exists: the method library is empty until runs with repair rounds have been distilled, so A-vs-B on a flat method library has no B yet. What this measures instead is whether the capsule helps at all — the same briefs with the project's memory records active and with them parked. EvoMemBench's finding is the hypothesis worth testing: memory helps hard tasks and can hurt easy ones, so the two arms are expected to differ by brief rather than uniformly.",
+  "_recordsPending": "`records` are empty here because the control plane has no route that creates a memory record — GET /api/memory/records lists, PATCH /api/memory/records/<id> updates, and nothing posts. Records exist only where the extractor put them. So the seeding step is a small set of real runs on this project that state preferences outright, after which both arms name the same record ids: baseline parks them (status pending), candidate activates them (status active). Filling these in from an invented id would produce a run that patches nothing and two arms that are the same arm."
+}
