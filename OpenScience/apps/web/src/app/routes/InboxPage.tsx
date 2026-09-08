@@ -108,7 +108,13 @@ function InboxCard({ item, busy, onRead, onResolve }: {
   item: InboxItem; busy: boolean; onRead: () => Promise<void>; onResolve: (actionId: string) => Promise<void>;
 }) {
   const completed = Boolean(item.resolvedAt);
-  const availableActions = item.actions.filter((action) => !completed || (item.source?.type === "digest" && action.id === "open"));
+  // An `open` action on a run or a digest is navigation, not a decision, so it
+  // outlives being handled: a researcher who read the notice yesterday should
+  // still be able to reach the run it names. Everything else is a decision and
+  // disappears once made.
+  const navigational = (action: { id: string }) =>
+    action.id === "open" && (item.source?.type === "digest" || item.source?.type === "run");
+  const availableActions = item.actions.filter((action) => !completed || navigational(action));
   return <Card>
     <article className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -122,6 +128,14 @@ function InboxCard({ item, busy, onRead, onResolve }: {
         if (item.source?.type === "digest" && action.id === "open") {
           return <a key={action.id} className={buttonClasses({ size: "sm", variant })}
             href={`/app/autopilot?digest=${encodeURIComponent(item.source.id)}`}>{action.label}</a>;
+        }
+        // A run notice's only useful action is reaching the run. RunsPage has
+        // taken `?run=` since the sidebar started linking to it; the inbox was
+        // the one surface that named a run and then offered no way to open it,
+        // so the reader had to find it by hand in a list ordered by time.
+        if (item.source?.type === "run" && action.id === "open") {
+          return <a key={action.id} className={buttonClasses({ size: "sm", variant })}
+            href={`/app/runs?run=${encodeURIComponent(item.source.id)}`}>{action.label}</a>;
         }
         return <Button key={action.id} size="sm" variant={variant} loading={busy} onClick={() => void onResolve(action.id)}>{action.label}</Button>;
       })}</div>}

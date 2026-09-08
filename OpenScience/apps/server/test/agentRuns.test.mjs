@@ -6397,3 +6397,141 @@ test("the correction route takes a text and nothing else, and names what it cann
     }
   });
 });
+
+// The answer line's `skillsLoaded` check had no route to being true. It does
+// not delegate, so `injectedSkills` — which reads `projection.subagents` —
+// found nothing on every run, and the only remaining evidence was a `skill`
+// tool call the brief asked for and the model made 6 times in 17. The control
+// plane now mounts the body itself and records that it did; these assert the
+// gate reads that record, and that the record cannot be faked from the run side.
+test("a control-plane mounted persona satisfies skillsLoaded with no skill tool call", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-mounted-skill-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_mounted", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "open-domain-answer",
+          version: "1.0.0",
+          runtimeAgent: "evimed-open-domain-answer",
+          skill: "open-domain-answer",
+          companionSkills: [],
+          outputs: [],
+          completionChecks: ["skillsLoaded"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const dispatch = (dispatchId) => store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId,
+      effectiveAgentId: "open-domain-answer",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-open-domain-answer",
+    }, async () => ({ accepted: true }));
+
+    // Baseline: the shape production was in. No mount, no tool call, and the
+    // reply is delivered unverified for a process gap the reader cannot see.
+    const first = await dispatch("turn_unmounted");
+    history = [{
+      info: { id: "msg_unmounted", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [{ type: "text", text: "二甲双胍主要通过抑制肝糖异生发挥作用。" }],
+    }];
+    const unmounted = await store.reconcileSession(project, binding.sessionId);
+    // Delivered, but stamped: a missing persona is a process gap the reader
+    // cannot see, so the answer ships and the run says it was not verified.
+    // This is the notice that fired on 11 of 17 production answer-line runs.
+    assert.equal(unmounted.status, "succeeded");
+    assert.equal(unmounted.verification, "unverified");
+    assert.match(unmounted.qualityNotices.join("\n"), /open-domain-answer skill was not loaded/);
+    assert.equal(first.id, unmounted.id);
+
+    // The same turn, with the control plane having mounted the body.
+    const second = await dispatch("turn_mounted");
+    await store.recordLearning(project, second.id, { mountedSkills: ["open-domain-answer"] });
+    history = [...history, {
+      info: { id: "msg_mounted", role: "assistant", time: { completed: Date.now() + 20 } },
+      parts: [{ type: "text", text: "二甲双胍主要通过抑制肝糖异生发挥作用。" }],
+    }];
+    const mounted = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(mounted.status, "succeeded");
+    assert.equal(mounted.errorCode, null);
+    // The difference the mount makes, and the whole point of it: same reply,
+    // same absence of a `skill` tool call, no notice and nothing unverified.
+    assert.equal(mounted.verification, null);
+    assert.deepEqual(mounted.qualityNotices, []);
+    assert.deepEqual(mounted.mountedSkills, ["open-domain-answer"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a mounted name the control plane never recorded does not pass the check", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-mounted-other-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_mounted_other", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "open-domain-answer",
+          version: "1.0.0",
+          runtimeAgent: "evimed-open-domain-answer",
+          skill: "open-domain-answer",
+          companionSkills: [],
+          outputs: [],
+          completionChecks: ["skillsLoaded"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_wrong_mount",
+      effectiveAgentId: "open-domain-answer",
+      effectiveAgentVersion: "1.0.0",
+      effectiveRuntimeAgent: "evimed-open-domain-answer",
+    }, async () => ({ accepted: true }));
+    // Some other skill was mounted. The required one still was not, so the
+    // record must not be read as "a skill was mounted, therefore fine".
+    await store.recordLearning(project, run.id, { mountedSkills: ["citation-integrity"] });
+    history = [{
+      info: { id: "msg_wrong_mount", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [{ type: "text", text: "答案。" }],
+    }];
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.verification, "unverified");
+    assert.match(finished.qualityNotices.join("\n"), /open-domain-answer skill was not loaded/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

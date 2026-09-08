@@ -52,6 +52,7 @@
     "check:release-manifest": "node scripts/ops/generate-release-manifest.mjs --check",
     "verify:release-manifest": "node scripts/ops/generate-release-manifest.mjs --check --verify-images",
     "smoke:deployment": "node scripts/ops/deployment-smoke.mjs",
+    "acceptance:capability": "node scripts/ops/capability-acceptance.mjs",
     "preflight:host": "node scripts/ops/host-preflight.mjs",
     "release:images": "node scripts/ops/release-images.mjs",
     "release:web-full": "node scripts/ops/release-full-build.mjs",
