@@ -469,6 +469,7 @@ function foldEvents(events) {
         ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
+        ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
         // `attempts` has been published to the browser since the repair loop
         // shipped and has always been 0, because nothing ever folded it. The
         // repair count is the number it was always meant to carry.
@@ -524,6 +525,23 @@ function normalizeTranscriptReceipt(value) {
 }
 
 /** @param {any} value @returns {{name: string, digest: string, seq?: number}[] | undefined} */
+/**
+ * Skill names the control plane put into this run's prompt.
+ *
+ * Non-throwing on a bad shape, like `normalizeQualityNotices` and unlike
+ * `normalizeStoredArtifacts`: this is a completion input, and a ledger line
+ * that will not parse must degrade to "nothing mounted" rather than make every
+ * run in the file unreadable.
+ * @param {any} value @returns {string[] | undefined}
+ */
+function normalizeMountedSkills(value) {
+  if (!Array.isArray(value)) return undefined;
+  const names = value
+    .filter((item) => typeof item === "string" && item.trim())
+    .map((item) => item.trim().slice(0, 160));
+  return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
+}
+
 function normalizeMethodDigests(value) {
   if (!Array.isArray(value)) return undefined;
   /** @type {{name: string, digest: string, seq?: number}[]} */
@@ -1558,14 +1576,23 @@ async function requiredSpecialistArtifacts(
 }
 
 /**
- * Every skill this run actually had, from either route: the model loaded it
- * with the `skill` tool, or delegation injected its body into the child's
- * prompt. Both are "the capability's method was in front of the model"; only
- * the first leaves a tool call to scan for.
+ * Every skill this run actually had, by any of the three routes: the model
+ * loaded it with the `skill` tool, delegation injected its body into a child's
+ * prompt, or the control plane mounted the body into the system prompt itself.
+ * All three are "the capability's method was in front of the model"; only the
+ * first leaves a tool call to scan for.
+ *
+ * The mounted names come from this store's own ledger rather than the run-side
+ * projection, because the control plane is the party that did the mounting —
+ * asking the runtime to confirm it would put the answer back in the hands of
+ * the side that cannot know.
  * @param {any} project @param {any} assistantMessages @returns {Promise<Set<string>>}
  */
 async function loadedOrInjectedSkills(project, assistantMessages, run = null) {
   const loaded = successfullyLoadedSkills(assistantMessages);
+  for (const name of run?.mountedSkills ?? []) {
+    if (typeof name === "string" && name.trim()) loaded.add(name.trim());
+  }
   const read = await readRunStateProjection(project, project.workspaceDir, run);
   if (read.state !== "read") return loaded;
   // A skill receipt is completion authority, so unlike display-only legacy
@@ -3159,7 +3186,7 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
    */
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
@@ -3177,6 +3204,7 @@ export class AgentRunStore {
         ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
+        ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
         ...(patch.repairRounds
           ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }
           : current.repairRounds ? { repairRounds: current.repairRounds } : {}),

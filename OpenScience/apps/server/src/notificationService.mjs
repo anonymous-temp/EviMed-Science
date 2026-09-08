@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NOTICE_PRIORITY, NOTICE_TYPES } from "@evimed/domain";
+import { NOTICE_PRIORITY, NOTICE_TYPES, errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
@@ -89,6 +89,54 @@ function sameSemantics(item, values) {
 }
 
 /** Durable in-app notification, question and review inbox. */
+
+/**
+ * What the inbox says about a finished run.
+ *
+ * Both bodies used to be fixed strings — "研究结果已准备好" and "研究运行已结束，请
+ * 查看运行记录了解状态" — which told the reader to go somewhere else to learn
+ * what the control plane already knew. Worse, a run the platform stopped on a
+ * timer and a package the gate refused arrived under the same sentence, so the
+ * inbox could not distinguish "your work was rejected" from "we killed it".
+ *
+ * A pure function over the run record, so the mapping is testable and there is
+ * exactly one of it. The sentences come from the domain registry rather than a
+ * table here, because a second table is how the frontend ended up with three.
+ * @param {{status?: string, errorCode?: string|null, verification?: string|null,
+ *          artifacts?: string[], unverifiedArtifacts?: string[], qualityNotices?: string[]}} run
+ */
+export function runFinishedNotice(run) {
+  const outcome = run?.errorCode
+    ? errorCodeOutcome(run.errorCode)
+    : run?.verification ? "qualified" : "delivered";
+  const title = {
+    delivered: "研究已完成",
+    qualified: "研究已交付，待你复核",
+    gated: "交付物未通过质量门",
+    stopped: "研究运行已被平台终止",
+    capped: "研究未开始：额度或并发受限",
+    upstream: "研究中断：外部数据源或服务异常",
+    unknown: "研究运行已结束",
+  }[outcome] ?? "研究运行已结束";
+  const reason = run?.errorCode
+    ? errorCodeMessage(run.errorCode)
+    : run?.verification === "unverified"
+      ? "结果已交付，但有质量检查没有通过，需要你自己复核后再使用。"
+      : run?.verification === "unchecked"
+        ? "结果已交付，但有质量检查没有运行，无法确认是否达标。"
+        : "研究结果已准备好，可以查看运行记录和交付物。";
+  // Files on disk are the researcher's own work whatever the verdict was, and
+  // saying so here is the same rule the run surface follows: a refused package
+  // is not a deleted one.
+  const files = [...(run?.artifacts ?? []), ...(run?.unverifiedArtifacts ?? [])].length;
+  const body = [
+    reason,
+    files > 0 ? `本次运行产出 ${files} 个文件，仍在工作区里，可以直接打开。` : null,
+    ...(run?.qualityNotices ?? []).slice(0, 2).map((notice) => String(notice).slice(0, 200)),
+  ].filter(Boolean).join("\n");
+  return { outcome, title, body };
+}
+
 export class NotificationService {
   /** @param {any} database */
   constructor(database) { this.database = database; }

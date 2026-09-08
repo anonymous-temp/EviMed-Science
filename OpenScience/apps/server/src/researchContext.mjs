@@ -311,7 +311,7 @@ export async function prepareResearchContext(
   project,
   session,
   config,
-  { query = "", memories = [], memoryError = null, specialists = [], routedSpecialist = null } = {},
+  { query = "", memories = [], memoryError = null, specialists = [], routedSpecialist = null, mountableSkills = [] } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   const knowledgeIndex = await indexKnowledgeBase(project, config, knowledge);
@@ -355,6 +355,22 @@ export async function prepareResearchContext(
         "若没有专项实质匹配，保持开放域回答；工具未配置、任务失败或证据不足时保留真实状态，不得假装已执行。",
       ].join("\n")
     : "专项科研会话必须继续遵循已注册专项 Agent 的 SKILL.md、工具边界和交付物约束。";
+  // Skills the control plane hands the model directly, rather than telling it to
+  // go and load them. `skillsLoaded` is a deterministic property — was the
+  // method in front of the model — and delegation already makes it true by
+  // construction for capability children by injecting their bodies. The answer
+  // line structurally never delegates, so nothing made it true there and the
+  // check measured instruction compliance instead: 35% on the production
+  // ledger. Mounting closes that by construction on the one path that lacked it.
+  // Only the unrouted open-domain turn. A routed turn's skills reach the model
+  // through delegation into the capability child, and a second copy sitting in
+  // the root system prompt would be a persona the child never sees while the
+  // ledger says it was mounted — the exact false record this replaces.
+  const mountable = routedSpecialist || session.mode !== "open-domain" ? [] : mountableSkills;
+  const mounted = (Array.isArray(mountable) ? mountable : [])
+    .filter((skill) => typeof skill?.name === "string" && skill.name.trim()
+      && typeof skill?.body === "string" && skill.body.trim())
+    .map((skill) => ({ name: skill.name.trim(), body: skill.body }));
   const routedSkills = routedSpecialist
     ? [routedSpecialist.skill, ...(routedSpecialist.companionSkills ?? [])].filter(Boolean)
     : [];
@@ -369,11 +385,22 @@ export async function prepareResearchContext(
     : session.mode === "open-domain"
       ? [
           "本轮未命中确定性专项路由，由开放域答问主路处理。",
-          "作答前必须先成功加载 open-domain-answer skill，并遵循其答案优先结构、证据诚实与引用规范；若后续发现任务与已注册专项实质匹配，仍应加载对应专项 Skill。",
+          mounted.length > 0
+            // The method is in this same prompt, below. Asking the model to go
+            // fetch what the platform is already holding was measured on the
+            // production ledger: 11 of 17 answer-line runs never made the call,
+            // and each was delivered "unverified" for a persona the control
+            // plane could have handed it.
+            ? `本轮已直接挂载以下方法，正文见下方 <evimed-skill>：${mounted.map((skill) => skill.name).join("、")}。这些方法无需再调用 skill 工具加载；若后续发现任务与已注册专项实质匹配，仍应加载对应专项 Skill。`
+            : "作答前必须先成功加载 open-domain-answer skill，并遵循其答案优先结构、证据诚实与引用规范；若后续发现任务与已注册专项实质匹配，仍应加载对应专项 Skill。",
         ].join("\n")
       : "本轮未命中确定性专项路由；若后续发现任务与已注册专项实质匹配，仍应加载对应 Skill。";
 
   return {
+    // What this prompt actually carries, for the caller to record. A run record
+    // saying a skill was mounted must come from the code that mounted it, not
+    // from the code that intended to.
+    mountedSkills: mounted.map((skill) => skill.name),
     knowledge,
     knowledgeIndex: {
       files: knowledgeIndex.files.length,
@@ -398,6 +425,16 @@ export async function prepareResearchContext(
       "开放域问题保持自主科研能力。",
       specialistInstruction,
       routingInstruction,
+      // Platform text, not retrieved material: the registry read this body from
+      // the image and checked its frontmatter name against the manifest, so it
+      // carries the same authority as the sentences around it and is not
+      // wrapped as untrusted the way knowledge chunks and memories are. The
+      // close tag is neutralized so a body can never end its own envelope.
+      ...mounted.map((skill) => [
+        `<evimed-skill name="${escapeContext(skill.name)}">`,
+        skill.body.replaceAll("</evimed-skill>", "<\\/evimed-skill>"),
+        "</evimed-skill>",
+      ].join("\n")),
       "开放域回答中引用统一采用 [1] 编号，并在文末参考文献区一次性列出各来源的完整 HTTPS 链接；正文句子不得夹带原始 URL 或 [1](https://…) 行内链接，也不得出现 <!-- claim:… -->、[claim:…] 等内部标记。引用的必须是读者可打开的公开来源（期刊页、PubMed/PMC、指南或监管页、说明书 PDF）；不得引用 www.evimed.com/api-evimed/ 等内部接口地址或任何带凭据的 URL——工具返回此类地址时，改引其指向的公开来源。未检索的直接回答无需强行添加引用。专项交付物内部的引用格式以对应 SKILL 约定为准。",
       "隔离运行时不得调用原生 webfetch。官方医学、指南、循证评价或监管网页必须通过 official_page_fetch 获取，并以落盘正文、抓取时间和内容哈希作为成功凭证；工具返回 error 时不得写成 Fetched 或当作已读取。",
       "不得把检索题录包装成已读摘要或全文：来源只到题录层级时，须明示证据仅限题录；可以给出有据的最佳判断，但必须标注不确定性，不得据此虚构研究设计、证据等级、效应量或因果结论。",

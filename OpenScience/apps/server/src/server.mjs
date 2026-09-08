@@ -41,7 +41,7 @@ import { assertDockerVolumeName } from "./dockerMounts.mjs";
 import { createModelGatewayHandler, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger } from "./usageLedger.mjs";
-import { NotificationService } from "./notificationService.mjs";
+import { NotificationService, runFinishedNotice } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
 import {
@@ -1172,10 +1172,20 @@ export function createWebApiApp(overrides = {}) {
       }, project, run);
       if (notificationService) {
         try {
+          // Say what happened, in the notice itself. The mapping lives in
+          // `notificationService.runFinishedNotice` so it is a tested pure
+          // function rather than inline copy in a completion callback.
+          const notice = runFinishedNotice(run);
           await notificationService.create(project.userId, {
             noticeType: "notify",
-            title: run.status === "succeeded" ? "研究已完成" : "研究运行已结束",
-            body: run.status === "succeeded" ? "研究结果已准备好，可以查看运行记录和交付物。" : "研究运行已结束，请查看运行记录了解状态。",
+            title: notice.title,
+            body: notice.body,
+            // Without an action the card renders no control at all, so a
+            // notice that names a run still could not open one. The frontend
+            // turns this id into `/app/runs?run=<id>` rather than resolving it
+            // server-side: an inbox action that resolves on the server would
+            // have to know the frontend's routes.
+            actions: [{ id: "open", label: "查看运行", style: "primary" }],
             projectId: project.id,
             source: { type: "run", id: run.id },
             idempotencyKey: `run-finished:${run.id}`,
@@ -2680,11 +2690,20 @@ export function createWebApiApp(overrides = {}) {
             : session.mode === "specialist"
               ? registry.get(session.agentId)
               : null;
+          // The answer line does not delegate, so nothing injects its persona
+          // the way a capability child gets one. Hand it the body the registry
+          // is already holding instead of instructing the model to fetch it.
+          const answerPackage = !contextSpecialist && !routedSpecialist && session.mode === "open-domain"
+            ? registry.getPackage(OPEN_DOMAIN_ANSWER_AGENT_ID)
+            : null;
           const prepared = await prepareResearchContext(ctx.project, session, config, {
             query: text,
             memories,
             memoryError,
             specialists: session.mode === "open-domain" ? routableAgents : [],
+            mountableSkills: answerPackage?.skillText
+              ? [{ name: answerPackage.manifest.skill, body: answerPackage.skillText }]
+              : [],
             routedSpecialist: contextSpecialist
               ? {
                   agentId: contextSpecialist.id,
@@ -2695,6 +2714,11 @@ export function createWebApiApp(overrides = {}) {
                 }
               : routedSpecialist,
           });
+          // Before the prompt goes out, like the brief: a mount the ledger has
+          // not recorded cannot be told apart from one that never happened.
+          if (prepared.mountedSkills.length > 0) {
+            await agentRuns.recordLearning(ctx.project, dispatchedRun.id, { mountedSkills: prepared.mountedSkills });
+          }
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             text: promptText,
             system: prepared.system,
