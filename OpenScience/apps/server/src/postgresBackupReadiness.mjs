@@ -43,7 +43,30 @@ async function verifySourceIdentity(config, database, receipt) {
 export async function postgresBackupReadiness(config, database = null) {
   if (!config.production || config.stateStore !== "postgres") return { required: false };
   const file = String(config.postgresBackupStateFile ?? "").trim();
-  if (!file) fail("postgres_backup_state_missing");
+  // Not configured is a notice, not a refusal.
+  //
+  // This check shipped blocking on 2026-09-08 and turned `/api/ready` red the
+  // second the release cut over — on a host where the backup timer had run nine
+  // hours earlier and its receipt was sitting on disk. Nothing was
+  // misconfigured; the operator had simply never set a lever that did not exist
+  // in the release they were upgrading from, and the compose default points at
+  // an empty in-release directory that no deployment can ever pass.
+  //
+  // Development principle #4: a new check ships as a notice and needs an
+  // observed real-world distribution before it may block. A check whose default
+  // configuration cannot pass is not a safety net, it is an outage on every
+  // first cutover — and one that names a backup fault when the backups are
+  // fine. Once the lever is set, everything below still blocks: a stale, forged
+  // or mismatched receipt is a real finding about real data.
+  if (!file) {
+    return {
+      required: true,
+      configured: false,
+      ok: true,
+      code: "postgres_backup_state_unconfigured",
+      detail: "Set OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR to the host directory the PostgreSQL backup timer writes its receipt into. Until then this deployment's PostgreSQL backups are not being verified here.",
+    };
+  }
   if (!path.isAbsolute(file)) fail("postgres_backup_state_invalid");
   const maxAge = Number(config.postgresBackupMaxAgeSeconds ?? 90000);
   if (!Number.isSafeInteger(maxAge) || maxAge < 60 || maxAge > 31_536_000) fail("postgres_backup_state_invalid");

@@ -29,6 +29,31 @@ async function fixture(t) {
   return { file, healthy, database, config: { production: true, stateStore: "postgres", databaseUrl: "postgresql://readonly@127.0.0.1/evimed_test_backup_readiness", postgresBackupStateFile: file, postgresBackupMaxAgeSeconds: 90000 } };
 }
 
+test("an unconfigured PostgreSQL backup check reports itself instead of failing the deployment", async (t) => {
+  // This check shipped blocking and turned `/api/ready` red the second the
+  // 2026-09-08 release cut over — on a host whose backup timer had run nine
+  // hours earlier with its receipt on disk. Nothing was misconfigured: the
+  // operator had never set a lever that did not exist in the release they were
+  // upgrading from, and the compose default names an empty in-release
+  // directory that no deployment can pass. A default configuration that cannot
+  // pass is not a safety net; it is an outage on every first cutover, wearing
+  // the name of a backup fault.
+  const { config, database } = await fixture(t);
+  const unconfigured = { ...config, postgresBackupStateFile: "" };
+
+  const result = await postgresBackupReadiness(unconfigured, database);
+  assert.equal(result.ok, true, "an unset lever must not fail readiness");
+  assert.equal(result.required, true, "and must not claim the check does not apply here");
+  assert.equal(result.configured, false);
+  assert.equal(result.code, "postgres_backup_state_unconfigured");
+  assert.match(result.detail, /OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR/,
+    "the notice must name the lever, or it is a silence with extra steps");
+
+  // Everything below the lever still blocks. Once an operator says where the
+  // receipt is, a stale or forged one is a real finding about real data.
+  await assert.rejects(() => postgresBackupReadiness(config, database), { code: "postgres_backup_state_missing" });
+});
+
 test("PostgreSQL backup readiness requires a fresh verified application-data restore receipt", async (t) => {
   const { file, healthy, config, database } = await fixture(t);
   await assert.rejects(() => postgresBackupReadiness(config, database), { code: "postgres_backup_state_missing" });
