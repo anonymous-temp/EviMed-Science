@@ -52,7 +52,6 @@ function worker(options = {}) {
       resolveRun: options.resolveRun ?? (async () => ({ id: "run_1", sessionId: "s1" })),
       enabled: options.enabled ?? true,
       ...(options.maintain ? { maintain: options.maintain } : {}),
-      ...(options.feedbackDistiller ? { feedbackDistiller: options.feedbackDistiller } : {}),
       window: options.window ?? "",
       now: options.now ?? (() => new Date("2026-09-07T23:00:00")),
       pollMs: 1000,
@@ -78,50 +77,6 @@ test("an off-peak window is parsed, wraps midnight, and a typo costs the discoun
     assert.equal(parseWindow(bad), null, bad);
   }
   assert.equal(withinWindow(null, new Date("2026-09-07T12:00:00")), true, "no window means always");
-});
-
-test("outside its window the worker defers what costs money and keeps the job", async () => {
-  // The window is an economic argument, not a schedule: it gates spending. It
-  // used to gate claiming as well, which was harmless only while a second
-  // worker claimed `distill` at any hour. With one claimer that behaviour
-  // stranded every queued job from 09:00 to 22:00.
-  const { jobs, worker: instance } = worker({
-    window: "22:00-09:00",
-    now: () => new Date("2026-09-07T12:00:00"),
-    jobs: fakeJobs([{ id: "j1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
-  });
-  const consolidator = instance.consolidation;
-  assert.deepEqual(await instance.tick(), { state: "deferred", reason: "outside_learning_window" });
-  assert.deepEqual(consolidator.calls, [], "nothing expensive may run at peak price");
-  assert.equal(jobs.finished.length, 0, "a deferred job is not a finished one");
-  assert.equal(jobs.failed.length, 1);
-  assert.equal(jobs.failed[0].options.retry, true, "deferred, not destroyed");
-  assert.ok(jobs.failed[0].options.delayMs >= 60_000, "and not re-offered on the next tick");
-  assert.equal(instance.status().lastSkippedReason, "outside_learning_window");
-
-  const disabled = worker({ enabled: false, jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", payload: {} }]) });
-  assert.equal(await disabled.worker.tick(), null);
-  assert.equal(disabled.worker.jobs.queue.length, 1, "a loop that is off claims nothing at all");
-  assert.equal(disabled.worker.status().lastSkippedReason, "learning_disabled");
-});
-
-test("a feedback-triggered distillation is free, so it runs outside the window too", async () => {
-  // No model call and no container: it assembles a candidate out of two events
-  // already on disk. Deferring it to the off-peak window would buy nothing and
-  // would leave a researcher's correction unlearned for most of the day.
-  const handed = [];
-  const feedbackDistiller = { async distill(job) { handed.push(job.id); return { methodId: "learned-method:abc", written: true }; } };
-  const { jobs, worker: instance } = worker({
-    feedbackDistiller,
-    window: "22:00-09:00",
-    now: () => new Date("2026-09-07T12:00:00"),
-    jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
-      payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
-  });
-  assert.deepEqual(await instance.tick(), { methodId: "learned-method:abc", written: true });
-  assert.deepEqual(handed, ["j_fb"]);
-  assert.equal(jobs.finished.length, 1);
-  assert.deepEqual(jobs.failed, [], "the free job is never deferred");
 });
 
 test("inside the window a consolidate job reaches the consolidation and finishes", async () => {
@@ -280,47 +235,20 @@ test("overlapping reconciles collapse into one, like the job tick", async () => 
 // those jobs arrive here and have to be handed to the code that knows them.
 // ---------------------------------------------------------------------------
 
-test("a feedback-triggered distill job is handed to the feedback distiller and finished with its result", async () => {
-  const handed = [];
-  const feedbackDistiller = { async distill(job) { handed.push(job.id); return { methodId: "learned-method:abc", status: "candidate", written: true }; } };
-  const runDistillation = { calls: [], async execute(request) { this.calls.push(request); return { state: "complete" }; } };
+test("the worker declines to claim outside its window, and says which reason", async () => {
+  // Every learning job dispatches a bounded run or a model call, so the window
+  // is both the spending gate and the claiming gate: there is no free work
+  // being stranded behind it.
   const { jobs, worker: instance } = worker({
-    feedbackDistiller,
-    distillation: runDistillation,
-    jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
-      payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
-  });
-  assert.deepEqual(await instance.tick(), { methodId: "learned-method:abc", status: "candidate", written: true });
-  assert.deepEqual(handed, ["j_fb"]);
-  assert.deepEqual(runDistillation.calls, [], "the run-shaped producer never sees a feedback-shaped job");
-  assert.equal(jobs.finished.length, 1, "finished once, by this worker, under its own lease");
-  assert.deepEqual(jobs.failed, []);
-});
-
-test("a feedback-triggered job with no distiller configured fails once and is not retried", async () => {
-  const { jobs, worker: instance } = worker({
-    jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
-      payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
+    window: "22:00-09:00",
+    now: () => new Date("2026-09-07T12:00:00"),
+    jobs: fakeJobs([{ id: "j1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
   });
   assert.equal(await instance.tick(), null);
-  assert.equal(instance.lastError, "distill_trigger_unknown");
-  assert.equal(jobs.failed.length, 1);
-  assert.equal(jobs.failed[0].options.retry, false, "a payload nothing can read does not become readable by waiting");
-});
+  assert.equal(jobs.queue.length, 1, "the job is still queued, not consumed and dropped");
+  assert.equal(instance.status().lastSkippedReason, "outside_learning_window");
 
-test("the distiller's own refusals are terminal, and a lost write race is not", async () => {
-  const refusing = (code, retryable = false) => ({
-    async distill() { const error = new Error(code); /** @type {any} */ (error).code = code; throw error; },
-    retryable,
-  });
-  for (const [code, retry] of [["distill_evidence_missing", false], ["distill_payload_invalid", false], ["product_revision_conflict", true]]) {
-    const { jobs, worker: instance } = worker({
-      feedbackDistiller: refusing(code),
-      jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
-        payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
-    });
-    await instance.tick();
-    assert.equal(instance.lastError, code);
-    assert.equal(jobs.failed[0].options.retry, retry, code);
-  }
+  const disabled = worker({ enabled: false, jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", payload: {} }]) });
+  assert.equal(await disabled.worker.tick(), null);
+  assert.equal(disabled.worker.status().lastSkippedReason, "learning_disabled");
 });

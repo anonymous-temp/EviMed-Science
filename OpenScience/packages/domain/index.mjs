@@ -102,20 +102,28 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 14 exports
+// errorCodes — 22 exports
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
+  CONTROL_PLANE_ERROR_CODES,
   CREDIT_ERROR_CODES,
+  ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
+  ERROR_DETAIL_FIELDS,
   RUNTIME_ERROR_CODES,
+  RUN_OUTCOME_KINDS,
+  RUN_VERDICT_ERROR_CODES,
   SOCKET_TOOL_ERROR_CODES,
   TURN_END_ERROR_CODES,
   TURN_END_SUB_CODES,
   classifyEvidenceSourceError,
   errorCodeMessage,
+  errorCodeOutcome,
+  knownErrorCodeMessage,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
+  runOutcomeKind,
   terminalEvidenceSourceErrorCodes,
   turnEndErrorCode,
 } from './src/errorCodes.mjs'

@@ -3,12 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionRoute } from "./SessionRoute";
+import { WebApiError } from "@/lib/apiClient";
 import { apply as applyNativeBridge } from "../../../../../packages/harness-port/src/runtimeUiBridge.mjs";
 
-vi.mock("./RunStreamSessionPage", () => ({ RunStreamSessionPage: () => <div>built-in session view</div> }));
 vi.mock("@/components/run/RunSidePanel", () => ({ RunSidePanel: () => <aside>run panel</aside> }));
 const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
-vi.mock("@/lib/apiClient", () => ({
+// Only the four frame calls and the profile are stubbed. Everything else is the
+// real module on purpose: `WebApiError` has to be the same class the component
+// tests with `instanceof`, and `webErrorMessage` has to be the real projection
+// over the real registry — a hand-written stub here would prove that a fake
+// dictionary renders, which is the defect this change removes, not the fix.
+vi.mock("@/lib/apiClient", async importOriginal => ({
+  ...(await importOriginal<typeof import("@/lib/apiClient")>()),
   hasWebApi: true, fetchWebMe: () => Promise.resolve({}), webRuntimeProfile: () => mocks.profile,
   getWebProjectId: () => mocks.projectId, createWebRuntimeUiFrame: mocks.create, releaseWebRuntimeUiFrame: mocks.release,
   renewWebRuntimeUiFrame: mocks.renew,
@@ -24,6 +30,7 @@ function PathProbe() {
 function mount(state: unknown = null, path = "/app/chat") {
   return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><Routes>
     <Route path="/app/chat" element={<SessionRoute />} /><Route path="/app/chat/:sessionId" element={<SessionRoute />} />
+    <Route path="/app/account" element={<div>account and usage</div>} />
   </Routes></MemoryRouter>);
 }
 function emit(frame: HTMLIFrameElement, data: Record<string, unknown>, origin = mocks.profile.uiOrigin, source: MessageEventSource | null = frame.contentWindow) {
@@ -174,9 +181,55 @@ describe("native frame identity and readiness", () => {
   it("offers retry on frame failure without silently switching dispatchers", async () => {
     mocks.create.mockRejectedValueOnce(new Error("Unavailable")); mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("研究会话暂时无法连接");
-    expect(screen.queryByText("built-in session view")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "重试" }));
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
+  });
+
+  // Every frame refusal used to arrive as 「研究会话暂时无法连接」 with a retry
+  // button beside it. Both halves were wrong for a ceiling: the sentence named
+  // a cause the code contradicts, and the only offered action is the one action
+  // that cannot work while the window is full.
+  it("names the ceiling that refused the frame, says when it frees, and offers the account page instead of a retry", async () => {
+    mocks.create.mockRejectedValueOnce(new WebApiError("This account reached its daily spending limit.", {
+      status: 402, code: "credits_daily_limit_reached", requestId: "req_402", retryAfterSeconds: 11_520,
+    }));
+    mount();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("今日额度上限已到");
+    expect(alert).toHaveTextContent("约 3 小时 12 分钟后额度开始释放");
+    expect(alert).toHaveTextContent("不是整点清零");
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "查看账户与额度" }));
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/account");
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  // A refusal that is not a ceiling keeps its retry, but stops claiming the
+  // cause was the connection.
+  it("renders a disabled surface as the reason it gave rather than as a connection fault", async () => {
+    mocks.create.mockRejectedValueOnce(new WebApiError("The native UI is not enabled.", {
+      status: 404, code: "runtime_ui_not_enabled", requestId: "req_404",
+    }));
+    mount();
+    const alert = await screen.findByRole("alert");
+    // The registry's `^runtime_` family sentence, reaching a pixel for the
+    // first time: this build has held it since the registry existed.
+    expect(alert).toHaveTextContent("运行时出现问题，稍后重试。");
+    expect(alert).not.toHaveTextContent("研究会话暂时无法连接");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  // An ended session is already being handled — `fetchWithWebAuth` announces it
+  // and the shell moves to the login route — so a retry here races that instead
+  // of fixing anything.
+  it("tells an expired login to log in again and does not offer a retry", async () => {
+    mocks.create.mockRejectedValueOnce(new WebApiError("Session expired.", {
+      status: 401, code: "authentication_required", requestId: "req_401",
+    }));
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("登录已失效，请重新登录。");
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看账户与额度" })).toBeNull();
   });
 
   it("keeps a capability intent pending until a matching success acknowledgement", async () => {
@@ -199,7 +252,6 @@ describe("native frame identity and readiness", () => {
   it("shows an explicit unavailable state when the deployment has no native surface", async () => {
     mocks.profile.uiOrigin = ""; mount();
     expect(await screen.findByRole("alert")).toHaveTextContent("研究会话暂时无法连接");
-    expect(screen.queryByText("built-in session view")).toBeNull();
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("opens deep links and back navigation in the same frame, and mirrors native session selection", async () => {
@@ -235,7 +287,6 @@ describe("native frame identity and readiness", () => {
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: false, error: "NAVIGATION_FAILED" });
     expect(await screen.findByRole("alert")).toHaveTextContent("研究任务暂时无法打开");
     expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/unknown-session");
-    expect(screen.queryByText("built-in session view")).toBeNull();
   });
 
   it("recovers an established frame without recreating its document or navigation", async () => {

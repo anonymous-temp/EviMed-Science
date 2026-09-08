@@ -21,6 +21,7 @@ import {
   writeFileExclusiveNoFollow,
 } from "../src/security.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
+import { ERROR_DETAIL_FIELDS } from "@evimed/domain";
 
 test("text fallback treats a missing parent directory as a missing file", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-web-text-fallback-"));
@@ -548,20 +549,47 @@ test("the ledger's reservation refusal survives the boundary whole", async () =>
   });
 });
 
-// The client parses this channel with its own copy of the two closed sets, and
-// a set that drifts is invisible: the server would send a window the browser
-// discards, and the account page would fall back to a sentence that names no
-// ceiling. Until the vocabulary lives in `@evimed/domain` (it does not — the
-// registry there has no `usage_budget_exceeded` entry at all), the two copies
-// are compared here, at the boundary that declares them.
-test("the browser accepts exactly the vocabulary this module declares", async () => {
+// One declaration, read by both sides.
+//
+// This used to compare two hand-written copies of the same closed sets — the
+// server's and the browser's — because there was nowhere that owned them. There
+// is now: `@evimed/domain`'s `ERROR_DETAIL_FIELDS`. So the property worth
+// holding is no longer "the copies agree" but "there is no copy": the browser
+// must read the domain's table, and this module must derive from it, or the
+// disagreement comes back.
+test("the details vocabulary is declared once and both sides read that declaration", async () => {
   const client = await readFile(new URL("../../web/src/lib/apiClient.ts", import.meta.url), "utf8");
-  const declared = (name) => {
-    const block = new RegExp(`const ${name}: WebUsageBudget\\w+\\[\\] = \\[([^\\]]*)\\]`).exec(client);
-    assert.ok(block, `${name} was not found in apiClient.ts — this test cannot conclude anything`);
-    return [...block[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-  };
-  const shape = errorDetailShapes.usage_budget_exceeded;
-  assert.deepEqual(declared("usageBudgetWindows").sort(), [...shape.window.allowed].sort());
-  assert.deepEqual(declared("usageBudgetCurrencies").sort(), [...shape.currency.allowed].sort());
+  assert.ok(client.length > 1_000, "the client source must actually have been read");
+
+  // The browser reads the table rather than restating it.
+  assert.match(client, /ERROR_DETAIL_FIELDS/,
+    "the browser must parse declared details from the domain's table");
+  assert.doesNotMatch(client, /const usageBudget(Windows|Currencies)\b/,
+    "a second copy of the closed sets is what this test exists to keep out");
+
+  // And this module derives rather than restating. Walked, not read off the
+  // source: an acceptor that is neither of the two vocabularies is the one edit
+  // that would make the safety argument in `errorDetailShapes` false.
+  assert.deepEqual(Object.keys(errorDetailShapes).sort(), Object.keys(ERROR_DETAIL_FIELDS).sort(),
+    "every declared code must reach the wire, or its details are computed and dropped");
+  for (const [code, fields] of Object.entries(ERROR_DETAIL_FIELDS)) {
+    for (const [key, rule] of Object.entries(fields)) {
+      const acceptor = errorDetailShapes[code][key];
+      assert.ok(acceptor, `${code}.${key} is declared in the domain and unreachable here`);
+      if (rule === "number") {
+        assert.equal(acceptor.kind, "finite-number");
+        assert.equal(acceptor("no"), undefined);
+        assert.equal(acceptor(1.5), 1.5);
+      } else {
+        assert.equal(acceptor.kind, "closed-set");
+        assert.deepEqual([...acceptor.allowed].sort(), [...rule].sort());
+        assert.equal(acceptor("../../etc/passwd"), undefined, "no caller-supplied string may leave through this channel");
+      }
+    }
+  }
+
+  // The two codes the drift hid. They are what this deployment actually raises.
+  for (const code of ["credits_daily_limit_reached", "credits_weekly_limit_reached"]) {
+    assert.ok(errorDetailShapes[code], `${code} must be able to name the ceiling it refused on`);
+  }
 });

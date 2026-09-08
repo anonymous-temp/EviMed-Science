@@ -15,12 +15,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { DISTILLATION_TRIGGERS } from "../src/methodDistillationRuns.mjs";
 import {
   DISTILL_TRIGGER,
   FeedbackEvents,
-  LEARNED_METHOD_RECORD_TYPE,
-  LEARNED_METHOD_STATUS,
-  MethodDistillWorker,
   deliverableSubjectId,
   feedbackEventId,
   memoryFeedbackEvents,
@@ -178,8 +176,7 @@ function fixture() {
   const jobs = new JobsDouble(database);
   const documents = new DocumentsDouble();
   const feedback = new FeedbackEvents({ database, jobs, now: () => new Date("2026-09-07T08:00:00.000Z") });
-  const worker = new MethodDistillWorker({ jobs, documents, feedback, now: () => new Date("2026-09-07T09:00:00.000Z") });
-  return { database, jobs, documents, feedback, worker };
+  return { database, jobs, documents, feedback };
 }
 
 /** A structured memory record as the memory API hands it back. */
@@ -358,14 +355,19 @@ test("an adopted deliverable that was then edited enqueues one distill job in th
   assert.equal(adoption.distillJob, null, "an adoption on its own is not a lesson");
   assert.ok(edit.distillJob, "an edit after an adoption is the trigger this release ships");
   assert.equal(edit.distillJob.kind, "distill");
-  // The shape is fixed so later triggers slot in without a migration: exactly
-  // these three keys, and the ids in evidence order.
-  assert.deepEqual(Object.keys(edit.distillJob.payload), ["runId", "feedbackEventIds", "trigger"]);
-  assert.deepEqual(edit.distillJob.payload, {
-    runId: "run_1",
-    feedbackEventIds: [adoption.event.id, edit.event.id],
-    trigger: DISTILL_TRIGGER,
-  });
+  // The shape is the one `MethodDistillationRuns` reads, checked key by key
+  // because this ledger and that consumer arrived on separate branches and the
+  // only thing that made them agree was this assertion.
+  assert.deepEqual(Object.keys(edit.distillJob.payload).sort(), ["feedback", "feedbackEventIds", "runId", "trigger"]);
+  assert.equal(edit.distillJob.payload.runId, "run_1");
+  assert.equal(edit.distillJob.payload.trigger, DISTILL_TRIGGER);
+  assert.ok(DISTILLATION_TRIGGERS.includes(DISTILL_TRIGGER),
+    "a trigger the distillation run does not accept is a job its only claimer fails terminally");
+  assert.deepEqual(edit.distillJob.payload.feedbackEventIds, [adoption.event.id, edit.event.id]);
+  // The events travel whole, not as ids: the consumer builds its frozen input
+  // from the payload and never reads this ledger back.
+  assert.deepEqual(edit.distillJob.payload.feedback.map((event) => event.id), [adoption.event.id, edit.event.id]);
+  assert.equal(edit.distillJob.payload.feedback[1].detail.summary, "把结论段的效应量补上了置信区间。");
 
   // Reporting the same edit again is the same job, not a second one.
   const replay = await feedback.record("user_1", {
@@ -402,74 +404,6 @@ test("an edit with nothing behind it, and an edit that changed nothing, distil n
   });
   assert.equal(unchanged.distillJob, null);
   assert.equal(jobs.jobs.length, 0);
-});
-
-test("the distill job writes a candidate method, and nothing it writes is ever approved", async () => {
-  const { feedback, documents, jobs, worker } = fixture();
-  const { adoption, edit } = await adoptAndEdit(feedback);
-
-  const completed = await worker.run();
-  assert.equal(completed.status, "succeeded", "the worker must claim the queued job and finish it");
-  assert.equal(jobs.finished.length, 1);
-
-  const [written] = [...documents.docs.values()];
-  assert.ok(written, "the distill job must write a method document");
-  assert.equal(written.kind, "method");
-  assert.equal(written.payload.recordType, LEARNED_METHOD_RECORD_TYPE);
-  assert.equal(written.payload.status, LEARNED_METHOD_STATUS);
-  assert.equal(written.payload.status, "candidate", "a generated method is never born approved");
-  assert.equal(written.revision, 1);
-  assert.deepEqual(written.payload.counts, { approvals: 0, applications: 0 });
-  assert.deepEqual(written.payload.feedbackEventIds, [adoption.event.id, edit.event.id]);
-  assert.match(written.payload.body, /把结论段的效应量补上了置信区间。/);
-  assert.match(written.payload.body, /reports\/evidence\.md/);
-  assert.equal(jobs.finished[0].result.status, "candidate");
-});
-
-test("the same lesson twice writes one revision; a changed body starts a new one with counts back at zero", async () => {
-  const { feedback, documents, jobs, worker } = fixture();
-  await adoptAndEdit(feedback);
-  await worker.run();
-  const key = [...documents.docs.keys()][0];
-  assert.equal(documents.docs.get(key).revision, 1);
-
-  // The same job replayed — a lease lost and re-claimed, say. The body has not
-  // changed, so rewriting it would churn a revision and reset counts the job
-  // did not earn.
-  jobs.jobs[0].status = "queued";
-  await worker.run();
-  assert.equal(documents.docs.get(key).revision, 1, "an unchanged body must not start a revision");
-  assert.equal(jobs.finished.at(-1).result.written, false);
-
-  // Standing the candidate earned after it was written, as an approval flow
-  // would record it.
-  const standing = documents.docs.get(key);
-  standing.payload = { ...standing.payload, counts: { approvals: 1, applications: 2 } };
-
-  // A second, different edit of the same deliverable: a different lesson.
-  await feedback.record("user_1", {
-    trigger: "deliverable-edited", subject: SUBJECT, identity: ["d".repeat(64)], projectId: "project_1", runId: "run_1",
-    detail: { path: "reports/evidence.md", runId: "run_1", contentSha256: "d".repeat(64), summary: "把安全性结论改成不给用药建议。" },
-  });
-  await worker.run();
-
-  const updated = documents.docs.get(key);
-  assert.equal(updated.revision, 2, "a changed body starts a new revision");
-  assert.deepEqual(updated.payload.counts, { approvals: 0, applications: 0 },
-    "counts earned by the previous text must not carry over to a different one");
-  assert.equal(updated.payload.status, "candidate", "and it is still a candidate");
-  assert.match(updated.payload.body, /把安全性结论改成不给用药建议。/);
-  assert.equal(updated.payload.createdAt, standing.payload.createdAt, "it is the same method, on its second draft");
-});
-
-test("a distill job whose evidence is gone fails outright instead of retrying to the same answer", async () => {
-  const { feedback, jobs, worker } = fixture();
-  await adoptAndEdit(feedback);
-  jobs.jobs[0].payload = { ...jobs.jobs[0].payload, feedbackEventIds: ["feedback:deliverable-adopted:nope", "feedback:deliverable-edited:nope"] };
-  await worker.run();
-  assert.equal(jobs.failed.length, 1);
-  assert.equal(jobs.failed[0].error.code, "distill_evidence_missing");
-  assert.equal(jobs.failed[0].options.retry, false);
 });
 
 test("the ledger pages instead of ending at its limit", async () => {
@@ -557,9 +491,10 @@ test("an adoption reported after the edit it justifies still produces the lesson
     detail: { path: "reports/evidence.md", runId: "run_1", contentSha256: "e".repeat(64) },
   });
   assert.ok(adoption.distillJob, "the adoption never paired with the edit it justifies");
-  assert.deepEqual(adoption.distillJob.payload, {
-    runId: "run_1", feedbackEventIds: [adoption.event.id, edit.event.id], trigger: DISTILL_TRIGGER,
-  });
+  assert.equal(adoption.distillJob.payload.runId, "run_1");
+  assert.equal(adoption.distillJob.payload.trigger, DISTILL_TRIGGER);
+  assert.deepEqual(adoption.distillJob.payload.feedbackEventIds, [adoption.event.id, edit.event.id]);
+  assert.deepEqual(adoption.distillJob.payload.feedback.map((event) => event.id), [adoption.event.id, edit.event.id]);
   assert.equal(jobs.jobs.length, 1);
 
   // And the two directions cannot enqueue one lesson twice: the job key is the

@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebAgentRun } from "@/lib/apiClient";
-import { useUiStore } from "@/lib/store";
+import { webRunOutcome } from "@/lib/runPresentation";
 import { RunsPage } from "./RunsPage";
 
 // The hosted ledger: RunsPage picks HostedRunsView when a web API exists
@@ -21,7 +21,10 @@ vi.mock("@/lib/artifactFile", () => ({
   downloadArtifact: (path: string, root?: string) => downloadArtifact(path, root),
 }));
 
-function webRun(overrides: Partial<WebAgentRun> = {}): WebAgentRun {
+/** `unverifiedArtifacts` is the ledger field naming what a refused run wrote.
+ *  It is landing on the server in parallel and is not on `WebAgentRun` yet;
+ *  older records will not carry it at all, which the page must survive. */
+function webRun(overrides: Partial<WebAgentRun> & { unverifiedArtifacts?: string[] } = {}): WebAgentRun {
   const now = new Date().toISOString();
   return {
     id: "run-1",
@@ -44,18 +47,36 @@ function webRun(overrides: Partial<WebAgentRun> = {}): WebAgentRun {
   };
 }
 
+/** The navigation the page performed, so a test can assert the draft reached
+ *  the channel that reads it rather than a store nothing reads. */
+function NavProbe() {
+  const location = useLocation();
+  return (
+    <>
+      <div data-testid="location">{location.pathname}</div>
+      <div data-testid="nav-state">{JSON.stringify(location.state ?? null)}</div>
+    </>
+  );
+}
+
 const renderPage = (entry = "/app/runs") =>
   render(
     <MemoryRouter initialEntries={[entry]}>
       <RunsPage />
+      <NavProbe />
     </MemoryRouter>,
   );
+
+// A run the 15-minute stall detector killed. The suite used to use
+// `agent_timeout`, a code apps/server/src emits nowhere — so it validated a
+// key of the page's own private table while none of the codes production
+// actually writes was covered anywhere.
+const TIMED_OUT = "runtime_monitor_timeout";
 
 describe("RunsPage (hosted web)", () => {
   beforeEach(() => {
     listWebAgentRuns.mockReset();
     downloadArtifact.mockReset();
-    useUiStore.setState({ composerDraft: null });
     listWebAgentRuns.mockResolvedValue([
       webRun(),
       webRun({
@@ -68,7 +89,7 @@ describe("RunsPage (hosted web)", () => {
         effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
         status: "failed",
         startedAt: new Date(Date.now() - 3_600_000).toISOString(),
-        errorCode: "agent_timeout",
+        errorCode: TIMED_OUT,
         artifacts: [],
       }),
     ]);
@@ -96,7 +117,7 @@ describe("RunsPage (hosted web)", () => {
     await screen.findByText("run-2");
     // run-2 is the older, failed run; its expanded detail is what proves the
     // link won over the default.
-    expect(await screen.findByText("运行超时，未能在时限内完成。")).toBeInTheDocument();
+    expect(await screen.findByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
     expect(screen.queryByText("output/report.docx")).not.toBeInTheDocument();
   });
 
@@ -108,7 +129,7 @@ describe("RunsPage (hosted web)", () => {
     expect(screen.getByText("run-2")).toBeInTheDocument();
     // The failed row explains itself in its expanded detail. It used to print
     // the raw code, which is a server term in the wrong language for a reader.
-    expect(screen.getByText("运行超时，未能在时限内完成。")).toBeInTheDocument();
+    expect(screen.getByTitle(`错误码：${TIMED_OUT}`)).toBeInTheDocument();
   });
 
   it("groups a delivered-but-unresolved run under 待人工复核, not under 成功", async () => {
@@ -152,12 +173,24 @@ describe("RunsPage (hosted web)", () => {
     expect(await screen.findByText(/没有符合筛选条件的运行记录/)).toBeInTheDocument();
   });
 
-  it("drafts the review prompt when 复查与复现 is clicked", async () => {
+  /**
+   * "复查与复现" used to write `composerDraft` and navigate. The only reader of
+   * that store field is the unrouted `components/thread/Composer`, so the
+   * draft went nowhere and the researcher landed on an empty runtime chat —
+   * a button whose tooltip promised a drafted prompt and which did nothing.
+   * The intent channel is the one that already ships and is already read.
+   */
+  it("hands 复查与复现 to the session surface that actually reads the draft", async () => {
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: /复查与复现/ }));
-    const draft = useUiStore.getState().composerDraft;
-    expect(draft).toContain("复查科研运行 `run-1`（meta-analysis）");
-    expect(draft).toContain("不要重新编造缺失数据");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/chat/ses-1");
+    const state = JSON.parse(screen.getByTestId("nav-state").textContent || "null");
+    // `kind: "open"` on the run's own session: this is a review of that run,
+    // not a fresh conversation about it.
+    expect(state.runtimeUiIntent.kind).toBe("open");
+    expect(state.runtimeUiIntent.sessionId).toBe("ses-1");
+    expect(state.runtimeUiIntent.draft).toContain("复查科研运行 `run-1`（meta-analysis）");
+    expect(state.runtimeUiIntent.draft).toContain("不要重新编造缺失数据");
   });
 
   it("downloads an artifact through the web API when clicked", async () => {
@@ -188,6 +221,9 @@ describe("RunsPage (hosted web)", () => {
     renderPage();
     expect(await screen.findByText(/已交付，但未完成核验/)).toBeInTheDocument();
     expect(screen.getByText(/产物可以照常下载和阅读/)).toBeInTheDocument();
+    // How much is owed, before any of the prose: a reader must not have to
+    // count bullets to learn there are three findings and one is blocking.
+    expect(screen.getByText(/必须修正 1 项 · 建议修正 2 项/)).toBeInTheDocument();
     // Grouped and named in Chinese, with what must be fixed leading. The notices
     // are written for the agent that repairs them; a reader meets the shape of
     // the problem first and the validator prose second.
@@ -204,17 +240,58 @@ describe("RunsPage (hosted web)", () => {
   });
 
   it("states a failure in the reader's language and keeps the code for support", async () => {
+    const failed = webRun({ status: "failed", errorCode: "specialist_citation_invalid", artifacts: [] });
+    listWebAgentRuns.mockResolvedValue([failed]);
+    renderPage();
+    const verdict = await screen.findByTitle("错误码：specialist_citation_invalid");
+    // One sentence, from the one dictionary, via the one projection.
+    expect(verdict).toHaveTextContent(webRunOutcome(failed).headline);
+    // The raw code stays reachable as a tooltip, not as the message.
+    expect(verdict.textContent).not.toMatch(/specialist_citation_invalid/);
+    expect(screen.queryByText("specialist_citation_invalid")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The single most damaging string this page shipped. `runErrorLabel` fell
+   * back to "运行未通过核验。" for every code its 20-key table did not list,
+   * and every code the monitor writes fell through — so a run killed on a
+   * timer told the researcher their evidence had failed quality control.
+   */
+  it("never reports a timer kill as a quality-control failure", async () => {
+    const timedOut = webRun({ id: "run-timeout", status: "failed", errorCode: TIMED_OUT, artifacts: [] });
+    listWebAgentRuns.mockResolvedValue([timedOut]);
+    renderPage();
+    const verdict = await screen.findByTitle(`错误码：${TIMED_OUT}`);
+    expect(verdict).toHaveTextContent(webRunOutcome(timedOut).headline);
+    expect(verdict.textContent).not.toMatch(/核验/);
+    // Chinese, not an identifier: a code that fell through the dictionary
+    // would render as itself, which is a bug report and not a message.
+    expect(verdict.textContent).toMatch(/[一-鿿]/);
+    expect(screen.queryByText("运行未通过核验。")).not.toBeInTheDocument();
+  });
+
+  /**
+   * 28 of 179 finished runs on the host were refused with an empty artifact
+   * list while a complete package sat on disk — p90 58 minutes of work, the
+   * most recent a nine-file clinical package. Nothing deleted those files.
+   */
+  it("hands back the files a refused run wrote, labelled as ungraded", async () => {
     listWebAgentRuns.mockResolvedValue([webRun({
+      id: "run-refused",
       status: "failed",
-      errorCode: "specialist_citation_invalid",
+      errorCode: "specialist_deliverable_not_accepted",
       artifacts: [],
+      unverifiedArtifacts: ["deliverables/clinical-evidence-report.md", "deliverables/citation-ledger.csv"],
     })]);
     renderPage();
-    const verdict = await screen.findByText(/读者无法打开的引文地址/);
-    expect(verdict).toBeInTheDocument();
-    // The raw code stays reachable as a tooltip, not as the message.
-    expect(verdict).toHaveAttribute("title", "错误码：specialist_citation_invalid");
-    expect(screen.queryByText("specialist_citation_invalid")).not.toBeInTheDocument();
+    expect(await screen.findByText(/未通过核验的文件（2）/)).toBeInTheDocument();
+    expect(screen.getByText("deliverables/clinical-evidence-report.md")).toBeInTheDocument();
+    // Never dressed as accepted work: the marker carries the same weight as
+    // the path, because a refused package presented like an accepted one is
+    // the failure the gate exists to prevent, moved into the UI.
+    expect(screen.getAllByText("未经核验")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: /clinical-evidence-report\.md/ }));
+    expect(downloadArtifact).toHaveBeenCalledWith("deliverables/clinical-evidence-report.md", "workspace");
   });
 
   it("identifies a run by the question asked, keeping the id reachable", async () => {
@@ -250,5 +327,10 @@ describe("RunsPage (hosted web)", () => {
     })]);
     renderPage();
     expect(await screen.findByText(/已完成 84 次检索与工具调用/)).toBeInTheDocument();
+    // A run still working owes no verdict. `runOutcomeKind` calls a running
+    // record with no code `unknown` — correctly, it is not an outcome — so the
+    // row has to ask "is it over" before it asks "how did it go", or a healthy
+    // 40-minute analysis is captioned 「这次没有完成」.
+    expect(screen.queryByText(/这次没有完成/)).not.toBeInTheDocument();
   });
 });

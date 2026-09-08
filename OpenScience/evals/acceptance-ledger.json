@@ -211,6 +211,43 @@
       "note": "The one end-to-end publication-quality run on a live stack produced a full 2,952-word manuscript with tables, figures, GRADE and PRISMA appendices, then correctly blocked its own release on six named gates rather than presenting a draft as submission-ready. The 2026-07-31 harness job ended blocked as well. A refusal that is right is still not an accepted delivery. Four briefs are now written under evals/meta-analysis and none has been run."
     },
     {
+      "id": "method-distillation",
+      "visibility": "internal",
+      "evalHarness": "evals/method-quality",
+      "briefCount": 0,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "capabilities/method-distillation/capability.yaml",
+        "evals/method-quality/splits.json",
+        "PROGRESS.md@2026-09-07 13:45",
+        "PROGRESS.md@2026-09-07 11:30"
+      ],
+      "note": "Internal: dispatched only by a distill job, never by a user request. Designed in docs/superpowers/plans/2026-09-07-self-evolving-agent-loop.md at the repository root. The capability package, its contract and the bounded run path landed with the self-evolution loop on 2026-09-07 and are covered by unit and contract tests. `evals/method-quality` is a paired-comparison harness (run_paired.py + splits.json), not a brief harness, so it ships no briefs and briefCount is 0 rather than a number no file backs. No distillation has been run against a live kernel."
+    },
+    {
+      "id": "method-relations",
+      "visibility": "internal",
+      "evalHarness": "evals/method-quality",
+      "briefCount": 0,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "capabilities/method-relations/capability.yaml",
+        "evals/method-quality/splits.json",
+        "PROGRESS.md@2026-09-07 11:30"
+      ],
+      "note": "Internal: dispatched only by a consolidate job. Designed in the same repository-root plan; same standing as method-distillation — package, contract and the three actions (screen, decide, build) are unit-tested, and nothing has run against a live kernel. Shares the method-quality harness, which holds no briefs."
+    },
+    {
       "id": "off-label-analysis",
       "visibility": "public",
       "evalHarness": "evals/off-label-analysis",

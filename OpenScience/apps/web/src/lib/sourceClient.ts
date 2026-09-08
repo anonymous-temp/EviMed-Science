@@ -1,3 +1,4 @@
+import { knownErrorCodeMessage } from "@evimed/domain";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
 export type SourceStatus = "queued" | "parsing" | "complete" | "needs_attention" | "failed" | "missing" | "canceled";
@@ -56,6 +57,24 @@ export interface SourceUnderstandingResult {
   status: SourceStatus;
   current: SourceUnderstanding | null;
 }
+/** The bounded omission notice `sourceOmissionRecord` keeps on the source row.
+ *
+ * A metric and nothing else: `sourceUnderstandingOmissionNotice` returns
+ * `blocking:false` and appears in no issue list, so nothing built on this can
+ * refuse a delivery — the targets it compares against have never been checked
+ * against an observed distribution of real sources. `disagreements` are the
+ * control plane's own English diagnostics, capped at five lines; the UI states
+ * them as a count in Chinese and keeps the raw lines for support only. */
+export interface SourceOmissionNotice {
+  status: string;
+  omissionRate: number | null;
+  reportedRate: number | null;
+  target: number;
+  withinTarget: boolean;
+  audited: number;
+  planned: number;
+  disagreements: string[];
+}
 export interface SourcePayload {
   paths: string[];
   status: SourceStatus;
@@ -66,6 +85,7 @@ export interface SourcePayload {
   generation?: number;
   analysis?: { phase?: string };
   omissionAudit?: { status: string; reason?: string; omissionRate: number | null };
+  omissionNotice?: SourceOmissionNotice | null;
   reasons: string[];
   valueVector: Record<string, number>;
   coverage: null | {
@@ -73,7 +93,41 @@ export interface SourcePayload {
     failed: number; percent: number; omissionRate: number | null; parserFailureRate?: number;
   };
   outputs: { summary?: string; facts?: number; methods?: number; artifactPath?: string };
+  // `message` is the control plane's own English literal — `recordFailure` is
+  // called with "Source analysis failed." for every failure, so it carries no
+  // information and cannot be shown. `code` is the fact; `@evimed/domain` is
+  // the one place that turns a code into a sentence a researcher reads.
   error?: { code: string; message: string } | null;
+}
+
+/**
+ * What to tell a researcher about a stored source failure.
+ *
+ * One function, because a source failure is rendered in three places — the card,
+ * the understanding panel's empty state, and a folder whose sync is failing —
+ * and three call sites inventing three sentences is how the run ledger ended up
+ * with five competing error dictionaries.
+ *
+ * `knownErrorCodeMessage` rather than `errorCodeMessage` because this caller has
+ * a better fallback than the generic one: it already knows the failure is a
+ * source analysis failure, so the generic 「这次没有完成…」 opener would repeat
+ * what the surrounding sentence just said. The registry stays the only place a
+ * code becomes a sentence; only the not-yet-translated case is local.
+ *
+ * The stored `message` is never used: `recordFailure` is called with the literal
+ * English "Source analysis failed." for every failure, so it is the same string
+ * every time and it is not in the interface language.
+ *
+ * NOTE: the source pipeline's own codes (`source_parser_*`,
+ * `source_understanding_*`, `source_ingestion_failed`, `document_parser_*`) are
+ * in neither `ALL_ERROR_CODES` nor any family regex today, so most real
+ * failures land on the fallback below. That is a registry gap, not a reason for
+ * a fourth table here.
+ */
+export function sourceFailureMessage(error?: { code: string; message?: string } | null): string | null {
+  if (!error?.code) return null;
+  return knownErrorCodeMessage(error.code)
+    ?? `本版本还没有为这个原因准备说明。把这个代号交给管理员即可定位：${error.code}`;
 }
 
 export function getSourceUnderstanding(id: string) {
@@ -146,6 +200,13 @@ export interface SourceFolderPayload {
   sync: { run: number; page: number };
   entries: Record<string, { providerHash: string; sourceId: string; version: number; size: number }>;
   lastSync: SourceFolderSync | null;
+  // `lastSync` is written only on the success path, so a folder whose sync keeps
+  // failing shows its last *successful* run forever and reads as healthy, and a
+  // folder the service paused shows a bare 「已暂停」 with no reason. This is the
+  // one field that says otherwise. Optional and absent-tolerant on purpose:
+  // folder records written before it existed will not carry it, and the server
+  // side that writes it lands separately (see the handoff note in the review).
+  lastError?: { code: string; at: string } | null;
   createdAt: string;
   updatedAt: string;
 }

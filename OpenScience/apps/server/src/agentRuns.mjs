@@ -327,6 +327,7 @@ function foldEvents(events) {
         durationMs: null,
         errorCode: null,
         artifacts: [],
+        unverifiedArtifacts: [],
         verification: null,
         qualityNotices: [],
         observedMessages: 0,
@@ -410,6 +411,16 @@ function foldEvents(events) {
         durationMs: event.durationMs,
         errorCode,
         artifacts,
+        // Read with the same normalizer and defaulted to `[]`, so a run written
+        // by an older build folds to "none written" rather than to `undefined`
+        // — the browser distinguishes the two and would otherwise have to say
+        // "unknown" about every run in the existing ledger.
+        // `?? []` before the normalizer, not inside it: every row already on
+        // every production ledger predates this field, and
+        // `normalizeStoredArtifacts` throws `corrupt` on a non-array — which
+        // would not have degraded one run, it would have made the whole ledger
+        // unreadable the moment this shipped.
+        unverifiedArtifacts: normalizeStoredArtifacts(event.unverifiedArtifacts ?? []),
         // A judgement can land either side of the delivery decision, so both
         // orders must fold to the same run. An admission already on the record
         // survives a terminal event that says nothing; a terminal finding
@@ -1149,6 +1160,66 @@ function clinicalEvidenceRepairPrompt(issues, shrinkage = null, revisionRequired
     // that is not there, and spent one of its bounded attempts finding out. The
     // run-side gate is what preflight became: submitting is how a package asks
     // whether it passes, and its issues are the same issues.
+    "After fixing the files, submit the package again with evimed_submit_deliverable.",
+    "Fix every issue it returns and resubmit until it accepts, then read every required deliverable back before finishing:",
+    bounded,
+  ].join("\n");
+}
+
+/**
+ * The repair prompt for the other fifteen capabilities.
+ *
+ * `canRepair` used to require `effectiveAgentId === "clinical-evidence-synthesis"`,
+ * so a bibliometric or dataset-scoping run whose contract rejected it failed
+ * outright — with the same actionable issue text the clinical loop repairs
+ * from. The issues were never clinical: `requiredSpecialistArtifacts` produces
+ * `specialist_required_output_missing` and `_stale` for every capability that
+ * declares required outputs, which is all of them.
+ *
+ * The clinical prompt could not simply be reused. It names
+ * `clinical-evidence-report.md`, the evidence matrix and the citation ledger by
+ * hand, so sending it to a bibliometric run would order that run to repair
+ * files it does not have and spend a bounded attempt discovering that — the
+ * same failure as the OpenCode `preflight.py` path this file already fixed
+ * once. What is shared is the part that is about repair rather than about
+ * clinical evidence, and that part is the whole of this function.
+ *
+ * The issue list leads and is verbatim. Structured feedback that carries
+ * position, observed value and an acceptable alternative raises repair success
+ * by 42–44 points, and the gain comes from the third element (arXiv 2607.14167);
+ * the gate's issues already have that shape, so restating them would only lose
+ * it.
+ *
+ * @param {any} agent the capability record, for its own required outputs
+ * @param {readonly string[]} issues
+ * @param {boolean} revisionRequired
+ */
+function specialistRepairPrompt(agent, issues, revisionRequired = false) {
+  const bounded = issues
+    .filter((issue) => typeof issue === "string" && issue.trim())
+    .slice(0, 40)
+    .map((issue) => `- ${issue.slice(0, 300)}`)
+    .join("\n");
+  // The capability's own manifest, not a list written here: `outputs` is what
+  // `requiredSpecialistArtifacts` checked against, so naming anything else
+  // would send the run after files the gate is not asking for.
+  const required = (agent?.outputs ?? [])
+    .filter((output) => output?.required && typeof output.path === "string" && output.path)
+    .map((output) => output.path)
+    .slice(0, 20);
+  return [
+    `The server-side delivery gate rejected this ${agent?.id ?? "capability"} package.`,
+    "When a capability child wrote the package, this resumed root session is its authenticated repair successor. Continue from the existing files; do not delegate any file to another child.",
+    ...(revisionRequired ? ["The local gate already accepted and froze this deliverable. Before changing any file, call evimed_revise_deliverable with the deliverable id and this server verdict as the reason. The server has already retained the accepted bytes outside the runtime workspace; the tool opens a new revision, after which you must repair and resubmit the new bytes."] : []),
+    ...(required.length ? [`Revise the existing package in place. Its required deliverables are: ${required.join(", ")}.`] : ["Revise the existing package in place."]),
+    // Capability-independent, and measured: four production clinical repairs
+    // showed every whole-file rewrite losing content (1,863 and 4,125
+    // characters in two of them) while targeted edits held steady. Nothing in
+    // that mechanism is about clinical evidence — it is about regenerating a
+    // long document from a compressed recollection.
+    "Patch prose deliverables with the edit tool, changing only what the issues name. Do not rewrite a whole file with the write tool: replacing it regenerates it from what you still hold in context, which after a long run is a compressed recollection, so it comes back shorter and you cannot tell that it did. Rewriting a whole file is warranted only when its structure is what the issue rejects, such as a JSON deliverable that no longer parses.",
+    "Every JSON deliverable must remain strict JSON. Escape embedded quotation marks correctly instead of changing wording to work around JSON syntax.",
+    "Deleting content is the last resort, not the first: it satisfies the gate while making the work smaller. If you do drop something, say in your reply what went and why it could not be supported.",
     "After fixing the files, submit the package again with evimed_submit_deliverable.",
     "Fix every issue it returns and resubmit until it accepts, then read every required deliverable back before finishing:",
     bounded,
@@ -2218,6 +2289,61 @@ async function consumeRepairAuthorization(project, input, {
   });
 }
 
+/**
+ * Every file the run actually wrote under `deliverables/`, as artifact paths.
+ *
+ * Read from the workspace rather than from a receipt, because this is the
+ * question a receipt cannot answer: a run that never submitted, or whose
+ * submission the gate refused, has no receipt and still has files.
+ *
+ * Bounded by `maxArtifacts` and one directory deep on purpose. The ids come out
+ * of directories the container created, so they are input — the same
+ * single-segment rule `deliverableCandidatePaths` and `unsubmittedDeliverables`
+ * apply, for the same reason: joined unchecked, `..` here names a path outside
+ * the workspace.
+ *
+ * @param {Record<string, any>} project
+ * @returns {Promise<string[]>}
+ */
+async function writtenDeliverableFiles(project) {
+  /** @type {string[]} */
+  const found = [];
+  /** @type {import('node:fs').Dirent[]} */
+  let ids;
+  try {
+    ids = await readdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir), { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of ids) {
+    if (found.length >= maxArtifacts) break;
+    if (!entry.isDirectory()) continue;
+    const id = entry.name;
+    if (!id || id.includes("/") || id.includes("\\") || id === "." || id === "..") continue;
+    let files;
+    try {
+      files = await readdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, id), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      if (found.length >= maxArtifacts) break;
+      if (!file.isFile()) continue;
+      found.push(`${workspaceLayout.deliverablesDir}/${id}/${file.name}`);
+    }
+  }
+  return found;
+}
+
+/**
+ * The sentence a recovered package carries, so "unverified" is a label on work
+ * that exists rather than a synonym for nothing.
+ */
+const UNVERIFIED_DELIVERY_NOTICE = "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——"
+  + "它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。"
+  + "上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。";
+
+
 async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
   try {
@@ -2575,6 +2701,99 @@ export class AgentRunStore {
     try {
       this.onRunStateChanged(project, { ...run, phase });
     } catch { /* isolated: evimed_run_state_listener_failures_total */ }
+  }
+
+  /**
+   * The accepted revisions of this run's package, preserved before repair.
+   *
+   * `snapshotAcceptedPackageForRepair` has written these since the repair loop
+   * was built — the whole text of every file, under the receipt digest they
+   * were accepted at — and nothing could read them back. That is the second
+   * half of the aripiprazole failure: the run kept editing after its package
+   * was accepted, the receipt stopped matching, and the version that *had*
+   * passed the gate was sitting in `.openscience/repair-revisions/` with no
+   * route to it. A snapshot nobody can open is a backup that does not exist.
+   *
+   * Read-only and metadata-first: the digests and byte counts, not the text.
+   * A package is a dozen files of report prose, and a list endpoint that
+   * inlined all of them would be the reason nobody calls it. `readRepairRevisionFile`
+   * fetches one file when a person asks for it.
+   *
+   * @param {Record<string, any>} project @param {string} rawRunId
+   * @returns {Promise<{acceptedDigest: string, preservedAt: string, files: {path: string, sha256: string, bytes: number}[]}[]>}
+   */
+  async listRepairRevisions(project, rawRunId) {
+    const runId = safeId(rawRunId, "agent run id");
+    const directory = path.join(project.metaDir, "repair-revisions");
+    /** @type {string[]} */
+    let names;
+    try {
+      names = (await readdir(directory, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.startsWith(`${runId}-`) && entry.name.endsWith(".json"))
+        .map((entry) => entry.name);
+    } catch {
+      // No directory is "this run was never repaired", which is the ordinary
+      // case and not an error.
+      return [];
+    }
+    const revisions = [];
+    for (const name of names.sort()) {
+      const text = await readTextFileNoFollow(project.rootDir, path.join(directory, name), "").catch(() => "");
+      if (!text) continue;
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { continue; }
+      // A snapshot this build cannot read is skipped rather than throwing: one
+      // unreadable file must not make the other revisions unreachable too.
+      if (parsed?.formatVersion !== 1 || parsed?.controlPlaneRunId !== runId) continue;
+      revisions.push({
+        acceptedDigest: String(parsed.acceptedDigest ?? ""),
+        preservedAt: String(parsed.preservedAt ?? ""),
+        files: (Array.isArray(parsed.files) ? parsed.files : []).map((file) => ({
+          path: String(file?.path ?? ""), sha256: String(file?.sha256 ?? ""), bytes: Number(file?.bytes ?? 0),
+        })).filter((file) => file.path),
+      });
+    }
+    return revisions;
+  }
+
+  /**
+   * One file out of one preserved revision, as it was when the gate accepted it.
+   *
+   * The digest is re-checked against the text rather than trusted from the
+   * snapshot's own field: the point of handing this back is that it is the
+   * version that passed, so "this is what passed" has to be provable here and
+   * not merely recorded.
+   *
+   * @param {Record<string, any>} project @param {string} rawRunId
+   * @param {string} acceptedDigest @param {string} relative
+   * @returns {Promise<{path: string, sha256: string, bytes: number, text: string, preservedAt: string}>}
+   */
+  async readRepairRevisionFile(project, rawRunId, acceptedDigest, relative) {
+    const runId = safeId(rawRunId, "agent run id");
+    const digest = safeId(String(acceptedDigest ?? ""), "accepted digest");
+    const wanted = normalizeWorkspaceRelativePath(relative, "artifact path");
+    const file = path.join(project.metaDir, "repair-revisions", `${runId}-${digest}.json`);
+    const text = await readTextFileNoFollow(project.rootDir, file, "").catch(() => "");
+    if (!text) throw new HttpError(404, "repair_revision_not_found", "No preserved revision for that run and digest.");
+    let parsed;
+    try { parsed = JSON.parse(text); } catch {
+      throw new HttpError(409, "repair_revision_unreadable", "The preserved revision could not be read.");
+    }
+    if (parsed?.formatVersion !== 1 || parsed?.controlPlaneRunId !== runId) {
+      throw new HttpError(404, "repair_revision_not_found", "No preserved revision for that run and digest.");
+    }
+    const entry = (Array.isArray(parsed.files) ? parsed.files : []).find((candidate) => candidate?.path === wanted);
+    if (!entry || typeof entry.text !== "string") {
+      throw new HttpError(404, "repair_revision_file_not_found", "That file is not part of the preserved revision.");
+    }
+    const actual = createHash("sha256").update(entry.text, "utf8").digest("hex");
+    if (actual !== String(entry.sha256)) {
+      throw new HttpError(409, "repair_revision_digest_mismatch", "The preserved revision no longer matches its recorded digest.");
+    }
+    return {
+      path: wanted, sha256: actual, bytes: Buffer.byteLength(entry.text), text: entry.text,
+      preservedAt: String(parsed.preservedAt ?? ""),
+    };
   }
 
   async list(project) {
@@ -3164,9 +3383,55 @@ export class AgentRunStore {
       status: terminal.status,
       errorCode: sanitizeErrorCode(terminal.errorCode),
       artifacts: normalizeArtifacts(terminal.artifacts),
+      /** Files the run wrote that no gate accepted. Empty is "none"; the field
+       *  is always present so a reader never has to treat absent as unknown. */
+      unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
       verification: normalizeVerification(terminal.verification),
       qualityNotices: normalizeQualityNotices(terminal.qualityNotices),
     };
+
+    // Delivery is a label, not a switch.
+    //
+    // This is the one funnel every terminal path in this file goes through, and
+    // it is deliberately here rather than at the fifteen call sites that build
+    // a `terminal`: a refusal branch added next month gets this for free, and
+    // the alternative — remembering, at each of fifteen sites, that a verdict is
+    // not a reason to hide the work — is the arrangement that produced the
+    // number below.
+    //
+    // In production over 179 finished runs, 28 ended gate-refused with
+    // `artifacts: []` at p90 58 minutes. The most recent was a complete
+    // nine-file clinical package. Every one of those files was on disk, in the
+    // workspace, at the moment the ledger recorded that the run had produced
+    // nothing — and the browser rendered 「暂无交付物。」 over the top of them.
+    // From the researcher's side that is indistinguishable from an hour of work
+    // being deleted, which is exactly what they reported it as.
+    //
+    // A separate field, not `artifacts`.
+    //
+    // `artifacts` means "the gate accepted these", and five modules rely on
+    // exactly that: `server.mjs` picks the autopilot's verification result out
+    // of it, `autopilotService` reads `agenda-delta.json` out of it, and
+    // `learningRuntime` and `sourceUnderstandingRuntime` read a bounded run's
+    // output out of it. Widening it would have made an ungraded file readable
+    // as a verified result — the same defect class as an autopilot verification
+    // that was never sound — so the fix would have bought the researcher their
+    // files at the price of the guarantee that makes those files worth having.
+    //
+    // So the verdict is untouched, `artifacts` keeps its meaning, and what the
+    // run wrote is stated as its own fact for the surfaces that show a person
+    // their work. A run that genuinely wrote nothing still reports nothing,
+    // because this reads the workspace instead of asserting.
+    if (normalized.status !== "succeeded" && normalized.artifacts.length === 0) {
+      const recovered = await writtenDeliverableFiles(project).catch(() => []);
+      if (recovered.length > 0) {
+        normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
+        normalized.qualityNotices = normalizeQualityNotices([
+          ...normalized.qualityNotices,
+          UNVERIFIED_DELIVERY_NOTICE,
+        ]);
+      }
+    }
     const outcome = await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
@@ -3396,7 +3661,33 @@ export class AgentRunStore {
         const structuralAttempts = this.clinicalStructuralRepairAttempts.get(run.id) ?? 0;
         const structuralRound = completion.qualityStructural === true
           && structuralAttempts < this.maxClinicalStructuralRepairAttempts;
-        const canRepair = run.effectiveAgentId === "clinical-evidence-synthesis"
+        // Every capability, not one.
+        //
+        // This required `effectiveAgentId === "clinical-evidence-synthesis"`,
+        // so the other fifteen went straight to `failed` on a rejection the
+        // clinical line repairs from — and the issues were never clinical:
+        // `requiredSpecialistArtifacts` raises `specialist_required_output_missing`
+        // and `_stale` for every capability that declares required outputs,
+        // which is all of them. Nothing else here was capability-specific
+        // either: the repair sender is registered for every dispatched run, and
+        // `snapshotAcceptedPackageForRepair` already answers
+        // `{revisionRequired: false}` when there is no accepted receipt to
+        // preserve, which is the ordinary shape of a package that never got
+        // past its required files.
+        //
+        // The prompt is chosen below, and that is the part that could not be
+        // shared: the clinical one names its own deliverables by hand.
+        //
+        // Bounded by `qualityFileDeliverable`, which is the answer line's
+        // absence rather than a capability name. An open-domain answer's
+        // deliverable *is* the reply, so there is no package to revise and no
+        // `evimed_submit_deliverable` to call — a repair prompt there would
+        // order a run to patch files it was never asked to write. That line
+        // already has the right behaviour for a citation it cannot vouch for:
+        // deliver the answer and mark it unverified.
+        const repairAgent = (await this.agentRegistry)?.get?.(run.effectiveAgentId);
+        const fileDeliverable = repairAgent?.completionChecks?.includes("requiredOutputsExist") === true;
+        const canRepair = fileDeliverable
           && repairableEvidencePackageErrorCodes.has(completion.errorCode)
           && Array.isArray(completion.qualityIssues)
           && completion.qualityIssues.length > 0
@@ -3439,7 +3730,9 @@ export class AgentRunStore {
               const previous = sizes.length > 0 && beforeRepair > 0 && beforeRepair < sizes[0]
                 ? { startSize: sizes[0], currentSize: beforeRepair, lost: sizes[0] - beforeRepair }
                 : null;
-              const repair = await repairSender(clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired));
+              const repair = await repairSender(run.effectiveAgentId === "clinical-evidence-synthesis"
+                ? clinicalEvidenceRepairPrompt(completion.qualityIssues, previous, revision.revisionRequired)
+                : specialistRepairPrompt(repairAgent, completion.qualityIssues, revision.revisionRequired));
               if (repair?.accepted !== false) return run;
             } catch { /* a rejected repair remains a terminal, fail-closed outcome */ }
             terminal.status = "failed";

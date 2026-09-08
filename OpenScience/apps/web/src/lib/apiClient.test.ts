@@ -922,10 +922,10 @@ describe("apiClient", () => {
 // act on "over budget" without it: the 24-hour ceiling frees itself within a
 // day, the 7-day one does not, and a run ceiling is about this task alone.
 describe("apiClient budget refusals", () => {
-  function refusal(details: unknown, code = "usage_budget_exceeded", status = 402) {
+  function refusal(details: unknown, code = "usage_budget_exceeded", status = 402, headers: Record<string, string> = {}) {
     return new Response(
       JSON.stringify({ error: "This request exceeds the account spending limit.", code, requestId: "req_402", details }),
-      { status, headers: { "Content-Type": "application/json" } },
+      { status, headers: { "Content-Type": "application/json", ...headers } },
     );
   }
 
@@ -1006,6 +1006,81 @@ describe("apiClient budget refusals", () => {
     expect(client.lastWebUsageBudgetRefusal()).toBeNull();
   });
 
+  // The reset moment travels as a header, and every client path here read only
+  // the JSON body — so a refusal that had already computed when it frees up
+  // arrived carrying nothing but "please retry".
+  it("reads the reset moment out of the Retry-After header the body never carried", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      refusal(undefined, "credits_daily_limit_reached", 402, { "Retry-After": "11520" }),
+    );
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
+    expect(error.retryAfterSeconds).toBe(11_520);
+    // The registry's sentence, then what the clock adds — and the wording says
+    // "starts freeing" rather than "recovers", because `spendAdmission` reports
+    // the moment the oldest charge in the rolling window ages out, which frees
+    // that one charge's worth and no more.
+    expect(client.webErrorMessage(error)).toBe(
+      "今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「账户与额度」调高上限。"
+      + "约 3 小时 12 分钟后额度开始释放（按滚动窗口逐笔释放，不是整点清零）。",
+    );
+  });
+
+  it("reads the HTTP-date form of Retry-After an intermediary may rewrite it into", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(undefined, "task_queue_full", 429, {
+      "Retry-After": new Date(Date.now() + 45_000).toUTCString(),
+    }));
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
+    expect(error.retryAfterSeconds).toBeGreaterThanOrEqual(40);
+    expect(error.retryAfterSeconds).toBeLessThanOrEqual(45);
+    // Not a ceiling, so it gets the retry wording rather than the release one.
+    // The header carries whole seconds, so the observed wait is 44 or 45.
+    expect(client.webErrorMessage(error)).toMatch(/^请求过于频繁，已被暂时限流。请在约 4[45] 秒后重试。$/);
+  });
+
+  it("says nothing about time when the control plane said nothing", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(undefined, "source_too_large", 413));
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
+    expect(error.retryAfterSeconds).toBeNull();
+    expect(client.webErrorMessage(error)).toBe("文件超过上限，请用本地代理处理。");
+  });
+
+  // The declared-details table now lives in `@evimed/domain` and covers all
+  // three codes, so the two the deployment actually raises stop arriving with
+  // their numbers filtered out.
+  it("accepts the declared details of a credits ceiling, not only usage_budget_exceeded", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(
+      { window: "week", limit: 20, committed: 20.5, currency: "CNY", retryAfterSeconds: 7200, sql: "SELECT 1" },
+      "credits_weekly_limit_reached",
+    ));
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
+    expect(Object.keys(error.details ?? {}).sort()).toEqual(["committed", "currency", "limit", "retryAfterSeconds", "window"]);
+    expect(error.retryAfterSeconds).toBe(7200);
+    expect(client.webErrorMessage(error)).toBe(
+      "近 7 天额度已达上限：上限 20.00 CNY，已占用 20.50 CNY。约 2 小时后额度开始释放（按滚动窗口逐笔释放，不是整点清零）。",
+    );
+  });
+
+  // A shape declared for one code must not travel under another: the domain
+  // table is per code, and `window: "day"` is the only window the daily ceiling
+  // may claim.
+  it("drops a bag whose value is outside the closed set declared for that code", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(
+      { window: "week", limit: 20, committed: 20.5, currency: "CNY" }, "credits_daily_limit_reached",
+    ));
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as { details: unknown };
+    expect(error.details).toBeNull();
+  });
+
   it("forgets the ceiling when the session ends", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(refusal({ window: "run", limit: 2, committed: 1.9, requested: 0.4, currency: "CNY" }))
@@ -1059,5 +1134,57 @@ describe("productClient budget refusals", () => {
 
     const error = await product.productRequest("/capsules/cap_1").catch((err: unknown) => err);
     expect(product.productErrorMessage(error)).toBe("这条记录已不存在，请刷新列表。");
+  });
+
+  async function productMessage(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}) {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } },
+    ));
+    const product = await loadProductClient("https://science.example/api");
+    const error = await product.productRequest("/sources").catch((err: unknown) => err);
+    return product.productErrorMessage(error);
+  }
+
+  // `product_state_unavailable` is raised by sourceRoutes, autopilotRoutes,
+  // pluginRoutes and capsuleGateway alike, and the old table answered all four
+  // with 「科研记忆服务暂时不可用」 — so the Sources page named the memory
+  // service when source storage was down. The status sentence is true of all
+  // four, which is what a shared sentence has to be.
+  it("stops naming the memory service when a different subsystem is the one that is down", async () => {
+    await expect(productMessage(
+      { error: "Source analysis storage is unavailable.", code: "product_state_unavailable" }, 503,
+    )).resolves.toBe("服务暂时不可用，请稍后重试。");
+  });
+
+  // 「请重试」 for a file over the ceiling is advice that provably cannot work,
+  // which the over-refusal research says costs more trust than the refusal.
+  it("stops telling a caller to retry a request that can never be accepted as sent", async () => {
+    await expect(productMessage(
+      { error: "The knowledge base file is too large.", code: "knowledge_base_file_too_large" }, 413,
+    )).resolves.toBe("内容超过了本次请求的大小上限，请拆分后再试。");
+  });
+
+  // The point of the change: a sentence the registry has always held, on a
+  // page that never had a way to reach it.
+  it("hands a registry sentence to the product pages instead of 操作未完成", async () => {
+    await expect(productMessage(
+      { error: "This project runtime is completing bounded proactive research.", code: "runtime_reserved_for_autopilot" },
+      423, { "Retry-After": "600" },
+    )).resolves.toBe(
+      "这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。"
+      + "等这一轮结束后即可继续，或在「主动研究」里先暂停它。请在约 10 分钟后重试。",
+    );
+  });
+
+  it("keeps the surface's own wording for the facts no error code expresses", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      JSON.stringify({ error: "revision conflict", code: "product_revision_conflict" }),
+      { status: 409, headers: { "Content-Type": "application/json" } },
+    ));
+    vi.resetModules();
+    setWebApiBase("https://science.example/api");
+    const inbox = await import("./inboxClient");
+    const error = await inbox.listInbox().catch((err: unknown) => err);
+    expect(inbox.inboxErrorMessage(error)).toBe("消息已发生变化，请刷新后重试。");
   });
 });

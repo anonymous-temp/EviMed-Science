@@ -9,6 +9,13 @@ const repoRoot = path.resolve(path.dirname(scriptFile), "../..");
 const outputDir = path.resolve(
   process.env.OPEN_SCIENCE_MONITORING_SECRETS_DIR ?? path.join(repoRoot, "deploy/web/secrets"),
 );
+/** Where Prometheus discovers the deployment-specific probe targets. Not under
+ *  `secrets/`: it holds a public URL, and Prometheus reads it as its own user. */
+const targetsDir = path.resolve(
+  process.env.OPEN_SCIENCE_MONITORING_TARGETS_DIR ?? path.join(repoRoot, "deploy/web/monitoring/targets"),
+);
+const tlsTargetsFile = path.join(targetsDir, "tls.json");
+
 const checkOnly = process.argv.includes("--check");
 const probeOnly = process.argv.includes("--probe");
 const jsonOutput = process.argv.includes("--json");
@@ -84,7 +91,12 @@ async function assertNoSymlinkPath(target, { allowMissingTail = false } = {}) {
   }
 }
 
-async function readRegularFile(file, maxBytes = 16 * 1024) {
+/** @param {string} file @param {number} [maxBytes] @param {boolean} [secret]
+ *  `secret` is the default because every file this module wrote until now was
+ *  one. The probe-target list is not: it holds a public URL and Prometheus
+ *  reads it as its own container user, so requiring 0600 would make it either
+ *  unreadable to the scraper or a secret that is not one. */
+async function readRegularFile(file, maxBytes = 16 * 1024, secret = true) {
   await assertNoSymlinkPath(file);
   let handle;
   try {
@@ -92,8 +104,14 @@ async function readRegularFile(file, maxBytes = 16 * 1024) {
     const stat = await handle.stat();
     if (!stat.isFile()) fail("monitoring_file_not_regular", `${path.basename(file)} must be a regular file.`);
     if (stat.size > maxBytes) fail("monitoring_file_too_large", `${path.basename(file)} is unexpectedly large.`);
-    if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
+    if (secret && process.platform !== "win32" && (stat.mode & 0o077) !== 0) {
       fail("monitoring_file_permissions", `${path.basename(file)} must not be group- or world-accessible.`);
+    }
+    // World-writable is refused whether or not the file is a secret: anyone who
+    // can rewrite this list can point the certificate probe at a host they
+    // control and silence the alert.
+    if (process.platform !== "win32" && (stat.mode & 0o022) !== 0) {
+      fail("monitoring_file_permissions", `${path.basename(file)} must not be group- or world-writable.`);
     }
     return await handle.readFile("utf8");
   } finally {
@@ -164,6 +182,45 @@ async function generate() {
   await writePrivateFile(files.prometheusMetricsToken, `${metricsToken}\n`);
   await writePrivateFile(files.grafanaPassword, `${grafanaPassword}\n`);
   await writePrivateFile(files.alertmanager, `${JSON.stringify(alertmanagerConfig(webhookUrl), null, 2)}\n`);
+  await writeTlsTargets();
+}
+
+/**
+ * The public origin whose certificate the expiry alert watches.
+ *
+ * Optional, and absent means an empty target list rather than a failure: a
+ * deployment that terminates TLS somewhere this host cannot reach has nothing
+ * to probe, and refusing to configure monitoring at all over that would be a
+ * worse outcome than no certificate alert. An empty file is also what makes the
+ * scrape job legal — Prometheus treats a missing file-SD file as an error it
+ * reports every refresh interval.
+ */
+async function writeTlsTargets() {
+  const raw = process.env.OPEN_SCIENCE_PUBLIC_HEALTH_URL ?? "";
+  const targets = [];
+  if (raw) {
+    let url;
+    try { url = new URL(raw); } catch {
+      fail("public_health_url_invalid", "OPEN_SCIENCE_PUBLIC_HEALTH_URL is not a URL.");
+    }
+    // https only: the metric this exists for is the certificate's expiry, and
+    // an http target simply never produces one — which would read as "the
+    // certificate is fine" forever.
+    if (url.protocol !== "https:") {
+      fail("public_health_url_insecure", "OPEN_SCIENCE_PUBLIC_HEALTH_URL must be an https URL; a plain-http target reports no certificate expiry at all.");
+    }
+    targets.push(url.toString());
+  }
+  await assertNoSymlinkPath(targetsDir, { allowMissingTail: true });
+  await fsp.mkdir(targetsDir, { recursive: true, mode: 0o755 });
+  await assertNoSymlinkPath(targetsDir);
+  await fsp.writeFile(tlsTargetsFile, `${JSON.stringify([{ targets, labels: { probe: "public-tls" } }], null, 2)}\n`, { mode: 0o644 });
+  // `mode` on writeFile applies only when the file is created, so a file that
+  // already exists keeps whatever mode it had — and this one is checked in, so
+  // on a host whose umask is 002 the checkout is group-writable and `check()`
+  // rejects the generator's own output. The secret writer above chmods for the
+  // same reason.
+  await fsp.chmod(tlsTargetsFile, 0o644);
 }
 
 async function check() {
@@ -191,7 +248,27 @@ async function check() {
   if (receiver.webhook_configs[0].send_resolved !== true) {
     fail("alertmanager_resolved_disabled", "Alertmanager must notify when alerts resolve.");
   }
-  return { receiverName: receiver.name, webhookUrl };
+  // Present, parseable and shaped like file-SD. A missing file is an error
+  // Prometheus reports once per refresh interval and nowhere a person looks.
+  let tlsTargets;
+  try {
+    tlsTargets = JSON.parse(await readRegularFile(tlsTargetsFile, 16 * 1024, false));
+  } catch (err) {
+    if (err?.code === "monitoring_file_missing" || err?.code === "ENOENT") {
+      fail("tls_targets_missing", "monitoring/targets/tls.json is missing; run configure:monitoring.");
+    }
+    if (err?.code) throw err;
+    fail("tls_targets_invalid", "monitoring/targets/tls.json must contain valid JSON.");
+  }
+  if (!Array.isArray(tlsTargets) || !Array.isArray(tlsTargets[0]?.targets)) {
+    fail("tls_targets_invalid", "monitoring/targets/tls.json must be a Prometheus file-SD target list.");
+  }
+  for (const target of tlsTargets[0].targets) {
+    if (!String(target).startsWith("https://")) {
+      fail("tls_targets_insecure", "Certificate-expiry probe targets must be https URLs.");
+    }
+  }
+  return { receiverName: receiver.name, webhookUrl, tlsTargets: tlsTargets[0].targets.length };
 }
 
 export async function probeAlertDelivery({ webhookUrl, receiverName, fetchImpl = fetch }) {

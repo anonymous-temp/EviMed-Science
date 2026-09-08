@@ -372,6 +372,8 @@ backups, or external webhook delivery.
 | `OpenScienceTaskQueueNearCapacity` | Queue depth, active tasks, task timeouts | Stop accepting new long tasks, cancel confirmed runaway work, and inspect task/runtime logs. |
 | `OpenScienceRuntimeCapacityNearLimit` | Running/starting runtime count and idle timeout | Stop orphaned/idle runtimes and restrict new starts; do not raise limits beyond host capacity. |
 | `OpenScienceRuntimeQuotaMonitorGap` | Runtime manager logs and quota-monitor interval | Stop uncovered runtimes immediately; restore monitoring before allowing restart. |
+| `OpenScienceCertificateExpiringSoon` | `systemctl status certbot.timer`, `certbot certificates`, the last renewal log | The certificate is short-lived and the timer normally renews it, so this alert means renewal has stopped, not that a renewal is due. Fix the timer or renew by hand before the remaining hours run out. |
+| `OpenScienceHostDiskLow` / `OpenScienceHostDiskCritical` | `df -h /`, `docker system df`, `ls /srv/evimed-science/releases` | Run `node scripts/ops/release-retention.mjs` (keeps the newest N and anything a container still bind-mounts), then prune images this deployment no longer references. On a host shared with other products, confirm what an image belongs to before removing it. |
 
 For every critical alert, record start/end time, affected release, readiness
 codes, request IDs, containment action, data-access approvals, recovery evidence,

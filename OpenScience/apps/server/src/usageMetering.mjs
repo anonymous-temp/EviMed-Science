@@ -487,6 +487,13 @@ export async function assertSpendWithinLimits(config, userId) {
     verdict.window === "day" ? "credits_daily_limit_reached" : "credits_weekly_limit_reached",
     `This account reached its ${verdict.window === "day" ? "daily" : "weekly"} spending limit: ` +
       `${verdict.spent} of ${verdict.limit} ${verdict.currency} used; it frees up at ${verdict.resetsAt}.`,
-    { retryAfterSeconds },
+    // Every one of these was already computed one line up and then thrown away:
+    // only `retryAfterSeconds` was passed, and the browser never read it because
+    // it arrives as a header. The account page could name no ceiling and no
+    // amount, so its advice for a spending cap was 「请重试」 — which is wrong
+    // twice over, since retrying cannot clear a ceiling and the researcher had
+    // no way to see how close to it they were. Filtered at the wire against
+    // `errorDetailShapes` like every other details bag.
+    { window: verdict.window, limit: verdict.limit, committed: verdict.spent, currency: verdict.currency, retryAfterSeconds },
   );
 }
