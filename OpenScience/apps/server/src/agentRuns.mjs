@@ -2442,6 +2442,50 @@ async function unsubmittedDeliverables(project, projection) {
 }
 
 /**
+ * Planned deliverables the receipt does not account for.
+ *
+ * A combined run plans two capabilities, one is accepted and one is not, and
+ * the receipt carries an entry only for the accepted one. The success branch
+ * built its notices from `receipt.entries`, so the dropped deliverable left no
+ * trace anywhere on the run row: succeeded, one artifact, no error code, no
+ * notice. A single-capability run cannot reach that state — with its one item
+ * rejected there is no receipt at all — so this is exactly the shape a reader
+ * is least equipped to notice, and the run says nothing is wrong.
+ *
+ * A notice, never a refusal: the accepted package really was accepted, and the
+ * reader is owed the fact that something else they asked for is not here.
+ * @param {any} projection a `readRunStateProjection` result
+ * @param {any} receipt
+ * @returns {string[]}
+ */
+function droppedDeliverableNotices(projection, receipt) {
+  if (projection?.state !== "read") return [];
+  const items = projection.projection?.plan?.items;
+  if (!Array.isArray(items)) return [];
+  const accounted = new Set(
+    (receipt?.entries ?? [])
+      .map((/** @type {any} */ entry) => String(entry?.deliverableId ?? entry?.id ?? ""))
+      .filter(Boolean),
+  );
+  const notices = [];
+  for (const item of items) {
+    const id = String(item?.id ?? "");
+    if (!id || accounted.has(id)) continue;
+    // `accepted` without a receipt entry would be a bookkeeping contradiction
+    // rather than a dropped deliverable, and saying "not delivered" about it
+    // would be the false claim this exists to prevent. Report what the plan
+    // itself calls unfinished.
+    const state = String(item?.status ?? item?.state ?? "");
+    if (state === "accepted") continue;
+    const label = String(item?.title ?? item?.capability ?? "").trim();
+    notices.push(label
+      ? `计划中的交付物「${label}」（${id}）没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`
+      : `计划中的交付物 ${id} 没有通过验收，本次运行没有交付它；其余通过验收的内容不受影响。`);
+  }
+  return notices.slice(0, 10);
+}
+
+/**
  * The browser's `deliverable/update` frames, built from the run's own record.
  *
  * Hidden knowledge: why this exists at all, and where every field comes from.
@@ -3400,7 +3444,12 @@ export class AgentRunStore {
       status: "succeeded",
       errorCode: null,
       artifacts,
-      qualityNotices: receipt.entries.flatMap((entry) => entry.notices ?? []).slice(0, 20),
+      qualityNotices: [
+        ...receipt.entries.flatMap((/** @type {any} */ entry) => entry.notices ?? []),
+        // The plan, not just the receipt. A receipt can only speak for what it
+        // holds an entry for, so on its own it cannot report an absence.
+        ...droppedDeliverableNotices(delivered, receipt),
+      ].slice(0, 20),
     });
   }
 

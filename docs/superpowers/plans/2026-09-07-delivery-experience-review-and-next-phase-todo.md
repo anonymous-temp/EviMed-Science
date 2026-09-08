@@ -133,7 +133,7 @@
 ### P2 · 质量与整洁
 
 18. 学习效果指标 eval（P1-13d）。
-19. 组合交付丢件通知（`combinedCapabilityDelivery.test.mjs:566` 的 KNOWN DEFECT）。
+19. ~~组合交付丢件通知~~ **已完成 2026-09-08**：成功分支的通知原本只由 `receipt.entries` 生成，而回执只能为它持有条目的东西说话，天然无法报告一个缺席——于是「计划两件、交付一件」的运行落在 succeeded、一个产物、无错误码、无通知。单能力运行到不了这个状态（唯一一项被退回就没有回执），所以这恰是读者最不设防的形状。现在同时读投影里的计划：计划里非 accepted 且回执无条目的项各出一条中文通知，是通知不是拒绝。原 `test.todo` 已转为正式测试并做了变异检查。
 20. 首批断言中文文案的前端测试（现在为零）。
 21. `runtime idle timeout waits for a call still in flight` 放宽期限（STATUS GC6）。
 22. `errors.jsonl` 每周摘要；`public_source_gateway_token_invalid` ×18 查因。

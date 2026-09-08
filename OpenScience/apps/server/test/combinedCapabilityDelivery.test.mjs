@@ -563,7 +563,7 @@ test("a combined run whose second capability was never accepted still delivers t
  * guard for it. Left executable rather than written down in prose precisely so
  * that "someone fixed it and nobody noticed" is visible in the suite output.
  */
-test.todo("KNOWN DEFECT (agentRuns.mjs): a partial combined delivery's run row never names the deliverable it dropped", async (t) => {
+test("a partial combined delivery names the deliverable it dropped", async (t) => {
   const f = await setupCombined(t, { bibliometricAccepted: false, completed: false });
   await f.adopt();
   f.restart();
@@ -575,9 +575,8 @@ test.todo("KNOWN DEFECT (agentRuns.mjs): a partial combined delivery's run row n
   assert.equal(finished.status, "succeeded");
   assert.ok(
     finished.qualityNotices.some((notice) => notice.includes(BIBLIOMETRIC.id) || notice.includes(BIBLIOMETRIC.title)),
-    "KNOWN DEFECT, expected to fail — this is a todo, the suite is green and its exit code is 0. "
-    + "apps/server/src/agentRuns.mjs builds a succeeded run's qualityNotices from receipt.entries only, so a "
-    + `dropped deliverable leaves no trace on the run row: ${JSON.stringify(finished.qualityNotices)}`,
+    "a succeeded run whose receipt has no entry for a planned deliverable must still name it: "
+    + `${JSON.stringify(finished.qualityNotices)}`,
   );
 });
 
