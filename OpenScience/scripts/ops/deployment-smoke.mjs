@@ -343,13 +343,23 @@ async function main() {
   await jsonFetch(`${baseUrl}/api/me`, { headers: auth });
   log(`${authenticated.mode} authentication ok`);
 
-  await jsonFetch(`${baseUrl}/api/projects`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...auth },
-    body: JSON.stringify({ id: projectId, name: `Smoke ${projectId}` }),
-  });
+  // A configured project id means "use this one", so finding it already there
+  // is the expected case rather than a failure. Creating unconditionally made
+  // the smoke un-rerunnable: the second run against the same deployment died on
+  // `project_exists`, and on an account at its project ceiling the first run
+  // died on `project_limit_reached` — two different 409s, neither of which says
+  // anything is actually wrong with the deployment being smoke-tested.
+  const projects = await jsonFetch(`${baseUrl}/api/projects`, { headers: auth });
+  const already = (projects.json?.data ?? []).some((project) => project?.id === projectId);
+  if (!already) {
+    await jsonFetch(`${baseUrl}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ id: projectId, name: `Smoke ${projectId}` }),
+    });
+  }
   const scoped = { ...auth, "X-Open-Science-Project": projectId };
-  log(`project ${projectId} ok`);
+  log(`project ${projectId} ok (${already ? "existing" : "created"})`);
 
   await command(baseUrl, "install_example", { name: "climate-trends" }, scoped);
   const example = await command(
