@@ -5946,9 +5946,20 @@ test("runtime idle timeout waits for a call still in flight", async () => {
       const manager = app.runtimeManager;
       const user = await app.store.devUser();
       const project = await app.store.defaultProject(user);
+      // The vulnerable window is between `start_runtime` returning and this
+      // line: nothing holds the runtime open in it, so an idle timeout shorter
+      // than the scheduling jitter of a loaded full-suite run lets the runtime
+      // idle out before the proxy slot is ever taken — and the failure then
+      // reads as "an in-flight call did not keep the runtime alive", which is
+      // the opposite of what happened. Observed once in a full run on
+      // 2026-09-07 and never when the file ran alone.
+      //
+      // The property under test is unchanged, and so is its shape: the slot is
+      // held for longer than the idle timeout, so the assertion still proves
+      // that holding it prevents the stop. Only the margin moved.
       manager.beginProxy(project);
       try {
-        await new Promise((resolve) => setTimeout(resolve, 90));
+        await new Promise((resolve) => setTimeout(resolve, 400));
         assert.ok(manager.activeProxyCount() > 0);
         const active = await command(base, "runtime_status");
         assert.equal(active.res.status, 200);
@@ -5961,7 +5972,7 @@ test("runtime idle timeout waits for a call still in flight", async () => {
       );
       assert.equal(status.kind, "mock");
     },
-    { runtimeIdleTimeoutMs: 40 },
+    { runtimeIdleTimeoutMs: 200 },
   );
 });
 
