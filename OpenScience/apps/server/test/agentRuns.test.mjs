@@ -6553,3 +6553,59 @@ test("a mounted name the control plane never recorded does not pass the check", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a run superseded days later records how long it ran, not how long the record sat", async () => {
+  // `durationMs` was `now - startedAt` at the moment of supersession. A run the
+  // control plane lost track of — restarted, abandoned, left from an earlier
+  // day — is superseded by the next dispatch into that session, and the
+  // difference to now describes the ledger rather than the work. It feeds the
+  // run list and every duration statistic read off it, where a three-day run is
+  // not an outlier to explain, it is a wrong number.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-superseded-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_stale", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let clock = Date.parse("2026-09-01T00:00:00.000Z");
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      now: () => new Date(clock),
+      // Four hours, the production shape: 500ms polls to a 28,800-poll ceiling.
+      monitorIntervalMs: 500,
+      monitorMaxPolls: 28_800,
+      readSessionHistory: async () => [],
+      readSessionStatus: async () => "running",
+    });
+    store.scheduleMonitor = () => {};
+
+    // The superseded path is for an adopted placeholder — the run the control
+    // plane creates when the browser application opens a session nobody has
+    // claimed. That is exactly the run most likely to be left behind, which is
+    // why its duration is the one that goes wrong.
+    const first = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_one",
+      effectiveRouteReason: "adopted:runtime-ui",
+    }, async () => ({ accepted: true }));
+
+    // Five days pass with the control plane none the wiser, then someone asks
+    // the same session something else.
+    clock += 5 * 24 * 60 * 60 * 1000;
+    await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "turn_two" },
+      async () => ({ accepted: true }));
+
+    const superseded = (await store.list(project)).find((run) => run.id === first.id);
+    assert.equal(superseded?.errorCode, "superseded_by_dispatch");
+    // Capped at the monitor's own ceiling: past four hours this run would have
+    // been ended, so it cannot have been working longer than that.
+    assert.ok(superseded.durationMs <= 500 * 28_800,
+      `recorded ${superseded.durationMs}ms, which is longer than the platform would ever let a run go`);
+    assert.ok(superseded.durationMs < 24 * 60 * 60 * 1000, "five days of wall clock reached the ledger");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
