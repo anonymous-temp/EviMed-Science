@@ -4278,6 +4278,8 @@ export class AgentRunStore {
     let wake = null;
     const promise = (async () => {
       let idlePolls = 0;
+      // Once per run: a notice repeated every poll is a log, not a notice.
+      let stallNoticed = false;
       // eslint-disable-next-line no-unmodified-loop-condition -- set by the cancel closure registered below
       for (let poll = 0; poll < this.monitorMaxPolls && !canceled; poll += 1) {
         const runs = await this.list(project);
@@ -4298,13 +4300,25 @@ export class AgentRunStore {
         const moved = await this.recordProgress(project, reconciled).catch(() => null);
         if (moved === true) idlePolls = 0;
         else if (moved === false) idlePolls += 1;
-        if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls) {
-          await this.finishInternal(project, runId, {
-            status: "failed",
-            errorCode: "runtime_monitor_stalled",
-            artifacts: [],
-          });
-          return;
+        // A stall threshold is a guess about what "long enough that nothing
+        // more will happen" means, and it was ending runs on that guess. A
+        // clinical review spends whole stretches inside one tool call with no
+        // counter moving, and the run this ended still had its files on disk —
+        // the same shape as the delivery complaint, arriving through the
+        // monitor instead of the gate. Principle #4 says a check ships as a
+        // notice until an observed distribution earns it the right to block.
+        //
+        // So the threshold now says so, once, and the run carries on.
+        // Termination belongs to the global clock (`monitorMaxPolls`, four
+        // hours), which is a budget rather than an inference about liveness,
+        // and whose terminal path already publishes whatever the workspace
+        // holds.
+        if (this.monitorStallPolls > 0 && idlePolls >= this.monitorStallPolls && !stallNoticed) {
+          stallNoticed = true;
+          const minutes = Math.round((idlePolls * this.monitorIntervalMs) / 60_000);
+          await this.appendQualityNotices(project, runId, [
+            `这次运行已有约 ${minutes} 分钟没有可观测的进展（没有新消息、没有新工具调用、工作区也没有变化）。运行仍在继续，没有被终止；如果确认它确实卡住了，可以手动停止，已经写出的文件不会丢失。`,
+          ]).catch(() => null);
         }
         // Checked here as well as in the loop condition. A cancel that lands
         // while a poll is in flight would otherwise be followed by a sleep that
