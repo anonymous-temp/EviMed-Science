@@ -74,3 +74,42 @@ test("the two review flags are the ones principle #4 asks for", async (t) => {
   const flagged = out.split("\n").filter((line) => /^\s+\d/.test(line) && line.includes("<--"));
   assert.equal(flagged.length, 2, `exactly the two flagged rows: ${JSON.stringify(flagged)}`);
 });
+
+test("the same walk summarizes the refusals that never became runs", async (t) => {
+  // `errors.jsonl` sits beside `runs.jsonl` and holds what was refused before a
+  // run existed: a spend ceiling, a bad credential, an unreachable source.
+  // Nothing read it on a schedule, so the only way anyone learned what was in
+  // it was to aggregate it by hand after something had already gone wrong —
+  // which is how eighteen gateway refusals sat unexplained for five days.
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-errors-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const meta = path.join(root, "users", "u1", "projects", "p1", ".openscience");
+  await mkdir(meta, { recursive: true });
+  await writeFile(path.join(meta, "runs.jsonl"), finished({ id: "r1", status: "succeeded", errorCode: null, artifacts: ["a.md"] }));
+  const old = new Date(Date.now() - 40 * 86_400_000).toISOString();
+  await writeFile(path.join(meta, "errors.jsonl"), [
+    JSON.stringify({ createdAt: new Date().toISOString(), code: "unauthorized", status: 401 }),
+    JSON.stringify({ createdAt: new Date().toISOString(), code: "unauthorized", status: 401 }),
+    JSON.stringify({ createdAt: old, code: "public_source_gateway_token_invalid", status: 401 }),
+    "not json at all",
+  ].join("\n"));
+
+  const out = run(root);
+  // It must say how many ledgers it read, for the same reason the run walk
+  // does: a summary that found nothing and one that read nothing print alike.
+  assert.match(out, /HTTP refusals from 1 error ledger\(s\): 3 rows/, "an unparseable line must be skipped, not counted");
+  assert.match(out, /2\s+last 0d ago\s+unauthorized/);
+  assert.match(out, /1\s+last 40d ago\s+public_source_gateway_token_invalid/);
+});
+
+test("a deployment with no refusals says nothing rather than printing an empty table", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-no-errors-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const meta = path.join(root, "users", "u1", "projects", "p1", ".openscience");
+  await mkdir(meta, { recursive: true });
+  await writeFile(path.join(meta, "runs.jsonl"), finished({ id: "r1", status: "succeeded", errorCode: null, artifacts: ["a.md"] }));
+
+  const out = run(root);
+  assert.doesNotMatch(out, /HTTP refusals/);
+  assert.match(out, /1 finished runs/);
+});
