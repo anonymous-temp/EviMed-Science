@@ -62,9 +62,23 @@ jobs:
         working-directory: OpenScience
         run: node scripts/ops/verify-harness-seams.mjs --install
 
+      # Both outputs, because the second one is the only thing that can ever
+      # answer a project's "is there a plugin update". The web image ships a
+      # permanently 1970-dated placeholder at `/app/plugin-availability.json`,
+      # so a deployment reads `unknown` until an operator bind-mounts a real
+      # record over it — and this run is where that record comes from. Uploading
+      # only `compat-matrix.json` meant the plugin lane observed availability
+      # nightly and threw the answer away.
+      #
+      # It is uploaded, not committed: a recorded observation carries a
+      # timestamp, and one committed into the repository would make every image
+      # built inside the 72-hour freshness window report a build-time answer as
+      # a current one.
       - name: Upload the matrix
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: compat-matrix
-          path: OpenScience/compat-matrix.json
+          path: |
+            OpenScience/compat-matrix.json
+            OpenScience/plugin-availability.json

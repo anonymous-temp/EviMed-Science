@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { DISTILL_TRIGGER } from "./feedbackEvents.mjs";
 
 import { CONSOLIDATE_ACTIONS } from "./methodConsolidation.mjs";
 
@@ -27,7 +28,8 @@ import { CONSOLIDATE_ACTIONS } from "./methodConsolidation.mjs";
 export class LearningWorker {
   /**
    * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
-   *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
+   *          feedbackDistiller?: {distill: (job: any) => Promise<any>} | null,
+ *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
    *          enabled?: boolean, window?: string,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
    */
@@ -35,6 +37,7 @@ export class LearningWorker {
     jobs,
     distillation,
     consolidation,
+    feedbackDistiller = null,
     resolveProject = async () => null,
     resolveRun = async () => null,
     maintain = async () => {},
@@ -56,6 +59,7 @@ export class LearningWorker {
     this.jobs = jobs;
     this.distillation = distillation;
     this.consolidation = consolidation;
+    this.feedbackDistiller = feedbackDistiller;
     this.resolveProject = resolveProject;
     this.resolveRun = resolveRun;
     this.maintain = maintain;
@@ -163,6 +167,20 @@ export class LearningWorker {
 
   /** @param {any} job */
   async #execute(job) {
+    // A `distill` job queued by the feedback ledger — an adopted deliverable
+    // and the edit the researcher made to it — carries a different payload
+    // from one queued by the terminal hook, and a different producer knows
+    // how to read it. This worker is the only claimer of the kind while the
+    // loop is on, so the job has to be handed over here or it fails on
+    // arrival with a payload it was never meant to parse.
+    if (job.kind === "distill" && job.payload?.trigger === DISTILL_TRIGGER) {
+      if (!this.feedbackDistiller) {
+        const error = new Error("No producer is configured for a feedback-triggered distillation.");
+        /** @type {any} */ (error).code = "distill_trigger_unknown";
+        throw error;
+      }
+      return this.feedbackDistiller.distill(job);
+    }
     if (job.kind === "consolidate") {
       const action = String(job.payload?.action ?? "");
       if (!CONSOLIDATE_ACTIONS.includes(action)) {
@@ -237,6 +255,11 @@ export class LearningWorker {
 const TERMINAL_LEARNING_ERRORS = new Set([
   "consolidate_action_invalid",
   "consolidate_payload_invalid",
+  // The feedback distiller's own refusals: a wrong shape or evidence that is
+  // gone will not become right by being retried.
+  "distill_trigger_unknown",
+  "distill_payload_invalid",
+  "distill_evidence_missing",
   "distillation_trigger_invalid",
   "distillation_run_unavailable",
   "method_candidate_invalid",

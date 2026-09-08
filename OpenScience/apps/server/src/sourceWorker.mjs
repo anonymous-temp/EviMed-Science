@@ -5,6 +5,7 @@ const TERMINAL_ERRORS = new Set([
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
   "source_parser_input_too_large", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_usage_invalid", "source_understanding_input_too_large",
   "source_not_found", "source_account_changed", "source_cleanup_unconfigured", "source_cleanup_platform_unsupported", "source_cleanup_path_invalid",
+  "source_folder_not_found", "source_folder_invalid", "source_folder_conflict",
 ]);
 
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
@@ -80,6 +81,15 @@ export class SourceIngestionWorker {
       if (job.payload?.action === "source-run-cancel") {
         if (!this.cancelUnderstanding) throw Object.assign(new Error("Source run cancellation is unavailable."), { code: "source_cancel_unconfigured" });
         return await this.sources.consumeRunCancellation(job, this.cancelUnderstanding);
+      }
+      if (job.payload?.action === "source-folder-sync") {
+        // A folder sync owns no source row, so it renews and finishes like any
+        // other leased job instead of going through the source-lease wrapper.
+        const summary = await this.sources.consumeFolderSync(job);
+        await this.jobs.finish(job.userId, job.id, job.leaseToken, summary);
+        this.lastError = null;
+        this.lastCompletedAt = new Date().toISOString();
+        return summary;
       }
       if (job.payload?.action === "source-delete") {
         if (!this.cleanupSource) throw Object.assign(new Error("Source deletion cleanup is unavailable."), { code: "source_cleanup_unconfigured" });

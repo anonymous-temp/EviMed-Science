@@ -2,17 +2,23 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore, productInteger, productPayload, productTime } from "./productPersistence.mjs";
-import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput } from "@evimed/domain";
+import { normalizeSourceText, sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput,
+  sourceUnderstandingAuditSample, sourceUnderstandingOmissionNotice } from "@evimed/domain";
+import { openListSourceInput } from "./openListSourceConnector.mjs";
 
 function projectRun(run) { return run ? { id: run.id, sessionId: run.sessionId, dispatchId: run.dispatchId } : null; }
 function projectUnit(unit) { return { id: unit.id, unitType: unit.unitType, start: unit.start, end: unit.end,
   ...(typeof unit.text === "string" ? { text: unit.text } : {}), status: unit.status,
   ...(Array.isArray(unit.itemIds) ? { itemIds: unit.itemIds.map(String) } : {}) }; }
 export function projectSourceManifestRecord(row) {
-  const { analysis, pendingRunCancellations: _pending, outputs, ...payload } = row.payload;
+  const { analysis, pendingRunCancellations: _pending, outputs, omissionAudit, ...payload } = row.payload;
   const { artifactPath: _path, ...publicOutputs } = outputs ?? {};
   if (outputs?.artifactPath != null) publicOutputs.artifactPath = sourcePath(outputs.artifactPath);
-  return { ...row, payload: { ...payload, outputs: publicOutputs, ...(analysis ? { analysis: {
+  // The audit's per-unit samples belong to the understanding record. A source
+  // card states the verdict, and a page of fifty cards must not carry fifty
+  // sample lists to say it.
+  const verdict = omissionAudit ? { status: omissionAudit.status, reason: omissionAudit.reason, omissionRate: omissionAudit.omissionRate ?? null } : null;
+  return { ...row, payload: { ...payload, outputs: publicOutputs, ...(verdict ? { omissionAudit: verdict } : {}), ...(analysis ? { analysis: {
     generation: analysis.generation, phase: analysis.phase, schemaVersion: analysis.schemaVersion, unitCount: analysis.unitCount,
     run: projectRun(analysis.run),
   } } : {}) } };
@@ -64,7 +70,35 @@ export const SOURCE_TYPES = Object.freeze([
 ]);
 
 export const SOURCE_DEPTHS = Object.freeze(["skip", "index_only", "structured", "deep"]);
-const CONNECTOR_TYPES = Object.freeze(["upload", "openlist", "local-agent", "internal"]);
+// No local analysis agent ships today. Nothing registers a `local-agent`
+// connector, and the ingestion worker refuses every connector outside the three
+// it can actually read, so listing one here only produced sources that could
+// never be parsed. Add the value back together with the agent that serves it.
+const CONNECTOR_TYPES = Object.freeze(["upload", "openlist", "internal"]);
+/** Connectors that can be paged as a folder, i.e. that support incremental sync. */
+const FOLDER_CONNECTOR_TYPES = Object.freeze(["openlist"]);
+const FOLDER_STATUSES = Object.freeze(["active", "paused"]);
+/** One sync run is bounded work: at most five provider pages, fifty new or
+ * changed registrations, and five hundred remembered entries per folder. */
+const FOLDER_PAGE_SIZE = 100;
+const FOLDER_MAX_PAGES_PER_RUN = 5;
+const FOLDER_MAX_REGISTRATIONS_PER_RUN = 50;
+const FOLDER_MAX_TRACKED_ENTRIES = 500;
+/** The tracked map, the skipped list and the removed list all live in one 256 KiB
+ * product record. Budget them so a folder of very long names cannot make its own
+ * sync unwritable and then retry forever. */
+const FOLDER_MAX_TRACKED_BYTES = 100_000;
+const FOLDER_MAX_REPORTED_PATHS = 20;
+const DUPLICATE_GROUP_KINDS = Object.freeze(["version-family", "shared-content", "similar-name"]);
+const DUPLICATE_DECISIONS = Object.freeze(["linked", "dismissed"]);
+const DUPLICATE_SCAN_PAGES = 5;
+const DUPLICATE_MAX_GROUPS = 50;
+/** The understanding contract owns the audit verdict. Extraction has not run
+ * one at all, so it states that rather than inventing a rate. */
+const UNAUDITED_OMISSION = Object.freeze({ status: "not_run", omissionRate: null, reason: "Question-based understanding audit has not run." });
+/** How many disagreement lines the source record keeps. The full list is a
+ * derivation of the stored output and can be recomputed; this is the metric. */
+const OMISSION_NOTICE_MAX_LINES = 5;
 const UNIT_TYPES = Object.freeze(["page", "slide", "segment", "column", "chunk", "row_group"]);
 const UNIT_STATUSES = Object.freeze(["extracted", "indexed_only", "no_content", "failed"]);
 const shaPattern = /^[a-f0-9]{64}$/;
@@ -109,6 +143,66 @@ function connector(value) {
   return { type, id: text(candidate.id, "connector id", 160) };
 }
 
+/** A remote folder path inside one account namespace. The connector re-checks
+ * it against the account prefix; this only rejects shapes we never send.
+ * @param {unknown} value */
+function folderPath(value) {
+  const result = text(value, "folder path", 1024);
+  if (!result.startsWith("/") || result.split("/").some((part) => part === "." || part === "..")) {
+    throw new HttpError(400, "source_folder_invalid", "The folder path is invalid.");
+  }
+  return result.length > 1 ? result.replace(/\/+$/, "") : "/";
+}
+
+/** @param {Record<string,any>} payload */
+function folderSyncState(payload) {
+  const run = Number(payload?.sync?.run);
+  const page = Number(payload?.sync?.page);
+  return { run: Number.isSafeInteger(run) && run > 0 ? run : 1, page: Number.isSafeInteger(page) && page > 0 ? page : 1 };
+}
+
+/** Where a group's decision lives. Derived from the project and the group key
+ * so the read path can name the record the write path created, instead of
+ * searching for it. @param {string} projectId @param {string} groupKey */
+function duplicateDecisionId(projectId, groupKey) {
+  return `srcdup_${digest(`${projectId}\0${groupKey}`).slice(0, 32)}`;
+}
+
+/** Becoming active mints a new sync run, keeping the page so a folder paused
+ * mid-walk resumes where it stopped. A folder sync's idempotency key is derived
+ * from the run number, and a run can be retired without advancing it: a job
+ * claimed while the folder was paused finishes `succeeded` having done no work.
+ * Recomputing that key then lands on the finished row — the enqueue dedupes onto
+ * it, `claim` never picks it up again, and the folder stops syncing for good
+ * while the API keeps answering as though a sync were scheduled. Minting the run
+ * at the moment the folder becomes syncable makes the property unconditional: a
+ * folder that is active can always be synced again, whatever became of the run
+ * before it. @param {Record<string,any>} payload @param {string} at */
+function resumedFolderPayload(payload, at) {
+  const { run, page } = folderSyncState(payload);
+  return { ...payload, status: "active", sync: { run: run + 1, page }, updatedAt: at };
+}
+
+/** OS-generated copy suffixes. This is a closed list of file-manager markers,
+ * not a similarity heuristic: filename shape is decidable, "same paper" is not. */
+// Applied after separators collapse to spaces, so "-副本" and "_copy" reach here as
+// " 副本" and " copy".
+const COPY_MARKERS = Object.freeze([/\s*\(\d{1,3}\)$/, /\s+copy$/, /\s*副本$/]);
+
+/** Deterministic filename key: extension dropped, width/case folded, separators
+ * collapsed, one OS copy marker removed. Two files sharing it are a candidate,
+ * never a conclusion. @param {string} file */
+function normalizedName(file) {
+  const base = path.posix.basename(String(file));
+  const extension = path.posix.extname(base);
+  let name = base.slice(0, base.length - extension.length).normalize("NFKC").toLowerCase()
+    .replaceAll("_", " ").replaceAll("-", " ").replace(/\s+/g, " ").trim();
+  for (const marker of COPY_MARKERS) {
+    if (marker.test(name)) { name = name.replace(marker, "").trim(); break; }
+  }
+  return name;
+}
+
 /** A deterministic, explainable first pass. A later classifier may refine it,
  * but a source never waits for a model before it is indexed. @param {string} file */
 function classify(file) {
@@ -141,6 +235,45 @@ function defaultValueVector(docType) {
   };
 }
 
+/** What the source record keeps of the understanding contract's omission notice.
+ *
+ * A notice, not a gate: `sourceUnderstandingOmissionNotice` returns
+ * `blocking:false` and appears in no issue list, so nothing here can refuse a
+ * delivery. It is kept small on purpose — the plan and the per-unit samples
+ * already live on the understanding record, and this one is read back on a page
+ * of fifty source cards.
+ * @param {{status:string,omissionRate:number|null,reportedRate:number|null,target:number,
+ *   withinTarget:boolean,audited:number,plan:string[],disagreements:string[]}} notice */
+function boundedOmissionNotice(notice) {
+  return { status: notice.status, omissionRate: notice.omissionRate, reportedRate: notice.reportedRate,
+    target: notice.target, withinTarget: notice.withinTarget, audited: notice.audited, planned: notice.plan.length,
+    disagreements: notice.disagreements.slice(0, OMISSION_NOTICE_MAX_LINES).map(line => line.slice(0, 300)) };
+}
+
+/** Everything a delivered understanding contributes to its source row about the
+ * omission audit: the verdict the contract projected, the metric the control
+ * plane derives from the same output, and the one measured rate the source card
+ * states.
+ *
+ * `notice` is a metric and nothing else. `sourceUnderstandingOmissionNotice`
+ * returns `blocking:false`, appears in no issue list, and this function returns
+ * a value for every input it is given — an over-target or self-contradictory
+ * audit is recorded against a delivered package, never a reason to refuse one.
+ *
+ * @param {any} projected the output as `projectSourceUnderstandingOutput` stored it
+ * @param {any} delivered the output the run delivered, unprojected
+ * @param {any} input the immutable capture the run was cut against
+ * @returns {{audit:any, notice:any, omissionRate:number|null}} */
+export function sourceOmissionRecord(projected, delivered, input) {
+  const audit = projected?.omissionAudit ?? { ...UNAUDITED_OMISSION };
+  // Parser coverage answers which units were read; only the audit answers what
+  // went unrepresented. When one ran, the source states its rate instead of
+  // leaving the field permanently null.
+  const omissionRate = audit.status === "audited" ? audit.omissionRate ?? null : null;
+  const notice = projected && input ? boundedOmissionNotice(sourceUnderstandingOmissionNotice(delivered, input)) : null;
+  return { audit, notice, omissionRate };
+}
+
 function isConflict(error) { return error?.code === "product_revision_conflict"; }
 
 function retiredSourceRun(payload) {
@@ -161,6 +294,29 @@ export class SourceService {
     this.jobs = jobs;
     this.extractorVersion = text(extractorVersion, "extractor version", 80);
     this.now = now;
+    /** @type {Map<string,any>} */
+    this.connectors = new Map();
+  }
+
+  /** The hosted composition builds one provider client and hands it to the source
+   * routes; the leased folder sync runs in the ingestion worker, which shares this
+   * service instance and reads the client back from here. Registering it once at
+   * boot is what lets a background sync page the same account namespace the
+   * browser browses, without a second client or a second credential.
+   * @param {string} type @param {any} client */
+  useConnector(type, client) {
+    if (!FOLDER_CONNECTOR_TYPES.includes(type) || !client || typeof client.list !== "function") {
+      throw new TypeError("A folder connector must be a supported provider client.");
+    }
+    this.connectors.set(type, client);
+    return this;
+  }
+
+  /** @param {string} type */
+  connectorFor(type) {
+    const found = this.connectors.get(type);
+    if (!found) throw new HttpError(503, "source_folder_connector_unavailable", "This folder connector is not configured for this deployment.");
+    return found;
   }
 
   /** @param {string} userId @param {Record<string,any>} input */
@@ -293,7 +449,7 @@ export class SourceService {
           ...(input.artifactPath == null ? {} : { artifactPath: sourcePath(input.artifactPath) }),
         },
         error: null,
-        omissionAudit: { status: "not_run", omissionRate: null, reason: "Question-based understanding audit has not run." },
+        omissionAudit: { ...UNAUDITED_OMISSION },
         updatedAt: this.now().toISOString(),
       };
       return payload;
@@ -338,8 +494,13 @@ export class SourceService {
       || digest(units.map(unit => unit.text).join("")) !== analysis.textSha256) {
       throw new HttpError(409, "source_capture_invalid", "The immutable source capture is incomplete.");
     }
+    // `auditSample` names the units the omission audit must examine. The fresh
+    // parse gets it from `normalizeSourceText`; a run recovered from a stored
+    // capture must be handed the same plan, or every retry and every restart
+    // would deliver `not_run` for a source whose first attempt could audit.
     return { input: { schemaVersion: 1, sourceId: source.id, generation: source.payload.generation,
-      docType: source.payload.docType, depth: source.payload.depth, schema: sourceUnderstandingSchema(source.payload.docType), units, text: units.map(unit => unit.text).join("") },
+      docType: source.payload.docType, depth: source.payload.depth, schema: sourceUnderstandingSchema(source.payload.docType), units, text: units.map(unit => unit.text).join(""),
+      auditSample: sourceUnderstandingAuditSample({ sourceId: source.id, generation: source.payload.generation, units }) },
     extractor: analysis.extractor, summary: analysis.summary, parserCoverage: analysis.parserCoverage };
   }
 
@@ -495,7 +656,13 @@ export class SourceService {
         if (issues.length) throw new HttpError(422, "source_understanding_invalid", issues[0]);
       }
       const id = `understanding:${source.id}:g${generation}`;
-      const output = completed ? projectSourceUnderstandingOutput(completed.output) : null;
+      // With the input, the stored audit is the control plane's own reading of
+      // the delivered anchors rather than the run's self-report of them.
+      const output = completed ? projectSourceUnderstandingOutput(completed.output, input) : null;
+      // A notice, never a gate: it is recorded against a delivered package and
+      // can refuse nothing. The targets it compares against have no observed
+      // real-world distribution yet, which is exactly why it does not block.
+      const omission = sourceOmissionRecord(output, completed?.output, input);
       const run = completed ? { id: completed.runId, sessionId: completed.sessionId, dispatchId: completed.dispatchId } : null;
       const units = input?.units ?? [];
       const cited = new Set(output ? [...Object.values(output.slots).flatMap(slot => slot.evidence ?? []), ...output.claims.flatMap(claim => claim.evidence), ...output.methods.flatMap(method => method.evidence)].map(anchor => anchor.unitId) : []);
@@ -515,10 +682,13 @@ export class SourceService {
           payload: { recordType: "source-method", sourceId: source.id, generation, status: "draft", method, run } });
       }
       await insertSourceRecords(client, job.userId, job.projectId, records);
-      const coverage = isSkip ? null : source.payload.analysis.parserCoverage;
+      const parserCoverage = isSkip ? null : source.payload.analysis.parserCoverage;
+      const coverage = parserCoverage ? { ...parserCoverage, omissionRate: omission.omissionRate } : null;
       const status = coverage?.failed > 0 ? "needs_attention" : "complete";
+      // The audit verdict belongs to the understanding contract; carry through
+      // whatever it declared instead of restating a fixed "not run" here.
       const payload = { ...source.payload, status, currentUnderstandingId: output ? id : null, coverage,
-        omissionAudit: { status: "not_run", omissionRate: null, reason: "Question-based understanding audit has not run." },
+        omissionAudit: omission.audit, omissionNotice: omission.notice,
         analysis: { ...(source.payload.analysis ?? {}), generation, phase: isSkip ? "skipped" : output ? "understood" : "indexed", run: run ? { ...source.payload.analysis?.run, ...run } : null },
         outputs: { summary: output?.summary ?? (isSkip ? "Skipped by the selected analysis depth." : parsed.summary),
           facts: output?.claims.length ?? 0, methods: output?.methods.length ?? 0,
@@ -630,17 +800,364 @@ export class SourceService {
     });
   }
 
-  /** @param {string} userId @param {{projectId:string,status?:string|null,limit?:number,cursor?:string|null}} options */
-  async list(userId, { projectId, status = null, limit = 50, cursor = null }) {
+  /** @param {string} userId @param {{projectId:string,status?:string|null,familyId?:string|null,limit?:number,cursor?:string|null}} options */
+  async list(userId, { projectId, status = null, familyId = null, limit = 50, cursor = null }) {
     const selectedStatus = status == null || status === "" ? null : text(status, "source status", 40);
+    const selectedFamily = familyId == null || familyId === "" ? null : text(familyId, "family id", 80);
     return this.documents.list(userId, "source", {
       projectId: text(projectId, "project id", 160), limit, cursor,
-      filter: selectedStatus ? { status: selectedStatus } : {},
+      filter: { ...(selectedStatus ? { status: selectedStatus } : {}), ...(selectedFamily ? { familyId: selectedFamily } : {}) },
     });
+  }
+
+  /** The version chain a source belongs to: same project, same connector, same
+   * path, newest version first. `familyId` and `version` were written on every
+   * source since intake shipped; this is the read path that makes them visible.
+   * @param {string} userId @param {string} sourceId @param {{limit?:number}} options */
+  async family(userId, sourceId, { limit = 50 } = {}) {
+    const source = await this.requireSource(userId, sourceId);
+    const familyId = typeof source.payload.familyId === "string" ? source.payload.familyId : null;
+    if (!familyId) return { sourceId, familyId: null, currentVersion: Number(source.payload.version) || null, items: [], nextCursor: null };
+    const page = await this.documents.list(userId, "source", { projectId: source.projectId, filter: { familyId },
+      limit: Math.min(Math.max(Number(limit) || 50, 1), 100) });
+    const items = [...page.items].sort((a, b) => (Number(b.payload.version) || 0) - (Number(a.payload.version) || 0)
+      || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return { sourceId, familyId, currentVersion: Number(source.payload.version) || null, items, nextCursor: page.nextCursor };
   }
 
   /** @param {string} userId @param {string} sourceId */
   async get(userId, sourceId, options = {}) { return this.requireSource(userId, sourceId, options); }
+
+  // ---------------------------------------------------------------------------
+  // Synced folders. A folder the researcher named is the unit of sync; nothing
+  // here ever walks a drive the researcher did not register.
+  // ---------------------------------------------------------------------------
+
+  /** @param {string} userId @param {Record<string,any>} input */
+  async registerFolder(userId, input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new HttpError(400, "source_folder_invalid", "Folder registration is invalid.");
+    const projectId = text(input.projectId, "project id", 160);
+    const connectorType = text(input.connectorType ?? "openlist", "connector type", 32);
+    if (!FOLDER_CONNECTOR_TYPES.includes(connectorType)) throw new HttpError(400, "source_folder_invalid", "This connector cannot be synced as a folder.");
+    const remotePath = folderPath(input.path);
+    const id = `srcdir_${digest(`${projectId}\0${connectorType}\0${remotePath}`).slice(0, 32)}`;
+    const at = this.now().toISOString();
+    const existing = await this.documents.get(userId, "preferences", id);
+    if (existing) {
+      const folder = this.requireFolderShape(existing, projectId);
+      const active = folder.payload.status === "active" ? folder
+        : await this.documents.put(userId, "preferences", id, resumedFolderPayload(folder.payload, at),
+          { expectedRevision: folder.revision, projectId });
+      return { folder: active, created: false, job: await this.enqueueFolderSync(userId, active) };
+    }
+    const folder = await this.documents.put(userId, "preferences", id, {
+      recordType: "source-folder",
+      schemaVersion: 1,
+      connector: { type: connectorType, id: remotePath },
+      status: "active",
+      // Sub-directories are not walked. Each folder a researcher wants synced is
+      // registered by name, so no registration ever widens itself.
+      recursive: false,
+      // `run` is the monotonic sync attempt this folder is waiting for and names
+      // the queued job; `page` is where the next run resumes. A run that did
+      // work advances `run`, and so does becoming active again, so a job
+      // identity a worker already retired is never recomputed.
+      sync: { run: 1, page: 1 },
+      entries: {},
+      lastSync: null,
+      createdAt: at,
+      updatedAt: at,
+    }, { expectedRevision: 0, projectId });
+    return { folder, created: true, job: await this.enqueueFolderSync(userId, folder) };
+  }
+
+  /** @param {any} row @param {string|null} projectId */
+  requireFolderShape(row, projectId = null) {
+    if (!row || row.payload?.recordType !== "source-folder") throw new HttpError(404, "source_folder_not_found", "The synced folder is unavailable.");
+    if (projectId != null && row.projectId !== projectId) throw new HttpError(409, "source_folder_conflict", "The synced folder belongs to another project.");
+    return row;
+  }
+
+  /** @param {string} userId @param {string} folderId */
+  async getFolder(userId, folderId) {
+    return this.requireFolderShape(await this.documents.get(userId, "preferences", text(folderId, "folder id", 200)));
+  }
+
+  /** @param {string} userId @param {{projectId:string,limit?:number,cursor?:string|null}} options */
+  async listFolders(userId, { projectId, limit = 50, cursor = null }) {
+    return this.documents.list(userId, "preferences", { projectId: text(projectId, "project id", 160), limit, cursor,
+      filter: { recordType: "source-folder" } });
+  }
+
+  /** @param {string} userId @param {string} folderId @param {{expectedRevision:number,status:string}} input */
+  async setFolderStatus(userId, folderId, input) {
+    const folder = await this.getFolder(userId, folderId);
+    if (input.expectedRevision !== folder.revision) throw new HttpError(409, "source_folder_conflict", "The folder changed; reload before updating it.");
+    const status = text(input.status, "folder status", 32);
+    if (!FOLDER_STATUSES.includes(status)) throw new HttpError(400, "source_folder_invalid", "The folder status is invalid.");
+    const at = this.now().toISOString();
+    const resuming = status === "active" && folder.payload.status !== "active";
+    const updated = await this.documents.put(userId, "preferences", folder.id,
+      resuming ? resumedFolderPayload(folder.payload, at) : { ...folder.payload, status, updatedAt: at },
+      { expectedRevision: folder.revision, projectId: folder.projectId });
+    return { folder: updated, job: status === "active" ? await this.enqueueFolderSync(userId, updated) : null };
+  }
+
+  /** @param {string} userId @param {string} folderId @param {{expectedRevision:number}} input */
+  async syncFolder(userId, folderId, input) {
+    const folder = await this.getFolder(userId, folderId);
+    if (input.expectedRevision !== folder.revision) throw new HttpError(409, "source_folder_conflict", "The folder changed; reload before syncing it.");
+    if (folder.payload.status !== "active") throw new HttpError(409, "source_folder_conflict", "This folder is not being synced.");
+    return { folder, job: await this.enqueueFolderSync(userId, folder) };
+  }
+
+  /** @param {string} userId @param {any} folder @param {any} transactionClient */
+  async enqueueFolderSync(userId, folder, transactionClient = null) {
+    const { run, page } = folderSyncState(folder.payload);
+    const reader = transactionClient ?? this.documents.database;
+    const account = reader
+      ? await reader.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]) : null;
+    return this.jobs.enqueue(userId, "ingest", {
+      action: "source-folder-sync", folderId: folder.id, run, page,
+      ...(account?.rows[0]?.generation ? { accountCreatedAt: account.rows[0].generation } : {}),
+    }, { idempotencyKey: `source-folder-sync:${folder.id}:${run}`, projectId: folder.projectId, rearmFailed: true, transactionClient });
+  }
+
+  /** Walk one registered folder, compare each entry's provider hash against what
+   * the folder already tracks, register what is new or changed, and record what
+   * was seen. Bounded per run; a folder larger than one run continues on a
+   * follow-up job rather than holding a lease open.
+   *
+   * What the job lease fences is the folder record and its continuation, not the
+   * registrations: a run that loses its lease has already written the source
+   * manifests and ingest jobs for the entries it reached. That is safe rather
+   * than tidy, and it is safe for a stated reason — a source id is the digest of
+   * its project and content and its ingest job is keyed by source and
+   * generation, so re-registering the same bytes returns the same source and the
+   * same job. The fenced folder record is what makes the replay observe them
+   * again instead of losing them. @param {any} job */
+  async consumeFolderSync(job) {
+    if (job.kind !== "ingest" || job.payload?.action !== "source-folder-sync") throw new HttpError(400, "source_job_invalid", "Invalid folder sync job identity.");
+    const folderId = text(job.payload.folderId, "folder id", 200);
+    await this.assertAccount(job.userId, job.payload.accountCreatedAt);
+    const folder = this.requireFolderShape(await this.documents.get(job.userId, "preferences", folderId), job.projectId);
+    if (folder.payload.status !== "active") return { folderId, scanned: 0, skippedRun: "folder_paused" };
+    const state = folderSyncState(folder.payload);
+    if ((Number(job.payload.run) || 0) !== state.run) return { folderId, scanned: 0, skippedRun: "sync_superseded" };
+    const startPage = state.page;
+    const provider = this.connectorFor(folder.payload.connector.type);
+    const tracked = { ...(folder.payload.entries ?? {}) };
+    let trackedBytes = Buffer.byteLength(JSON.stringify(tracked));
+    // `skipped` is a bounded list of examples; `skippedCount` is the total. A
+    // folder that skipped five hundred files must not report twenty.
+    const summary = { scanned: 0, registered: 0, updated: 0, unchanged: 0, directories: 0, skipped: [], skippedCount: 0 };
+    const seen = [];
+    let page = startPage;
+    let complete = false;
+    let budgetReached = false;
+    for (let visited = 0; visited < FOLDER_MAX_PAGES_PER_RUN && !budgetReached; visited += 1) {
+      const listed = await provider.list(job.userId, folder.payload.connector.id, { page, perPage: FOLDER_PAGE_SIZE });
+      for (const item of listed.entries ?? []) {
+        summary.scanned += 1;
+        if (item.entryType !== "file") { summary.directories += 1; continue; }
+        if (!/^sha256:[a-f0-9]{64}$/i.test(String(item.providerHash ?? ""))) {
+          this.noteSkipped(summary, item.path, "provider_hash_unsupported");
+          continue;
+        }
+        seen.push(item.path);
+        const known = tracked[item.path];
+        if (known && known.providerHash === item.providerHash) { summary.unchanged += 1; continue; }
+        if (summary.registered + summary.updated >= FOLDER_MAX_REGISTRATIONS_PER_RUN) { budgetReached = true; break; }
+        const entryBytes = Buffer.byteLength(JSON.stringify({ [item.path]: { providerHash: item.providerHash, sourceId: "s".repeat(36), version: 999, size: item.size } }));
+        if (!known && (Object.keys(tracked).length >= FOLDER_MAX_TRACKED_ENTRIES || trackedBytes + entryBytes > FOLDER_MAX_TRACKED_BYTES)) {
+          this.noteSkipped(summary, item.path, "entry_budget_exhausted");
+          continue;
+        }
+        let registered;
+        try {
+          registered = await this.register(job.userId, openListSourceInput(folder.projectId, item, { now: this.now }));
+        } catch (error) {
+          // One unusable entry never fails a folder. Storage, lease and account
+          // failures still do: they are not the entry's fault.
+          if (!(error instanceof HttpError) || error.status >= 500) throw error;
+          this.noteSkipped(summary, item.path, String(error.code ?? "source_entry_rejected"));
+          continue;
+        }
+        tracked[item.path] = { providerHash: item.providerHash, sourceId: registered.source.id,
+          version: Number(registered.source.payload.version) || 1, size: Number(item.size) || 0 };
+        if (!known) trackedBytes += entryBytes;
+        if (known) summary.updated += 1; else summary.registered += 1;
+      }
+      if (budgetReached) break;
+      if (!listed.nextCursor) { complete = true; break; }
+      const next = Number(listed.nextCursor);
+      if (!Number.isSafeInteger(next) || next <= page) throw new HttpError(502, "openlist_response_invalid", "OpenList returned an invalid page cursor.");
+      page = next;
+    }
+    // Absence is only decidable when one run saw the whole folder. A partial run
+    // reports what it read and claims nothing about what it did not.
+    const fullPass = complete && startPage === 1;
+    const removedPaths = fullPass ? Object.keys(tracked).filter((entryPath) => !seen.includes(entryPath)) : [];
+    for (const entryPath of removedPaths) delete tracked[entryPath];
+    const at = this.now().toISOString();
+    const payload = { ...folder.payload, entries: tracked,
+      sync: { run: state.run + 1, page: complete ? 1 : page },
+      lastSync: { at, run: state.run, startPage, endPage: page, complete,
+        scanned: summary.scanned, registered: summary.registered, updated: summary.updated, unchanged: summary.unchanged,
+        directories: summary.directories, skipped: summary.skipped, skippedCount: summary.skippedCount, tracked: Object.keys(tracked).length,
+        removedPaths: removedPaths.slice(0, FOLDER_MAX_REPORTED_PATHS).map((entryPath) => entryPath.slice(0, 300)),
+        removedCount: removedPaths.length, removalCheck: fullPass ? "full" : "partial" },
+      updatedAt: at };
+    // The record and its continuation are one write. Enqueuing afterwards could
+    // fail after the record advanced its run, and the retry would then see a
+    // superseded run, finish successfully and leave a half-synced folder with no
+    // job naming its next page.
+    const result = await this.jobs.withLease(job.userId, job.id, job.leaseToken, async (client) => {
+      const written = await this.documents.put(job.userId, "preferences", folder.id, payload,
+        { expectedRevision: folder.revision, projectId: folder.projectId, transactionClient: client });
+      return { written, nextJob: complete ? null : await this.enqueueFolderSync(job.userId, written, client) };
+    });
+    if (!result) throw new HttpError(409, "product_job_lease_lost", "The folder sync lease was lost.");
+    return { folderId: folder.id, ...payload.lastSync, continuedAs: result.nextJob?.id ?? null };
+  }
+
+  /** Every skip is counted; the first few are also named. The count is what the
+   * researcher is told, the names are the examples.
+   * @param {{skipped:{path:string,reason:string}[],skippedCount:number}} summary
+   * @param {string} entryPath @param {string} reason */
+  noteSkipped(summary, entryPath, reason) {
+    summary.skippedCount += 1;
+    if (summary.skipped.length < FOLDER_MAX_REPORTED_PATHS) summary.skipped.push({ path: String(entryPath).slice(0, 300), reason });
+  }
+
+  /** @param {string} userId @param {string|undefined} accountCreatedAt */
+  async assertAccount(userId, accountCreatedAt) {
+    const database = this.documents.database;
+    if (!database || !accountCreatedAt) return;
+    const account = await database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
+    if (account.rows[0]?.generation !== accountCreatedAt) throw new HttpError(409, "source_account_changed", "The source account changed.");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Duplicate candidates. Identical bytes already collapse into one source id,
+  // so every group here is decidable from hashes, family ids, sizes and
+  // normalised filenames. No prose comparison, no model call.
+  // ---------------------------------------------------------------------------
+
+  /** @param {string} userId @param {{projectId:string,limit?:number}} options */
+  async duplicateCandidates(userId, { projectId, limit = DUPLICATE_MAX_GROUPS }) {
+    const scope = text(projectId, "project id", 160);
+    const sources = [];
+    let cursor = null;
+    for (let page = 0; page < DUPLICATE_SCAN_PAGES; page += 1) {
+      const listed = await this.documents.list(userId, "source", { projectId: scope, limit: 100, cursor });
+      sources.push(...listed.items);
+      cursor = listed.nextCursor;
+      if (!cursor) break;
+    }
+    const member = (row) => ({ sourceId: row.id, version: Number(row.payload.version) || 1, familyId: row.payload.familyId ?? null,
+      status: row.payload.status, docType: row.payload.docType, paths: [...(row.payload.paths ?? [])],
+      size: Number(row.payload.fingerprint?.size) || 0, sha256: row.payload.fingerprint?.sha256 ?? null,
+      connectorType: row.payload.connector?.type ?? null, updatedAt: row.updatedAt });
+    /** @type {{kind:string,groupKey:string,label:string,members:any[]}[]} */
+    const groups = [];
+    const families = new Map();
+    for (const row of sources) {
+      if (typeof row.payload.familyId !== "string") continue;
+      const list = families.get(row.payload.familyId) ?? [];
+      list.push(row);
+      families.set(row.payload.familyId, list);
+    }
+    for (const [familyId, rows] of families) {
+      if (rows.length < 2) continue;
+      groups.push({ kind: "version-family", groupKey: `version-family:${digest(familyId).slice(0, 32)}`,
+        label: rows[0].payload.paths?.[0] ?? familyId,
+        members: rows.map(member).sort((a, b) => b.version - a.version) });
+    }
+    for (const row of sources) {
+      if ((row.payload.paths ?? []).length < 2) continue;
+      groups.push({ kind: "shared-content", groupKey: `shared-content:${digest(row.id).slice(0, 32)}`,
+        label: row.payload.paths[0], members: [member(row)] });
+    }
+    // Every path a source carries is a name it can be matched on. Keying on the
+    // first path alone made both the grouping and the group's identity depend on
+    // which path happened to sort first, so importing the same bytes under an
+    // alphabetically earlier name silently regrouped sources and reopened a
+    // dismissal that had already been made.
+    const names = new Map();
+    for (const row of sources) {
+      for (const key of new Set((row.payload.paths ?? []).map((entryPath) => normalizedName(entryPath)))) {
+        if (!key) continue;
+        const bucket = names.get(key) ?? new Map();
+        bucket.set(row.id, row);
+        names.set(key, bucket);
+      }
+    }
+    const namedKeys = new Set();
+    for (const [key, bucket] of names) {
+      const rows = [...bucket.values()];
+      const distinctFamilies = new Set(rows.map((row) => row.payload.familyId));
+      if (rows.length < 2 || distinctFamilies.size < 2) continue;
+      const members = rows.map(member).sort((a, b) => (a.sourceId < b.sourceId ? -1 : 1));
+      // The identity of a group is the set of sources in it, not one of their
+      // names. Two names over the same set are one group, offered once.
+      const groupKey = `similar-name:${digest(`${scope}\0${members.map((item) => item.sourceId).join("\0")}`).slice(0, 32)}`;
+      if (namedKeys.has(groupKey)) continue;
+      namedKeys.add(groupKey);
+      groups.push({ kind: "similar-name", groupKey, label: key, members });
+    }
+    // A decision record's id is derived from its project and group key, so the
+    // groups this scan just computed name the decisions that can cover them.
+    // Reading one page of the project's decisions instead made every dismissal
+    // past that page invisible, and an invisible dismissal is an undecided
+    // group — sorted back to the top of the desk, asked again forever.
+    const decided = new Map();
+    for (const group of groups) {
+      const row = await this.documents.get(userId, "preferences", duplicateDecisionId(scope, group.groupKey));
+      if (row?.payload?.recordType === "source-duplicate-decision") decided.set(group.groupKey, row.payload);
+    }
+    const items = groups.map((group) => {
+      const sourceIds = [...new Set(group.members.map((item) => item.sourceId))].sort();
+      const decision = decided.get(group.groupKey);
+      // A decision covers the members it was taken over. A new version in a
+      // dismissed family is new information and comes back as undecided.
+      const current = decision && JSON.stringify(decision.sourceIds) === JSON.stringify(sourceIds)
+        ? { decision: decision.decision, note: decision.note ?? "", at: decision.at } : null;
+      return { ...group, sourceIds, decision: current };
+    }).sort((a, b) => (a.decision ? 1 : 0) - (b.decision ? 1 : 0));
+    return { items: items.slice(0, Math.min(Math.max(Number(limit) || DUPLICATE_MAX_GROUPS, 1), DUPLICATE_MAX_GROUPS)),
+      scanned: sources.length, truncated: Boolean(cursor) };
+  }
+
+  /** @param {string} userId @param {Record<string,any>} input */
+  async decideDuplicate(userId, input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new HttpError(400, "source_duplicate_invalid", "The duplicate decision is invalid.");
+    const projectId = text(input.projectId, "project id", 160);
+    const groupKey = text(input.groupKey, "duplicate group", 120);
+    const kind = groupKey.slice(0, groupKey.indexOf(":"));
+    if (!DUPLICATE_GROUP_KINDS.includes(kind) || !/^[a-z-]+:[a-f0-9]{32}$/.test(groupKey)) {
+      throw new HttpError(400, "source_duplicate_invalid", "The duplicate group is invalid.");
+    }
+    const decision = text(input.decision, "duplicate decision", 32);
+    if (!DUPLICATE_DECISIONS.includes(decision)) throw new HttpError(400, "source_duplicate_invalid", "The duplicate decision is unsupported.");
+    if (!Array.isArray(input.sourceIds) || input.sourceIds.length < 1 || input.sourceIds.length > 20) {
+      throw new HttpError(400, "source_duplicate_invalid", "A duplicate decision names between one and twenty sources.");
+    }
+    const sourceIds = [...new Set(input.sourceIds.map((value) => text(value, "source id", 160)))].sort();
+    for (const sourceId of sourceIds) {
+      const source = await this.requireSource(userId, sourceId);
+      if (source.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "A named source belongs to another project.");
+    }
+    const note = input.note == null || input.note === "" ? "" : text(input.note, "duplicate note", 1000);
+    const id = duplicateDecisionId(projectId, groupKey);
+    const at = this.now().toISOString();
+    const payload = { recordType: "source-duplicate-decision", schemaVersion: 1, groupKey, kind, sourceIds, decision, note, at };
+    const existing = await this.documents.get(userId, "preferences", id);
+    if (existing && existing.payload.recordType !== "source-duplicate-decision") throw new HttpError(409, "source_duplicate_conflict", "This decision id is already used.");
+    return this.documents.put(userId, "preferences", id, payload,
+      { expectedRevision: existing?.revision ?? 0, projectId });
+  }
+
 
   /** @param {string} userId @param {string} sourceId @param {{expectedRevision:number}} input */
   async cancel(userId, sourceId, input) {

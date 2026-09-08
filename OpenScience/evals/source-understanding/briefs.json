@@ -13,7 +13,7 @@
         "All six procedure slots are known with exact anchors.",
         "At least one method draft preserves the source checks.",
         "Nothing is published as a capsule skill.",
-        "Omission audit remains not_run."
+        "The omission audit covers exactly the units the frozen input names in auditSample."
       ]
     },
     {
@@ -43,6 +43,34 @@
         "No reusable method is invented from an incomplete fragment.",
         "Retry and history retain the frozen source generation."
       ]
+    },
+    {
+      "id": "audited-omission",
+      "docType": "research-protocol",
+      "depth": "deep",
+      "fixtureOnly": true,
+      "sourceText": "Purpose: keep the sample-handling log auditable.\nApplicability: any bench run that produces stored aliquots.\nInputs: the run sheet, the freezer map and the aliquot labels.\nSteps: label before freezing; record the freezer position; reconcile the log against the map weekly.\nChecks: every stored aliquot must resolve to one row of the log.\nPitfalls: a position recorded after the fact is a guess, not a record.\n",
+      "brief": "Understand the complete SOP at deep depth and run the omission audit the frozen input asks for. Audit exactly the units named in auditSample, decide representation against the anchors this output already carries, and report the rate those samples imply.",
+      "expectations": [
+        "omissionAudit.status is audited and its samples cover exactly the unit ids in the input auditSample.",
+        "A sample is called represented only when a known slot, claim or method already anchors that unit; no anchor is copied into the sample.",
+        "omissionRate equals the unrepresented fraction of the audited samples, to four decimal places; the control plane derives its own and records a disagreement rather than refusing the package.",
+        "No anchor is invented to make a sampled unit look represented."
+      ]
+    },
+    {
+      "id": "unaudited-omission",
+      "docType": "note-memo",
+      "depth": "structured",
+      "fixtureOnly": true,
+      "sourceText": "Recovered capture, no audit plan\nDecision: continue with the frozen generation rather than reparsing the file.\nAction: re-run the understanding from the stored capture.\nOpen question: whether the recovered input still names an audit sample.\n",
+      "brief": "Understand these notes from a capture recovered out of storage rather than freshly parsed, so the input this run receives carries no auditSample and the omission audit has no plan to follow. Deliver anyway and say so, without converting an unmeasured audit into a clean one.",
+      "expectations": [
+        "omissionAudit.status is not_run with a reason and omissionRate null, because the recovered input names no auditSample.",
+        "No samples are attached to an audit that did not run.",
+        "The rate is null rather than 0, because unmeasured is not the same as measured and clean.",
+        "The package still delivers; a missing audit plan is not a delivery failure."
+      ]
     }
   ],
   "capability": "source-understanding",
@@ -60,7 +88,7 @@
       "mustDo": [
         "Read the complete frozen source, including later rollback and verification sections.",
         "Use known or explicitly unknown procedure slots and retain the source conditions.",
-        "Keep the method a draft and keep omission audit not_run."
+        "Keep the method a draft and run the omission audit over the units the frozen input names in auditSample."
       ],
       "liveStatus": "not_run"
     },

@@ -1,5 +1,34 @@
 # EviMed 发布与交付检查表
 
+> **【存档说明 · 2026-09-07】本文件是 2026-07-19 的快照（第 6 条与「上线执行顺序」各自带着
+> 2026-09-03 的就地更正，日期写在原处），其中按能力组织的那部分已被重写后的产品形态取代。
+> 请按下面的分工读，不要把整份文件当作现状：**
+>
+> - **已被取代：「专项 Agent 生产交付状态」表。** 它按九个专项入口 + 八个外部专项适配器
+>   组织；今天这九项各自是 `OpenScience/capabilities/` 下的一个能力包——
+>   `adr-analysis`、`off-label-analysis`、`comprehensive-drug-evaluation`、`drug-selection`、
+>   `meta-analysis`、`mendelian-randomization`、`bibliometric-analysis`、
+>   `research-topic-selection`、`peer-review`。表中前四行所依赖的五个 Java 服务
+>   （`项目代码/` 下的循证药品综合评价、循证药品综合评价 agent、超说明书用药、药品遴选、
+>   安全性分析）已于 2026-07-24 冻结并移出仓库：工作区根 `.gitignore` 里以
+>   `# Archived Java services (frozen 2026-07-24)` 起头的那段就是那次移出，工作区根
+>   `CLAUDE.md` 记着同一件事。新的证据/评价能力一律落在 `OpenScience/` 里，不再回写这五个
+>   服务。「已完成的代码门禁」表同理，其中「桌面 tag 构建」一行所依赖的桌面形态已删除。
+> - **当前的逐能力状态在 `OpenScience/evals/acceptance-ledger.json`**：`OpenScience/capabilities/`
+>   下每个能力包一行，带该能力 `capability.yaml` 里的 `visibility`，记录它最靠前的一次真实
+>   交付及其结局。「一个能力包一行」不是靠人盯：`pnpm check:acceptance-ledger`
+>   （`OpenScience/evals/capability-audit/verify_acceptance_ledger.py`）校验它与代码树一致，
+>   `pnpm test:web` 里也跑一遍。
+> - **仍然有效：下面十条「正式发布前的外部阻断项」与「上线执行顺序」。** 十条阻断项一字未改，
+>   其中两条要连着本说明读：第 4 条锁的是上述已归档 Java 服务的工具链，只有真要动那棵归档树
+>   时才成立；第 10 条的桌面签名以桌面形态为前提，而唯一的前端是 `OpenScience/apps/web`
+>   （`OpenScience/AGENTS.md` 的仓库地图：Tauri 壳、它的 Rust 命令层与 `packages/sdk` 已于
+>   2026-09-04 删除）。「上线执行顺序」里只改了一处：同样以桌面形态为前提的 `pnpm check:tauri`
+>   在 `OpenScience/package.json` 里已经没有这个脚本，留着只会报错，因此在原处写明后删去；
+>   其余命令逐条仍在 `OpenScience/package.json` 里。
+> - 架构与部署以 `OpenScience/AGENTS.md`、`OpenScience/docs/WEB_DEPLOYMENT.md` 为准；当前的
+>   未完清单见 `docs/superpowers/plans/2026-09-07-gap-closure-todo.md`。
+
 更新日期：2026-07-19
 
 ## 当前结论
@@ -80,7 +109,8 @@
 pnpm install --frozen-lockfile
 pnpm lint
 pnpm ci:web
-pnpm check:tauri
+# 桌面形态删除后 `pnpm check:tauri` 已不存在于 `package.json`，此处不再调用；
+# Web 交付的全量门禁就是上面的 `pnpm ci:web`（它内含 test:web 与全部审计）。
 
 # 在目标主机和真实生产 env 上执行。顺序按 2026-09-03 的实测更正了两次：
 #   ① 签发凭据要启动运行时容器，而启动计划拒绝清单没有指名的镜像

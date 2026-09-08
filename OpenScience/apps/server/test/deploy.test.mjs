@@ -198,6 +198,69 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
   assert.deepEqual(missing, [], "these gates run locally and nothing runs them on a pull request");
 });
 
+test("every capability-audit test file is named by a script the PR gate runs", async () => {
+  // `unittest discover` is given a literal filename per script, so a test file
+  // added next to an existing one is collected by nothing and says nothing.
+  // That is not hypothetical: `test_eval_briefs.py` landed beside
+  // `test_acceptance_ledger.py` with 21 assertions and ran nowhere — not in
+  // `test:web`, not in `ci:web`, not in CI. The pattern stays literal (it is
+  // explicit about what runs), and this is what makes forgetting one loud.
+  const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const auditDir = path.join(repoRoot, "evals/capability-audit");
+  const files = (await readdir(auditDir)).filter((name) => name.startsWith("test_") && name.endsWith(".py")).sort();
+  assert.ok(files.length >= 3, `the capability audit should ship several test files, found ${JSON.stringify(files)}`);
+
+  // Expand `test:web` the same way the `ci:web` step test does, then read the
+  // discovery pattern out of each leaf that runs `unittest discover` there.
+  const expand = (name, seen = new Set()) => {
+    if (seen.has(name)) return [];
+    seen.add(name);
+    const body = pkg.scripts?.[name];
+    if (!body) return [];
+    const called = [...body.matchAll(/pnpm (?:run )?([\w:-]+)/g)]
+      .map((match) => match[1])
+      .filter((child) => Object.hasOwn(pkg.scripts ?? {}, child));
+    return [body, ...called.flatMap((child) => expand(child, seen))];
+  };
+  const discovered = new Set();
+  for (const body of expand("test:web")) {
+    const match = body.match(/unittest discover -s evals\/capability-audit -p '([^']+)'/);
+    if (match) discovered.add(match[1]);
+  }
+  assert.ok(discovered.size > 0, "no script in test:web discovers the capability audit at all");
+
+  const globToRegExp = (pattern) =>
+    new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
+  const unrun = files.filter((file) => ![...discovered].some((pattern) => globToRegExp(pattern).test(file)));
+  assert.deepEqual(unrun, [], "these capability-audit tests are tracked but no script in test:web collects them");
+});
+
+test("the shipped plugin availability record is a placeholder, never a recorded observation", async () => {
+  // `deploy/web/Dockerfile` copies this file into the image and
+  // `pluginService.mjs` reads it at that path, so whatever is committed here is
+  // what a released control plane answers "is there an update" from. A real
+  // `pnpm matrix:upstream` run committed over it would be inside the 72-hour
+  // freshness window of every image built that week, and the card would report
+  // `current` or `update-available` from a build-time observation — the
+  // "reports green because nobody looked" failure the availability rule exists
+  // to prevent. The resting state is 1970 and no rows: unknown, always.
+  const shipped = JSON.parse(await readFile(path.join(repoRoot, "plugin-availability.json"), "utf8"));
+  assert.equal(shipped.schemaVersion, 1, "the placeholder must still parse as the record the reader supports");
+  assert.equal(shipped.generatedAt, "1970-01-01T00:00:00.000Z", "a real matrix observation has been committed over the placeholder");
+  assert.deepEqual(shipped.plugins, [], "the placeholder must carry no plugin rows");
+
+  // And the reader agrees: the shipped file answers unknown for the plugin the
+  // image installs, so the assertions above are not merely about a string.
+  const { PLUGIN_ID, PLUGIN_REGISTRY, pluginAvailability } = await import("../src/pluginService.mjs");
+  const verdict = pluginAvailability(shipped, PLUGIN_REGISTRY.get(PLUGIN_ID), Date.now());
+  assert.equal(verdict.state, "unknown");
+  assert.equal(verdict.availableUpdate, null);
+
+  const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
+  assert.match(dockerfile, /COPY --from=build \/app\/plugin-availability\.json \.\/plugin-availability\.json/,
+    "the image no longer ships the file this test is guarding");
+});
+
 test("web Dockerfile only copies sources that exist in the build context", async () => {
   const dockerfilePath = path.join(repoRoot, "deploy/web/Dockerfile");
   const dockerfile = await readFile(dockerfilePath, "utf8");

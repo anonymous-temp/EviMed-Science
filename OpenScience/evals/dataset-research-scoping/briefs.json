@@ -1,0 +1,119 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "dataset-research-scoping",
+  "note": "Four briefs. This capability starts from a file, so every brief names a real export shape a hospital information department actually hands over — a directory of CSVs with the column names people really use, the sentinel values they really contain, and the join keys that really are empty. The failures are the ones the SKILL records as having cost real runs: an extract read as a cohort, an identifier carried out of the data, a missing field turned into a verdict without ever showing it binds, and a literature phase run against one index. None of them look like failures in the delivered package. `datasetPath` carries what an information department's handover carries — the workspace-relative directory, the tables and their row counts, and what was and was not sent with them; the defects the run is graded on finding are stated in each brief's `why`, where a grader can read them and a run cannot. The sentinel share in scoping-003 deliberately differs from the worked example in the capability's own SKILL, so a profile transcribed from the skill instead of measured from the data comes out wrong.",
+  "briefs": [
+    {
+      "id": "scoping-001-vancomycin-tdm-extract",
+      "title": "万古霉素血药浓度监测导出：这批数据能撑起哪些研究",
+      "why": "The ordinary case, and the baseline for the other three. The export is honest, reasonably wide and reasonably deep, and the work is the join the skill exists for: profile it mechanically, take the derived quantities to the literature, and come back with designs whose variables are constructed against named fields. Its one real difficulty is that the interesting quantity — dose-normalized trough, and AUC/MIC where a MIC exists — is not a column; it has to be reconstructed by joining the concentration table to the order in force on the sampling date, and a field inventory reports those two tables as unrelated.",
+      "inputs": {
+        "datasetPath": "data/vanco-tdm-2021-2025/（6 张 CSV：patients.csv、admissions.csv、drug_orders.csv、tdm_results.csv、labs.csv、microbiology.csv；约 2,300 名住院患者、4,100 次血药浓度检测）",
+        "researchInterest": "万古霉素在成人住院患者中的暴露达标情况，以及能否从常规数据里做剂量个体化",
+        "domain": "临床药学 / 治疗药物监测",
+        "populationOfInterest": "接受静脉万古霉素治疗且至少有一次谷浓度检测的成年住院患者",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Write the prior-data-contact declaration into scoping-run.json before profiling anything.",
+        "Copy the packaged profiler to data-profile.py, run it in the workspace, and produce data-profile.json and data-profile.md from that run.",
+        "Reconstruct daily dose from the order in force on each sampling date and report dose-normalized concentration as a number with its spread, not as an intention.",
+        "Run every identity the schema implies — order start/stop against admission window, creatinine against its reference range, AUC against the trough where both exist — and report the counts that held and failed.",
+        "Meet the evidence floors: at least 30 distinct works with resolvable identifiers and URLs, at least 5 channels, at least 5 full texts read, and at least 2 methodological citations per surviving question, with the field of origin marked on every row of evidence-map.md.",
+        "Run the axis-5 search outside this specialty — sparse-sampling Bayesian dose control is solved in oncology and transplantation — and say what transfers and what does not.",
+        "Give each surviving topic all three sections of research-portfolio.md: the 400–800-word mini-review, the reasoning, and the design with its estimator and sample size at scale."
+      ],
+      "mustNotDo": [
+        "Write any PATIENT_ID, medical record number, admission number or date of birth into a deliverable, a scratch file or a script's output.",
+        "Write the pseudonym-to-source-value mapping anywhere on disk.",
+        "Name a topic after the activity performed — 审计, 梳理, 摸底, 盘点, 情况分析, 现状调查 are all out of a topic title.",
+        "Deliver a portfolio that is mostly descriptive designs without saying which of the analysis families were ruled out and on what evidence.",
+        "Cite a work in evidence-map.md whose 「Used for」 cell cannot name a sentence that depends on it."
+      ],
+      "gradedOn": "Whether the researcher can hand research-portfolio.md to a colleague and have them execute one design from it without asking a question, and whether every number in data-profile.md regenerates by running data-profile.py again."
+    },
+    {
+      "id": "scoping-002-five-patient-schema-sample",
+      "title": "五个病人的导出：信息科先给个样例看看结构",
+      "why": "The single most expensive mistake this capability has made, reproduced in the shape it arrives in. The information department sends five patients so the researcher can check the schema before the full pull is approved. Read as a cohort, n=5 fails every inferential design's power check, so the portfolio collapses to two descriptive summaries and the run reports honestly that the data cannot support research — a conclusion that is complete, defensible-sounding, and wrong about the thing the researcher owns. The identifier trap rides along: five real hospital numbers are short enough to feel harmless and are exactly what a delivery-gate scan finds.",
+      "inputs": {
+        "datasetPath": "data/schema-sample-5pts/（5 名患者的完整导出：front_page.csv、diagnosis.csv、orders.csv、labs.csv、vitals.csv；共 915 行医嘱、188 行检验）",
+        "researchInterest": "先看看这个结构能做什么；全量申请还没批，信息科说库里是同一套表",
+        "domain": "住院药学 / 医院信息系统导出",
+        "populationOfInterest": "全院住院患者（本次仅导出 5 例作为结构样例）",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Treat n as a property of this export and say so, and derive the sample size each proposed design needs at scale — events per variable, Riley's criteria, or the detectable effect at a stated alpha and power.",
+        "Run each proposed pipeline on the five records so the code is real, and report every quantity it produces as an existence proof for the pipeline with its interval, saying that is what it is.",
+        "Assign pseudonyms P1–P5 in a stable order, derived in memory, and refer to subjects only by those.",
+        "Rank the candidate questions by scientific value first and by how much data they need second.",
+        "Close data-quality.md with the mandatory preprocessing list, the field-usage table, and the fields to request at full scale ordered by how much each unlocks — naming the one worth more than the rest and why."
+      ],
+      "mustNotDo": [
+        "Write 「样本量过小，不可行」 or any equivalent against a design.",
+        "Report a quantity computed on five observations as an estimate of anything.",
+        "Emit a value copied from a source identifier column, including a hospital number with a letter prefixed to it.",
+        "Write the pseudonym mapping into a working file, a JSON scratch file or a script's stdout.",
+        "Deliver a portfolio of two descriptive audits and call the dataset limited."
+      ],
+      "gradedOn": "Whether the delivered package would still be the right package once the full census arrives behind the same schema — and whether a scan of every file left in the workspace finds a single source identifier."
+    },
+    {
+      "id": "scoping-003-coded-frequency-no-administration-time",
+      "title": "医嘱里只有开单时间和 30 种频次代码：缺的字段到底卡不卡",
+      "why": "The verdict trap, on the export where it is most tempting. There is no administration record — START_DATETIME is the moment the order was written — and FREQUENCY holds thirty local codes like BID4, QD11, W4D8 and ALWAYS; END_DATETIME carries the sentinel 0/0/0 00:00:00 in 7.3% of rows, and its remaining dates are written in an ambiguous order. The general rule says exposure-response analysis needs administration times, so a run states the rule, marks time zero as unavailable and delivers a matrix of red crosses. That is a refusal wearing a verdict's clothes: whether the gap binds depends on the half-life against the dosing interval, and on this drug it may be an order of magnitude smaller than the between-subject spread the same run just measured. The dispensing-versus-administration trap sits underneath — most ONCE orders here are discharge take-home, and counted as the regimen in use they change every exposure the designs rest on.",
+      "inputs": {
+        "datasetPath": "data/psych-ward-orders/（orders.csv 4,970 行、tdm.csv 214 行、vitals.csv 3,880 行、diagnosis.csv 1,204 行；信息科只给了表名、行数与字段名，没有数据字典，也没有给药执行记录表）",
+        "researchInterest": "抗精神病药的暴露与体重、代谢指标变化之间有没有关系",
+        "domain": "精神科临床药学",
+        "populationOfInterest": "住院期间接受口服抗精神病药治疗的成年患者",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Decode all thirty FREQUENCY codes explicitly, or list the ones that could not be decoded, and say which downstream analysis each undecoded code breaks.",
+        "Separate dispensing from administration: count the ONCE orders, say how many are discharge take-home, and state what including them would do to daily dose.",
+        "Handle the sentinel END_DATETIME and the ambiguous date order before any timeline is built, and say how many rows each rule touched.",
+        "For every target-trial element that cannot be read from a field, quantify what the gap costs in the same units as the effect being studied, state the assumption that closes it, and carry it through as a sensitivity analysis reporting a range.",
+        "Look for the proxy before declaring an outcome absent — longitudinal weight and vitals records, anticholinergic co-prescription, repeat laboratory values are outcomes you construct.",
+        "Give every infeasible verdict the strongest question the data can still answer, with its assumption and its cost."
+      ],
+      "mustNotDo": [
+        "Mark time zero unavailable and stop, without showing that the missing timestamp binds on this drug at this dosing interval.",
+        "Read a coded frequency literally — 10mg BID4 is not 10 mg per day.",
+        "Write 「无结局字段」 without having searched the vitals and laboratory tables for a constructible proxy.",
+        "Leave any analysis family in the Phase 4b list marked 「未考虑」.",
+        "Repair immortal time bias with a later statistical adjustment instead of naming the missing field."
+      ],
+      "gradedOn": "Whether every ❌ in feasibility-matrix.md is backed by a number showing the gap binds, and whether the run computed the derived quantities before deciding what was impossible rather than after."
+    },
+    {
+      "id": "scoping-004-empty-join-key-and-a-settled-question",
+      "title": "诊断表的 PATIENT_ID 全空，而研究者想做的题目已经有人做完了",
+      "why": "Two independent failures that a single package has to survive. Structurally, the diagnosis table's PATIENT_ID has 0% fill, so no patient-level analysis across admissions is possible — an inclusion-dependency finding that a fill-rate table shows and a narrative summary hides, and one that silently deletes half the proposed portfolio if it is missed. Two smaller defects ride along: DIAGNOSIS_CODE mixes ICD-10 with two local traditional-medicine code sets, and AGE is text (「56岁」) in front_page.csv and numeric in labs.csv, which breaks a join across the two without raising anything. Scientifically, the researcher's stated interest is a comparison the field has already settled at far larger n, which the novelty ledger is supposed to surface and which a run that searches only PubMed will not: the closest works are registry analyses indexed elsewhere. Dropping a question because the field has answered it is a finding; not noticing is a year of somebody's time.",
+      "inputs": {
+        "datasetPath": "data/cardio-readmit-export/（admissions.csv 8,240 行、diagnosis.csv 19,006 行、orders.csv 61,330 行、labs.csv 204,118 行、front_page.csv 8,240 行；信息科说是「跟上次同一套表」，未随附数据字典，未做任何清洗）",
+        "researchInterest": "想比较 ACEI 与 ARB 出院带药对心衰患者 30 天再入院的影响",
+        "domain": "心血管临床药学",
+        "populationOfInterest": "因心力衰竭住院并存活出院的成年患者",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Run inclusion-dependency discovery on every declared join key and report the 0%-fill diagnosis key as a structural finding, naming each design it removes.",
+        "Report the mixed coding systems with counts per system and say what fraction of rows maps to nothing, and whether the flag column separates them reliably.",
+        "Report the AGE type mismatch across tables and the joins it would break silently.",
+        "Write the novelty ledger for the stated interest: what already answers it, at what n, in which population, published where and when, and what precisely is left — reaching more than one index, including registry and full-text channels.",
+        "If the question is answered, drop it and say so, then propose what this dataset can carry that the settled literature does not — and keep the closest works named.",
+        "Write the layer-by-layer expansion section showing how one measured quantity opens into a programme, each layer a checkable claim."
+      ],
+      "mustNotDo": [
+        "Propose an across-admission patient-level design against a diagnosis table whose patient key is empty.",
+        "Report a fill rate without saying which completeness it measured.",
+        "Argue novelty from a thin result set — few engines answering is not evidence that little exists.",
+        "Keep the original question alive by narrowing it without naming the exact axis of difference from the closest published work.",
+        "Deliver a bibliography whose rows all come from one specialty and one channel."
+      ],
+      "gradedOn": "Whether the empty join key appears as a numbered finding that visibly removes designs from the matrix rather than as a sentence in a data-quality paragraph, and whether the novelty ledger names the works that make the original question not worth doing."
+    }
+  ]
+}

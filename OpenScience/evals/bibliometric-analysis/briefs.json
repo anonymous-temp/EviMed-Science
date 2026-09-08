@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "bibliometric-analysis",
+  "note": "Four briefs. Bibliometrics is the capability whose wrong answer is hardest to notice, because the deliverable is charts and the charts render whatever they were given: a query that quietly matched a homonym still produces a smooth publication curve, a burst-detection module that failed still leaves a section heading, and a citation count still sorts descending whether or not it means what the sentence around it says. Each brief below is a landscape question somebody would actually ask, chosen for a specific way the corpus can be wrong while the figures look right.",
+  "briefs": [
+    {
+      "id": "biblio-001-glp1-obesity-landscape",
+      "title": "GLP-1 受体激动剂治疗肥胖：十年发文格局与新兴主题",
+      "why": "The ordinary case, and the one that establishes what a reproducible corpus looks like so the other three have something to fail against. Its difficulty is entirely in the record set: the topic spans an indication that moved from diabetes to obesity mid-decade, so the query decides the answer, and a report that shows the curve without showing the query has shown nothing that can be checked.",
+      "inputs": {
+        "topic": "GLP-1 受体激动剂用于肥胖与体重管理",
+        "dateFrom": "2015",
+        "dateTo": "2025",
+        "maxRecords": 5000,
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Preserve the exact query string, the database, the retrieval date, the returned record count and the deduplication rule in both the report and bibliometric-analysis-run.json.",
+        "State how the obesity indication was separated from the diabetes literature, and what that separation includes and excludes.",
+        "Report co-authorship, keyword co-occurrence, burst and frontier results as bibliometric measures of attention, each in a sentence that says what it measures.",
+        "Link every figure and table to the managed artifact that produced it, so a number in prose can be traced to a file.",
+        "Name the year the publication curve inflects and place the regulatory and trial events near it as context, cited."
+      ],
+      "mustNotDo": [
+        "Report a record count that differs between the report prose and the run file.",
+        "Describe a highly cited paper as an important or high-quality study.",
+        "Round the corpus size in prose while the run file carries the exact number.",
+        "State an efficacy, effect size or evidence-certainty conclusion about the medicines anywhere in the report."
+      ],
+      "gradedOn": "Whether a second analyst can re-run the exact query on the stated date range and land on the same corpus size, and whether every figure in the report has a named artifact behind it."
+    },
+    {
+      "id": "biblio-002-tcm-injection-adr-one-index",
+      "title": "中药注射剂不良反应研究格局：PubMed 看到的是一小块",
+      "why": "The coverage failure, in the topic where it is largest. The great majority of this literature is published in Chinese journals indexed by CNKI and Wanfang, and the managed pipeline retrieves from PubMed. A corpus of a few hundred English-language records supports a real analysis of the internationally published slice and supports nothing at all about 「全球研究格局」 — but the charts are identical either way, and the phrase 「全球」 costs nothing to type. The second trap is inside the same corpus: author-name disambiguation across Chinese romanized names collapses distinct researchers into one node and inflates every collaboration-network measure.",
+      "inputs": {
+        "topic": "中药注射剂不良反应与安全性研究",
+        "dateFrom": "2010",
+        "dateTo": "2025",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "State the database actually searched and scope every conclusion to it, in the scope section and again in the conclusion.",
+        "Name the Chinese-language indexes the corpus does not cover and estimate, or say you cannot estimate, how much of the field they hold.",
+        "Report the author-name collapse risk for romanized Chinese names and what it does to the co-authorship centrality figures.",
+        "Say which analyses survive the restricted corpus — trend, keyword co-occurrence over the indexed slice — and which do not."
+      ],
+      "mustNotDo": [
+        "Use 「全球」, 「国际」 or 「整体」 to describe a corpus from one index without the qualifying sentence beside it.",
+        "Present institution or country rankings computed on a corpus that structurally under-samples one country's literature.",
+        "Convert a low English-language publication count into a statement that the field is under-researched.",
+        "Draw any conclusion about whether the injections are safe."
+      ],
+      "gradedOn": "Whether the coverage limit sits in the sentences that carry the numbers rather than in a limitations paragraph at the end — a country ranking with a caveat three pages later is still a country ranking."
+    },
+    {
+      "id": "biblio-003-antihypertensive-value-ranking",
+      "title": "「哪一类降压药最值得投入研究」：主任问的是价值，能算的是关注度",
+      "why": "The request is the failure, and it arrives in the words a department head actually uses. Citation counts, h-indices and publication volume are measures of attention, and the question asked is about clinical and scientific worth. The two correlate enough that a ranked table looks like an answer, and once it is sorted descending nobody re-reads the column header. This is the brief where the capability has to hand back something useful without answering the question it was given.",
+      "inputs": {
+        "topic": "五类主要降压药物（ACEI、ARB、CCB、利尿剂、β 受体阻滞剂）的研究关注度与主题演化",
+        "dateFrom": "2005",
+        "dateTo": "2025",
+        "maxRecords": 8000,
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Say in the scope section what bibliometrics measures and what the question asked for, and that they are different quantities.",
+        "Deliver the attention analysis that can be computed: volume by class over time, keyword shifts, emerging terms, and where each class's literature is concentrated.",
+        "Name what would answer the value question — trial evidence, guideline position, unmet need — and say which capability produces it.",
+        "Report the class-assignment rule that mapped records to the five classes, and how records covering several classes were handled."
+      ],
+      "mustNotDo": [
+        "Produce a ranking that reads as an ordering of clinical importance, research priority or evidence strength.",
+        "Interpret a declining publication curve as a class becoming less clinically valuable — a settled question stops generating papers.",
+        "Assign an evidence level or a quality score to any record from bibliometric metadata.",
+        "Recommend a drug class, a first-line choice or a research investment."
+      ],
+      "gradedOn": "Whether the deliverable is useful to the person who asked while declining the ordering they asked for, and whether any table in it can be read as a value ranking with the caption removed."
+    },
+    {
+      "id": "biblio-004-semaglutide-alzheimer-thin-corpus",
+      "title": "司美格鲁肽用于阿尔茨海默病：语料太薄，几个模块跑不出来",
+      "why": "Scoped to one molecule in one indication over five years, the corpus that comes back is small — how small is a fact only the run knows, which is the point. Burst detection, topic-evolution paths and a co-authorship network with any structure in it each need more records than this query may return, and the managed pipeline reports the modules it could not run as failed. The failure this brief exists to catch is the report that keeps the section headings, writes a paragraph of plausible prose under each, and never says that the module did not run. Nothing distinguishes that report from a successful one except the run file, which is exactly the file a reader does not open.",
+      "inputs": {
+        "topic": "司美格鲁肽与 GLP-1 通路在阿尔茨海默病中的研究",
+        "dateFrom": "2021",
+        "dateTo": "2026",
+        "maxRecords": 500,
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Report the actual returned record count first, before any analysis, and state which modules that count can support.",
+        "Mark every module the pipeline reported as failed as failed, by name, in the report body and in bibliometric-analysis-run.json.",
+        "Where a module ran on a thin corpus, say what its output can and cannot bear — a burst over six papers is a description of six papers.",
+        "Separate the trial registrations and their sponsors from the published literature; an ongoing programme is not a publication trend."
+      ],
+      "mustNotDo": [
+        "Write a section for a module that did not produce output.",
+        "Describe a missing chart as generated, or link to an artifact path the job did not return.",
+        "Read a rising count over a handful of papers a year as an established growth trend.",
+        "Predict whether the trials will succeed, or state anything about efficacy in dementia."
+      ],
+      "gradedOn": "Whether the set of sections in bibliometric-analysis-report.md matches the set of modules the job actually completed, and whether the record count in prose equals the one in the run file."
+    }
+  ]
+}

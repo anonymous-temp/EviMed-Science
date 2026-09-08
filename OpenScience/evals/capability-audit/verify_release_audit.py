@@ -11,6 +11,7 @@ from pathlib import Path
 
 from hosted_receipts import read_owned, file_receipt, validate_receipt, artifact_paths
 import public_mr_fixture as public_mr
+import verify_acceptance_ledger as acceptance_ledger
 
 
 HERE = Path(__file__).resolve().parent
@@ -452,11 +453,40 @@ def verify_skills():
     require(all(item.get("releaseStatus") != "published" for item in items), "a mapped source skill is still labeled published")
 
 
+def verify_acceptance():
+    """Fail when the per-capability acceptance ledger drifts from the tree.
+
+    This one checks a record, not a recording: whether every capability under
+    `capabilities/` has a row, whether every row names a capability that exists,
+    whether each brief count matches the briefs on disk and whether every claim
+    of a delivery resolves to something. It does not require that any capability
+    be accepted — most rows read "not-run" today and that is the honest answer.
+    The acceptance rate is printed as a notice for exactly that reason.
+    """
+    issues = acceptance_ledger.ledger_issues()
+    require(
+        not issues,
+        "acceptance ledger is inconsistent with the capability tree:\n  - %s" % "\n  - ".join(issues),
+    )
+    for notice in acceptance_ledger.harness_notices():
+        print(notice)
+    print(acceptance_ledger.coverage_notice())
+
+
 def main():
+    # Appended, never inserted. This audit is a fail-fast wall of refusals, so
+    # where a new check goes decides which refusal an operator is shown first —
+    # and the freshness refusals in verify_tools/verify_sources are the ones
+    # that must keep speaking for themselves. Running last also means a stale
+    # checkout never reaches this check, which is exactly why the ledger's own
+    # coverage does not depend on the audit: `pnpm test:acceptance-ledger` runs
+    # it offline on every commit through `test:web`, and `pnpm
+    # check:acceptance-ledger` runs it on its own.
     verify_tools()
     verify_sources()
     verify_connectors()
     verify_skills()
+    verify_acceptance()
     print("capability audit release gate passed")
 
 

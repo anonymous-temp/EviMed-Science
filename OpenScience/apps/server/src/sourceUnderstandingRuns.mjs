@@ -36,7 +36,12 @@ export class SourceUnderstandingRuns {
       || !Number.isSafeInteger(usage.inputTokens) || usage.inputTokens < 0 || !Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0) {
       throw new HttpError(502, "source_understanding_usage_invalid", "The source run has no actual gateway usage receipt.");
     }
-    return { state: "complete", ...run, output: projectSourceUnderstandingOutput(result.output), usage: {
+    // Projected against the immutable input, so the stored audit is the one the
+    // control plane derived from the deterministic unit sample and the output's
+    // own anchors — not the one the run reported about itself. Dropping the
+    // second argument here is what would let a run record a clean audit it
+    // never performed, which is the whole reason the contract stopped refusing.
+    return { state: "complete", ...run, output: projectSourceUnderstandingOutput(result.output, input), usage: {
       currency: "CNY", modelId: usage.modelId, providerId: usage.providerId, actualCost: usage.actualCost,
       inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
     } };

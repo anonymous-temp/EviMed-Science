@@ -160,16 +160,51 @@ export class CapsuleService {
         catch (error) { if (error.code !== "product_revision_conflict") throw error; }
       }
     }
+    // Where the suggestion came from, when the caller knows: a digest decision
+    // is the researcher's own act, not a runtime inference about the project,
+    // and the entry they are asked to approve should say so.
+    const origin = input.provenance == null
+      ? [{ type: "source", id: `runtime-project:${projectId}` }]
+      : provenance(input.provenance);
     const id = `runtime-note:${createHash("sha256").update(JSON.stringify([capsule.id, factKind, content])).digest("hex")}`;
     const existing = await this.documents.get(userId, "fact", id);
     if (existing) return existing;
     try {
       return await this.documents.put(userId, "fact", id, { capsuleId: capsule.id, factKind,
         layer: factKind === "method_preference" ? "methods" : "knowledge", content, origin: "inferred", status: "candidate",
-        provenance: [{ type: "source", id: `runtime-project:${projectId}` }], contextOnly: true }, { expectedRevision: 0, projectId });
+        provenance: origin, contextOnly: true }, { expectedRevision: 0, projectId });
     } catch (error) {
       if (error.code !== "product_revision_conflict") throw error;
       return this.documents.get(userId, "fact", id);
+    }
+  }
+
+  /**
+   * Take back a suggestion this system made and has since learned was wrong.
+   *
+   * Only what the system itself suggested and the user has not yet acted on: a
+   * `candidate` is retired, because asking someone to approve knowledge we know
+   * we could not reproduce is worse than never having suggested it. An entry the
+   * user approved is theirs — it keeps its status and only carries the note, so
+   * the retraction informs their decision instead of overruling it.
+   *
+   * Idempotent, and never throws for an entry that is already gone: it is called
+   * from a fold that replays.
+   *
+   * @param {string} userId @param {string} entryId @param {{reason?:string}} options
+   */
+  async retractNote(userId, entryId, { reason = "" } = {}) {
+    const entry = await this.documents.get(userId, "fact", productId(entryId, "entry"));
+    if (!entry) return null;
+    const retracted = { reason: text(reason, "retraction reason", 2000, false), at: new Date().toISOString() };
+    if (entry.payload.retracted?.reason === retracted.reason) return entry;
+    const payload = { ...entry.payload, retracted,
+      ...(entry.payload.status === "candidate" ? { status: "retired", curatedAt: retracted.at } : {}) };
+    try {
+      return await this.documents.put(userId, "fact", entry.id, payload, { expectedRevision: entry.revision });
+    } catch (error) {
+      if (error.code !== "product_revision_conflict") throw error;
+      return this.documents.get(userId, "fact", entry.id);
     }
   }
 

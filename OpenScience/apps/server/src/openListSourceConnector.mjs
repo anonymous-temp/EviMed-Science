@@ -1,7 +1,7 @@
 import path from "node:path";
 import { HttpError, safeId } from "./security.mjs";
 
-function remotePath(value) {
+function remotePathOf(value) {
   if (typeof value !== "string" || !value.startsWith("/") || value.length > 2048 || value.includes("\0")) {
     throw new HttpError(400, "openlist_path_invalid", "OpenList path is invalid.");
   }
@@ -15,12 +15,35 @@ function remotePath(value) {
   return normalized;
 }
 
+/** One mapping from an OpenList directory entry to a source manifest. The
+ * explicit import route and the leased folder sync both go through it, so a file
+ * lands in the same version family whichever path registered it.
+ * @param {string} projectId @param {{path:string,size:number,mtime:string|null,providerHash:string|null}} entry
+ * @param {{now?:()=>Date}} options */
+export function openListSourceInput(projectId, entry, { now = () => new Date() } = {}) {
+  const match = /^sha256:([a-f0-9]{64})$/i.exec(String(entry?.providerHash ?? ""));
+  if (!match) {
+    throw new HttpError(409, "openlist_sha256_required", "This OpenList storage must expose a SHA-256 hash; use platform upload for this file.");
+  }
+  const remotePath = remotePathOf(entry.path);
+  return {
+    projectId,
+    connector: { type: "openlist", id: remotePath },
+    path: `openlist/${remotePath.replace(/^\/+/, "")}`,
+    size: entry.size,
+    mtime: entry.mtime ?? now().toISOString(),
+    mimeType: "application/octet-stream",
+    sha256: match[1].toLowerCase(),
+    providerHash: entry.providerHash,
+  };
+}
+
 /** Maps every account into one immutable OpenList namespace. A browser can
  * name paths inside its namespace but can never select a storage root. */
 export class OpenListSourceConnector {
   constructor(client, { tenantRoot = "/tenants" } = {}) {
     if (!client) throw new TypeError("OpenList source connector requires a client.");
-    const root = remotePath(tenantRoot);
+    const root = remotePathOf(tenantRoot);
     if (root === "/") throw new TypeError("OpenList tenant root cannot be the service root.");
     this.client = client;
     this.tenantRoot = root.replace(/\/+$/, "");
@@ -29,7 +52,7 @@ export class OpenListSourceConnector {
   prefix(userId) { return `${this.tenantRoot}/${encodeURIComponent(safeId(userId, "user"))}`; }
 
   scoped(userId, value) {
-    const selected = remotePath(value);
+    const selected = remotePathOf(value);
     return `${this.prefix(userId)}${selected === "/" ? "" : selected}`;
   }
 

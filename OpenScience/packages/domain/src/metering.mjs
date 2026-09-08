@@ -103,9 +103,14 @@ export function isPeak(at) {
  * charge a user for a stable prompt prefix as if it were new — and a stable
  * prefix is exactly the behaviour the composition is designed to produce.
  *
+ * A list is identified and dated, not anonymous: every ledger row stamps the
+ * version it was priced under, and a list that carried neither a version nor a
+ * start instant could be stamped on a row and then never found again.
+ *
  * @typedef {object} PriceList
  * @property {string} currency
- * @property {string} [version]
+ * @property {string} version
+ * @property {string} effectiveFrom  ISO instant this list started billing
  * @property {string} [modelSource]
  * @property {Record<string, { cacheHit: number, cacheMiss: number, output: number }>} model  price per 1M tokens
  * @property {number} asrPerMinute
@@ -115,30 +120,144 @@ export function isPeak(at) {
  */
 
 /**
+ * Freeze a price list — or a registry of them — through every nested table.
+ *
+ * `Object.freeze` is one level deep and every rate in a list is at least two:
+ * a list frozen only at the top still lets one line of code change the rate a
+ * settled ledger row was billed at, and nothing on the invoice would show it.
+ * A price list is a plain tree of data — no cycles, no class instances — so
+ * walking it terminates.
+ *
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object') return value
+  Object.freeze(value)
+  for (const inner of Object.values(value)) deepFreeze(inner)
+  return value
+}
+
+/**
  * The reference price list. A deployment overrides it; the shape is fixed here
  * so a price list is one thing rather than a scattering of constants.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = Object.freeze({
+export const REFERENCE_PRICE_LIST = deepFreeze({
   currency: 'CNY',
   version: 'evimed-reference-2026-09-05',
+  effectiveFrom: '2026-09-05T00:00:00.000Z',
   modelSource: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing/',
-  model: Object.freeze({
-    'deepseek-v4-pro': Object.freeze({ cacheHit: 0.3, cacheMiss: 9, output: 27 }),
-    'deepseek-v4-flash': Object.freeze({ cacheHit: 0.1, cacheMiss: 3, output: 9 }),
-  }),
+  model: {
+    'deepseek-v4-pro': { cacheHit: 0.3, cacheMiss: 9, output: 27 },
+    'deepseek-v4-flash': { cacheHit: 0.1, cacheMiss: 3, output: 9 },
+  },
   asrPerMinute: 0.05,
   embeddingPerMillion: 0.5,
-  specialistJob: Object.freeze({
+  specialistJob: {
     'meta-analysis': 6,
     'mendelian-randomization': 8,
     'bibliometric-analysis': 4,
     'research-topic-selection': 4,
     'peer-review': 3,
     'drug-safety-analysis': 3,
-  }),
+  },
   storagePerGigabyteDay: 0.01,
 })
+
+/**
+ * Every price list this platform has billed against, keyed by version.
+ *
+ * Each ledger row stamps the version it was priced under, and a stamp is only
+ * worth writing down if the list it names can still be found: without this
+ * registry, the first price change turns every historical row into a reference
+ * to a list that exists nowhere, and reconciling or re-pricing a past month
+ * becomes guesswork. Adding the next list is a data edit here — append the new
+ * entry with its own `effectiveFrom`, point `REFERENCE_PRICE_LIST` at it, and
+ * never touch a list that has already priced a row.
+ *
+ * There is one entry because there has been one list: the usage ledger was
+ * created after `evimed-reference-2026-09-05` and no persisted row can name an
+ * earlier one. The rates that preceded it are deliberately not resurrected
+ * here — they were billed by an off-peak rule this function no longer applies,
+ * so a reconstruction would be a price list that never charged anyone.
+ *
+ * Not exported, on purpose. A map handed out is a map indexed, and indexing it
+ * with a version it does not hold answers `undefined` — the one value a price
+ * list must never be, because `undefined` is also what an omitted argument
+ * looks like. `priceListFor` is the only lookup and it answers `null`.
+ *
+ * @type {Readonly<Record<string, PriceList>>}
+ */
+const priceLists = deepFreeze({
+  'evimed-reference-2026-09-05': REFERENCE_PRICE_LIST,
+})
+
+/**
+ * The registered price versions, oldest first by `effectiveFrom`.
+ *
+ * This is how a caller — or a test holding the registry to its invariants —
+ * enumerates what exists without being handed the registry itself. Resolving
+ * each one goes through `priceListFor`, which cannot answer `undefined`.
+ *
+ * @type {readonly string[]}
+ */
+export const PRICE_LIST_VERSIONS = Object.freeze(
+  Object.keys(priceLists).sort((left, right) => Date.parse(priceLists[left].effectiveFrom) - Date.parse(priceLists[right].effectiveFrom)),
+)
+
+/**
+ * The exact list a version names, or null.
+ *
+ * Null rather than the current list, always: a historical row re-priced at
+ * today's rates is a wrong invoice that looks right, and the caller can only
+ * treat it correctly — as unpriced — if it is told the truth here. Null rather
+ * than `undefined` for the next reason along: `priceUsage` prices at the
+ * current list when it is handed no list at all, so a failed lookup has to be
+ * a value that is visibly not "no argument".
+ *
+ * @param {string | undefined | null} version
+ * @returns {PriceList | null}
+ */
+export function priceListFor(version) {
+  if (typeof version !== 'string' || !version) return null
+  return Object.hasOwn(priceLists, version) ? priceLists[version] : null
+}
+
+/**
+ * The list in force at an instant: the newest one that had already taken
+ * effect. Null before the first list — no list was in force, and saying so is
+ * better than dating a charge to prices that did not exist yet.
+ *
+ * The set to select from is a parameter because the selection is a rule over a
+ * set, and this platform has had exactly one list so far: without it, "a
+ * boundary instant belongs to the later list" would first be exercised on the
+ * day a second list starts billing, which is the worst day to find out it is
+ * wrong. It defaults to the registry, and no caller in the platform passes it.
+ *
+ * @param {Date | string | number} instant  a Date, an ISO instant, or epoch milliseconds
+ * @param {Readonly<Record<string, PriceList>>} [registry]
+ * @returns {PriceList | null}
+ */
+export function priceListAt(instant, registry = priceLists) {
+  const at = instant instanceof Date ? instant.getTime()
+    : typeof instant === 'number' ? instant
+      : Date.parse(String(instant ?? ''))
+  if (!Number.isFinite(at)) return null
+  /** @type {PriceList | null} */
+  let effective = null
+  let effectiveAt = -Infinity
+  for (const list of Object.values(registry)) {
+    const from = Date.parse(String(list.effectiveFrom ?? ''))
+    // A list with no parseable start cannot be dated, so it cannot be selected
+    // by date; `priceListFor` still resolves it by name.
+    if (!Number.isFinite(from) || from > at || from <= effectiveAt) continue
+    effective = list
+    effectiveAt = from
+  }
+  return effective
+}
 
 /**
  * What one metered request costs.
@@ -147,16 +266,28 @@ export const REFERENCE_PRICE_LIST = Object.freeze({
  * rather than guessing a rate: a guessed price on an invoice is worse than a
  * visible gap, because a gap gets fixed and a guess gets believed.
  *
+ * The price list is a rest parameter, and that is load-bearing rather than
+ * stylish: a default parameter fires on an explicitly passed `undefined`
+ * exactly as it fires on an omitted argument, so `priceUsage(usage, lookup())`
+ * would bill a historical row at today's rates whenever `lookup()` missed.
+ * Here the two are different. Omit the argument and the current list prices
+ * the request, deliberately — that is how the gateway prices a live call it
+ * stamps `REFERENCE_PRICE_LIST.version` on. Pass anything falsy — the `null`
+ * from `priceListFor`, or an `undefined` from a lookup that missed — and
+ * nothing is priced.
+ *
  * @param {{ resourceType: string, model?: string, cacheHit?: number, cacheMiss?: number, output?: number, minutes?: number, tokens?: number, jobType?: string, gigabyteDays?: number, peak: boolean }} usage
- * @param {PriceList} [prices]
+ * @param {...(PriceList | null | undefined)} prices  omit to price at the current list; otherwise the resolved list to price against
  * @returns {{ cost: number, priced: boolean, currency: string }}
  */
-export function priceUsage(usage, prices = REFERENCE_PRICE_LIST) {
+export function priceUsage(usage, ...prices) {
+  const list = prices.length === 0 ? REFERENCE_PRICE_LIST : prices[0]
+  if (!list) return { cost: 0, priced: false, currency: '' }
   const multiplier = usage.peak ? 1 : OFF_PEAK_MULTIPLIER
-  const currency = prices.currency
+  const currency = list.currency
   switch (usage.resourceType) {
     case 'model': {
-      const rate = prices.model[String(usage.model ?? '')]
+      const rate = list.model[String(usage.model ?? '')]
       if (!rate) return { cost: 0, priced: false, currency }
       const millions = (/** @type {unknown} */ value) => (Number(value) || 0) / 1_000_000
       const cost = millions(usage.cacheHit) * rate.cacheHit
@@ -165,18 +296,18 @@ export function priceUsage(usage, prices = REFERENCE_PRICE_LIST) {
       return { cost: round(cost * multiplier), priced: true, currency }
     }
     case 'asr':
-      return { cost: round((Number(usage.minutes) || 0) * prices.asrPerMinute), priced: true, currency }
+      return { cost: round((Number(usage.minutes) || 0) * list.asrPerMinute), priced: true, currency }
     case 'embedding':
-      return { cost: round(((Number(usage.tokens) || 0) / 1_000_000) * prices.embeddingPerMillion), priced: true, currency }
+      return { cost: round(((Number(usage.tokens) || 0) / 1_000_000) * list.embeddingPerMillion), priced: true, currency }
     case 'specialist-job': {
-      const rate = prices.specialistJob[String(usage.jobType ?? '')]
+      const rate = list.specialistJob[String(usage.jobType ?? '')]
       if (rate == null) return { cost: 0, priced: false, currency }
       return { cost: round(rate), priced: true, currency }
     }
     case 'storage':
       // Storage is not a request and has no peak window; applying one would
       // charge a user less for the same disk at night, which is nonsense.
-      return { cost: round((Number(usage.gigabyteDays) || 0) * prices.storagePerGigabyteDay), priced: true, currency }
+      return { cost: round((Number(usage.gigabyteDays) || 0) * list.storagePerGigabyteDay), priced: true, currency }
     default:
       return { cost: 0, priced: false, currency }
   }

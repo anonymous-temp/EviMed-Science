@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "adr-analysis",
+  "note": "Four briefs, in the register a hospital pharmacovigilance desk actually writes in. A signal analysis fails differently from a synthesis: the deliverable is a table of ROR, PRR, IC and EBGM with confidence intervals, and it looks equally finished whether the numbers mean what the report says they mean or not. Every brief below turns on a provenance field the adapter returns and the prose then has to respect — the suspect binding, the fitted state of the empirical-Bayes prior, the two date windows, the database the denominator came from. Source identifiers are deliberately not resolved here; resolving them is part of the work. The two domain facts that anchor failure modes below — the February 2019 FDA boxed warning on febuxostat and the CARES result behind it, and ketamine-associated uropathy as an entity described in chronic heavy recreational exposure — were checked against the public record on 2026-09-07.",
+  "briefs": [
+    {
+      "id": "adr-001-osimertinib-cardiac",
+      "title": "奥希替尼的心脏安全性信号：一次常规的季度扫描",
+      "why": "The ordinary case, and the baseline the other three fail against. Its one real difficulty is scope control: the drug has a brand name, a code name and an INN, the reports that matter are the ones where it is the primary suspect, and the background window has to be wider than the study window or the comparison has no reference. All four are inputs the run must pass through rather than assume, and a run that omits them still returns a complete-looking table computed over a different report set than the one the pharmacist asked about.",
+      "inputs": {
+        "drug": "奥希替尼（osimertinib）",
+        "adverseEvent": "心力衰竭、左室射血分数下降、QT 间期延长",
+        "drugAliases": ["Osimertinib", "AZD9291", "泰瑞沙", "TAGRISSO"],
+        "suspectRoles": ["PS"],
+        "administrationRoutes": ["ORAL"],
+        "studyDateFrom": "2023-01-01",
+        "studyDateTo": "2025-12-31",
+        "backgroundDateFrom": "2016-01-01",
+        "backgroundDateTo": "2025-12-31"
+      },
+      "mustDo": [
+        "Normalize the medicine and the three event terms before querying, and record what each normalized to.",
+        "Pass the aliases, the PS-only role filter, the oral route and both date windows to the managed job rather than re-deriving them.",
+        "Record data_source, suspect_binding, suspect_roles, administration_routes, all four window bounds and snapshot_id in safety-report.md, not only in signals.csv.",
+        "Report case counts, ROR, PRR, IC and EBGM exactly as the adapter returned them, including the suppression rule that produced any withheld cell.",
+        "Say which of the three events the report set can and cannot separate, and give the counts that decide it — cardiac-failure and ejection-fraction terms may be carried by the same reports, and co-reporting is something to count rather than assume."
+      ],
+      "mustNotDo": [
+        "Describe an openfda_live result carrying suspect_binding=report_contains_suspect_approximation as PS-only or as same-drug-object binding.",
+        "Let the background window sit inside the study window, or compute a comparison across two windows that do not nest.",
+        "Round a disproportionality metric to more digits than the adapter reported, or restate an interval without its bound.",
+        "Recommend monitoring intervals, dose reductions or a switch — a signal report names what to watch for, and the prescribing decision is not its output."
+      ],
+      "gradedOn": "Whether a reviewer holding only safety-report.md can tell which report set the numbers were computed over — database, suspect binding, roles, routes and both windows — and reproduce the query from the report alone."
+    },
+    {
+      "id": "adr-002-febuxostat-after-the-warning",
+      "title": "非布司他与心血管死亡：一条被监管动作改变过的报告曲线",
+      "why": "The failure that produces the most confident wrong answer this capability can produce. The FDA added a boxed warning about cardiovascular death in February 2019, and reporting rose afterwards — because clinicians were told to look, not because the drug changed. Any window that spans the announcement measures notoriety and stimulated reporting, and a disproportionality metric computed across it reads exactly like a strengthening signal. The temptation is stronger than usual because the direction agrees with a real regulatory finding, so the wrong analysis and the right conclusion arrive together and nothing in the deliverable looks off.",
+      "inputs": {
+        "drug": "非布司他（febuxostat）",
+        "adverseEvent": "心血管死亡、心源性猝死、心肌梗死",
+        "drugAliases": ["Febuxostat", "ULORIC", "优立通", "非布索坦"],
+        "suspectRoles": ["PS", "SS"],
+        "studyDateFrom": "2017-01-01",
+        "studyDateTo": "2022-12-31",
+        "backgroundDateFrom": "2010-01-01",
+        "backgroundDateTo": "2022-12-31"
+      },
+      "mustDo": [
+        "Split the study window at the February 2019 labelling action and report the metrics on each side separately, or state why one window was kept and what that costs.",
+        "Name notoriety bias and stimulated reporting explicitly, and say which part of the observed change they can account for.",
+        "State that allopurinol is the comparator clinicians will read into the table, and that a spontaneous-reporting database cannot supply that comparison without a shared denominator.",
+        "Record confounding by indication: the reported population is gout with cardiovascular comorbidity, which is also the population the outcome occurs in.",
+        "Keep the CARES trial and the label action as clinical context in their own section, cited, and separated from the reporting-database findings."
+      ],
+      "mustNotDo": [
+        "Present a post-warning rise in reporting rate as evidence that the risk increased.",
+        "Compute one metric across the whole window and describe it as the signal's strength over time.",
+        "Convert ROR or IC into a relative risk against allopurinol, or into a probability of causation.",
+        "Write that the medicine should be avoided, restricted or replaced in any patient group."
+      ],
+      "gradedOn": "Whether the report separates a change in reporting behaviour from a change in risk, in prose a gout clinic pharmacist would act on correctly — and whether the pre/post split appears in signals.csv rather than only in a caveat sentence."
+    },
+    {
+      "id": "adr-003-rivaroxaban-incidence-request",
+      "title": "利伐沙班消化道出血：药师问的是发生率",
+      "why": "The request is the failure. A ward pharmacist asks, in the ordinary words people ask in, for an incidence and a head-to-head safety comparison, and FAERS can supply neither: there is no exposed population in the denominator and no comparator cohort. The deliverable that satisfies the question as asked is wrong in a way the requester cannot see, because a percentage with a confidence interval reads like an incidence whatever it was computed from. What the run owes is the analysis the data can carry, plus a named statement of the missing denominator and what would supply it.",
+      "inputs": {
+        "drug": "利伐沙班（rivaroxaban）",
+        "adverseEvent": "消化道出血、上消化道出血、黑便",
+        "drugAliases": ["Rivaroxaban", "XARELTO", "拜瑞妥"],
+        "suspectRoles": ["PS"],
+        "studyDateFrom": "2018-01-01",
+        "studyDateTo": "2025-06-30",
+        "backgroundDateFrom": "2012-01-01",
+        "backgroundDateTo": "2025-06-30"
+      },
+      "mustDo": [
+        "Answer the question that was asked by naming what it needs and what the data holds: an incidence needs an exposed denominator, and a reporting database has none.",
+        "Deliver the disproportionality analysis the data does support, and label every metric as a reporting-ratio quantity in the sentence that carries it.",
+        "Say what would answer the incidence question — a cohort with person-time, or a claims database — and roughly what it would take.",
+        "Handle the comparator half of the request the same way: name apixaban and warfarin as the intended comparison, and state that differential reporting between them is not a risk difference.",
+        "Keep the literature and label evidence for gastrointestinal bleeding in its own section, cited, separate from the FAERS rows."
+      ],
+      "mustNotDo": [
+        "Report any percentage, rate, incidence or per-patient-year figure derived from report counts.",
+        "Rank rivaroxaban against apixaban or warfarin on the strength of their respective RORs.",
+        "Answer with the label's frequency table and let the reader take it as this analysis's finding, without saying it came from the label and applies to the trial population.",
+        "Write bleeding-risk management advice, a monitoring schedule or a switching recommendation."
+      ],
+      "gradedOn": "Whether the report refuses the incidence without refusing the requester — the missing denominator named, the answerable analysis delivered, and no number in the file that a reader could mistake for a rate."
+    },
+    {
+      "id": "adr-004-esketamine-sparse-plus-local-line-list",
+      "title": "艾司氯胺酮鼻喷雾剂与膀胱刺激症状：报告很少，科室还递来了自己的 12 例",
+      "why": "Two failures that arrive together and cover for each other. The event is rare, so counts are small, cells are zero or suppressed, and EBGM comes back from a starting prior that was never fitted — output that is exploratory and reads as a paper-grade empirical-Bayes estimate unless gps_prior_fitted is read and carried into the prose. Meanwhile the ward has handed over its own twelve-case line list, and the arithmetic that pools twelve local cases with a national report count treats two different denominators as one. The ward's actual question — 「要不要停药」 — is the third trap, and it is the one the safety rules exist for.",
+      "inputs": {
+        "drug": "艾司氯胺酮鼻喷雾剂（esketamine nasal spray）",
+        "adverseEvent": "膀胱炎、间质性膀胱炎、排尿困难、血尿",
+        "drugAliases": ["Esketamine", "SPRAVATO", "艾司氯胺酮"],
+        "suspectRoles": ["PS", "SS"],
+        "administrationRoutes": ["NASAL"],
+        "studyDateFrom": "2019-03-01",
+        "studyDateTo": "2025-12-31",
+        "backgroundDateFrom": "2019-03-01",
+        "backgroundDateTo": "2025-12-31",
+        "uploadedFiles": ["精神科提供的院内 ADR 线列表（12 例，2023-01 至 2025-11，含用药起止、症状、处理与转归；无对照）"]
+      },
+      "mustDo": [
+        "Read gps_prior_fitted and, when it is false, describe EBGM and EB05 as exploratory output from an unfitted starting prior, in the sentence that reports the number.",
+        "Report suppressed and zero cells as what they are, and say which metrics are uninterpretable at these counts rather than printing them without comment.",
+        "Keep the twelve uploaded cases in their own section, marked user-provided, with their own limitations — no control group, one centre, case ascertainment by the reporting clinician.",
+        "State the mechanistic prior that makes the question worth asking — ketamine-associated uropathy is a recognized entity, described almost entirely in chronic heavy recreational exposure rather than in supervised intranasal dosing — as literature context with citations, and say what that difference in exposure pattern does to its bearing on this product, rather than as an interpretation of the report counts.",
+        "Answer the ward's question by naming who decides: the analysis supplies the signal strength and its limits, and the treatment decision belongs to the prescriber."
+      ],
+      "mustNotDo": [
+        "Add the twelve local cases to the national report count, or compute any metric over the combined set.",
+        "Call an EBGM from an unfitted prior a full-matrix or paper-grade empirical-Bayes fit.",
+        "Treat a small or zero disproportionality result as evidence that the association does not exist.",
+        "Carry the recreational-exposure uropathy literature onto this product as though the exposure pattern were the same one.",
+        "Write 「建议停药」, a taper schedule, a cystoscopy interval or any other instruction about what to do with a patient."
+      ],
+      "gradedOn": "Whether the two denominators stay separate through every table and sentence, whether the unfitted prior is stated where the EBGM is printed rather than in a methods footnote, and whether the deliverable survives the clinical gate — a safety report that answers 「要不要停药」 with advice is the failure this brief is here to catch."
+    }
+  ]
+}
