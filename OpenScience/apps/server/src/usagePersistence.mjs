@@ -35,6 +35,16 @@ CREATE INDEX IF NOT EXISTS usage_model_requests_account_time_idx
 CREATE INDEX IF NOT EXISTS usage_model_requests_open_idx
   ON evimed_usage.model_requests(user_id,reservation_expires_at,id)
   WHERE status IN ('reserved','uncertain');
+-- The reconciliation sweep asks for the oldest expired reservations across every
+-- account. The account-leading partial index above can answer that, but only by
+-- reading all of itself: its first column is unconstrained, so there is no range
+-- to seek and no useful order to stop early in. Leading with
+-- reservation_expires_at lets the sweep's ORDER BY ... LIMIT stop after its
+-- batch. (The readiness count needs no such index: it is a full count of the
+-- open rows and the partial index above already covers exactly that set.)
+CREATE INDEX IF NOT EXISTS usage_model_requests_expiry_sweep_idx
+  ON evimed_usage.model_requests(reservation_expires_at,id)
+  WHERE status = 'reserved';
 CREATE INDEX IF NOT EXISTS usage_model_requests_project_fk_idx
   ON evimed_usage.model_requests(user_id,project_id);
 ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS run_id text;

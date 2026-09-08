@@ -27,17 +27,117 @@ export class BackendUnavailableError extends Error {
   }
 }
 
+/** The three ceilings the usage ledger enforces. They are not interchangeable:
+ *  the two account ceilings are rolling windows over the last 24 hours and the
+ *  last 7 days (`openCostWindows` in usageLedger.mjs, measured in SQL as
+ *  `created_at >= now - interval`), so spend ages out continuously instead of
+ *  resetting at midnight; a run ceiling is about this one task. Which one
+ *  refused decides what the researcher can do next, so it is named. */
+export type WebUsageBudgetWindow = "day" | "week" | "run";
+
+/** The currencies the ledger prices in. A closed set, mirroring the control
+ *  plane's declaration: a currency outside it is not renamed to CNY here — the
+ *  whole bag is dropped, because an amount shown under the wrong currency is
+ *  worse than no amount at all. */
+export type WebUsageBudgetCurrency = "CNY";
+
+/** What a 402 `usage_budget_exceeded` refusal carries.
+ *  `requested` is absent when the ceiling refused admission before pricing. */
+export interface WebUsageBudgetDetails {
+  window: WebUsageBudgetWindow;
+  limit: number;
+  committed: number;
+  requested?: number;
+  currency: WebUsageBudgetCurrency;
+}
+
+export interface WebUsageBudgetRefusal extends WebUsageBudgetDetails {
+  /** When this browser saw the refusal. */
+  observedAt: string;
+}
+
+const usageBudgetWindows: WebUsageBudgetWindow[] = ["day", "week", "run"];
+const usageBudgetCurrencies: WebUsageBudgetCurrency[] = ["CNY"];
+
+/** The Chinese name of each ceiling. The two account ceilings say the window
+ *  they measure, not a calendar period: nothing resets at midnight or on
+ *  Monday. */
+export const webUsageBudgetWindowLabels: Record<WebUsageBudgetWindow, string> = {
+  day: "近 24 小时额度",
+  week: "近 7 天额度",
+  run: "单次任务额度",
+};
+
+/** Mirrors the control plane's per-code declaration: only
+ *  `usage_budget_exceeded` carries details, and only the keys, types and closed
+ *  sets below survive. Anything else the wire happens to hold is dropped here
+ *  rather than handed to a component to interpret. */
+function parseWebApiErrorDetails(code: string | null, value: unknown): WebUsageBudgetDetails | null {
+  if (code !== "usage_budget_exceeded" || !value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const window = usageBudgetWindows.find(candidate => candidate === raw.window);
+  const currency = usageBudgetCurrencies.find(candidate => candidate === raw.currency);
+  const number = (input: unknown) => (typeof input === "number" && Number.isFinite(input) ? input : null);
+  const limit = number(raw.limit);
+  const committed = number(raw.committed);
+  const requested = number(raw.requested);
+  if (!window || !currency || limit === null || committed === null) return null;
+  return {
+    window,
+    limit,
+    committed,
+    ...(requested === null ? {} : { requested }),
+    currency,
+  };
+}
+
+let lastUsageBudgetRefusal: WebUsageBudgetRefusal | null = null;
+
+/** The last budget refusal this page load saw, anywhere in the app. The
+ *  refusal is raised on whichever page tried to spend and is read on the
+ *  account page, which is where a researcher goes to find out what happened.
+ *
+ *  In memory only, and deliberately not presented as more than that: a reload
+ *  or a second tab starts blank, and a refusal raised inside a server-side
+ *  worker (an autopilot episode, a source-understanding job) never passes
+ *  through a browser at all. The durable answer is for `/api/account/usage` to
+ *  report the configured ceilings and the current rolling committed spend, so
+ *  the account page can state the position without a remembered exception;
+ *  that endpoint carries neither today. */
+export function lastWebUsageBudgetRefusal(): WebUsageBudgetRefusal | null {
+  return lastUsageBudgetRefusal;
+}
+
+/** One Chinese sentence naming the ceiling and the amounts behind it. */
+export function describeWebUsageBudget(details: WebUsageBudgetDetails): string {
+  const money = (value: number) => `${value.toFixed(2)} ${details.currency}`;
+  const spent = `上限 ${money(details.limit)}，已占用 ${money(details.committed)}`;
+  const asked = details.requested === undefined ? "" : `，本次请求还需 ${money(details.requested)}`;
+  return `${webUsageBudgetWindowLabels[details.window]}已达上限：${spent}${asked}。`;
+}
+
 export class WebApiError extends Error {
   readonly status: number;
   readonly code: string | null;
   readonly requestId: string | null;
+  /** The machine-readable specifics the control plane declared for this code,
+   *  or null for the codes that declare none — which is every code but one. */
+  readonly details: WebUsageBudgetDetails | null;
 
-  constructor(message: string, details: { status: number; code?: string | null; requestId?: string | null }) {
+  constructor(
+    message: string,
+    envelope: { status: number; code?: string | null; requestId?: string | null; details?: unknown },
+  ) {
     super(message);
     this.name = "WebApiError";
-    this.status = details.status;
-    this.code = details.code ?? null;
-    this.requestId = details.requestId ?? null;
+    this.status = envelope.status;
+    this.code = envelope.code ?? null;
+    this.requestId = envelope.requestId ?? null;
+    this.details = parseWebApiErrorDetails(this.code, envelope.details);
+    // Remembered here, at the one place every client path constructs the
+    // error, rather than at each catch site: "every caller remembers it" is
+    // how this detail was lost in the first place.
+    if (this.details) lastUsageBudgetRefusal = { ...this.details, observedAt: new Date().toISOString() };
   }
 }
 
@@ -132,17 +232,38 @@ export interface WebProject {
 export interface WebPluginConfiguration {
   revision: number;
   enabled: boolean;
-  settings: { timeoutMs: number };
+  /** Whatever the plugin's own schema declares; empty for a plugin with no settings. */
+  settings: Record<string, number>;
+}
+
+/**
+ * What the control plane last recorded about a newer build, and when.
+ *
+ * `unknown` is a first-class answer, not a fallback: nothing on the request
+ * path asks upstream, so an absent, stale or unobserved record means nobody
+ * knows — which must never be shown as "up to date".
+ */
+export interface WebPluginAvailability {
+  state: "unknown" | "current" | "update-available";
+  checkedAt: string | null;
+  reason: string;
 }
 
 export interface WebPluginState {
-  id: "dsh-cite";
+  id: string;
   binaryVersion: string;
-  availableUpdate: null;
+  /** The tools this bundle registers, as the compatibility record lists them. */
+  tools: string[];
+  /** The settings this build accepts, with the deployment's own ceilings applied. */
+  settingsSchema: Record<string, { min: number; max: number }>;
+  availableUpdate: { version: string; recordedAt: string; source: string } | null;
+  availability: WebPluginAvailability;
   desired: WebPluginConfiguration | null;
   effective: WebPluginConfiguration | null;
   phase: "saved" | "pending" | "applying" | "effective" | "rolled_back" | "unavailable" | "failed";
   error: string | null;
+  /** The saved configuration is exactly the removal state: disabled, defaults. */
+  removed: boolean;
   limits: { minTimeoutMs: number; maxTimeoutMs: number };
 }
 
@@ -313,6 +434,46 @@ export interface WebAgentRun {
 }
 
 
+/**
+ * What a client can report about a deliverable it produced.
+ *
+ * Two facts, and only these two: the researcher kept this file, and the
+ * researcher revised it. The pair of them is what the control plane distils
+ * into a candidate method — an edit with no adoption behind it is somebody
+ * rewriting work they rejected, and there is no lesson in that.
+ */
+export type WebDeliverableFeedbackTrigger = "deliverable-adopted" | "deliverable-edited";
+
+export interface WebDeliverableFeedback {
+  trigger: WebDeliverableFeedbackTrigger;
+  /** The run that produced the file. The server refuses an id no run in the
+   * current project answers to, because the id is copied into the lesson. */
+  runId: string;
+  /** Workspace-relative path of the deliverable. */
+  path: string;
+  /** What the researcher changed and why. Only an edit carries one, and it is
+   * the whole readable content of the lesson — without it the candidate method
+   * says so and asks for it. */
+  summary?: string;
+}
+
+export interface WebFeedbackEvent {
+  id: string;
+  projectId: string | null;
+  runId: string | null;
+  trigger: string;
+  subject: { type: string; id: string };
+  detail: Record<string, unknown>;
+  occurredAt: string;
+  recordedAt: string;
+}
+
+export interface WebFeedbackRecord {
+  event: WebFeedbackEvent;
+  /** The distillation job the event completed the evidence for, when it did. */
+  distillJobId: string | null;
+}
+
 export type WebFileRoot = "workspace" | "base";
 
 export interface WebMetrics {
@@ -432,6 +593,8 @@ export function setWebProjectId(projectId: string): void {
 function clearWebSessionState(): void {
   webCsrfToken = null;
   webCsrfRefresh = null;
+  // A ceiling belongs to the account that hit it, so it leaves with the session.
+  lastUsageBudgetRefusal = null;
   if (typeof window !== "undefined") {
     window.sessionStorage.removeItem(PROJECT_KEY);
     window.localStorage.removeItem(PROJECT_KEY);
@@ -526,6 +689,7 @@ async function parseApiResponse<T>(res: Response): Promise<T> {
       status: res.status,
       code: envelope && typeof envelope.code === "string" ? envelope.code : null,
       requestId: envelope && typeof envelope.requestId === "string" ? envelope.requestId : null,
+      details: envelope?.details,
     });
   }
 
@@ -743,28 +907,46 @@ async function webPluginRequest<T>(projectId: string, suffix: string, method = "
   return parseApiResponse<T>(res);
 }
 
+/** The plugin id is a path segment, so it is encoded like one. */
+const pluginPath = (pluginId: string, suffix = "") => `/${encodeURIComponent(pluginId)}${suffix}`;
+
 export async function listWebPlugins(projectId: string, signal?: AbortSignal): Promise<WebPluginState[]> {
   return (await webPluginRequest<{ plugins: WebPluginState[] }>(projectId, "", "GET", undefined, signal)).plugins;
 }
 
-export function saveWebPlugin(projectId: string, input: { expectedRevision: number; enabled: boolean; settings: { timeoutMs: number } }, signal?: AbortSignal): Promise<WebPluginState> {
-  return webPluginRequest(projectId, "/dsh-cite", "PUT", {
-    expectedRevision: input.expectedRevision, enabled: input.enabled, settings: { timeoutMs: input.settings.timeoutMs },
+export function saveWebPlugin(projectId: string, pluginId: string, input: { expectedRevision: number; enabled: boolean; settings: Record<string, number> }, signal?: AbortSignal): Promise<WebPluginState> {
+  // Named fields, not the caller's object: the server refuses a request body
+  // carrying anything outside the three it declares, so what is sent is built
+  // from what this signature promises. `settings` passes through whole because
+  // its keys are the plugin's own schema, which this layer does not know.
+  return webPluginRequest(projectId, pluginPath(pluginId), "PUT", {
+    expectedRevision: input.expectedRevision, enabled: input.enabled, settings: input.settings,
   }, signal);
 }
 
-export async function listWebPluginRevisions(projectId: string, signal?: AbortSignal): Promise<WebPluginConfiguration[]> {
-  return (await webPluginRequest<{ items: WebPluginConfiguration[] }>(projectId, "/dsh-cite/revisions", "GET", undefined, signal)).items;
+export async function listWebPluginRevisions(projectId: string, pluginId: string, signal?: AbortSignal): Promise<WebPluginConfiguration[]> {
+  return (await webPluginRequest<{ items: WebPluginConfiguration[] }>(projectId, pluginPath(pluginId, "/revisions"), "GET", undefined, signal)).items;
 }
 
-export function rollbackWebPlugin(projectId: string, input: { expectedRevision: number; targetRevision: number }, signal?: AbortSignal): Promise<WebPluginState> {
-  return webPluginRequest(projectId, "/dsh-cite/rollback", "POST", {
+export function rollbackWebPlugin(projectId: string, pluginId: string, input: { expectedRevision: number; targetRevision: number }, signal?: AbortSignal): Promise<WebPluginState> {
+  return webPluginRequest(projectId, pluginPath(pluginId, "/rollback"), "POST", {
     expectedRevision: input.expectedRevision, targetRevision: input.targetRevision,
   }, signal);
 }
 
-export function retryWebPlugin(projectId: string, signal?: AbortSignal): Promise<WebPluginState> {
-  return webPluginRequest(projectId, "/dsh-cite/retry", "POST", {}, signal);
+export function retryWebPlugin(projectId: string, pluginId: string, signal?: AbortSignal): Promise<WebPluginState> {
+  return webPluginRequest(projectId, pluginPath(pluginId, "/retry"), "POST", {}, signal);
+}
+
+/**
+ * Stop this project using a plugin.
+ *
+ * Not a deletion: the binary ships inside the runtime image, so what this
+ * removes is the project's use of it — disabled, configuration back to its
+ * defaults, recorded as a revision the history keeps.
+ */
+export function removeWebPlugin(projectId: string, pluginId: string, input: { expectedRevision: number }, signal?: AbortSignal): Promise<WebPluginState> {
+  return webPluginRequest(projectId, pluginPath(pluginId), "DELETE", { expectedRevision: input.expectedRevision }, signal);
 }
 
 export async function createWebProject(id: string, name = id): Promise<WebProject> {
@@ -937,6 +1119,36 @@ export async function fetchWebRunTranscript(sessionId: string): Promise<RunTrans
   // baseline every run starts from, not a failure.
   if (res.status === 404) return null;
   return parseApiResponse<RunTranscript>(res);
+}
+
+/**
+ * Report what the researcher did with a deliverable.
+ *
+ * The other half of the feedback ledger. The memory routes record their own
+ * events server-side, but nothing can observe an adoption or an edit from the
+ * server: only the page that shows the file knows the researcher kept it or
+ * revised it, so this call is the only way those two facts are ever recorded —
+ * and they are the only two the distillation producer reads.
+ *
+ * The body is exactly the four fields the route accepts; it refuses any other
+ * with 400. The content digest is not among them and must not be: the server
+ * reads the deliverable out of the workspace and digests it there, so an edit
+ * that changed nothing cannot be reported as one.
+ */
+export async function reportWebDeliverableFeedback(input: WebDeliverableFeedback): Promise<WebFeedbackRecord> {
+  if (!hasWebApi) throw new BackendUnavailableError("feedback.record");
+  const summary = input.summary?.trim() ?? "";
+  const res = await fetchWithWebAuth(apiUrl("/feedback/events"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      trigger: input.trigger,
+      runId: input.runId,
+      path: input.path,
+      ...(summary ? { summary } : {}),
+    }),
+  });
+  return parseApiResponse<WebFeedbackRecord>(res);
 }
 
 export async function exportWebProject(projectId: string): Promise<Blob> {

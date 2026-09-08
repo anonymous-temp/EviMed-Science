@@ -1,5 +1,44 @@
 # Hosted Web Deployment Readiness Report
 
+> **ARCHIVED SNAPSHOT — this report describes the system as of the two dates it
+> states below: 2026-07-13, reassessed 2026-07-19. Do not read its architecture
+> as current.**
+>
+> Its go-live blocker lists are kept below unchanged, and their substance is
+> still open. Its architecture description is superseded in three ways:
+>
+> - **Kernel.** Every mention of OpenCode below names a runtime that no longer
+>   exists: it was deleted on 2026-09-01, and the agent kernel is DeepSeek
+>   Harness, pinned once as `@deepseek-ai/dsh` in
+>   `OpenScience/deps-version.json` (`dsh.version` is the live value; every
+>   derived copy is asserted equal to it). No `package.json` tracked in this
+>   repository depends on OpenCode any more. The strings that remain are comments
+>   explaining why current code has the shape it has, wire identifiers kept on
+>   purpose because the name is what an already-deployed client types, and the
+>   tests that hold those in place: `/api/opencode/` answers 410 by name in
+>   `apps/server/src/server.mjs`, and `OPEN_SCIENCE_RUNTIME_MODE=opencode` is
+>   refused by name in `apps/server/src/config.mjs`.
+> - **Application names.** The "Web adaptation" this report calls
+>   `open-science-web` is `OpenScience/apps/web` (`@ai4s/web`), served by
+>   `OpenScience/apps/server`. Neither `open-science-web` nor the
+>   `open-science-master/open-science-master` original project it is compared
+>   against is in this repository, and the Tauri desktop form in "Project
+>   Comparison" is gone with them: `OpenScience/apps/web` is the only frontend,
+>   and this checkout has no `src-tauri` tree and no `packages/sdk`
+>   (`OpenScience/AGENTS.md`, "Repository map": the Tauri shell, its Rust command
+>   layer and `packages/sdk` were deleted on 2026-09-04).
+> - **Consequence for the lists.** The P0 blockers stand on their substance —
+>   identity, model keys, data governance, runtime image, third-party
+>   skills/exporters, deployment acceptance — but their wording is dated. "the
+>   repository now pins and labels OpenCode/uv versions", for example, is today
+>   the single kernel pin in `deps-version.json`.
+>
+> Current sources of truth (paths from the workspace root):
+> `OpenScience/AGENTS.md` for architecture and working rules,
+> `OpenScience/docs/WEB_DEPLOYMENT.md` for how the hosted stack is deployed, and
+> `docs/superpowers/plans/2026-09-07-gap-closure-todo.md` for the current open
+> list.
+
 Date: 2026-07-13
 
 Reassessed: 2026-07-19. The canonical product/SaaS boundary is now

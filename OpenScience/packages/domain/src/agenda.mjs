@@ -129,10 +129,29 @@ export function userSignalScore(decisions) {
  * interpretation, however well argued, goes lower down and in the language of
  * interpretation — this is the direct countermeasure to the 58% figure.
  *
+ * The refutation verdict is read before the tier, not after it: a tier is a
+ * record of what has been checked so far, and an independent refuter is the
+ * later check. A claim that reads "reproduced" and "refuted" at once is a
+ * ledger that lost a write, and the safe reading of that pair is the one that
+ * keeps it out of the headlines.
+ *
+ * `weakened` used to fall through to the `reproduced` branch and headline; it
+ * no longer does, and that is a deliberate tightening rather than an oversight.
+ * The verdict had no producer until independent verification existed, so no
+ * stored claim can have carried it, and the first claim that ever does carry it
+ * is one a refuter supported less than it claimed — which is the definition of
+ * a lead rather than a headline.
+ *
  * @param {{ tier: string, type: string, refutation?: string, what_would_change?: string }} claim
  * @returns {{ headline: boolean, reason: string }}
  */
 export function digestPlacement(claim) {
+  if (claim.refutation === 'refuted') {
+    return { headline: false, reason: '独立复核推翻了这条结论，不能作为发现' }
+  }
+  if (claim.refutation === 'weakened') {
+    return { headline: false, reason: '独立复核只能部分支持，措辞需保守' }
+  }
   if (claim.tier === 'reproduced') {
     return { headline: true, reason: '重跑复现一致' }
   }
@@ -229,6 +248,15 @@ export function tierRaiseAllowed(input) {
  * seven-day rule is the one that matters most for trust — a system that keeps
  * spending while its owner has stopped looking has stopped being useful and
  * started being expensive.
+ *
+ * `verificationsPerEpisode` is the same kind of rule pointed at the second
+ * process rather than the first. Independent verification is what lets a claim
+ * reach `reproduced`, and it is a second run with a second bill; uncapped, one
+ * productive night would spend a second night's budget re-checking itself. At
+ * most three claims per episode are re-checked, and the share they spend is
+ * held back out of the night's own budget before the episode is dispatched
+ * (`splitEpisodeBudget` in the server's autopilot service), so a night costs
+ * what it said it would cost whether or not its claims earn a second opinion.
  */
 export const STOPPING_RULES = Object.freeze({
   episodesWithoutGatedClaimBeforeHalving: 3,
@@ -236,6 +264,7 @@ export const STOPPING_RULES = Object.freeze({
   consecutiveFailuresBeforePausingTaskType: 2,
   daysWithoutOpeningDigestBeforePausing: 7,
   episodeWallClockHours: 2,
+  verificationsPerEpisode: 3,
 })
 
 /**

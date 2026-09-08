@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "definitions": {
+    "purpose": "One row per capability package under capabilities/. It answers a question nothing else in this repository answered: has this capability ever produced a real delivery, and how did that delivery end? Before it existed the answer lived in PROGRESS.md prose, STATUS lines and scattered evals/*/results directories, and the only capability driven end to end on every deploy was adr-analysis, over HTTP.",
+    "checkedBy": "evals/capability-audit/verify_acceptance_ledger.py. The checker proves the ledger is complete and consistent with the tree; it never asserts that a capability was accepted. It runs on every commit as `pnpm test:acceptance-ledger` inside `test:web`, on its own as `pnpm check:acceptance-ledger`, and last inside verify_release_audit.py — last so it cannot displace that audit's evidence-freshness refusals, and so the ledger's own coverage does not depend on a checkout having fresh probe receipts.",
+    "realDelivery": "The most advanced capability-level delivery on record: a run of the capability package that produced, or failed to produce, its declared deliverable set. A managed specialist engine job is the engine running, not the capability delivering, so those appear under relatedEvidence instead.",
+    "status": {
+      "accepted": "A delivery is on record and it was accepted; evidence resolves. What was accepted has to be a run of the capability package: an artifact a harness script assembled and a person then repaired can pass the same contract validator and still be nobody's delivery, which is how one row read accepted until it was followed back to the script that wrote it.",
+      "failed": "A delivery attempt is on record and it was refused, blocked or failed; evidence resolves.",
+      "not-run": "No capability-level delivery is on record. evidence, at and surface are null. This is the correct value for most rows today and is not a defect of the ledger."
+    },
+    "surface": {
+      "native-ui": "Driven from the product UI in a browser. No row carries this yet; public browser acceptance is open work.",
+      "http-api": "Dispatched through the control plane's HTTP API (/api/agent-runs/dispatch and the hosted e2e).",
+      "harness": "A capability run driven from an eval harness under evals/ rather than by the hosted product. No row carries this yet: an artifact a harness script assembled is the harness delivering, not the capability, and it belongs under relatedEvidence."
+    },
+    "evidence": "Either a repository-relative path that must exist, or 'PROGRESS.md@YYYY-MM-DD HH:MM' naming a log entry that must be there. Line numbers are not a form: PROGRESS.md is written newest first, so every new milestone would invalidate every anchor below it.",
+    "evalHarness": "The directory under evals/ that holds this capability's eval assets, or null when it has none. Most rows name their own evals/<id>; comprehensive-drug-evaluation and drug-selection still share evals/drug-evidence-quality, and two rows point at a differently named harness (evals/clinical-review-quality, evals/research-topic-quality).",
+    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones.",
+    "relatedEvidence": "References that exist and are worth keeping in view but that do not establish a capability-level accepted delivery. The checker resolves each one so it cannot rot."
+  },
+  "capabilities": [
+    {
+      "id": "adr-analysis",
+      "visibility": "public",
+      "evalHarness": "evals/adr-analysis",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "accepted",
+        "evidence": "PROGRESS.md@2026-09-04 09:50",
+        "at": "2026-09-04T09:50:00",
+        "surface": "http-api"
+      },
+      "relatedEvidence": [
+        "scripts/ops/hosted-production-e2e.mjs",
+        "evals/specialist-smoke/results/evimed_drug_safety_analysis.json",
+        "PROGRESS.md@2026-07-21 06:13"
+      ],
+      "note": "The hosted production e2e dispatches this capability over /api/agent-runs/dispatch on every deploy and refuses unless the run ends succeeded with safety-report.md and signals.csv tracked in the ledger; the 2026-09-04 release recorded it passing with zero notices. It is the only capability with a delivery that repeats. Four briefs are now written under evals/adr-analysis and none has been run: the deploy path exercises one aspirin dispatch, not the four ways this capability is asked to be wrong."
+    },
+    {
+      "id": "bibliometric-analysis",
+      "visibility": "public",
+      "evalHarness": "evals/bibliometric-analysis",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/specialist-smoke/results/evimed_bibliometric_analysis.json",
+        "PROGRESS.md@2026-07-21 06:13"
+      ],
+      "note": "The managed bibliometric engine has succeeded with artifacts on the harness surface, and the 2026-07-21 six-specialist content acceptance produced grounded artifacts under the retired kernel. Neither is the capability package delivering its declared outputs. Four briefs are now written under evals/bibliometric-analysis and none has been run."
+    },
+    {
+      "id": "clinical-evidence-synthesis",
+      "visibility": "public",
+      "evalHarness": "evals/clinical-review-quality",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "failed",
+        "evidence": "PROGRESS.md@2026-09-07 08:40",
+        "at": "2026-09-07T08:40:00",
+        "surface": "http-api"
+      },
+      "relatedEvidence": [
+        "PROGRESS.md@2026-09-07 07:14",
+        "PROGRESS.md@2026-09-07 07:12",
+        "PROGRESS.md@2026-09-07 05:55",
+        "PROGRESS.md@2026-09-07 05:39",
+        "PROGRESS.md@2026-09-07 04:37",
+        "PROGRESS.md@2026-09-07 03:22",
+        "PROGRESS.md@2026-08-01 18:00"
+      ],
+      "note": "Seven dated production attempts and no acceptance: the 52-minute same-title run of 2026-09-07 08:40 lost its parent/child submission binding, and the runs before it exhausted their repair budget, tripped an exclusive-safety false positive, or stopped at HTTP 400 before any model work. Every failed package and workspace was retained. This is the most exercised capability in the product and the one with the clearest negative record."
+    },
+    {
+      "id": "comprehensive-drug-evaluation",
+      "visibility": "public",
+      "evalHarness": "evals/drug-evidence-quality",
+      "briefCount": 0,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/drug-evidence-quality/benchmark_cases.json"
+      ],
+      "note": "Covered by the comprehensiveCase of the drug-evidence benchmark, which grades the deterministic assessment compiler rather than a delivered package. No delivery on record and no briefs."
+    },
+    {
+      "id": "dataset-research-scoping",
+      "visibility": "public",
+      "evalHarness": "evals/dataset-research-scoping",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "accepted",
+        "evidence": "PROGRESS.md@2026-08-06 09:22",
+        "at": "2026-08-06T09:22:00",
+        "surface": "http-api"
+      },
+      "relatedEvidence": [
+        "PROGRESS.md@2026-08-06 15:05",
+        "PROGRESS.md@2026-08-07 09:05"
+      ],
+      "note": "A real five-table TDM extract delivered clean on the deployed release in 14 minutes: all eight declared artifacts plus three scripts the run wrote for itself, zero quality notices, and the identifier discipline held on real patient data. The skill has been revised twice since that run and the manifest now declares ten required outputs rather than eight, so the accepted delivery is not a delivery of today's contract. Four briefs are now written under evals/dataset-research-scoping and none has been run, so nothing re-checks it after those revisions."
+    },
+    {
+      "id": "drug-selection",
+      "visibility": "public",
+      "evalHarness": "evals/drug-evidence-quality",
+      "briefCount": 0,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/drug-evidence-quality/benchmark_cases.json"
+      ],
+      "note": "Covered by the selectionCase of the drug-evidence benchmark. No delivery on record and no briefs."
+    },
+    {
+      "id": "evidence-appraisal",
+      "visibility": "public",
+      "evalHarness": "evals/evidence-appraisal",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/evidence-appraisal/briefs.json"
+      ],
+      "note": "Four real briefs are written and none has been run: the harness ships no results directory."
+    },
+    {
+      "id": "geo-content",
+      "visibility": "public",
+      "evalHarness": "evals/geo-content",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/geo-content/results/2026-08-30-geo-001/deliverable",
+        "evals/geo-content/results/2026-08-30-geo-002",
+        "evals/geo-content/results/2026-08-30-geo-003"
+      ],
+      "note": "Downgraded from accepted on review, for the reason this ledger exists. The measurement is real — fifty rounds against the live probe — and the retained geo-001 deliverable carries all nine required outputs and passes the geo-content-pack contract validator today; the delivery summary states the shrunken denominator and the unbranded 18/25 rather than the flattering 25/25. But no run of the capability package produced it: evals/geo-content/measure.mjs collected the two probe ledgers, evals/geo-content/build_pack.py assembled the pack from them, and its blocks were repaired by hand in the commit that made geo-content-pack a clinical contract kind. The contract declares three checks and only requiredOutputsExist was ever evaluated; skillsLoaded cannot have passed, because nothing loaded a skill. This is the same line the bibliometric row already draws for a succeeded managed engine job: the harness delivering is not the capability delivering, so the deliverable is relatedEvidence. The other two runs retained only their probe logs."
+    },
+    {
+      "id": "manuscript-support",
+      "visibility": "public",
+      "evalHarness": "evals/manuscript-support",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/manuscript-support/briefs.json"
+      ],
+      "note": "Four real briefs are written and none has been run: the harness ships no results directory."
+    },
+    {
+      "id": "mendelian-randomization",
+      "visibility": "public",
+      "evalHarness": "evals/mendelian-randomization",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/specialist-smoke/results/evimed_mendelian_randomization.json",
+        "PROGRESS.md@2026-09-07 03:17",
+        "PROGRESS.md@2026-09-03 16:20"
+      ],
+      "note": "The engine has a succeeded harness job and a reproduced offline public BMI/CHD replay, but hosted publication and an authenticated OpenGWAS token are separate open steps, and the audit lane has been blocked on an expired 14-day JWT. No capability delivery on record. Four briefs are now written under evals/mendelian-randomization and none has been run."
+    },
+    {
+      "id": "meta-analysis",
+      "visibility": "public",
+      "evalHarness": "evals/meta-analysis",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "failed",
+        "evidence": "PROGRESS.md@2026-07-30 11:20",
+        "at": "2026-07-30T11:20:00",
+        "surface": "http-api"
+      },
+      "relatedEvidence": [
+        "evals/specialist-smoke/results/evimed_meta_analysis.json"
+      ],
+      "note": "The one end-to-end publication-quality run on a live stack produced a full 2,952-word manuscript with tables, figures, GRADE and PRISMA appendices, then correctly blocked its own release on six named gates rather than presenting a draft as submission-ready. The 2026-07-31 harness job ended blocked as well. A refusal that is right is still not an accepted delivery. Four briefs are now written under evals/meta-analysis and none has been run."
+    },
+    {
+      "id": "off-label-analysis",
+      "visibility": "public",
+      "evalHarness": "evals/off-label-analysis",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/drug-evidence-quality/benchmark_cases.json"
+      ],
+      "note": "Also covered by the offLabelCase of the drug-evidence benchmark, which grades the deterministic assessment compiler rather than a delivered package. No delivery on record. Four briefs are now written under evals/off-label-analysis and none has been run."
+    },
+    {
+      "id": "peer-review",
+      "visibility": "public",
+      "evalHarness": "evals/peer-review",
+      "briefCount": 4,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/specialist-smoke/results/evimed_peer_review.json",
+        "PROGRESS.md@2026-07-21 06:13"
+      ],
+      "note": "The managed review engine has a succeeded harness job and was part of the 2026-07-21 six-specialist content acceptance under the retired kernel. No capability delivery on record. Four briefs are now written under evals/peer-review and none has been run."
+    },
+    {
+      "id": "research-grant-development",
+      "visibility": "public",
+      "evalHarness": "evals/research-grant-development",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/research-grant-development/briefs.json"
+      ],
+      "note": "Three real briefs are written and none has been run: the harness ships no results directory."
+    },
+    {
+      "id": "research-topic-selection",
+      "visibility": "public",
+      "evalHarness": "evals/research-topic-quality",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/specialist-smoke/results/evimed_research_topic_selection.json",
+        "evals/research-topic-quality/test_preflight.py",
+        "PROGRESS.md@2026-07-21 06:13"
+      ],
+      "note": "Three briefs plus a preflight test, and a succeeded managed engine job on the harness surface. No capability delivery on record."
+    },
+    {
+      "id": "source-understanding",
+      "visibility": "internal",
+      "evalHarness": "evals/source-understanding",
+      "briefCount": 5,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/source-understanding/real-briefs.json",
+        "evals/source-understanding/real-inputs",
+        "PROGRESS.md@2026-09-07 04:04",
+        "PROGRESS.md@2026-09-07 03:35"
+      ],
+      "note": "Internal: dispatched only by the source pipeline, never by a user request. The backend and the bounded DSH dispatch path were accepted in review, but both brief files say so themselves — offline fixtures only, real inputs frozen, DSH execution and public three-source acceptance not yet run."
+    }
+  ]
+}

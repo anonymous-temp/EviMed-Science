@@ -4,6 +4,99 @@ import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+/** Accept a finite number, or nothing.
+ *  `kind` is read by `test/security.test.mjs`, which asserts that every
+ *  acceptor in the table below is one of the two vocabularies this module
+ *  defines — the property the safety comment there rests on.
+ *  @param {unknown} value */
+function finiteNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+finiteNumber.kind = "finite-number";
+finiteNumber.allowed = Object.freeze(/** @type {string[]} */ ([]));
+
+/** Accept one of a closed set of strings written here, or nothing.
+ *  @param {readonly string[]} allowed */
+function oneOf(allowed) {
+  const members = Object.freeze([...allowed]);
+  /** @param {unknown} value */
+  const accept = (value) => (typeof value === "string" && members.includes(value) ? value : undefined);
+  accept.kind = "closed-set";
+  accept.allowed = members;
+  return accept;
+}
+
+/**
+ * The error codes whose refusal may carry machine-readable specifics to the
+ * browser, and the exact shape each one may carry. A code absent from this
+ * table carries nothing, which is every code but one.
+ *
+ * The safety of this channel is structural, not a review habit, and it is
+ * enforced twice: `HttpError` filters the call site's bag at construction, and
+ * `sendError` filters again against this table immediately before writing the
+ * body — `details` is an ordinary writable property, so trusting it would make
+ * the guarantee a property of the constructor rather than of the wire.
+ *
+ * A value reaches the wire only if (1) this table declares its key for that
+ * code and (2) the acceptor declared for that key returns it — and every
+ * acceptor here yields either a finite number or a string it picked out of a
+ * closed set written in this file. No caller-supplied string is ever copied
+ * out. So a stack trace, a filesystem path, a SQL fragment, a hostname or a
+ * credential cannot leave through this channel even if a future call site puts
+ * one in the bag: none of them is a finite number, and none of them is a
+ * member of a set written above.
+ *
+ * Frozen, and exported only so that guarantee can be tested rather than
+ * believed:
+ * `test/security.test.mjs` walks this table and refuses an acceptor that is
+ * neither vocabulary, because adding a free-string acceptor here is the one
+ * edit that would quietly make the paragraph above false. Nothing outside this
+ * module may build a details bag from it.
+ *
+ * Adding a code here is a new promise to the client. Add one only together
+ * with the surface that renders it.
+ */
+export const errorDetailShapes = Object.freeze({
+  // Which ceiling refused the request, so the answer can say "your week is
+  // gone" instead of "over budget". A shape's keys are each optional and an
+  // absent one is omitted rather than sent as null.
+  //
+  // `usageLedger.assertWithinLimits` is the refusal that reaches a browser
+  // today (the admission check in front of an interactive prompt); it refuses
+  // before it prices anything, so it names no `requested` amount and never a
+  // `run` window. `window: "run"` and `requested` come from
+  // `usageLedger.reserveModel`, which the model gateway answers with its own
+  // envelope (`modelGateway.mjs`) instead of `sendError` — they are declared
+  // because the ledger builds them, and they arrive the day that path is
+  // routed through this boundary.
+  usage_budget_exceeded: Object.freeze({
+    window: oneOf(["day", "week", "run"]),
+    limit: finiteNumber,
+    committed: finiteNumber,
+    requested: finiteNumber,
+    currency: oneOf(["CNY"]),
+  }),
+});
+
+/** Copy the declared, accepted details out of a call site's options bag.
+ *  Only own data properties are read, so no getter runs, nothing is inherited
+ *  from a prototype, and the result holds copies rather than references.
+ *  @param {string} code @param {Record<string, any>} options
+ *  @returns {Record<string, string | number> | undefined} */
+function declaredErrorDetails(code, options) {
+  const shape = errorDetailShapes[code];
+  if (!shape || !options || typeof options !== "object") return undefined;
+  /** @type {Record<string, string | number>} */
+  const details = {};
+  for (const [key, accept] of Object.entries(shape)) {
+    const descriptor = Object.getOwnPropertyDescriptor(options, key);
+    if (!descriptor || !("value" in descriptor)) continue;
+    const value = accept(descriptor.value);
+    if (value !== undefined) details[key] = value;
+  }
+  return Object.keys(details).length > 0 ? details : undefined;
+}
+
 export class HttpError extends Error {
   /** @param {number} status @param {string} code @param {string} message @param {Record<string, any>} options */
   constructor(status, code, message, options = {}) {
@@ -12,6 +105,13 @@ export class HttpError extends Error {
     this.status = status;
     /** @type {string} */
     this.code = code;
+    /** What this refusal can tell the client beyond its code and sentence,
+     *  filtered to the shape `errorDetailShapes` declares for this code.
+     *  Undefined for every code that declares no shape. Writable like any
+     *  property, which is why `sendError` filters again rather than trusting
+     *  whatever this holds when the body is written.
+     *  @type {Record<string, string | number> | undefined} */
+    this.details = declaredErrorDetails(code, options);
     /** Set by the dispatch path when an upstream refusal is final rather than
      *  worth retrying. Declared here so the property has one definition
      *  instead of appearing by assignment at the call sites.
@@ -136,7 +236,20 @@ export function sendError(res, err, fields = {}) {
     headers["Retry-After"] = String(Math.max(1, Math.ceil(err.retryAfterSeconds)));
   }
   if (fields.requestId) headers["X-Open-Science-Request-Id"] = fields.requestId;
-  sendJson(res, status, { error: message, code, requestId: fields.requestId ?? null }, headers);
+  /** @type {{ error: string, code: string, requestId: string | null, details?: Record<string, string | number> }} */
+  const body = { error: message, code, requestId: fields.requestId ?? null };
+  // Only the codes that declared a shape carry details. Every other error
+  // keeps the exact three-key envelope clients parse today, byte for byte.
+  //
+  // Filtered here against the declared shape rather than copied from
+  // `err.details`: that property is writable, and readiness and profile checks
+  // already build errors carrying a `details` bag of internal reporting (a
+  // path, a failing field, a stack) for their own logs. Deriving the wire value
+  // at the wire is what makes the guarantee `errorDetailShapes` states true of
+  // every response instead of only of errors nobody touched after construction.
+  const details = err instanceof HttpError ? declaredErrorDetails(err.code, err.details) : undefined;
+  if (details) body.details = details;
+  sendJson(res, status, body, headers);
 }
 
 export async function readBody(req, limit) {

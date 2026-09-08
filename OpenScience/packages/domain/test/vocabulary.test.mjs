@@ -375,7 +375,8 @@ test("off-peak is passed through, and an unknown model is unpriced rather than g
 });
 
 test("a claim cannot grade itself, and only a reproduced or refuter-tested direct claim leads a digest", async () => {
-  const { digestPlacement, tierRaiseAllowed, validateAgendaClaim, directionVerdict } = await import("../index.mjs");
+  const { digestPlacement, tierRaiseAllowed, validateAgendaClaim, directionVerdict,
+    REFUTATION_VERDICTS, STOPPING_RULES } = await import("../index.mjs");
   const selfGraded = validateAgendaClaim({ statement: "x", type: "synthesized", tier: "reproduced", sources: ["a"], provenance: {}, what_would_change: "y" });
   assert.ok(selfGraded.issues.some((issue) => issue.code === "agenda_claim_self_graded"));
 
@@ -399,6 +400,28 @@ test("a claim cannot grade itself, and only a reproduced or refuter-tested direc
   assert.equal(tierRaiseAllowed({ from: "unverified", to: "gated", gatePassed: true, refutation: "refuted" }).ok, false);
   assert.equal(tierRaiseAllowed({ from: "unverified", to: "reproduced", reproductionMatched: true }).ok, false);
   assert.equal(tierRaiseAllowed({ from: "gated", to: "reproduced", reproductionMatched: true }).ok, true);
+
+  // An independent refuter outranks the tier. A claim carrying both a
+  // `reproduced` tier and a `refuted` verdict is a ledger that lost a write,
+  // and the reading that keeps it out of the headlines is the safe one.
+  for (const tier of ["reproduced", "gated", "unverified"]) {
+    assert.equal(digestPlacement({ tier, type: "direct", refutation: "refuted" }).headline, false,
+      `a refuted claim must never lead a digest, whatever its tier says (${tier})`);
+    assert.equal(digestPlacement({ tier, type: "direct", refutation: "weakened" }).headline, false,
+      `a weakened claim must never lead a digest, whatever its tier says (${tier})`);
+  }
+  assert.match(digestPlacement({ tier: "gated", type: "direct", refutation: "refuted" }).reason, /推翻/);
+  assert.match(digestPlacement({ tier: "gated", type: "direct", refutation: "weakened" }).reason, /部分支持/);
+  // `stands` is the only verdict the headline rule admits, and it is one of the three.
+  assert.deepEqual([...REFUTATION_VERDICTS].sort(), ["refuted", "stands", "weakened"]);
+  assert.deepEqual(REFUTATION_VERDICTS.filter((verdict) => digestPlacement({ tier: "gated", type: "direct", refutation: verdict }).headline),
+    ["stands"]);
+
+  // Verification is a second run with a second bill, so it is capped like every
+  // other unattended spend.
+  assert.ok(Number.isSafeInteger(STOPPING_RULES.verificationsPerEpisode));
+  assert.ok(STOPPING_RULES.verificationsPerEpisode >= 1 && STOPPING_RULES.verificationsPerEpisode <= 10,
+    "an uncapped second opinion is an uncapped bill");
 
   assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 8, userRejected: false }).action, "pause-thread");
   assert.equal(directionVerdict({ episodesWithoutGatedClaim: 3, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: false }).action, "halve");

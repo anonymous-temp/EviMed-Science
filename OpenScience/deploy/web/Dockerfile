@@ -58,6 +58,7 @@ COPY --from=build /server ./apps/server
 # config dependency during the kernel migration, after the last image was built,
 # so nothing noticed until an image built from that code was first run.
 COPY --from=build /app/deps-version.json ./deps-version.json
+COPY --from=build /app/plugin-availability.json ./plugin-availability.json
 COPY --from=build /app/capabilities ./capabilities
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/runtime/skills/core ./runtime/skills/core

@@ -4,9 +4,15 @@ export interface AgendaPayload { title: string; topics: string[]; taskTypes: str
   maxEpisodeCny: number; scheduleHour: number; timeZone: string; enabled: boolean; status: string; pauseReason: string | null; outcomes: unknown[];
   userSignal?: { score: number; decided: number; rejected: boolean } | null;
   followUps?: Array<{ digestId: string; claimId: string; note: string; at: string; consumedBy?: string }> }
-export interface DigestClaim { id: string; statement: string }
+export interface DigestClaim { id: string; statement: string;
+  /** How far the claim has been checked: only an independent rerun reaches `reproduced`. */
+  tier?: string; type?: string;
+  /** What an independent refuter concluded: refuted / weakened / stands. */
+  refutation?: string | null;
+  verification?: { status: string; verdict?: string; reason?: string; code?: string; reproductionMatched?: boolean } | null }
 export interface DigestPayload { date: string; costCny: number; headlines: DigestClaim[]; leads: DigestClaim[];
-  openedAt?: string | null; decisions: Array<{ action: string; claimId: string; note: string }> }
+  openedAt?: string | null;
+  decisions: Array<{ action: string; claimId: string; note: string; memory?: { status: string; reason?: string; code?: string } }> }
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };
 export type DigestRecord = ProductRecord<DigestPayload> & { projectId: string };
 

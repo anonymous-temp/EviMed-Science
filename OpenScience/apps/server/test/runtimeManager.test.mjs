@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createServer, request as httpRequest } from "node:http";
@@ -8,13 +9,18 @@ import test from "node:test";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { assertDockerDataVolumeSupport } from "../src/dockerMounts.mjs";
+import { materializeCapsuleMethods } from "../src/capsuleMethods.mjs";
 import {
   RUNTIME_KERNEL_NAME,
   RuntimeManager,
   buildRuntimeLaunchPlan,
+  capsuleMethodsHostDir,
+  capsuleMethodsRuntimePath,
   cleanupDockerContainer,
   childSessionHeads,
+  dshProfileInput,
   requestRuntime,
+  runtimeCapsuleMethodsDir,
   runtimeContainerName,
   parseByteSize,
   recordPidSample,
@@ -22,7 +28,9 @@ import {
   runtimeTmpDir,
   syncRuntimeDshProfile,
 } from "../src/runtimeManager.mjs";
-import { readRuntimeResponseBody } from "../src/runtimeManager.mjs";
+import { expectedPluginTools, provenPluginSettings, readRuntimeResponseBody } from "../src/runtimeManager.mjs";
+import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
+import { PLUGIN_ID, PLUGIN_REGISTRY, PLUGIN_SUPPORT_SNAPSHOT, pluginEntry, pluginRegistryFrom } from "../src/pluginService.mjs";
 import { releaseManifestFixture, runtimeReleaseConfig } from "./releaseFixture.mjs";
 
 /**
@@ -2409,4 +2417,503 @@ test("frame policy inspection preserves the exact native workspace request body 
   const response = await fetch(`${f.uiBase}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: "https://science.example:8443", "content-type": "application/json" }, body });
   assert.equal(response.status, 200);
   assert.equal(received, body);
+});
+
+/** Records the full `docker run` argv, which is where the container's
+ *  environment and its mounts are actually decided. */
+async function fakeDockerArgvBin(root) {
+  const bin = path.join(root, "docker-argv-stub.mjs");
+  await writeFile(
+    bin,
+    `#!/usr/bin/env node
+import fs from "node:fs";
+
+const args = process.argv.slice(2);
+if (args[0] === "rm") {
+  process.stderr.write("Error: No such container: " + args[2] + "\\n");
+  process.exit(1);
+}
+if (args[0] !== "run") process.exit(2);
+fs.writeFileSync(process.env.RUNTIME_ARGV_LOG, JSON.stringify(args));
+process.exit(0);
+`,
+    { mode: 0o755 },
+  );
+  return bin;
+}
+
+/** A `CapsuleService` stand-in holding one capsule of entries. */
+function fakeCapsuleService(items, entriesById) {
+  return {
+    async active(_userId, projectId = null) { return { record: null, items: projectId == null ? [] : items }; },
+    async entries(_userId, capsuleId) { return { items: entriesById[capsuleId] ?? [], nextCursor: null }; },
+  };
+}
+
+function capsuleEntry(id, payload = {}) {
+  return {
+    id,
+    revision: 1,
+    payload: {
+      capsuleId: "capsule-a",
+      factKind: "method_preference",
+      layer: "methods",
+      status: "approved",
+      origin: "explicit",
+      content: "Always quote the source sentence.",
+      ...payload,
+    },
+  };
+}
+
+test("buildRuntimeLaunchPlan leaves the capsule methods directory unnamed when the project has none", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "os-rt-capsule-empty-"));
+  const emptyProject = { ...project, rootDir: tmp, runtimeDir: path.join(tmp, "runtime") };
+  try {
+    const config = {
+      runtimeSandboxMode: "docker",
+      runtimeContainerBin: "docker",
+      runtimeContainerImage: "evimed-runtime-dsh:test",
+      runtimeTransport: "unix",
+      runtimeNetworkMode: "none",
+      runtimeCpuLimit: "1",
+      runtimeMemoryLimit: "1g",
+      runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false,
+      deepseekProviderEnabled: true,
+      deepseekModel: "deepseek-v4-pro",
+      modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+      modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes",
+      evimedWorkloadSigningSecret: "evimed-workload-signing-secret-with-32-bytes",
+      runtimeSandboxEnforcement: "full",
+    };
+    const plan = buildRuntimeLaunchPlan(config, emptyProject, 49152);
+    // The empty string is the plugin's own schema default and its documented
+    // "no capsule is mounted" value, so nothing is mounted and nothing is named.
+    assert.ok(plan.args.includes("EVIMED_CAPSULE_METHODS_DIR="));
+    assert.equal(plan.args.some((arg) => String(arg).includes(`dst=${runtimeCapsuleMethodsDir}`)), false);
+    // `--mount type=bind` refuses a missing source, so a plan that named one
+    // would fail the launch; the launch creates every other runtime directory
+    // and must not create this one, because an unmounted methods directory is
+    // a directory with no reader.
+    assert.equal(plan.runtimeDirs.includes(capsuleMethodsHostDir(emptyProject)), false);
+    assert.equal(existsSync(capsuleMethodsHostDir(emptyProject)), false);
+    assert.equal(
+      dshProfileInput(config, emptyProject, plan, "deepseek-v4-pro", `${runtimeDshHome}/evimed-workload-token`).capsuleMethodsDir,
+      "",
+    );
+    // The whole rule, both values of it: there is no host-path form, because
+    // `buildRuntimeLaunchPlan` refuses every sandbox mode but docker by name.
+    assert.equal(capsuleMethodsRuntimePath({ capsuleMethodCount: 0 }), "");
+    assert.equal(capsuleMethodsRuntimePath({ capsuleMethodCount: 2 }), runtimeCapsuleMethodsDir);
+    assert.throws(
+      () => buildRuntimeLaunchPlan({ ...config, runtimeSandboxMode: "host" }, emptyProject, 49152),
+      (error) => error?.code === "invalid_runtime_sandbox",
+    );
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("an active capsule's approved methods reach the container environment and the profile input as one path", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "os-rt-capsule-mount-"));
+  const projectRoot = path.join(tmp, "project");
+  const runtimeProject = {
+    ...project,
+    rootDir: projectRoot,
+    baseDir: path.join(projectRoot, "workspace"),
+    workspaceDir: path.join(projectRoot, "workspace"),
+    runtimeDir: path.join(projectRoot, "runtime"),
+    metaDir: path.join(projectRoot, ".openscience"),
+  };
+  await Promise.all([
+    mkdir(runtimeProject.workspaceDir, { recursive: true }),
+    mkdir(runtimeProject.runtimeDir, { recursive: true }),
+    mkdir(runtimeProject.metaDir, { recursive: true }),
+  ]);
+  const argvLog = path.join(tmp, "docker-argv.json");
+  const previousArgvLog = process.env.RUNTIME_ARGV_LOG;
+  process.env.RUNTIME_ARGV_LOG = argvLog;
+  const manager = new RuntimeManager({
+    production: false,
+    runtimeMode: "kernel",
+    runtimeSandboxMode: "docker",
+    runtimeContainerBin: await fakeDockerArgvBin(tmp),
+    runtimeContainerImage: "evimed-runtime-dsh:test",
+    runtimeTransport: "unix",
+    runtimeNetworkMode: "none",
+    runtimeCpuLimit: "1",
+    runtimeMemoryLimit: "1g",
+    runtimePidsLimit: 64,
+    allowRuntimeHostNetwork: false,
+    runtimeProxyConnectTimeoutMs: 1_000,
+    runtimeReadyTimeoutMs: 1_000,
+    maxLogFileBytes: 1024 * 1024,
+    deepseekProviderEnabled: true,
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+    modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes",
+    evimedWorkloadSigningSecret: "evimed-workload-signing-secret-with-32-bytes",
+    evimedWorkloadTokenTtlSeconds: 300,
+    runtimeSandboxEnforcement: "full",
+  });
+  manager.capsuleService = fakeCapsuleService(
+    [{ capsuleId: "capsule-a", mode: "own" }],
+    {
+      "capsule-a": [
+        capsuleEntry("mounted"),
+        // Everything an imported work-style pack arrives as. It is present in
+        // the capsule and must not be present in the run.
+        capsuleEntry("imported", { status: "candidate", origin: "system" }),
+      ],
+    },
+  );
+  try {
+    // The stub answers and exits, so the start itself fails; the argv it
+    // recorded is the evidence.
+    await assert.rejects(() => manager.startKernel(runtimeProject), (error) => error?.code === "runtime_exited");
+    const args = JSON.parse(await readFile(argvLog, "utf8"));
+    const hostDir = capsuleMethodsHostDir(runtimeProject);
+    assert.ok(
+      args.includes(`type=bind,src=${hostDir},dst=${runtimeCapsuleMethodsDir},readonly`),
+      "the methods a run reads must be mounted read-only",
+    );
+    assert.ok(
+      args.includes(`EVIMED_CAPSULE_METHODS_DIR=${runtimeCapsuleMethodsDir}`),
+      "a name missing from the --env list leaves the plugin on its schema default",
+    );
+    assert.deepEqual((await readdir(hostDir)).sort(), ["mounted"], "only the approved entry is materialized");
+    // Outside the container's `/runtime` mount, which is read-write: inside it,
+    // the same files would also be reachable at a writable path.
+    const runtimeMountRoot = path.join(runtimeProject.runtimeDir, "container-runtime");
+    assert.equal(hostDir.startsWith(runtimeMountRoot + path.sep), false);
+    assert.ok(args.includes("--mount"));
+    assert.equal(
+      args.some((arg) => String(arg).startsWith("type=bind,") && String(arg).includes(`src=${runtimeMountRoot},`)
+        && String(arg).includes(",readonly")),
+      false,
+      "the runtime root itself is mounted read-write, so the methods must not live under it",
+    );
+    assert.match(
+      await readFile(path.join(hostDir, "mounted", "SKILL.md"), "utf8"),
+      /^---\nname: method-mounted\n/,
+    );
+
+    // The other half of the same deployment: the patch input the kernel's own
+    // profile is rendered from. The two are built by different functions and
+    // have to describe one directory.
+    const plan = buildRuntimeLaunchPlan(manager.config, runtimeProject, 49152);
+    assert.equal(
+      dshProfileInput(manager.config, runtimeProject, plan, "deepseek-v4-pro", `${runtimeDshHome}/evimed-workload-token`).capsuleMethodsDir,
+      runtimeCapsuleMethodsDir,
+    );
+    assert.equal(
+      args.find((arg) => String(arg).startsWith("EVIMED_CAPSULE_METHODS_DIR=")),
+      `EVIMED_CAPSULE_METHODS_DIR=${dshProfileInput(manager.config, runtimeProject, plan, "deepseek-v4-pro", `${runtimeDshHome}/evimed-workload-token`).capsuleMethodsDir}`,
+    );
+
+    // How many methods this launch mounted, on the ledger row. Without it,
+    // "the capsule service was never assigned" and "the capsule had methods and
+    // they loaded" are the same observation from outside the container.
+    const state = JSON.parse(await readFile(path.join(runtimeProject.metaDir, "runtime-state.json"), "utf8"));
+    assert.equal(state.capsuleMethodsMounted, 1);
+    const events = (await readFile(path.join(runtimeProject.metaDir, "runtime.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(events.find((event) => event.event === "starting").capsuleMethodsMounted, 1);
+  } finally {
+    if (previousArgvLog == null) delete process.env.RUNTIME_ARGV_LOG;
+    else process.env.RUNTIME_ARGV_LOG = previousArgvLog;
+    await manager.closeAll();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("a project whose capsules hold no mountable method starts with no methods directory named", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "os-rt-capsule-none-"));
+  const projectRoot = path.join(tmp, "project");
+  const runtimeProject = {
+    ...project,
+    rootDir: projectRoot,
+    baseDir: path.join(projectRoot, "workspace"),
+    workspaceDir: path.join(projectRoot, "workspace"),
+    runtimeDir: path.join(projectRoot, "runtime"),
+    metaDir: path.join(projectRoot, ".openscience"),
+  };
+  await Promise.all([
+    mkdir(runtimeProject.workspaceDir, { recursive: true }),
+    mkdir(runtimeProject.runtimeDir, { recursive: true }),
+    mkdir(runtimeProject.metaDir, { recursive: true }),
+  ]);
+  const argvLog = path.join(tmp, "docker-argv.json");
+  const previousArgvLog = process.env.RUNTIME_ARGV_LOG;
+  process.env.RUNTIME_ARGV_LOG = argvLog;
+  const manager = new RuntimeManager({
+    production: false,
+    runtimeMode: "kernel",
+    runtimeSandboxMode: "docker",
+    runtimeContainerBin: await fakeDockerArgvBin(tmp),
+    runtimeContainerImage: "evimed-runtime-dsh:test",
+    runtimeTransport: "unix",
+    runtimeNetworkMode: "none",
+    runtimeCpuLimit: "1",
+    runtimeMemoryLimit: "1g",
+    runtimePidsLimit: 64,
+    allowRuntimeHostNetwork: false,
+    runtimeProxyConnectTimeoutMs: 1_000,
+    runtimeReadyTimeoutMs: 1_000,
+    maxLogFileBytes: 1024 * 1024,
+    deepseekProviderEnabled: true,
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
+    modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes",
+    evimedWorkloadSigningSecret: "evimed-workload-signing-secret-with-32-bytes",
+    evimedWorkloadTokenTtlSeconds: 300,
+    runtimeSandboxEnforcement: "full",
+  });
+  manager.capsuleService = fakeCapsuleService(
+    [{ capsuleId: "capsule-a", mode: "own" }],
+    { "capsule-a": [capsuleEntry("retired-one", { status: "retired" })] },
+  );
+  try {
+    await assert.rejects(() => manager.startKernel(runtimeProject), (error) => error?.code === "runtime_exited");
+    const args = JSON.parse(await readFile(argvLog, "utf8"));
+    assert.ok(args.includes("EVIMED_CAPSULE_METHODS_DIR="));
+    assert.equal(args.some((arg) => String(arg).includes(`dst=${runtimeCapsuleMethodsDir}`)), false);
+    assert.equal(
+      existsSync(capsuleMethodsHostDir(runtimeProject)),
+      false,
+      "nothing was written, so nothing is left behind for the runtime to find or write into",
+    );
+    const state = JSON.parse(await readFile(path.join(runtimeProject.metaDir, "runtime-state.json"), "utf8"));
+    assert.equal(state.capsuleMethodsMounted, 0, "zero is a reading, not a missing field");
+  } finally {
+    if (previousArgvLog == null) delete process.env.RUNTIME_ARGV_LOG;
+    else process.env.RUNTIME_ARGV_LOG = previousArgvLog;
+    await manager.closeAll();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("the volume-backed hosted launch mounts the methods subpath, and mounts it read-only", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "os-rt-capsule-volume-"));
+  const projectRoot = path.join(dataDir, "users/alice/projects/paper1");
+  const volumeProject = {
+    ...project,
+    rootDir: projectRoot,
+    workspaceDir: path.join(projectRoot, "workspace"),
+    runtimeDir: path.join(projectRoot, "runtime"),
+  };
+  await mkdir(volumeProject.runtimeDir, { recursive: true });
+  try {
+    const written = await materializeCapsuleMethods({
+      capsules: fakeCapsuleService([{ capsuleId: "capsule-a", mode: "own" }], { "capsule-a": [capsuleEntry("mounted")] }),
+      project: volumeProject,
+      directory: capsuleMethodsHostDir(volumeProject),
+    });
+    assert.equal(written.count, 1);
+    const plan = buildRuntimeLaunchPlan(
+      {
+        dataDir,
+        runtimeSandboxMode: "docker",
+        runtimeContainerBin: "docker",
+        runtimeContainerImage: "evimed-runtime-dsh:test",
+        runtimeDataVolume: "open-science-data",
+        runtimeTransport: "unix",
+        runtimeNetworkMode: "none",
+        runtimeCpuLimit: "1",
+        runtimeMemoryLimit: "1g",
+        runtimePidsLimit: 64,
+        allowRuntimeHostNetwork: false,
+      },
+      volumeProject,
+      4096,
+    );
+    const subpath = "users/alice/projects/paper1/runtime/capsule-methods";
+    assert.ok(plan.args.includes(`type=volume,src=open-science-data,dst=${runtimeCapsuleMethodsDir},volume-subpath=${subpath},readonly`));
+    // Negative control: the writable form of the same mount must not be there.
+    assert.equal(
+      plan.args.includes(`type=volume,src=open-science-data,dst=${runtimeCapsuleMethodsDir},volume-subpath=${subpath}`),
+      false,
+      "a writable methods mount would let a run rewrite the user's own approved method",
+    );
+    assert.ok(plan.args.includes(`EVIMED_CAPSULE_METHODS_DIR=${runtimeCapsuleMethodsDir}`));
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+// --- the plugin proof ------------------------------------------------------
+// `probePlugin` used to compare the kernel's proof against two literals of its
+// own: the string "0.3.2" and five tool names. Both are recorded facts about
+// an installed bundle, and a third copy of a fact is a third place for it to
+// drift from the image.
+
+const pluginSupportRecord = JSON.parse(
+  await readFile(new URL("../../../runtime/skills/community/plugin-support.json", import.meta.url), "utf8"),
+);
+const recordedCite = pluginSupportRecord.communityToolBundles.find((/** @type {any} */ entry) => entry.name === PLUGIN_ID);
+const twoPluginRegistry = pluginRegistryFrom(
+  {
+    communityToolBundles: [
+      recordedCite,
+      { name: "dsh-notes", version: "1.0.0", status: "installed", tools: ["note_add"] },
+    ],
+  },
+  new Set([PLUGIN_ID, "dsh-notes"]),
+);
+
+test("the tools a probe demands are the tools the record states, in both deployment shapes", () => {
+  assert.ok(recordedCite?.tools?.length > 0, "the support record must state dsh-cite's tools for this test to mean anything");
+  // A checkout: the registry is derived from the record and carries them.
+  assert.deepEqual([...expectedPluginTools(pluginEntry(PLUGIN_ID, pluginRegistryFrom(pluginSupportRecord)))].sort(), [...recordedCite.tools].sort());
+  // A released web image: `deploy/web/Dockerfile` does not copy
+  // `runtime/skills/community/`, so the registry falls back to the in-module
+  // snapshot. It has to state the same tools, or the released control plane
+  // expects zero registered tools while the runtime proves five — every apply
+  // failing its probe into a rollback, in production only — and serves the
+  // plugin card an empty tool list besides.
+  const shipped = pluginEntry(PLUGIN_ID, pluginRegistryFrom(PLUGIN_SUPPORT_SNAPSHOT));
+  assert.deepEqual([...shipped.tools].sort(), [...recordedCite.tools].sort(),
+    "the shipped snapshot has drifted from runtime/skills/community/plugin-support.json");
+  assert.deepEqual([...expectedPluginTools(shipped)].sort(), [...recordedCite.tools].sort());
+  // And a bundle whose tools this deployment cannot state is not one whose
+  // proof it can check: it fails the probe rather than passing on an empty
+  // expectation.
+  assert.throws(() => expectedPluginTools({ id: "dsh-notes", tools: [] }), { status: 502, code: "plugin_probe_invalid" });
+  assert.deepEqual(expectedPluginTools({ id: "dsh-notes", tools: ["note_add"] }), ["note_add"]);
+});
+
+/** A manager with one running runtime and a scripted kernel proof.
+ * @param {any} proof @param {Map<string,any>|null} registry */
+function probeManager(proof, registry = null) {
+  const manager = new RuntimeManager({});
+  /** @type {string[]} */ const asked = [];
+  manager.runtimes.set(`${project.userId}:${project.id}`, { modelGatewayTokenJti: "gen-1" });
+  if (registry) manager.pluginService = { entry: (/** @type {string} */ id) => pluginEntry(id, registry) };
+  manager.callKernel = async (/** @type {any} */ _r, /** @type {any} */ _p, /** @type {string} */ method) => { asked.push(method); return proof; };
+  return { manager, asked };
+}
+const citeProof = { binaryVersion: "0.3.2", enabled: true, revision: 7, timeoutMs: 4000, tools: [...recordedCite.tools].reverse() };
+const citeExpected = { revision: 7, enabled: true, settings: { timeoutMs: 4000 } };
+
+test("dsh-cite's probe verdict is the verdict it always was", async () => {
+  const { manager, asked } = probeManager(citeProof);
+  assert.deepEqual(await manager.probePlugin(project, citeExpected), { generation: "gen-1" });
+  assert.deepEqual(await manager.probePlugin(project, citeExpected, PLUGIN_ID), { generation: "gen-1" },
+    "naming the default plugin must be the same call as naming nothing");
+  assert.deepEqual(asked, ["evimedPlugins/verify", "evimedPlugins/verify"]);
+  for (const broken of [
+    { ...citeProof, binaryVersion: "0.3.3" },
+    { ...citeProof, revision: 6 },
+    { ...citeProof, timeoutMs: 5000 },
+    { ...citeProof, tools: recordedCite.tools.slice(1) },
+    { ...citeProof, tools: [...recordedCite.tools, "cite_extra"] },
+    { ...citeProof, enabled: false, tools: [] },
+  ]) {
+    await assert.rejects(probeManager(broken).manager.probePlugin(project, citeExpected), { status: 502, code: "plugin_probe_invalid" });
+  }
+  // Disabled is proved by an empty registration, not by a smaller one.
+  const disabled = { revision: 7, enabled: false, settings: { timeoutMs: 4000 } };
+  assert.deepEqual(await probeManager({ ...citeProof, enabled: false, tools: [] }).manager.probePlugin(project, disabled), { generation: "gen-1" });
+  await assert.rejects(probeManager({ ...citeProof, enabled: false, tools: ["cite_health"] }).manager.probePlugin(project, disabled),
+    { status: 502, code: "plugin_probe_invalid" });
+});
+
+test("the version a probe demands comes from the registry, so moving the pin moves the probe", async () => {
+  // The literal this replaced could not do this: with "0.3.2" written into the
+  // comparison, a registry that says the image installs 0.3.4 would certify a
+  // container still running 0.3.2.
+  const upgraded = pluginRegistryFrom({ communityToolBundles: [{ ...recordedCite, version: "0.3.4" }] });
+  await assert.rejects(probeManager(citeProof, upgraded).manager.probePlugin(project, citeExpected),
+    { status: 502, code: "plugin_probe_invalid" });
+  assert.deepEqual(
+    await probeManager({ ...citeProof, binaryVersion: "0.3.4" }, upgraded).manager.probePlugin(project, citeExpected),
+    { generation: "gen-1" },
+  );
+});
+
+test("a probe reaches no verdict for a bundle whose configuration this deployment cannot read back", async () => {
+  // `evimedPlugins/verify` takes no arguments and has one implementation, and
+  // the proof it returns is dsh-cite's shape: a version, an enabled bit, a
+  // revision, a `timeoutMs` and a tool list. A second registered bundle
+  // declares no settings at all — `PLUGIN_SETTINGS_SCHEMAS` in
+  // pluginService.mjs names dsh-cite alone, so `validatePluginConfig` forces
+  // its saved configuration to `{}` — and the `timeoutMs` the kernel proves is
+  // then some other registration's. So there is no verdict to reach, with its
+  // own proof or with dsh-cite's, and the kernel is not asked for one.
+  const notesProof = { binaryVersion: "1.0.0", enabled: true, revision: 7, timeoutMs: 4000, tools: ["note_add"] };
+  const notesExpected = { revision: 7, enabled: true, settings: {} };
+  for (const proof of [notesProof, citeProof]) {
+    const notes = probeManager(proof, twoPluginRegistry);
+    await assert.rejects(notes.manager.probePlugin(project, notesExpected, "dsh-notes"), { status: 502, code: "plugin_probe_invalid" });
+    assert.deepEqual(notes.asked, [], "a configuration this deployment cannot prove must not reach the kernel");
+  }
+  // The rule at its own boundary: exactly the settings that one proof shape
+  // restates. Adding a second setting to dsh-cite's schema without teaching the
+  // proof to carry it turns every probe below red here, rather than certifying
+  // a value the kernel never mentioned.
+  assert.deepEqual(provenPluginSettings(pluginEntry(PLUGIN_ID)), ["timeoutMs"]);
+  assert.throws(() => provenPluginSettings({ settings: {} }), { status: 502, code: "plugin_probe_invalid" });
+  assert.throws(() => provenPluginSettings({ settings: { timeoutMs: {}, pageSize: {} } }), { status: 502, code: "plugin_probe_invalid" });
+  // And the relationship that keeps the claim honest: every plugin this
+  // deployment registers is one it can prove. Registering a second bundle
+  // lands here, naming it, instead of in a user's failed apply.
+  for (const entry of PLUGIN_REGISTRY.values()) {
+    assert.doesNotThrow(() => provenPluginSettings(entry),
+      `${entry.id} declares settings evimedPlugins/verify does not restate; teach the kernel's proof before registering it`);
+  }
+  // dsh-cite is untouched by the second registration.
+  assert.deepEqual(await probeManager(citeProof, twoPluginRegistry).manager.probePlugin(project, citeExpected), { generation: "gen-1" });
+  // And a plugin this image never approved is refused before the kernel is asked.
+  const unapproved = probeManager(citeProof);
+  await assert.rejects(unapproved.manager.probePlugin(project, citeExpected, "dsh-browse"), { status: 404, code: "plugin_not_supported" });
+  assert.deepEqual(unapproved.asked, [], "an unapproved plugin must not reach the kernel at all");
+});
+
+test("a launch plan carries one plugin's configuration, and a second bundle's cannot be rendered at all", () => {
+  // Not a count of registered plugins: `pluginService.test.mjs` already holds
+  // the registry to dsh-cite alone and `APPLY_PATH_PLUGIN_IDS` refuses a record
+  // that says otherwise, so a count here would only repeat that failure with a
+  // longer message. What is unpinned without this test is the launch half —
+  // that the single `pluginConfig` a plan takes is one plugin's, and that a
+  // configuration shaped like any other bundle's is refused rather than
+  // rendered into a container that would read it as dsh-cite's.
+  const base = {
+    presetSkillsDir: "", capabilitiesDir: "", capabilitySkillsDir: "", capsuleMethodsDir: "",
+    capsuleGatewayUrl: "", workloadTokenFile: "", bundleVersion: "",
+    flags: /** @type {any} */ ({}), limits: /** @type {any} */ ({}),
+  };
+  const environment = runtimeEnvironment({ ...base, pluginConfig: { revision: 9, enabled: true, settings: { timeoutMs: 4000 } } });
+  const other = runtimeEnvironment({ ...base, pluginConfig: { revision: 10, enabled: false, settings: { timeoutMs: 9000 } } });
+  assert.deepEqual(
+    Object.keys(other).filter((name) => other[name] !== environment[name]).sort(),
+    ["EVIMED_CITE_CONFIG_REVISION", "EVIMED_CITE_ENABLED", "EVIMED_CITE_TIMEOUT_MS"],
+    "the one configuration a plan carries must move exactly one plugin's variables",
+  );
+  // A second bundle's validated configuration is `{}` — it declares no settings
+  // — and this is where that stops: the container environment is dsh-cite's
+  // schema, so rendering another bundle's configuration is a refusal, not a
+  // silent default. Teaching it means teaching dshProfilePatch.mjs, the
+  // `evimed-citation-bridge` preset row and the controller protocol first.
+  assert.throws(
+    () => runtimeEnvironment({ ...base, pluginConfig: { revision: 9, enabled: true, settings: {} } }),
+    { code: "plugin_config_invalid" },
+  );
+
+  const plan = buildRuntimeLaunchPlan(
+    {
+      dataDir: "/tmp/os-plugin-plan", runtimeKernel: "dsh", runtimeSandboxMode: "docker",
+      runtimeContainerBin: "docker", runtimeContainerImage: "evimed-runtime-dsh:test", runtimeTransport: "unix",
+      runtimeNetworkMode: "none", runtimeCpuLimit: "1", runtimeMemoryLimit: "1g", runtimePidsLimit: 64,
+      allowRuntimeHostNetwork: false,
+    },
+    { id: "p1", userId: "u1", rootDir: "/tmp/os-plugin-plan/p1", workspaceDir: "/tmp/os-plugin-plan/p1/workspace", runtimeDir: "/tmp/os-plugin-plan/p1/runtime" },
+    4096,
+    { pluginConfig: { revision: 9, enabled: true, settings: { timeoutMs: 4000 } } },
+  );
+  assert.deepEqual(
+    plan.args.filter((/** @type {any} */ arg) => typeof arg === "string" && arg.startsWith("EVIMED_CITE_")).sort(),
+    ["EVIMED_CITE_CONFIG_REVISION=9", "EVIMED_CITE_ENABLED=1", "EVIMED_CITE_TIMEOUT_MS=4000"],
+    "the saved configuration must reach the container's environment",
+  );
 });

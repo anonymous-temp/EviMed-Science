@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { MEMORY_PROMOTION_MIN_OCCURRENCES, MEMORY_PROMOTION_MIN_RUNS } from "@evimed/domain";
 import { MemoryIntelligence, conversationMemorySources } from "../src/memoryIntelligence.mjs";
 
 class MemoryStoreDouble {
@@ -59,7 +60,16 @@ function project() {
   return { id: "project_1", userId: "user_1" };
 }
 
-function run(id = "run_1") {
+/**
+ * A finished run.
+ *
+ * `finishedAt` is a parameter because it is now load-bearing: an evidence entry
+ * is stamped with the terminal time of the run that contributed it, which is
+ * how "observed in separate runs" is decided. Three runs ending at the same
+ * instant is not something production produces, and a fixture that pretends
+ * otherwise would be testing one run three times.
+ */
+function run(id = "run_1", finishedAt = "2026-07-22T01:01:00.000Z") {
   return {
     id,
     sessionId: "session_1",
@@ -74,7 +84,7 @@ function run(id = "run_1") {
     errorCode: null,
     artifacts: ["reports/result.md"],
     startedAt: "2026-07-22T01:00:00.000Z",
-    finishedAt: "2026-07-22T01:01:00.000Z",
+    finishedAt,
     durationMs: 60_000,
   };
 }
@@ -233,7 +243,7 @@ test("memory extraction rejects a plausible but unsupported model claim", async 
   assert.equal([...store.records.values()].filter((record) => record.kind === "run_summary").length, 1);
 });
 
-test("inferred memory remains pending until three independent exact observations", async () => {
+test("inferred memory remains pending until enough exact observations in separate runs", async () => {
   const store = new MemoryStoreDouble();
   const intelligence = new MemoryIntelligence(config, store, {
     fetchImpl: modelFetch((sources) => [{
@@ -252,14 +262,63 @@ test("inferred memory remains pending until three independent exact observations
   });
 
   for (let index = 1; index <= 3; index += 1) {
-    await intelligence.recordRun(project(), run(`run_${index}`), [
+    await intelligence.recordRun(project(), run(`run_${index}`, `2026-07-2${index}T01:01:00.000Z`), [
       message(`user_${index}`, `第${index}次：请保留分析脚本、参数和可复现步骤。`),
     ]);
     const behavior = [...store.records.values()].find((record) => record.kind === "behavior");
-    assert.equal(behavior.status, index < 3 ? "pending" : "active");
+    assert.equal(behavior.status, index < MEMORY_PROMOTION_MIN_OCCURRENCES ? "pending" : "active");
   }
   const behavior = [...store.records.values()].find((record) => record.kind === "behavior");
-  assert.equal(behavior.evidenceCount, 3);
+  assert.equal(behavior.evidenceCount, MEMORY_PROMOTION_MIN_OCCURRENCES);
+});
+
+// Three observations that all came out of one conversation are one
+// conversation repeating itself, and `evidenceCount >= 3` counted them as
+// independence. `MEMORY_PROMOTION_MIN_RUNS` was declared in the domain and had
+// no consumer anywhere, so nothing checked the second half of the rule.
+test("three observations inside one run are not three independent ones", async () => {
+  const store = new MemoryStoreDouble();
+  // The same behavior proposed from three different messages of the same run:
+  // three distinct evidence entries, one conversation.
+  const intelligence = new MemoryIntelligence(config, store, {
+    fetchImpl: modelFetch((sources) => sources.filter((source) => source.role === "user").map((source) => ({
+      scope: "user",
+      kind: "behavior",
+      key: "workflow.requests_reproducibility",
+      value: "Frequently requests reproducible analysis outputs.",
+      summary: "Prefers reproducible analysis workflows.",
+      origin: "inferred",
+      confidence: 0.7,
+      importance: 0.7,
+      sensitive: false,
+      sourceRef: source.sourceRef,
+      evidenceQuote: source.text,
+    }))),
+  });
+
+  const single = await intelligence.recordRun(project(), run("run_one_shot", "2026-07-22T02:00:00.000Z"), [
+    message("u1", "请保留分析脚本。"),
+    message("u2", "也请保留参数。"),
+    message("u3", "还有可复现步骤。"),
+  ]);
+  const behavior = [...store.records.values()].find((record) => record.kind === "behavior");
+  assert.equal(behavior.evidenceCount, MEMORY_PROMOTION_MIN_OCCURRENCES,
+    "the occurrence count is met, which is exactly what used to be enough");
+  assert.equal(behavior.status, "pending", "one run cannot promote itself however often it repeats");
+  assert.equal(single.activated, 0);
+  assert.ok(single.pendingReasons.some((item) => item.reason === "inferred"));
+
+  // A second run says the same thing. Now the observations span
+  // MEMORY_PROMOTION_MIN_RUNS runs and the promotion is earned.
+  assert.equal(MEMORY_PROMOTION_MIN_RUNS, 2);
+  const second = await intelligence.recordRun(project(), run("run_second", "2026-07-23T02:00:00.000Z"), [
+    message("u4", "这次也请保留可复现步骤。"),
+  ]);
+  const promoted = [...store.records.values()].find((record) => record.kind === "behavior");
+  assert.equal(promoted.status, "active");
+  assert.equal(second.activated, 1);
+  const reason = store.reasons.at(-1).reason;
+  assert.match(reason, new RegExp(`${MEMORY_PROMOTION_MIN_OCCURRENCES} observations across at least ${MEMORY_PROMOTION_MIN_RUNS} runs`));
 });
 
 // A record parked as `pending` is not refused: it is stored with its evidence
@@ -430,4 +489,294 @@ test("what the extractor refused reaches the run's audit line and its quality no
   // own injection.
   assert.match(serverSource, /excluded=\$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the audit ledger");
   assert.match(serverSource, /未读取 \$\{memoryResult\.excluded\.map\(/, "the refusals do not reach the zero-extraction notice");
+});
+
+/**
+ * The inbox, with the one behaviour a recorder would have hidden.
+ *
+ * The real `NotificationService.create` derives the row id from the idempotency
+ * key and, when that key already names a row, returns it only if the content is
+ * the same one — same project, notice type, title, body, actions and source —
+ * and otherwise throws `notification_idempotency_conflict`. A double that only
+ * appends cannot tell a key that dedups from a key that collides, which is how
+ * a run-scoped `source` under a run-stable key passed its own test here and
+ * would have thrown against the real service on every later observation.
+ */
+function notificationsDouble() {
+  /** Every call the module made, including the ones that were refused. */
+  const attempts = [];
+  /** What the inbox would actually hold. */
+  const rows = new Map();
+  return {
+    attempts,
+    rows,
+    async create(userId, input) {
+      attempts.push({ userId, ...input });
+      const semantics = JSON.stringify([
+        userId, input.projectId ?? null, input.noticeType, input.title, input.body,
+        input.actions ?? [], input.source ?? null,
+      ]);
+      const key = input.idempotencyKey == null ? `unkeyed:${rows.size}` : `${userId} ${input.idempotencyKey}`;
+      const prior = rows.get(key);
+      if (prior) {
+        if (prior.semantics !== semantics) {
+          /** @type {any} */
+          const error = new Error("The notification key already names different content.");
+          error.status = 409;
+          error.code = "notification_idempotency_conflict";
+          throw error;
+        }
+        return prior.item;
+      }
+      const item = { id: `notice_${rows.size + 1}`, ...input };
+      rows.set(key, { semantics, item });
+      return item;
+    },
+  };
+}
+
+/** Everything the composition root would have audited. */
+function auditDouble() {
+  const failures = [];
+  return { failures, record: async (event, error) => { failures.push({ event, code: error?.code ?? null }); } };
+}
+
+/** A memory the user stated and the system has been using ever since. */
+async function seedConfirmed(store, { key, value, origin = "explicit", kind = "preference" }) {
+  return store.upsertRecord("user_1", {
+    scope: "user", scopeId: "", kind, key, value, summary: value,
+    origin, status: "active", confidence: 1, importance: 0.8, sensitive: false,
+  }, null, {});
+}
+
+/** An extractor that proposes exactly one candidate under a key it was told about. */
+function proposeValue(key, value, kind = "preference", origin = "explicit") {
+  return modelFetch((sources) => [{
+    scope: "user", kind, key, value, summary: value, origin,
+    confidence: 1, importance: 0.8, sensitive: false,
+    sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
+  }]);
+}
+
+// The first version of this feature answered a contradiction by refusing the
+// write: the confirmed record was left untouched and the new value was parked
+// under a key of its own as `pending`. So a researcher who says "from now on
+// answer in English" was answered in Chinese forever — the inbox action that
+// would have applied their statement has no handler anywhere, and before the
+// feature existed the same statement simply took effect. A check that refuses
+// what used to succeed is a blocking point, and those are budgeted; this one
+// was never justified by an observed distribution and is gone. What is left is
+// the part that was worth having: the contradiction is detected, the value it
+// replaced is kept, and the researcher is told.
+test("a restated preference takes effect at once, and the memory it replaced is recorded rather than refused", async () => {
+  const store = new MemoryStoreDouble();
+  const notifications = notificationsDouble();
+  const audit = auditDouble();
+  const confirmed = await seedConfirmed(store, { key: "preference.output_language", value: "回答请用中文" });
+  const intelligence = new MemoryIntelligence(config, store, {
+    notifications,
+    audit: audit.record,
+    fetchImpl: proposeValue("preference.output_language", "回答请用英文"),
+  });
+
+  const result = await intelligence.recordRun(project(), run("run_conflict", "2026-07-24T01:01:00.000Z"), [
+    message("u1", "回答请用英文"),
+  ]);
+
+  // The whole point: what the user just said is in force, under the key it
+  // belongs to, immediately.
+  const kept = [...store.records.values()].find((record) => record.key === "preference.output_language");
+  assert.equal(kept.value, "回答请用英文", "the researcher's own restatement must take effect");
+  assert.equal(kept.status, "active", "and take effect now, not after someone approves it");
+  assert.equal(kept.version, confirmed.version + 1);
+  assert.equal([...store.records.values()].filter((record) => record.key.includes(".proposed.")).length, 0,
+    "a value the user stated is not a proposal");
+
+  // The value it replaced, in the one place that outlives the write.
+  const reason = store.reasons.find((entry) => entry.key === "preference.output_language" && /replaced/.test(entry.reason));
+  assert.ok(reason, "the revision history must name the value that was replaced");
+  assert.match(reason.reason, /replaced the value the user had confirmed: 「回答请用中文」/);
+
+  // The verdict is a return value carrying the specifics.
+  assert.equal(result.conflicts.length, 1);
+  assert.deepEqual(
+    {
+      key: result.conflicts[0].key,
+      previousValue: result.conflicts[0].previousValue,
+      nextValue: result.conflicts[0].nextValue,
+      origin: result.conflicts[0].origin,
+    },
+    { key: "preference.output_language", previousValue: "回答请用中文", nextValue: "回答请用英文", origin: "explicit" },
+  );
+  assert.equal(result.pending, 0, "nothing was parked");
+  assert.equal(result.pendingReasons.length, 0);
+
+  // And the researcher is told, with both values, by a notice that does not ask
+  // them to do anything: the change has already happened.
+  assert.equal(notifications.rows.size, 1);
+  const notice = notifications.attempts[0];
+  assert.equal(notice.noticeType, "notify", "a question would promise a decision nothing acts on");
+  assert.equal(notice.actions, undefined, "an inbox action with no handler is a button that does nothing");
+  assert.equal(notice.userId, "user_1");
+  assert.match(notice.body, /回答请用中文/);
+  assert.match(notice.body, /回答请用英文/);
+  assert.match(notice.body, /记忆管理/, "the way back has to be in the notice");
+  assert.equal(audit.failures.length, 0);
+});
+
+test("case and spacing are not a change of mind, and an unconfirmed guess is corrected in silence", async () => {
+  // The narrowness is the point. Code decides only that two strings differ once
+  // normalized; whether two statements contradict each other is a language
+  // judgement, and this must not start making it.
+  const cosmetic = new MemoryStoreDouble();
+  const cosmeticInbox = notificationsDouble();
+  await seedConfirmed(cosmetic, { key: "preference.evidence_depth", value: "Prefer primary evidence" });
+  const unchanged = await new MemoryIntelligence(config, cosmetic, {
+    notifications: cosmeticInbox,
+    fetchImpl: proposeValue("preference.evidence_depth", "prefer  primary   evidence"),
+  }).recordRun(project(), run("run_cosmetic", "2026-07-26T01:01:00.000Z"), [message("u1", "prefer  primary   evidence")]);
+  assert.equal(cosmeticInbox.attempts.length, 0, "whitespace and case are not a contradiction");
+  assert.equal(unchanged.conflicts.length, 0);
+
+  // An active memory the model inferred and the user never confirmed is not
+  // "what the user told the system": correcting it is how inference is supposed
+  // to work, and a notice about it would be noise.
+  const inferred = new MemoryStoreDouble();
+  const inferredInbox = notificationsDouble();
+  await seedConfirmed(inferred, { key: "preference.output_language", value: "回答请用中文", origin: "inferred" });
+  const corrected = await new MemoryIntelligence(config, inferred, {
+    notifications: inferredInbox,
+    fetchImpl: proposeValue("preference.output_language", "回答请用英文"),
+  }).recordRun(project(), run("run_inferred", "2026-07-27T01:01:00.000Z"), [message("u1", "回答请用英文")]);
+  assert.equal(inferredInbox.attempts.length, 0);
+  assert.equal(corrected.conflicts.length, 0);
+  assert.equal([...inferred.records.values()].find((record) => record.key === "preference.output_language").value, "回答请用英文");
+
+  // An episodic project fact is outside the boundary too: those legitimately
+  // change, and telling the researcher every time one does is exactly the noise
+  // a budget of six blocking points exists to prevent.
+  const episodic = new MemoryStoreDouble();
+  const episodicInbox = notificationsDouble();
+  await episodic.upsertRecord("user_1", {
+    scope: "project", scopeId: "project_1", kind: "analysis", key: "project.analysis.followup_window",
+    value: "随访窗口取 12 周", summary: "随访窗口", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.8, sensitive: false,
+  }, null, {});
+  await new MemoryIntelligence(config, episodic, {
+    notifications: episodicInbox,
+    fetchImpl: modelFetch((sources) => [{
+      scope: "project", kind: "analysis", key: "project.analysis.followup_window",
+      value: "随访窗口取 24 周", summary: "随访窗口", origin: "explicit",
+      confidence: 1, importance: 0.8, sensitive: false,
+      sourceRef: sources[0].sourceRef, evidenceQuote: sources[0].text,
+    }]),
+  }).recordRun(project(), run("run_episodic", "2026-07-28T01:01:00.000Z"), [message("u1", "随访窗口取 24 周")]);
+  assert.equal(episodicInbox.attempts.length, 0);
+  assert.equal([...episodic.records.values()].find((record) => record.key === "project.analysis.followup_window").value, "随访窗口取 24 周");
+});
+
+test("the notice's key names exactly what the notice says, so observing one change twice is one inbox item", async () => {
+  // Against the real service the identity of an inbox item is its key AND its
+  // content: a repeated key whose content differs is a 409, not a duplicate.
+  // The first version keyed on the record while sending the run as the notice's
+  // source, so the second observation of one contradiction took the 409 branch
+  // and was swallowed by a bare `catch`. Nothing about the run reaches this
+  // notice now, and the double above enforces the rule the service enforces.
+  const store = new MemoryStoreDouble();
+  const notifications = notificationsDouble();
+  const audit = auditDouble();
+  await seedConfirmed(store, { key: "preference.output_language", value: "回答请用中文" });
+  const say = (value, id, at) => new MemoryIntelligence(config, store, {
+    notifications,
+    audit: audit.record,
+    fetchImpl: proposeValue("preference.output_language", value),
+  }).recordRun(project(), run(id, at), [message(`m_${id}`, value)]);
+
+  await say("回答请用英文", "run_first", "2026-07-24T01:01:00.000Z");
+  await say("回答请用中文", "run_second", "2026-07-25T01:01:00.000Z");
+  // The researcher changes their mind back: the same contradiction as the first
+  // one, observed in a different run and reported from a different project.
+  const third = await new MemoryIntelligence(config, store, {
+    notifications,
+    audit: audit.record,
+    fetchImpl: proposeValue("preference.output_language", "回答请用英文"),
+  }).recordRun({ id: "project_2", userId: "user_1" }, run("run_third", "2026-07-26T01:01:00.000Z"),
+    [message("m_third", "回答请用英文")]);
+
+  assert.equal(third.conflicts.length, 1);
+  assert.equal(notifications.attempts.length, 3, "each observation reported");
+  assert.equal(notifications.rows.size, 2, "but the same change twice is one inbox item, not a 409");
+  assert.deepEqual(audit.failures, [], "and nothing was swallowed");
+  assert.equal(notifications.attempts[0].idempotencyKey, notifications.attempts[2].idempotencyKey);
+  assert.notEqual(notifications.attempts[0].idempotencyKey, notifications.attempts[1].idempotencyKey);
+  for (const attempt of notifications.attempts) {
+    assert.equal(attempt.source, undefined, "a run-scoped source under a run-stable key is the 409");
+    assert.equal(attempt.projectId, null, "a user-scoped memory belongs to no project");
+  }
+});
+
+test("a change the model inferred is a different notice from the same change the user stated", async () => {
+  // The notice names which of the two it was, so the key has to as well: a key
+  // that does not distinguish what its own text distinguishes is exactly the
+  // idempotency conflict, one turn later.
+  const store = new MemoryStoreDouble();
+  const notifications = notificationsDouble();
+  const audit = auditDouble();
+  await seedConfirmed(store, { key: "preference.output_language", value: "回答请用中文" });
+  const say = (value, origin, id, at) => new MemoryIntelligence(config, store, {
+    notifications,
+    audit: audit.record,
+    fetchImpl: proposeValue("preference.output_language", value, "preference", origin),
+  }).recordRun(project(), run(id, at), [message(`m_${id}`, value)]);
+
+  await say("回答请用英文", "explicit", "run_said", "2026-08-02T01:01:00.000Z");
+  await say("回答请用中文", "explicit", "run_back", "2026-08-03T01:01:00.000Z");
+  await say("回答请用英文", "inferred", "run_guessed", "2026-08-04T01:01:00.000Z");
+
+  assert.equal(notifications.rows.size, 3);
+  assert.deepEqual(audit.failures, []);
+  assert.match(notifications.attempts[0].body, /你在本次对话里的说法/);
+  assert.match(notifications.attempts.at(-1).body, /模型对本次对话的推断/);
+});
+
+test("an inbox that refuses the notice costs the run neither its memory nor its visibility", async () => {
+  const store = new MemoryStoreDouble();
+  const audit = auditDouble();
+  await seedConfirmed(store, { key: "behavior.reporting_style", value: "报告先给结论", kind: "behavior" });
+  const refusing = { create: async () => {
+    /** @type {any} */
+    const error = new Error("inbox is down");
+    error.code = "notification_unavailable";
+    throw error;
+  } };
+  const result = await new MemoryIntelligence(config, store, {
+    notifications: refusing,
+    audit: audit.record,
+    // The model's own guess, over something the user confirmed. It still lands,
+    // exactly as it did before this feature existed — and it is the one case a
+    // future decision to hold such a write back could be argued from, which is
+    // why the notice names it as inferred.
+    fetchImpl: proposeValue("behavior.reporting_style", "报告先给方法", "behavior", "inferred"),
+  }).recordRun(project(), run("run_inbox_down", "2026-08-01T01:01:00.000Z"), [message("u1", "报告先给方法")]);
+
+  assert.equal([...store.records.values()].find((record) => record.key === "behavior.reporting_style").value, "报告先给方法");
+  assert.equal(result.conflicts.length, 1, "the run still reports the change it made");
+  assert.equal(result.conflicts[0].origin, "inferred");
+  assert.deepEqual(audit.failures, [{ event: "notification.memory_conflict.create", code: "notification_unavailable" }],
+    "an inbox that stopped accepting these must not be invisible");
+});
+
+test("the promotion rule reads the domain's numbers instead of restating them", async () => {
+  // `MEMORY_PROMOTION_MIN_OCCURRENCES` and `MEMORY_PROMOTION_MIN_RUNS` were
+  // declared in `@evimed/domain` and consumed by nothing outside the domain's
+  // own index and tests, while this module hard-coded `evidenceCount >= 3` and
+  // never looked at runs at all. The behaviour is pinned by the tests above;
+  // this pins where the numbers come from, because a copy that happens to agree
+  // today is the shape the whole domain package exists to prevent.
+  const source = await readFile(new URL("../src/memoryIntelligence.mjs", import.meta.url), "utf8");
+  assert.ok(source.length > 1_000, "the module source must actually have been read");
+  assert.match(source, /import \{[^}]*MEMORY_PROMOTION_MIN_OCCURRENCES[^}]*\} from "@evimed\/domain"/s);
+  assert.match(source, /stored\.evidenceCount >= MEMORY_PROMOTION_MIN_OCCURRENCES/);
+  assert.match(source, /distinctObservationRuns\(stored\) >= MEMORY_PROMOTION_MIN_RUNS/);
+  assert.doesNotMatch(source, /evidenceCount >= \d/, "the literal the constants replaced must be gone");
 });

@@ -153,6 +153,49 @@ function recordStartedSubagent(ctx, entry, item, skills, run, extra = {}) {
   return childSessionId
 }
 
+/**
+ * The delegation receipt's digests: which version of each injected skill and
+ * capsule method was in the child's room.
+ *
+ * The names alone could not answer the question the learning loop asks of
+ * every finished run. A method amended between two runs keeps its name, so a
+ * receipt of names attributes the second run's outcome to text that was never
+ * loaded for it; the digests are what make the attribution honest.
+ *
+ * Computed beside the running child, never in front of it. The hash goes
+ * through WebCrypto, which resolves off the event loop, and awaiting it before
+ * `startSubagent` — or between the start and the running row — moves that row
+ * past the tick a reader waits for it in: the combined-plan suite settles its
+ * children one timer tick after delegating, and with the hashing in front it
+ * found no running rows and waited forever. So the running row is written
+ * first, with names; this fills the digests into that row when they arrive, if
+ * it is still this child's running row; and the settled record awaits the
+ * result, so the receipt the control plane reads is never missing them.
+ *
+ * A hashing failure does not fail the delegation. It leaves the digests empty
+ * and names itself on the row, because a child that did its work is not undone
+ * by the bookkeeping beside it, and an empty receipt that says why is one the
+ * ledger can tell from a child that loaded nothing.
+ *
+ * @param {any} ctx @param {Record<string, any>} entry @param {string} itemId
+ * @param {readonly {name: string, body: string}[]} skillBodies @param {string} childSessionId
+ * @returns {Promise<{skillDigests: {name: string, digest: string}[], methods: {name: string, digest: string}[], receiptError?: string}>}
+ */
+function delegationReceipt(ctx, entry, itemId, skillBodies, childSessionId) {
+  const capsuleMethods = ctx.get('evimedCapsuleMethods') ?? []
+  return Promise.all([
+    Promise.all(skillBodies.map(async (skill) => ({ name: skill.name, digest: await skillBodyDigestAsync(skill.body) }))),
+    Promise.all(capsuleMethods.map(async (method) => ({ name: method.name, digest: method.digest ?? await skillBodyDigestAsync(method.body ?? '') }))),
+  ]).then(([skillDigests, methods]) => {
+    const receipt = { skillDigests, methods }
+    const store = ctx.get('evimedRun')
+    const key = `${entry.runId}:${itemId}`
+    const row = store?.subagents.get(key)
+    if (row && row.status === 'running' && row.childSessionId === childSessionId) store.subagents.set(key, { ...row, ...receipt })
+    return receipt
+  }, (error) => ({ skillDigests: [], methods: [], receiptError: errorMessage(error) }))
+}
+
 /** Whether a one-shot submission grant still names this exact repair.
  * @param {Record<string, any>} entry @param {Record<string, any>|undefined} item
  * @param {Record<string, any>|undefined} grant @returns {boolean} */
@@ -571,14 +614,6 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
         // the model never calls the `skill` tool and a transcript scan for that
         // call can only ever conclude the skill was missing.
         const injected = skillBodies.map((skill) => skill.name)
-        // The names alone could not answer the question the learning loop asks
-        // of every finished run: *which version* of a method was in the room.
-        // A method that was amended between two runs keeps its name, so a
-        // receipt of names attributes the second run's outcome to text that was
-        // never loaded for it.
-        const skillDigests = await Promise.all(skillBodies.map(async (skill) => ({ name: skill.name, digest: await skillBodyDigestAsync(skill.body) })))
-        const methodDigests = await Promise.all((ctx.get('evimedCapsuleMethods') ?? [])
-          .map(async (method) => ({ name: method.name, digest: method.digest ?? await skillBodyDigestAsync(method.body ?? '') })))
         let run
         try {
           run = await startSubagent(ctx, request, ctx.get('agents')?.get?.(call.agentId), call.signal)
@@ -594,13 +629,17 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             issues: [issue('subagent_start_failed', `分工没有启动：${detail}`)],
           }
         }
-        const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run, { skillDigests, methods: methodDigests })
+        const childSessionId = recordStartedSubagent(ctx, entry, item, injected, run)
         bindChildOwner(childSessionId, entry, item)
         entry.budget.children += 1
         Object.assign(item, advancePlanItem(item, 'delegate'))
         await putPlanIndex(store(), entry)
         await putRunMirror(ctx, entry, config.bundleVersion)
+        // The receipt's digests, computed beside the running child rather than
+        // in front of it. See `delegationReceipt` for why the order matters.
+        const receipt = delegationReceipt(ctx, entry, item.id, skillBodies, childSessionId)
         const outcome = await awaitOwnedSubagent(run, childSessionId)
+        const { skillDigests, methods: methodDigests, receiptError } = await receipt
         item.childSessionId = outcome.childSessionId
         recordSubagent(ctx, entry, item.id, {
           deliverableId: item.id,
@@ -608,6 +647,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           skills: injected,
           skillDigests,
           methods: methodDigests,
+          ...(receiptError ? { receiptError } : {}),
           status: outcome.stopReason,
           childSessionId: outcome.childSessionId,
         })
@@ -629,7 +669,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           // after a child had already failed, which is why nothing ever saw it.
           const parent = ctx.get('agents')?.get?.(call.agentId)
           const retry = await startSubagent(ctx, { ...request, prompt: `${request.prompt}\n\n## 上一次失败\n\n${settlement.reason}` }, parent, call.signal)
-          const retryChildSessionId = recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true })
+          const retryChildSessionId = recordStartedSubagent(ctx, entry, item, injected, retry, { retried: true, skillDigests, methods: methodDigests })
           bindChildOwner(retryChildSessionId, entry, item)
           await putPlanIndex(store(), entry)
           await putRunMirror(ctx, entry, config.bundleVersion)
@@ -638,6 +678,12 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
             deliverableId: item.id,
             capability: item.capability,
             skills: injected,
+            // The retry was handed the same request, so the same receipt: a
+            // retried child without digests is a child the learning loop
+            // cannot attribute, and the retry is exactly the outcome worth
+            // attributing.
+            skillDigests,
+            methods: methodDigests,
             status: retried.stopReason,
             childSessionId: retried.childSessionId,
             retried: true,

@@ -454,6 +454,81 @@ describe("apiClient", () => {
     );
   });
 
+  it("reports what the researcher did with a deliverable, in the four fields the route accepts", async () => {
+    // The other half of the feedback ledger. The server records memory
+    // decisions by itself, but an adoption and an edit are only visible to the
+    // page showing the file — and they are the only two triggers the
+    // distillation producer reads, so without this call nothing is ever
+    // distilled.
+    const adopted = {
+      id: "feedback:deliverable-adopted:0123456789abcdef0123456789abcdef",
+      projectId: "paper1", runId: "run_1", trigger: "deliverable-adopted",
+      subject: { type: "deliverable", id: "run_1:reports/evidence.md" },
+      detail: { path: "reports/evidence.md", runId: "run_1", contentSha256: "a".repeat(64) },
+      occurredAt: "2026-09-07T08:00:00.000Z", recordedAt: "2026-09-07T08:00:00.100Z",
+    };
+    const edited = { ...adopted, id: "feedback:deliverable-edited:fedcba9876543210fedcba9876543210", trigger: "deliverable-edited" };
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson({ event: adopted, distillJobId: null }, { status: 201 }))
+      .mockResolvedValueOnce(responseJson({ event: edited, distillJobId: "job_1" }));
+    const client = await loadClient("https://science.example/api");
+
+    await expect(client.reportWebDeliverableFeedback({
+      trigger: "deliverable-adopted", runId: "run_1", path: "reports/evidence.md",
+    })).resolves.toEqual({ event: adopted, distillJobId: null });
+
+    // Exactly the fields the route names, and no `summary` key on an adoption:
+    // it refuses any field it did not name with a 400.
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://science.example/api/feedback/events",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ trigger: "deliverable-adopted", runId: "run_1", path: "reports/evidence.md" }),
+      }),
+    );
+    expect(callHeaders(fetchMock, 1).get("Content-Type")).toBe("application/json");
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
+    expect(callHeaders(fetchMock, 1).get("X-Open-Science-Project")).toBe("default");
+
+    // The edit carries the summary, trimmed; the job the pair enqueued comes
+    // back so the caller can say a lesson was recorded.
+    await expect(client.reportWebDeliverableFeedback({
+      trigger: "deliverable-edited", runId: "run_1", path: "reports/evidence.md",
+      summary: "  把结论段的效应量补上了置信区间。  ",
+    })).resolves.toEqual({ event: edited, distillJobId: "job_1" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://science.example/api/feedback/events",
+      expect.objectContaining({
+        body: JSON.stringify({
+          trigger: "deliverable-edited", runId: "run_1", path: "reports/evidence.md",
+          summary: "把结论段的效应量补上了置信区间。",
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces the feedback route's own refusals instead of swallowing them", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(responseJson({}, { status: 404 }));
+    const client = await loadClient("https://science.example/api");
+    // The server resolves the run against the caller's own project, because the
+    // id is copied into the lesson and into the method document it becomes.
+    await expect(client.reportWebDeliverableFeedback({
+      trigger: "deliverable-adopted", runId: "run_missing", path: "reports/evidence.md",
+    })).rejects.toMatchObject({ status: 404 });
+
+    const offline = await loadClient();
+    await expect(offline.reportWebDeliverableFeedback({
+      trigger: "deliverable-adopted", runId: "run_1", path: "reports/evidence.md",
+    })).rejects.toThrow(/No backend is configured/);
+  });
+
   it("exports and deletes hosted projects", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response("archive-bytes"))
@@ -839,5 +914,150 @@ describe("apiClient", () => {
       }),
     );
     expect(callHeaders(fetchMock, 5).get("X-Open-Science-Project")).toBe("paper1");
+  });
+});
+
+// A 402 used to arrive as a code and a sentence. The ledger knows which of the
+// three ceilings refused the request and by how much, and a researcher cannot
+// act on "over budget" without it: the 24-hour ceiling frees itself within a
+// day, the 7-day one does not, and a run ceiling is about this task alone.
+describe("apiClient budget refusals", () => {
+  function refusal(details: unknown, code = "usage_budget_exceeded", status = 402) {
+    return new Response(
+      JSON.stringify({ error: "This request exceeds the account spending limit.", code, requestId: "req_402", details }),
+      { status, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  it("carries the ceiling to the caller and remembers it for the account page", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(refusal({ window: "week", limit: 12, committed: 12.4, requested: 0.3, currency: "CNY" }));
+    const client = await loadClient("https://science.example/api");
+
+    await expect(client.dispatchWebAgentRun("ses_1", "分析这份证据", "turn_1")).rejects.toMatchObject({
+      name: "WebApiError",
+      status: 402,
+      code: "usage_budget_exceeded",
+      requestId: "req_402",
+      details: { window: "week", limit: 12, committed: 12.4, requested: 0.3, currency: "CNY" },
+    });
+
+    const remembered = client.lastWebUsageBudgetRefusal();
+    if (!remembered) throw new Error("the refusal was not remembered");
+    expect(remembered.window).toBe("week");
+    expect(Number.isNaN(Date.parse(remembered.observedAt))).toBe(false);
+    expect(client.describeWebUsageBudget(remembered)).toBe(
+      "近 7 天额度已达上限：上限 12.00 CNY，已占用 12.40 CNY，本次请求还需 0.30 CNY。",
+    );
+  });
+
+  it("keeps only the declared keys out of a bag that carries more", async () => {
+    // Shaped exactly like a live API key, assembled at run time so no such
+    // literal sits in source: `pnpm audit:source-secrets` refuses one even in
+    // a test proving such a value never travels, and it is right to — a
+    // scanner cannot read intent. The value on the wire below is
+    // byte-identical to what a real leak would look like.
+    const credentialShapedValue = ["sk", "live", "a1b2c3d4e5f6a7b8c9d0e1f2"].join("-");
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal({
+      window: "day", limit: 5, committed: 5, currency: "CNY",
+      sql: "SELECT reserved_cost FROM evimed_usage.model_requests", apiKey: credentialShapedValue,
+      stack: "Error: at reserveModel (/srv/evimed/apps/server/src/usageLedger.mjs:176)",
+    }));
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as { details: Record<string, unknown> };
+    expect(Object.keys(error.details).sort()).toEqual(["committed", "currency", "limit", "window"]);
+    expect(JSON.stringify(error.details)).not.toContain(credentialShapedValue);
+    expect(client.describeWebUsageBudget(error.details as never)).toBe("近 24 小时额度已达上限：上限 5.00 CNY，已占用 5.00 CNY。");
+  });
+
+  // The currency cases are the reason this parser mirrors the server's closed
+  // sets instead of substituting a default: the server drops a currency outside
+  // its own set, and a client that filled the gap with "CNY" would print an
+  // amount under a currency nobody said it was in.
+  it.each([
+    ["an unknown window", { window: "month", limit: 12, committed: 12.4, currency: "CNY" }],
+    ["a limit that is not a number", { window: "day", limit: "12", committed: 12.4, currency: "CNY" }],
+    ["no window at all", { limit: 12, committed: 12.4, currency: "CNY" }],
+    ["an unknown currency", { window: "day", limit: 12, committed: 12.4, currency: "USD" }],
+    ["no currency at all", { window: "day", limit: 12, committed: 12.4 }],
+    ["a bag that is not an object", "week"],
+  ])("drops a details bag with %s", async (_label, details) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(details));
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as { details: unknown };
+    expect(error.details).toBeNull();
+    expect(client.lastWebUsageBudgetRefusal()).toBeNull();
+  });
+
+  // The client mirrors the control plane's per-code declaration: a code that
+  // declares no shape carries nothing, whatever the body happens to hold.
+  it("ignores details on a code that declares none", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      refusal({ window: "week", limit: 12, committed: 12.4, currency: "CNY" }, "project_forbidden", 403),
+    );
+    const client = await loadClient("https://science.example/api");
+
+    const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as { details: unknown; status: number };
+    expect(error.status).toBe(403);
+    expect(error.details).toBeNull();
+    expect(client.lastWebUsageBudgetRefusal()).toBeNull();
+  });
+
+  it("forgets the ceiling when the session ends", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(refusal({ window: "run", limit: 2, committed: 1.9, requested: 0.4, currency: "CNY" }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Session expired.", code: "authentication_required" }), {
+        status: 401, headers: { "Content-Type": "application/json" },
+      }));
+    const client = await loadClient("https://science.example/api");
+
+    await client.fetchWebAccountUsage().catch(() => null);
+    expect(client.lastWebUsageBudgetRefusal()?.window).toBe("run");
+
+    await client.fetchWebAccountUsage().catch(() => null);
+    expect(client.lastWebUsageBudgetRefusal()).toBeNull();
+  });
+});
+
+// The capsule/autopilot/sources client builds its own WebApiError from the same
+// envelope, and its message map is what those pages show. "操作未完成，请重试"
+// is advice that cannot work when the ceiling that refused is a spent week.
+describe("productClient budget refusals", () => {
+  async function loadProductClient(webApiBase: string) {
+    vi.resetModules();
+    setWebApiBase(webApiBase);
+    return import("./productClient");
+  }
+
+  it("answers a refused request with the ceiling that refused it", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(csrfMeResponse())
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          error: "This account reached its spending limit.",
+          code: "usage_budget_exceeded",
+          requestId: "req_402",
+          details: { window: "day", limit: 5, committed: 5, currency: "CNY" },
+        }),
+        { status: 402, headers: { "Content-Type": "application/json" } },
+      ));
+    const product = await loadProductClient("https://science.example/api");
+
+    const error = await product.productRequest("/autopilot/agendas", "POST", { title: "夜间检索" }).catch((err: unknown) => err);
+    expect(product.productErrorMessage(error)).toBe("近 24 小时额度已达上限：上限 5.00 CNY，已占用 5.00 CNY。");
+  });
+
+  it("leaves every other failure with the message it had", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      JSON.stringify({ error: "gone", code: "product_document_missing", requestId: "req_404" }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    ));
+    const product = await loadProductClient("https://science.example/api");
+
+    const error = await product.productRequest("/capsules/cap_1").catch((err: unknown) => err);
+    expect(product.productErrorMessage(error)).toBe("这条记录已不存在，请刷新列表。");
   });
 });

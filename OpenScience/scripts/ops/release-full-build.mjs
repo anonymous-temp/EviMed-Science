@@ -144,7 +144,13 @@ export function capChildOutput(child, outputs) {
 }
 export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // A different recipe needs a separate review, not a caller-supplied hash.
-export const WEB_DOCKERFILE_SHA256 = "sha256:8b8ddb1df0f2ec0f2c4330e8ec37ff108748b040274b070da05e7bde5b63cf61";
+// 2026-09-07: repinned for one added line — the image now carries the
+// placeholder plugin-availability.json, because apps/server/src reads that
+// path at the repository root and deploy.test.mjs derives from the source
+// that every such file is in the image. A deployment's bind mount still
+// overrides it; the shipped record is deliberately dated 1970 so every
+// plugin reads as unknown until the nightly matrix writes a real one.
+export const WEB_DOCKERFILE_SHA256 = "sha256:cb253e3db671c81de2eb2927de5a1add6e5fc466701e5c1694cd9012f2ee6f84";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

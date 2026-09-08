@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import { OpenListClient } from "../src/openListClient.mjs";
+import { openListSourceInput } from "../src/openListSourceConnector.mjs";
 
 test("OpenList calls only the pinned list, get and link contracts", async (t) => {
   const calls = [];
@@ -54,4 +55,72 @@ test("OpenList application errors and oversized responses fail closed", async (t
   await assert.rejects(() => client.list("/"), (error) => error.code === "openlist_request_failed");
   oversized = true;
   await assert.rejects(() => client.list("/"), (error) => error.code === "openlist_response_too_large");
+});
+
+/** @param {any[]} responses */
+function fixture(responses) {
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    requests.push({ url, body: init?.body ? JSON.parse(init.body) : null });
+    const payload = responses[Math.min(requests.length - 1, responses.length - 1)];
+    const text = JSON.stringify(payload);
+    return { ok: true, headers: new Headers({ "content-length": String(Buffer.byteLength(text)) }),
+      body: new Blob([text]).stream() };
+  };
+  return { requests, client: new OpenListClient({ baseUrl: "http://openlist.local", token: "t", fetchImpl }) };
+}
+
+const file = (name, hashInfo) => ({ name, size: 11, modified: "2026-09-06T00:00:00.000Z", is_dir: false, hash_info: hashInfo });
+
+test("a directory page carries the provider hash the folder sync compares against", async () => {
+  const { client, requests } = fixture([{ code: 200, data: { total: 2, content: [
+    file("one.pdf", { sha256: "A".repeat(64) }), { name: "sub", size: 0, is_dir: true },
+  ] } }]);
+  const page = await client.list("/tenants/user-one/papers", { page: 1, perPage: 100 });
+  assert.deepEqual(requests[0].body, { path: "/tenants/user-one/papers", page: 1, per_page: 100, refresh: false });
+  assert.equal(requests[0].url, "http://openlist.local/api/fs/list");
+  assert.deepEqual(page.entries[0], { path: "/tenants/user-one/papers/one.pdf", name: "one.pdf", size: 11,
+    mtime: "2026-09-06T00:00:00.000Z", entryType: "file", providerHash: `sha256:${"a".repeat(64)}` });
+  assert.equal(page.entries[1].entryType, "dir");
+  assert.equal(page.entries[1].providerHash, null);
+  assert.equal(page.nextCursor, null, "a fully covered directory ends the walk");
+});
+
+test("paging stops exactly when the reported total is covered", async () => {
+  const { client } = fixture([{ code: 200, data: { total: 250, content: Array.from({ length: 100 }, (_, index) => file(`p${index}.pdf`, { sha256: "b".repeat(64) })) } }]);
+  assert.equal((await client.list("/papers", { page: 1, perPage: 100 })).nextCursor, "2");
+  assert.equal((await client.list("/papers", { page: 2, perPage: 100 })).nextCursor, "3");
+  assert.equal((await client.list("/papers", { page: 3, perPage: 100 })).nextCursor, null);
+});
+
+test("a storage without SHA-256 is reported honestly instead of being guessed", async () => {
+  const { client } = fixture([{ code: 200, data: { total: 2, content: [
+    file("legacy.pdf", { md5: "c".repeat(32) }), file("bare.pdf", null),
+  ] } }]);
+  const page = await client.list("/papers", {});
+  assert.equal(page.entries[0].providerHash, `md5:${"c".repeat(32)}`);
+  assert.equal(page.entries[1].providerHash, null);
+  for (const entry of page.entries) {
+    assert.throws(() => openListSourceInput("project-one", entry), { code: "openlist_sha256_required" },
+      "a file we cannot content-address must never enter the ledger");
+  }
+});
+
+test("an oversized or malformed listing is refused, never truncated silently", async () => {
+  const { client } = fixture([{ code: 200, data: { total: 1, content: [file("a.pdf", null), file("b.pdf", null)] } }]);
+  await assert.rejects(client.list("/papers", { page: 1, perPage: 1 }), { code: "openlist_response_invalid" });
+  const bad = fixture([{ code: 200, data: { total: 1, content: [{ name: "../escape.pdf", size: 1, is_dir: false }] } }]);
+  await assert.rejects(bad.client.list("/papers", {}), { code: "openlist_response_invalid" });
+  await assert.rejects(client.list("/papers", { page: 0 }), { code: "openlist_page_invalid" });
+});
+
+test("one entry maps to one source manifest, so import and sync share a version family", () => {
+  const entry = { path: "/papers/one.pdf", name: "one.pdf", size: 11, mtime: "2026-09-06T00:00:00.000Z",
+    entryType: "file", providerHash: `sha256:${"A".repeat(64)}` };
+  const input = openListSourceInput("project-one", entry);
+  assert.deepEqual(input, { projectId: "project-one", connector: { type: "openlist", id: "/papers/one.pdf" },
+    path: "openlist/papers/one.pdf", size: 11, mtime: "2026-09-06T00:00:00.000Z",
+    mimeType: "application/octet-stream", sha256: "a".repeat(64), providerHash: `sha256:${"A".repeat(64)}` });
+  assert.equal(openListSourceInput("project-one", { ...entry, mtime: null }, { now: () => new Date("2026-09-07T00:00:00.000Z") }).mtime,
+    "2026-09-07T00:00:00.000Z");
 });

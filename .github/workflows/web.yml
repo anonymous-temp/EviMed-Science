@@ -38,7 +38,7 @@ jobs:
       - name: Install test system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip python3-venv postgresql-client
+          sudo apt-get install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -61,6 +61,17 @@ jobs:
 
       - name: Test domain, port, socket and upstream contracts
         run: CI=true pnpm test:packages
+
+      # Every test file under `evals/capability-audit/` is named here, because
+      # `unittest discover` is given a literal filename per script and a file
+      # nobody names is collected by nothing. `deploy.test.mjs` fails if a
+      # `test_*.py` lands there without a script, and the `ci:web` step list
+      # test fails if a script lands without a step here.
+      - name: Test the capability audit suites
+        run: |
+          pnpm test:acceptance-ledger
+          pnpm test:eval-briefs
+          pnpm test:specialist-driver
 
       - name: Check generated artifacts are current
         run: |

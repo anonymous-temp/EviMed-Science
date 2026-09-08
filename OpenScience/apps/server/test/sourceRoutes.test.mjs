@@ -16,6 +16,15 @@ async function fixture(t, { withOpenList = false } = {}) {
     register: async (userId, input) => { calls.push({ method: "register", userId, input }); return { source: { id: "source-openlist" }, job: { id: "job-openlist" } }; },
     getUnderstanding: async (userId, id) => { calls.push({ method: "getUnderstanding", userId, id }); return { sourceId: id, generation: 1, depth: "structured", status: "parsing", current: null }; },
     understandingHistory: async (userId, id, options) => { calls.push({ method: "understandingHistory", userId, id, options }); return { items: [], nextCursor: null }; },
+    family: async (userId, id, options) => { calls.push({ method: "family", userId, id, options }); return { sourceId: id, familyId: "fam_one", currentVersion: 2, items: [], nextCursor: null }; },
+    useConnector: (type, client) => { calls.push({ method: "useConnector", type, hasList: typeof client?.list === "function" }); },
+    listFolders: async (userId, options) => { calls.push({ method: "listFolders", userId, options }); return { items: [], nextCursor: null }; },
+    getFolder: async (userId, id) => { calls.push({ method: "getFolder", userId, id }); return { id, kind: "preferences", projectId: "owned-project", revision: 4, payload: { recordType: "source-folder" } }; },
+    registerFolder: async (userId, input) => { calls.push({ method: "registerFolder", userId, input }); return { folder: { id: "srcdir_one" }, created: true, job: { id: "job-folder" } }; },
+    setFolderStatus: async (userId, id, body) => { calls.push({ method: "setFolderStatus", userId, id, body }); return { folder: { id }, job: null }; },
+    syncFolder: async (userId, id, body) => { calls.push({ method: "syncFolder", userId, id, body }); return { folder: { id }, job: { id: "job-sync" } }; },
+    duplicateCandidates: async (userId, options) => { calls.push({ method: "duplicateCandidates", userId, options }); return { items: [], scanned: 0, truncated: false }; },
+    decideDuplicate: async (userId, input) => { calls.push({ method: "decideDuplicate", userId, input }); return { id: "srcdup_one", payload: input }; },
   };
   const store = {
     ensureSessionUser: async (req) => {
@@ -34,8 +43,10 @@ async function fixture(t, { withOpenList = false } = {}) {
   };
   const openList = withOpenList ? {
     list: async (userId, selected, options) => { calls.push({ method: "openList", userId, selected, options }); return { entries: [], nextCursor: null }; },
-    stat: async () => ({ path: "/paper.pdf", name: "paper.pdf", entryType: "file", size: 7,
-      mtime: "2026-09-06T00:00:00.000Z", providerHash: `sha256:${"a".repeat(64)}` }),
+    stat: async (_userId, selected) => (selected === "/papers"
+      ? { path: "/papers", name: "papers", entryType: "dir", size: 0, mtime: null, providerHash: null }
+      : { path: "/paper.pdf", name: "paper.pdf", entryType: "file", size: 7,
+        mtime: "2026-09-06T00:00:00.000Z", providerHash: `sha256:${"a".repeat(64)}` }),
   } : null;
   const route = createSourceRoutes({ store, service, openList, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
@@ -58,7 +69,7 @@ test("source listing is project scoped before the service sees the request", asy
   assert.equal(response.status, 200);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], { method: "list", userId: "owner", options: {
-    projectId: "owned-project", status: "needs_attention", limit: 50, cursor: null,
+    projectId: "owned-project", status: "needs_attention", familyId: null, limit: 50, cursor: null,
   } });
 });
 
@@ -129,4 +140,90 @@ test("OpenList browse and import stay account and project scoped", async (t) => 
   assert.equal(registered.userId, "owner");
   assert.deepEqual(registered.input.connector, { type: "openlist", id: "/paper.pdf" });
   assert.equal(registered.input.sha256, "a".repeat(64));
+});
+
+test("the OpenList connector is handed to the service the ingestion worker shares", async (t) => {
+  const { calls } = await fixture(t, { withOpenList: true });
+  assert.deepEqual(calls.filter(call => call.method === "useConnector"), [{ method: "useConnector", type: "openlist", hasList: true }],
+    "without this wiring a leased folder sync has no client for the account namespace");
+  const { calls: withoutOpenList } = await fixture(t);
+  assert.equal(withoutOpenList.some(call => call.method === "useConnector"), false);
+});
+
+test("the version chain is a real read route scoped to the source's project", async (t) => {
+  const { base, headers, calls, service } = await fixture(t);
+  const response = await fetch(`${base}/api/sources/source-one/family?limit=7`, { headers });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.familyId, "fam_one");
+  assert.deepEqual(calls.find(call => call.method === "family"), { method: "family", userId: "owner", id: "source-one", options: { limit: 7 } });
+  const filtered = await fetch(`${base}/api/sources?projectId=owned-project&familyId=fam_one`, { headers });
+  assert.equal(filtered.status, 200);
+  assert.equal(calls.find(call => call.method === "list").options.familyId, "fam_one");
+  service.get = async () => ({ id: "source-other", projectId: "other-project" });
+  assert.equal((await fetch(`${base}/api/sources/source-other/family`, { headers })).status, 404);
+});
+
+test("folder registration requires a directory, a project and CSRF", async (t) => {
+  const { base, headers, calls } = await fixture(t, { withOpenList: true });
+  assert.equal((await fetch(`${base}/api/sources/folders`, { method: "POST", headers: { cookie: headers.cookie, "content-type": "application/json" },
+    body: JSON.stringify({ projectId: "owned-project", path: "/papers" }) })).status, 403);
+  assert.equal((await fetch(`${base}/api/sources/folders`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "other", path: "/papers" }) })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/folders`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", path: "/paper.pdf" }) })).status, 400, "a file is not a syncable folder");
+  const created = await fetch(`${base}/api/sources/folders`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", path: "/papers" }) });
+  assert.equal(created.status, 201);
+  assert.deepEqual(calls.find(call => call.method === "registerFolder").input,
+    { projectId: "owned-project", connectorType: "openlist", path: "/papers" });
+  assert.equal(calls.some(call => call.method === "registerFolder" && call.userId !== "owner"), false);
+});
+
+test("folder listing, status and sync are project-scoped revision-guarded operations", async (t) => {
+  const { base, headers, calls, service } = await fixture(t, { withOpenList: true });
+  assert.equal((await fetch(`${base}/api/sources/folders?projectId=owned-project`, { headers })).status, 200);
+  assert.equal((await fetch(`${base}/api/sources/folders?projectId=other`, { headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/folders/srcdir_one`, { method: "PATCH", headers,
+    body: JSON.stringify({ expectedRevision: 4, status: "paused" }) })).status, 200);
+  assert.equal((await fetch(`${base}/api/sources/folders/srcdir_one/sync`, { method: "POST", headers,
+    body: JSON.stringify({ expectedRevision: 4 }) })).status, 200);
+  assert.deepEqual(calls.find(call => call.method === "setFolderStatus").body, { expectedRevision: 4, status: "paused" });
+  assert.deepEqual(calls.find(call => call.method === "syncFolder").body, { expectedRevision: 4 });
+  service.getFolder = async (userId, id) => ({ id, kind: "preferences", projectId: "other-project", revision: 4, payload: { recordType: "source-folder" } });
+  assert.equal((await fetch(`${base}/api/sources/folders/srcdir_other/sync`, { method: "POST", headers,
+    body: JSON.stringify({ expectedRevision: 4 }) })).status, 404, "another project's folder is not reachable by id");
+});
+
+test("the duplicate desk reads and decides only inside the caller's project", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  assert.equal((await fetch(`${base}/api/sources/duplicates?projectId=owned-project`, { headers })).status, 200);
+  assert.equal((await fetch(`${base}/api/sources/duplicates?projectId=other`, { headers })).status, 404);
+  const decided = await fetch(`${base}/api/sources/duplicates`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", groupKey: `version-family:${"a".repeat(32)}`, sourceIds: ["source-one"], decision: "linked" }) });
+  assert.equal(decided.status, 201);
+  assert.equal(calls.find(call => call.method === "decideDuplicate").userId, "owner");
+  assert.equal((await fetch(`${base}/api/sources/duplicates`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", groupKey: "k", sourceIds: [], decision: "linked", userId: "other" }) })).status, 400);
+});
+
+test("folder replies say a sync is scheduled without handing the browser worker identity", async (t) => {
+  const { base, headers, service } = await fixture(t, { withOpenList: true });
+  service.registerFolder = async () => ({ folder: { id: "srcdir_one" }, created: true,
+    job: { id: "job-folder", payload: { accountCreatedAt: "2026-01-01 00:00:00+00", folderId: "srcdir_one" } } });
+  const created = await fetch(`${base}/api/sources/folders`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", path: "/papers" }) });
+  const body = await created.json();
+  assert.deepEqual(body.data, { folder: { id: "srcdir_one" }, created: true, scheduled: true });
+  assert.equal(JSON.stringify(body).includes("accountCreatedAt"), false);
+});
+
+test("an imported file and a synced file register under the same connector-resolved path", async (t) => {
+  const { base, headers, calls } = await fixture(t, { withOpenList: true });
+  const imported = await fetch(`${base}/api/sources/openlist/import`, { method: "POST", headers,
+    body: JSON.stringify({ projectId: "owned-project", path: "//paper.pdf/" }) });
+  assert.equal(imported.status, 201);
+  const registered = calls.find((call) => call.method === "register");
+  assert.deepEqual(registered.input.connector, { type: "openlist", id: "/paper.pdf" },
+    "the family id must not depend on how the browser spelled the path");
+  assert.equal(registered.input.path, "openlist/paper.pdf");
 });

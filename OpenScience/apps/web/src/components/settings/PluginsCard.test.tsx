@@ -3,12 +3,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError, type WebPluginState } from "@/lib/apiClient";
 import { PluginsCard } from "./PluginsCard";
 
-const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebPluginRevisions: vi.fn(), rollbackWebPlugin: vi.fn(), retryWebPlugin: vi.fn() }));
+const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebPluginRevisions: vi.fn(), rollbackWebPlugin: vi.fn(), retryWebPlugin: vi.fn(), removeWebPlugin: vi.fn() }));
 vi.mock("@/lib/apiClient", async (original) => ({ ...await original<typeof import("@/lib/apiClient")>(), ...api }));
 
 const config = (revision = 0, timeoutMs = 15000, enabled = true) => ({ revision, enabled, settings: { timeoutMs } });
 function plugin(overrides: Partial<WebPluginState> = {}): WebPluginState {
-  return { id: "dsh-cite", binaryVersion: "0.3.2", availableUpdate: null, desired: config(), effective: config(), phase: "effective", error: null, limits: { minTimeoutMs: 2000, maxTimeoutMs: 15000 }, ...overrides };
+  return {
+    id: "dsh-cite", binaryVersion: "0.3.2", tools: ["cite_lookup", "cite_check"],
+    settingsSchema: { timeoutMs: { min: 2000, max: 15000 } },
+    availableUpdate: null, availability: { state: "unknown", checkedAt: null, reason: "no-record" },
+    desired: config(), effective: config(), phase: "effective", error: null, removed: false,
+    limits: { minTimeoutMs: 2000, maxTimeoutMs: 15000 }, ...overrides,
+  };
+}
+/** A second registered plugin that declares no settings of its own. */
+function notes(overrides: Partial<WebPluginState> = {}): WebPluginState {
+  return plugin({
+    id: "dsh-notes", binaryVersion: "1.0.0", tools: [], settingsSchema: {},
+    desired: { revision: 0, enabled: true, settings: {} }, effective: null, phase: "saved", ...overrides,
+  });
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -16,6 +29,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 async function ready() { return screen.findByRole("spinbutton", { name: "请求超时（毫秒）" }); }
+const panel = (id: string) => screen.getByRole("region", { name: `插件 ${id}` });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -33,8 +47,7 @@ describe("PluginsCard", () => {
     await act(async () => request.resolve([plugin()]));
     expect(await ready()).toHaveValue(15000);
     expect(screen.getByText("已安装版本 0.3.2")).toBeInTheDocument();
-    expect(screen.getByText("暂无可用的程序版本更新")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /更新插件|安装插件|立即重启/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/cite_lookup/)).toBeInTheDocument();
     view.unmount();
     api.listWebPlugins.mockRejectedValueOnce(new Error("network"));
     render(<PluginsCard projectId="alpha" />);
@@ -50,16 +63,111 @@ describe("PluginsCard", () => {
     expect(screen.queryByText("dsh-cite")).not.toBeInTheDocument();
   });
 
+  // (a) Discovery: whatever the control plane registered is what the card shows.
+  it("lists every discovered plugin and configures one without touching the other", async () => {
+    api.listWebPlugins.mockResolvedValue([plugin(), notes()]);
+    api.saveWebPlugin.mockResolvedValue(notes({ desired: { revision: 1, enabled: false, settings: {} }, phase: "pending" }));
+    render(<PluginsCard projectId="alpha" />);
+    await ready();
+    expect(screen.getByRole("heading", { name: "dsh-cite" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "dsh-notes" })).toBeInTheDocument();
+    expect(within(panel("dsh-notes")).getByText("已安装版本 1.0.0")).toBeInTheDocument();
+    // A plugin with no settings of its own gets no settings form, only its switch.
+    expect(within(panel("dsh-notes")).queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(within(panel("dsh-cite")).getByRole("spinbutton")).toBeInTheDocument();
+    fireEvent.click(within(panel("dsh-notes")).getByRole("switch"));
+    fireEvent.click(within(panel("dsh-notes")).getByRole("button", { name: "保存配置" }));
+    await waitFor(() => expect(api.saveWebPlugin).toHaveBeenCalledTimes(1));
+    expect(api.saveWebPlugin.mock.calls[0].slice(0, 3)).toEqual(["alpha", "dsh-notes", { expectedRevision: 0, enabled: false, settings: {} }]);
+    expect(within(panel("dsh-notes")).getByLabelText("已保存配置")).toHaveTextContent("版本 1 · 已禁用");
+    expect(within(panel("dsh-cite")).getByLabelText("已保存配置")).toHaveTextContent("版本 0 · 已启用 · 15000 毫秒");
+  });
+
+  // (b) Upgrade: an unrecorded availability must never read as "up to date".
+  it("reports an unknown availability as unknown and offers an update only when one is recorded", async () => {
+    render(<PluginsCard projectId="alpha" />);
+    await ready();
+    expect(screen.getByText("更新信息暂不可用，尚未记录检查结果")).toBeInTheDocument();
+    expect(screen.queryByText(/暂无可用的程序版本更新|已是最新|已是记录中的最新版本/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看更新" })).not.toBeInTheDocument();
+
+    api.listWebPlugins.mockResolvedValue([plugin({ availability: { state: "current", checkedAt: "2026-09-06T02:00:00.000Z", reason: "recorded" } })]);
+    fireEvent.click(screen.getByRole("button", { name: "刷新插件状态" }));
+    expect(await screen.findByText("已是记录中的最新版本（检查于 2026-09-06）")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看更新" })).not.toBeInTheDocument();
+
+    api.listWebPlugins.mockResolvedValue([plugin({
+      availability: { state: "update-available", checkedAt: "2026-09-06T02:00:00.000Z", reason: "recorded" },
+      availableUpdate: { version: "0.3.4", recordedAt: "2026-09-06T02:00:00.000Z", source: "npm" },
+    })]);
+    fireEvent.click(screen.getByRole("button", { name: "刷新插件状态" }));
+    expect(await screen.findByText("可更新至 0.3.4（记录于 2026-09-06）")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看更新" }));
+    // Honest about what the action can do: the binary ships in the runtime image.
+    expect(screen.getByText(/随运行时镜像发布/)).toBeInTheDocument();
+  });
+
+  // (c)/(e) Removal is a state change the user confirms; history keeps it undoable.
+  // The plugin removed here is the second one, at a revision of its own, so a
+  // panel that removed a name or a revision it did not read would be caught.
+  it("removes the panel's own plugin at its own revision, only through the confirmation dialog", async () => {
+    const configured = notes({ desired: { revision: 3, enabled: true, settings: {} } });
+    api.listWebPlugins.mockResolvedValue([plugin(), configured]);
+    api.removeWebPlugin.mockResolvedValue(notes({ desired: { revision: 4, enabled: false, settings: {} }, removed: true, phase: "pending" }));
+    render(<PluginsCard projectId="alpha" />);
+    await ready();
+    fireEvent.click(within(panel("dsh-notes")).getByRole("button", { name: "移除插件" }));
+    const cancelled = screen.getByRole("alertdialog");
+    expect(cancelled).toHaveTextContent("移除 dsh-notes");
+    expect(cancelled).toHaveTextContent("恢复为默认值");
+    expect(cancelled).toHaveTextContent("可随时重新启用");
+    fireEvent.click(within(cancelled).getByRole("button", { name: "取消" }));
+    expect(api.removeWebPlugin).not.toHaveBeenCalled();
+    fireEvent.click(within(panel("dsh-notes")).getByRole("button", { name: "移除插件" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "移除插件" }));
+    await waitFor(() => expect(api.removeWebPlugin).toHaveBeenCalledTimes(1));
+    expect(api.removeWebPlugin.mock.calls[0].slice(0, 3)).toEqual(["alpha", "dsh-notes", { expectedRevision: 3 }]);
+    expect(await screen.findByText("此项目已移除该插件：已停用并恢复默认配置，配置历史保留。")).toBeInTheDocument();
+    expect(within(panel("dsh-notes")).getByRole("switch")).toHaveAttribute("aria-checked", "false");
+    expect(within(panel("dsh-notes")).queryByRole("button", { name: "移除插件" })).not.toBeInTheDocument();
+    // The other plugin was neither removed nor touched.
+    expect(within(panel("dsh-cite")).getByRole("button", { name: "移除插件" })).toBeEnabled();
+    expect(within(panel("dsh-cite")).getByLabelText("已保存配置")).toHaveTextContent("版本 0 · 已启用 · 15000 毫秒");
+  });
+
+  // A read that starts while a save is in flight lands its pre-save answer on
+  // top of the save's own reply, and the card then reports a version conflict
+  // the user never caused. Nothing may start one until the mutation settles.
+  it("locks the whole card while one plugin is mutating", async () => {
+    api.listWebPlugins.mockResolvedValue([plugin(), notes()]);
+    const save = deferred<WebPluginState>();
+    api.saveWebPlugin.mockReturnValue(save.promise);
+    render(<PluginsCard projectId="alpha" />);
+    await ready();
+    fireEvent.click(within(panel("dsh-notes")).getByRole("switch"));
+    fireEvent.click(within(panel("dsh-notes")).getByRole("button", { name: "保存配置" }));
+    await waitFor(() => expect(api.saveWebPlugin).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: "刷新插件状态" })).toBeDisabled();
+    expect(within(panel("dsh-cite")).getByRole("switch")).toBeDisabled();
+    expect(within(panel("dsh-cite")).getByRole("spinbutton")).toBeDisabled();
+    expect(within(panel("dsh-cite")).getByRole("button", { name: "移除插件" })).toBeDisabled();
+    const reads = api.listWebPlugins.mock.calls.length;
+    await act(async () => save.resolve(notes({ desired: { revision: 1, enabled: false, settings: {} }, phase: "pending" })));
+    expect(api.listWebPlugins.mock.calls.length).toBe(reads);
+    expect(screen.getByRole("button", { name: "刷新插件状态" })).toBeEnabled();
+    expect(within(panel("dsh-cite")).getByRole("switch")).toBeEnabled();
+  });
+
   it("saves once and distinguishes desired configuration from the old effective configuration", async () => {
     const saved = plugin({ desired: config(1, 4000, false), phase: "pending" });
     api.saveWebPlugin.mockResolvedValue(saved);
     render(<PluginsCard projectId="alpha" />);
     fireEvent.change(await ready(), { target: { value: "4000" } });
-    fireEvent.click(screen.getByRole("switch", { name: "启用项目引用工具" }));
+    fireEvent.click(screen.getByRole("switch", { name: "启用插件 dsh-cite" }));
     expect(api.saveWebPlugin).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
     await waitFor(() => expect(api.saveWebPlugin).toHaveBeenCalledTimes(1));
-    expect(api.saveWebPlugin.mock.calls[0].slice(0, 2)).toEqual(["alpha", { expectedRevision: 0, enabled: false, settings: { timeoutMs: 4000 } }]);
+    expect(api.saveWebPlugin.mock.calls[0].slice(0, 3)).toEqual(["alpha", "dsh-cite", { expectedRevision: 0, enabled: false, settings: { timeoutMs: 4000 } }]);
     expect(await screen.findByText("等待应用")).toBeInTheDocument();
     expect(screen.getByLabelText("已保存配置")).toHaveTextContent("版本 1 · 已禁用 · 4000 毫秒");
     expect(screen.getByLabelText("已验证生效配置")).toHaveTextContent("版本 0 · 已启用 · 15000 毫秒");
@@ -76,19 +184,20 @@ describe("PluginsCard", () => {
   });
 
   it("honors the lower deployment timeout maximum", async () => {
-    api.listWebPlugins.mockResolvedValue([plugin({ desired: config(0, 6000), limits: { minTimeoutMs: 2000, maxTimeoutMs: 6000 } })]);
+    api.listWebPlugins.mockResolvedValue([plugin({ desired: config(0, 6000), settingsSchema: { timeoutMs: { min: 2000, max: 6000 } }, limits: { minTimeoutMs: 2000, maxTimeoutMs: 6000 } })]);
     render(<PluginsCard projectId="alpha" />);
     fireEvent.change(await ready(), { target: { value: "6001" } });
     expect(screen.getByRole("alert")).toHaveTextContent("请输入 2000–6000 之间的整数");
   });
 
-  it("refuses configuration controls for an unsupported binary", async () => {
-    api.listWebPlugins.mockResolvedValue([plugin({ binaryVersion: "0.3.3" })]);
+  it("refuses configuration controls for settings this version cannot render", async () => {
+    api.listWebPlugins.mockResolvedValue([plugin({ binaryVersion: "0.4.0", settingsSchema: { timeoutMs: { min: 2000, max: 15000 }, retries: { min: 0, max: 5 } } })]);
     render(<PluginsCard projectId="alpha" />);
     expect(await ready()).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent("当前程序版本不支持配置");
     expect(screen.getByRole("switch")).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存配置" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "移除插件" })).toBeDisabled();
   });
 
   it("keeps edits and allows an explicit retry after a failed save", async () => {
@@ -127,7 +236,7 @@ describe("PluginsCard", () => {
     if (retry) {
       fireEvent.click(screen.getByRole("button", { name: "重试应用" }));
       expect(await screen.findByText("等待应用")).toBeInTheDocument();
-      expect(api.retryWebPlugin.mock.calls[0][0]).toBe("alpha");
+      expect(api.retryWebPlugin.mock.calls[0].slice(0, 2)).toEqual(["alpha", "dsh-cite"]);
     } else {
       expect(screen.getByLabelText("已验证生效配置")).toHaveTextContent("尚未验证生效");
       expect(screen.queryByRole("button", { name: "重试应用" })).not.toBeInTheDocument();
@@ -149,7 +258,7 @@ describe("PluginsCard", () => {
     expect(confirmation).toHaveTextContent("0.3.2");
     fireEvent.click(within(confirmation).getByRole("button", { name: "恢复配置" }));
     expect(await screen.findByText("等待应用")).toBeInTheDocument();
-    expect(api.rollbackWebPlugin.mock.calls[0].slice(0, 2)).toEqual(["alpha", { expectedRevision: 2, targetRevision: 1 }]);
+    expect(api.rollbackWebPlugin.mock.calls[0].slice(0, 3)).toEqual(["alpha", "dsh-cite", { expectedRevision: 2, targetRevision: 1 }]);
     expect(screen.getByLabelText("已保存配置")).toHaveTextContent("版本 3");
     expect(screen.queryByText("应用失败，已恢复上次有效配置")).not.toBeInTheDocument();
   });
@@ -168,7 +277,7 @@ describe("PluginsCard", () => {
     api.saveWebPlugin.mockResolvedValue(plugin({ desired: config(2, 4000), phase: "pending" }));
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
     await waitFor(() => expect(api.saveWebPlugin).toHaveBeenCalledTimes(2));
-    expect(api.saveWebPlugin.mock.calls[1][1].expectedRevision).toBe(1);
+    expect(api.saveWebPlugin.mock.calls[1][2].expectedRevision).toBe(1);
   });
 
   it("isolates project switches and ignores late old-project reads and writes", async () => {
@@ -188,7 +297,7 @@ describe("PluginsCard", () => {
     await act(async () => oldSave.resolve(plugin({ desired: config(22, 4000) })));
     expect(screen.getByLabelText("已保存配置")).toHaveTextContent("版本 0");
     expect(api.saveWebPlugin.mock.calls[0][0]).toBe("beta");
-    expect(api.saveWebPlugin.mock.calls[0][2].aborted).toBe(true);
+    expect(api.saveWebPlugin.mock.calls[0][3].aborted).toBe(true);
   });
 
   it("ignores an old project's history after switching projects", async () => {
@@ -201,7 +310,7 @@ describe("PluginsCard", () => {
     await ready();
     await act(async () => history.resolve([config(88)]));
     expect(screen.queryByRole("button", { name: "恢复配置版本 88" })).not.toBeInTheDocument();
-    expect(api.listWebPluginRevisions.mock.calls[0][1].aborted).toBe(true);
+    expect(api.listWebPluginRevisions.mock.calls[0][2].aborted).toBe(true);
   });
 
   it("polls only pending/application phases, preserves edits, and stops at effective", async () => {

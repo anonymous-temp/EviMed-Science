@@ -52,6 +52,7 @@ import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSea
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
+import { FeedbackEvents, MethodDistillWorker, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
@@ -72,7 +73,8 @@ import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
-import { AutopilotService } from "./autopilotService.mjs";
+import { AutopilotService, VERIFICATION_ARTIFACT, VERIFICATION_ROUTE_REASON, parseVerificationResult, verificationBrief,
+  verificationEpisodeId, verificationPrompt, verificationWorkspacePath } from "./autopilotService.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler } from "./capsuleGateway.mjs";
@@ -133,6 +135,110 @@ function originFor(value) {
     return new URL(value).origin;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The project a verification run sees: a scratch workspace of its own under the
+ * project's workspace root.
+ *
+ * The same shape `sourceRunProject` builds for a source-understanding run — the
+ * project with `workspaceDir` moved. What that buys is bounded, and the bound
+ * is stated here because it was previously stated wrongly ("the report is not
+ * in its filesystem at all"):
+ *
+ * - A launch plan built from this object mounts the scratch directory at
+ *   `/workspace`, so the episode's report, its delta and its notes are not
+ *   reachable by any tool the verifier has. `serverComposition.test.mjs` reads
+ *   that off a real `buildRuntimeLaunchPlan` rather than off `workspaceDir`,
+ *   because this argument looked right for the whole time the mounts did not.
+ * - `runtimeDir` is deliberately NOT moved. A container mounts two host
+ *   directories, and the second — the project's runtime root at `/runtime`,
+ *   read-write, holding `$DSH_HOME` and therefore the kernel's sessions, logs
+ *   and attachments — comes from `project.runtimeDir`. So the verifier does
+ *   share the episode's DSH home. Scoping it from here would not isolate it
+ *   and would break the hosted deployment: the privileged runtime controller
+ *   rebuilds the project from `{userId, projectId, activeWorkspace}` alone
+ *   (`projectFromReference`, and `/v1/runtime/start` refuses any other key), so
+ *   it would mount the project's own runtime root while the control plane wrote
+ *   this run's profile and credentials into the scoped one — a verification
+ *   whose kernel cannot authenticate. Isolating `/runtime` is a
+ *   `RUNTIME_CONTROLLER_PROTOCOL_VERSION` change carrying the runtime root on
+ *   both sides at once, not an edit here.
+ * - For the same reason the workspace move does not reach the container on the
+ *   hosted path either: `activeWorkspace` is the only workspace selector the
+ *   protocol carries, and `.evimed-verification/<id>` is not a workspace name.
+ *   There, what separates the verifier from the run it is checking is the
+ *   projection in `verificationBrief` and the prompt — which is a prompt, not
+ *   an enforcement.
+ *
+ * `baseDir` is deliberately left as the project's workspace root, so this
+ * function answers the same for the interactive project object and for one
+ * already scoped — which is what lets the completion fold rebuild the path, and
+ * what lets the sweep below rebuild it from the id alone.
+ *
+ * @param {any} project @param {string} verificationId
+ */
+function verificationRunProject(project, verificationId) {
+  return { ...project, activeWorkspace: "",
+    workspaceDir: resolveScopedPath(project.baseDir, verificationWorkspacePath(verificationId)) };
+}
+
+/**
+ * Delete one verification's scratch directory, once its run is over.
+ *
+ * A verification writes into `.evimed-verification/<id>` under the project's
+ * workspace root — the tree `assertProjectCapacity` and the runtime quota
+ * monitor both walk — and nothing ever removed it. A nightly agenda therefore
+ * filled the researcher's own quota with the platform's scratch, one directory
+ * per verification, until the usage walk hit its entry ceiling.
+ *
+ * Removal never decides whether a verification counts. A scratch directory that
+ * outlives its run is a leak; a fold that died trying to delete one would lose
+ * a verdict already paid for. So this runs after the verdict is recorded and
+ * after the bounded runtime is released, and every caller records a failure
+ * instead of raising it.
+ *
+ * `verificationRunProject` refuses an id that is not a verification id and
+ * `resolveScopedPath` refuses one that would leave the workspace root, so the
+ * path this removes is always inside the project.
+ *
+ * @param {any} project @param {string} verificationId
+ */
+async function discardVerificationScratch(project, verificationId) {
+  const scoped = verificationRunProject(project, verificationId);
+  await withProjectStorageMutation(project, async () => {
+    await assertNoSymlinkPath(project.baseDir, scoped.workspaceDir, { allowMissingTail: true });
+    await fsp.rm(scoped.workspaceDir, { recursive: true, force: true });
+  });
+}
+
+/**
+ * What one independent verification concluded, read from the one file it writes.
+ *
+ * The original report is not opened here and its path is not resolved: the only
+ * artifact this reads is the verifier's own answer, out of the verifier's own
+ * scratch workspace. A run that failed, wrote nothing, or wrote something
+ * unreadable returns a code rather than a verdict, and the claim keeps the tier
+ * its own episode's gate gave it.
+ *
+ * Anchored at the project's workspace root rather than at the scratch
+ * directory, for the reason `readOwnedJson` states for source artifacts: the
+ * scratch directory is written by the run, so anchoring there checks no-follow
+ * on the file and on nothing above it — a link left in place of the scratch
+ * directory would have been read through, out of the project. Every ancestor
+ * has to pass, and the sweep below refuses the same shape.
+ */
+async function readVerificationVerdict(project, run) {
+  if (run.status !== "succeeded") return { errorCode: "verification_run_failed" };
+  const artifact = (run.artifacts ?? []).find((item) => typeof item === "string" && item.endsWith(VERIFICATION_ARTIFACT));
+  if (!artifact) return { errorCode: "verification_result_missing" };
+  try {
+    const scoped = verificationRunProject(project, run.dispatchId);
+    const file = resolveScopedPath(scoped.workspaceDir, artifact);
+    return parseVerificationResult(JSON.parse(String(await readFileNoFollow(project.baseDir, file, "utf8"))));
+  } catch {
+    return { errorCode: "verification_result_unreadable" };
   }
 }
 
@@ -296,6 +402,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/commands/")) return "/api/commands/:command";
   if (pathname.startsWith("/api/tasks/")) return "/api/tasks/:taskId";
   if (pathname.startsWith("/api/logs/")) return "/api/logs/:kind";
+  if (pathname === "/api/feedback/events") return pathname;
   if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
   if (pathname.startsWith("/api/runtime-ui/")) return "/api/runtime-ui/:projectId/*";
@@ -506,6 +613,42 @@ export function createWebApiApp(overrides = {}) {
   const memoryIndexWorker = memoryIndexing
     ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, pollMs: config.memoryIndexPollMs,
       leaseMs: config.memoryIndexLeaseMs, reconcileMs: config.memoryIndexReconcileMs }) : null;
+  // What the researcher did, and the one producer that reads it back. Both
+  // exist exactly when the product ledger does; without it the memory routes
+  // below record nothing and say so by being null rather than by pretending.
+  const feedbackEvents = productDatabase ? new FeedbackEvents({ database: productDatabase, jobs: productJobs }) : null;
+  const methodDistillWorker = feedbackEvents && productDocuments && productJobs
+    ? new MethodDistillWorker({ jobs: productJobs, documents: productDocuments, feedback: feedbackEvents }) : null;
+  /** Optional infrastructure says so, rather than answering 500 to a valid request. */
+  function requireFeedbackEvents() {
+    if (!feedbackEvents) throw new HttpError(503, "feedback_unavailable", "Recording feedback requires the shared product store.");
+    return feedbackEvents;
+  }
+
+  /**
+   * Feedback is recorded beside the researcher's action, never instead of it.
+   *
+   * The memory update has already been written and audited by the time this
+   * runs, so an unreachable ledger must not turn a successful PATCH into an
+   * error the user sees. It is not swallowed either: the failure lands in the
+   * security ledger with its code, which is where "the loop stopped closing"
+   * has to be visible.
+   *
+   * @param {any} ctx @param {() => any} operation
+   */
+  async function recordFeedback(ctx, operation) {
+    try {
+      return await operation();
+    } catch (error) {
+      await securityAudit(config, "feedback.record", "failed", {
+        userId: ctx.user.id,
+        code: typeof error?.code === "string" ? error.code : "feedback_unavailable",
+        detail: String(error?.message ?? "").slice(0, 200),
+      });
+      return null;
+    }
+  }
+
   const learningService = productDocuments
     ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService })
     : null;
@@ -744,6 +887,7 @@ export function createWebApiApp(overrides = {}) {
   }) : null;
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
+    capsules: capsuleService,
   }) : null;
   const autopilotRoutes = createAutopilotRoutes({ store, service: autopilotService, maxJsonBytes: config.maxJsonBytes });
   let autopilotWorker = null;
@@ -766,6 +910,15 @@ export function createWebApiApp(overrides = {}) {
   const oidcService = new OidcService(config, store);
   const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
   const memoryIntelligence = new MemoryIntelligence(config, memosClient, {
+    // A conversation that changes a memory the researcher confirmed is worth
+    // telling them about, and the inbox is where that is told. It never holds
+    // the write back: see contradictedValue in memoryIntelligence.mjs.
+    notifications: notificationService,
+    // The inbox failing must not cost the run its memory, and must not be
+    // invisible either — the same pair the run-finished notice above takes.
+    audit: async (event, error) => securityAudit(config, event, "failed", {
+      code: typeof error?.code === "string" ? error.code : "notification_unavailable",
+    }),
     fetchImpl: overrides.memoryExtractionFetch ?? globalThis.fetch,
   });
   const specialistClassifier = new SpecialistClassifier(config, {
@@ -851,6 +1004,13 @@ export function createWebApiApp(overrides = {}) {
     },
   });
   runtimeManager.pluginService = pluginService;
+  // The other half of the same seam. `syncCapsuleMethods` reads this before
+  // every launch, and left unassigned it materializes an empty directory: the
+  // work-style pack a user exported, imported and approved would reach no run,
+  // and nothing would say so. Assigned beside `pluginService` because the two
+  // have the same lifetime -- both are null exactly when no product database is
+  // configured.
+  runtimeManager.capsuleService = capsuleService;
   if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
   const pluginApplyWorker = pluginService ? new PluginApplyWorker({
     service: pluginService, runtime: runtimeManager,
@@ -876,8 +1036,19 @@ export function createWebApiApp(overrides = {}) {
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds),
     runtimeWorkspaceRoot: (project) => runtimeManager.runtimeWorkspaceRoot(project),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
-    resolveRunProject: (project, run) => sourceUnderstandingRuntime
-      ? sourceUnderstandingRuntime.resolveRunProject(project, run) : Promise.resolve(project),
+    // Which workspace a run belongs to, re-derived rather than remembered. It
+    // is asked on recovery, so a verification in flight when the control plane
+    // restarted has to answer the same as when it was dispatched — otherwise the
+    // monitor looks for its verdict in the project workspace, finds nothing, and
+    // records a verification that did run as one that never did. The id is
+    // enough: the scratch path is a pure function of it.
+    resolveRunProject: (project, run) => {
+      if (autopilotService && verificationEpisodeId(run.dispatchId)) {
+        return Promise.resolve(verificationRunProject(project, run.dispatchId));
+      }
+      return sourceUnderstandingRuntime
+        ? sourceUnderstandingRuntime.resolveRunProject(project, run) : Promise.resolve(project);
+    },
     // A run's own state changes ride the same stream as the kernel's events,
     // because from a user's point of view they are one story: "it is running",
     // "the second deliverable came back with three fixes", "it finished".
@@ -921,6 +1092,49 @@ export function createWebApiApp(overrides = {}) {
             code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
           });
         });
+      }
+      // An independent verification is not an episode: it owns its own bounded
+      // runtime scope and folds into one claim, not into a digest fold.
+      //
+      // It is identified by its dispatch id, which is the one thing about the
+      // run the dispatch layer cannot rewrite. The route reason cannot be used:
+      // `AgentRunStore.dispatch` replaces the caller's value with
+      // "session-binding" for every specialist-mode session, so keying on it
+      // meant this whole fold never ran. The id is a reserved shape
+      // (`episode-<32 hex>-v<n>`) that `/runs` refuses from a client, and
+      // `recordVerification` still requires the named episode to hold a claim
+      // carrying exactly this verification id, which is the ownership evidence.
+      const verifiedEpisodeId = autopilotService ? verificationEpisodeId(run.dispatchId) : null;
+      if (verifiedEpisodeId) {
+        const verdict = await readVerificationVerdict(project, run);
+        const spent = usageLedger ? await usageLedger.summaryRun(project.userId, run.dispatchId).catch(() => null) : null;
+        await autopilotService.recordVerification(project.userId, {
+          episodeId: verifiedEpisodeId, verificationId: run.dispatchId, runId: run.id,
+          costCny: spent?.actualCost ?? 0,
+          // Whether the separation was a fence or only a prompt. The scratch
+          // workspace reaches the container on the direct path and not through
+          // the privileged controller, whose start payload carries only
+          // `{userId, projectId, activeWorkspace}` — so this deployment's mode
+          // is what decides, and the tier a claim may reach follows it.
+          isolated: config.runtimeControllerMode !== "socket",
+          ...verdict,
+        }).catch(error => securityAudit(config, "autopilot.verification.record", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "autopilot_verification_failed",
+        }));
+        if (runtimeManager.boundedRuntimeScope(project)?.runId === run.dispatchId) {
+          await runtimeManager.endBoundedRuntime(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.runtime.release", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "runtime_stop_failed",
+          }));
+        }
+        // Last, and only after the verdict is in the claim: the scratch the run
+        // was given exists to be thrown away, and it is inside the tree the
+        // project's quota measures.
+        await discardVerificationScratch(project, run.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "verification_scratch_remove_failed",
+        }));
       }
       await completeOwnedAutopilotRun({
         service: autopilotService, runtimeManager, usageLedger,
@@ -1116,6 +1330,26 @@ export function createWebApiApp(overrides = {}) {
           + "。记录与证据都已保存，可在记忆管理中确认后启用。",
         ]).catch(() => {});
       }
+      // A memory the researcher had confirmed, changed by this conversation.
+      // The change is in force — holding it back would refuse the researcher
+      // their own restatement — so this is a notice, not a gate: it is how the
+      // person finds out, and it is the distribution any later decision to hold
+      // such a write back would have to be argued from. The inbox says the same
+      // thing, and this says it where a deployment without a product database
+      // can still read it.
+      if ((memoryResult.conflicts?.length ?? 0) > 0) {
+        // Two changes named and the rest counted, with short excerpts: a run
+        // notice is truncated at 300 characters, and a line that is cut off
+        // mid-sentence loses the part that says the old value is recoverable.
+        // The inbox notice carries the full excerpts.
+        const changed = memoryResult.conflicts.slice(0, 2).map((item) =>
+          `「${item.key.slice(0, 40)}」由「${item.previousValue.slice(0, 30)}」改为「${item.nextValue.slice(0, 30)}」`);
+        await agentRuns.appendQualityNotices(project, run.id, [
+          `本次对话改写了 ${memoryResult.conflicts.length} 条你确认过的记忆：${changed.join("；")}`
+          + `${memoryResult.conflicts.length > changed.length ? "等" : ""}`
+          + "。新值已生效，原值保留在该记忆的修订记录中，可在记忆管理中改回。",
+        ]).catch(() => {});
+      }
       securityAudit(config, "memory.agent_run.record", "completed", {
         userId: project.userId,
         projectId: project.id,
@@ -1134,6 +1368,7 @@ export function createWebApiApp(overrides = {}) {
           `extracted=${memoryResult.extracted}`,
           `rejected=${memoryResult.rejected}`,
           `pending=${memoryResult.pending ?? 0}`,
+          `conflicts=${memoryResult.conflicts?.length ?? 0}`,
           ...(memoryResult.pendingReasons?.length
             ? [`parked=${memoryResult.pendingReasons.map((item) => `${item.reason}:${item.count}`).join("|")}`]
             : []),
@@ -1205,6 +1440,10 @@ export function createWebApiApp(overrides = {}) {
     });
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
+      // The other producer of `distill` jobs. The learning worker is the only
+      // claimer while the loop is on, so a job the feedback ledger queued has
+      // to reach the code that knows its shape, or it fails on arrival.
+      feedbackDistiller: methodDistillWorker,
       enabled: config.learningEnabled,
       window: config.learningWindow,
       pollMs: config.learningPollMs,
@@ -1284,6 +1523,117 @@ export function createWebApiApp(overrides = {}) {
         const combined = /** @type {AggregateError & {code?:string}} */ (new AggregateError(failures, "Autopilot cancellation did not complete."));
         combined.code = failures[0]?.code ?? "autopilot_cancellation_failed";
         throw combined;
+      }
+    },
+    // The second process: an independent re-check of one claim, in a fresh
+    // session that was never told what the first run concluded or how, and in a
+    // workspace that does not contain it. It is dispatched to the answer line
+    // rather than to the capability that made the claim, and `verificationBrief`
+    // re-projects the job payload here, at the last moment before a prompt
+    // exists, so the only things that can reach the verifier are the claim and
+    // its sources. The artifact its provenance names is carried in the payload
+    // for the ledger and is never opened.
+    //
+    // Two separations, because a prompt is not an enforcement: the projection
+    // bounds what the instructions say, and the scratch workspace bounds what
+    // the run can open. The container mounts one directory, and this is it.
+    // Memories are not attached and the knowledge base is not synchronized into
+    // it for the same reason — the original run's own notes and its project's
+    // library would put its reasoning back into the room. The verifier resolves
+    // the sources it was given through the public source gateway, which is what
+    // the claim's DOIs and PMIDs are for.
+    dispatchVerification: async (verification) => {
+      const user = await store.userById(verification.userId);
+      if (!user) throw new HttpError(404, "autopilot_account_unavailable", "Autopilot account is unavailable.");
+      const project = await store.requireProject(user, verification.projectId);
+      const agenda = await autopilotService.get(user.id, verification.agendaId);
+      const brief = verificationBrief(verification);
+      const prompt = verificationPrompt(brief);
+      const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
+      const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
+      const runLimit = Number(verification.budgetCny);
+      if (!Number.isFinite(runLimit) || runLimit <= 0) {
+        throw new HttpError(400, "autopilot_payload_invalid", "A verification needs a positive share of the episode budget.");
+      }
+      // Verification spends money, so it asks the same question the episode
+      // asked before it spent any: an account already at its ceiling leaves the
+      // claim at "gated" instead of promoting it unchecked. The share it spends
+      // was held back from the episode's own budget at schedule time, so a night
+      // that used everything it was given has not eaten its own second opinion.
+      if (usageLedger) await usageLedger.assertWithinLimits(user.id, { dailyLimit, weeklyLimit });
+      const registry = await agentRegistry;
+      const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
+      if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
+      const scoped = verificationRunProject(project, verification.verificationId);
+      await withProjectStorageMutation(project, async () => {
+        // `docker run --mount type=bind` refuses a source that does not exist,
+        // so the directory is made before the runtime is reserved.
+        //
+        // No capacity check of its own: `reserveBoundedRuntimeSession` starts
+        // the runtime on the next line and `startAdmitted` refuses an
+        // over-quota project there, walking the same tree for the same verdict.
+        // What the directory needs is not a second gate but an owner, and the
+        // sweep below is it -- including on the failure path, so a dispatch
+        // refused for quota does not leave the empty directory it just made.
+        const opened = await openScopedDirectoryNoFollow(project.baseDir, scoped.workspaceDir, { create: true });
+        await opened.handle.close();
+      });
+      // The reservation is inside the try, not before it: the failures a nightly
+      // agenda actually hits -- the project's runtime busy with something else,
+      // the project over its storage quota -- are raised by this call, and a
+      // handler that started after it swept nothing on exactly those.
+      try {
+        const session = await runtimeManager.reserveBoundedRuntimeSession(scoped, {
+          runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
+        });
+        await researchSessions.put(scoped, session.id, {
+          mode: "specialist", agentId: selected.id, agentVersion: selected.version,
+        });
+        const run = await agentRuns.dispatch(scoped, {
+          sessionId: session.id,
+          dispatchId: verification.verificationId,
+          question: prompt,
+          effectiveAgentId: selected.id,
+          effectiveAgentVersion: selected.version,
+          effectiveRuntimeAgent: selected.runtimeAgent,
+          // Recorded only if the session is not specialist-bound; the dispatch
+          // layer substitutes "session-binding" for one that is. Nothing reads
+          // it back — the completion fold identifies a verification by its
+          // dispatch id — but the caller still says what it dispatched.
+          effectiveRouteReason: VERIFICATION_ROUTE_REASON,
+        }, async (binding, dispatchedRun) => {
+          const prepared = await prepareResearchContext({ ...scoped, baseDir: scoped.workspaceDir }, binding, config, {
+            query: prompt, memories: [], memoryError: null, specialists: [],
+            routedSpecialist: {
+              agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
+              skill: selected.skill, companionSkills: selected.companionSkills,
+            },
+          });
+          const budgetMarker = issueModelGatewayBudgetMarker({
+            secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
+            runId: verification.verificationId, dailyLimit, weeklyLimit, runLimit,
+          });
+          return runtimeManager.dispatchPrompt(scoped, session.id, {
+            text: `<evimed-autopilot-verification>${verification.verificationId}</evimed-autopilot-verification>\n${budgetMarker}\n${prompt}`,
+            system: prepared.system, agent: selected.runtimeAgent, strictContext: true,
+            model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
+            requestId: dispatchedRun.kernelRequestIds?.at(-1),
+          });
+        });
+        return { runId: run.id, sessionId: session.id };
+      } catch (error) {
+        await runtimeManager.endBoundedRuntime(scoped, verification.verificationId).catch(() => {});
+        // A dispatch that failed leaves the same directory behind as one that
+        // ran, and no completion fold is ever called for it. The dispatch
+        // failure is the one that travels; this one is recorded, because a
+        // scratch directory nobody removed is invisible until the quota walk
+        // trips over it.
+        await discardVerificationScratch(project, verification.verificationId)
+          .catch(scratchError => securityAudit(config, "autopilot.verification.scratch", "failed", {
+            userId: project.userId, projectId: project.id,
+            code: typeof scratchError?.code === "string" ? scratchError.code : "verification_scratch_remove_failed",
+          }));
+        throw error;
       }
     },
     dispatchEpisode: async (episode) => {
@@ -2042,15 +2392,100 @@ export function createWebApiApp(overrides = {}) {
             reason: acceptedInference ? "user confirmed a pending memory" : "user updated structured memory",
           });
           await audit(ctx, "memory.record.update", "completed", { target: updated.id, version: updated.version });
+          // The decision itself, as an event. An audit line records that a
+          // request happened; this records what the researcher decided, in a
+          // form later steps can count and read.
+          await recordFeedback(ctx, () => feedbackEvents?.recordMemoryUpdate(ctx.user.id, {
+            before: existing, after: updated, projectId: ctx.project.id,
+          }));
           sendJson(res, 200, { data: updated });
           return;
         }
         if (req.method === "DELETE") {
+          // Read before deleting: what was rejected is the whole content of the
+          // event, and after the delete there is nothing left to name it by.
+          const rejected = await memosClient.getRecord(ctx.user.id, recordId);
           await memosClient.deleteRecord(ctx.user.id, recordId);
           await audit(ctx, "memory.record.delete", "completed", { target: recordId });
+          await recordFeedback(ctx, () => feedbackEvents?.recordMemoryDeletion(ctx.user.id, {
+            record: rejected, projectId: ctx.project.id,
+          }));
           sendJson(res, 200, { data: true });
           return;
         }
+      }
+
+      if (pathname === "/api/feedback/events" && req.method === "GET") {
+        const ctx = await context(req, res);
+        const service = requireFeedbackEvents();
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const subjectType = url.searchParams.get("subjectType");
+        const subjectId = url.searchParams.get("subjectId");
+        sendJson(res, 200, { data: await service.list(ctx.user.id, {
+          trigger: url.searchParams.get("trigger") || null,
+          subject: subjectType && subjectId ? { type: subjectType, id: subjectId } : null,
+          limit: Number(url.searchParams.get("limit") ?? 50) || 50,
+          cursor: url.searchParams.get("cursor"),
+        }) });
+        return;
+      }
+
+      // Only the two deliverable triggers. The memory triggers are recorded by
+      // the memory routes above from what actually changed, and a client that
+      // could post "the user accepted this inference" could manufacture the
+      // evidence the extractor is supposed to earn.
+      if (pathname === "/api/feedback/events" && req.method === "POST") {
+        const ctx = await context(req, res);
+        const service = requireFeedbackEvents();
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "feedback event");
+        const unknown = Object.keys(body).filter((field) => !["trigger", "runId", "path", "summary"].includes(field));
+        if (unknown.length > 0) {
+          throw new HttpError(400, "feedback_event_invalid", `Unknown feedback field(s): ${unknown.sort().join(", ")}.`);
+        }
+        const trigger = assertString(body.trigger, "trigger", { max: 64 });
+        if (!["deliverable-adopted", "deliverable-edited"].includes(trigger)) {
+          throw new HttpError(400, "feedback_event_invalid", "A client reports a deliverable adoption or a deliverable edit.");
+        }
+        const runId = safeId(assertString(body.runId, "runId", { max: 120 }), "runId");
+        // The run is resolved from the caller's own project first, the way
+        // every other run-addressed route here does it. This id is not
+        // decoration: it is copied into the distillation payload, into the
+        // `method` document the lesson becomes and into its rendered body, so
+        // an id no run answers to would attribute a lesson to a run nobody can
+        // open — and it is entirely client-chosen.
+        const projectRuns = await agentRuns.list(ctx.project);
+        if (!projectRuns.some((candidate) => candidate.id === runId)) {
+          throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+        }
+        const relative = normalizeWorkspaceRelativePath(body.path, "path");
+        const summary = assertString(body.summary, "summary", { optional: true, max: 2_000 }) ?? "";
+        // The content is the identity: the digest is computed here, from the
+        // deliverable the workspace actually holds, so an edit that changed
+        // nothing cannot be reported as one and the same edit reported twice is
+        // one event.
+        const opened = await openScopedFileNoFollow(ctx.project.workspaceDir, resolveScopedPath(ctx.project.workspaceDir, relative))
+          .catch((error) => {
+            if (error?.code !== "ENOENT") throw error;
+            throw new HttpError(404, "file_not_found", "File not found.");
+          });
+        let contentSha256;
+        try {
+          if (opened.stat.size > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
+          contentSha256 = createHash("sha256").update(await opened.handle.readFile()).digest("hex");
+        } finally { await opened.handle.close(); }
+        const recorded = await service.record(ctx.user.id, {
+          trigger,
+          subject: { type: "deliverable", id: deliverableSubjectId(runId, relative) },
+          identity: trigger === "deliverable-edited" ? [contentSha256] : [],
+          projectId: ctx.project.id,
+          runId,
+          detail: { path: relative, runId, contentSha256, ...(summary ? { summary } : {}) },
+        });
+        await audit(ctx, "feedback.record", "completed", { target: recorded.event.id });
+        sendJson(res, recorded.created ? 201 : 200, { data: {
+          event: recorded.event, distillJobId: recorded.distillJob?.id ?? null,
+        } });
+        return;
       }
 
       if (pathname === "/api/research-sessions" && req.method === "GET") {
@@ -2087,6 +2522,14 @@ export function createWebApiApp(overrides = {}) {
         }
         const text = assertString(body.text, "text", { max: config.maxJsonBytes });
         if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
+        // `episode-<32 hex>-v<n>` is how the completion fold recognizes an
+        // independent verification of a proactive claim. A browser that could
+        // name one would be dispatching a run whose own workspace decides the
+        // verdict of a claim it authored — the self-grading the second process
+        // exists to remove. The shape is reserved for the system that mints it.
+        if (verificationEpisodeId(body.dispatchId)) {
+          throw new HttpError(400, "invalid_agent_run", "This dispatch id is reserved for independent verification.");
+        }
         const registry = await agentRegistry;
         const boundSession = await researchSessions.get(ctx.project, body.sessionId);
         await assertPublicSessionPrompt(ctx.project, body.sessionId, boundSession);
@@ -2851,9 +3294,35 @@ export function createWebApiApp(overrides = {}) {
     return autopilotScheduleRun;
   };
 
+  let usageReconcileTimer = null;
+  let usageReconcileRun = null;
+  // A reservation whose settlement never arrived would otherwise stay 'reserved'
+  // forever: nothing else in the system reads reservation_expires_at, so the row
+  // simply falls out of the budget window and is never accounted for again.
+  const reconcileUsageReservations = () => {
+    if (!usageLedger) return Promise.resolve(null);
+    if (usageReconcileRun) return usageReconcileRun;
+    usageReconcileRun = maintenanceMutation(() => usageLedger.reconcileExpiredReservations({ limit: 200 }))
+      .then(async (result) => {
+        if (result?.reconciled) {
+          await securityAudit(config, "usage.reservation.reconcile", "expired", {
+            code: "reservation_expired", detail: `reconciled=${result.reconciled} remaining=${result.remaining}`,
+          });
+        }
+        return result;
+      })
+      .catch((error) => {
+        if (error?.code === "maintenance_active") return null;
+        process.stderr.write(`usage reservation reconciliation failed: ${typeof error?.code === "string" ? error.code : "usage_reconcile_failed"}\n`);
+        return null;
+      })
+      .finally(() => { usageReconcileRun = null; });
+    return usageReconcileRun;
+  };
+
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, methodDistillWorker, learningWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -2864,9 +3333,11 @@ export function createWebApiApp(overrides = {}) {
     if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
     if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
+    if (usageReconcileTimer) clearInterval(usageReconcileTimer);
     capsuleCleanupTimer = null;
     autopilotScheduleTimer = null;
     notificationTimer = null;
+    usageReconcileTimer = null;
   };
 
   const startRecurringWork = async () => {
@@ -2877,7 +3348,14 @@ export function createWebApiApp(overrides = {}) {
       memoryIndexWorker?.start();
       sourceWorker?.start();
       autopilotWorker?.start();
+      // Exactly one claimer for `distill` at a time. When the learning loop is
+      // on, the learning worker owns both learning kinds and hands a
+      // feedback-triggered job to the feedback distiller; when it is off, the
+      // distiller claims those jobs itself, exactly as it did before the loop
+      // existed. Two claimers on one kind would each take the other's jobs and
+      // fail them by payload shape.
       learningWorker?.start();
+      if (!learningWorker) methodDistillWorker?.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -2895,6 +3373,12 @@ export function createWebApiApp(overrides = {}) {
       if (notificationService && !notificationTimer) {
         notificationTimer = setInterval(() => { void applyNotificationDefaults(); }, 30_000);
         notificationTimer.unref();
+      }
+      await reconcileUsageReservations();
+      if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
+      if (usageLedger && !usageReconcileTimer) {
+        usageReconcileTimer = setInterval(() => { void reconcileUsageReservations(); }, 60_000);
+        usageReconcileTimer.unref();
       }
     } catch (error) {
       recurringWorkStarted = false;
@@ -2917,6 +3401,12 @@ export function createWebApiApp(overrides = {}) {
     autopilotWorker,
     usageLedger,
     notificationService,
+    // Returned so the composition root can be asserted at the composition root.
+    // It was reachable only through `recordRun`'s call site, so cutting its
+    // inbox dependency here left every test green and the notices dark.
+    memoryIntelligence,
+    feedbackEvents,
+    methodDistillWorker,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -2954,11 +3444,14 @@ export function createWebApiApp(overrides = {}) {
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await autopilotWorker?.close();
+      await methodDistillWorker?.close();
       await learningWorker?.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
+      if (usageReconcileTimer) clearInterval(usageReconcileTimer);
+      await usageReconcileRun;
       await runtimeUi.close();
       await taskManager.close();
       // Before the runtimes, because stopping a runtime the pump is still

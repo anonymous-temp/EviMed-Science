@@ -52,6 +52,7 @@ function worker(options = {}) {
       resolveRun: options.resolveRun ?? (async () => ({ id: "run_1", sessionId: "s1" })),
       enabled: options.enabled ?? true,
       ...(options.maintain ? { maintain: options.maintain } : {}),
+      ...(options.feedbackDistiller ? { feedbackDistiller: options.feedbackDistiller } : {}),
       window: options.window ?? "",
       now: options.now ?? (() => new Date("2026-09-07T23:00:00")),
       pollMs: 1000,
@@ -239,4 +240,58 @@ test("overlapping reconciles collapse into one, like the job tick", async () => 
   });
   await Promise.all([slow.reconcile(), slow.reconcile(), slow.reconcile()]);
   assert.equal(peak, 1, "a slow sweep must not be started again on top of itself");
+});
+
+// ---------------------------------------------------------------------------
+// One kind, two producers, one claimer.
+//
+// The feedback ledger queues `distill` jobs of its own shape — an adopted
+// deliverable and the edit made to it — and its own worker reads them. While
+// the learning loop is on, this worker is the only claimer of the kind, so
+// those jobs arrive here and have to be handed to the code that knows them.
+// ---------------------------------------------------------------------------
+
+test("a feedback-triggered distill job is handed to the feedback distiller and finished with its result", async () => {
+  const handed = [];
+  const feedbackDistiller = { async distill(job) { handed.push(job.id); return { methodId: "learned-method:abc", status: "candidate", written: true }; } };
+  const runDistillation = { calls: [], async execute(request) { this.calls.push(request); return { state: "complete" }; } };
+  const { jobs, worker: instance } = worker({
+    feedbackDistiller,
+    distillation: runDistillation,
+    jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
+      payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
+  });
+  assert.deepEqual(await instance.tick(), { methodId: "learned-method:abc", status: "candidate", written: true });
+  assert.deepEqual(handed, ["j_fb"]);
+  assert.deepEqual(runDistillation.calls, [], "the run-shaped producer never sees a feedback-shaped job");
+  assert.equal(jobs.finished.length, 1, "finished once, by this worker, under its own lease");
+  assert.deepEqual(jobs.failed, []);
+});
+
+test("a feedback-triggered job with no distiller configured fails once and is not retried", async () => {
+  const { jobs, worker: instance } = worker({
+    jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
+      payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
+  });
+  assert.equal(await instance.tick(), null);
+  assert.equal(instance.lastError, "distill_trigger_unknown");
+  assert.equal(jobs.failed.length, 1);
+  assert.equal(jobs.failed[0].options.retry, false, "a payload nothing can read does not become readable by waiting");
+});
+
+test("the distiller's own refusals are terminal, and a lost write race is not", async () => {
+  const refusing = (code, retryable = false) => ({
+    async distill() { const error = new Error(code); /** @type {any} */ (error).code = code; throw error; },
+    retryable,
+  });
+  for (const [code, retry] of [["distill_evidence_missing", false], ["distill_payload_invalid", false], ["product_revision_conflict", true]]) {
+    const { jobs, worker: instance } = worker({
+      feedbackDistiller: refusing(code),
+      jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
+        payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
+    });
+    await instance.tick();
+    assert.equal(instance.lastError, code);
+    assert.equal(jobs.failed[0].options.retry, retry, code);
+  }
 });
