@@ -6609,3 +6609,135 @@ test("a run superseded days later records how long it ran, not how long the reco
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a stale root file does not shadow the package this run wrote into deliverables/", async () => {
+  // Reproduces the 2026-09-08 clinical acceptance failure exactly.
+  //
+  // A 70-minute run produced a complete synthesis at
+  // `deliverables/<id>/clinical-evidence-report.md`. A file of the same name,
+  // left at the workspace root by a run in July, was found first — because
+  // `readRequiredFile` returns the root hit before it looks anywhere else — and
+  // the run was failed `specialist_required_output_stale` for a file it had not
+  // written, while its own package sat one directory away untouched.
+  //
+  // The native-turn path already iterated candidates and took the fresh one,
+  // with a comment saying "a root file from yesterday must not hide today's
+  // nested deliverable". The rule existed; only one of the two paths had it.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stale-root-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace"),
+    };
+    await mkdir(path.join(project.workspaceDir, "deliverables", "empa-kidney"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+
+    // July's leftover, at the root.
+    const stale = path.join(project.workspaceDir, "clinical-evidence-report.md");
+    await writeFile(stale, "# an old report from a previous run\n", "utf8");
+    const july = Date.parse("2026-07-23T16:02:37.000Z");
+    await utimes(stale, july / 1000, july / 1000);
+
+    const binding = { sessionId: "ses_stale_root", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis",
+          version: "2.11.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          skill: "clinical-evidence-synthesis",
+          companionSkills: [],
+          outputs: [{ path: "clinical-evidence-report.md", required: true }],
+          completionChecks: ["requiredOutputsExist"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000,
+      monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    const run = await store.dispatch(project, {
+      sessionId: binding.sessionId,
+      dispatchId: "turn_stale_root",
+      effectiveAgentId: "clinical-evidence-synthesis",
+      effectiveAgentVersion: "2.11.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+
+    // Today's real package, written after the run started.
+    const fresh = path.join(project.workspaceDir, "deliverables", "empa-kidney", "clinical-evidence-report.md");
+    await writeFile(fresh, "# 恩格列净对成人慢性肾脏病的证据综合\n", "utf8");
+    history = [{
+      info: { id: "msg_done", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [{ type: "text", text: "报告已写入。" }],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.id, run.id);
+    assert.notEqual(finished.errorCode, "specialist_required_output_stale",
+      "a July file at the root failed a run whose own package was written today");
+    assert.equal(finished.status, "succeeded");
+    assert.deepEqual(finished.artifacts, ["deliverables/empa-kidney/clinical-evidence-report.md"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("with nothing fresh anywhere, a stale package is still reported stale", async () => {
+  // Freshness picks which candidate, never whether one exists. A run that
+  // really did write nothing must still get the staleness verdict, or this
+  // becomes a way to pass by leaving an old file lying around.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stale-only-"));
+  try {
+    const project = {
+      id: "project-1", userId: "user-1", rootDir: root,
+      metaDir: path.join(root, ".openscience"), workspaceDir: path.join(root, "workspace"),
+    };
+    await mkdir(path.join(project.workspaceDir, "deliverables", "old"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const july = Date.parse("2026-07-23T16:02:37.000Z") / 1000;
+    for (const file of [
+      path.join(project.workspaceDir, "clinical-evidence-report.md"),
+      path.join(project.workspaceDir, "deliverables", "old", "clinical-evidence-report.md"),
+    ]) {
+      await writeFile(file, "# old\n", "utf8");
+      await utimes(file, july, july);
+    }
+
+    const binding = { sessionId: "ses_stale_only", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    let history = [];
+    const store = new AgentRunStore({ get: async () => binding }, {
+      agentRegistry: {
+        get: () => ({
+          id: "clinical-evidence-synthesis", version: "2.11.0",
+          runtimeAgent: "evimed-clinical-evidence-synthesis",
+          skill: "clinical-evidence-synthesis", companionSkills: [],
+          outputs: [{ path: "clinical-evidence-report.md", required: true }],
+          completionChecks: ["requiredOutputsExist"],
+        }),
+      },
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 60_000, monitorMaxPolls: 20,
+      readSessionHistory: async () => history,
+      readSessionStatus: async () => "idle",
+    });
+    store.scheduleMonitor = () => {};
+    await store.dispatch(project, {
+      sessionId: binding.sessionId, dispatchId: "turn_stale_only",
+      effectiveAgentId: "clinical-evidence-synthesis", effectiveAgentVersion: "2.11.0",
+      effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
+    }, async () => ({ accepted: true }));
+    history = [{
+      info: { id: "msg_done", role: "assistant", time: { completed: Date.now() + 10 } },
+      parts: [{ type: "text", text: "done" }],
+    }];
+
+    const finished = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(finished.errorCode, "specialist_required_output_stale");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

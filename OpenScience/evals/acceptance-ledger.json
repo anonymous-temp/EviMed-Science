@@ -62,8 +62,8 @@
       "briefCount": 3,
       "realDelivery": {
         "status": "failed",
-        "evidence": "PROGRESS.md@2026-09-07 08:40",
-        "at": "2026-09-07T08:40:00",
+        "evidence": "evals/clinical-review-quality/results/2026-09-08-review-001-empa-kidney-report-family",
+        "at": "2026-09-08T10:15:12",
         "surface": "http-api"
       },
       "relatedEvidence": [
@@ -75,7 +75,7 @@
         "PROGRESS.md@2026-09-07 03:22",
         "PROGRESS.md@2026-08-01 18:00"
       ],
-      "note": "Seven dated production attempts and no acceptance: the 52-minute same-title run of 2026-09-07 08:40 lost its parent/child submission binding, and the runs before it exhausted their repair budget, tripped an exclusive-safety false positive, or stopped at HTTP 400 before any model work. Every failed package and workspace was retained. This is the most exercised capability in the product and the one with the clearest negative record."
+      "note": "Eight dated production attempts and no acceptance. The eighth, on 2026-09-08, is the informative one: a 70-minute run produced a complete synthesis with claim markers, effect sizes and citations, and the gate read it closely enough to return per-claim review findings — then failed it specialist_required_output_stale for a clinical-evidence-report.md left at the workspace root by a run in July, which readRequiredFile returned before looking in deliverables/<id>/ where this run's own package was. A false positive, fixed the same day; the re-run belongs on a release carrying that fix. The earlier seven exhausted their repair budget, tripped an exclusive-safety false positive, lost a parent/child submission binding, or stopped at HTTP 400 before any model work. Every failed package and workspace was retained. This is the most exercised capability in the product and the one with the clearest negative record."
     },
     {
       "id": "comprehensive-drug-evaluation",

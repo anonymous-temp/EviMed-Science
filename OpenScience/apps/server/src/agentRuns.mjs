@@ -1299,7 +1299,35 @@ async function existingArtifacts(project, candidates, run = null, endTime = null
   return result;
 }
 
-async function readRequiredFile(project, relative) {
+async function readRequiredFile(project, relative, freshSince = null) {
+  // Prefer a file this run actually wrote.
+  //
+  // The root lookup below is first because a capability declares bare names and
+  // nothing forbids writing them at the root. But a workspace is reused across
+  // runs, so a same-named file left at the root by an earlier run shadows the
+  // package today's run wrote into `deliverables/<id>/` — and because the root
+  // file is returned before anything looks further, the run is then failed
+  // `specialist_required_output_stale` for a file it did not write while its own
+  // complete package sits one directory away, untouched.
+  //
+  // That is not hypothetical: it is what happened to the 2026-09-08 clinical
+  // acceptance. A 70-minute run produced a full synthesis at
+  // `deliverables/empa-kidney-durability/clinical-evidence-report.md`, and a
+  // `clinical-evidence-report.md` from 2026-07-23 at the workspace root failed
+  // it. The native-turn path above already iterates candidates and takes the
+  // fresh one — with a comment saying "a root file from yesterday must not hide
+  // today's nested deliverable" — so the rule existed and only one of the two
+  // paths had it.
+  //
+  // Freshness decides only *which* candidate; it never invents one. When no
+  // candidate is fresh the original order stands, so a genuinely stale package
+  // still reaches the staleness verdict with the same file it always did.
+  if (freshSince != null) {
+    for (const candidate of [relative, ...await deliverableCandidatePaths(project, relative)]) {
+      const found = await openWorkspaceText(project, candidate);
+      if (found && found.stat.mtimeMs + 1_000 >= freshSince) return found;
+    }
+  }
   const direct = await openWorkspaceText(project, relative);
   if (direct) return direct;
   // Then under the deliverable directories.
@@ -1714,7 +1742,7 @@ async function specialistCompletionOutcome(
         if (found) outsideNativeTurn = true;
       }
     } else {
-      file = await readRequiredFile(project, relative);
+      file = await readRequiredFile(project, relative, Date.parse(run.startedAt));
       if (file) artifactPath = file.relativePath;
     }
     if (!file) {
