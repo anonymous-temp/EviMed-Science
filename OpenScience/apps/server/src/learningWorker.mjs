@@ -99,6 +99,26 @@ export class LearningWorker {
     return null;
   }
 
+  /**
+   * Whether this worker may take a job off the queue at all.
+   *
+   * Not the same question as `claimBlockedReason`, and the difference is a
+   * defect this had while there were two claimers to hide it. The window is an
+   * economic argument — model calls are half price at night — so it gates
+   * *spending*, not claiming. But this worker is the only claimer of `distill`
+   * while the loop is on, and the feedback ledger queues `distill` jobs that
+   * cost no model call and start no container. Declining to claim outside the
+   * window left those queued from 09:00 to 22:00 with nobody to take them,
+   * which is not thrift, it is a stall.
+   *
+   * So: the loop being off still means claim nothing. Outside the window it
+   * claims, and `#execute` runs the free work and puts the expensive work back.
+   * @returns {string | null}
+   */
+  pollBlockedReason() {
+    return this.enabled ? null : "learning_disabled";
+  }
+
   async tick() {
     if (this.running) return this.running;
     this.running = this.#tick().catch((error) => {
@@ -109,12 +129,12 @@ export class LearningWorker {
   }
 
   async #tick() {
-    const blocked = this.claimBlockedReason();
+    const blocked = this.pollBlockedReason();
     if (blocked) {
       this.lastSkippedReason = blocked;
       return null;
     }
-    this.lastSkippedReason = null;
+    this.lastSkippedReason = this.claimBlockedReason();
     const job = await this.jobs.claim(["distill", "consolidate"], this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let leaseLost = false;
@@ -125,6 +145,17 @@ export class LearningWorker {
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     try {
+      // Outside the window, spend nothing. A feedback-triggered distillation
+      // is free — no model call, no container — so it runs at any hour; every
+      // other job goes back with a delay rather than being worked at peak
+      // price. Deferred rather than failed: the job keeps its attempts and its
+      // identity, and the next tick inside the window picks it up.
+      if (this.claimBlockedReason() && !isFreeLearningJob(job)) {
+        await this.jobs.fail(job.userId, job.id, job.leaseToken,
+          { code: "outside_learning_window", message: "Deferred until the off-peak learning window." },
+          { retry: true, delayMs: this.#untilWindowOpensMs() });
+        return { state: "deferred", reason: "outside_learning_window" };
+      }
       const result = await this.#execute(job);
       // A run that has not finished yet is not a job that has: the bounded run
       // keeps its own identity, and re-claiming later adopts it by dispatch id
@@ -163,6 +194,17 @@ export class LearningWorker {
     } finally {
       clearInterval(renewal);
     }
+  }
+
+  /** Milliseconds until the window opens, floored at one minute and capped at a
+   *  day. With no window configured there is nothing to wait for. */
+  #untilWindowOpensMs() {
+    if (!this.window) return 60_000;
+    const now = this.now();
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const start = this.window.startMinutes;
+    const delta = (start - minutes + 1440) % 1440;
+    return Math.min(86_400_000, Math.max(60_000, delta * 60_000));
   }
 
   /** @param {any} job */
@@ -252,6 +294,20 @@ export class LearningWorker {
 }
 
 /** Codes where another attempt would spend money to reach the same conclusion. */
+/**
+ * Whether a job costs nothing to run, and may therefore run at any hour.
+ *
+ * Only one kind qualifies today: the feedback ledger's distillation, which
+ * assembles a candidate method out of two events already on disk. It makes no
+ * model call and starts no container, so deferring it to the off-peak window
+ * would buy nothing and would leave a researcher's correction unlearned for
+ * most of the day.
+ * @param {any} job @returns {boolean}
+ */
+function isFreeLearningJob(job) {
+  return job?.kind === "distill" && job?.payload?.trigger === DISTILL_TRIGGER;
+}
+
 const TERMINAL_LEARNING_ERRORS = new Set([
   "consolidate_action_invalid",
   "consolidate_payload_invalid",

@@ -943,15 +943,21 @@ test("the composed feedback ledger turns an adopted-then-edited deliverable into
   assert.equal(app.methodDistillWorker.documents, app.capsuleService.documents,
     "and write through the document store the rest of the composition uses");
 
-  // The poll actually reached the queue asking for its own kind. Read from the
-  // bound parameter rather than the SQL text, like the autopilot claim above.
+  // A poll actually reached the queue asking for this kind. Which worker does
+  // the asking depends on the learning loop: it is the only claimer of
+  // `distill` while it is on, and hands a feedback-shaped job to the distiller
+  // above; the distiller claims for itself only when the loop is off. Both
+  // arrangements are accepted here, because what this test is about is that
+  // the kind is claimed by somebody — two claimers would each fail the other's
+  // jobs by payload shape, and zero claimers leave every lesson queued.
   const claimed = await waitFor(async () => pool.calls.some((call) =>
     /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
-    && Array.isArray(call.values[0]) && call.values[0].join() === "distill"));
-  assert.ok(claimed, "the composed distill worker never asked the job queue for work");
+    && Array.isArray(call.values[0]) && call.values[0].includes("distill")));
+  assert.ok(claimed, "nothing in the composition ever asked the job queue for a distill job");
 
-  // Drive the rest by hand, so the assertions below cannot race the poll.
+  // Drive the rest by hand, so the assertions below cannot race either poll.
   await app.methodDistillWorker.close();
+  await app.close?.();
 
   const subject = { type: "deliverable", id: deliverableSubjectId("run-adopted", "reports/evidence.md") };
   const detail = (contentSha256, extra = {}) => ({ path: "reports/evidence.md", runId: "run-adopted", contentSha256, ...extra });

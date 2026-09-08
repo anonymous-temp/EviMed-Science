@@ -80,19 +80,48 @@ test("an off-peak window is parsed, wraps midnight, and a typo costs the discoun
   assert.equal(withinWindow(null, new Date("2026-09-07T12:00:00")), true, "no window means always");
 });
 
-test("the worker declines to claim outside its window, and says which reason", async () => {
+test("outside its window the worker defers what costs money and keeps the job", async () => {
+  // The window is an economic argument, not a schedule: it gates spending. It
+  // used to gate claiming as well, which was harmless only while a second
+  // worker claimed `distill` at any hour. With one claimer that behaviour
+  // stranded every queued job from 09:00 to 22:00.
   const { jobs, worker: instance } = worker({
     window: "22:00-09:00",
     now: () => new Date("2026-09-07T12:00:00"),
     jobs: fakeJobs([{ id: "j1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
   });
-  assert.equal(await instance.tick(), null);
-  assert.equal(jobs.queue.length, 1, "the job is still queued, not consumed and dropped");
+  const consolidator = instance.consolidation;
+  assert.deepEqual(await instance.tick(), { state: "deferred", reason: "outside_learning_window" });
+  assert.deepEqual(consolidator.calls, [], "nothing expensive may run at peak price");
+  assert.equal(jobs.finished.length, 0, "a deferred job is not a finished one");
+  assert.equal(jobs.failed.length, 1);
+  assert.equal(jobs.failed[0].options.retry, true, "deferred, not destroyed");
+  assert.ok(jobs.failed[0].options.delayMs >= 60_000, "and not re-offered on the next tick");
   assert.equal(instance.status().lastSkippedReason, "outside_learning_window");
 
   const disabled = worker({ enabled: false, jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", payload: {} }]) });
   assert.equal(await disabled.worker.tick(), null);
+  assert.equal(disabled.worker.jobs.queue.length, 1, "a loop that is off claims nothing at all");
   assert.equal(disabled.worker.status().lastSkippedReason, "learning_disabled");
+});
+
+test("a feedback-triggered distillation is free, so it runs outside the window too", async () => {
+  // No model call and no container: it assembles a candidate out of two events
+  // already on disk. Deferring it to the off-peak window would buy nothing and
+  // would leave a researcher's correction unlearned for most of the day.
+  const handed = [];
+  const feedbackDistiller = { async distill(job) { handed.push(job.id); return { methodId: "learned-method:abc", written: true }; } };
+  const { jobs, worker: instance } = worker({
+    feedbackDistiller,
+    window: "22:00-09:00",
+    now: () => new Date("2026-09-07T12:00:00"),
+    jobs: fakeJobs([{ id: "j_fb", kind: "distill", userId: "u1", projectId: "p1",
+      payload: { trigger: "adopted-deliverable-edit", runId: "run_9", feedbackEventIds: ["fe_1", "fe_2"] } }]),
+  });
+  assert.deepEqual(await instance.tick(), { methodId: "learned-method:abc", written: true });
+  assert.deepEqual(handed, ["j_fb"]);
+  assert.equal(jobs.finished.length, 1);
+  assert.deepEqual(jobs.failed, [], "the free job is never deferred");
 });
 
 test("inside the window a consolidate job reaches the consolidation and finishes", async () => {
