@@ -1,0 +1,141 @@
+# 2026-09-07 · 上一阶段复核、交付体验的一类问题、下一阶段 TODO
+
+复核对象：`main` 上 `deb30513b..36138f712`（11 个提交，声称关闭 2026-09-07 缺口清单的 P0–P2）。方法：三路独立代码审计（缺口逐项核对、阻断点普查、用户可见面审计）+ 生产主机只读探测（运行账本、错误账本、磁盘、证书、镜像）+ 联网核查依赖与文献。结论都附文件位置；没确认的写"未确认"。
+
+## 0. 一句话结论
+
+**代码阶段基本完成，交付阶段没有开始。** 13 项里 8 项完成、4 项部分、2 项未做；另有 7 处"造好了但没人喂"。更重要的是：生产跑的仍是合并前的 `evimed-20260907-fd5657b`，这 11 个提交一个都没上线；临床证据深度分析在生产 7 次尝试、0 次验收；而**产品里能让研究者看到门禁结果的那一整面界面根本不在路由上**。用户"突然就出不来了、出来的又消失了"的感受，在生产账本里是可以量出来的（§2）。
+
+## 1. 上一阶段完成度核对
+
+| 项 | 判定 | 残余 |
+|---|---|---|
+| P0-4 用量对账 | 完成 | 无 |
+| P0-6 验收台账 | 完成 | 台账如实记录 16 个能力里 14 个从未有过真实交付验收 |
+| P0-8 / P2-19 文档纠偏与归档 | 完成 | 无 |
+| P1-9 插件生态 | 部分 | `APPLY_PATH_PLUGIN_IDS` 仍只有 `dsh-cite`，第二个插件被标为已安装时 `pluginRegistryFrom` 直接抛错（`pluginService.mjs:85,107`）；插件级矩阵在 CI 里 `not-probed`（`upstream-matrix.yml` 未设 `EVIMED_PLUGIN_PROBE`） |
+| P1-10 资料接入 | 部分 | (e) 语料级覆盖台账无任何生产者/消费者；(d) 遗漏审计的 `omissionNotice` 写进了库、API 也返回，**前端 0 处读取** |
+| P1-12 胶囊方法挂载 | 完成 | 挂载路径是 `/runtime/capsule-methods`，计划文案写的 `/opt/evimed/...` 已过时 |
+| P1-13 个性化学习 | 部分 | `distill` 的唯一触发器 `reportWebDeliverableFeedback` **没有任何 UI 组件调用**（`apiClient.ts:1138`），所以运行中的产品永远产生不了一个 distill 任务；蒸馏出的 `method` 文档没有读者；`consolidate` 仍无生产者；(d) 可测量指标未做 |
+| P1-14 主动科研独立验证 | 完成 | 验证者仍与回合共享 `/runtime`（DSH home），代码里写明需要控制器协议升版 |
+| P1-15 简报/收件箱 | 部分 | `question` 只有一个生产者（复核驳回已采纳结论）；回合中途模型需要裁决时仍没有；收件箱里 `仍然沿用` 是记录了点击、没有任何行为（`notificationService.mjs:199-205`） |
+| P1-16 计量 | 部分 | `price-list` 文档种类仍无读写者；`priceListAt` / `PRICE_LIST_VERSIONS` 是只有测试调用的死导出 |
+| P2-17 组合任务测试 | 完成 | 留下一个如实标注的 KNOWN DEFECT：组合交付丢了一件时 run 行不说 |
+| P2-18 7 个能力 ×4 brief | 完成 | 一份都没跑过 |
+| F `OPEN_SCIENCE_AUTOPILOT_ENABLED` 进基础栈 | 未做 | 仍只在 ingestion overlay；`config.mjs:1098` 在 production 默认开——所以生产其实开着，但清单要求的两条路一条都没走 |
+
+**"造好了但没人喂"（7 处）**：`reportWebDeliverableFeedback`（无 UI 调用）、蒸馏出的 `method` 文档（无读者）、`omissionNotice`（无 UI）、`priceListAt`/`PRICE_LIST_VERSIONS`（无生产调用）、`VERIFICATION_ROUTE_REASON`（只写不读）、`consolidate` 任务种类（无生产者）、收件箱 action id（无消费者）。上一轮修掉的 3 处暗线（capsuleService 赋值、验证回折键、notifications 注入）已由 `serverComposition.test.mjs` 断言，不会再暗回去。
+
+## 2. 生产实测（2026-09-07 UTC 22:55，只读）
+
+**运行账本**（41 个项目的 `runs.jsonl`，全部历史，179 次结束的运行）：
+
+| 结局 | 次数 | 占比 | 时长中位 / p90 / 最大（分钟） |
+|---|---|---|---|
+| 交付成功 | 131 | 73% | 39.6 / 60.6 / 87.7 |
+| **门禁拒绝**（`specialist_*`） | 28 | **15.6%** | 16.2 / **57.8** / **107.7** |
+| 运行时失败（`runtime_*`） | 16 | 9% | 11.4 / 38.6 / 43.6 |
+| 取消 | 4 | 2% | — |
+
+28 次门禁拒绝的 `artifacts` **全部为空**——最长 108 分钟的工作，用户一个文件都拿不到。拒绝原因：traceability 12、integrity 5、provenance 4、citation 3、required_output_missing 2、receipt_digest_mismatch 1、delegated_read 1。
+
+**9 月的 16 次**：14 次开放问答（11 次带 `The open-domain-answer skill was not loaded…` 通知 → `verification: "unverified"`，**发生率 100%**）；1 次 `runtime_stopped` 时长记为 **20.7 天**（陈旧运行被清扫时用了墙钟差）；1 次临床证据运行——见下。
+
+**那一次临床证据运行**（`eval-rtpapers-0907-fd-review-aripiprazole`，57.8 分钟）：工作区里 `deliverables/arp-tdm-review/` 下 9 个文件齐全（报告、证据矩阵、引用台账、bib、审计、修订说明…）。门禁找到 10+ 条**可修复**问题（"数值 X 不在其直接支持里，请引出原句或在不确定性里说明"），准备走修复回路，先给已接受的包做快照——快照抛错（运行在提交后还在改文件，`accepted repair source changed during snapshot`），于是 `specialist_evidence_repair_snapshot_failed` → `specialist_receipt_digest_mismatch`，`artifacts: []`。研究者看到的是「未完成 · 运行未通过核验。」和「暂无交付物」。**报告就在盘上，1.7 MB，任何 API 都拿不到。**
+
+**错误账本**（9/1 起）：`unauthorized` 44、`public_source_pdf_not_open_access` 40、`public_source_gateway_token_invalid` 18、`model_gateway_unavailable` 12、`project_limit_reached` 6、`runtime_limit_exceeded` 3。后三个没人看过。
+
+**主机**：`/` 178 GB，已用 167 GB，**剩 3.4 GB（99%）**；`docker system df` 可回收镜像 39 GB——仅 9/7 一天就留下 9 个 4.12 GB 的运行时镜像。没有磁盘告警规则（现有 10 条规则全是探针/HTTP/队列）。这正是上次 502 的成因，而且会再来一次。
+
+**证书**：Let's Encrypt `shortlived` profile（6.67 天），`evimed-certbot-renew.timer` 每天两次，上次续期 9/5 00:05 CST，日志"no renewal failures"，下次预计 9/9。**P0-3 是误报**——它是一张会自动换的短期证书，不是"9/11 之前压倒一切"的事故。缺的是证书到期告警，不是人工续期。
+
+**部署**：`/srv/evimed-science/releases/evimed-20260907-fd5657b`（合并前 review 分支尖）。上一阶段 11 个提交无一上线。
+
+## 3. 一类问题，不是一堆问题
+
+用户的判断是对的：这些不是十几个独立 bug，是同一套设计假设在真实运行里反复失效。把它们按"设计时假设了什么"归类，每类给一条通用规则，一条规则关掉一批分支。
+
+### A. 「回执即真理」——把交付当成密码学身份，而不是盘上的文件
+
+**假设**：运行提交后就不再碰文件；每件交付物恰好经过一次 `evimed_submit_deliverable`；控制面总能拿到与回执逐字节相同的内容。
+**现实**：运行提交后继续改（aripiprazole）；子代理替父提交、父再修（9/7 五次运行各自死在不同的守卫状态：提交上限、一次性授权、父子归属、`唯一…` 正则误报、通过却无回执）；8/31 一次 38 分钟门禁全绿的包因摘要不符被整包丢弃（`agentRuns.mjs:3252-3262` 的注释自己记着）。
+**后果**：七条拒绝分支里五条写 `artifacts: []`（`agentRuns.mjs:2851,2902,2928,3419,3761,3785`）；修复快照存进 `.openscience/repair-revisions/`，**没有任何路由能读它**。
+**通用规则**：**交付是标签，不是开关。** 只要工作区里有交付文件，就发布它们，并附一个裁决 `{verified | unverified(issues) | gate_failed(issues) | killed(reason)}`；`artifacts: []` 只允许在工作区确实没有交付文件时出现。回执不符 → 用同一套门禁对盘上现字节重判（live 路径 `:3427` 已经这么做了），重判不过就按 `unverified` 交付，永远不丢。这一条规则替换掉 5 个分支，也让"修复快照失败"变成通知。
+
+### B. 「门禁结果是给运行看的」——裁决是返回值，但从不给研究者渲染
+
+**假设**：研究者会在运行流页面看到每件交付物的退回理由、修复轮次、审批/追问卡片。
+**现实**：`RunStreamSessionPage`/`RunStreamThread`/`RunTree`/`DeliverableCard`/`RunInteractionPrompt`/`Composer` **全部不在路由上**（`router.tsx:34-35` 把 `chat` 指向内核 iframe 的 `SessionRoute`；`RunStreamSessionPage` 被 0 个文件引用）。于是：`/api/runs/:id/events` 没有浏览器消费者；`phase: "repairing"` 永远产生不了（`awaitingRepairDispatch` 服务端从未设置）；「复查与复现」写的草稿没人读（S498 已记过一半）；`ERROR_CODE_MESSAGES` 的 47 句中文一个像素都没渲染——运行页用一张 20 键的小表、**未知码统一显示「运行未通过核验。」**（对超时、取消、基础设施故障都是假话），侧栏直接显示英文码（`RunSidePanel.tsx:141`，还有测试钉着它）；产品 API 一律「操作未完成，请重试。」；收件箱「研究运行已结束，请查看运行记录了解状态。」不带原因不带链接；资料卡的 `payload.error` 存了、类型有了、0 处渲染。
+**通用规则**：**每次运行只有一个 Outcome 对象** `{state, reason(中文), produced[], issues[], nextAction}` 由服务端生成，运行页、侧栏、收件箱、iframe 旁栏都只渲染它，不各自翻译。错误码字典只有 domain 一份，前端三张表删掉。
+
+### C. 「一直响的警报不是警报」——检查没有观测分布就上线
+
+**实例**：答案线 `skill not loaded` 通知 100% 触发（runtime-ui 路径没有预注入，`buildDelegation` 的"由构造保证"只对委派子代理成立），等于每个回答都被标 unverified，通知本身失去信息；`runtime_monitor_stalled`（15 分钟无进展即杀）是一个**不在六个之内、没有任何观测记录**的阻断点；前端给一个**服务端从不发出**的 `agent_timeout` 写了中文，却没给 15 个真会发出的码写；上一份清单把自动续期的证书列为 P0。
+**通用规则**：**每个检查都要有自己的生产分布，每周看一次。** `scripts/ops/gate-health.mjs` 已经存在，把它接到生产账本上定期跑：触发率 > 50% 或 30 天内 0 次的检查自动进复审；新检查先通知、后阻断（原则 #4）对通知也适用。
+
+### D. 「修复回路只护一个能力、两轮就放弃」
+
+**实例**：`canRepair` 要求 `effectiveAgentId === "clinical-evidence-synthesis"`——其余 15 个能力门禁不过就直接失败；`maxClinicalRepairAttempts` 2 + 结构轮 2 + 运行侧 `deliveryAttemptLimit` 3，三套上限互相不认识，才有 9/7 那些"能改不能交"的死锁；不可退化的码用尽后是 `failed` 而不是"带问题交付"。
+**文献**：结构化反馈（位置 + 观测值 + **可接受的替代写法**）把修复成功率提高 42–44 个百分点，增益主要来自"替代写法"一项，散文和 JSON 效果相同（arXiv 2607.14167）；前 3–4 轮修复拿走绝大部分收益，此后边际递减，且"流程与反馈的设计比模型更重要"（arXiv 2607.05197）。我们的数值事实问题文案已经是这个形状（"引出原句，或在不确定性里说明"），把它做成所有 issue 的模板。
+**通用规则**：修复回路对 16 个能力通用，以契约 issue 为输入；**一个回合预算 3–4 轮**，全系统只数一次；用尽后**带问题交付**（A 类规则）。
+
+### E. 「幂等和续跑是事后补的」——静默跳过、无人消费的队列、错的时长
+
+**实例**：暂停再恢复的资料夹去重到自己的旧作业上（上一轮修了）；没有配置验证器时 `verify` 任务永远排队、无任何提示；`{skipped:true}` 的作业不写任何用户可见记录；被新派发顶替的运行标「已取消」无原因；收件箱 `仍然沿用` 空操作；20.7 天的时长。
+**通用规则**：**每个生产者都要有一个被断言的消费者**——把 `serverComposition.test.mjs` 的"wired is not fed"扩成生产者/消费者登记表（任务种类、通知类型、action id、notice 字段），没有消费者的要么接上要么删除；每个终局跳过都把原因写到所属记录。
+
+### F. 「运维只看得见自己写的探针」
+
+**实例**：磁盘 99% 无告警；镜像无保留策略；证书无到期告警；错误账本里 18 次网关 token 失效、12 次模型网关不可用没人看。
+**通用规则**：告警对准真正坏过的东西：磁盘、证书、门禁拒绝率、网关错误率；发布镜像 keep-2；每周一份账本摘要进收件箱（给运营者）。
+
+### G. 「多个真理来源」
+
+**实例**：错误文案 4 份（domain 注册表 + `WEB_RUN_ERROR_LABEL` + `RunSidePanel` 裸码 + `productErrorMessage`），两种回退行为；花费上限两条路（有账本 `usage_budget_exceeded` 带 details，无账本 `credits_*` 只有 `Retry-After`，前端从不读 `Retry-After`，iframe 建帧失败一律「研究会话暂时无法连接」）。
+**通用规则**：一个注册表，一个回退，一个 details 形状；`credits_*` 也声明 details；前端解析 `Retry-After`。
+
+## 4. 联网核查（2026-09-07）
+
+- **DSH**：npm `latest` 仍是 `0.1.2-rc.1`；`0.1.3-alpha.2` 于 **2026-09-07 13:11Z** 发到 `alpha` 标签（依赖清单多了 `@deepseek-ai/dsh-http-proxy`，其余同名升版）。按"活线探测后才采纳"，等 0.1.3 到 rc 再跑我们的电池；现在不动。
+- **MemOS**：最新 2.0.33（9/3，偏好记忆修复）；2.0.32（8/28）加了官方 DSH 记忆适配器；Local Plugin 2.0.18（9/1）。我们钉 2.0.30。P1-11 的决策未变：生态优先，评估采用上游适配器，而不是继续自建召回插件。
+- **MinerU** 3.4.5（6/18）仍是最新稳定版；**OpenList** 4.2.6 仍是最新，CVE-2026-75602 在 4.2.3 修复且在我们未启用的离线下载功能里。均无动作。
+- **门禁与 UX 的业界证据**：(1) 分阶段执行——先监控、再软执行、最后全阻断（2026 guardrails 实践）——与原则 #4 一致，我们缺的是"监控"那一段的数据；(2) Google PAIR《Errors + Graceful Failure》：失败时把控制权和**全部信息**交还用户、解释为什么给不出结果、让失败"安全、无聊、是产品的自然一部分"——我们现在是把文件藏起来；(3) Anthropic 2026 harness 设计指南：脚手架的每个组件都编码了一个"模型做不到"的假设，能力提升就该拆掉，"我能停止做什么"——对照 D 类：受契约保护的修复回路是护城河，但三套互不相认的上限是脚手架；(4) 过度拒绝文献：安全性与有用性存在权衡，无解释的拒绝显著提高逆反、降低信任；(5) AI 科学家综述（2608.05179）的结论不变：瓶颈是可核验性，独立验证方向正确。
+
+## 5. 下一阶段 TODO
+
+### P0 · 开放给用户之前
+
+1. **交付是标签不是开关（A 类）。** `agentRuns.mjs` 的所有终局分支统一走一个 `publishOutcome`：工作区有交付文件就发布 + 裁决；回执不符先重判现字节，重判不过按 `unverified` 交付；`repair-revisions` 快照增加只读路由。验收：变异测试——任一拒绝分支在盘上有文件时 `artifacts.length > 0`；用 aripiprazole 的工作区回放，得到一份"已交付，待人工复核"的包而不是「暂无交付物」。
+2. **把门禁结果给研究者看（B 类）。** 服务端生成 Outcome 对象；`SessionRoute` 的侧栏渲染每件交付物的状态与退回理由（用现成的 `DeliverableCard`，把它挂到路由上）；「复查与复现」真的重新派发；Files 页能进运行工作区（挂上 `SessionFilesPane`）；收件箱条目带原因与深链；被杀的运行显示「已停止：15 分钟无进展」而不是「未通过核验」。验收：一条遍历 `ALL_ERROR_CODES` 的测试断言每个码有中文句子且渲染出来（现在 253 个码 46 个有）。
+3. **生产磁盘（F 类）。** 立即：保留当前 + 上一版，清掉其余运行时/Web 镜像（约 39 GB）；然后 `release:prune` 运维脚本 keep-2、node-exporter + 磁盘告警（< 20 GB）。验收：剩余 ≥ 30 GB；告警演练触发。
+4. **部署合并后的 main，并在其上重跑临床证据验收。** 前提是 #1 落地，否则再跑一次仍会被丢。验收台账 `clinical-evidence-synthesis` 至少一次 `accepted`。
+5. **答案线的 skill 检查（C 类）。** runtime-ui 路径要么预注入 persona，要么不做该检查；`gate-health.mjs` 接生产账本每周跑，触发率 > 50% / 30 天 0 次自动进复审。验收：答案线 unverified 率一周内 < 5%。
+6. **修复回路通用化（D 类）。** 对 16 个能力生效；一个回合 3–4 轮、全系统只数一次；issue 文案模板 = 位置 + 观测值 + 可接受写法，中文；用尽后带问题交付。验收：9/7 那五种死锁各写一个回放测试，全部以"交付 + issues"结束。
+7. **证书降级为监控项。** blackbox `probe_ssl_earliest_cert_expiry` 告警（< 3 天）；确认 9/9 的自动续期发生。
+
+### P1 · 产品完整性
+
+8. **错误码单一真理源（G 类）。** 删除前端三张表，全部走 domain 注册表 + 家族回退；`credits_*` 声明 details；前端读 `Retry-After`；`productErrorMessage`/`inboxClient` 用注册表；资料卡渲染 `payload.error`（并把 `"Source analysis failed."` 换成真实原因）；资料夹增加 `lastError`。
+9. **停滞检测改为通知（C/A 类）。** 15 分钟无进展 → 通知 + 继续；只有 4 小时时钟才终止；终止时按 A 类规则交付盘上内容。规格 §29.3 的六点清单补记停滞检测与 `gate_source_denied` 的归属。
+10. **生产者/消费者登记表测试（E 类）。** 接上 `reportWebDeliverableFeedback`（交付物"采纳/已编辑"按钮）、收件箱 action、`omissionNotice` 渲染、`phaseNotices` 进类型、`compareExpectation` 要么接线要么删；删 `price-list` 种类、`priceListAt`、`PRICE_LIST_VERSIONS`、`consolidate`（或给它生产者）。
+11. **收件箱的 `question` 可以在原地作答**（自由文本），并加回合中途的 `question` 生产者。
+12. **`OPEN_SCIENCE_AUTOPILOT_ENABLED` 进基础栈**（或文档写明 overlay 依赖）；控制器协议 6→7 让验证隔离在托管路径上成为真围栏。
+13. **静默跳过写原因；时长封顶**（陈旧运行按清扫时刻或监控上限记，不记墙钟差）。
+14. **iframe 内的门禁可见性**：用真浏览器确认 DSH 原生界面如何渲染 `deliverable_rejected` 工具结果，以及能力模板预填（S498）的去向。
+15. **依赖**：DSH 0.1.3 到 rc 时活线探测；MemOS 2.0.32+ 适配器评估（P1-11 原样）；MinerU/OpenList 无动作。
+16. **插件生态收尾**：第二个插件的 apply 路径；CI 设 `EVIMED_PLUGIN_PROBE`。
+17. **语料级覆盖台账**（P1-10e，原样未做）。
+
+### P2 · 质量与整洁
+
+18. 学习效果指标 eval（P1-13d）。
+19. 组合交付丢件通知（`combinedCapabilityDelivery.test.mjs:566` 的 KNOWN DEFECT）。
+20. 首批断言中文文案的前端测试（现在为零）。
+21. `runtime idle timeout waits for a call still in flight` 放宽期限（STATUS GC6）。
+22. `errors.jsonl` 每周摘要；`public_source_gateway_token_invalid` ×18 查因。
+
+### 仍需外部输入（不是代码）
+
+- P0-1：MR 通道 Ed25519 回执 + 新 OpenGWAS token（账号主）；
+- P0-7：S3 兼容桶、密钥、端点；
+- #14：一次真浏览器会话。
