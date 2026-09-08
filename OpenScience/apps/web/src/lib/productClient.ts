@@ -1,4 +1,4 @@
-import { describeWebUsageBudget, fetchWithWebAuth, getWebProjectId, WebApiError, webApiBase } from "./apiClient";
+import { fetchWithWebAuth, getWebProjectId, WebApiError, webApiBase, webErrorMessage, webRetryAfterSeconds } from "./apiClient";
 
 export interface ProductRecord<T> {
   id: string;
@@ -30,23 +30,46 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
   });
   const value = await response.json().catch(() => null) as { data?: T; error?: string; code?: string; requestId?: string; details?: unknown } | null;
   if (!response.ok || !value || !("data" in value)) {
-    throw new WebApiError(value?.error ?? "The service response was unavailable.", { status: response.status, code: value?.code, requestId: value?.requestId, details: value?.details });
+    // `Retry-After` is a header, so a client that reads only the body throws
+    // away the one fact that makes a ceiling actionable.
+    throw new WebApiError(value?.error ?? "The service response was unavailable.", {
+      status: response.status, code: value?.code, requestId: value?.requestId, details: value?.details,
+      retryAfterSeconds: webRetryAfterSeconds(response.headers),
+    });
   }
   return value.data as T;
 }
 
+/**
+ * What Sources, Capsules, Autopilot, Memory and Duplicates say when an action
+ * is refused.
+ *
+ * One line of dictionary lookup replaced a table that answered
+ * 「操作未完成，请重试。」 to everything it did not special-case — including
+ * every one of the sentences `@evimed/domain` already held, and including the
+ * two spend ceilings, where "please retry" is advice that provably cannot work.
+ *
+ * Two of the old special cases were deleted rather than kept:
+ *   - `product_state_unavailable` answered 「科研记忆服务暂时不可用」, but
+ *     `sourceRoutes`, `autopilotRoutes` and `pluginRoutes` raise the same code,
+ *     so the Sources page named the memory service when source storage was
+ *     down. It is a 503 and the shared 503 sentence is true of all four.
+ *   - The 401 case is now the shared one, word for word.
+ */
 export function productErrorMessage(error: unknown): string {
-  if (error instanceof WebApiError) {
-    if (error.status === 401) return "登录已失效，请重新登录。";
-    // A budget refusal already says which ceiling stopped it and by how much.
-    // Answering "请重试" to a spent week is advice that cannot work.
-    if (error.details) return describeWebUsageBudget(error.details);
-    if (error.status === 409) return "内容已发生变化，请刷新后再保存。";
-    if (error.code === "product_state_unavailable") return "科研记忆服务暂时不可用，请稍后重试。";
-    if (error.code === "capsule_payload_invalid") return "请检查名称和条目内容是否填写完整。";
-    if (error.status === 404) return "这条记录已不存在，请刷新列表。";
-  }
-  return "操作未完成，请重试。";
+  return webErrorMessage(error, {
+    codes: {
+      // A 400 the registry has no code sentence for, and the only one of these
+      // the reader can fix in the form in front of them.
+      capsule_payload_invalid: "请检查名称和条目内容是否填写完整。",
+    },
+    statuses: {
+      // Optimistic concurrency: a fact of the revision protocol that no error
+      // code expresses, so the registry structurally cannot say it.
+      409: "内容已发生变化，请刷新后再保存。",
+      404: "这条记录已不存在，请刷新列表。",
+    },
+  });
 }
 
 export function listCapsules({ deleted = false, cursor = null }: { deleted?: boolean; cursor?: string | null } = {}) {

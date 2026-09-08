@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "1.0.0",
+  "note": "Model-proposed tool dependency edges, merged by scripts/dev/build-tool-graph.mjs. The build never calls a model — a build that reached one would produce a different corpus on every run — so a model reads two tool declarations offline and its answer is recorded here. Every entry is merged as via:\"model\" whatever it claims, and a model edge is a proposal: only an execution receipt in executed-edges.jsonl may carry a task. Shape: {capability?, from, to, type: \"parameter\"|\"semantic\", confidence: 0..1, rationale}.",
+  "edges": []
+}

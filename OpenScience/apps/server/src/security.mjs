@@ -4,6 +4,8 @@ import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { ERROR_DETAIL_FIELDS } from "@evimed/domain";
+
 /** Accept a finite number, or nothing.
  *  `kind` is read by `test/security.test.mjs`, which asserts that every
  *  acceptor in the table below is one of the two vocabularies this module
@@ -29,7 +31,25 @@ function oneOf(allowed) {
 /**
  * The error codes whose refusal may carry machine-readable specifics to the
  * browser, and the exact shape each one may carry. A code absent from this
- * table carries nothing, which is every code but one.
+ * table carries nothing.
+ *
+ * Derived from `@evimed/domain`'s `ERROR_DETAIL_FIELDS` rather than written
+ * here, because there were three copies of this vocabulary and they disagreed.
+ * The browser held one (`parseWebApiErrorDetails`), this module held another,
+ * and the domain now holds the declaration both read. While they were separate,
+ * the two codes this deployment actually raises — `credits_daily_limit_reached`
+ * and `credits_weekly_limit_reached` — were absent from this table, so
+ * `assertSpendWithinLimits` computed the window, the ceiling, the amount spent
+ * and the reset moment and had all four dropped at the wire; the researcher was
+ * told 「请重试」 for a ceiling that retrying cannot clear. Deriving is what
+ * makes "declare a code's details" one edit instead of three.
+ *
+ * The safety argument is unchanged and still structural: the domain declares
+ * data — either the literal `'number'` or a frozen closed set of strings — and
+ * this maps each to `finiteNumber` or `oneOf`, which are the only two acceptors
+ * that exist. There is no way to spell a free-string acceptor in that
+ * vocabulary, so no caller-supplied string can be copied out however a future
+ * call site fills its bag.
  *
  * The safety of this channel is structural, not a review habit, and it is
  * enforced twice: `HttpError` filters the call site's bag at construction, and
@@ -56,27 +76,11 @@ function oneOf(allowed) {
  * Adding a code here is a new promise to the client. Add one only together
  * with the surface that renders it.
  */
-export const errorDetailShapes = Object.freeze({
-  // Which ceiling refused the request, so the answer can say "your week is
-  // gone" instead of "over budget". A shape's keys are each optional and an
-  // absent one is omitted rather than sent as null.
-  //
-  // `usageLedger.assertWithinLimits` is the refusal that reaches a browser
-  // today (the admission check in front of an interactive prompt); it refuses
-  // before it prices anything, so it names no `requested` amount and never a
-  // `run` window. `window: "run"` and `requested` come from
-  // `usageLedger.reserveModel`, which the model gateway answers with its own
-  // envelope (`modelGateway.mjs`) instead of `sendError` — they are declared
-  // because the ledger builds them, and they arrive the day that path is
-  // routed through this boundary.
-  usage_budget_exceeded: Object.freeze({
-    window: oneOf(["day", "week", "run"]),
-    limit: finiteNumber,
-    committed: finiteNumber,
-    requested: finiteNumber,
-    currency: oneOf(["CNY"]),
-  }),
-});
+export const errorDetailShapes = Object.freeze(Object.fromEntries(
+  Object.entries(ERROR_DETAIL_FIELDS).map(([code, fields]) => [code, Object.freeze(Object.fromEntries(
+    Object.entries(fields).map(([key, rule]) => [key, rule === "number" ? finiteNumber : oneOf(rule)]),
+  ))]),
+));
 
 /** Copy the declared, accepted details out of a call site's options bag.
  *  Only own data properties are read, so no getter runs, nothing is inherited

@@ -19,6 +19,9 @@ import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscript
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
+import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
+import { METHOD_OPERATIONS, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
+import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
 
 /**
  * Every check a gate verdict can attribute a finding to.
@@ -45,6 +48,9 @@ export const GATE_CHECK_IDS = Object.freeze([
   'topic-study-plan',
   'topic-research-context',
   'source-understanding-schema',
+  'method-candidate-schema',
+  'method-relations-schema',
+  'method-skill-rules',
 ])
 
 /**
@@ -455,6 +461,8 @@ const VALIDATORS = Object.freeze({
   'reproducibility-pack': (input) => validateJsonShaped(input, { file: 'reproducibility-pack.json', check: checkReproducibilityPack }),
   'surveillance-diff': (input) => validateJsonShaped(input, { file: 'surveillance-diff.json', check: checkSurveillanceDiff }),
   'hypothesis-set': (input) => validateJsonShaped(input, { file: 'hypothesis-set.json', check: checkHypothesisSet }),
+  'method-candidate': validateMethodCandidatePackage,
+  'method-relations': validateMethodRelationsPackage,
 })
 
 /** Every kind must have a validator; the test that walks CONTRACT_KINDS holds that line. */
@@ -570,6 +578,362 @@ function checkHypothesisSet(value) {
     if (!Array.isArray(item.tests) || !item.tests.length) errors.push('each hypothesis needs tests[] — what would settle it.')
   }
   return errors
+}
+
+/* ------------------------------------------------- the self-evolution pair */
+
+/** The three files the two learning contracts deliver. */
+const METHOD_SKILL_FILE = 'SKILL.md'
+const METHOD_CANDIDATE_FILE = 'method-candidate.json'
+const METHOD_RELATIONS_FILE = 'method-relations.json'
+
+/**
+ * What a consolidation run was asked to do.
+ *
+ * Three jobs, not one, because screening cheaply on names must not be able to
+ * become deciding without reading the bodies, and deciding must not be able to
+ * become rewriting in the same breath.
+ */
+export const METHOD_RELATIONS_ACTIONS = Object.freeze(['screen', 'decide', 'build'])
+
+/** Revision operations a builder may propose. `create` and `amend` carry a
+ *  rewritten body; `retire` carries a forwarding address instead. */
+const METHOD_REVISION_OPERATIONS = Object.freeze(['create', 'amend', 'retire'])
+
+/** @param {unknown} value @returns {boolean} */
+function nonEmptyText(value) {
+  return typeof value === 'string' && Boolean(value.trim())
+}
+
+/** A digest read out of parsed JSON, where the field may be anything at all.
+ *  @param {unknown} value @returns {boolean} */
+function pinsRevision(value) {
+  return typeof value === 'string' && isMethodDigest(value)
+}
+
+/**
+ * Grades a submitted SKILL.md with the one implementation of the method rules.
+ *
+ * `validateMethodSkill` is what the run is told to satisfy and what the control
+ * plane applies to the same bytes afterwards, so the codes come through
+ * unchanged: a gate that renamed its findings would be handing the run a repair
+ * instruction it cannot look up. This is the same single-implementation rule the
+ * clinical gate already paid for three times.
+ * @param {string} source   the SKILL.md text as delivered
+ * @param {string} at       where it sat in the deliverable, for the finding
+ * @param {{directoryName?: string}} [options]
+ * @returns {GateIssue[]}
+ */
+function methodSkillIssues(source, at, options = {}) {
+  const parsed = parseSkillFrontmatter(source)
+  /** @param {{code: string, message: string, field?: string}} found @returns {GateIssue} */
+  const asGateIssue = (found) => issue(
+    found.code,
+    `${at}: ${found.field ? `${found.field}: ` : ''}${found.message}`,
+    { path: at, check: 'method-skill-rules' },
+  )
+  // A file whose frontmatter block does not parse is not a method yet. Running
+  // the rest over an empty object would bury that one fact under fifteen of its
+  // consequences, which is the avalanche the repair budget cannot afford.
+  if (parsed.issues.some((found) => found.code === 'method_frontmatter_missing' || found.code === 'method_frontmatter_unterminated')) {
+    return parsed.issues.map(asGateIssue)
+  }
+  const verdict = validateMethodSkill({
+    frontmatter: parsed.frontmatter,
+    body: parsed.body,
+    requireProvenance: true,
+    ...(options.directoryName ? { directoryName: options.directoryName } : {}),
+  })
+  return [...parsed.issues, ...verdict.issues].map(asGateIssue)
+}
+
+/**
+ * `method-candidate.json`: one proposal, and what it rests on.
+ * @param {any} value @returns {string[]}
+ */
+function checkMethodCandidate(value) {
+  /** @type {string[]} */
+  const errors = []
+  if (!isRecord(value)) return ['must be an object.']
+  if (value.schemaVersion !== 1) errors.push('schemaVersion must be 1.')
+  const operation = String(value.operation ?? '')
+  if (!METHOD_OPERATIONS.includes(operation)) {
+    errors.push(`operation ${JSON.stringify(value.operation ?? null)} must be one of ${METHOD_OPERATIONS.join(', ')}.`)
+  }
+  // The proposer is not the judge. Both of these are how a proposal would claim
+  // to have been decided by the job that wrote it.
+  if (value.status != null && value.status !== 'candidate') {
+    errors.push('status may only be "candidate": promotion is decided after an independent evaluation, never by the run that proposed the method.')
+  }
+  if (Array.isArray(value.evaluations) && value.evaluations.length) {
+    errors.push('a candidate may not carry an evaluation verdict of its own; the paired evaluation is run separately against a frozen baseline.')
+  }
+  if (operation === 'amend' || operation === 'merge') {
+    if (!nonEmptyText(value.targetMethodId)) errors.push(`${operation} must name the method it rewrites in targetMethodId.`)
+    if (!pinsRevision(value.baseDigest)) errors.push(`${operation} must pin the revision it was computed against in baseDigest as sha256:<64 hex>.`)
+  }
+  if (operation === 'merge') {
+    const merged = Array.isArray(value.mergedMethodIds) ? value.mergedMethodIds : []
+    if (merged.length < 2) errors.push('merge must list every method it folds together in mergedMethodIds; fewer than two of them is an amend.')
+  }
+  if (operation === 'create' && value.baseDigest != null) {
+    errors.push('create has no base revision; baseDigest must be null.')
+  }
+  if (operation === 'no_change') {
+    if (!nonEmptyText(value.reason)) {
+      errors.push('no_change must say why in reason. It is a real and common answer, and an unexplained one is indistinguishable from a run that gave up.')
+    }
+    if (nonEmptyText(value.targetMethodId) !== pinsRevision(value.baseDigest)) {
+      errors.push('no_change carries targetMethodId and baseDigest together or neither: the pair is what lets the control plane confirm the named method did not move.')
+    }
+  }
+  const evidence = Array.isArray(value.evidence) ? value.evidence : null
+  if (!evidence) errors.push('evidence[] must be an array of quoted observations.')
+  else {
+    if (operation !== 'no_change' && !evidence.length) errors.push('evidence[] is empty; a proposal with no quoted observation rests on nothing.')
+    for (const entry of evidence) {
+      if (!isRecord(entry)) { errors.push('each evidence entry must be an object.'); continue }
+      if (!nonEmptyText(entry.runId)) errors.push('each evidence entry needs the runId it was observed in.')
+      const range = Array.isArray(entry.seqRange) ? entry.seqRange : []
+      if (range.length !== 2 || !range.every((/** @type {unknown} */ bound) => Number.isSafeInteger(bound)) || range[0] > range[1]) {
+        errors.push('each evidence entry needs seqRange as [from, to] with from <= to, so the quote can be found again in the excerpt.')
+      }
+      if (!nonEmptyText(entry.quote)) errors.push('each evidence entry needs the verbatim quote it rests on; a paraphrase is not evidence.')
+    }
+  }
+  if (operation === 'no_change') return errors
+  if (!nonEmptyText(value.applicability)) errors.push('applicability must state the situation this method is for.')
+  if (!Array.isArray(value.counterexamples)) errors.push('counterexamples[] must be an array; write [] only when none is known.')
+  const risk = isRecord(value.risk) ? value.risk : null
+  if (!risk || typeof risk.touchesSafety !== 'boolean' || typeof risk.widensTools !== 'boolean') {
+    errors.push('risk must carry the booleans touchesSafety and widensTools.')
+  }
+  const scenarios = Array.isArray(value.testScenarios) ? value.testScenarios : []
+  if (scenarios.length < SKILL_AUTHORING_LIMITS.minTestScenarios) {
+    errors.push(`testScenarios[] has ${scenarios.length} entries; ${SKILL_AUTHORING_LIMITS.minTestScenarios} are required, each taken from a run in this input.`)
+  }
+  for (const scenario of scenarios) {
+    if (!isRecord(scenario)) { errors.push('each test scenario must be an object.'); continue }
+    if (!nonEmptyText(scenario.runId)) errors.push('each test scenario must name the run it was taken from; a scenario nobody observed tests nothing that happened.')
+    if (!nonEmptyText(scenario.situation) || !nonEmptyText(scenario.expected)) {
+      errors.push('each test scenario needs a situation and what the method is expected to produce in it.')
+    }
+  }
+  return errors
+}
+
+/**
+ * `screen`: which methods are worth reading together, and what was set aside.
+ * @param {Record<string, unknown>} value @returns {string[]}
+ */
+function methodScreenErrors(value) {
+  const screened = isRecord(value.screened) ? value.screened : null
+  if (!screened) return ['screen must carry screened{selected[], rejected[]}.']
+  /** @type {string[]} */
+  const errors = []
+  const selected = Array.isArray(screened.selected) ? screened.selected : null
+  if (!selected) errors.push('screened.selected must be an array; an empty one is a real result.')
+  else {
+    for (const group of selected) {
+      if (!isRecord(group)) { errors.push('each selected group must be an object.'); continue }
+      const label = nonEmptyText(group.group) ? String(group.group) : '?'
+      if (!nonEmptyText(group.group)) errors.push('each selected group needs an id.')
+      const methods = Array.isArray(group.methods) ? group.methods : []
+      if (methods.length < 2 || methods.length > 8) errors.push(`group ${label} holds ${methods.length} methods; a group holds 2 to 8.`)
+      if (new Set(methods).size !== methods.length) errors.push(`group ${label} names the same method twice.`)
+      if (!nonEmptyText(group.reason)) errors.push(`group ${label} has no reason, so nothing says what the reader should check it against.`)
+    }
+  }
+  const rejected = Array.isArray(screened.rejected) ? screened.rejected : null
+  if (!rejected) errors.push('screened.rejected must be an array; what was looked at and set aside is part of the result.')
+  else {
+    for (const entry of rejected) {
+      if (!isRecord(entry) || !nonEmptyText(entry.method) || !nonEmptyText(entry.reason)) {
+        errors.push('each rejected entry needs the method and the reason it was set aside.')
+      }
+    }
+  }
+  return errors
+}
+
+/**
+ * `decide`: the analyser's output, in SkillPyramid's four fields.
+ * @param {Record<string, unknown>} value @returns {string[]}
+ */
+function methodAssignmentErrors(value) {
+  const assignments = Array.isArray(value.assignments) ? value.assignments : null
+  if (!assignments) return ['assignments[] must be an array of ASSIGNMENT / SKILLS / RELATION_TYPE / REASON records.']
+  /** @type {string[]} */
+  const errors = []
+  const seen = new Set()
+  for (const entry of assignments) {
+    if (!isRecord(entry)) { errors.push('each assignment must be an object.'); continue }
+    const label = nonEmptyText(entry.ASSIGNMENT) ? String(entry.ASSIGNMENT) : '?'
+    if (!nonEmptyText(entry.ASSIGNMENT)) errors.push('each assignment needs an ASSIGNMENT identifier the builder can be dispatched against.')
+    else if (seen.has(label)) errors.push(`ASSIGNMENT ${label} appears twice.`)
+    else seen.add(label)
+    const type = String(entry.RELATION_TYPE ?? '')
+    if (!METHOD_RELATION_TYPES.includes(type)) {
+      errors.push(`ASSIGNMENT ${label} has RELATION_TYPE ${JSON.stringify(entry.RELATION_TYPE ?? null)}, which is not one of ${METHOD_RELATION_TYPES.join(', ')}.`)
+    }
+    const skills = Array.isArray(entry.SKILLS) ? entry.SKILLS : []
+    // An abstract pattern is a claim about peers. Two methods that resemble each
+    // other are a `merge` or a `subset`; naming a parent over them invents a
+    // level nobody needed.
+    const minimum = type === 'abstract_pattern' ? 3 : 2
+    if (skills.length < minimum) errors.push(`ASSIGNMENT ${label} names ${skills.length} method(s) in SKILLS; ${type || 'a relation'} holds between at least ${minimum}.`)
+    if (new Set(skills).size !== skills.length) errors.push(`ASSIGNMENT ${label} names the same method twice in SKILLS.`)
+    if (!nonEmptyText(entry.REASON)) errors.push(`ASSIGNMENT ${label} has no REASON, so the builder would be acting on an assertion.`)
+  }
+  return errors
+}
+
+/**
+ * `build`: revisions, each carried out under an assignment it did not make.
+ * @param {Record<string, unknown>} value @returns {string[]}
+ */
+function methodBuildErrors(value) {
+  /** @type {Map<string, string>} */
+  const relationOf = new Map()
+  for (const entry of Array.isArray(value.assignments) ? value.assignments : []) {
+    if (isRecord(entry) && nonEmptyText(entry.ASSIGNMENT)) relationOf.set(String(entry.ASSIGNMENT), String(entry.RELATION_TYPE ?? ''))
+  }
+  const revisions = Array.isArray(value.revisions) ? value.revisions : null
+  if (!revisions) return ['build must carry revisions[]; an empty array is how it reports that nothing could be built.']
+  /** @type {string[]} */
+  const errors = []
+  for (const revision of revisions) {
+    if (!isRecord(revision)) { errors.push('each revision must be an object.'); continue }
+    const label = nonEmptyText(revision.name) ? String(revision.name) : '?'
+    const assignment = String(revision.assignment ?? '')
+    if (!relationOf.has(assignment)) {
+      errors.push(`revision of ${label} names assignment ${JSON.stringify(revision.assignment ?? null)}, which this build does not carry. The analyser's assignment is authoritative and has to be echoed back unchanged.`)
+    } else if (relationOf.get(assignment) === 'conflicts_with') {
+      errors.push(`assignment ${assignment} is conflicts_with, so neither method may be rewritten until the researcher decides which is right.`)
+    }
+    if (!nonEmptyText(revision.name)) errors.push('each revision names the method it produces or retires.')
+    const operation = String(revision.operation ?? '')
+    if (!METHOD_REVISION_OPERATIONS.includes(operation)) {
+      errors.push(`revision of ${label} has operation ${JSON.stringify(revision.operation ?? null)}; it must be one of ${METHOD_REVISION_OPERATIONS.join(', ')}.`)
+      continue
+    }
+    if (operation === 'retire') {
+      if (!nonEmptyText(revision.supersededBy)) errors.push(`retiring ${label} must name what supersedes it; a retirement with no forwarding address orphans the source's history.`)
+      if (revision.skill != null) errors.push(`retiring ${label} carries a rewritten body, but a retirement rewrites nothing.`)
+    } else if (!nonEmptyText(revision.skill)) {
+      errors.push(`${operation} of ${label} carries no SKILL.md text in skill.`)
+    }
+    if (operation === 'create' && revision.baseDigest != null) errors.push(`create of ${label} has no base revision; baseDigest must be null.`)
+    if (operation !== 'create' && !pinsRevision(revision.baseDigest)) {
+      errors.push(`${operation} of ${label} must pin the revision it was computed against in baseDigest as sha256:<64 hex>.`)
+    }
+  }
+  const noticed = new Set()
+  for (const entry of Array.isArray(value.notices) ? value.notices : []) {
+    if (isRecord(entry) && nonEmptyText(entry.assignment)) noticed.add(String(entry.assignment))
+  }
+  for (const [assignment, type] of relationOf) {
+    if (type === 'conflicts_with' && !noticed.has(assignment)) {
+      errors.push(`assignment ${assignment} is conflicts_with and carries no notice; nothing else in this build acts on it, so the conflict would never reach the researcher.`)
+    }
+  }
+  return errors
+}
+
+/** @param {any} value @returns {string[]} */
+function checkMethodRelations(value) {
+  /** @type {string[]} */
+  const errors = []
+  if (!isRecord(value)) return ['must be an object.']
+  if (value.schemaVersion !== 1) errors.push('schemaVersion must be 1.')
+  const action = String(value.action ?? '')
+  if (!METHOD_RELATIONS_ACTIONS.includes(action)) {
+    errors.push(`action ${JSON.stringify(value.action ?? null)} must be one of ${METHOD_RELATIONS_ACTIONS.join(', ')}.`)
+    return errors
+  }
+  if (action === 'screen') return [...errors, ...methodScreenErrors(value)]
+  errors.push(...methodAssignmentErrors(value))
+  if (action === 'build') errors.push(...methodBuildErrors(value))
+  return errors
+}
+
+/**
+ * The rewritten bodies inside a build, so each is graded as the method it will
+ * become rather than as a string in a JSON field.
+ * @param {any} value @returns {{ at: string, source: string, name: string }[]}
+ */
+function methodRelationsRewrites(value) {
+  if (!isRecord(value) || value.action !== 'build') return []
+  /** @type {{ at: string, source: string, name: string }[]} */
+  const rewrites = []
+  const revisions = Array.isArray(value.revisions) ? value.revisions : []
+  for (let index = 0; index < revisions.length; index += 1) {
+    const revision = revisions[index]
+    if (!isRecord(revision) || !nonEmptyText(revision.skill)) continue
+    rewrites.push({
+      at: `${METHOD_RELATIONS_FILE}#/revisions/${index}/skill`,
+      source: String(revision.skill),
+      name: nonEmptyText(revision.name) ? String(revision.name) : '',
+    })
+  }
+  return rewrites
+}
+
+/**
+ * `method-candidate`: one proposal distilled from one run.
+ *
+ * The SKILL.md half is not graded here — it is handed to `validateMethodSkill`,
+ * the same function `evimed_submit_deliverable` calls on the run side and the
+ * same one the consolidation builder's rewrites go through. A second copy of
+ * those rules living in this file would be invisible to the run that is told to
+ * satisfy them, which is precisely the drift the clinical gate paid for.
+ * @param {GateInput} input @returns {GateVerdict}
+ */
+function validateMethodCandidatePackage(input) {
+  /** @type {GateIssue[]} */
+  const issues = requiredOutputIssues(input)
+  const candidate = json(input, METHOD_CANDIDATE_FILE)
+  if (candidate === undefined) {
+    issues.push(issue('deliverable_rejected', `${METHOD_CANDIDATE_FILE} is not valid JSON.`, { path: METHOD_CANDIDATE_FILE, check: 'method-candidate-schema' }))
+  } else if (candidate === null) {
+    issues.push(issue('required_output_missing', `${METHOD_CANDIDATE_FILE} is missing.`, { path: METHOD_CANDIDATE_FILE, check: 'required-output' }))
+  } else {
+    for (const message of checkMethodCandidate(candidate)) {
+      issues.push(issue('deliverable_rejected', `${METHOD_CANDIDATE_FILE}: ${message}`, { path: METHOD_CANDIDATE_FILE, check: 'method-candidate-schema' }))
+    }
+  }
+  const skill = input.files.get(METHOD_SKILL_FILE)
+  if (skill == null || !skill.trim()) {
+    issues.push(issue('required_output_missing', `${METHOD_SKILL_FILE} is missing.`, { path: METHOD_SKILL_FILE, check: 'required-output' }))
+  } else {
+    issues.push(...methodSkillIssues(skill, METHOD_SKILL_FILE))
+  }
+  const required = issues.filter((entry) => entry.severity === 'required')
+  return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }
+}
+
+/**
+ * `method-relations`: one screen, one decision, or one build.
+ * @param {GateInput} input @returns {GateVerdict}
+ */
+function validateMethodRelationsPackage(input) {
+  /** @type {GateIssue[]} */
+  const issues = requiredOutputIssues(input)
+  const report = json(input, METHOD_RELATIONS_FILE)
+  if (report === undefined) {
+    issues.push(issue('deliverable_rejected', `${METHOD_RELATIONS_FILE} is not valid JSON.`, { path: METHOD_RELATIONS_FILE, check: 'method-relations-schema' }))
+  } else if (report === null) {
+    issues.push(issue('required_output_missing', `${METHOD_RELATIONS_FILE} is missing.`, { path: METHOD_RELATIONS_FILE, check: 'required-output' }))
+  } else {
+    for (const message of checkMethodRelations(report)) {
+      issues.push(issue('deliverable_rejected', `${METHOD_RELATIONS_FILE}: ${message}`, { path: METHOD_RELATIONS_FILE, check: 'method-relations-schema' }))
+    }
+    for (const rewrite of methodRelationsRewrites(report)) {
+      issues.push(...methodSkillIssues(rewrite.source, rewrite.at, rewrite.name ? { directoryName: rewrite.name } : {}))
+    }
+  }
+  const required = issues.filter((entry) => entry.severity === 'required')
+  return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }
 }
 
 /**

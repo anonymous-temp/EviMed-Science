@@ -1,12 +1,18 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { knownErrorCodeMessage } from "@evimed/domain";
 import type { SourceUnderstanding, SourceUnderstandingResult } from "@/lib/sourceClient";
 import { SourceUnderstandingPanel } from "./SourceUnderstandingPanel";
 
 const mocks = vi.hoisted(() => ({ getSourceUnderstanding: vi.fn(), listSourceUnderstandingHistory: vi.fn(), projectId: "project-one" }));
-vi.mock("@/lib/sourceClient", () => ({ getSourceUnderstanding: mocks.getSourceUnderstanding, listSourceUnderstandingHistory: mocks.listSourceUnderstandingHistory }));
-vi.mock("@/lib/apiClient", () => ({ getWebProjectId: () => mocks.projectId, WebApiError: class extends Error {} }));
+// Only the request functions are replaced; `sourceFailureMessage` stays real so
+// the failed-generation empty state is proved against the shared dictionary.
+vi.mock("@/lib/sourceClient", async (importOriginal) => ({ ...(await importOriginal<object>()),
+  getSourceUnderstanding: mocks.getSourceUnderstanding, listSourceUnderstandingHistory: mocks.listSourceUnderstandingHistory }));
+// Partial: only the project identity is stubbed, so `productErrorMessage` runs
+// against the real shared error text.
+vi.mock("@/lib/apiClient", async (importOriginal) => ({ ...(await importOriginal<object>()), getWebProjectId: () => mocks.projectId }));
 
 const anchor = { sourceId: "source-one", generation: 2, unitId: "chunk-1", start: 0, end: 8, quote: "记录研究纳入标准" };
 const understanding: SourceUnderstanding = {
@@ -141,6 +147,36 @@ describe("SourceUnderstandingPanel", () => {
     expect(await screen.findByText("此资料只建索引")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "查看历史" }));
     await waitFor(() => expect(screen.getByText("暂无历史理解")).toBeInTheDocument());
+  });
+
+  it("keeps a generation whose parse failed distinct from one that was never analysed", async () => {
+    // Both used to render 「此代次尚无可用理解」, so a researcher could not tell a
+    // dead parse from a queue and re-uploaded the file, paying for the parse a
+    // second time. The source's own status separates them; the stored error code
+    // names the cause, and the sentence comes from the one dictionary.
+    mocks.getSourceUnderstanding.mockResolvedValue({ ...result("failed"), generation: 3, current: null });
+    const failed = render(<SourceUnderstandingPanel {...props} generation={3}
+      error={{ code: "source_unreadable", message: "Source analysis failed." }} />);
+    expect(await screen.findByText("第 3 代解析失败，因此这一代没有理解结果")).toBeInTheDocument();
+    expect(failed.container.textContent).toContain(knownErrorCodeMessage("source_unreadable") as string);
+    expect(failed.container.textContent).toContain("原件仍在知识库里");
+    // The stored English literal is never shown, and the old sentence must not
+    // be what a failure falls back to.
+    expect(failed.container.textContent).not.toMatch(/Source analysis failed/);
+    expect(screen.queryByText("此代次尚无可用理解")).not.toBeInTheDocument();
+    failed.unmount();
+
+    // A failure the source row recorded without a code still says it failed.
+    mocks.getSourceUnderstanding.mockResolvedValue({ ...result("failed"), generation: 3, current: null });
+    const bare = render(<SourceUnderstandingPanel {...props} generation={3} />);
+    expect(await screen.findByText("第 3 代解析失败，因此这一代没有理解结果")).toBeInTheDocument();
+    expect(bare.container.textContent).toContain("系统没有记下这次失败的原因。");
+    bare.unmount();
+
+    // Nothing failed: the empty state is unchanged.
+    mocks.getSourceUnderstanding.mockResolvedValue({ ...result("complete"), generation: 3, current: null });
+    render(<SourceUnderstandingPanel {...props} generation={3} />);
+    expect(await screen.findByText("此代次尚无可用理解")).toBeInTheDocument();
   });
 
   it("uses normalized UTF-16 offsets and does not present an unverifiable quote as source evidence", async () => {

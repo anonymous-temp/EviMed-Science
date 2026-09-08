@@ -87,6 +87,17 @@ const routeReasonPattern = /^[a-z][a-z0-9_.:-]{0,63}$/;
 // `reserveRun` both look at.
 const adoptedRouteReason = "adopted:runtime-ui";
 
+/**
+ * How many mid-run corrections one run accepts.
+ *
+ * A bound rather than a preference. Every correction is another instruction the
+ * run has to hold in a context it is already spending, and an unbounded stream
+ * of them keeps a run alive for as long as somebody keeps typing — which is a
+ * budget the dispatch-time limits cannot see. Three is generous for the thing
+ * this exists for: noticing part-way through that the question was wrong.
+ */
+export const MAX_RUN_CORRECTIONS = 3;
+
 function invalid(message) {
   return new HttpError(400, "invalid_agent_run", message);
 }
@@ -316,6 +327,7 @@ function foldEvents(events) {
         durationMs: null,
         errorCode: null,
         artifacts: [],
+        unverifiedArtifacts: [],
         verification: null,
         qualityNotices: [],
         observedMessages: 0,
@@ -332,6 +344,11 @@ function foldEvents(events) {
       if (!current) throw corrupt("Runtime input refers to an unknown run.");
       runs.set(id, Object.freeze({ ...current,
         ...(event.event === "runtime-turn" ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
+        // A field on an existing event rather than an event kind of its own.
+        // `foldEvents` throws on a kind it does not know, so a new kind means a
+        // ledger an older control plane cannot read at all; an unknown *field*
+        // is simply not folded, which costs the count and nothing else.
+        ...(event.kind === "steer" ? { corrections: (current.corrections ?? 0) + 1 } : {}),
         kernelRequestIds: [...new Set([...(current.kernelRequestIds ?? []), ...(event.requestIds ?? []).map(storedKernelRequestId)])],
       }));
       continue;
@@ -394,6 +411,16 @@ function foldEvents(events) {
         durationMs: event.durationMs,
         errorCode,
         artifacts,
+        // Read with the same normalizer and defaulted to `[]`, so a run written
+        // by an older build folds to "none written" rather than to `undefined`
+        // — the browser distinguishes the two and would otherwise have to say
+        // "unknown" about every run in the existing ledger.
+        // `?? []` before the normalizer, not inside it: every row already on
+        // every production ledger predates this field, and
+        // `normalizeStoredArtifacts` throws `corrupt` on a non-array — which
+        // would not have degraded one run, it would have made the whole ledger
+        // unreadable the moment this shipped.
+        unverifiedArtifacts: normalizeStoredArtifacts(event.unverifiedArtifacts ?? []),
         // A judgement can land either side of the delivery decision, so both
         // orders must fold to the same run. An admission already on the record
         // survives a terminal event that says nothing; a terminal finding
@@ -407,6 +434,46 @@ function foldEvents(events) {
           ...(Array.isArray(event.qualityNotices) ? event.qualityNotices.filter((item) => typeof item === "string") : []),
           ...current.qualityNotices,
         ].slice(0, maxQualityNotices),
+      }));
+      continue;
+    }
+    // What the run left behind for the learning loop: where its transcript was
+    // written, which methods were mounted and which were actually called, how
+    // many repair rounds it took, and what the kernel compacted.
+    //
+    // Observational like `progress`, and for the same reason: none of it may
+    // change a run's status, so a malformed one is dropped rather than
+    // corrupting the ledger. It is also a *gauge* — `serializeNext` supersedes
+    // the previous row for the same run — which is why every writer sends the
+    // whole cumulative value rather than a delta. A history row here would grow
+    // once per repair round and once per compaction, on a file with a 1 MiB
+    // ceiling that has already been hit once.
+    //
+    // DEPLOYMENT CONSTRAINT, because `foldEvents` throws on an event kind it
+    // does not know: once a project ledger has a `learning` row, a control
+    // plane older than this branch cannot read that ledger at all — `list`,
+    // `recover`, every dispatch and every monitor poll fail together with
+    // `agent_runs_corrupt`, permanently, because the server cannot remove the
+    // row. Rolling back past this change therefore requires either keeping this
+    // branch's reader or removing the rows. The writer is unconditional on
+    // purpose (the compaction distribution §6.5 needs measuring before any
+    // policy changes), so this applies to a deployment that never turns the
+    // learning loop on.
+    if (event.event === "learning") {
+      const id = safeStoredId(event.id, "id");
+      const current = runs.get(id);
+      if (!current) continue;
+      const repairRounds = normalizeRepairRounds(event.repairRounds);
+      runs.set(id, Object.freeze({
+        ...current,
+        ...(event.transcript ? { transcript: normalizeTranscriptReceipt(event.transcript) } : {}),
+        ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
+        ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
+        // `attempts` has been published to the browser since the repair loop
+        // shipped and has always been 0, because nothing ever folded it. The
+        // repair count is the number it was always meant to carry.
+        ...(repairRounds ? { repairRounds, attempts: repairRounds.content + repairRounds.structural } : {}),
+        ...(event.compaction ? { compaction: normalizeCompactionRecords(event.compaction) } : {}),
       }));
       continue;
     }
@@ -433,6 +500,71 @@ function foldEvents(events) {
     throw corrupt("Agent run ledger contains an unsupported event.");
   }
   return runs;
+}
+
+/** How many method mounts and calls one run may record. The mount cap is the
+ *  capsule's own (32); a run that reports more is reporting something else. */
+const maxLearningMethods = 64;
+const maxCompactionRecords = 64;
+
+/** @param {any} value @returns {{path: string, completeness: string, bytes: number, sha256: string, messages: number} | undefined} */
+function normalizeTranscriptReceipt(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const completeness = String(value.completeness ?? "");
+  if (!["complete", "partial", "unavailable"].includes(completeness)) return undefined;
+  if (typeof value.path !== "string" || !value.path || value.path.length > 512) return undefined;
+  if (typeof value.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.sha256)) return undefined;
+  return {
+    path: value.path,
+    completeness,
+    bytes: Number.isSafeInteger(value.bytes) && value.bytes >= 0 ? value.bytes : 0,
+    sha256: value.sha256,
+    messages: Number.isSafeInteger(value.messages) && value.messages >= 0 ? value.messages : 0,
+  };
+}
+
+/** @param {any} value @returns {{name: string, digest: string, seq?: number}[] | undefined} */
+function normalizeMethodDigests(value) {
+  if (!Array.isArray(value)) return undefined;
+  /** @type {{name: string, digest: string, seq?: number}[]} */
+  const entries = [];
+  for (const item of value.slice(0, maxLearningMethods)) {
+    if (!item || typeof item.name !== "string" || !item.name) continue;
+    if (typeof item.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(item.digest)) continue;
+    entries.push({
+      name: item.name.slice(0, 128),
+      digest: item.digest,
+      ...(Number.isSafeInteger(item.seq) && item.seq >= 0 ? { seq: item.seq } : {}),
+    });
+  }
+  return entries;
+}
+
+/** @param {any} value @returns {{content: number, structural: number} | undefined} */
+function normalizeRepairRounds(value) {
+  if (!value || typeof value !== "object") return undefined;
+  const content = Number.isSafeInteger(value.content) && value.content >= 0 ? value.content : 0;
+  const structural = Number.isSafeInteger(value.structural) && value.structural >= 0 ? value.structural : 0;
+  return { content, structural };
+}
+
+/** @param {any} value @returns {{at: string, seq: number, replaced: number, tokens: number, policy: string}[] | undefined} */
+function normalizeCompactionRecords(value) {
+  if (!Array.isArray(value)) return undefined;
+  /** @type {{at: string, seq: number, replaced: number, tokens: number, policy: string}[]} */
+  const entries = [];
+  for (const item of value.slice(-maxCompactionRecords)) {
+    if (!item || typeof item !== "object") continue;
+    if (!Number.isSafeInteger(item.seq) || item.seq < 0) continue;
+    entries.push({
+      at: typeof item.at === "string" ? item.at.slice(0, 40) : "",
+      seq: item.seq,
+      replaced: Number.isSafeInteger(item.replaced) && item.replaced >= 0 ? item.replaced : 0,
+      tokens: Number.isSafeInteger(item.tokens) && item.tokens >= 0 ? item.tokens : 0,
+      policy: typeof item.policy === "string" ? item.policy.slice(0, 32) : "",
+    });
+  }
+  return entries;
 }
 
 function safeStoredId(value, label) {
@@ -548,7 +680,11 @@ function serializeNext(events, event, maxBytes) {
   const keep = [...events, event];
   for (let index = keep.length - 1; index >= 0; index -= 1) {
     const item = keep[index];
-    if (item?.event !== "progress" && item?.event !== "native-workflow") continue;
+    // `learning` joins the gauges: every writer sends the whole cumulative
+    // receipt, so only the last one is worth keeping. Adding it to the history
+    // side instead would put one row per repair round and one per compaction on
+    // a file that has already hit its ceiling once.
+    if (item?.event !== "progress" && item?.event !== "native-workflow" && item?.event !== "learning") continue;
     const key = `${item.event}:${item.id}`;
     if (superseded.has(key)) keep[index] = null;
     else superseded.add(key);
@@ -2093,6 +2229,61 @@ async function consumeRepairAuthorization(project, input, {
   });
 }
 
+/**
+ * Every file the run actually wrote under `deliverables/`, as artifact paths.
+ *
+ * Read from the workspace rather than from a receipt, because this is the
+ * question a receipt cannot answer: a run that never submitted, or whose
+ * submission the gate refused, has no receipt and still has files.
+ *
+ * Bounded by `maxArtifacts` and one directory deep on purpose. The ids come out
+ * of directories the container created, so they are input — the same
+ * single-segment rule `deliverableCandidatePaths` and `unsubmittedDeliverables`
+ * apply, for the same reason: joined unchecked, `..` here names a path outside
+ * the workspace.
+ *
+ * @param {Record<string, any>} project
+ * @returns {Promise<string[]>}
+ */
+async function writtenDeliverableFiles(project) {
+  /** @type {string[]} */
+  const found = [];
+  /** @type {import('node:fs').Dirent[]} */
+  let ids;
+  try {
+    ids = await readdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir), { withFileTypes: true });
+  } catch {
+    return found;
+  }
+  for (const entry of ids) {
+    if (found.length >= maxArtifacts) break;
+    if (!entry.isDirectory()) continue;
+    const id = entry.name;
+    if (!id || id.includes("/") || id.includes("\\") || id === "." || id === "..") continue;
+    let files;
+    try {
+      files = await readdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, id), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      if (found.length >= maxArtifacts) break;
+      if (!file.isFile()) continue;
+      found.push(`${workspaceLayout.deliverablesDir}/${id}/${file.name}`);
+    }
+  }
+  return found;
+}
+
+/**
+ * The sentence a recovered package carries, so "unverified" is a label on work
+ * that exists rather than a synonym for nothing.
+ */
+const UNVERIFIED_DELIVERY_NOTICE = "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——"
+  + "它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。"
+  + "上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。";
+
+
 async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
   try {
@@ -2452,6 +2643,99 @@ export class AgentRunStore {
     } catch { /* isolated: evimed_run_state_listener_failures_total */ }
   }
 
+  /**
+   * The accepted revisions of this run's package, preserved before repair.
+   *
+   * `snapshotAcceptedPackageForRepair` has written these since the repair loop
+   * was built — the whole text of every file, under the receipt digest they
+   * were accepted at — and nothing could read them back. That is the second
+   * half of the aripiprazole failure: the run kept editing after its package
+   * was accepted, the receipt stopped matching, and the version that *had*
+   * passed the gate was sitting in `.openscience/repair-revisions/` with no
+   * route to it. A snapshot nobody can open is a backup that does not exist.
+   *
+   * Read-only and metadata-first: the digests and byte counts, not the text.
+   * A package is a dozen files of report prose, and a list endpoint that
+   * inlined all of them would be the reason nobody calls it. `readRepairRevisionFile`
+   * fetches one file when a person asks for it.
+   *
+   * @param {Record<string, any>} project @param {string} rawRunId
+   * @returns {Promise<{acceptedDigest: string, preservedAt: string, files: {path: string, sha256: string, bytes: number}[]}[]>}
+   */
+  async listRepairRevisions(project, rawRunId) {
+    const runId = safeId(rawRunId, "agent run id");
+    const directory = path.join(project.metaDir, "repair-revisions");
+    /** @type {string[]} */
+    let names;
+    try {
+      names = (await readdir(directory, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.startsWith(`${runId}-`) && entry.name.endsWith(".json"))
+        .map((entry) => entry.name);
+    } catch {
+      // No directory is "this run was never repaired", which is the ordinary
+      // case and not an error.
+      return [];
+    }
+    const revisions = [];
+    for (const name of names.sort()) {
+      const text = await readTextFileNoFollow(project.rootDir, path.join(directory, name), "").catch(() => "");
+      if (!text) continue;
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { continue; }
+      // A snapshot this build cannot read is skipped rather than throwing: one
+      // unreadable file must not make the other revisions unreachable too.
+      if (parsed?.formatVersion !== 1 || parsed?.controlPlaneRunId !== runId) continue;
+      revisions.push({
+        acceptedDigest: String(parsed.acceptedDigest ?? ""),
+        preservedAt: String(parsed.preservedAt ?? ""),
+        files: (Array.isArray(parsed.files) ? parsed.files : []).map((file) => ({
+          path: String(file?.path ?? ""), sha256: String(file?.sha256 ?? ""), bytes: Number(file?.bytes ?? 0),
+        })).filter((file) => file.path),
+      });
+    }
+    return revisions;
+  }
+
+  /**
+   * One file out of one preserved revision, as it was when the gate accepted it.
+   *
+   * The digest is re-checked against the text rather than trusted from the
+   * snapshot's own field: the point of handing this back is that it is the
+   * version that passed, so "this is what passed" has to be provable here and
+   * not merely recorded.
+   *
+   * @param {Record<string, any>} project @param {string} rawRunId
+   * @param {string} acceptedDigest @param {string} relative
+   * @returns {Promise<{path: string, sha256: string, bytes: number, text: string, preservedAt: string}>}
+   */
+  async readRepairRevisionFile(project, rawRunId, acceptedDigest, relative) {
+    const runId = safeId(rawRunId, "agent run id");
+    const digest = safeId(String(acceptedDigest ?? ""), "accepted digest");
+    const wanted = normalizeWorkspaceRelativePath(relative, "artifact path");
+    const file = path.join(project.metaDir, "repair-revisions", `${runId}-${digest}.json`);
+    const text = await readTextFileNoFollow(project.rootDir, file, "").catch(() => "");
+    if (!text) throw new HttpError(404, "repair_revision_not_found", "No preserved revision for that run and digest.");
+    let parsed;
+    try { parsed = JSON.parse(text); } catch {
+      throw new HttpError(409, "repair_revision_unreadable", "The preserved revision could not be read.");
+    }
+    if (parsed?.formatVersion !== 1 || parsed?.controlPlaneRunId !== runId) {
+      throw new HttpError(404, "repair_revision_not_found", "No preserved revision for that run and digest.");
+    }
+    const entry = (Array.isArray(parsed.files) ? parsed.files : []).find((candidate) => candidate?.path === wanted);
+    if (!entry || typeof entry.text !== "string") {
+      throw new HttpError(404, "repair_revision_file_not_found", "That file is not part of the preserved revision.");
+    }
+    const actual = createHash("sha256").update(entry.text, "utf8").digest("hex");
+    if (actual !== String(entry.sha256)) {
+      throw new HttpError(409, "repair_revision_digest_mismatch", "The preserved revision no longer matches its recorded digest.");
+    }
+    return {
+      path: wanted, sha256: actual, bytes: Buffer.byteLength(entry.text), text: entry.text,
+      preservedAt: String(parsed.preservedAt ?? ""),
+    };
+  }
+
   async list(project) {
     const events = parseEvents(await readLedgerText(project, this.maxBytes));
     const runs = [...foldEvents(events).values()];
@@ -2776,6 +3060,97 @@ export class AgentRunStore {
     });
   }
 
+  /**
+   * The run's own account of what it did, scoped to this run.
+   *
+   * `readRunStateProjection` already refuses another run's file, an
+   * unparseable one, and — for a native-workflow run — one whose plan revision
+   * or item identities do not match the tool calls this run actually made. The
+   * terminal hook needs exactly that guarantee: it attributes method outcomes
+   * to deliverables, and a projection belonging to a different run would
+   * attribute them confidently to the wrong ones.
+   *
+   * Null for every unreadable state rather than a throw, because the only
+   * caller runs beside a finished run's real work.
+   * @param {any} project @param {Record<string, any>} run
+   * @returns {Promise<Record<string, any> | null>}
+   */
+  async runWorkflowProjection(project, run) {
+    try {
+      const read = await readRunStateProjection(project, project.workspaceDir, run);
+      return read.state === "read" ? (read.projection ?? null) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Record what a run left for the learning loop.
+   *
+   * Merge semantics, not replace: the row is a gauge, so the last one written
+   * is the only one kept, and a caller that sent only `compaction` must not
+   * erase the transcript receipt a different caller wrote a second earlier.
+   * Four independent writers reach this — the terminal hook (transcript,
+   * mounted methods, invoked methods), the repair loop (rounds), the event pump
+   * (compaction) and the reconciler — and none of them holds the others' facts.
+   *
+   * Returns null rather than throwing for an unknown run: every caller is on a
+   * best-effort path beside the run's real work, and none of them may be the
+   * reason a run fails.
+   * @param {any} project
+   * @param {string} rawRunId
+   * @param {{transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any}} patch
+   */
+  async recordLearning(project, rawRunId, patch) {
+    const runId = safeId(rawRunId, "agent run id");
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const current = foldEvents(events).get(runId);
+      if (!current) return null;
+      const compaction = patch.appendCompaction
+        ? [...(current.compaction ?? []), patch.appendCompaction]
+        : patch.compaction;
+      const event = {
+        event: "learning",
+        id: runId,
+        at: this.now().toISOString(),
+        ...(patch.transcript ? { transcript: patch.transcript } : current.transcript ? { transcript: current.transcript } : {}),
+        ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
+        ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
+        ...(patch.repairRounds
+          ? { repairRounds: { content: patch.repairRounds.content ?? 0, structural: patch.repairRounds.structural ?? 0 } }
+          : current.repairRounds ? { repairRounds: current.repairRounds } : {}),
+        ...(compaction ? { compaction } : {}),
+      };
+      // Nothing but the timestamp to write means nothing to write.
+      if (Object.keys(event).length <= 3) return current;
+      const text = serializeNext(events, event, this.maxBytes);
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, updated);
+      return updated;
+    });
+  }
+
+  /**
+   * Persist the repair counts the loop has been keeping in memory.
+   *
+   * The five repair maps on this store are lost on a control-plane restart,
+   * which is how an adopted run silently gets a fresh repair budget. Writing
+   * the count each time it moves does not fix that — the budget still lives in
+   * memory — but it does make the number durable for the distiller, which needs
+   * "this package took two rounds to pass" as its strongest signal that
+   * something is worth learning.
+   * @param {any} project @param {string} runId
+   */
+  async recordRepairRounds(project, runId) {
+    const content = this.clinicalRepairAttempts.get(runId) ?? 0;
+    const structural = this.clinicalStructuralRepairAttempts?.get(runId) ?? 0;
+    if (!content && !structural) return null;
+    // isolated: evimed_agent_run_learning_write_failed_total
+    return this.recordLearning(project, runId, { repairRounds: { content, structural } }).catch(() => null);
+  }
+
   /** Wait for every coverage judgement still in flight. Shutdown and tests
    *  only — no request path may call this, which is the whole point of D2. */
   async settleCoverageJudgements() {
@@ -2948,9 +3323,55 @@ export class AgentRunStore {
       status: terminal.status,
       errorCode: sanitizeErrorCode(terminal.errorCode),
       artifacts: normalizeArtifacts(terminal.artifacts),
+      /** Files the run wrote that no gate accepted. Empty is "none"; the field
+       *  is always present so a reader never has to treat absent as unknown. */
+      unverifiedArtifacts: normalizeArtifacts(terminal.unverifiedArtifacts),
       verification: normalizeVerification(terminal.verification),
       qualityNotices: normalizeQualityNotices(terminal.qualityNotices),
     };
+
+    // Delivery is a label, not a switch.
+    //
+    // This is the one funnel every terminal path in this file goes through, and
+    // it is deliberately here rather than at the fifteen call sites that build
+    // a `terminal`: a refusal branch added next month gets this for free, and
+    // the alternative — remembering, at each of fifteen sites, that a verdict is
+    // not a reason to hide the work — is the arrangement that produced the
+    // number below.
+    //
+    // In production over 179 finished runs, 28 ended gate-refused with
+    // `artifacts: []` at p90 58 minutes. The most recent was a complete
+    // nine-file clinical package. Every one of those files was on disk, in the
+    // workspace, at the moment the ledger recorded that the run had produced
+    // nothing — and the browser rendered 「暂无交付物。」 over the top of them.
+    // From the researcher's side that is indistinguishable from an hour of work
+    // being deleted, which is exactly what they reported it as.
+    //
+    // A separate field, not `artifacts`.
+    //
+    // `artifacts` means "the gate accepted these", and five modules rely on
+    // exactly that: `server.mjs` picks the autopilot's verification result out
+    // of it, `autopilotService` reads `agenda-delta.json` out of it, and
+    // `learningRuntime` and `sourceUnderstandingRuntime` read a bounded run's
+    // output out of it. Widening it would have made an ungraded file readable
+    // as a verified result — the same defect class as an autopilot verification
+    // that was never sound — so the fix would have bought the researcher their
+    // files at the price of the guarantee that makes those files worth having.
+    //
+    // So the verdict is untouched, `artifacts` keeps its meaning, and what the
+    // run wrote is stated as its own fact for the surfaces that show a person
+    // their work. A run that genuinely wrote nothing still reports nothing,
+    // because this reads the workspace instead of asserting.
+    if (normalized.status !== "succeeded" && normalized.artifacts.length === 0) {
+      const recovered = await writtenDeliverableFiles(project).catch(() => []);
+      if (recovered.length > 0) {
+        normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
+        normalized.qualityNotices = normalizeQualityNotices([
+          ...normalized.qualityNotices,
+          UNVERIFIED_DELIVERY_NOTICE,
+        ]);
+      }
+    }
     const outcome = await withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);
@@ -3199,6 +3620,12 @@ export class AgentRunStore {
           if (revision) {
             if (structuralRound) this.clinicalStructuralRepairAttempts.set(run.id, structuralAttempts + 1);
             else this.clinicalRepairAttempts.set(run.id, repairAttempts + 1);
+            // The count has to reach the ledger here rather than at the end: the
+            // maps are deleted in `finishInternal`, so a run that finishes takes
+            // the only record of how hard it was with it. It is also the signal
+            // the distiller cares about most — a package that passed on the
+            // second attempt is a lesson, one that passed first time is not.
+            void this.recordRepairRounds(project, run.id);
             this.clinicalRepairBaselineCursors.set(run.id, messageId(assistants.at(-1)));
           // Record the report's size on the way into each repair. A repair that
           // answers with a whole-file write regenerates the report from what is
@@ -3913,6 +4340,46 @@ export class AgentRunStore {
       ], { unchecked: true });
     }
     return (await this.list(project)).find((item) => item.id === run.id) ?? run;
+  }
+
+  /**
+   * Record a researcher's mid-run correction, before the kernel is told.
+   *
+   * Hidden knowledge: this is deliberately *not* a second dispatch. A dispatch
+   * creates a run, a run binds a deliverable contract, and one research session
+   * may have one active run — which is why `agent_run_active` refuses a second
+   * one and why that refusal stays exactly as it is. A correction is input to
+   * the run that is already going, attributed to it, graded by the contract it
+   * already has. The published implementations of this feature agree on the
+   * same shape: a steered message belongs to the response it steers, not to a
+   * turn of its own, because splitting it off is what makes a later compaction
+   * summarise away one half of a modified instruction.
+   *
+   * Bounded per run. A client that could correct without limit could keep a
+   * run alive indefinitely, and every correction is another thing the run must
+   * hold in a context it is already spending.
+   *
+   * Written before the prompt is sent, like the repair path: a request id the
+   * ledger has not seen cannot be matched to the run it belongs to.
+   *
+   * @param {any} project @param {string} runId @param {string} requestId
+   */
+  async recordCorrection(project, runId, requestId) {
+    return withProjectStorageMutation(project, async () => {
+      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const run = foldEvents(events).get(runId);
+      if (!run || run.status !== "running") {
+        throw new HttpError(409, "agent_run_not_running", "The run is no longer accepting corrections.");
+      }
+      if ((run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) {
+        throw new HttpError(409, "agent_run_correction_limit", `A run accepts at most ${MAX_RUN_CORRECTIONS} corrections.`);
+      }
+      const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)] };
+      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      const updated = foldEvents([...events, event]).get(runId);
+      this.notifyState(project, updated);
+      return updated;
+    });
   }
 
   /** Persist a repair's native request identity before sending it. */

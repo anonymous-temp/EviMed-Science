@@ -42,6 +42,13 @@ export const CONTRACT_KINDS = Object.freeze([
   'reproducibility-pack',
   'surveillance-diff',
   'hypothesis-set',
+  // Self-evolution: the two internal packages the learning loop runs. Neither
+  // is a customer deliverable — they are what `distill` and `consolidate` hand
+  // back — but they go through the same gate as everything else, because a
+  // proposal that edits the methods later runs are mounted with is the last
+  // thing that should be graded by the job that produced it.
+  'method-candidate',
+  'method-relations',
 ])
 
 /** @param {string} value @returns {value is ContractKind} */
@@ -121,6 +128,8 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'reproducibility-pack': '可复现包',
   'surveillance-diff': '监测差异',
   'hypothesis-set': '假说集',
+  'method-candidate': '方法候选',
+  'method-relations': '方法关系',
 })
 
 /** @param {string} kind @returns {string} */

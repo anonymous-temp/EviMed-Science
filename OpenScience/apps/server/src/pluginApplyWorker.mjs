@@ -104,6 +104,7 @@ export class PluginApplyWorker {
     this.service = service; this.jobs = service.jobs; this.database = service.database;
     this.runtime = runtime; this.resolveProject = resolveProject; this.ledgerBusy = ledgerBusy;
     this.pollMs = pollMs; this.leaseMs = leaseMs; this.workerId = `plugin-apply-${randomUUID()}`;
+    this.kinds = ["plugin-apply"];
     this.timer = null; this.running = null; this.lastError = null;
   }
   start() {
@@ -130,7 +131,7 @@ export class PluginApplyWorker {
   }
   async run() {
     await migrateProductStore(this.database);
-    const job = await this.jobs.claim(["plugin-apply"], this.workerId, { leaseMs: this.leaseMs });
+    const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
     if (!job) return null;
     let lost = false;
     const renewal = setInterval(() => { void this.jobs.renew(job.userId, job.id, job.leaseToken, this.leaseMs)

@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "registryVersion": "method-quality/splits/1",
+  "recordedAt": "2026-09-07",
+  "purpose": "Which briefs a paired method evaluation may read, and which it may not. Plan 2026-09-07 §6.3.5, release criteria §7.",
+  "idAssignment": {
+    "briefIdFormat": "<capability-prefix>-<nnn>-<slug>",
+    "prefixes": {
+      "review": "clinical-evidence-synthesis (evals/clinical-review-quality/briefs.json)",
+      "appraisal": "evidence-appraisal (evals/evidence-appraisal/briefs.json)",
+      "geo": "geo-content (evals/geo-content/briefs.json)",
+      "ms": "manuscript-support (evals/manuscript-support/briefs.json)",
+      "grant": "research-grant-development (evals/research-grant-development/briefs.json)",
+      "topic": "research-topic-selection (evals/research-topic-quality/briefs.json ships three legacy ids without the prefix; they keep the ids they were authored with)"
+    },
+    "uniqueness": "A brief id is unique across the whole corpus, not per capability, because this registry and the ledger both key on the bare id.",
+    "generatedBriefs": "scripts/dev/generate-briefs.mjs (§6.3.3) writes `generated: {tdgVersion, chain, stages, seed}` and must mint ids in the same format; a generated id carries the capability prefix of the capability its chain belongs to.",
+    "splitRule": "bucket = int(sha256('method-quality/splits/1:' + briefId).hexdigest()[:8], 16) % 100; bucket < 40 -> holdout, else dev. The rule and its salt are pre-registered so a split cannot be re-drawn after a candidate has been seen. Adding a brief never moves an existing one.",
+    "precedence": "A brief pinned into `regression` is in `dev` regardless of its bucket, because a regression brief has to be runnable on every candidate cycle. Every such pin is listed in regression.pinned with the reason, so moving a brief out of the holdout is a recorded act rather than a silent one.",
+    "recompute": "python3 -c \"import hashlib,sys;print(int(hashlib.sha256(('method-quality/splits/1:'+sys.argv[1]).encode()).hexdigest()[:8],16)%100)\" <briefId>"
+  },
+  "policy": {
+    "margin": 0.02,
+    "marginNote": "Pre-registered non-inferiority margin, 2 percentage points (§7). An interval that spans the margin is inconclusive, never a pass.",
+    "holdoutUse": "The holdout is read once per decisive comparison and never during candidate development. run_paired.py refuses a config that names a holdout brief unless --use-holdout is passed with --holdout-reason.",
+    "distillationInput": "A brief id that appears in a `distillation-input.json` (§6.2) must not be in the holdout: a method distilled from a brief cannot be evaluated on it. apps/server tests and test_run_paired.py both assert this.",
+    "corpusSize": "21 briefs is a development corpus, not a decision corpus. §6.3.3 grows it to 100-200 briefs over 8-12 task families; until then a holdout of 3 briefs supports finding problems, not claiming a win (§7: twenty cases find problems, they do not make claims)."
+  },
+  "dev": {
+    "purpose": "Readable while iterating on a candidate. Findings here may steer the next revision.",
+    "briefs": [
+      "review-001-empa-kidney-report-family",
+      "review-003-mimic-overlap-unknown",
+      "appraisal-001-sglt2-hfpef",
+      "appraisal-002-tirzepatide-companion-papers",
+      "appraisal-004-nfl-primary-care-indirectness",
+      "geo-001-suxiao-baseline",
+      "geo-002-partial-outage",
+      "geo-003-absent-brand",
+      "geo-004-off-label-question-set",
+      "ms-001-strobe-methods-retrospective-cohort",
+      "ms-002-discussion-against-a-prior-evidence-package",
+      "ms-004-revision-with-the-reply-in-the-wrong-file",
+      "grant-001-nsfc-general",
+      "grant-002-rule-from-another-call",
+      "grant-003-feasibility-risk-that-survives",
+      "ordinary-constrained-cohort",
+      "sparse-evidence",
+      "already-answered-novelty-trap"
+    ]
+  },
+  "holdout": {
+    "purpose": "Never read during candidate development. One decisive paired run per promotion decision; the report records who opened it and why.",
+    "briefs": [
+      "review-002-aripiprazole-sparse-safety",
+      "appraisal-003-suxiao-jiuxin-wan-formulary",
+      "ms-003-effect-estimate-corrected-late"
+    ],
+    "opened": []
+  },
+  "regression": {
+    "purpose": "Overlay on dev. Frozen: every candidate runs the whole set, and zero new deterministic completeness or safety failures is a release condition (§7), not a score.",
+    "growth": "One brief per incident (development principle 6: every incident becomes an eval case). Adding a brief here is the only supported way to make a past failure permanent.",
+    "pinned": [
+      {
+        "id": "geo-001-suxiao-baseline",
+        "bucket": 54,
+        "movedFromHoldout": false,
+        "reason": "Its own `why` records the incident it reproduces: the first run's five questions all named the product, so the 25/25 mention rate measured the question set rather than the brand. The brief exists to keep a run able to tell the branded and unbranded sets apart."
+      }
+    ],
+    "briefs": [
+      "geo-001-suxiao-baseline"
+    ]
+  },
+  "chronological": {
+    "purpose": "Overlay for the temporal check: train on what existed before the cutoff, measure on briefs authored after it, so a method cannot be credited for fitting briefs that were written around it.",
+    "cutoff": null,
+    "briefs": [],
+    "pending": "Empty on purpose, and it stays empty until briefs carry an authoring date. No brief in the corpus records one today, and inferring it from git history would date the file, not the brief. Activation: the generator writes `generated.authoredAt` (ISO date) into every new brief and the seven hand-written sets are backfilled by their authors; then set `cutoff` and list every brief whose authoredAt is on or after it."
+  },
+  "unregistered": {
+    "note": "Briefs that exist in the repository but are deliberately not in any split, with the reason. run_paired.py refuses to run a brief that is in neither a split nor this list.",
+    "briefs": [
+      {
+        "id": "sop",
+        "file": "evals/source-understanding/briefs.json",
+        "reason": "source-understanding is `visibility: internal` and is dispatched by the source pipeline, not by a researcher. It is not a method-quality comparison surface."
+      },
+      {
+        "id": "paper",
+        "file": "evals/source-understanding/briefs.json",
+        "reason": "Same as `sop`."
+      },
+      {
+        "id": "notes",
+        "file": "evals/source-understanding/briefs.json",
+        "reason": "Same as `sop`."
+      }
+    ]
+  },
+  "pendingCapabilities": {
+    "note": "§6.3.3 requires at least three hand-reviewed briefs for each of these before the generator expands the corpus. They have none today, so no split can contain them.",
+    "capabilities": [
+      "adr-analysis",
+      "bibliometric-analysis",
+      "dataset-research-scoping",
+      "mendelian-randomization",
+      "meta-analysis",
+      "off-label-analysis",
+      "peer-review"
+    ]
+  }
+}

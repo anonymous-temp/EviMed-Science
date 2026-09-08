@@ -31,7 +31,8 @@ import test from "node:test";
 import { splitEpisodeBudget, verificationIdFor, verificationWorkspacePath } from "../src/autopilotService.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
-import { DISTILL_TRIGGER, FeedbackEvents, MethodDistillWorker, deliverableSubjectId } from "../src/feedbackEvents.mjs";
+import { DISTILL_TRIGGER, FeedbackEvents, deliverableSubjectId } from "../src/feedbackEvents.mjs";
+import { DISTILLATION_TRIGGERS, buildDistillationInput } from "../src/methodDistillationRuns.mjs";
 import { memoryNamespace } from "../src/memosClient.mjs";
 import { buildRuntimeLaunchPlan } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
@@ -930,28 +931,49 @@ test("an episode that spent everything it was given still leaves its own verific
 // something they had adopted" to a `method` document the runtime cannot mount.
 // ---------------------------------------------------------------------------
 
-test("the composed feedback ledger turns an adopted-then-edited deliverable into a candidate method", async (t) => {
-  const fixture = await composedApp(t);
+test("the composed feedback ledger queues the distillation exactly one worker claims", async (t) => {
+  const fixture = await composedApp(t, { learningEnabled: true });
   const { app, pool } = fixture;
 
   assert.ok(app.feedbackEvents instanceof FeedbackEvents, "a product database must compose the feedback ledger");
-  assert.ok(app.methodDistillWorker instanceof MethodDistillWorker, "and the worker that reads it back");
-  assert.deepEqual(app.methodDistillWorker.kinds, ["distill"],
-    "a worker that never claims `distill` leaves every lesson queued forever");
-  assert.equal(app.methodDistillWorker.feedback, app.feedbackEvents,
-    "the worker must read the ledger the API routes write to");
-  assert.equal(app.methodDistillWorker.documents, app.capsuleService.documents,
-    "and write through the document store the rest of the composition uses");
 
-  // The poll actually reached the queue asking for its own kind. Read from the
-  // bound parameter rather than the SQL text, like the autopilot claim above.
-  const claimed = await waitFor(async () => pool.calls.some((call) =>
-    /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
-    && Array.isArray(call.values[0]) && call.values[0].join() === "distill"));
-  assert.ok(claimed, "the composed distill worker never asked the job queue for work");
+  // The property the merge broke, asserted over the composition rather than
+  // over either worker: `distill` has exactly one claimer.
+  //
+  // It had two. `jobs.claim` selects by kind with `SKIP LOCKED`, so whichever
+  // polled first took the job — and both classify a payload written for the
+  // other as a terminal failure, which burns the idempotency key and makes the
+  // lesson unqueueable forever. Nothing failed in either worker's own tests,
+  // because a claim race between two objects is not visible from inside one of
+  // them. Counting the claimers is.
+  const workers = [app.pluginApplyWorker, app.memoryIndexWorker, app.sourceWorker, app.autopilotWorker, app.learningWorker]
+    .filter(Boolean);
+  // Every worker declares the kinds it claims, so this is countable at all.
+  // Four of the five used to pass an array literal straight into `claim`, which
+  // is why the collision was invisible from here: there was nothing to count.
+  for (const worker of workers) {
+    assert.ok(Array.isArray(worker.kinds) && worker.kinds.length > 0,
+      `${worker.constructor.name} must declare the job kinds it claims`);
+  }
+  /** @type {Map<string, string[]>} */
+  const byKind = new Map();
+  for (const worker of workers) {
+    for (const kind of worker.kinds) byKind.set(kind, [...(byKind.get(kind) ?? []), worker.constructor.name]);
+  }
+  for (const [kind, owners] of byKind) {
+    assert.equal(owners.length, 1,
+      `job kind ${kind} is claimed by ${owners.join(" and ")} — SKIP LOCKED would decide which one destroys the other's jobs`);
+  }
 
-  // Drive the rest by hand, so the assertions below cannot race the poll.
-  await app.methodDistillWorker.close();
+  const claimers = workers.filter((worker) => worker.kinds.includes("distill"));
+  assert.equal(claimers.length, 1, "the learning loop is composed here, so `distill` must have its one claimer");
+
+  // Producer and claimer agree, in both directions. Two claimers race; zero
+  // claimers with a live producer is the quieter failure of the same kind — a
+  // job enqueued per adopted-then-edited deliverable, a `distillJobId` handed
+  // back to the browser, and nothing that will ever run it.
+  assert.equal(Boolean(app.feedbackEvents.jobs), claimers.length === 1,
+    "the feedback ledger must enqueue distillation exactly when something claims it");
 
   const subject = { type: "deliverable", id: deliverableSubjectId("run-adopted", "reports/evidence.md") };
   const detail = (contentSha256, extra = {}) => ({ path: "reports/evidence.md", runId: "run-adopted", contentSha256, ...extra });
@@ -963,20 +985,58 @@ test("the composed feedback ledger turns an adopted-then-edited deliverable into
     trigger: "deliverable-edited", subject, identity: ["b".repeat(64)], projectId: PROJECT_ID, runId: "run-adopted",
     detail: detail("b".repeat(64), { summary: "把结论段的效应量补上了置信区间。" }),
   });
+  if (claimers.length === 0) {
+    assert.equal(edit.distillJob, null, "a deployment with no claimer must not queue a lesson nobody will read");
+    assert.ok(pool.calls.length > 0, "the composed ledger never reached the database");
+    return;
+  }
   assert.ok(edit.distillJob, "the producer never enqueued the lesson");
-  assert.deepEqual(edit.distillJob.payload, {
-    runId: "run-adopted", feedbackEventIds: [adoption.event.id, edit.event.id], trigger: DISTILL_TRIGGER,
-  });
 
-  const finished = await app.methodDistillWorker.run();
-  assert.equal(finished.status, "succeeded", "the composed worker did not complete the job it claimed");
-  const written = [...pool.documents.values()].find((row) => row.kind === "method");
-  assert.ok(written, "the distilled candidate never reached the document store");
-  assert.equal(written.payload.recordType, "learned-method");
-  assert.equal(written.payload.status, "candidate",
-    "a candidate the researcher never approved must never be able to reach a runtime");
-  assert.match(written.payload.body, /把结论段的效应量补上了置信区间。/);
-  assert.deepEqual(written.payload.counts, { approvals: 0, applications: 0 });
+  // The trigger is the distillation module's own, and the two events travel
+  // whole under `feedback` — the field `buildDistillationInput` reads. A
+  // payload of ids alone would reach a consumer that cannot resolve them.
+  assert.equal(edit.distillJob.payload.trigger, DISTILL_TRIGGER);
+  assert.ok(DISTILLATION_TRIGGERS.includes(edit.distillJob.payload.trigger),
+    "the queued trigger must be one the distillation run accepts, or the only claimer fails it terminally");
+  assert.equal(edit.distillJob.payload.runId, "run-adopted");
+  assert.deepEqual(edit.distillJob.payload.feedbackEventIds, [adoption.event.id, edit.event.id]);
+  assert.deepEqual(edit.distillJob.payload.feedback.map((event) => event.id), [adoption.event.id, edit.event.id]);
+  assert.match(JSON.stringify(edit.distillJob.payload.feedback), /把结论段的效应量补上了置信区间。/,
+    "the edit summary is the whole readable evidence of the lesson and must reach the run");
+
+  // And the input assembler accepts it as-is. This is the seam the two branches
+  // disagreed across, so it is checked against the real builder rather than by
+  // eye.
+  const input = buildDistillationInput({
+    run: { id: edit.distillJob.payload.runId }, trigger: edit.distillJob.payload.trigger,
+    transcript: null, feedback: edit.distillJob.payload.feedback,
+  });
+  assert.equal(input.trigger, DISTILL_TRIGGER);
+  assert.equal(input.feedback.length, 2);
+  assert.ok(pool.calls.length > 0, "the composed ledger never reached the database");
+});
+
+test("a deployment without the learning loop records the fact and queues nothing", async (t) => {
+  // The other direction of the same invariant, and the default shape of every
+  // deployment today. Without this the assertion above would be satisfied by a
+  // build that simply never composes a claimer.
+  const { app } = await composedApp(t);
+  assert.equal(app.learningWorker, null, "learning is off by default");
+  assert.equal(app.feedbackEvents.jobs, null, "and the ledger must not queue work nothing will claim");
+
+  const subject = { type: "deliverable", id: deliverableSubjectId("run-adopted", "reports/evidence.md") };
+  const detail = (contentSha256, extra = {}) => ({ path: "reports/evidence.md", runId: "run-adopted", contentSha256, ...extra });
+  await app.feedbackEvents.record(USER_ID, {
+    trigger: "deliverable-adopted", subject, projectId: PROJECT_ID, runId: "run-adopted", detail: detail("a".repeat(64)),
+  });
+  const edit = await app.feedbackEvents.record(USER_ID, {
+    trigger: "deliverable-edited", subject, identity: ["b".repeat(64)], projectId: PROJECT_ID, runId: "run-adopted",
+    detail: detail("b".repeat(64), { summary: "把结论段的效应量补上了置信区间。" }),
+  });
+  // The fact is still recorded — that half stands on its own and is what a
+  // later deployment distils from.
+  assert.ok(edit.event.id, "the event must be recorded whether or not anything distils it");
+  assert.equal(edit.distillJob, null, "and no job is queued for a loop that does not exist");
 });
 
 /**
@@ -1023,6 +1083,11 @@ test("confirming a pending memory over HTTP writes the feedback event the loop n
   const fixture = await composedApp(t, {
     memosUrl: "http://memos.internal", memosAccessToken: "memos_pat_test",
     memosRequestTimeoutMs: 1_000, memosFetch: memory.fetchImpl,
+    // The distillation half of this test needs the loop that claims what the
+    // ledger queues. Off by default, and the ledger is honest about it: with no
+    // claimer composed it enqueues nothing and answers a null job id, so this
+    // has to ask for the deployment it is actually asserting about.
+    learningEnabled: true,
   });
   const address = fixture.app.server.address();
   const headers = {

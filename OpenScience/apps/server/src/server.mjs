@@ -3,7 +3,7 @@ import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createServer } from "node:http";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -15,6 +15,16 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore } from "./agentRuns.mjs";
+import { collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from "./runTranscripts.mjs";
+import { resolveGatewayFetch } from "./recordedGateway.mjs";
+import { LearningService } from "./learningService.mjs";
+import { createLearningRuntime } from "./learningRuntime.mjs";
+import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
+import { MethodConsolidation } from "./methodConsolidation.mjs";
+import { LearningWorker } from "./learningWorker.mjs";
+import { runMethodObservations } from "./methodObservations.mjs";
+import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
+import { mountedMethodDigest } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -33,6 +43,7 @@ import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usag
 import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
+import { createLearningRoutes } from "./learningRoutes.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -41,7 +52,7 @@ import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSea
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
-import { FeedbackEvents, MethodDistillWorker, deliverableSubjectId } from "./feedbackEvents.mjs";
+import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
@@ -605,9 +616,17 @@ export function createWebApiApp(overrides = {}) {
   // What the researcher did, and the one producer that reads it back. Both
   // exist exactly when the product ledger does; without it the memory routes
   // below record nothing and say so by being null rather than by pretending.
-  const feedbackEvents = productDatabase ? new FeedbackEvents({ database: productDatabase, jobs: productJobs }) : null;
-  const methodDistillWorker = feedbackEvents && productDocuments && productJobs
-    ? new MethodDistillWorker({ jobs: productJobs, documents: productDocuments, feedback: feedbackEvents }) : null;
+  // The queue is handed over only when something will claim from it.
+  //
+  // `distill` has exactly one claimer, `LearningWorker`, and that worker is
+  // composed only when `learningEnabled`. Passing the queue unconditionally
+  // would enqueue a lesson per adopted-then-edited deliverable on a deployment
+  // that has nothing to run it — jobs that sit `queued` forever while
+  // `POST /api/feedback/events` reports a `distillJobId` for work that will
+  // never happen. With no queue the ledger still records the fact, which is the
+  // half of this that stands on its own, and answers `null` for the job.
+  const feedbackEvents = productDatabase
+    ? new FeedbackEvents({ database: productDatabase, jobs: config.learningEnabled ? productJobs : null }) : null;
   /** Optional infrastructure says so, rather than answering 500 to a valid request. */
   function requireFeedbackEvents() {
     if (!feedbackEvents) throw new HttpError(503, "feedback_unavailable", "Recording feedback requires the shared product store.");
@@ -638,6 +657,112 @@ export function createWebApiApp(overrides = {}) {
     }
   }
 
+  const learningService = productDocuments
+    ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService })
+    : null;
+  const learningRoutes = createLearningRoutes({ store, service: learningService, maxJsonBytes: config.maxJsonBytes });
+  // Terminal-hook writes still in flight.
+  //
+  // `onRunFinished` fires from the run store's own monitor, so a transcript
+  // write can land after the process has been asked to stop — and in a test
+  // that is a write racing the temp directory's removal. Held here so `close`
+  // can wait for them, the way it already waits for the capsule cleanup and the
+  // inbox default pass.
+  /** @type {Set<Promise<unknown>>} */
+  const learningWrites = new Set();
+  /** @param {Promise<unknown>} work @returns {Promise<unknown>} */
+  const trackLearningWrite = (work) => {
+    const tracked = work.finally(() => learningWrites.delete(tracked));
+    learningWrites.add(tracked);
+    return tracked;
+  };
+  /**
+   * Fold one finished run into the counters of every method it was given.
+   *
+   * Best effort and self-auditing, like everything else in the terminal hook: a
+   * counter that could not be written must not be the reason a run reports
+   * failure, and must not be silent either.
+   *
+   * @param {{project: any, run: any, sessions: readonly any[]}} input
+   * @returns {Promise<void>}
+   */
+  /** @param {string} text @returns {string} */
+  const sha256Hex = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+  const recordMethodUse = async ({ project, run, sessions }) => {
+    if (!learningService || !config.learningEnabled) return;
+    const projection = await agentRuns.runWorkflowProjection(project, run);
+    if (!projection) return;
+    const approved = await learningService.approvedMethods(project.userId, { projectId: project.id });
+    const accountWide = await learningService.approvedMethods(project.userId, { projectId: null });
+    /** @type {{id: string, name: string, digest: string}[]} */
+    const methods = [];
+    for (const document of [...approved, ...accountWide]) {
+      if (methods.some((method) => method.id === document.id)) continue;
+      const name = String(document.payload?.frontmatter?.name ?? "");
+      if (!name) continue;
+      methods.push({ id: String(document.id), name, digest: mountedMethodDigest(document.payload, sha256Hex) });
+    }
+    const derived = runMethodObservations({ run, projection, methods, sessions });
+    if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
+      await agentRuns.recordLearning(project, run.id, {
+        methodsLoaded: derived.methodsLoaded,
+        methodsInvoked: derived.methodsInvoked,
+      });
+    }
+    // A method the run read without any delegation to hang it on. It earns no
+    // observation — no mounted digest, no deliverable verdict — but a run that
+    // answered directly out of a learned method and left no trace of it is how
+    // a whole product line comes to look like it never uses the library.
+    if (derived.invokedWithoutMount.length) {
+      await securityAudit(config, "learning.observation.record", "unmounted", {
+        userId: project.userId, projectId: project.id, runId: run.id,
+        code: `read_without_receipt:${derived.invokedWithoutMount.length}`,
+      });
+      // And into the method's own ledger, which is where the loop reads it.
+      // The audit line alone showed the reading to an operator and hid it from
+      // `retirementProposal`, so a method the answer line opened daily still
+      // arrived at the nightly job with a strength of 0 and could be proposed
+      // for retirement as unused. One timestamp for the run, so several methods
+      // read by the same run are read at the same moment.
+      const readAt = new Date().toISOString();
+      for (const entry of derived.invokedWithoutMount) {
+        await learningService.recordRead(project.userId, entry.id, readAt).catch(async (error) => {
+          await securityAudit(config, "learning.observation.record", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "method_read_failed",
+          });
+        });
+      }
+    }
+    if (!methods.length) return;
+    for (const { methodId, observation } of derived.observations) {
+      await learningService.recordObservation(project.userId, methodId, observation).catch(async (error) => {
+        await securityAudit(config, "learning.observation.record", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "method_observation_failed",
+        });
+      });
+    }
+    for (const methodId of derived.eligible) {
+      await learningService.recordEligible(project.userId, methodId).catch(() => {});
+    }
+    // A mounted digest that is not the stored one is worth a line. It is not an
+    // error — a method amended mid-run is legitimate — but it is the one way
+    // this producer can silently record nothing while everything looks healthy,
+    // which is the failure the whole module exists to have ended.
+    if (derived.mismatched.length) {
+      await securityAudit(config, "learning.observation.record", "stale", {
+        userId: project.userId, projectId: project.id, runId: run.id,
+        code: `digest_moved:${derived.mismatched.length}`,
+      });
+    }
+  };
+  // Constructed after the runtime exists, and left null when the loop is off
+  // so that a deployment that has not opted in has no claimer for the two
+  // learning job kinds rather than a claimer that declines every job.
+  let learningRuntime = null;
+  /** @type {any} */
+  let learningWorker = null;
   const capsuleService = productDocuments ? new CapsuleService(productDocuments, { indexing: memoryIndexing }) : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
@@ -776,6 +901,8 @@ export function createWebApiApp(overrides = {}) {
   let autopilotWorker = null;
   let autopilotScheduleTimer = null;
   let autopilotScheduleRun = null;
+  let consolidationScheduleTimer = null;
+  let consolidationScheduleRun = null;
   let capsuleCleanupTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
@@ -848,6 +975,23 @@ export function createWebApiApp(overrides = {}) {
     // sequence directly to the stall monitor; the model's workspace
     // projection remains useful UI detail, but is not the heartbeat.
     onRunActivity: (project, runId, activity) => agentRuns?.noteKernelActivity(project, runId, activity),
+    // Recorded, not merely published: the browser shows a compaction card and
+    // forgets it, while "does compaction ever fire, and what does it cost"
+    // needs the ledger. Today the answer is expected to be "never" — the
+    // control plane declares a 1,000,000-token window against a 400,000-token
+    // run budget — and an empty column is exactly the measurement §6.5 asks for
+    // before any threshold is touched.
+    onCompaction: (project, runId, record) => {
+      void agentRuns?.recordLearning(project, runId, {
+        appendCompaction: {
+          at: new Date().toISOString(),
+          seq: record.seq,
+          replaced: record.replaced,
+          tokens: record.tokens,
+          policy: config.runtimeCompactionPolicy ?? "basic",
+        },
+      }).catch(() => {});
+    },
   });
   let agentRuns;
   const runtimeManager = new RuntimeManager(config, {
@@ -1043,6 +1187,103 @@ export function createWebApiApp(overrides = {}) {
           });
         }
       }
+      // Write the run down before anything else can decide not to.
+      //
+      // This is the only moment the conversation is still readable: the
+      // container is alive because the terminal write has not released it yet,
+      // and `sessionTranscript` starts answering `runtime_not_running` shortly
+      // afterwards. It sits above the Memos branch deliberately — that branch
+      // returns early on a deployment with no memory service, and a deployment
+      // without Memos is still a deployment whose runs should be learnable.
+      //
+      // Best effort, and it audits its own failure: a throw in this callback is
+      // caught by `finishInternal` and then caught again, so a step that does
+      // not report for itself fails invisibly.
+      await trackLearningWrite((async () => {
+        try {
+          const sessions = await collectRunTranscripts(runtimeManager, project, run);
+          const receipt = await persistRunTranscript({ project, run, sessions });
+          await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          if (receipt.completeness !== "complete") {
+            await securityAudit(config, "run.transcript.persist", "partial", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: receipt.missing[0]?.reason ?? "incomplete",
+            });
+          }
+          // What actually fed what, for the evaluation corpus.
+          //
+          // Every edge in all fifteen tool graphs is `via: "schema"` — a type
+          // that *could* flow — and only an executed edge may carry a task, so
+          // the brief generator honestly produced nothing. This is the receipt
+          // that was missing; it costs one pass over the transcript already in
+          // hand.
+          try {
+            const written = await persistExecutedToolEdges({ project, run, sessions });
+            // The call sequence itself, not only the pairs it implies. The plan
+            // builds the corpus "execute first, write the task second", and the
+            // run that established the edges is the execution — so the golden
+            // trace it asks for is read off the transcript rather than waiting
+            // for a fixture harness that would only ever be a claim about it.
+            const traced = await persistGoldenTraces({ project, run, sessions });
+            if (written.edges || traced.traces) {
+              await securityAudit(config, "run.tool.edges", "ok", {
+                userId: project.userId, projectId: project.id, runId: run.id,
+                code: `edges:${written.edges} traces:${traced.traces} steps:${traced.steps}`,
+              });
+            }
+          } catch (error) {
+            await securityAudit(config, "run.tool.edges", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "tool_edges_unavailable",
+            });
+          }
+          // The counters the whole loop turns on.
+          //
+          // This is the producer `recordObservation` never had. Without it the
+          // ledger's `learning` row records what was mounted and nothing about
+          // what came of it, `learning.counts` stays at zero for every method,
+          // and no inferred method can ever reach a paired evaluation — a
+          // library that only ever grows candidates, which is indistinguishable
+          // from a library with nothing worth promoting.
+          //
+          // It runs inside the transcript write on purpose: it needs the same
+          // sessions, and both must finish before the run's container is let go.
+          await recordMethodUse({ project, run, sessions });
+        } catch (error) {
+          await securityAudit(config, "run.transcript.persist", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id,
+            code: typeof error?.code === "string" ? error.code : "run_transcript_unavailable",
+          });
+        }
+      })());
+      // Queue the run for distillation when it is worth learning from.
+      //
+      // Trigger (b) of the plan's three: a package that needed at least one
+      // repair round and was then accepted. That is the cheapest honest signal
+      // the system has — the run was wrong in a specific, recorded way and then
+      // became right — and unlike the other two triggers it needs no feedback
+      // event, so it works on the day this ships.
+      //
+      // A run with no repair rounds is not queued. A loop that learns from
+      // every success learns mostly that things usually work.
+      if (learningWorker && productJobs && run.status === "succeeded") {
+        const rounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
+        if (rounds >= 1 && run.transcript?.completeness === "complete") {
+          await productJobs.enqueue(project.userId, "distill", {
+            runId: run.id,
+            trigger: "repair_accepted",
+            repairRounds: run.repairRounds,
+          }, {
+            idempotencyKey: `distill:${run.id}:repair_accepted`,
+            projectId: project.id,
+          }).catch(async (error) => {
+            await securityAudit(config, "learning.distill.enqueue", "failed", {
+              userId: project.userId, projectId: project.id, runId: run.id,
+              code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
+            });
+          });
+        }
+      }
       if (!memosClient.configured) {
         if (config.requireMemos) {
           /** @type {Error & Record<string, any>} */
@@ -1078,6 +1319,10 @@ export function createWebApiApp(overrides = {}) {
         await agentRuns.appendQualityNotices(project, run.id, [
           `记忆抽取未产出记录：消息 ${messages.length} 条、候选 ${memoryResult.proposed} 条、`
           + `采纳 ${memoryResult.extracted} 条、驳回 ${memoryResult.rejected} 条`
+          // A third cause of the same zero: the transcript was mostly our own
+          // injected context, which the extractor refuses to read back as if
+          // the user had said it.
+          + `${memoryResult.excluded?.length ? `、未读取 ${memoryResult.excluded.map((item) => `${item.count} 条（${item.reason === "injected" ? "系统注入" : "回合未完成"}）`).join("")}` : ""}`
           + `${memoryResult.extractionError ? `（抽取报错：${memoryResult.extractionError}）` : ""}`
           + "。空对话与抽取失效在结果上一样，这行区分它们。",
         ], { unchecked: true }).catch(() => {});
@@ -1137,6 +1382,9 @@ export function createWebApiApp(overrides = {}) {
           ...(memoryResult.pendingReasons?.length
             ? [`parked=${memoryResult.pendingReasons.map((item) => `${item.reason}:${item.count}`).join("|")}`]
             : []),
+          ...(memoryResult.excluded?.length
+            ? [`excluded=${memoryResult.excluded.map((item) => `${item.reason}:${item.count}`).join("|")}`]
+            : []),
           ...(memoryResult.rejectionReasons?.length ? [`why=${memoryResult.rejectionReasons.slice(0, 3).join("|")}`] : []),
           ...(memoryResult.extractionError ? [`error=${memoryResult.extractionError}`] : []),
           ...(historyError ? [`history=${historyError}`] : []),
@@ -1175,6 +1423,74 @@ export function createWebApiApp(overrides = {}) {
         sourceId: match[1], generation: Number(match[2]), jobIds: [match[3]], attemptId: match[4] }));
     },
   });
+  if (learningService && productJobs && config.learningEnabled) {
+    learningRuntime = createLearningRuntime({
+      config, store, agentRuns, runtimeManager, researchSessions,
+      registry: agentRegistry, usageLedger, prepareContext: prepareResearchContext,
+    });
+    const dispatchLearningRun = (request) => learningRuntime.dispatch(request);
+    const readLearningResult = (identity) => learningRuntime.readResult(identity);
+    const distillation = new MethodDistillationRuns({
+      dispatch: dispatchLearningRun,
+      readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-distillation" }),
+      learning: learningService, jobs: productJobs, notifications: notificationService,
+    });
+    const consolidation = new MethodConsolidation({
+      dispatch: dispatchLearningRun,
+      readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
+      learning: learningService, jobs: productJobs, notifications: notificationService,
+      // A paired evaluation dispatches hundreds of real runs, so it is opt-in:
+      // with no command configured an `evaluate` job fails by name rather than
+      // succeeding without having evaluated anything. When an operator does
+      // configure one, it is spawned as its own process with the job's own
+      // budget, and its stdout is expected to be the report the runner writes.
+      evaluate: config.learningEvaluationCommand
+        ? (request) => runPairedEvaluation(config.learningEvaluationCommand, request)
+        : null,
+    });
+    learningWorker = new LearningWorker({
+      jobs: productJobs, distillation, consolidation,
+      enabled: config.learningEnabled,
+      window: config.learningWindow,
+      pollMs: config.learningPollMs,
+      leaseMs: config.learningLeaseMs,
+      resolveProject: async (job) => {
+        const user = await store.userById(job.userId);
+        return user ? store.requireProject(user, job.projectId) : null;
+      },
+      resolveRun: async (project, job) => {
+        if (!project) return null;
+        const runId = String(job.payload?.runId ?? "");
+        return (await agentRuns.list(project)).find((run) => run.id === runId) ?? null;
+      },
+      // Transcript retention, which `config.transcriptRetentionDays` promised
+      // and nothing delivered: `pruneRunTranscripts` had no caller, so the knob
+      // read like a policy and behaved like a comment.
+      maintain: async () => {
+        await store.loadUsers();
+        for (const user of [...store.users.values()]) {
+          // One project's unreadable directory must not stop the sweep: the
+          // point of a retention policy is that it runs, and a policy that
+          // stops at the first awkward project is a policy that protects the
+          // projects nobody looks at least of all.
+          const projects = await store.listProjects(user).catch(() => []);
+          for (const summary of projects) {
+            try {
+              const project = await store.requireProject(user, summary.id);
+              const { removed } = await pruneRunTranscripts(project, { retentionDays: config.transcriptRetentionDays });
+              if (removed.length) {
+                await securityAudit(config, "run.transcript.prune", "ok", {
+                  userId: user.id, projectId: project.id, code: `removed:${removed.length}`,
+                });
+              }
+            } catch {
+              // isolated: evimed_run_transcript_prune_failed_total
+            }
+          }
+        }
+      },
+    });
+  }
   if (autopilotService && config.autopilotEnabled) {
     const episodeAgents = {
       "literature-sentinel": "clinical-evidence-synthesis",
@@ -1448,8 +1764,13 @@ export function createWebApiApp(overrides = {}) {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
   });
+  // The evaluation corpus needs both arms to see byte-identical upstream
+  // answers, so the gateway's fetch is replaceable by a fixture reader. Neither
+  // knob is set in production, and setting the replay one makes a miss a named
+  // failure rather than a live request.
+  const gatewayFetch = resolveGatewayFetch(process.env, overrides.publicSourceFetch ?? globalThis.fetch);
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
-    fetchImpl: overrides.publicSourceFetch ?? globalThis.fetch,
+    fetchImpl: gatewayFetch,
   });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
@@ -1503,6 +1824,7 @@ export function createWebApiApp(overrides = {}) {
           memoryIndexWorker?.reconciling,
           sourceWorker?.status?.().running,
           autopilotWorker?.status?.().running,
+          learningWorker?.status?.().running,
         ].filter(Boolean).length;
         return {
           activeCommands,
@@ -1681,6 +2003,7 @@ export function createWebApiApp(overrides = {}) {
       if (await pluginRoutes(req, res)) return;
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
+      if (await learningRoutes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
 
@@ -2196,6 +2519,39 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // The accepted version of a package, before the repair loop touched it.
+      //
+      // Read-only, and the only reader these snapshots have ever had. The
+      // writer has existed since the repair loop was built; without this a run
+      // that was accepted and then edited left its accepted bytes on disk with
+      // no way to reach them, which is how 38 minutes of gate-clean work became
+      // unrecoverable on 2026-08-31.
+      if (pathname.startsWith("/api/agent-runs/") && pathname.endsWith("/repair-revisions") && req.method === "GET") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length, -"/repair-revisions".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const ctx = await context(req, res);
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        sendJson(res, 200, { data: await agentRuns.listRepairRevisions(ctx.project, runId) });
+        return;
+      }
+
+      if (pathname.startsWith("/api/agent-runs/") && pathname.includes("/repair-revisions/") && req.method === "GET") {
+        const rest = pathname.slice("/api/agent-runs/".length);
+        const [rawRunId, marker, rawDigest, ...extra] = rest.split("/");
+        if (!rawRunId || marker !== "repair-revisions" || !rawDigest || extra.length > 0) {
+          throw new HttpError(404, "not_found", "Route not found.");
+        }
+        const ctx = await context(req, res);
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const digest = decodeRouteComponent(rawDigest, "accepted digest");
+        // The path is a query parameter, not a path segment: it contains
+        // slashes by construction, and encoding them into one segment is the
+        // shape every route in this file refuses.
+        const relative = new URL(req.url ?? "/", "http://localhost").searchParams.get("path") ?? "";
+        sendJson(res, 200, { data: await agentRuns.readRepairRevisionFile(ctx.project, runId, digest, relative) });
+        return;
+      }
+
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
@@ -2351,6 +2707,47 @@ export function createWebApiApp(overrides = {}) {
         });
         const run = pluginService ? await pluginService.withAdmission(ctx.project, dispatch) : await dispatch();
         sendJson(res, 202, { data: run });
+        return;
+      }
+
+      // A correction to a run that is already going.
+      //
+      // Deliberately its own route rather than an exemption in the dispatch
+      // rule. A dispatch creates a run, a run binds a deliverable contract, and
+      // one research session may have one active run — so relaxing
+      // `agent_run_active` would have produced two runs, two contracts and two
+      // verdicts for one conversation. A correction is input to the run that is
+      // already going: same run, same contract, same gate, and the ledger says
+      // how many corrections it took.
+      if (pathname.startsWith("/api/agent-runs/") && pathname.endsWith("/steer") && req.method === "POST") {
+        const rawRunId = pathname.slice("/api/agent-runs/".length, -"/steer".length);
+        if (!rawRunId || rawRunId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
+        const runId = decodeRouteComponent(rawRunId, "agent run id");
+        const ctx = await context(req, res);
+        const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run correction");
+        const unknown = Object.keys(body).filter((field) => field !== "text");
+        if (unknown.length > 0) {
+          throw new HttpError(400, "invalid_payload", `Unknown correction field(s): ${unknown.sort().join(", ")}.`);
+        }
+        const text = assertString(body.text, "text", { max: 4000 });
+        if (!text.trim()) throw new HttpError(400, "invalid_payload", "text must not be empty.");
+        const run = (await agentRuns.list(ctx.project)).find((item) => item.id === runId);
+        if (!run) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
+        const correctionRequestId = randomId("req_");
+        // Recorded before the kernel is told, like the repair path: a request
+        // id the ledger has not seen cannot be matched to the run it belongs to.
+        const updated = await agentRuns.recordCorrection(ctx.project, runId, correctionRequestId);
+        await runtimeManager.dispatchPrompt(ctx.project, run.sessionId, {
+          // Marked, so a compaction can carry it as a handle rather than
+          // summarising away one half of a modified instruction — the failure
+          // the published implementations of this feature all name.
+          text: `<evimed-correction>${text}</evimed-correction>`,
+          runId,
+          requestId: correctionRequestId,
+          mode: "steer",
+          strictContext: true,
+        });
+        sendJson(res, 202, { data: { id: runId, corrections: updated?.corrections ?? 0 } });
         return;
       }
 
@@ -2936,6 +3333,68 @@ export function createWebApiApp(overrides = {}) {
     return autopilotScheduleRun;
   };
 
+  /**
+   * Enqueue one night's consolidation per project that has methods to consolidate.
+   *
+   * This did not exist, and its absence made the whole learning loop a one-way
+   * street. `MethodConsolidation.sleep` is the only code path that calls
+   * `learning.approve`, and `approve` is the only way a `candidate` method ever
+   * becomes `approved` — which is the only status `capsuleMethods.mjs` will
+   * mount. It is also the only caller of `retirementProposals`. Distillation
+   * therefore wrote candidates forever, nothing was ever promoted, nothing was
+   * ever retired, and every test of the promotion rule passed because they all
+   * call `sleep` directly. A producer nobody writes is invisible to unit tests
+   * by construction: there is no assertion to fail.
+   *
+   * Enqueued whenever the day turns over, not on a schedule of its own. The
+   * spending window is `LearningWorker`'s to enforce — it declines to claim
+   * outside it — so a job queued at noon simply waits for the evening rather
+   * than being dropped, and a deployment whose window never opens accumulates
+   * exactly one job per project per day instead of losing the day entirely.
+   *
+   * Per project rather than per user, because `sleep` reads and writes one
+   * project's library: `listMethods`, `approve` and `retirementProposals` are
+   * all scoped by `job.projectId`, so a single account-wide job would
+   * consolidate whichever project it happened to name and silently skip the
+   * rest.
+   */
+  const scheduleConsolidation = async () => {
+    if (!learningService || !productJobs || !config.learningEnabled || consolidationScheduleRun) {
+      return consolidationScheduleRun;
+    }
+    const schedule = async () => {
+      // Projects holding at least one method that is not already retired. A
+      // library of nothing has nothing to consolidate, and enqueueing for it
+      // would put a job on every project in the deployment every night.
+      const result = await productDatabase.query(`SELECT DISTINCT user_id,project_id FROM evimed_product.documents
+        WHERE kind='method' AND deleted_at IS NULL AND project_id IS NOT NULL
+          AND payload->>'status' IS DISTINCT FROM 'retired'
+        ORDER BY user_id,project_id LIMIT 200`);
+      const date = new Date().toISOString().slice(0, 10);
+      for (const row of result.rows) {
+        try {
+          await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
+            // One pass per project per day however often this timer fires.
+            idempotencyKey: `consolidate:sleep:${row.project_id}:${date}`,
+            projectId: row.project_id,
+          });
+        } catch (error) {
+          await securityAudit(config, "learning.consolidate.enqueue", "failed", {
+            userId: row.user_id, projectId: row.project_id,
+            code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
+          });
+        }
+      }
+    };
+    consolidationScheduleRun = maintenanceMutation(schedule)
+      .catch((error) => {
+        if (error?.code === "maintenance_active") return null;
+        throw error;
+      })
+      .finally(() => { consolidationScheduleRun = null; });
+    return consolidationScheduleRun;
+  };
+
   let usageReconcileTimer = null;
   let usageReconcileRun = null;
   // A reservation whose settlement never arrived would otherwise stay 'reserved'
@@ -2964,20 +3423,22 @@ export function createWebApiApp(overrides = {}) {
 
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
-    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, methodDistillWorker]) {
+    for (const worker of [pluginApplyWorker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
-    for (const worker of [memoryIndexWorker, sourceWorker, autopilotWorker]) {
+    for (const worker of [memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker]) {
       if (worker?.reconcileTimer) clearInterval(worker.reconcileTimer);
       if (worker) worker.reconcileTimer = null;
     }
     if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
     if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
+    if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
     if (usageReconcileTimer) clearInterval(usageReconcileTimer);
     capsuleCleanupTimer = null;
     autopilotScheduleTimer = null;
+    consolidationScheduleTimer = null;
     notificationTimer = null;
     usageReconcileTimer = null;
   };
@@ -2990,7 +3451,7 @@ export function createWebApiApp(overrides = {}) {
       memoryIndexWorker?.start();
       sourceWorker?.start();
       autopilotWorker?.start();
-      methodDistillWorker?.start();
+      learningWorker?.start();
       await retryCapsuleCleanup();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
       if (capsuleTransferService && !capsuleCleanupTimer) {
@@ -3002,6 +3463,13 @@ export function createWebApiApp(overrides = {}) {
       if (autopilotService && !autopilotScheduleTimer) {
         autopilotScheduleTimer = setInterval(() => { void scheduleAutopilot(); }, 60_000);
         autopilotScheduleTimer.unref();
+      }
+      // Hourly, not minutely: the job it enqueues is idempotent per project per
+      // day, so the only thing a faster tick buys is 60 times the queries.
+      if (learningWorker && !consolidationScheduleTimer) {
+        consolidationScheduleTimer = setInterval(() => { void scheduleConsolidation(); }, 3_600_000);
+        consolidationScheduleTimer.unref();
+        void scheduleConsolidation();
       }
       await applyNotificationDefaults();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -3041,7 +3509,12 @@ export function createWebApiApp(overrides = {}) {
     // inbox dependency here left every test green and the notices dark.
     memoryIntelligence,
     feedbackEvents,
-    methodDistillWorker,
+    // The only claimer of `distill` and `consolidate`. Returned for the same
+    // reason as the line above it, and the absence was not theoretical: the
+    // composition assertion that `distill` has at most one claimer read
+    // `app.learningWorker`, got `undefined`, filtered it out and passed on an
+    // empty list — a test of a collision that could not see either side of it.
+    learningWorker,
     capsuleService,
     pluginService,
     pluginApplyWorker,
@@ -3079,9 +3552,11 @@ export function createWebApiApp(overrides = {}) {
       await memoryIndexWorker?.close();
       await sourceWorker?.close();
       await autopilotWorker?.close();
-      await methodDistillWorker?.close();
+      await learningWorker?.close();
       if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
       await autopilotScheduleRun;
+      if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
+      await consolidationScheduleRun;
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       if (usageReconcileTimer) clearInterval(usageReconcileTimer);
@@ -3092,6 +3567,23 @@ export function createWebApiApp(overrides = {}) {
       // following makes it reconnect to a kernel that is going away.
       await runtimeEventPump.closeAll();
       await agentRuns.closeAll();
+      // After the run store, before the runtimes — and that order is the whole
+      // point rather than a detail.
+      //
+      // `onRunFinished` fires from the run store's own monitor, so draining
+      // before `agentRuns.closeAll()` drains a set the producer is still adding
+      // to: the wait finishes, the monitor delivers one more terminal hook, and
+      // that write lands after the directory it writes into has been removed.
+      // Looping over the set was not enough for the same reason. The store has
+      // to stop first. It still has to happen before `runtimeManager.closeAll()`
+      // because the write reads the run's sessions out of a live container.
+      //
+      // The bound ends a shutdown that cannot finish rather than holding it
+      // forever; no new runs are accepted by this point, so reaching it means
+      // something else is wrong.
+      for (let drain = 0; learningWrites.size && drain < 100; drain += 1) {
+        await Promise.allSettled([...learningWrites]);
+      }
       await runtimeManager.closeAll();
       await maintenanceService?.close();
       await new Promise((resolve, reject) => {
@@ -3824,6 +4316,49 @@ function addHistogramMetric(lines, name, help, series) {
     lines.push(metricLine(`${name}_sum`, item.sum, item.labels));
     lines.push(metricLine(`${name}_count`, item.count, item.labels));
   }
+}
+
+/**
+ * Spawn the paired-evaluation harness for one candidate.
+ *
+ * Deliberately a subprocess and deliberately not part of this process: the
+ * harness is Python, it runs for hours, and it dispatches real runs through the
+ * same API a person would. What comes back is only the verdict and the path of
+ * the report it wrote — the control plane does not re-derive the statistics,
+ * because a second implementation of the analysis is a second answer.
+ * @param {string} command
+ * @param {{userId: string, projectId: string, methodId: string, candidateDigest: string, baselineDigest: string}} request
+ * @returns {Promise<{verdict: string, report: string, baselineDigest?: string}>}
+ */
+function runPairedEvaluation(command, request) {
+  return new Promise((resolve, reject) => {
+    const [program, ...args] = command.split(/\s+/).filter(Boolean);
+    const child = spawn(program, [...args,
+      "--method", request.methodId,
+      "--candidate-digest", request.candidateDigest,
+      ...(request.baselineDigest ? ["--baseline-digest", request.baselineDigest] : []),
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += String(chunk).slice(0, 64 * 1024); });
+    child.stderr.on("data", (chunk) => { stderr += String(chunk).slice(0, 8 * 1024); });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        const error = new Error(`The paired evaluation exited ${code}: ${stderr.trim().slice(0, 300)}`);
+        /** @type {any} */ (error).code = "method_evaluation_failed";
+        reject(error);
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch {
+        const error = new Error("The paired evaluation printed no readable verdict.");
+        /** @type {any} */ (error).code = "method_evaluation_invalid";
+        reject(error);
+      }
+    });
+  });
 }
 
 async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands }) {

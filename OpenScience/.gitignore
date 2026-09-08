@@ -82,3 +82,9 @@ packages/socket/capability-skills/
 # acceptance host. The bounded, verbatim selection that the tests read lives in
 # apps/desktop/src/lib/__fixtures__/.
 evals/session-stream/recordings/
+
+# Brief drafts and their synthesis requests (scripts/dev/generate-briefs.mjs).
+# Regenerated from the committed tool graphs and the execution receipts; nothing
+# in here is corpus until the writing step has run and a human has reviewed it,
+# and a draft with null prose committed by accident reads as a finished brief.
+evals/tool-graph/generated/

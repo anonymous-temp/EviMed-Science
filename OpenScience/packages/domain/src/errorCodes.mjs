@@ -452,18 +452,125 @@ export const CREDIT_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Every code the control plane can write onto a *finished run* — the one place
+ * a code is read by a researcher rather than by a tool loop.
+ *
+ * It is enumerated separately because the coverage arithmetic over
+ * `ALL_ERROR_CODES` answers the wrong question: of the 253 codes there, the
+ * overwhelming majority are tool-boundary codes that `terminalFromMessages`
+ * collapses into `runtime_tool_error` long before anyone sees them, while
+ * fifteen codes that really do end runs — `runtime_monitor_stalled`,
+ * `specialist_deliverable_not_accepted`, `superseded_by_dispatch` and the rest
+ * of this list — were in no registry at all. The browser filled the gap with a
+ * twenty-key table of its own whose default sentence was 「运行未通过核验。」,
+ * so a run killed on a fifteen-minute stall timer told the researcher their
+ * evidence had failed quality control. Every member here therefore carries an
+ * *exact* sentence (the family fallback is not good enough for a verdict) and
+ * an outcome class, and the test holds that line.
+ *
+ * Not a closed set at runtime, and deliberately not treated as one:
+ * `sanitizeErrorCode` admits any well-formed lowercase identifier, and the run
+ * monitor's catch forwards whatever code the runtime controller's `HttpError`
+ * carried. That is why `errorCodeOutcome` and `errorCodeMessage` must both be
+ * total. This list is what we promise to explain by name.
+ */
+export const RUN_VERDICT_ERROR_CODES = Object.freeze([
+  // The platform stopped the run. None of these is a judgment about the work.
+  'runtime_canceled',
+  'runtime_stopped',
+  'runtime_session_error',
+  'runtime_tool_error',
+  'runtime_turn_end_unknown',
+  'runtime_deliverable_never_submitted',
+  'runtime_monitor_stalled',
+  'runtime_monitor_timeout',
+  'runtime_monitor_failed',
+  'runtime_prompt_rejected',
+  // Manufactured by `sanitizeErrorCode` for a code that is not a well-formed
+  // identifier. The system invents it for itself, so it has to be able to
+  // explain it: it used to reach the browser's table, miss, and be reported as
+  // a failed verification.
+  'runtime_error',
+  'superseded_by_dispatch',
+  // Refused by the delivery gate. The package is on disk and the issues are
+  // actionable inside it — every sentence for these says so, because "your
+  // files are gone" is what 28 of 179 production runs looked like.
+  'specialist_deliverable_not_accepted',
+  'specialist_receipt_digest_mismatch',
+  'specialist_required_output_missing',
+  'specialist_required_output_stale',
+  'specialist_required_skill_missing',
+  'specialist_contract_unavailable',
+  'specialist_citation_invalid',
+  'specialist_citation_integrity_failed',
+  'specialist_cited_source_unrecorded',
+  'specialist_delegated_evidence_read',
+  'specialist_evidence_snapshot_missing',
+  'specialist_evidence_snapshot_invalid',
+  'specialist_evidence_snapshot_empty',
+  'specialist_evidence_traceability_failed',
+  'specialist_evidence_provenance_failed',
+  'specialist_evidence_integrity_failed',
+  'specialist_evidence_repair_failed',
+  'specialist_evidence_repair_snapshot_failed',
+  'specialist_question_coverage_missing',
+  // The named defects `clinicalEvidencePackageErrorCode` returns.
+  'specialist_question_coverage_invalid',
+  'specialist_question_coverage_unsupported',
+  'specialist_question_coverage_gap_overstated',
+  'specialist_question_coverage_understated',
+  'specialist_screening_ledger_mismatch',
+  'practical_emergency_trigger_conditioned_on_medication_response',
+  'regulatory_article_without_official_source',
+  'declared-appraisal-must-execute',
+])
+
+/**
+ * Codes a person meets outside a run's verdict: a refusal before anything
+ * starts, and the autopilot verification episode's own outcomes.
+ *
+ * These never reach `run.errorCode`, but they do reach a human — a 402 at the
+ * moment they press Send, a 423 while their own proactive research holds the
+ * runtime, a claim card saying an independent check could not be completed —
+ * and each was previously rendered as its raw English identifier or swallowed
+ * entirely.
+ */
+export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
+  'usage_budget_exceeded',
+  'runtime_reserved_for_autopilot',
+  'runtime_busy',
+  'runtime_limit_exceeded',
+  'agent_run_active',
+  'agent_run_limit_reached',
+  'illegal_state_transition',
+  'verification_run_failed',
+  'verification_result_missing',
+  'verification_result_unreadable',
+  'verification_result_schema_invalid',
+  'verification_verdict_invalid',
+  'verification_verdict_missing',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
+ *
+ * De-duplicated, because the lists above overlap on purpose: a run verdict is
+ * also a runtime code, and stating it twice — once as "what the kernel can
+ * return" and once as "what a researcher can be shown" — is what keeps the
+ * second list from being derived by accident and drifting.
  */
-export const ALL_ERROR_CODES = Object.freeze([
+export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
   ...ANALYSIS_ERROR_CODES,
   ...CREDIT_ERROR_CODES,
+  ...RUN_VERDICT_ERROR_CODES,
+  ...CONTROL_PLANE_ERROR_CODES,
   ...repairableEvidencePackageErrorCodes,
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
-])
+])])
 
 /**
  * How a source-tool failure should be treated. A code in neither set is
@@ -510,7 +617,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     + '文件仍在工作区里，可以重新发起让它提交；未经校验的文件不会被当作交付物。',
   runtime_session_error: '模型调用失败。稍后重试；若反复出现请缩小题面范围。',
   runtime_session_not_found: '运行时还没有这个会话，因此它还没有产生任何记录。',
-  runtime_tool_error: '一次工具调用被拒绝或失败。查看运行树中标红的节点。',
+  // Was 「查看运行树中标红的节点」. The run tree is not on the router — it lives
+  // under an unreachable page — so the sentence sent the reader to a screen
+  // that does not exist. Say what is true and reachable instead.
+  runtime_tool_error: '一次工具调用被拒绝或失败，运行没能继续。这不是对成果的质量判断；已经写出的文件仍在工作区里，可以重试或把题面缩小一些。',
   runtime_turn_end_unknown: '运行以本版本未知的方式结束，已记录待排查。',
   runtime_history_unavailable: '暂时读不到运行记录，这不代表运行没有进展。稍后刷新。',
   runtime_status_unavailable: '暂时读不到运行状态，稍后刷新。',
@@ -548,10 +658,131 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_duplicate: '这份资料已经存在。',
   source_missing: '原始库里找不到这份资料了，派生内容已保留。',
   credits_exhausted: '额度已用尽，充值后即可继续。',
-  credits_daily_limit_reached: '今日额度上限已到，明天继续或调高上限。',
-  credits_weekly_limit_reached: '本周额度上限已到。',
+  credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在「账户与额度」调高上限。',
+  credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在「账户与额度」调高上限。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
+
+  // ——— Run verdicts: the platform stopped the run ———
+  //
+  // Every sentence below is written under one rule: a run the platform stopped
+  // must never be described as work that failed quality control. That was the
+  // single most damaging string in the product — the browser's own table
+  // answered 「运行未通过核验。」 for a stall timer, a cancel and a supersede
+  // alike — and the rule is what these entries exist to carry.
+  runtime_monitor_stalled:
+    '运行连续很长时间没有产生新的消息或工具调用，已按「无进展」中断收尾。'
+    + '这不是质量问题；已经写出的文件仍在工作区里，可以回到这个会话让它从中断处继续。',
+  runtime_monitor_timeout:
+    '运行超过了本次任务的总时长上限，已中止。'
+    + '这不是质量问题；已经写出的文件仍在工作区里，把题面拆小后重跑通常能跑完。',
+  runtime_monitor_failed:
+    '平台在监控这次运行时自身出错，运行按失败收尾。'
+    + '这是我们这边的问题，与你的题面和已经产出的内容无关，请重试；反复出现时把这条运行的编号发给管理员。',
+  // No claim about billing here, unlike the ceiling messages below: the prompt
+  // is refused before the turn is accepted, but this file cannot promise what
+  // the gateway did or did not charge, and a sentence that promises it would be
+  // one more thing the product says without guaranteeing.
+  runtime_prompt_rejected: '运行时拒绝了这次提问，任务没有开始。稍后重试；反复出现请联系管理员。',
+  runtime_error: '运行以一个本版本无法识别的原因结束，已记录待排查。这不是对成果的质量判断。',
+  superseded_by_dispatch:
+    '这次运行被你随后发出的新任务取代，已按取消收尾。'
+    + '接着做同一件事的是列表里更靠前的那一条运行。',
+
+  // ——— Run verdicts: refused by the delivery gate ———
+  //
+  // The package exists. Each sentence says where the work is and what the
+  // repair is, because 28 of 179 production runs ended here with a finished
+  // report on disk and a screen that said 「暂无交付物。」
+  specialist_deliverable_not_accepted:
+    '交付物已经写好，但没有通过交付契约校验，因此没有作为成果发布。'
+    + '文件没有被删除，仍在本次运行的工作区里；按退回意见修好后可以重新提交。',
+  specialist_receipt_digest_mismatch:
+    '写下交付回执之后文件又被改动过，盘上的这一版没有经过质量门判定，因此不能当作已核验的成果发布。'
+    + '文件仍在工作区里，可以自行取用；若这是有意的收尾修改，请让运行在最后一次修改之后再提交一次。',
+  specialist_required_output_missing:
+    '这项能力约定必须产出的文件里，有一个没有写出来，因此这份成果不完整、没有通过质量门。'
+    + '已经写好的部分仍在工作区里。',
+  specialist_required_output_stale:
+    '必须产出的文件是上一次运行留下的旧文件，不是这次的成果，因此不能作为这次的交付物。'
+    + '请让运行用这次的工作重新生成它。',
+  specialist_required_skill_missing:
+    '这次运行没有加载本项能力约定必须使用的方法说明，因此无法确认结论是按该方法做出来的。'
+    + '这不是对结论对错的判断，重新发起一次即可。',
+  specialist_contract_unavailable:
+    '这次运行所依据的能力契约在服务端已经更新或不再提供，无法据此核验产出。请重新发起。',
+  specialist_citation_invalid:
+    '报告里有读者打不开的引用地址（需要登录、或指向内部地址），这些引用无法作为可核对的证据。'
+    + '成果仍在，换成公开可访问的出处即可。',
+  specialist_citation_integrity_failed:
+    '报告里的引文与它标注的来源对不上，引用链没有通过核验。成果仍在，逐条订正引文或改标出处即可。',
+  specialist_cited_source_unrecorded:
+    '报告引用了没有登记在证据快照（evidence-snapshot.json）里的来源，证据链缺了一环。'
+    + '把该来源补登为已检索，或去掉依赖它的那句结论即可。',
+  specialist_evidence_snapshot_missing:
+    '这份成果缺少证据快照 evidence-snapshot.json —— 报告所引每一条来源的冻结记录，因此证据链无法核验。其余文件都已写好。',
+  specialist_evidence_snapshot_invalid: '证据快照 evidence-snapshot.json 不是合法的来源记录，证据链无法核验。',
+  specialist_evidence_snapshot_empty: '证据快照 evidence-snapshot.json 里没有登记任何来源地址，证据链无法核验。',
+  specialist_evidence_traceability_failed:
+    '成果的证据链有对不上的地方：引用、检索记录与来源清单之间不一致，因此没有通过质量门。'
+    + '报告和其余文件都在工作区里，按退回意见逐条订正即可，不需要重做。',
+  specialist_evidence_provenance_failed:
+    '来源清单里列出的文件，没有任何检索工具在这次运行中报告保存过，因此这些来源的出处无法证实。'
+    + '只列检索工具在本次运行中实际返回的来源路径即可。',
+  specialist_evidence_integrity_failed:
+    '保存下来的原始来源与检索时写下的内容已经不一致，从中摘出的引文不能算作原文。'
+    + '不要改动、截断或重排已保存的来源；确需更新时重新检索一次。',
+  specialist_delegated_evidence_read:
+    '这份成果里有一部分证据是分工子任务读取的，主运行没有亲自核对，因此标注为「未完成核验」。'
+    + '成果可以正常查看，引用前请自行复核这部分。',
+  specialist_evidence_repair_failed:
+    '按退回意见做的修复没能完成，成果保持未通过状态。已经写好的文件仍在工作区里，可以自行取用或重新发起。',
+  specialist_evidence_repair_snapshot_failed:
+    '进入修复前没能把已完成的成果备份到工作区之外，为免改坏原件，这次没有开始修复。文件仍在工作区里。',
+  specialist_question_coverage_missing:
+    '题面逐问核对台账（question-coverage.json）没有写，因此无法证明每一问都答到了。'
+    + '其余成果都已写好，补上这份台账即可交付。',
+  specialist_question_coverage_invalid: '题面逐问核对台账的格式无效，无法据此核对每一问是否答到。其余成果都已写好。',
+  specialist_question_coverage_unsupported: '题面逐问核对台账里的条目指向了不存在的报告位置或论据，核对不成立。',
+  specialist_question_coverage_gap_overstated: '题面逐问核对台账把报告其实已经答到的问题登记成了缺口。',
+  specialist_question_coverage_understated: '题面里有问题在逐问核对台账中没有任何条目，等于没有交代它。',
+  specialist_screening_ledger_mismatch:
+    '检索筛选流程里的数字与最终纳入的来源对不上（或参考文献条目数与正文引用不一致），这份台账不能自证。',
+  practical_emergency_trigger_conditioned_on_medication_response:
+    '临床实践要点把「就医／急救」的触发条件写成了取决于用药后的反应，这在安全上不成立：就医指征必须是无条件的。'
+    + '这是必须改的一处，其余成果都在。',
+  regulatory_article_without_official_source:
+    '报告以条款级方式引用了法规，却没有给出官方出处，不能这样发布。补上官方文件的出处，或把表述降为概述即可。',
+  'declared-appraisal-must-execute':
+    '报告声明做了证据分级，但 GRADE 等级与降级理由不自洽，等于分级没有真正执行。补齐或订正分级理由即可。',
+
+  // ——— Refusals a person meets before anything runs ———
+  usage_budget_exceeded: '这次请求会超出账户设定的用量上限，因此没有开始，也没有产生费用。可在「账户与额度」查看已用与上限。',
+  runtime_reserved_for_autopilot:
+    '这个项目的运行时正在执行你自己设定的主动研究任务，暂时不接受交互提问。'
+    + '等这一轮结束后即可继续，或在「主动研究」里先暂停它。',
+  runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
+  runtime_limit_exceeded: '运行时的并发或用量上限已到，这次请求没有被受理。稍后重试。',
+  agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
+  agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
+
+  // ——— The autopilot's independent-check episode ———
+  //
+  // "The check could not be completed" is not "the claim was refuted", and the
+  // two must never read alike: one is our infrastructure, the other is a
+  // finding about the user's own adopted conclusion.
+  verification_run_failed: '独立复核这一次没能跑完，因此还没有复核结论。这不代表原来的结论被推翻。',
+  verification_result_missing: '独立复核跑完了但没有写出结论文件，因此这次没有复核结果。原结论未被推翻。',
+  verification_result_unreadable: '独立复核的结论文件读不出来，因此这次没有复核结果。原结论未被推翻。',
+  verification_result_schema_invalid: '独立复核的结论文件格式与约定不符，这次不采信它。原结论未被推翻。',
+  verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
+  verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
+
+  // ——— Tool-boundary codes that have no family and would otherwise be bare ———
+  tool_disabled: '这个部署没有开放这项工具，运行会绕开它继续。',
+  unknown_tool: '调用了一个不存在的工具。',
+  invalid_input: '这次工具调用的参数不符合要求。',
+  upstream_failed: '下游服务这次没能完成。',
 })
 
 /**
@@ -563,13 +794,31 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
  * sentence that is true of its whole family, and the code itself is still shown
  * beside it for anyone who needs the exact one.
  */
-/** @type {ReadonlyArray<readonly [RegExp, string]>} */
-const ERROR_CODE_FAMILIES = Object.freeze([
+/**
+ * Exported so a test can walk it, and so a caller can tell "we have a sentence
+ * for this family" from "we have nothing". It was module-private, which meant
+ * the registry's coverage could only be measured by re-typing these patterns
+ * somewhere else — and the copy is what goes stale.
+ * @type {ReadonlyArray<readonly [RegExp, string]>}
+ */
+export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^full_text_/, '这篇文献的全文取不到。报告会把它记为限制，而不是当作读过。'],
   [/^official_page_/, '这个官方页面取不到。报告会把它记为限制。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
   [/^web_search_/, '网页检索这次没能完成。'],
   [/^adapter_/, '专有数据接口这次没能给出结果。'],
+  // Added because 64 codes matched no family and no entry, so they rendered as
+  // a bare English identifier in a Simplified-Chinese interface. They are
+  // tool-boundary codes a run handles internally, which is why they get a
+  // family and not 64 sentences: a table that size is the table nobody keeps
+  // current, which is the failure the family mechanism exists to prevent.
+  [/^geo_probe_/, '生成式检索的可见度探测这次没能完成，报告会把它记为限制。'],
+  [/^science_connector_/, '科学数据连接器这次没能给出结果。'],
+  [/^mr_input_/, '孟德尔随机化的本地输入需要更正后才能继续。'],
+  [/^pharmacy_reference_/, '药学参考数据这次没能给出结果。'],
+  [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
+  [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],
+  [/^verification_/, '独立复核这次没能给出结论。原来的结论未被推翻。'],
   // The specific families come first: matching is in order, and
   // `specialist_question_coverage_missing` is a coverage gap, not an engine
   // failure — telling a reader to retry it would send them to the wrong place.
@@ -581,19 +830,235 @@ const ERROR_CODE_FAMILIES = Object.freeze([
 ])
 
 /**
- * The reader-facing sentence for a code.
+ * The sentence this build actually has for a code, or `null` when it has none.
  *
- * The exact entry wins; then the family; then the code itself. Falling through
- * to the code is deliberate — an untranslated code is visibly untranslated,
- * which is a bug report, whereas a generic "an error occurred" is a dead end.
- * @param {string} code @returns {string}
+ * Split out of `errorCodeMessage` so a caller can tell "the registry answered"
+ * from "the registry fell back" without comparing the answer against the code,
+ * which is what every substitute dictionary in the browser had to do. A caller
+ * with a better fallback of its own — one that can read the run's own facts —
+ * uses this; a caller with nothing better uses `errorCodeMessage`.
+ * @param {string} code @returns {string | null}
  */
-export function errorCodeMessage(code) {
+export function knownErrorCodeMessage(code) {
   const text = String(code ?? '')
   const exact = ERROR_CODE_MESSAGES[/** @type {keyof typeof ERROR_CODE_MESSAGES} */ (text)]
   if (exact) return exact
   for (const [pattern, message] of ERROR_CODE_FAMILIES) {
     if (pattern.test(text)) return message
   }
-  return text
+  return null
 }
+
+/**
+ * The sentence shown for a code, always.
+ *
+ * The exact entry wins, then the family, then an honest fallback that says only
+ * what is true of every unrecognized code — that the run did not finish and
+ * that we do not have an explanation for this one — and carries the raw code
+ * inside it.
+ *
+ * Falling through to the bare code was the old behaviour and it lost twice: the
+ * one surface that rendered it showed 「失败原因：runtime_monitor_stalled」 to a
+ * Chinese-reading researcher, and the surfaces that refused to show an English
+ * identifier substituted a *specific* sentence instead — 「运行未通过核验。」 —
+ * which is a false accusation about the researcher's own work whenever the
+ * cause was a timer, a cancel or an outage. Neither half of that trade is
+ * necessary: a sentence that declines to guess the cause is honest, and keeping
+ * the code inside it keeps the one handle support has for finding the run. The
+ * fallback deliberately makes no claim about quality, delivery or files.
+ * @param {string} code @returns {string}
+ */
+export function errorCodeMessage(code) {
+  const text = String(code ?? '')
+  const known = knownErrorCodeMessage(text)
+  if (known) return known
+  if (!text) return '这次没有完成，系统没有记下原因。'
+  return `这次没有完成，本版本还没有为这个原因准备说明。把这个代号交给管理员即可定位：${text}`
+}
+
+/**
+ * How an outcome should be read, so a surface can group and act on codes
+ * without keeping a table of its own.
+ *
+ *   delivered  the work shipped and every check that could run, ran clean
+ *   qualified  the work shipped with something the reader must check
+ *              themselves: a check that did not run, or one that ran and found
+ *              something the package cannot self-prove. Named `qualified`
+ *              rather than `reserved` or `unverified` because both of those are
+ *              already values of other vocabularies in this domain, and this
+ *              package's rule is that no two things share a name
+ *   gated      a finished package the delivery gate refused; the files exist
+ *              and the issues are repairable inside them
+ *   stopped    the platform ended the run — a timer, a cancel, a supersede, an
+ *              outage. Never a statement about the work
+ *   capped     refused before anything started: a spend ceiling, a concurrency
+ *              limit, a hold. Nothing was produced and nothing was charged
+ *   upstream   the problem was at a source, connector, tool or downstream
+ *              service boundary rather than in the package or the platform.
+ *              `classifyEvidenceSourceError` draws the finer line inside this
+ *              class — whether the run may carry on or must stop
+ *   unknown    a code this build does not recognize
+ *
+ * Six classes and not more, because each one implies a different next action —
+ * read it, read it and check the stated part, repair it, resume it, wait or
+ * raise the ceiling, try another source — and a class nobody would act on
+ * differently is a class that only splits the copy.
+ */
+export const RUN_OUTCOME_KINDS = Object.freeze([
+  'delivered',
+  'qualified',
+  'gated',
+  'stopped',
+  'capped',
+  'upstream',
+  'unknown',
+])
+
+/**
+ * Codes whose class cannot be read off their prefix. Everything else is derived
+ * below, so this table holds only the exceptions — a derived classification
+ * that is 90% table is a table.
+ * @type {Readonly<Record<string, typeof RUN_OUTCOME_KINDS[number]>>}
+ */
+const ERROR_CODE_OUTCOMES = Object.freeze({
+  // `specialist_*` and `meta_*` are gate codes by prefix (below), but these
+  // three name a downstream service or a subagent that did not answer, which is
+  // the same fact as an unreachable source.
+  specialist_agent_unavailable: 'upstream',
+  specialist_execution_failed: 'upstream',
+  meta_agent_execution_failed: 'upstream',
+  // Prefixed `runtime_`, but nothing ran: they are holds and ceilings, and the
+  // action is to wait or to raise the ceiling, not to retry immediately.
+  runtime_reserved_for_autopilot: 'capped',
+  runtime_busy: 'capped',
+  runtime_limit_exceeded: 'capped',
+  agent_run_active: 'capped',
+  agent_run_limit_reached: 'capped',
+  usage_budget_exceeded: 'capped',
+  // The gate's own named defects, which carry no recognizable prefix.
+  'declared-appraisal-must-execute': 'gated',
+  practical_emergency_trigger_conditioned_on_medication_response: 'gated',
+  regulatory_article_without_official_source: 'gated',
+  // Socket tool codes that are neither a gate refusal nor a platform stop.
+  budget_exhausted: 'capped',
+  attempt_limit_reached: 'capped',
+  capsule_unavailable: 'upstream',
+  review_unavailable: 'upstream',
+  subagent_failed: 'upstream',
+  // The autopilot's independent check could not be completed. Ours, not the
+  // user's, and emphatically not a verdict about their adopted claim.
+  verification_run_failed: 'stopped',
+  verification_result_missing: 'stopped',
+  verification_result_unreadable: 'stopped',
+  verification_result_schema_invalid: 'stopped',
+  verification_verdict_invalid: 'stopped',
+  verification_verdict_missing: 'stopped',
+  illegal_state_transition: 'stopped',
+  // Prefixed like a ceiling, but nothing was refused: the run went ahead and
+  // the usage is recorded late. Calling it `capped` would tell a reader to wait
+  // for a window that is not holding anything.
+  usage_metering_unavailable: 'upstream',
+})
+
+/**
+ * The outcome class of a code. Total by construction: an unrecognized code is
+ * `unknown`, never a guess, because `sanitizeErrorCode` admits any well-formed
+ * identifier and the run monitor forwards whatever code the runtime controller
+ * raised — so the vocabulary is open however carefully this file is maintained.
+ *
+ * `delivered` and `qualified` are never returned here: a run that shipped
+ * carries no error code at all (on the degraded path the gate clears
+ * `errorCode` and marks `verification` instead), so those two classes can only
+ * be reached from the run record. See `runOutcomeKind`.
+ * @param {string} code @returns {typeof RUN_OUTCOME_KINDS[number]}
+ */
+export function errorCodeOutcome(code) {
+  const text = String(code ?? '')
+  if (!text) return 'unknown'
+  const explicit = ERROR_CODE_OUTCOMES[text]
+  if (explicit) return explicit
+  // The two source sets first: they are enumerated, and a `specialist_worker_*`
+  // or `meta_agent_*` code inside them is a source problem, not a gate verdict.
+  if (recoverableEvidenceSourceErrorCodes.has(text) || terminalEvidenceSourceErrorCodes.has(text)) return 'upstream'
+  if (repairableEvidencePackageErrorCodes.has(text)) return 'gated'
+  if (ANALYSIS_ERROR_CODES.includes(text)) return 'upstream'
+  if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
+  if (/^verification_/.test(text)) return 'stopped'
+  if (/^(specialist|meta)_/.test(text)) return 'gated'
+  if (/^runtime_/.test(text)) return 'stopped'
+  if (text === 'superseded_by_dispatch') return 'stopped'
+  if (SOCKET_TOOL_ERROR_CODES.includes(text)) return 'gated'
+  return 'unknown'
+}
+
+/**
+ * The outcome class of a finished run, which is the code's class except in the
+ * one case a code cannot express: a run that shipped its package and could not
+ * fully prove it. That run succeeds with `errorCode: null` and a `verification`
+ * of `unverified` or `unchecked`, and reporting it as a plain success is what
+ * let 「已交付，但未完成核验」 and 「暂无交付物。」 sit six lines apart in the
+ * same card.
+ *
+ * Total for any shape, including a record from an older ledger that predates a
+ * field: an unrecognized status with no code is `unknown`, never `delivered`.
+ * @param {{ status?: string | null, errorCode?: string | null, verification?: string | null }} run
+ * @returns {typeof RUN_OUTCOME_KINDS[number]}
+ */
+export function runOutcomeKind(run) {
+  const status = String(run?.status ?? '')
+  const code = run?.errorCode == null ? '' : String(run.errorCode)
+  if (code) return errorCodeOutcome(code)
+  if (status === 'succeeded') {
+    const verification = String(run?.verification ?? '')
+    return verification === 'unverified' || verification === 'unchecked' ? 'qualified' : 'delivered'
+  }
+  if (status === 'canceled') return 'stopped'
+  return 'unknown'
+}
+
+/**
+ * What a refusal is allowed to tell the client beyond its code and sentence.
+ *
+ * Declared here, in the domain, because both ends need the same list: the
+ * control plane filters an outgoing body against it (`errorDetailShapes` in
+ * `apps/server/src/security.mjs`, which must derive its acceptors from this
+ * table rather than restate them) and the browser decides whether to look for
+ * numbers at all. They were restated, and the copies disagreed: only
+ * `usage_budget_exceeded` was declared, so the two codes the deployment
+ * actually raises — `credits_daily_limit_reached` and
+ * `credits_weekly_limit_reached` — reached the browser with the amount, the
+ * ceiling and the reset time computed, filtered out, and thrown away, leaving
+ * 「请重试」 as the advice for a ceiling that retrying cannot clear.
+ *
+ * A value is either `'number'` (finite) or a frozen array of the exact strings
+ * allowed. Nothing here may be an open string: this channel's safety is that
+ * no caller-supplied text can leave through it.
+ * @type {Readonly<Record<string, Readonly<Record<string, 'number' | readonly string[]>>>>}
+ */
+export const ERROR_DETAIL_FIELDS = Object.freeze({
+  usage_budget_exceeded: Object.freeze({
+    window: Object.freeze(['day', 'week', 'run']),
+    limit: 'number',
+    committed: 'number',
+    requested: 'number',
+    currency: Object.freeze(['CNY']),
+  }),
+  // `assertSpendWithinLimits` already holds every one of these — the window it
+  // refused on, the ceiling, what has been spent, the currency, and how long
+  // until it frees up — and passed only `retryAfterSeconds`, which the browser
+  // never read because it arrives as a header.
+  credits_daily_limit_reached: Object.freeze({
+    window: Object.freeze(['day']),
+    limit: 'number',
+    committed: 'number',
+    currency: Object.freeze(['CNY']),
+    retryAfterSeconds: 'number',
+  }),
+  credits_weekly_limit_reached: Object.freeze({
+    window: Object.freeze(['week']),
+    limit: 'number',
+    committed: 'number',
+    currency: Object.freeze(['CNY']),
+    retryAfterSeconds: 'number',
+  }),
+})

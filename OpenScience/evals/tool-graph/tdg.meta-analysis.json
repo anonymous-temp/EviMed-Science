@@ -1,0 +1,793 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "meta-analysis",
+  "version": "sha256:69de8e79049fe039920c0d83e5a22aba89d3cf8d76d984ec6864c8388980f591",
+  "generatedBy": "scripts/dev/build-tool-graph.mjs",
+  "counts": {
+    "nodes": 21,
+    "edges": 3,
+    "byVia": {
+      "schema": 3,
+      "model": 0,
+      "executed": 0
+    },
+    "sampleable": 0
+  },
+  "suppressed": [
+    {
+      "reason": "kernel-to-kernel type match; every file tool can feed every other, so the pair says nothing about this capability",
+      "count": 22
+    }
+  ],
+  "removed": [],
+  "nodes": [
+    {
+      "name": "ask_user",
+      "source": "kernel",
+      "description": "Ask the operator a question.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "bash",
+      "source": "kernel",
+      "description": "Run a shell command in the run workspace.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "edit",
+      "source": "kernel",
+      "description": "Replace an exact string in a workspace file.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "old_string": {
+            "type": "string"
+          },
+          "new_string": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "old_string",
+          "new_string"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "fs_edit",
+      "source": "kernel",
+      "description": "Edit a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "fs_read",
+      "source": "kernel",
+      "description": "Read a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "fs_search",
+      "source": "kernel",
+      "description": "Search the workspace through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "fs_write",
+      "source": "kernel",
+      "description": "Write a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "glob",
+      "source": "kernel",
+      "description": "List workspace paths matching a glob.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[]",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "grep",
+      "source": "kernel",
+      "description": "Search workspace file contents.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "job_run",
+      "source": "kernel",
+      "description": "Start a long-running job.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "job_status",
+      "source": "kernel",
+      "description": "Poll a started job.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "jobId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "list",
+      "source": "kernel",
+      "description": "List the entries of a workspace directory.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "entries[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__meta_analysis",
+      "source": "mcp",
+      "description": "Start or inspect a managed MetaAgent systematic-review and meta-analysis job. The job runs with DeepSeek V4 Pro, writes its auditable package into the current workspace, and preserves release-gate status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "capabilities",
+              "start",
+              "status"
+            ]
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "jobId": {
+            "type": "string",
+            "pattern": "^meta-[a-z0-9-]{8,80}$"
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 45
+          },
+          "outputLanguage": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "maxPapers": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 200
+          },
+          "analysisType": {
+            "type": "string",
+            "enum": [
+              "pairwise",
+              "network"
+            ]
+          },
+          "userPdfDirectory": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "ipdData": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "action"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "artifacts[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "dataset_path"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_ledger"
+    },
+    {
+      "name": "read",
+      "source": "kernel",
+      "description": "Read a workspace file, paginated.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "skill",
+      "source": "kernel",
+      "description": "Load a skill body into the run.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "subagent",
+      "source": "kernel",
+      "description": "Delegate to a child agent.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "task": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "subagent_control",
+      "source": "kernel",
+      "description": "Steer or stop a child agent.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "subagent_report",
+      "source": "kernel",
+      "description": "Read a child agent's report.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "task",
+      "source": "kernel",
+      "description": "Run a scoped subtask in a fresh context.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "workflow",
+      "source": "kernel",
+      "description": "Run a declared workflow.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "write",
+      "source": "kernel",
+      "description": "Write a workspace file.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "content"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    }
+  ],
+  "edges": [
+    {
+      "from": "mcp__evimed__meta_analysis",
+      "to": "edit",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_ledger",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__meta_analysis",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_ledger",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__meta_analysis",
+      "to": "write",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_ledger",
+      "matchedTypes": [
+        "file_path"
+      ]
+    }
+  ]
+}

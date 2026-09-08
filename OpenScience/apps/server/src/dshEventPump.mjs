@@ -157,7 +157,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number }) => void }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void }} options
    */
   constructor({
     runEvents,
@@ -171,6 +171,13 @@ export class RuntimeEventPump {
     adoptSession = async () => null,
     adoptIntervalMs = ADOPTION_SWEEP_MS,
     onRunActivity = () => {},
+    // The kernel is the only thing that knows a compaction happened, and this
+    // pump is the only thing that hears the kernel. Nothing recorded it before,
+    // which is why the compaction policy has never been measurable: the control
+    // plane declares a 1,000,000-token context window while a run's budget is
+    // 400,000, so pressure compaction is unreachable inside the budget and
+    // nobody could tell that from "it happens and we do not log it".
+    onCompaction = () => {},
   }) {
     this.adoptSession = adoptSession;
     this.runEvents = runEvents;
@@ -184,6 +191,7 @@ export class RuntimeEventPump {
     this.reconnectDelayMs = reconnectDelayMs;
     this.adoptIntervalMs = adoptIntervalMs;
     this.onRunActivity = onRunActivity;
+    this.onCompaction = onCompaction;
     /** @type {Map<string, PumpProjectState>} */
     this.projects = new Map();
     /** Adoptions still writing, so `closeAll` can wait for them. @type {Set<Promise<void>>} */
@@ -783,6 +791,13 @@ export class RuntimeEventPump {
     if (!runId) return; // isolated: evimed_runtime_event_pump_unrouted_total
     if (!options.replay) this.#noteRunActivity(state, sessionId, runId, event.seq);
     this.runEvents.publish(runId, "run/event", { event });
+    if (event.type === "compaction" && !options.replay) {
+      try {
+        this.onCompaction(state.project, runId, { seq: event.seq, replaced: event.replaced, tokens: event.estimatedTokens });
+      } catch {
+        // isolated: evimed_runtime_event_pump_compaction_record_failed_total
+      }
+    }
     if (event.type === "turn/end") {
       // The one lifecycle fact the mux stream carries that `run/event` alone
       // does not surface as a status: nothing else marks a subagent's own

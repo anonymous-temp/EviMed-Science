@@ -340,6 +340,102 @@ export class MemOsClient {
     return { status: "deleted", verified: false };
   }
 
+  /**
+   * Create the cube this scope writes to, explicitly.
+   *
+   * `add` has always relied on the engine materializing a cube it has never
+   * seen, and today it does. Nothing in the pinned source promises to keep
+   * doing so, and the endpoint that does promise it was outside our contract,
+   * so a change upstream would have surfaced as writes that succeed into
+   * nothing rather than as a refusal.
+   *
+   * The precondition this pins is the finding: upstream's `CubeHandler`
+   * validates `owner_id` against its own `UserManager` and answers 400 for an
+   * owner it does not know. Our `memOsNamespace` derives an opaque owner id
+   * that is never registered anywhere, so against a real engine this call
+   * fails until the substrate migration registers users first. That is worth
+   * knowing before the migration rather than during it — see
+   * `packages/contracts/memos/fixtures/provenance.json`.
+   *
+   * `cube_path` is deliberately never sent: a filesystem path chosen by the
+   * control plane is a path the engine would write to on our say-so.
+   * `cube_name` is the derived id rather than anything about the account,
+   * because a human-readable name here would be tenant data in a service that
+   * has no authentication.
+   *
+   * @param {string} userId @param {ScopeOptions} [options]
+   */
+  async createCube(userId, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
+    const result = await this.#request("/product/create_cube", {
+      cube_name: scope.cubeId, owner_id: scope.userId, cube_id: scope.cubeId,
+    });
+    if (!object(result.data) || result.data.cube_id !== scope.cubeId || result.data.owner_id !== scope.userId) {
+      throw failure("mem_os_scope_mismatch", "MemOS created a cube outside the requested scope.");
+    }
+    return { cubeId: scope.cubeId, status: "created" };
+  }
+
+  /**
+   * Send one decision about recalled memories back to the ranking.
+   *
+   * The endpoint MemOS documents for exactly this and our contract did not
+   * cover. It is the return path of the recall loop: without it the index only
+   * ever learns what was written, never what turned out to be worth reading.
+   *
+   * `writable_cube_ids` is not optional here even though the model marks it so.
+   * Upstream's `FeedbackHandler._resolve_cube_ids` falls back to `[user_id]`
+   * when the list is absent — a cube id that is not ours — so an omitted field
+   * is a write into a namespace this client exists to make unreachable.
+   *
+   * `corrected_answer` stays false: this reports what a person decided, and
+   * asking the engine to rewrite the answer as well would put a second author
+   * on text the gate has already judged.
+   *
+   * The task id is minted the way `add` mints one, so `getTaskStatus` can
+   * verify this call for the same reason and by the same scope check.
+   *
+   * @param {string} userId
+   * @param {{history: {role: string, content: string}[], feedbackContent: string, retrievedMemoryIds?: string[], sessionId?: string}} decision
+   * @param {ScopeOptions} [options]
+   */
+  async feedback(userId, decision, options) {
+    fields(options, ["accountCreatedAt", "projectId", "capsuleId"]);
+    fields(decision, ["history", "feedbackContent", "retrievedMemoryIds", "sessionId"]);
+    const scope = memOsNamespace(userId, options.accountCreatedAt, options.projectId, options.capsuleId);
+    const history = Array.isArray(decision.history) ? decision.history : [];
+    if (history.length < 1 || history.length > 40) {
+      throw failure(inputCode, "MemOS feedback requires between 1 and 40 history messages.", 400);
+    }
+    const retrievedMemoryIds = decision.retrievedMemoryIds ?? [];
+    if (!Array.isArray(retrievedMemoryIds) || retrievedMemoryIds.length > 100) {
+      throw failure(inputCode, "MemOS feedback received invalid retrieved memory identifiers.", 400);
+    }
+    const taskId = `${taskPrefix(scope)}${randomUUID()}`;
+    const payload = {
+      user_id: scope.userId,
+      writable_cube_ids: [scope.cubeId],
+      async_mode: "async",
+      task_id: taskId,
+      corrected_answer: false,
+      history: history.map(message => {
+        fields(message, ["role", "content"]);
+        if (!["user", "assistant"].includes(message.role)) {
+          throw failure(inputCode, "MemOS feedback history accepts only user and assistant turns.", 400);
+        }
+        return { role: message.role, content: text(message.content, 32 * 1024) };
+      }),
+      feedback_content: text(decision.feedbackContent, 16 * 1024),
+      retrieved_memory_ids: retrievedMemoryIds.map(id => text(id, 512)),
+      ...(decision.sessionId === undefined ? {} : { session_id: text(decision.sessionId, 512) }),
+    };
+    this.#encode(payload);
+    const result = await this.#request("/product/feedback", payload);
+    if (!Array.isArray(result.data)) throw failure(responseCode, "MemOS did not confirm the feedback submission.");
+    return { status: "accepted", taskId };
+  }
+
   /** Query only a task issued in this account/project scope; 404 stays an error, never completion.
    * @param {string} userId @param {string} taskId @param {ScopeOptions} [options] */
   async getTaskStatus(userId, taskId, options) {
