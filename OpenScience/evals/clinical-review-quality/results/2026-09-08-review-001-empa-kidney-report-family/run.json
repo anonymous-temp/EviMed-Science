@@ -1,0 +1,31 @@
+{
+  "capability": "clinical-evidence-synthesis",
+  "brief": "review-001-empa-kidney-report-family",
+  "base": "https://82.156.128.153",
+  "project": "c1-x7w0sn",
+  "session": "acc-clinical-evidence-sy-mtsg1eg0",
+  "runId": "run_bb6c4e6b0765eb6bd3bb0a28e605555a",
+  "agentVersion": "2.11.0",
+  "dispatchedAt": "2026-09-08T10:15:12Z",
+  "prompt": "In adults with chronic kidney disease, what do the active EMPA-KIDNEY trial and its post-trial follow-up establish about the durability of empagliflozin's kidney and cardiovascular effects?\n\nReview design: systematic.\n\nInclude: Reports of EMPA-KIDNEY (NCT03594110) with clinical or kidney-function outcomes; Current CKD guidance used only for practice context.\nExclude: Commentaries without new EMPA-KIDNEY outcome data; Trials of different investigational medicines.\n\nStarting sources (retrieve and preserve the current text of each; this list is not evidence):\n- PMID 36331190 — https://pubmed.ncbi.nlm.nih.gov/36331190/ — role: active randomized trial report — study: NCT03594110\n- PMID 39453837 — https://pubmed.ncbi.nlm.nih.gov/39453837/ — role: post-trial follow-up report — study: NCT03594110\n- PMID 38061371 — https://pubmed.ncbi.nlm.nih.gov/38061371/ — role: prespecified kidney-function analysis — study: NCT03594110\n- KDIGO 2024 CKD Guideline — https://kdigo.org/wp-content/uploads/2024/03/KDIGO-2024-CKD-Guideline.pdf — role: guideline context",
+  "outcome": {
+    "status": "failed",
+    "errorCode": "specialist_required_output_stale",
+    "verification": null,
+    "artifacts": [
+      "deliverables/empa-kidney-durability/clinical-evidence-report.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "clinical-evidence-report.md predates this run, so it is a previous run's file rather than this one's output. Regenerate it from this run's own work.",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-060 — The claim correctly separates measured in-trial safety (SAE rates similar; DKA 6 vs 1 rare; sAKI HR 0.78 non-significant) from unmeasured post-trial safety (AEs not collected; non-CV death as safety outcome, HR 0.97) — the 'not measured ≠ safe' distinction is handled prope",
+      "review weakened: RPT-L93-eGFR-gloss — Results §3 line 93 adds an interpretive clause to the CLM-028 figures: '——若治疗期效应原样持续，该差值应远小于治疗期慢性斜率差所能预示者 [3]'. This clause (a) is not present in the cited post-trial report (PMID 39453837 contains no such sentence; no supportQuote in the ledger carries it), and"
+    ],
+    "effectiveAgentId": "clinical-evidence-synthesis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 4205691,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}
