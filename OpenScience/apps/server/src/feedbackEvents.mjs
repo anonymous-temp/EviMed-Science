@@ -43,7 +43,8 @@
  * @module
  */
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
+import { DISTILLATION_TRIGGERS } from "./methodDistillationRuns.mjs";
 import { HttpError } from "./security.mjs";
 import {
   FEEDBACK_EVENT_TRIGGERS,
@@ -57,26 +58,33 @@ import {
 export { FEEDBACK_EVENT_TRIGGERS, FEEDBACK_SUBJECT_TYPES };
 
 /**
- * The one distillation trigger this release ships.
+ * Which distillation this ledger asks for: the `edit_diff` trigger of
+ * `DISTILLATION_TRIGGERS`, named from that module so a rename there is a
+ * load-time failure here rather than a job nothing will ever claim.
  *
- * The payload shape below is fixed by design so later triggers slot in without
- * a migration: `{ runId, feedbackEventIds, trigger }`, and the trigger names
- * which evidence the job is looking at rather than what it should conclude.
- */
-export const DISTILL_TRIGGER = "adopted-deliverable-edit";
-
-/** The `method` document a distilled candidate is written as. */
-export const LEARNED_METHOD_RECORD_TYPE = "learned-method";
-
-/**
- * A distilled method is born a candidate and can be born nothing else.
+ * It used to be `"adopted-deliverable-edit"`, a private trigger for a private
+ * worker in this file that wrote the lesson deterministically and said so:
+ * "this release ships the producer, not the judgement… retrieving related
+ * methods before proposing, and deciding create/amend/merge, belong to the
+ * method-distillation effort and are deliberately not here." That effort landed
+ * on another branch and merged next to this one. Both workers then claimed job
+ * kind `distill`, `SKIP LOCKED` handed each of them the other's payload, and
+ * both classify a foreign trigger as terminal — so whichever polled first
+ * destroyed the other's job and burned its idempotency key, meaning the lesson
+ * could never be re-queued. Two `learned-method` writers with disjoint payload
+ * schemas is the same collision one layer down: `LearningService` filters
+ * `method` documents by `recordType` containment, so it would have read rows
+ * that carry no `frontmatter`, no `contentDigest` and no `learning`.
  *
- * `capsuleMethods.mjs` mounts only `approved` entries into a runtime, and it
- * mounts capsule facts rather than `method` documents, so nothing this worker
- * writes can reach a container. That is the property, not an accident: a method
- * the researcher never approved must never instruct a run.
+ * One kind, one claimer. The evidence this ledger holds — the adoption and the
+ * edit — travels as `feedback`, which is exactly the field
+ * `buildDistillationInput` reserves for it.
  */
-export const LEARNED_METHOD_STATUS = "candidate";
+export const DISTILL_TRIGGER = "edit_diff";
+
+if (!DISTILLATION_TRIGGERS.includes(DISTILL_TRIGGER)) {
+  throw new TypeError(`Method distillation no longer accepts the "${DISTILL_TRIGGER}" trigger.`);
+}
 
 /** Detail objects are evidence, not prose: bounded, and refused when oversized. */
 const MAX_DETAIL_BYTES = 4_096;
@@ -412,153 +420,35 @@ export class FeedbackEvents {
     return null;
   }
 
-  /** @param {any} adoption @param {any} edit */
+  /**
+   * Queue the distillation this pair of events is the evidence for.
+   *
+   * The two events travel whole, under `feedback`, rather than as the ids they
+   * used to be: `MethodDistillationRuns` builds the run's frozen input from the
+   * payload and never reads this ledger, so a payload of ids would arrive at a
+   * reader that cannot resolve them. `feedbackEventIds` stays beside them
+   * because the job is the only place that records which two events a candidate
+   * came from, and a lesson whose evidence cannot be named is one nobody can
+   * audit.
+   *
+   * The idempotency key is still the edit — one edit is one lesson however many
+   * times the pair is completed — but it now names the run as well, because the
+   * distillation dispatch identity is `(runId, trigger)` and two jobs that would
+   * adopt the same bounded run must be the same job.
+   *
+   * @param {any} adoption @param {any} edit
+   */
   async #enqueueLesson(adoption, edit) {
     const runId = edit.runId ?? adoption.runId;
     if (!runId) return null;
     return this.jobs.enqueue(edit.userId, "distill", {
       runId,
-      feedbackEventIds: [adoption.id, edit.id],
       trigger: DISTILL_TRIGGER,
+      feedbackEventIds: [adoption.id, edit.id],
+      feedback: [adoption, edit],
     }, {
-      idempotencyKey: `distill:${DISTILL_TRIGGER}:${edit.id}`,
+      idempotencyKey: `distill:${runId}:${DISTILL_TRIGGER}:${edit.id}`,
       projectId: edit.projectId ?? adoption.projectId ?? null,
     });
-  }
-}
-
-/**
- * The body a distilled candidate carries.
- *
- * Deterministic on purpose: this release ships the producer, not the judgement.
- * Retrieving related methods before proposing, and deciding create/amend/merge,
- * belong to the method-distillation effort and are deliberately not here — a
- * body assembled from the two events is honest about being an unread lesson,
- * and a model-written one would look like a conclusion nobody reached.
- *
- * @param {any} adoption @param {any} edit
- */
-export function learnedMethodBody(adoption, edit) {
-  const summary = boundedText(edit?.detail?.summary, 2_000);
-  return [
-    "# 从已采纳交付物的修改中提炼的方法（候选）",
-    "",
-    `- 交付物：${edit.subject.id}`,
-    `- 来源运行：${edit.runId ?? adoption.runId ?? ""}`,
-    `- 采纳时间：${adoption.occurredAt}`,
-    `- 修改时间：${edit.occurredAt}`,
-    "",
-    "## 研究者改了什么",
-    "",
-    summary || "这次修改没有附说明，请在采纳为方法前补充：修改的是哪一处、为什么。",
-  ].join("\n");
-}
-
-/** @param {string} body */
-function bodyDigest(body) {
-  return createHash("sha256").update(body).digest("hex").slice(0, 32);
-}
-
-/**
- * Runs `distill` jobs. One kind, one trigger, no model call.
- *
- * The job writes a `method` document and nothing else. It never approves what
- * it writes, and a changed body starts a new revision whose counts begin at
- * zero, because the counts were earned by the previous text and carrying them
- * over would let an unread candidate inherit another candidate's standing.
- */
-export class MethodDistillWorker {
-  /** @param {{jobs:any,documents:any,feedback:FeedbackEvents,pollMs?:number,leaseMs?:number,now?:()=>Date}} dependencies */
-  constructor({ jobs, documents, feedback, pollMs = 5_000, leaseMs = 60_000, now = () => new Date() }) {
-    this.jobs = jobs;
-    this.documents = documents;
-    this.feedback = feedback;
-    this.database = jobs.database;
-    this.pollMs = pollMs;
-    this.leaseMs = leaseMs;
-    this.now = now;
-    this.kinds = ["distill"];
-    this.workerId = `method-distill-${randomUUID()}`;
-    this.timer = null;
-    this.running = null;
-    this.lastError = null;
-  }
-
-  start() {
-    if (this.timer) return;
-    this.timer = setInterval(() => { void this.tick(); }, this.pollMs);
-    this.timer.unref();
-    void this.tick();
-  }
-
-  async close() {
-    clearInterval(this.timer);
-    this.timer = null;
-    await this.running;
-  }
-
-  async tick() {
-    if (this.running) return this.running;
-    this.running = this.run()
-      .catch((error) => { this.lastError = typeof error?.code === "string" ? error.code : "distill_failed"; return null; })
-      .finally(() => { this.running = null; });
-    return this.running;
-  }
-
-  async run() {
-    const job = await this.jobs.claim(this.kinds, this.workerId, { leaseMs: this.leaseMs });
-    if (!job) return null;
-    try {
-      return await this.handle(job);
-    } catch (error) {
-      const code = typeof error?.code === "string" ? error.code : "distill_failed";
-      // A job naming evidence that is gone will never succeed; a lost race with
-      // another writer will.
-      await this.jobs.fail(job.userId, job.id, job.leaseToken, { code, message: String(error?.message ?? "Distillation failed.") },
-        { retry: code === "product_revision_conflict" });
-      return null;
-    }
-  }
-
-  /** @param {any} job */
-  async handle(job) {
-    const payload = job.payload ?? {};
-    if (payload.trigger !== DISTILL_TRIGGER) throw new HttpError(400, "distill_trigger_unknown", "Unknown distillation trigger.");
-    const ids = Array.isArray(payload.feedbackEventIds) ? payload.feedbackEventIds : [];
-    if (typeof payload.runId !== "string" || !payload.runId || ids.length !== 2) {
-      throw new HttpError(400, "distill_payload_invalid", "A distillation job names one run and its two feedback events.");
-    }
-    const [adoption, edit] = await Promise.all(ids.map((id) => this.feedback.get(job.userId, String(id))));
-    if (!adoption || !edit || adoption.trigger !== "deliverable-adopted" || edit.trigger !== "deliverable-edited") {
-      throw new HttpError(409, "distill_evidence_missing", "The distillation job's feedback events are unavailable.");
-    }
-    const body = learnedMethodBody(adoption, edit);
-    const digest = bodyDigest(body);
-    const id = `learned-method:${createHash("sha256").update(JSON.stringify([payload.runId, edit.subject.id])).digest("hex").slice(0, 32)}`;
-    const existing = await this.documents.get(job.userId, "method", id);
-    const at = this.now().toISOString();
-    if (existing && existing.payload?.bodyDigest === digest) {
-      // Same lesson, already written. Rewriting it would churn a revision and
-      // reset counts that this job did not change.
-      return this.jobs.finish(job.userId, job.id, job.leaseToken, { methodId: id, status: LEARNED_METHOD_STATUS, written: false });
-    }
-    await this.documents.put(job.userId, "method", id, {
-      recordType: LEARNED_METHOD_RECORD_TYPE,
-      schemaVersion: 1,
-      // Never approved by generation: the researcher approves a method or it
-      // stays here, and nothing mounts a candidate into a runtime.
-      status: LEARNED_METHOD_STATUS,
-      trigger: DISTILL_TRIGGER,
-      runId: payload.runId,
-      subject: edit.subject,
-      body,
-      bodyDigest: digest,
-      feedbackEventIds: [adoption.id, edit.id],
-      // A changed body is a different lesson, so its standing starts over.
-      counts: { approvals: 0, applications: 0 },
-      createdAt: existing?.payload?.createdAt ?? at,
-      updatedAt: at,
-    }, { expectedRevision: existing ? existing.revision : 0, projectId: existing?.projectId ?? edit.projectId ?? adoption.projectId ?? null });
-    return this.jobs.finish(job.userId, job.id, job.leaseToken, { methodId: id, status: LEARNED_METHOD_STATUS, written: true });
   }
 }

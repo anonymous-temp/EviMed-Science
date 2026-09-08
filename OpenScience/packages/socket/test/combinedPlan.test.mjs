@@ -451,8 +451,30 @@ async function combinedFixture({ subagentStart = null, deliveryAttemptLimit = 3,
   };
 }
 
-/** Lets the awaiting delegate tool observe a child that has started. */
-const settleTick = () => new Promise((resolve) => setTimeout(resolve, 0));
+/**
+ * Waits until the delegate tool has actually started `count` children.
+ *
+ * This was one `setTimeout(0)`, which is a bet on how many turns the delegate
+ * path takes before it calls `startSubagent`. The self-evolution work added two
+ * awaited WebCrypto digests ahead of that call — the skill and method digests a
+ * receipt of names could not supply — and the bet stopped paying: `starts` was
+ * still empty one macrotask later, the assertion read `0 !== 2`, and the test
+ * that awaits both children afterwards hung until the runner's deadline.
+ *
+ * A count is the condition the tests actually mean, so waiting for it survives
+ * any number of awaits the production path acquires later.
+ *
+ * @param {{starts: readonly unknown[]}} fixture @param {number} count
+ * @returns {Promise<void>}
+ */
+async function startedChildren(fixture, count) {
+  for (let turn = 0; turn < 500 && fixture.starts.length < count; turn += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  if (fixture.starts.length < count) {
+    throw new Error(`delegation started ${fixture.starts.length} of ${count} children within the deadline`);
+  }
+}
 
 /* -------------------------------------------------------------- the tests */
 
@@ -526,7 +548,7 @@ test("a plan spanning two capabilities delegates twice, and each child submits o
   // survive: with one child running there is nobody to confuse it with.
   const bibDelegation = f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
   const appraisalDelegation = f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
-  await settleTick();
+  await startedChildren(f, 2);
   assert.equal(f.starts.length, 2, "a two-item plan must start two children");
 
   // Both children are on the ledger *while they are still running*, each under
@@ -655,7 +677,7 @@ test("a delegated child is handed its own capability's tools and skills, never t
   await f.plan();
   const bibDelegation = f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
   const appraisalDelegation = f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
-  await settleTick();
+  await startedChildren(f, 2);
 
   assert.equal(f.starts.length, 2, "there must be two spawns to compare");
   // Selected by what each spawn was handed, not by which one was recorded
@@ -909,7 +931,7 @@ test("the projection the control plane reads keeps both children, each separable
   await f.plan();
   const bibDelegation = f.execute("evimed_delegate", { deliverableId: "d-bib", inputs: {} });
   const appraisalDelegation = f.execute("evimed_delegate", { deliverableId: "d-appraise", inputs: {} });
-  await settleTick();
+  await startedChildren(f, 2);
   for (const [id, settle] of settlers) settle({ stopReason: "completed", output: { deliverableId: id, submitted: true, summary: "done" } });
   await Promise.all([bibDelegation, appraisalDelegation]);
 

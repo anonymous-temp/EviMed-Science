@@ -1,8 +1,56 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
+import { errorCodeOutcome } from "@evimed/domain";
+import { createWebRuntimeUiFrame, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, getWebProjectId, webErrorMessage, WebApiError, webRuntimeProfile, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { Button } from "@/components/ui/Button";
+
+/** Why this surface is showing an alert instead of the research session. */
+interface FrameFailure {
+  text: string;
+  /** Whether building the binding again could plausibly succeed right now. A
+   *  retry button offered against a spent budget is a button that is guaranteed
+   *  to fail, which is the over-refusal pattern: an unexplained refusal costs
+   *  less trust than one whose only offered action cannot work. */
+  retryable: boolean;
+  /** A ceiling or a hold. The account page is where the position is stated and
+   *  where the ceiling is raised, so it is the offered action instead. */
+  capped: boolean;
+}
+
+/** A failure this surface observed itself — a timer, a native error frame —
+ *  where no control-plane refusal exists to explain. */
+function frameFailure(text: string): FrameFailure {
+  return { text, retryable: true, capped: false };
+}
+
+/**
+ * A refusal the control plane explained, rendered instead of discarded.
+ *
+ * `createWebRuntimeUiFrame` rejects with a `WebApiError` carrying the code, the
+ * declared amounts and the reset moment, and every one of them used to end in
+ * `.catch(() => setError("研究会话暂时无法连接"))` — five distinct causes
+ * (an expired login, a project that is gone, a disabled surface, a CSRF
+ * mismatch, a network fault) collapsed into one sentence that suggests the
+ * fault is transient and invites an immediate retry.
+ *
+ * SCOPE, stated because the gap is easy to mistake for a bug here: the spend
+ * cap and the autopilot hold are NOT enforced on this call. `authorizeMethod`
+ * (runtimeUiServer.mjs) checks them only for `session/prompt`, i.e. when the
+ * researcher presses Send inside the kernel's own application, and that refusal
+ * is delivered as a JSON error frame on the mux to third-party code we do not
+ * own (runtimeUiMuxProxy.mjs `rejectStream`). No React component is on that
+ * path. This function renders what does reach us.
+ */
+function refusedFrame(error: unknown): FrameFailure {
+  const text = webErrorMessage(error, { fallback: "研究会话暂时无法连接，请重试。" });
+  if (!(error instanceof WebApiError)) return frameFailure(text);
+  const capped = errorCodeOutcome(error.code ?? "") === "capped" || [402, 423, 429].includes(error.status);
+  // A 401 is already being handled elsewhere — `fetchWithWebAuth` announces the
+  // ended session and the shell moves to the login route — so a retry here
+  // would race that, not fix it.
+  return { text, retryable: !capped && error.status !== 401, capped };
+}
 
 /** The native application stays on its own origin and immutable project frame. */
 export function RuntimeUiFrame() {
@@ -23,7 +71,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
   const [readyGeneration, setReadyGeneration] = useState(0);
   const [pending, setPending] = useState(false);
   const [navigated, setNavigated] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FrameFailure | null>(null);
   const [leaseError, setLeaseError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -83,7 +131,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()
         || typeof value.renewalToken !== "string" || !value.renewalToken) throw new Error("Invalid frame binding");
       setBinding(value);
-    }).catch(() => { if (active) setError("研究会话暂时无法连接"); });
+    }).catch((cause: unknown) => { if (active) setError(refusedFrame(cause)); });
     return () => { active = false; if (frameId) release(frameId); };
   }, [projectId, origin, attempt]);
 
@@ -115,8 +163,11 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
         if (!nativeReady.current) iframe.current?.contentWindow?.postMessage({
           type: "evimed.runtime-ui.resume", version: 1, frameId, projectId, seq: ++outgoing.current,
         }, origin);
-      }).catch(() => {
-        if (active) setLeaseError("研究连接暂时无法续期，请重试");
+      }).catch((cause: unknown) => {
+        // The renewal answers with the same envelope the creation does, so an
+        // expired login or a revoked project says so instead of arriving as a
+        // sentence about the connection.
+        if (active) setLeaseError(webErrorMessage(cause, { fallback: "研究连接暂时无法续期，请重试" }));
       }).finally(() => {
         inFlight = null;
         if (active) setRenewing(false);
@@ -144,7 +195,9 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
 
   useEffect(() => {
     if (navigated || error) return;
-    const timeout = setTimeout(() => setError("研究会话暂时无法连接"), 30_000);
+    // A slow cold start is not a failure, and the old sentence
+    // (「研究会话暂时无法连接」) named a cause this timer cannot know.
+    const timeout = setTimeout(() => setError(frameFailure("研究运行时在 30 秒内没有就绪。冷启动有时需要更久；重试会重新建立连接。")), 30_000);
     return () => clearTimeout(timeout);
   }, [navigated, error, attempt]);
 
@@ -172,14 +225,14 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
           setReady(false);
           if (!recoveryAttempted.current) { recoveryAttempted.current = true; renewBinding.current?.(); }
           else setLeaseError("研究连接暂时无法恢复，请重试");
-        } else setError("研究会话暂时无法连接");
+        } else setError(frameFailure("研究会话没有完成初始化，请重试。"));
       } else if (message.type === "evimed.runtime-ui.ack") {
         const request = currentRequest.current;
         if (!request || message.requestId !== request.requestId || typeof message.ok !== "boolean"
           || (message.ok && (typeof message.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(message.sessionId)
             || (request.kind === "open" && message.sessionId !== request.sessionId)))) return;
         incoming.current = message.seq;
-        if (!message.ok) { setError("研究任务暂时无法打开"); return; }
+        if (!message.ok) { setError(frameFailure("研究任务暂时无法打开")); return; }
         currentRequest.current = null; setPending(false); setNavigated(true);
         mirroredSession.current = { sessionId: message.sessionId, attempt };
         // Remove only this acknowledged request. A later navigation intent
@@ -203,7 +256,7 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
 
   useEffect(() => {
     if (!ready || error || !binding || !intent || !iframe.current?.contentWindow) return;
-    if (!/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)) { setError("研究任务暂时无法打开"); return; }
+    if (!/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)) { setError(frameFailure("研究任务暂时无法打开")); return; }
     const key = `${binding.frameId}:${intent.requestId}`;
     if (lastSent.current === key) return;
     lastSent.current = key; currentRequest.current = intent; setPending(true);
@@ -216,16 +269,17 @@ function BoundRuntimeUiFrame({ projectId, origin }: { projectId: string; origin:
 
   useEffect(() => {
     if (!pending || error) return;
-    const timeout = setTimeout(() => setError("研究任务暂时无法打开"), 20_000);
+    const timeout = setTimeout(() => setError(frameFailure("研究任务暂时无法打开")), 20_000);
     return () => clearTimeout(timeout);
   }, [pending, error, attempt, intent?.requestId]);
 
   return (
     <div className="relative h-full w-full">
       {error ? (
-        <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui-sm text-error">
-          <p>{error}</p>
-          <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>
+        <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui-sm text-error">
+          <p>{error.text}</p>
+          {error.retryable && <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
+          {error.capped && <Button variant="ghost" onClick={() => navigate("/app/account")}>查看账户与额度</Button>}
         </div>
       ) : (
         <>

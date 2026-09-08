@@ -87,7 +87,7 @@
     "@deepseek-ai/dsh-mcp-client": "config-row",
     "@deepseek-ai/dsh-agent-presets": "config-row",
     "@deepseek-ai/dsh-skill-filesystem": "config-row",
-    "@deepseek-ai/dsh-compaction-basic": "config-row",
+    "@deepseek-ai/dsh-compaction-basic": "provider-base",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "config-row",
     "@deepseek-ai/dsh-tool-subagent": "config-row",
     "@deepseek-ai/dsh-tool-subagent-control": "config-row",
@@ -104,6 +104,28 @@
     "@deepseek-ai/dsh-typert-protocol": "dependency",
     "@deepseek-ai/dsh-scope": "dependency",
     "@deepseek-ai/dsh-system-prompt": "dependency"
+  },
+  "providers": {
+    "compaction": {
+      "package": "@deepseek-ai/dsh-compaction-basic",
+      "export": "BasicCompactionEngine",
+      "hook": "summarize",
+      "hookArity": 3,
+      "methods": [
+        "compactIfNeeded",
+        "compactRegion",
+        "compactNow"
+      ],
+      "statics": [
+        "inject",
+        "Config"
+      ],
+      "defaults": {
+        "thresholdRatio": 0.8,
+        "retainRatio": 0.16,
+        "maxTokens": 8192
+      }
+    }
   },
   "wire": {
     "unary": [
@@ -278,7 +300,9 @@
     "hostDescribeRemoved": "0.1.2 removed host.describe with the rest of ApiProxy. Host facts arrive once, in the `$events` stream's opening `ready` frame. The readiness probe is session/list, which is a real wire call and therefore also proves authentication.",
     "methodsRenamed": "0.1.2 renamed every method from dotted to slashed and moved arguments into a named descriptor: session.list became session/list taking {_request}. Verified against a running 0.1.2-alpha.3 binary, which 404s the dotted form and names the missing args field itself.",
     "sessionIdNotInFrame": "A session's events arrive on the `session/follow` stream opened for that session and no longer carry a session id. Whatever opens the stream owns the pairing.",
-    "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does."
+    "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does.",
+    "summarizeWithLlmNotExported": "dsh-compaction-basic declares summarizeWithLlm in lib/types/summarizer.d.ts, but the published bundle exports only { BasicCompactionEngine, default }: the function is module-internal, and `./src/*` is in `exports` while not being in `files`. src/compaction.mjs therefore reaches the upstream summarization call through the base class's own summarize() hook, which appends its checkpoint-structure directive after ours. If a later release exports it, the EviMed directive can replace the upstream one instead of composing with it.",
+    "compactionProviderIsAlsoAComposition": "dsh-compaction-basic is a `provider-base`, not a `config-row`, because harness-port subclasses it. It is still named by a composition row and still installed only inside the runtime image, which is why the composition checker treats both roles alike; the distinct word records that a rename of `summarize` silently disables the override rather than erroring."
   },
   "browser": {
     "transportGlobal": "__DSH_TRANSPORT__",

@@ -60,7 +60,7 @@ test("the public registry excludes internal pipelines while trusted lookup retai
   assert.equal(ids.includes("source-understanding"), false);
   assert.equal(registry.get("source-understanding").visibility, "internal");
   assert.ok(registry.getPackage("source-understanding"));
-  assert.equal(registry.list({ includeInternal: true }).length, 17);
+  assert.equal(registry.list({ includeInternal: true }).length, 19);
 });
 
 test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {

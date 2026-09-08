@@ -648,7 +648,7 @@ test("the feedback routes are reachable and name the dependency they need", asyn
   const base = `http://127.0.0.1:${address.port}`;
   try {
     assert.equal(app.feedbackEvents, null, "a file-backed control plane has no product ledger to append to");
-    assert.equal(app.methodDistillWorker, null, "and therefore nothing to distil from");
+    assert.equal(app.learningWorker, null, "and therefore nothing to distil from");
 
     for (const request of [
       { method: "GET", body: undefined },

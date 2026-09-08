@@ -112,6 +112,7 @@ export const SOCKET_TOOL_NAMES = Object.freeze({
   capsuleNote: 'evimed_capsule_note',
   screenBatch: 'evimed_screen_batch',
   reviewRun: 'evimed_review_run',
+  compactRequest: 'evimed_compact_request',
 })
 
 /** Flat list of socket tool names. */
@@ -216,3 +217,66 @@ export const RUNTIME_LEAKAGE_TOOL_TOKENS = Object.freeze([
   ...MCP_TOOL_NAMES,
   ...SOCKET_TOOL_NAME_LIST,
 ])
+
+/**
+ * Kernel tools this composition mounts, as distinct from the ones we register.
+ *
+ * Hidden knowledge: this list is a literal rather than something derived from
+ * the preset, and that is deliberate. The preset names *plugin packages*
+ * (`@deepseek-ai/dsh-tool-fs`); the tools those packages register are a
+ * different vocabulary, and deriving one from the other would be a guess
+ * wearing the costume of a check. It lived in `scripts/dev/vendor-community-
+ * skills.mjs` while community intake was the only thing that needed it. Method
+ * distillation needs the same closed set — a learned method that instructs the
+ * model to call an unmounted tool degrades the run silently, exactly the
+ * failure the intake check exists to prevent — so it moved here, where both
+ * callers read one definition.
+ */
+export const KERNEL_MOUNTED_TOOL_NAMES = Object.freeze([
+  'bash', 'read', 'write', 'edit', 'glob', 'grep', 'list', 'skill', 'task',
+  'fs_read', 'fs_write', 'fs_edit', 'fs_search', 'job_run', 'job_status',
+  'ask_user', 'subagent', 'subagent_control', 'subagent_report', 'workflow',
+])
+
+/**
+ * Every tool name a skill body may legally call: the kernel's plus ours.
+ * MCP tools are not here because a skill body calls them by their prefixed
+ * model-visible name, which `isMcpToolName` already recognises.
+ */
+export const MOUNTED_TOOL_NAMES = Object.freeze([
+  ...KERNEL_MOUNTED_TOOL_NAMES,
+  ...SOCKET_TOOL_NAME_LIST,
+])
+
+/**
+ * Identifier-shaped call sites in a skill body: `some_tool(`, in prose or in a
+ * fence. Two-part snake_case only — a single lowercase word followed by `(` is
+ * far more often ordinary prose or shell than a tool call, and flagging those
+ * would bury the real finding.
+ */
+const TOOL_CALL_PATTERN = /\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\s*\(/g
+
+/**
+ * Distinct snake_case call sites a skill body names.
+ * @param {string} body
+ * @returns {string[]}
+ */
+export function referencedToolNames(body) {
+  const source = String(body ?? '')
+  return [...new Set([...source.matchAll(TOOL_CALL_PATTERN)].map((match) => match[1]))]
+}
+
+/**
+ * The call sites in this body that this composition does not mount.
+ *
+ * `extra` is for a skill that legitimately brings its own tools with it — the
+ * community intake path passes a source's `requiresTools`. A method never has
+ * any: it is text mounted into a run whose tool surface is already fixed.
+ * @param {string} body
+ * @param {readonly string[]} [extra]
+ * @returns {string[]}
+ */
+export function unmountedToolReferences(body, extra = []) {
+  const allowed = new Set([...MOUNTED_TOOL_NAMES, ...extra])
+  return referencedToolNames(body).filter((tool) => !allowed.has(tool) && !isMcpToolName(tool))
+}

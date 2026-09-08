@@ -3,7 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import { SEAMS } from "@evimed/harness-port";
-import { CONTRACT_KINDS, workspaceLayout } from "@evimed/domain";
+import { CONTRACT_KINDS, workspaceLayout, TOOL_RESULT_PRUNER } from "@evimed/domain";
 
 import {
   AGENT_PLUGIN_IDS,
@@ -972,4 +972,82 @@ test("an empty or unconfigured capability catalogue says so instead of disabling
   Object.defineProperty(empty, "fs", { get: () => workspaceFs, configurable: true });
   assert.deepEqual(await loadCapabilities(empty, "/opt/evimed/capabilities"), []);
   assert.ok(said.some((line) => /catalogue is empty/.test(line)), `empty directory said: ${said}`);
+});
+
+test("the tool-result pruner's thresholds are the domain constant, not a hand copy of it", async () => {
+  // The three numbers lived in two places with nothing holding them equal: the
+  // preset row the plugin actually reads, and `TOOL_RESULT_PRUNER` in
+  // `@evimed/domain`, which is what the control plane reasons about when it
+  // decides how much of a tool result a distillation excerpt may carry. A copy
+  // that drifts here does not fail — it makes the control plane's idea of what
+  // the run saw quietly wrong.
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  const row = /- id: tool-result-pruner[\s\S]*?config:\n([\s\S]*?)\n\n/.exec(preset);
+  assert.ok(row, "the tool-result-pruner row is gone; this test is now checking nothing");
+  for (const [key, value] of Object.entries(TOOL_RESULT_PRUNER)) {
+    assert.match(row[1], new RegExp(`${key}:\\s*${value}\\b`), `${key} in the preset is not ${value}`);
+  }
+});
+
+test("exactly one compaction engine can be active at a time", async () => {
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  // Both rows are mounted, which is deliberate — the kernel's engine is the
+  // default and ours is a swap — so the invariant cannot be "only one row".
+  // It is that the swap declines unless the policy asks for it, in the one
+  // place that decides.
+  assert.match(preset, /- id: compaction-basic/);
+  assert.match(preset, /- id: evimed-compaction/);
+  const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
+  assert.match(plugin, /derived\.policy === 'basic'\)\s*\{[\s\S]*?return\n?\s*\}/,
+    "the compaction plugin no longer returns early on the default policy, so two engines would register");
+  assert.ok(!/from\s+['"]@deepseek-ai\//.test(plugin), "the base engine must stay lazily resolved; it is not installed here");
+});
+
+/* ------------------------------------------- the manager's compaction request tool */
+
+test("the compaction request marker is consumed, keyed by session, and never leaks between them", async () => {
+  const { sessionKey, takeRequest } = await import("../plugins/compaction.mjs");
+  assert.equal(sessionKey({ session: { id: "ses_a" } }), "ses_a");
+  assert.equal(sessionKey({ agent: { session: { id: "ses_b" } } }), "ses_b");
+  assert.equal(sessionKey({ sessionId: "ses_c" }), "ses_c");
+  assert.equal(sessionKey({}), "");
+  assert.equal(sessionKey(null), "");
+
+  const requests = new Map([["ses_a", { reason: "context is crowded", at: 1 }]]);
+  assert.deepEqual(takeRequest(requests, { session: { id: "ses_b" } }), null,
+    "one session's request must not compact another's conversation");
+  assert.deepEqual(takeRequest(requests, { session: { id: "ses_a" } }), { reason: "context is crowded" });
+  assert.deepEqual(takeRequest(requests, { session: { id: "ses_a" } }), null,
+    "a marker that survived what it asked for would compact every step until nothing was left");
+  assert.equal(requests.size, 0);
+  assert.equal(takeRequest(requests, {}), null);
+});
+
+test("the request dependency reaches the engine through the factory, not through ctx.plugin", async () => {
+  // cordis constructs a class plugin as `new Plugin(ctx, config)`; anything
+  // after the config is dropped. Handing `takeCompactRequest` that way would
+  // leave the tool registered, the marker written, and nothing reading it —
+  // which is not a wiring error that fails, it is one that looks like the
+  // model never asking.
+  const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
+  const factoryCall = /loadEvimedCompactionEngine\(\{[\s\S]*?\n {2}\}\)/.exec(plugin);
+  assert.ok(factoryCall, "the engine is no longer built through the factory");
+  assert.match(factoryCall[0], /takeCompactRequest:/);
+  const pluginCall = /ctx\.plugin\(Engine, \{[\s\S]*?\n {2}\}\)/.exec(plugin);
+  assert.ok(pluginCall, "the engine is no longer mounted");
+  assert.ok(!/takeCompactRequest/.test(pluginCall[0]), "a third ctx.plugin argument is not passed on");
+});
+
+test("the request tool exists only where its consumer does, and promises the step boundary", async () => {
+  const plugin = await readFile(new URL("../plugins/compaction.mjs", import.meta.url), "utf8");
+  // Registered after the early return for the `basic` policy, so a deployment
+  // running the kernel's own engine never sees a tool nothing would serve.
+  const earlyReturn = plugin.indexOf("derived.policy === 'basic'");
+  const registration = plugin.indexOf("registerTool(ctx, compactTool)");
+  assert.ok(earlyReturn > 0 && registration > earlyReturn);
+  assert.match(plugin, /name: SOCKET_TOOL_NAMES\.compactRequest/, "the name comes from the closed vocabulary");
+  // The tool runs inside a step; the compaction happens at the next boundary.
+  // Reporting otherwise would have the model plan around room it does not have.
+  assert.match(plugin, /servedAt: 'next-step'/);
+  assert.ok(!/compactNow/.test(plugin), "compactNow goes through runMaintenance and throws while a turn is in flight");
 });

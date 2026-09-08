@@ -27,7 +27,7 @@
 export const DOMAIN_VERSION = '0.1.0'
 
 
-// toolNames — 16 exports
+// toolNames — 20 exports
 export {
   MCP_MANAGED_JOB_BASE_NAMES,
   MCP_SERVER_NAME,
@@ -36,6 +36,8 @@ export {
   MCP_TOOL_PREFIX,
   OPENCODE_MCP_SERVER_NAME,
   OPENCODE_MCP_TOOL_PREFIX,
+  KERNEL_MOUNTED_TOOL_NAMES,
+  MOUNTED_TOOL_NAMES,
   ROOT_VISIBLE_MCP_BASE_NAMES,
   RUNTIME_LEAKAGE_TOOL_TOKENS,
   SOCKET_TOOL_NAMES,
@@ -45,6 +47,8 @@ export {
   isSocketToolName,
   mcpToolBaseName,
   mcpToolName,
+  referencedToolNames,
+  unmountedToolReferences,
 } from './src/toolNames.mjs'
 
 // contractKinds — 9 exports
@@ -98,20 +102,28 @@ export {
   transitionEvents,
 } from './src/states.mjs'
 
-// errorCodes — 14 exports
+// errorCodes — 22 exports
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
+  CONTROL_PLANE_ERROR_CODES,
   CREDIT_ERROR_CODES,
+  ERROR_CODE_FAMILIES,
   ERROR_CODE_MESSAGES,
+  ERROR_DETAIL_FIELDS,
   RUNTIME_ERROR_CODES,
+  RUN_OUTCOME_KINDS,
+  RUN_VERDICT_ERROR_CODES,
   SOCKET_TOOL_ERROR_CODES,
   TURN_END_ERROR_CODES,
   TURN_END_SUB_CODES,
   classifyEvidenceSourceError,
   errorCodeMessage,
+  errorCodeOutcome,
+  knownErrorCodeMessage,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
+  runOutcomeKind,
   terminalEvidenceSourceErrorCodes,
   turnEndErrorCode,
 } from './src/errorCodes.mjs'
@@ -131,6 +143,9 @@ export {
   MAX_DELEGATION_DEPTH,
   MEMORY_PROMOTION_MIN_OCCURRENCES,
   MEMORY_PROMOTION_MIN_RUNS,
+  MAX_ACTIVE_LEARNED_METHODS,
+  METHOD_CONTRIBUTION_MIN_TRIALS,
+  METHOD_CONTRIBUTION_RETIRE_AT,
   MEMORY_RECENCY_GAMMA_PER_HOUR,
   MEMORY_REFLECTION_IMPORTANCE_THRESHOLD,
   MEMORY_RERANK_WEIGHTS,
@@ -169,10 +184,11 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
-// contractRegistry — 5 exports
+// contractRegistry — 6 exports
 export {
   CONTRACT_VALIDATOR_KINDS,
   GATE_CHECK_IDS,
+  METHOD_RELATIONS_ACTIONS,
   layeredIssues,
   unreadableSubmission,
   runGate,
@@ -329,6 +345,127 @@ export {
 /** @typedef {import('./src/runTranscript.mjs').TranscriptPart} TranscriptPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptTextPart} TranscriptTextPart */
 /** @typedef {import('./src/runTranscript.mjs').TranscriptToolCall} TranscriptToolCall */
+
+// sensitiveText — 3 exports
+export {
+  SENSITIVE_TEXT_PATTERN,
+  hasSensitiveText,
+  redactSensitiveText,
+  sensitiveTextTokens,
+} from './src/sensitiveText.mjs'
+
+// methodSkill — the learned-method format, its digest, and every rule code can decide
+export {
+  METHOD_BODY_SECTIONS,
+  METHOD_FILE_PREFIXES,
+  METHOD_FILES_MAX_BYTES,
+  METHOD_OPERATIONS,
+  METHOD_PRESERVED_SECTIONS,
+  METHOD_ROLES,
+  METHOD_SCRIPT_DENIED_IMPORTS,
+  METHOD_SKILL_ISSUE_CODES,
+  METHOD_SKILL_SCHEMA,
+  METHOD_STATUSES,
+  formatDependsOn,
+  isMethodDigest,
+  methodBodySections,
+  methodContentDigest,
+  mountedMethodDigest,
+  methodDigestInput,
+  normalizeSkillBody,
+  parseDependsOn,
+  parsePythonToolShape,
+  parseReuseReferences,
+  parseSkillFrontmatter,
+  preservedSectionItems,
+  preservedSectionsIntact,
+  renderMethodSkill,
+  renderSkillFrontmatter,
+  scriptStaticIssues,
+  skillBodyDigest,
+  toolConfigIssues,
+  validateMethodSkill,
+} from './src/methodSkill.mjs'
+
+// methodGraph — the lifecycle: counters, promotion, retirement, and the graph
+export {
+  METHOD_COUNT_KINDS,
+  METHOD_EVALUATION_VERDICTS,
+  METHOD_GRAPH_ISSUE_CODES,
+  METHOD_OBSERVATION_OUTCOMES,
+  METHOD_ORIGINS,
+  METHOD_PASSING_VERDICTS,
+  METHOD_RELATION_TYPES,
+  METHOD_SUCCESS_OUTCOMES,
+  computeMethodLevels,
+  emptyLearning,
+  evaluationEligible,
+  foldEligible,
+  foldEvaluation,
+  foldObservation,
+  foldRead,
+  foldRelation,
+  methodLevel,
+  methodStrength,
+  promotionVerdict,
+  reflectionDue,
+  relationIssues,
+  resetLearningForDigest,
+  retirementProposal,
+  libraryEvictions,
+  methodContribution,
+  successfulFamilies,
+  successfulRuns,
+  unresolvedConflicts,
+  validateMethodGraph,
+} from './src/methodGraph.mjs'
+
+// toolGraphSampling — ToolVerse's dependency graph and unlock sampling
+export {
+  TOOL_EDGE_SOURCES,
+  TOOL_EDGE_STATE_EFFECTS,
+  TOOL_EDGE_TYPES,
+  TOOL_GRAPH_ISSUE_CODES,
+  chainSpecs,
+  graphCoverage,
+  sampleableEdges,
+  sanitizeToolGraph,
+  seededRandom,
+  seededSample,
+  unlockSchedule,
+  validateToolGraph,
+} from './src/toolGraphSampling.mjs'
+
+// experienceBullets — the capability handbook's self-maintained section
+export {
+  BULLET_TAGS,
+  EXPERIENCE_SECTION_HEADING,
+  EXPERIENCE_SECTION_NOTE,
+  EXPERIENCE_SUBSECTIONS,
+  curateBullets,
+  harmfulBullets,
+  nextBulletId,
+  onlyExperienceSectionChanged,
+  parseExperienceSection,
+  renderBullet,
+  renderExperienceSection,
+  replaceExperienceSection,
+} from './src/experienceBullets.mjs'
+
+/** @typedef {import('./src/methodSkill.mjs').MethodSkillIssue} MethodSkillIssue */
+/** @typedef {import('./src/methodSkill.mjs').MethodPayload} MethodPayload */
+/** @typedef {import('./src/methodSkill.mjs').MethodDependency} MethodDependency */
+/** @typedef {import('./src/methodGraph.mjs').MethodRecord} MethodRecord */
+/** @typedef {import('./src/methodGraph.mjs').MethodLearning} MethodLearning */
+/** @typedef {import('./src/methodGraph.mjs').MethodObservation} MethodObservation */
+/** @typedef {import('./src/methodGraph.mjs').MethodRelation} MethodRelation */
+/** @typedef {import('./src/methodGraph.mjs').MethodEvaluation} MethodEvaluation */
+/** @typedef {import('./src/methodGraph.mjs').MethodProvenance} MethodProvenance */
+/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraph} ToolGraph */
+/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphNode} ToolGraphNode */
+/** @typedef {import('./src/toolGraphSampling.mjs').ToolGraphEdge} ToolGraphEdge */
+/** @typedef {import('./src/toolGraphSampling.mjs').ChainSpec} ChainSpec */
+/** @typedef {import('./src/experienceBullets.mjs').ExperienceBullet} ExperienceBullet */
 
 export { citedIdentifiers, retractionNotices } from './src/retractionCheck.mjs'
 // sourceUnderstanding — 15 exports

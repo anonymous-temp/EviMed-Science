@@ -17,6 +17,7 @@ import {
   ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
   readDelegatedAssistantMessagesForTest,
+  MAX_RUN_CORRECTIONS,
   scopeNativeProjectionForTest,
   snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
@@ -232,7 +233,10 @@ test("starts immutable open-domain and specialist run identities from research-s
     const identity = events.filter((event) => event.event === "started" || event.event === "dispatch");
     assert.deepEqual(identity.map((event) => event.event), ["started", "dispatch", "started", "dispatch"]);
     for (const event of events) {
-      assert.ok(["started", "dispatch", "progress", "notice", "finished"].includes(event.event), `unknown ledger event ${event.event}`);
+      // `learning` joined the vocabulary when a finished run began writing its
+      // transcript down: the receipt is folded onto the run record, so every
+      // run that produced a readable session leaves one.
+      assert.ok(["started", "dispatch", "progress", "notice", "finished", "learning"].includes(event.event), `unknown ledger event ${event.event}`);
     }
     assert.equal(ledger.includes("prompt"), false);
     assert.equal(ledger.includes("content"), false);
@@ -916,11 +920,19 @@ test("a run whose files drifted from its receipt does not ship, container alive 
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "failed", "a package no gate has seen must not ship");
     assert.equal(run.errorCode, "specialist_receipt_digest_mismatch");
-    assert.deepEqual(run.artifacts, []);
+    // Not shipped is not deleted. The verdict above is the whole of "does not
+    // ship" — the run is `failed`, the package is not published as graded, and
+    // nothing downstream treats it as accepted. The files are still listed,
+    // marked unverified, because the alternative is telling a researcher whose
+    // report is sitting in the workspace that there is 「暂无交付物」.
+    assert.deepEqual(run.artifacts, [], "a package no gate has seen is not graded output");
+    assert.deepEqual(run.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
     assert.ok(
       (run.qualityNotices ?? []).some((line) => /digest the file no longer matches/.test(String(line))),
       "the verdict must say which file drifted",
     );
+    assert.ok((run.qualityNotices ?? []).some((line) => String(line).includes("未经核验")),
+      "and must label the files it lists as ungraded");
   });
 });
 
@@ -5132,6 +5144,7 @@ test("a run whose container is already gone is judged from its receipt, not fail
 
     assert.equal(finished?.status, "succeeded", "a receipt that verifies is a delivered run, whatever became of the container");
     assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.deepEqual(finished?.unverifiedArtifacts, [], "a delivered package has nothing ungraded to report");
     assert.deepEqual(finished?.qualityNotices, ["one advisory"]);
 
     // And the receipt reaches the browser, ahead of the terminal state.
@@ -5440,6 +5453,87 @@ test("a repair instruction names a check the run can actually run", () => {
   assert.equal(/evimed_submit_deliverable/.test(stale), false);
 });
 
+test("the preserved accepted bytes can be read back, and only by their own digest", async () => {
+  // The writer above has existed since the repair loop was built and had no
+  // reader at all. That is the second half of the aripiprazole failure: the run
+  // kept editing after its package was accepted, the receipt stopped matching,
+  // and the version that had passed the gate sat in `.openscience/repair-revisions/`
+  // with no route to it. A snapshot nobody can open is a backup that does not
+  // exist, so this test is the reader.
+  const root = await mkdtemp(path.join(tmpdir(), "os-repair-readback-"));
+  try {
+    const project = {
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const relative = "deliverables/review/clinical-evidence-report.md";
+    const accepted = "# Accepted review\n二甲双胍的原始已核验版本。\n";
+    await mkdir(path.dirname(path.join(project.workspaceDir, relative)), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), accepted);
+    await writeFile(path.join(project.workspaceDir, workspaceLayout.receiptFile), JSON.stringify({
+      formatVersion: 1,
+      runId: "kernel-run-1",
+      bundleVersion: "1.0.0",
+      domainVersion: "1.0.0",
+      entries: [{
+        deliverableId: "review",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        acceptedAt: "2026-09-06T00:00:00Z",
+        attempt: 1,
+        notices: [],
+        files: [{ path: relative, sha256: createHash("sha256").update(accepted).digest("hex"), bytes: Buffer.byteLength(accepted) }],
+      }],
+    }));
+    await snapshotAcceptedPackageForRepairForTest(project, { id: "run_control", nativeTurn: null }, "runtime-generation-1");
+
+    const store = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-pro", monitorIntervalMs: 60_000 });
+
+    const revisions = await store.listRepairRevisions(project, "run_control");
+    assert.equal(revisions.length, 1, "the snapshot the writer just made must be listable");
+    assert.match(revisions[0].acceptedDigest, /^[0-9a-f]{64}$/);
+    // Metadata only. A package is a dozen files of report prose, and a list
+    // endpoint that inlined all of them is the endpoint nobody calls.
+    assert.deepEqual(revisions[0].files.map((file) => file.path), [relative]);
+    assert.equal(Object.hasOwn(revisions[0].files[0], "text"), false, "the list must not carry file bodies");
+
+    const file = await store.readRepairRevisionFile(project, "run_control", revisions[0].acceptedDigest, relative);
+    assert.equal(file.text, accepted, "the bytes handed back must be the bytes the gate accepted");
+    assert.equal(file.sha256, createHash("sha256").update(accepted).digest("hex"));
+
+    // Another run cannot read this run's revisions, whatever digest it names.
+    assert.deepEqual(await store.listRepairRevisions(project, "run_other"), []);
+    await assert.rejects(
+      store.readRepairRevisionFile(project, "run_other", revisions[0].acceptedDigest, relative),
+      (error) => error.code === "repair_revision_not_found",
+    );
+    // And a file that is not in the revision is not served out of it.
+    await assert.rejects(
+      store.readRepairRevisionFile(project, "run_control", revisions[0].acceptedDigest, "deliverables/review/other.md"),
+      (error) => error.code === "repair_revision_file_not_found",
+    );
+
+    // The digest is re-derived from the text rather than trusted: the whole
+    // point of handing this back is that it is the version that passed, so
+    // "this is what passed" has to be provable here.
+    const snapshotName = (await readdir(path.join(project.metaDir, "repair-revisions")))
+      .find((name) => name.startsWith("run_control-"));
+    const snapshotPath = path.join(project.metaDir, "repair-revisions", snapshotName);
+    const tampered = JSON.parse(await readFile(snapshotPath, "utf8"));
+    tampered.files[0].text = "# 被改过的内容\n";
+    await writeFile(snapshotPath, JSON.stringify(tampered));
+    await assert.rejects(
+      store.readRepairRevisionFile(project, "run_control", revisions[0].acceptedDigest, relative),
+      (error) => error.code === "repair_revision_digest_mismatch",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("server repair preserves accepted bytes outside the runtime workspace", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-repair-revision-"));
   try {
@@ -5675,7 +5769,20 @@ test("a package written and never submitted is not reported as a stopped runtime
       abandoned?.qualityNotices?.some((line) => line.includes("d1") && line.includes("1")),
       `the verdict must name the deliverable and what was written: ${JSON.stringify(abandoned?.qualityNotices)}`,
     );
-    assert.deepEqual(abandoned?.artifacts, [], "ungraded files are still not deliverables");
+    // Ungraded is a label on the files, not a reason to hide them.
+    //
+    // This asserted `artifacts: []` — "ungraded files are still not
+    // deliverables" — and that was the whole defect, stated as an invariant. In
+    // production 28 of 179 finished runs ended here, at p90 58 minutes, with a
+    // complete package on disk and 「暂无交付物。」 on the screen. The verdict is
+    // unchanged and still `runtime_deliverable_never_submitted`; what changed is
+    // that the run no longer reports having produced nothing when it produced
+    // something.
+    assert.deepEqual(abandoned?.artifacts, [], "ungraded files are not graded output");
+    assert.deepEqual(abandoned?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"],
+      "but the run must still say what it wrote");
+    assert.ok(abandoned?.qualityNotices?.some((line) => line.includes("未经核验")),
+      `the files must be labelled unverified rather than passed off as graded: ${JSON.stringify(abandoned?.qualityNotices)}`);
 
     // Negative controls — the three ways this could lie.
     // 1. An item that was submitted and rejected wrote files too; that is a
@@ -5763,7 +5870,10 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
     const finished = (await store.list(project)).find((item) => item.id === started.id);
     assert.equal(finished?.status, "failed");
     assert.equal(finished?.errorCode, "specialist_receipt_digest_mismatch");
+    // Same rule on the container-gone path: refused, and still on disk.
     assert.deepEqual(finished?.artifacts, []);
+    assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.ok(finished?.qualityNotices?.some((line) => String(line).includes("未经核验")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -6144,4 +6254,126 @@ test("a prior run projection in the same session cannot prove current-run source
 
   assert.equal(scopeNativeProjectionForTest(projection, run), null);
   assert.equal(scopeNativeProjectionForTest({ ...projection, runId: "current-run" }, run)?.runId, "current-run");
+});
+
+/* ------------------------------------------------ a correction to a run already going */
+
+// The design question this settles: a researcher who realises part-way through
+// that the question was wrong. The obvious move is to let a second dispatch
+// through on a session that already has a running run, and it is the wrong one
+// — a dispatch creates a run, a run binds a deliverable contract, and one
+// session with two runs is one conversation with two verdicts. Every published
+// implementation of mid-run steering reaches the same conclusion from the other
+// side: a steered message belongs to the response it steers, not to a turn of
+// its own, because splitting it off is what lets a later compaction summarise
+// away one half of a modified instruction.
+//
+// So `agent_run_active` stays exactly as it is — the test above at
+// "a session may hold one active run" still holds it — and a correction is a
+// different operation on the run that is already going.
+/** A throwaway project directory, in the shape the run store expects. */
+async function withProject(body) {
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-correct-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, ".evimed"), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    await body(project);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("a correction belongs to the run it corrects, and is counted on it", async () => {
+  await withProject(async (project) => {
+    const binding = { sessionId: "ses_correct", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 1000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+    });
+    const run = await store.start(project, { sessionId: binding.sessionId });
+    assert.equal(run.status, "running");
+    assert.equal(run.corrections ?? 0, 0);
+
+    const first = await store.recordCorrection(project, run.id, "req_correction_1");
+    assert.equal(first.corrections, 1);
+    assert.ok(first.kernelRequestIds.includes("req_correction_1"),
+      "the request id is on the run before the kernel is told, or nothing can match the reply to it");
+    assert.equal((await store.list(project)).length, 1, "a correction must not create a run");
+
+    // A repair's request is recorded through the same event and is not a
+    // correction: the gate asking for a fix and a researcher changing their
+    // mind are different facts about a run.
+    const repaired = await store.recordKernelRequest(project, run.id, "req_repair_1");
+    assert.equal(repaired.corrections, 1);
+    assert.ok(repaired.kernelRequestIds.includes("req_repair_1"));
+  });
+});
+
+test("corrections are bounded, and a run that is not running takes none", async () => {
+  await withProject(async (project) => {
+    const binding = { sessionId: "ses_correct_cap", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      monitorIntervalMs: 1000,
+      monitorMaxPolls: 100,
+      readSessionHistory: async () => [],
+    });
+    const run = await store.start(project, { sessionId: binding.sessionId });
+
+    for (let index = 1; index <= MAX_RUN_CORRECTIONS; index += 1) {
+      assert.equal((await store.recordCorrection(project, run.id, `req_c_${index}`)).corrections, index);
+    }
+    // An unbounded stream of corrections keeps a run alive for as long as
+    // somebody keeps typing, which is a budget the dispatch-time limits cannot
+    // see.
+    await assert.rejects(
+      () => store.recordCorrection(project, run.id, "req_c_over"),
+      (error) => error?.code === "agent_run_correction_limit",
+    );
+    await assert.rejects(
+      () => store.recordCorrection(project, "run_missing", "req_c_x"),
+      (error) => error?.code === "agent_run_not_running",
+    );
+
+    // Once the run is over there is nothing left to correct, and saying so by
+    // name is what stops a late correction from looking like it landed.
+    await store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+    await assert.rejects(
+      () => store.recordCorrection(project, run.id, "req_c_late"),
+      (error) => error?.code === "agent_run_not_running",
+    );
+  });
+});
+
+test("the correction route takes a text and nothing else, and names what it cannot find", async () => {
+  await withApp(async ({ base }) => {
+    const missing = await fetch(`${base}/api/agent-runs/run_does_not_exist/steer`, {
+      method: "POST", headers: projectHeaders("default", true), body: JSON.stringify({ text: "只看随机对照试验" }),
+    });
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, "agent_run_not_found");
+
+    for (const [label, body] of [
+      ["empty text", { text: "   " }],
+      // The delivery mode is the control plane's decision, not the client's: a
+      // caller that could choose `queue` here would be dispatching a second
+      // turn through a route that promises not to.
+      ["a chosen mode", { text: "x", mode: "queue" }],
+      ["no text at all", {}],
+    ]) {
+      const response = await fetch(`${base}/api/agent-runs/run_x/steer`, {
+        method: "POST", headers: projectHeaders("default", true), body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 400, label);
+    }
+  });
 });

@@ -6,6 +6,8 @@
  * branch is gone with it rather than staying as a constant that is always
  * false and a code path nothing can reach.
  */
+import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage } from "@evimed/domain";
+
 import type { RunTranscript } from "@/lib/runStream";
 
 const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
@@ -49,15 +51,16 @@ export interface WebUsageBudgetDetails {
   committed: number;
   requested?: number;
   currency: WebUsageBudgetCurrency;
+  /** How long until this ceiling starts freeing itself. Declared for the two
+   *  `credits_*` codes only; `usage_budget_exceeded` states it in a header
+   *  instead, which `WebApiError.retryAfterSeconds` reads either way. */
+  retryAfterSeconds?: number;
 }
 
 export interface WebUsageBudgetRefusal extends WebUsageBudgetDetails {
   /** When this browser saw the refusal. */
   observedAt: string;
 }
-
-const usageBudgetWindows: WebUsageBudgetWindow[] = ["day", "week", "run"];
-const usageBudgetCurrencies: WebUsageBudgetCurrency[] = ["CNY"];
 
 /** The Chinese name of each ceiling. The two account ceilings say the window
  *  they measure, not a calendar period: nothing resets at midnight or on
@@ -68,27 +71,80 @@ export const webUsageBudgetWindowLabels: Record<WebUsageBudgetWindow, string> = 
   run: "单次任务额度",
 };
 
-/** Mirrors the control plane's per-code declaration: only
- *  `usage_budget_exceeded` carries details, and only the keys, types and closed
- *  sets below survive. Anything else the wire happens to hold is dropped here
- *  rather than handed to a component to interpret. */
+/**
+ * The declared specifics of a refusal, or null.
+ *
+ * Driven by `@evimed/domain`'s `ERROR_DETAIL_FIELDS`, which is the same table
+ * the control plane filters the outgoing body against. It used to be restated
+ * here — one code, `usage_budget_exceeded`, with its window and currency sets
+ * spelled out a second time — and the copies disagreed: the two codes this
+ * deployment actually raises (`credits_daily_limit_reached`,
+ * `credits_weekly_limit_reached`) reached the browser with the ceiling, the
+ * amount and the reset moment computed and then dropped, leaving 「请重试」 as
+ * the advice for a ceiling retrying cannot clear.
+ *
+ * Anything the wire holds beyond the declared keys is dropped rather than
+ * handed to a component to interpret, and a value outside a declared closed set
+ * is dropped rather than substituted — an amount printed under a currency
+ * nobody said it was in is worse than no amount at all.
+ */
 function parseWebApiErrorDetails(code: string | null, value: unknown): WebUsageBudgetDetails | null {
-  if (code !== "usage_budget_exceeded" || !value || typeof value !== "object") return null;
+  const table = ERROR_DETAIL_FIELDS as unknown as Record<string, Record<string, "number" | readonly string[]> | undefined>;
+  const shape = code ? table[code] : undefined;
+  if (!shape || !value || typeof value !== "object") return null;
   const raw = value as Record<string, unknown>;
-  const window = usageBudgetWindows.find(candidate => candidate === raw.window);
-  const currency = usageBudgetCurrencies.find(candidate => candidate === raw.currency);
-  const number = (input: unknown) => (typeof input === "number" && Number.isFinite(input) ? input : null);
-  const limit = number(raw.limit);
-  const committed = number(raw.committed);
-  const requested = number(raw.requested);
-  if (!window || !currency || limit === null || committed === null) return null;
+  const accepted: Record<string, number | string> = {};
+  for (const [key, rule] of Object.entries(shape)) {
+    const candidate = raw[key];
+    if (rule === "number") {
+      if (typeof candidate === "number" && Number.isFinite(candidate)) accepted[key] = candidate;
+    } else if (typeof candidate === "string" && rule.includes(candidate)) {
+      accepted[key] = candidate;
+    }
+  }
+  // Every declared shape names these four. A bag missing one is dropped whole
+  // rather than rendered with a hole: 「上限 undefined」 is not a sentence, and
+  // the registry's own sentence for the code is a better answer than a broken
+  // one. The two casts are what the loop above already proved — the value came
+  // out of the closed set the domain declared for this key.
+  const window = accepted.window;
+  const currency = accepted.currency;
+  if (typeof window !== "string" || typeof currency !== "string"
+    || typeof accepted.limit !== "number" || typeof accepted.committed !== "number") return null;
   return {
-    window,
-    limit,
-    committed,
-    ...(requested === null ? {} : { requested }),
-    currency,
+    window: window as WebUsageBudgetWindow,
+    limit: accepted.limit,
+    committed: accepted.committed,
+    currency: currency as WebUsageBudgetCurrency,
+    ...(typeof accepted.requested === "number" ? { requested: accepted.requested } : {}),
+    ...(typeof accepted.retryAfterSeconds === "number" ? { retryAfterSeconds: accepted.retryAfterSeconds } : {}),
   };
+}
+
+/**
+ * How long the control plane says this refusal will keep refusing, in seconds.
+ *
+ * `Retry-After` is a header (`sendError` in `apps/server/src/security.mjs`) and
+ * every client path here read only the JSON body, so a 402 that had already
+ * computed the moment the ceiling frees up arrived carrying nothing but
+ * "please retry" — advice that provably cannot work while the window is full.
+ * Both forms RFC 9110 allows are read: delta-seconds, which is what the control
+ * plane sends, and an HTTP-date, because an intermediary may rewrite the first
+ * into the second.
+ *
+ * CROSS-ORIGIN: `Retry-After` is not a CORS-safelisted response header. A
+ * deployment serving this bundle from an origin other than the API must name it
+ * in `Access-Control-Expose-Headers` or this reads null — which is not an
+ * error, the hint is simply omitted and the sentence stands on its own.
+ */
+export function webRetryAfterSeconds(headers: Headers): number | null {
+  const raw = headers.get("Retry-After");
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return Math.min(Number(trimmed), 30 * 24 * 60 * 60);
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, Math.round((at - Date.now()) / 1000));
 }
 
 let lastUsageBudgetRefusal: WebUsageBudgetRefusal | null = null;
@@ -121,12 +177,20 @@ export class WebApiError extends Error {
   readonly code: string | null;
   readonly requestId: string | null;
   /** The machine-readable specifics the control plane declared for this code,
-   *  or null for the codes that declare none — which is every code but one. */
+   *  or null for the codes that declare none — see `ERROR_DETAIL_FIELDS`. */
   readonly details: WebUsageBudgetDetails | null;
+  /** Seconds until this refusal is worth attempting again, from the
+   *  `Retry-After` header or from the declared details, or null when the
+   *  control plane said nothing about time. Never invented: a hint nobody sent
+   *  would be a promise this client cannot keep. */
+  readonly retryAfterSeconds: number | null;
 
   constructor(
     message: string,
-    envelope: { status: number; code?: string | null; requestId?: string | null; details?: unknown },
+    envelope: {
+      status: number; code?: string | null; requestId?: string | null; details?: unknown;
+      retryAfterSeconds?: number | null;
+    },
   ) {
     super(message);
     this.name = "WebApiError";
@@ -134,11 +198,123 @@ export class WebApiError extends Error {
     this.code = envelope.code ?? null;
     this.requestId = envelope.requestId ?? null;
     this.details = parseWebApiErrorDetails(this.code, envelope.details);
+    // The header first: it is what every refusal with a retryAfterSeconds
+    // carries today, across all sixteen status classes, while the body detail
+    // exists only for the two credits codes that declare it.
+    this.retryAfterSeconds = typeof envelope.retryAfterSeconds === "number" && Number.isFinite(envelope.retryAfterSeconds)
+      ? Math.max(0, envelope.retryAfterSeconds)
+      : this.details?.retryAfterSeconds ?? null;
     // Remembered here, at the one place every client path constructs the
     // error, rather than at each catch site: "every caller remembers it" is
     // how this detail was lost in the first place.
     if (this.details) lastUsageBudgetRefusal = { ...this.details, observedAt: new Date().toISOString() };
   }
+}
+
+/**
+ * A wait in the units a person thinks in.
+ *
+ * Rounded up, always: a sentence that promises the ceiling frees earlier than
+ * it does sends the researcher back to be refused a second time, which is the
+ * retry loop this whole change exists to stop.
+ */
+export function describeWebRetryAfter(seconds: number): string {
+  const total = Math.max(1, Math.ceil(seconds));
+  if (total < 60) return `约 ${total} 秒`;
+  const minutes = Math.ceil(total / 60);
+  if (minutes < 60) return `约 ${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `约 ${hours} 小时` : `约 ${hours} 小时 ${rest} 分钟`;
+}
+
+/**
+ * What the refusal's own clock adds to its sentence, or null.
+ *
+ * A spend ceiling gets different words from a rate limit because it *is* a
+ * different fact. Both account ceilings are rolling windows (`spendAdmission`
+ * in `usageMetering.mjs` measures the last 24 hours and the last 7 days), and
+ * the moment it reports is when the oldest charge inside the window ages out —
+ * the earliest the refusal can lift, freeing that one charge's worth and no
+ * more. Saying 「N 分钟后恢复」 would be a promise the ledger never made;
+ * naming it as the start of a gradual release is what the number actually
+ * means, and it also rules out the reading that budgets reset at midnight.
+ */
+export function webRetryAfterHint(error: WebApiError): string | null {
+  if (error.retryAfterSeconds === null) return null;
+  const wait = describeWebRetryAfter(error.retryAfterSeconds);
+  const code = error.code ?? "";
+  // A spend ceiling only: a runtime hold or a rate limit does free completely
+  // at its stated time, and telling someone their 额度 is releasing when the
+  // autopilot merely holds the runtime would be a different false claim.
+  const spendCeiling = error.details !== null || code === "usage_budget_exceeded" || /^credits_/.test(code);
+  if (spendCeiling) return `${wait}后额度开始释放（按滚动窗口逐笔释放，不是整点清零）。`;
+  return `请在${wait}后重试。`;
+}
+
+/**
+ * What an HTTP status alone can honestly say.
+ *
+ * The last resort, reached only when the registry has no sentence for the code
+ * and the surface offered no wording of its own. It exists because the previous
+ * last resort was 「操作未完成，请重试。」 for all sixteen status classes the
+ * control plane raises — including 413 (a file over the size ceiling) and 503
+ * (a connector the deployment has not configured), where retrying is advice
+ * that provably cannot work and, per the over-refusal research, costs more
+ * trust than the refusal itself.
+ */
+function webStatusMessage(status: number): string {
+  if (status === 401) return "登录已失效，请重新登录。";
+  if (status === 402) return "额度上限已到，这次请求没有开始。";
+  if (status === 403) return "当前账号没有执行这项操作的权限。";
+  if (status === 404) return "这条记录已不存在，请刷新后再试。";
+  if (status === 409) return "内容已发生变化，请刷新后再试。";
+  if (status === 413) return "内容超过了本次请求的大小上限，请拆分后再试。";
+  if (status === 423) return "所需资源正被占用，暂时无法执行。";
+  if (status === 429) return "请求过于频繁，已被暂时限流。";
+  if (status === 400 || status === 422) return "这次请求没有被接受，请检查填写的内容。";
+  if (status >= 500) return "服务暂时不可用，请稍后重试。";
+  return "操作未完成，请重试。";
+}
+
+/** What a surface may say instead of the shared wording, when it knows more. */
+export interface WebErrorMessageOverrides {
+  /** By error code, for codes the registry has no sentence for. Delete an entry
+   *  the day the registry gains that code: the registry wins here on purpose. */
+  codes?: Record<string, string>;
+  /** By HTTP status, for facts no error code expresses — a revision conflict is
+   *  the only real one, and it reads differently on a document than on a
+   *  notification. */
+  statuses?: Record<number, string>;
+  /** For a failure that never reached the control plane at all: a dropped
+   *  connection, an invalid response. */
+  fallback?: string;
+}
+
+/**
+ * One Chinese sentence for any refusal, from the one dictionary.
+ *
+ * The order is most-specific-first and every step is a fact rather than a
+ * guess: the declared numbers, then the registry's sentence for the code, then
+ * whatever the surface knows about that code or status, then the status alone.
+ *
+ * This function exists because four independent tables of Chinese error strings
+ * shipped in this bundle at once and disagreed — `runtime_canceled` had two
+ * different sentences — while the registry that holds them all rendered zero
+ * pixels. A surface that needs different words supplies them through
+ * `overrides` and stays one caller of one dictionary.
+ */
+export function webErrorMessage(error: unknown, overrides: WebErrorMessageOverrides = {}): string {
+  if (!(error instanceof WebApiError)) return overrides.fallback ?? "操作未完成，请重试。";
+  const code = error.code ?? "";
+  const head = error.details
+    ? describeWebUsageBudget(error.details)
+    : knownErrorCodeMessage(code)
+      ?? overrides.codes?.[code]
+      ?? overrides.statuses?.[error.status]
+      ?? webStatusMessage(error.status);
+  const hint = webRetryAfterHint(error);
+  return hint ? `${head}${hint}` : head;
 }
 
 export type WebTaskStatus =
@@ -417,7 +593,16 @@ export interface WebAgentRun {
   finishedAt: string | null;
   durationMs: number | null;
   errorCode: string | null;
+  /** Files the delivery gate accepted. Only these are graded output, and the
+   *  control plane reads verification results and agenda deltas out of this
+   *  list — which is why ungraded files are a separate field rather than a
+   *  wider meaning for this one. */
   artifacts: string[];
+  /** Files the run wrote under `deliverables/` that no gate accepted. Present
+   *  on every run this build records; `[]` means none were written. Older
+   *  ledger rows omit it, which is why `undeliveredFiles` distinguishes an
+   *  absent field from an empty one. */
+  unverifiedArtifacts?: string[];
   // "unverified" when a clinical package finished with only process-documentation
   // or presentation gaps and was delivered rather than discarded.
   // "unchecked" when a layer of the gate did not run at all — most often the
@@ -431,6 +616,29 @@ export interface WebAgentRun {
   observedMessages?: number;
   observedToolCalls?: number;
   lastProgressAt?: string | null;
+  /** How many repair rounds the delivery gate and the run went through, and
+   *  the same number split by what was repaired. Both are folded from the
+   *  ledger's `learning` event (`normalizeRepairRounds`, agentRuns.mjs) and
+   *  have been on the wire since the repair loop shipped. */
+  attempts?: number;
+  repairRounds?: { content: number; structural: number };
+  /** How many times the researcher steered this run mid-flight. */
+  corrections?: number;
+  /**
+   * The phase projection's own diagnostics, attached by `AgentRuns.list()`
+   * (agentRuns.mjs:2593). Typed here because the server already sends them and
+   * an untyped field is invisible to `tsc` — a later reader would otherwise
+   * need a second wire change to see what is already arriving.
+   *
+   * NOT researcher-facing, and a surface that renders them verbatim is a new
+   * defect of exactly the kind this change removes: `phaseNotices` entries are
+   * internal state-machine diagnostics in English of the form
+   * `illegal_state_transition: running -> succeeded` (agentRuns.mjs:643). They
+   * belong in a support affordance — a title attribute, a diagnostics drawer —
+   * beside the run id, never in the outcome sentence.
+   */
+  phaseIllegalTransitions?: number;
+  phaseNotices?: string[];
 }
 
 
@@ -690,6 +898,10 @@ async function parseApiResponse<T>(res: Response): Promise<T> {
       code: envelope && typeof envelope.code === "string" ? envelope.code : null,
       requestId: envelope && typeof envelope.requestId === "string" ? envelope.requestId : null,
       details: envelope?.details,
+      // The body is not the whole refusal: the reset moment travels as a
+      // header, and reading only the JSON is how "近 3 小时后额度开始释放"
+      // became "请重试" on the one surface where retrying cannot work.
+      retryAfterSeconds: webRetryAfterSeconds(res.headers),
     });
   }
 

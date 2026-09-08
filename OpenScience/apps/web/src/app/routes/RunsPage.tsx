@@ -12,11 +12,18 @@ import {
   Search,
 } from "lucide-react";
 import { downloadArtifact } from "@/lib/artifactFile";
-import { listWebAgentRuns, type WebAgentRun, type WebAgentRunStatus } from "@/lib/apiClient";
+import { getWebProjectId, listWebAgentRuns, type WebAgentRun, type WebAgentRunStatus } from "@/lib/apiClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { formatDateTime } from "@/lib/format";
-import { useUiStore } from "@/lib/store";
+import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import {
+  runDidNotDeliver,
+  summarizeQualityNotices,
+  undeliveredFiles,
+  webRunOutcome,
+  WEB_RUN_STATUS_LABEL,
+} from "@/lib/runPresentation";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 
@@ -30,13 +37,6 @@ interface Filter {
   surface?: string;
   since?: SincePreset;
 }
-
-const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
-  running: "执行中",
-  succeeded: "成功",
-  failed: "失败",
-  canceled: "已取消",
-};
 
 /**
  * The nine-phase projection (§7.1.1), for the row that is already open.
@@ -59,78 +59,6 @@ const WEB_RUN_PHASE_LABEL: Record<string, string> = {
   failed: "未完成",
   canceled: "已取消",
 };
-
-/** What went wrong, in the reader's language. The raw code was rendered as-is,
- *  so a run reported "specialist_citation_invalid" to someone reading a Chinese
- *  interface. The code is kept as a tooltip for support, not as the message. */
-const WEB_RUN_ERROR_LABEL: Record<string, string> = {
-  agent_timeout: "运行超时，未能在时限内完成。",
-  runtime_tool_error: "科研工具调用失败，且后续没有成功的同类调用。",
-  runtime_session_error: "科研会话出错中断。",
-  runtime_canceled: "运行已被取消。",
-  runtime_limit_exceeded: "同时运行的任务已达上限，请等待前一个任务完成后重试。",
-  specialist_contract_unavailable: "该专项 Agent 的契约版本已变更，结果无法核验。",
-  specialist_required_output_missing: "缺少必需的产物文件。",
-  specialist_required_output_stale: "产物文件早于本次运行，未被更新。",
-  specialist_required_skill_missing: "本轮未加载所需技能，结果未经该技能核验。",
-  specialist_citation_invalid: "存在读者无法打开的引文地址（内部地址或含凭据）。",
-  specialist_citation_integrity_failed: "引文与其来源不一致。",
-  specialist_cited_source_unrecorded: "报告引用了未记录在证据快照中的来源。",
-  specialist_evidence_snapshot_missing: "缺少证据快照文件。",
-  specialist_evidence_snapshot_invalid: "证据快照文件格式无效。",
-  specialist_evidence_snapshot_empty: "证据快照中没有任何来源。",
-  specialist_evidence_traceability_failed: "部分结论未能追溯到其来源原文。",
-  specialist_evidence_provenance_failed: "来源文件的留存记录不完整。",
-  specialist_evidence_integrity_failed: "来源文件在运行后被改动。",
-  specialist_evidence_repair_failed: "多轮修复后仍未通过证据核验。",
-  specialist_delegated_evidence_read: "检索到的原文由子任务转述读取，引文非来源原始措辞。",
-};
-
-function runErrorLabel(code: string): string {
-  return WEB_RUN_ERROR_LABEL[code] ?? "运行未通过核验。";
-}
-
-/** What each gate notice is about, in the reader's language. The notices are
- *  written for the agent that has to repair them, so making them visible put
- *  forty lines of English validator prose in front of a Chinese-reading
- *  researcher. Grouping gives them the shape of the problem first; the detail
- *  lines still carry the line numbers, URLs and claim ids they need to check. */
-const NOTICE_GROUPS: { label: string; match: RegExp }[] = [
-  { label: "数字未标注其来源主张", match: /^Report line \d+ numeric facts .+ have no evidence-matrix claim reference/ },
-  { label: "数字与所引主张不符", match: /^Report line \d+ numeric facts .+ are not present in the cited claim evidence/ },
-  { label: "推导结论未标注为推导", match: /states derived result .+ without marking it as derived/ },
-  { label: "推导结论进入了处置建议", match: /practical advice must rest on measured evidence/ },
-  { label: "引文地址", match: /^The citation /i },
-  { label: "证据矩阵主张", match: /^claims\[\d+\]/ },
-  { label: "引文台账与参考文献", match: /^(?:citation-ledger\.csv|references\.bib|citation-audit\.md)/ },
-  { label: "检索日志与运行记录", match: /search log|clinical-evidence-(?:search|run)\.json/i },
-  { label: "检索到的原文由子任务转述", match: /^Reading retrieved evidence was delegated/ },
-  { label: "修复过程影响了报告篇幅", match: /^(?:The report was replaced|Repair reduced)/ },
-  { label: "报告结构与表述", match: /^The (?:academic|deep-research) report/ },
-];
-
-interface NoticeGroup {
-  label: string;
-  mustFix: boolean;
-  items: string[];
-}
-
-function groupQualityNotices(notices: string[]): NoticeGroup[] {
-  const groups = new Map<string, NoticeGroup>();
-  for (const notice of notices) {
-    // "MUST FIX — " is how the gate marks what a reader cannot see for
-    // themselves. It is a severity, not part of the sentence.
-    const mustFix = /^MUST FIX\s*[—-]\s*/.test(notice);
-    const body = notice.replace(/^MUST FIX\s*[—-]\s*/, "");
-    const label = NOTICE_GROUPS.find((group) => group.match.test(body))?.label ?? "其他核验提示";
-    const key = `${mustFix ? "1" : "0"}:${label}`;
-    const existing = groups.get(key);
-    if (existing) existing.items.push(body);
-    else groups.set(key, { label, mustFix, items: [body] });
-  }
-  // What must be fixed leads: it is the part a reader cannot discount alone.
-  return [...groups.values()].sort((a, b) => Number(b.mustFix) - Number(a.mustFix));
-}
 
 /** Global Runs view (sidebar) — all runs across every session, like the global
  *  Files browser and Notebooks page. Same information architecture on both
@@ -278,7 +206,8 @@ function RunsEmptyState({ filtered }: { filtered: boolean }) {
  * are computed client-side while the filter bar, sticky day labels and row
  * expand style stay identical to the desktop ledger. Actions differ by form:
  * hosted downloads artifacts instead of opening them locally, and "复查与复现"
- * prefills the composer instead of the desktop's re-run recipe.
+ * drafts into the runtime session surface instead of the desktop's re-run
+ * recipe.
  */
 function HostedRunsView() {
   const [runs, setRuns] = useState<WebAgentRun[] | null>(null); // null = loading
@@ -292,7 +221,6 @@ function HostedRunsView() {
   const deepLinked = params.get("run");
   const [expanded, setExpanded] = useState<string | null>(deepLinked);
   const navigate = useNavigate();
-  const setComposerDraft = useUiStore((s) => s.setComposerDraft);
 
   useEffect(() => {
     let active = true;
@@ -348,13 +276,36 @@ function HostedRunsView() {
     return counts;
   }, [runs]);
 
+  /**
+   * "复查与复现" — drafted into the session surface that actually reads it.
+   *
+   * This used to call `setComposerDraft` and navigate. The only reader of
+   * `composerDraft` is the unrouted `components/thread/Composer`, so the draft
+   * was written to a store nothing reads and the researcher landed on an empty
+   * runtime chat: a button whose tooltip promised a drafted prompt and which
+   * silently did nothing. The channel that works already ships —
+   * `runtimeUiIntent` in the navigation state, forwarded by RuntimeUiFrame and
+   * applied by the harness bridge's `setDraft` — and CapabilitiesPage has been
+   * using it. Reuse it rather than resurrecting a second composer.
+   */
   const reproduce = (run: WebAgentRun) => {
     const activeAgent = run.effectiveAgentId ?? run.agentId;
-    setComposerDraft(
+    const draft =
       `复查科研运行 \`${run.id}\`（${activeAgent ? `${run.mode === "open-domain" ? "开放域路由 · " : ""}${activeAgent}` : "开放域科研"}）。` +
-        `请读取该会话的原始消息、工具记录和产物，核对证据来源、失败项与可复现性；不要重新编造缺失数据。`,
-    );
-    navigate(`/app/chat/${run.sessionId}`);
+      `请读取该会话的原始消息、工具记录和产物，核对证据来源、失败项与可复现性；不要重新编造缺失数据。`;
+    // `runtimeUiIntentFromState` drops an intent whose session id is not a
+    // plain identifier, and a dropped intent is indistinguishable from the bug
+    // being fixed here. When the ledger's session id cannot be addressed,
+    // open a fresh session carrying the same draft rather than lose it.
+    const addressable = /^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId);
+    const intent: RuntimeUiIntent = {
+      kind: addressable ? "open" : "create",
+      projectId: getWebProjectId(),
+      requestId: crypto.randomUUID(),
+      sessionId: addressable ? run.sessionId : crypto.randomUUID(),
+      draft,
+    };
+    navigate(addressable ? `/app/chat/${run.sessionId}` : "/app/chat", { state: { runtimeUiIntent: intent } });
   };
 
   const toggle = (value: WebAgentRunStatus | "degraded") =>
@@ -477,6 +428,12 @@ function WebRunRow({
 }) {
   const failed = run.status === "failed";
   const ts = webRunTs(run);
+  const notices = summarizeQualityNotices(run.qualityNotices ?? []);
+  const hasArtifacts = run.artifacts.length > 0;
+  // `null` when the ledger does not carry the field at all — which is not the
+  // same as "there are none", so the row stays silent rather than claiming the
+  // run produced nothing.
+  const undelivered = undeliveredFiles(run);
   return (
     <li>
       <button
@@ -555,17 +512,21 @@ function WebRunRow({
                 {run.lastProgressAt && ` · 最近进展 ${relativeTs(Date.parse(run.lastProgressAt) / 1000)}`}
               </span>
             )}
-            {run.errorCode && (
-              <span className="text-error" title={`错误码：${run.errorCode}`}>
-                {runErrorLabel(run.errorCode)}
-              </span>
-            )}
           </div>
+
+          {/* What happened, said once, from the one dictionary.
+            * This row used to hold a 20-key table whose default sentence was
+            * "运行未通过核验。" — so a run killed by the stall detector, a run
+            * the researcher cancelled and a run superseded by their own next
+            * message were each told their science had failed quality control.
+            * The code stays reachable as a tooltip for support, never as the
+            * message. */}
+          {runDidNotDeliver(run) && <RunVerdict run={run} />}
 
           {/* The verdict and its reasons were computed, stored, and returned by
             * the API, and then rendered nowhere: a package delivered with seven
             * named gaps looked exactly like a clean one. */}
-          {(run.verification != null || (run.qualityNotices?.length ?? 0) > 0) && (
+          {(run.verification != null || notices.total > 0) && (
             <div className="rounded-card border border-border-faint bg-surface-2/40 p-2">
               <div className="mb-1 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted">
                 <ScrollText size={12} />
@@ -575,20 +536,31 @@ function WebRunRow({
                   * nothing below says that layer found the package sound. */}
                 {run.verification === "unchecked" && "已交付，但有一层没有检查过"}
                 {run.verification == null && "核验提示"}
+                {notices.total > 0 && (
+                  <span className="normal-case tracking-normal">
+                    · 必须修正 {notices.mustFix} 项 · 建议修正 {notices.advisory} 项
+                  </span>
+                )}
               </div>
+              {/* The clause about files is conditional: the unverified path can
+                * finish with no files at all (an open-domain answer has none by
+                * design), and this paragraph used to promise downloadable
+                * artifacts directly above an empty artifact list. */}
               {run.verification === "unverified" && (
                 <p className="mb-1.5 text-xs text-text/80">
-                  产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。
+                  {hasArtifacts
+                    ? "产物可以照常下载和阅读；以下各点是本次分析未能自证的部分，请在引用前自行核对。"
+                    : "本次没有文件产出；以下各点是本次分析未能自证的部分，请在引用前自行核对。"}
                 </p>
               )}
               {run.verification === "unchecked" && (
                 <p className="mb-1.5 text-xs text-text/80">
-                  产物可以照常下载和阅读；本次交付有一层核验根本没有执行，以下说明是哪一层、为什么没执行。
-                  没有发现问题不等于检查过。
+                  {hasArtifacts ? "产物可以照常下载和阅读；" : ""}
+                  本次交付有一层核验根本没有执行，以下说明是哪一层、为什么没执行。 没有发现问题不等于检查过。
                 </p>
               )}
               <ul className="space-y-2">
-                {groupQualityNotices(run.qualityNotices ?? []).map((group) => (
+                {notices.groups.map((group) => (
                   <li key={`${group.mustFix}-${group.label}`}>
                     <div className="flex items-center gap-1.5 text-xs">
                       {group.mustFix && (
@@ -613,7 +585,7 @@ function WebRunRow({
             </div>
           )}
 
-          {run.artifacts.length > 0 && (
+          {hasArtifacts && (
             <div>
               <div className="mb-1 flex items-center gap-1 text-caption font-medium uppercase tracking-wider text-muted">
                 <FileOutput size={12} /> 产物
@@ -621,14 +593,31 @@ function WebRunRow({
               <ul className="space-y-0.5">
                 {run.artifacts.map((path) => (
                   <li key={path}>
-                    <button
-                      onClick={() => void downloadArtifact(path, "workspace")}
-                      title="下载此产物文件"
-                      className="group flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
-                    >
-                      <span className="min-w-0 flex-1 truncate font-mono text-text group-hover:text-link">{path}</span>
-                      <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" />
-                    </button>
+                    <ArtifactRow path={path} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* The files a refused run wrote and the gate did not accept.
+            * Twenty-eight of 179 finished runs on the host ended with an empty
+            * artifact list while a complete nine-file package sat on disk —
+            * p90 58 minutes of work, and the ledger named none of it. Nothing
+            * deleted those files; they were unreachable, so this section hands
+            * them back and says plainly what they are. */}
+          {!hasArtifacts && undelivered && undelivered.length > 0 && (
+            <div>
+              <div className="mb-1 flex items-center gap-1 text-caption font-medium uppercase tracking-wider text-warn">
+                <FileOutput size={12} /> 未通过核验的文件（{undelivered.length}）
+              </div>
+              <p className="mb-1 text-text/70">
+                本次运行写出了这些文件，但它们没有通过质量门，因此没有作为成果发布。文件没有被删除，可以下载后自行判断；引用前请逐条核对。
+              </p>
+              <ul className="space-y-0.5">
+                {undelivered.map((path) => (
+                  <li key={path}>
+                    <ArtifactRow path={path} unverified />
                   </li>
                 ))}
               </ul>
@@ -637,6 +626,44 @@ function WebRunRow({
         </div>
       )}
     </li>
+  );
+}
+
+/** What happened to this run — one sentence from the one dictionary, plus
+ *  whatever the ledger's own counters can add to it. */
+function RunVerdict({ run }: { run: WebAgentRun }) {
+  const outcome = webRunOutcome(run);
+  return (
+    <div className="space-y-0.5">
+      <p className="text-error" title={outcome.code ? `错误码：${outcome.code}` : undefined}>
+        {outcome.headline}
+      </p>
+      {outcome.detail && <p className="text-text/70">{outcome.detail}</p>}
+    </div>
+  );
+}
+
+/** One downloadable file. `unverified` marks a file the gate did not accept;
+ *  the marker carries the same weight as the path, because a reader must not
+ *  be able to take one of these for graded work. */
+function ArtifactRow({ path, unverified }: { path: string; unverified?: boolean }) {
+  return (
+    <button
+      onClick={() => void downloadArtifact(path, "workspace")}
+      title={unverified ? "下载此文件（未通过核验）" : "下载此产物文件"}
+      className="group flex w-full items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-surface-2"
+    >
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate font-mono group-hover:text-link",
+          unverified ? "text-warn" : "text-text",
+        )}
+      >
+        {path}
+      </span>
+      {unverified && <span className="shrink-0 text-caption text-warn">未经核验</span>}
+      <ExternalLink size={11} className="shrink-0 text-muted opacity-0 group-hover:opacity-100" />
+    </button>
   );
 }
 

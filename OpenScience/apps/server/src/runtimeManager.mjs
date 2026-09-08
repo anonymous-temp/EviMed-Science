@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { workspaceLayout } from "@evimed/domain";
+import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
   dockerWorkspaceMount,
@@ -1685,7 +1686,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
   return {
     modelGatewayUrl: modelGatewayProviderUrl(config),
     model,
-    contextWindow: 1_000_000,
+    contextWindow: Number(config.runtimeContextWindow) || Number(config.runMaxTokens) || 400_000,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
     mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
@@ -2177,6 +2178,17 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           modelGatewayTokenFile: `${runtimeDshHome}/${modelGatewayTokenFileName}`,
           workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
+          // Derived once, out here, from the same definitions the preset row
+          // reads inside the container. A compaction knob that is not on this
+          // list does nothing and says nothing.
+          compaction: compactionRuntimeEnv(compactionConfigFromEnv({
+            ...process.env,
+            OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY: String(config.runtimeCompactionPolicy ?? "basic"),
+          })),
+          // `retainTokens` is a port-level option with no row to read it, so it
+          // never crosses the boundary. Sending it would put a name on the
+          // container's env that nothing reads, which is the same defect as a
+          // row reading a name nobody sends, pointing the other way.
           flags: {
             hosted: Boolean(config.production),
             // Same two settings as `dshProfileInput`; see there.
@@ -3642,7 +3654,14 @@ export class RuntimeManager {
    * revision as a first-class logged message before the corresponding step.
    *
    * @param {Record<string, any>} project @param {string} sessionId
-   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean }} input
+   * `mode` is the kernel's own delivery vocabulary. `queue` hands the message
+   * to `agent.followup`, which the agent reads after the turn it is in; `steer`
+   * hands it to `agent.steer`, which the running turn reads at its next
+   * boundary. Both are accepted while the agent is busy — that was verified on
+   * the pinned kernel rather than read from its documentation.
+   *
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @param {{ text: string, system?: string | null, agent?: string | null, model?: string | null, runId?: string | null, requestId?: string, strictContext?: boolean, allowBounded?: boolean, mode?: 'queue' | 'steer' }} input
    * @returns {Promise<void>}
    */
   async dispatchPrompt(project, sessionId, input) {
@@ -3655,7 +3674,7 @@ export class RuntimeManager {
     }
   }
 
-  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false }) {
+  async dispatchAdmittedPrompt(project, sessionId, { text, system = null, runId = null, requestId = randomId("req_"), strictContext = false, allowBounded = false, mode = "queue" }) {
     const runtime = this.runtimes.get(this.key(project));
     if (!runtime) {
       const error = new HttpError(409, "runtime_prompt_rejected", "Runtime was not available to accept the prompt.");
@@ -3696,7 +3715,11 @@ export class RuntimeManager {
             // sending; other callers use the per-call default above.
             requestId: safeId(requestId, "runtime request id"),
             sessionId,
-            mode: "queue",
+            // `queue` unless the caller is correcting a turn that is already
+            // running. The kernel routes the two to different methods and the
+            // difference is visible to the model: a queued message arrives
+            // after the current turn, a steered one inside it.
+            mode: mode === "steer" ? "steer" : "queue",
             content: [{ type: "text", text }],
           },
         }, signal),
