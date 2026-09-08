@@ -110,3 +110,46 @@ it("does not leak an old mutation failure or busy state into a reloaded filter",
   await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   expect(screen.getByRole("button", { name: "标为已读" })).toBeEnabled();
 });
+
+it("opens the run a notice names, and keeps that link after the notice is handled", async () => {
+  // The inbox was the one surface that named a run and then offered no way to
+  // reach it: the card rendered no control, so a reader who was told their
+  // research had finished had to go and find it by hand in a list ordered by
+  // time. RunsPage has accepted `?run=` since the sidebar started linking to
+  // it; nothing was ever pointed at it from here.
+  const runNotice = { ...review, id: "run-finished", noticeType: "notify" as const,
+    title: "交付物未通过质量门",
+    body: "这次运行没有通过交付前的质量门。\n本次运行产出 8 个文件，仍在工作区里，可以直接打开。",
+    source: { type: "run" as const, id: "run_abc123" },
+    actions: [{ id: "open", label: "查看运行", style: "primary" as const }],
+    readAt: "2026-09-06T00:01:00Z", resolvedAt: "2026-09-06T00:01:00Z" };
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice], nextCursor: null });
+
+  render(<InboxPage />);
+
+  const link = await screen.findByRole("link", { name: "查看运行" });
+  expect(link).toHaveAttribute("href", "/app/runs?run=run_abc123");
+  // Opening a run is navigation, not a decision, so a handled notice must not
+  // hide it — and it must not resolve anything on the way.
+  expect(api.resolveInboxItem).not.toHaveBeenCalled();
+  expect(api.markInboxRead).not.toHaveBeenCalled();
+});
+
+it("says which outcome a finished run had, and that its files are still there", async () => {
+  // Both run-finished bodies used to be fixed strings chosen by whether the run
+  // succeeded, so a refused package, a stall timer and a spend ceiling all
+  // arrived under one sentence and the reader had to open the run to learn
+  // which. The server now writes the reason and the file count.
+  const runNotice = { ...review, id: "run-unverified", noticeType: "notify" as const,
+    title: "研究已交付，待你复核",
+    body: "结果已交付，但有质量检查没有通过，需要你自己复核后再使用。\n本次运行产出 3 个文件，仍在工作区里，可以直接打开。",
+    source: { type: "run" as const, id: "run_xyz" },
+    actions: [{ id: "open", label: "查看运行", style: "primary" as const }] };
+  vi.mocked(api.listInbox).mockResolvedValue({ items: [runNotice], nextCursor: null });
+
+  render(<InboxPage />);
+
+  expect(await screen.findByText("研究已交付，待你复核")).toBeInTheDocument();
+  expect(screen.getByText(/需要你自己复核后再使用/)).toBeInTheDocument();
+  expect(screen.getByText(/本次运行产出 3 个文件，仍在工作区里/)).toBeInTheDocument();
+});
