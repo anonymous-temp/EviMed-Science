@@ -139,7 +139,7 @@
 18. 学习效果指标 eval（P1-13d）。
 19. ~~组合交付丢件通知~~ **已完成 2026-09-08**：成功分支的通知原本只由 `receipt.entries` 生成，而回执只能为它持有条目的东西说话，天然无法报告一个缺席——于是「计划两件、交付一件」的运行落在 succeeded、一个产物、无错误码、无通知。单能力运行到不了这个状态（唯一一项被退回就没有回执），所以这恰是读者最不设防的形状。现在同时读投影里的计划：计划里非 accepted 且回执无条目的项各出一条中文通知，是通知不是拒绝。原 `test.todo` 已转为正式测试并做了变异检查。
 20. 首批断言中文文案的前端测试（现在为零）。
-21. `runtime idle timeout waits for a call still in flight` 放宽期限（STATUS GC6）。
+21. ~~`runtime idle timeout waits for a call still in flight` 放宽期限~~ **已完成 2026-09-08**：真因是 `start_runtime` 返回到 `beginProxy` 之间那段**没有任何东西撑住运行时**的窗口，40ms 的 idle 期限短于满负载跑全套时的调度抖动，于是运行时在代理槽被占用之前就自己空转停掉了——而失败信息写的是「在飞的调用没能让运行时活着」，恰好与实际发生的相反。期限 40ms→200ms、持槽 90ms→400ms：被测性质与形状都不变（持槽时间仍然长于 idle 期限，断言仍然证明持槽能阻止停止），只是把余量拉开。
 22. ~~`errors.jsonl` 每周摘要~~ **已完成 2026-09-08**（并入 `gate:health --ledger` 的同一次遍历：`errors.jsonl` 就在 `runs.jsonl` 旁边，问的是同一个问题、早一层；现在每周定时一次同时给出两份分布。注意根目录要给到数据卷根而不是 `users/`——错误账本是全局的，指到 `users/` 会安静地少一半）；~~`public_source_gateway_token_invalid` ×18 查因~~ **查因已完成 2026-09-08**。生产 41 个账本共 2,076 条 HTTP 拒绝，前几名：`unauthorized` 1231、`internal_error` 315、`runtime_bootstrap_failed` 136、`not_found` 70、`auth_rate_limited` 68。那 18 条**全部集中在 2026-09-03 一次事件**（当天 22 条网关错误，其中六条落在同一秒内），09-04 之后为零；今天出现的 3 条是 `rate_limited`（429）而不是它。
     **原因**：`publicSourceGateway` 收到 token 后调 `runtimeManager.assertActiveModelGatewayToken`，而它除了验签还要求 `jti` 命中 `activeModelGatewayTokens` —— 一个**纯内存 Map**，只在 `start()` 里 `waitUntilReady` 之后写入，`runtimeManager.mjs` 里没有任何容器接管（adopt/reattach）路径。控制面一重启（部署即是），这张表就空了，而 docker 容器活得比控制面进程久：孤儿容器带着一个**签名仍然有效**的 token 继续取源，于是并发的几次抓取在同一秒内全部 401。分类本身是对的（`token_invalid` 属终止类、`rate_limited` 属可恢复类），问题在于**一次部署会让在飞的运行以「认证失败」告终**，而现场没有任何东西配错。
     **未做**：真正的修法是重启后接管既有容器并重新登记其 token，那是 runtimeManager 的实质改动，不该在有部署待发、且有一次验收在飞时顺手做。建议与 P1-12 的控制器协议 6→7 一起排。
