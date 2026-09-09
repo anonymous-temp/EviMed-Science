@@ -3,7 +3,8 @@ import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw }
 import { useNavigate } from "react-router";
 import type { ProvenanceRecord } from "@ai4s/shared";
 import { listProvenance, readEnvLockfile } from "@/lib/provenance";
-import { useUiStore } from "@/lib/store";
+import { getWebProjectId } from "@/lib/apiClient";
+import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { cn } from "@/lib/cn";
 
@@ -51,7 +52,6 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   // The package lockfile currently shown, keyed by its content hash.
   const [lockfile, setLockfile] = useState<{ hash: string; text: string | null } | null>(null);
   const navigate = useNavigate();
-  const setComposerDraft = useUiStore((s) => s.setComposerDraft);
 
   // Toggle the pip-freeze lockfile for a snapshot hash; loads it lazily on open.
   const toggleLockfile = (hash: string) => {
@@ -66,10 +66,21 @@ export function ProvenancePanel({ path, language }: { path: string; language?: s
   };
 
   // Draft the reproduce prompt into the conversation the version came from —
-  // the user reviews and sends it (human in the loop, never auto-run).
+  // the user reviews and sends it (human in the loop, never auto-run). The
+  // draft travels as a `runtimeUiIntent` in the navigation state, which the
+  // kernel's own application reads through the harness bridge; it used to be
+  // written to a store field only a never-routed composer of ours read, so the
+  // button navigated and the prompt went nowhere.
   const reproduce = (r: ProvenanceRecord) => {
-    setComposerDraft(reproducePrompt(r));
-    navigate(r.sessionId ? `/app/chat/${r.sessionId}` : "/app/chat");
+    const sessionId = typeof r.sessionId === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(r.sessionId) ? r.sessionId : null;
+    const intent: RuntimeUiIntent = {
+      kind: sessionId ? "open" : "create",
+      projectId: getWebProjectId(),
+      requestId: crypto.randomUUID(),
+      sessionId: sessionId ?? crypto.randomUUID(),
+      draft: reproducePrompt(r),
+    };
+    navigate(sessionId ? `/app/chat/${sessionId}` : "/app/chat", { state: { runtimeUiIntent: intent } });
   };
 
   useEffect(() => {

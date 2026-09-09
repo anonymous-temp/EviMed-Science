@@ -16,10 +16,19 @@ test('the packaged native client registers a browser-safe synchronous plugin', a
   /** @type {any} */ let registration;
   vm.runInNewContext(source, { __ModuleLoader__: { load: (/** @type {any} */ value) => { registration = value; } } });
   assert.equal(registration.id, '@evimed/dsh-socket');
-  const plugin = registration.factory();
-  assert.deepEqual(Array.from(plugin.inject), ['sessions', 'conversation', 'connection', 'workspaces']);
+  // The loader hands the factory its `require`; React reaches the shell that
+  // way and nowhere else.
+  /** @type {string[]} */ const required = [];
+  const plugin = registration.factory((/** @type {string} */ id) => { required.push(id); return undefined; });
+  assert.deepEqual(Array.from(plugin.inject), ['sessions', 'conversation', 'connection', 'workspaces', 'slots', 'locale']);
   assert.equal(plugin.apply.constructor.name, 'Function');
-  assert.equal(plugin.apply({}, {}, {}), undefined);
+  assert.equal(plugin.apply({}, {}), undefined);
+  assert.deepEqual(required, [], 'outside a hosted frame neither body touches the loader');
+  // Every service the bodies inject has its provider named for the module
+  // scanner, so the bundle is ordered after them rather than racing them.
+  for (const provider of ['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-sidebar']) {
+    assert.ok(pkg.dsh.client.inject.includes(provider), `${provider} must be listed under dsh.client.inject`);
+  }
   assert.doesNotMatch(source, /(?:import|require)\s*\(?['"](?:node:|@deepseek-ai\/)/);
   const docker = await readFile(new URL('../../../deploy/runtime-dsh/Dockerfile', import.meta.url), 'utf8');
   assert.ok(docker.indexOf('RUN node /opt/evimed/socket/scripts/build-client.mjs') < docker.indexOf('chmod -R a-w /opt/evimed/socket'));
