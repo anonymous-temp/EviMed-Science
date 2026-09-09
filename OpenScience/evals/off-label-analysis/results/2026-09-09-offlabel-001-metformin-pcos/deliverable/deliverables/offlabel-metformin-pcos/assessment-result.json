@@ -1,0 +1,54 @@
+{
+ "assessmentType": "off_label",
+ "classification": "potentially_off_label",
+ "jurisdiction": "中国（NMPA）",
+ "mismatchDimensions": ["indication", "population"],
+ "uncertainDimensions": ["dose", "duration", "frequency"],
+ "labelComparisons": [
+  {"dimension": "indication", "status": "mismatch", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片；锚定索引品规：美迪康 0.5 g，重庆药友制药）", "labelVersion": "EviMed NMPA 索引记录副本（修订日期未提供，官方现行性未核）", "evidenceIds": ["SRC-LAB-01", "SRC-LAB-04", "SRC-LAB-05"], "rationale": "拟用适应证为多囊卵巢综合征（PCOS）患者的代谢与月经周期改善。检索到的 6 条 NMPA 盐酸二甲双胍片说明书记录的适应证均为 2 型糖尿病：新模板（美迪康 0.5 g 等）为“本品首选用于单纯饮食控制及体育锻炼控制血糖无效的2 型糖尿病……对于 10 岁及以上的儿童和青少年，本品可用于单药治疗或与胰岛素联合治疗”；旧模板（迪化唐锭 0.5 g 进口、万全万特/湖南明瑞 0.25 g）为“用于单纯饮食控制不满意的Ⅱ型糖尿病病人，尤其是肥胖和伴高胰岛素血症者……”。无任何品规说明书将 PCOS 或月经紊乱列为适应证。indication 维度判定 mismatch（标签不支持拟用适应证），此为标签状态而非疗效结论。"},
+  {"dimension": "population", "status": "mismatch", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片；锚定索引品规：美迪康 0.5 g）", "labelVersion": "EviMed NMPA 索引记录副本", "evidenceIds": ["SRC-LAB-01", "SRC-LAB-04"], "rationale": "说明书核准人群为 2 型糖尿病患者（成人，及 10 岁及以上儿童青少年单药或联合胰岛素；旧模板另述Ⅱ型糖尿病伴肥胖/高胰岛素血症者）。拟用人群为 18–40 岁、BMI≥24、伴胰岛素抵抗但未合并糖尿病的 PCOS 女性，不属于说明书核准的患者人群；妊娠与哺乳栏目亦按糖尿病用药语境书写（旧模板：“妊娠及哺乳期妇女禁用”）。population 维度 mismatch。"},
+  {"dimension": "dose", "status": "unclear", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片）", "labelVersion": "EviMed NMPA 索引记录副本", "evidenceIds": ["SRC-LAB-01", "SRC-LAB-03"], "rationale": "拟用单次剂量 500 mg。所检索的 6 条 NMPA 说明书索引记录均未返回【用法用量】小节（可核验栏目限于适应证/禁忌/注意事项/不良反应/相互作用/孕妇与哺乳/儿童/老年/贮藏），因此无法从标签核实 500 mg 是否落入说明书成人剂量范围。缺失/截断小节按规则判为 unclear，不作 match 或 mismatch 推定；剂量层面是否有指南依据属证据支持评估范畴，与标签状态无关。"},
+  {"dimension": "route", "status": "match", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片）", "labelVersion": "EviMed NMPA 索引记录副本", "evidenceIds": ["SRC-LAB-01"], "rationale": "拟用给药途径为口服；锚定产品为 NMPA 批准的“盐酸二甲双胍片”（片剂，口服固体制剂），6 条检索品规均为片剂，无注射或其他途径。给药途径与标签产品剂型一致。注明：索引记录未单独呈现“口服”字样，本判定依据品名与剂型字段（均出自标签记录）。"},
+  {"dimension": "frequency", "status": "unclear", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片）", "labelVersion": "EviMed NMPA 索引记录副本", "evidenceIds": ["SRC-LAB-01", "SRC-LAB-03"], "rationale": "拟用频次为每日三次。说明书索引记录缺失【用法用量】小节，无从核实每日给药次数与每日总剂量的说明书表述；frequency 维度判 unclear。"},
+  {"dimension": "duration", "status": "unclear", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片）", "labelVersion": "EviMed NMPA 索引记录副本", "evidenceIds": ["SRC-LAB-01"], "rationale": "拟用疗程 6 个月。索引记录无可核验的疗程/用法用量表述，说明书（针对糖尿病为长期用药）也未规定 PCOS 疗程；无法以标签文本比较 6 个月疗程，判 unclear。"},
+  {"dimension": "formulation", "status": "match", "jurisdiction": "中国（NMPA）", "product": "盐酸二甲双胍片（0.5 g 普通片）", "labelVersion": "EviMed NMPA 索引记录副本", "evidenceIds": ["SRC-LAB-01", "SRC-LAB-02", "SRC-LAB-04"], "rationale": "拟用剂型为普通片（即释片）。检索到的 NMPA 品规品名均为“盐酸二甲双胍片”，规格 0.25 g/0.5 g/0.85 g，无“缓释”“肠溶”修饰（缓释/肠溶产品以“缓释片/肠溶片”另行命名，不属本次品规）；剂型层面与标签产品一致，判定 match。"}
+ ],
+ "evidenceSupport": {
+  "status": "assessed_by_evidence_type",
+  "assessments": [
+   {"evidenceType": "origin_country_label", "status": "does_not_support", "applicability": "direct", "evidenceIds": ["SRC-LAB-01", "SRC-LAB-04", "SRC-LAB-05", "SRC-LAB-06"], "rationale": "原产国（中国 NMPA）现行说明书适应证仅为 2 型糖尿病（成人单药或与磺脲类/胰岛素联合；10 岁及以上儿童青少年单药或联合胰岛素），无任何品规批准 PCOS 或其代谢/月经相关用途。origin-country label 层面不支持拟用——该判定为标签/注册状态，不构成疗效或安全性结论。"},
+   {"evidenceType": "evidence_database", "status": "unclear", "applicability": "not_assessed", "evidenceIds": [], "rationale": "许可型循证数据库（Micromedex/UpToDate/Lexicomp 等）在当前网关不可访问，且未提供用户摘录/导出——按规则记录为缺口，不把不可得类型当作零分；院内私有策展药学参考索引（pharmacy-reference-v1）检索 0 命中。evidence_database 维度无法评估，判 unclear。"},
+   {"evidenceType": "clinical_guideline", "status": "supports", "applicability": "direct", "evidenceIds": ["SRC-GDL-01", "SRC-GDL-02", "SRC-GDL-03", "SRC-GDL-04", "SRC-GDL-05", "SRC-GDL-06", "SRC-GDL-07"], "rationale": "多部指南/共识支持“PCOS 伴胰岛素抵抗”背景下使用二甲双胍改善代谢：①《多囊卵巢综合征中国诊疗指南（2018）》将“PCOS伴胰岛素抵抗的患者”列为二甲双胍适应证之一；②《PCOS 诊治路径专家共识（2023）》：二甲双胍适用于 PCOS 合并 IR/糖调节受损/糖尿病且生活方式干预效果欠佳者，BMI≥25 的成年 PCOS 患者除生活方式外应考虑二甲双胍管理体质量与代谢，育龄期非肥胖者推荐剂量 1000–1500 mg/d、疗程 3–6 个月及以上；③《PCOS 合并胰岛素抵抗诊治专家共识（2024）》：二甲双胍可改善 IR 与代谢异常、降低高雄激素、诱导排卵、恢复月经；并转述国际指南 BMI≥25 的 PCOS 成人应考虑单独使用二甲双胍以改善 IR、血糖和血脂；④《超重/肥胖 PCOS 体重管理内分泌专家共识（2025）》：推荐二甲双胍为超重/肥胖 PCOS 一线（伴 IR/糖耐量异常者），最佳有效剂量 1000–2500 mg/d；COCP 禁忌/不接受/不耐受时可借其调整月经周期；⑤国际循证指南（2018/2023）中文译文：二甲双胍主要用于代谢异常患者，并注明 PCOS 用药通常属说明书外但大多有循证依据。定位边界：以“调整月经周期”为单一目标时，孕激素后半周期疗法/COCP 是首选一线；二甲双胍对月经恢复的证据主要出现在 IR/代谢角色或 COCP 不适用场景，指南层面对拟用（IR 为核心特征+代谢目标）持支持态度。未在本轮对指南执行 AGREE II 正式评分；观察到的外部评级为国际指南自述遵循 GRADE（2023 译文记录），予以保留未转换。"},
+   {"evidenceType": "systematic_review", "status": "mixed", "applicability": "direct", "evidenceIds": ["SRC-LIT-01", "SRC-LIT-02", "SRC-LIT-03", "SRC-LIT-04", "SRC-LIT-05", "SRC-LIT-06", "SRC-LIT-07"], "rationale": "系统综述/Meta 分析层面分结局看：排卵获益较一致（二甲双胍 vs 安慰剂排卵 OR 3.88，95%CI 2.25–6.69 [Lord 2003]；OR 2.94，95%CI 1.43–6.02，NNT 4.0 [Creanga 2008]，且短随访试验效应更大）；超重 PCOS 体重下降（BMI WMD −1.25，95%CI −1.60~−0.91；腰围 WMD −1.41 [Guan 2020]）；生活方式基础上加二甲双胍降低 BMI 并改善月经（2015 Hum Reprod Update MA），但二甲双胍单药 vs 生活方式在 6 个月 BMI 上无差异（同 MA）。不一致之处：超重 PCOS 的合并分析中 HOMA-IR、空腹胰岛素无统计学改善（Guan 2020）；生活方式 vs 二甲双胍单药在月经周期改善上无差异且生活方式在 IR 指标上更优（Kim 2020）；与 COCP 相比二甲双胍降胰岛素（−27.12 pmol/L，95%CI −40.65~−13.59）与甘油三酯，但在游离雄激素指数、SHBG、睾酮等雄激素指标上劣于 COCP（Melin 2023，2023 国际指南更新的一部分，按 GRADE 分级）。综合“代谢+月经”双重宣称，证据总体方向支持但关键结局存在异质性，判 mixed。未在本轮对纳入 SR/MA 执行 AMSTAR-2 评分。"},
+   {"evidenceType": "randomized_trial", "status": "mixed", "applicability": "direct", "evidenceIds": ["SRC-LIT-08", "SRC-LIT-09", "SRC-LIT-10", "SRC-LIT-11", "SRC-LIT-15"], "rationale": "RCT 层面证据不一致：①6 个月双盲交叉 RCT（850 mg bid，56 例 18–45 岁 PCOS）：体重、收缩压下降、HDL 升高；肥胖亚组睾酮/空腹血糖/胰岛素/HOMA 下降，但月经频率无变化，非肥胖者未见获益（Trolle 2007）——与拟用 6 个月疗程最接近的 RCT；②90 天 RCT（500 mg tid，肥胖非糖尿病 PCOS，30 例）：总睾酮（p=0.030）与总胆固醇（p=0.023）显著下降，作者仅提出“可能恢复规则月经周期”的限制性结论（Chou 2003）；③CC 抵抗华人 PCOS（500 mg tid×3 个月，20 例）：BMI、睾酮、瘦素下降但排卵率无改善（Ng 2001）；④CC 抵抗者 500 mg tid+CC 周期排卵率 36.4%，低于罗格列酮+CC 组 64.3%（Rouzi 2006）；⑤3 个月试验中二甲双胍组周期长度 48.72±37.06 天，与对照组无显著差异（Yavangi 2024）。直接匹配“500 mg tid×6 个月、BMI≥24、伴 IR、未合并糖尿病”的 RCT 缺如；现有 RCT 显示代谢参数与部分人群排卵获益，但月经恢复与 HOMA 改善并不稳定，判 mixed。"},
+   {"evidenceType": "nonrandomized_study", "status": "supports", "applicability": "direct", "evidenceIds": ["SRC-LIT-12", "SRC-LIT-13", "SRC-LIT-14"], "rationale": "前瞻非随机队列证据与拟用方案最接近：108 例 22–35 岁胰岛素抵抗超重/肥胖 PCOS 接受二甲双胍 1500 mg/d（500 mg×3/日）首 6 个月，BMI>25 者应答良好；HOMA 未正常化者加量至 2500 mg/d 再 6 个月后肥胖组出现 BMI、月经模式、血脂与高雄激素改善（Morgante 2020）——直接支持方向且方案（剂量、6 个月、人群）高度接近，但属单臂、非随机、单中心，偏倚风险高，未正式执行 MINORS 评分。安全性队列（间接人群，2 型糖尿病）：乳酸酸中毒发生率 10.37/10 万人年（95%CI 7.22–14.42）、无致死事件且与肾功能分组无显著差异（Richy 2014）；二甲双胍单药组酸中毒率（0.78/万患者月）不高于其他降糖或不用药组（Trinkley 2018）——提示目标剂量下酸中毒绝对风险低，但不能外推为非糖尿病 PCOS 的直接发生率。"},
+   {"evidenceType": "case_report_or_series", "status": "unclear", "applicability": "indirect", "evidenceIds": ["SRC-LIT-16", "SRC-LIT-17"], "rationale": "未检索到直接针对 18–40 岁成人 PCOS 拟用方案的病例报告/病例系列。间接病例证据双向并存：青春期 PCOS（≤17 岁，20 例）二甲双胍+饮食 1 年后正常月经周期比例由治疗前中位 8% 升至 100%（Glueck 2009，未成年人群，间接）；乳酸酸中毒个案系列集中于老年/合并症住院的 2 型糖尿病患者，提示该并发症罕见但真实且与危险因素相关（DePalo 2005）。病例层面证据既不确证也不否定拟用获益，对拟用方向的判定为 unclear。"},
+   {"evidenceType": "reference_work", "status": "unclear", "applicability": "not_assessed", "evidenceIds": [], "rationale": "权威工具书（如《中华人民共和国药典临床用药须知》等）文本未能通过本网关可解析来源核验，院内私有药学参考索引 0 命中；reference_work 维度记 unclear 并列为未解析缺口，不据此推断支持或不支持。"}
+  ],
+  "supportingEvidenceTypes": ["clinical_guideline", "nonrandomized_study"],
+  "mixedEvidenceTypes": ["randomized_trial", "systematic_review"],
+  "nonSupportingEvidenceTypes": ["origin_country_label"],
+  "unresolvedEvidenceTypes": ["case_report_or_series", "evidence_database", "reference_work"],
+  "overallGrade": "not_automatically_determined"
+ },
+ "independentAxes": {
+  "regulatoryLabelStatus": "potentially_off_label",
+  "evidenceSupport": "assessed_by_evidence_type",
+  "clinicalAppropriateness": "requires_clinical_review",
+  "workflowAuthorization": "out_of_scope_for_scoring_agent"
+ },
+ "audit": {
+  "compiler": "evimed-drug-assessment",
+  "compilerVersion": "1.4.0",
+  "compilerInputSha256": "8e694d17ec4853a48d98799c55b6b13386a4b54c095080b670d330cb9ea09eb3",
+  "evidenceSnapshotFileSha256": "e94bd1cf3e9f146b3c268063ec4a83d9cf8ab6030cb0c1582c38dbc9f5349fc9",
+  "automaticDecision": false,
+  "humanReviewRequired": true
+ },
+ "warnings": [
+  "Label status, evidence support, clinical appropriateness, and workflow authorization are independent conclusions.",
+  "Workflow authorization is out of scope; this compilation cannot authorize prescribing or replace current jurisdictional label verification.",
+  "One or more supplied label dimensions remain unclear or unassessed."
+ ],
+ "notAuthorizing": "potentially_off_label 为初步标签比较，不代表使用被授权、合法或临床适当；也不代表无效或不安全。"
+}

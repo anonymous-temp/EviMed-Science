@@ -1,0 +1,787 @@
+{
+ "meta": {
+  "producedAt": "2026-09-09T06:15:00Z",
+  "contractKind": "off-label-report",
+  "toolchain": "off-label-analysis (EviMed evidence gateway)",
+  "binding": {
+   "drug": "二甲双胍（盐酸二甲双胍片，中国 NMPA）",
+   "proposedUse": "多囊卵巢综合征（PCOS）伴胰岛素抵抗患者的代谢与月经周期改善",
+   "product": "盐酸二甲双胍片（本院在用品规——题面标注需运行时核对；未随题面提供，未能锁定唯一本院品规，按通用“NMPA 批准的盐酸二甲双胍普通片 0.5 g”口径执行，本院确切品规与批准文号列为未解析缺口）",
+   "population": "18–40 岁、BMI ≥ 24、伴胰岛素抵抗的 PCOS 女性，未合并糖尿病",
+   "dose": "500 mg",
+   "route": "口服",
+   "frequency": "每日三次",
+   "duration": "6 个月",
+   "formulation": "普通片",
+   "jurisdiction": "中国（NMPA）",
+   "decisionDate": "2026-03-01"
+  },
+  "noteOnDecisionDate": "decisionDate（2026-03-01）早于证据冻结/检索时点（2026-09-09）；因此无法回溯证明决策日当日的官方说明书现行状态，现行性核实列为缺口，本包所有标签状态均以检索时点可核验的 EviMed NMPA 索引记录为限。"
+ },
+ "drugNormalization": {
+  "attempts": [
+   {
+    "tool": "drug_term_normalize",
+    "term": "二甲双胍",
+    "result": "无本地策展归一化条目，返回原词",
+    "at": "2026-09-09T06:08:26Z"
+   },
+   {
+    "tool": "biomedical_source_search",
+    "source": "rxnorm",
+    "query": "二甲双胍 metformin",
+    "result": "0 命中（中文词未入 RxNorm 查询形态）",
+    "at": "2026-09-09T06:08:35Z"
+   },
+   {
+    "tool": "biomedical_source_search",
+    "source": "rxnorm",
+    "query": "metformin",
+    "result": "返回复方产品概念（如 metformin/saxagliptin、linagliptin/metformin），确认“metformin hydrochloride”为 RxNorm 可识别组分词",
+    "at": "2026-09-09T06:10:07Z"
+   },
+   {
+    "tool": "biomedical_source_search",
+    "source": "mesh",
+    "query": "metformin",
+    "result": "仅返回索引条目号，无描述文本，不可用于材料性判定",
+    "at": "2026-09-09T06:09:45Z"
+   },
+   {
+    "tool": "biomedical_source_search",
+    "source": "pubchem",
+    "query": "metformin hydrochloride",
+    "result": "PubChem CID 14219（Metformin Hydrochloride）",
+    "at": "2026-09-09T06:10:51Z"
+   }
+  ],
+  "conclusion": "药品通用名“盐酸二甲双胍”与 WHO INN/化学名 metformin hydrochloride（PubChem CID 14219，C4H12ClN5·HCl）对应；未能在 RxNorm 固定单一 RXCUI（组合产品遮蔽单方条目），术语归一化以 PubChem CID 14219 为可解析化学标识锚点，具体制剂品规以 NMPA 索引记录为准。"
+ },
+ "searches": [
+  {
+   "tool": "offlabel_evidence_packet",
+   "action": "requirements",
+   "query": "drug=二甲双胍; proposedUse=PCOS 伴胰岛素抵抗患者的代谢与月经周期改善（附 population/dose/route/frequency/duration/formulation/jurisdiction/decisionDate）",
+   "result": "readiness=ready_for_retrieval；缺失输入为空",
+   "retrievedAt": "2026-09-09T06:08:24Z"
+  },
+  {
+   "tool": "drug_label_search",
+   "query": "drug=盐酸二甲双胍片; jurisdiction=NMPA; limit=3",
+   "result": "3 条索引候选（美迪康 0.5 g/天津太平洋 0.25 g/格华止 0.85 g）",
+   "retrievedAt": "2026-09-09T06:08:26Z"
+  },
+  {
+   "tool": "drug_label_search",
+   "query": "drug=盐酸二甲双胍片; product=美迪康; jurisdiction=NMPA; limit=1",
+   "result": "1 条（天津太平洋 0.25 g 记录；product 参数未按品名精确过滤，未保留为来源）",
+   "retrievedAt": "2026-09-09T06:08:48Z"
+  },
+  {
+   "tool": "drug_label_search",
+   "query": "drug=二甲双胍; limit=3",
+   "result": "3 条索引候选（迪化唐锭 0.5 g 进口/万全万特 0.25 g/湖南明瑞 0.25 g，旧版模板）",
+   "retrievedAt": "2026-09-09T06:12:37Z"
+  },
+  {
+   "tool": "guideline_search",
+   "query": "多囊卵巢综合征 二甲双胍 胰岛素抵抗 (zh, blocks)",
+   "result": "10 条候选（糖尿病方向为主，其中 2025 国家基层糖尿病防治管理指南等为糖尿病背景参考）",
+   "retrievedAt": "2026-09-09T06:08:52Z"
+  },
+  {
+   "tool": "guideline_search",
+   "query": "polycystic ovary syndrome metformin guideline (en, records)",
+   "result": "7 条候选（含 ASRM 2017、2023 AMD/SID、2013 ENDO、2025 国际青少年等；其本地工件其后被中文检索工件覆盖，正文引用以仍可解析工件为准）",
+   "retrievedAt": "2026-09-09T06:08:54Z"
+  },
+  {
+   "tool": "guideline_search",
+   "query": "多囊卵巢综合征 (zh, records)",
+   "result": "20 条候选，其中 18 条带本地工件；命中并采用：2018 中国诊疗指南、2023 诊治路径专家共识、2024 PCOS-IR 专家共识、2025 超重/肥胖体重管理共识、2023 国际循证推荐译文、2018 内分泌专家共识、2018 国际循证（2019 译文）、2014 RCOG、2023 中西医结合指南、2013 ENDO 指南中文解读、2011 澳大利亚循证指南等",
+   "retrievedAt": "2026-09-09T06:09:33Z"
+  },
+  {
+   "tool": "guideline_search",
+   "query": "PCOS assessment management evidence-based guideline 2023 international recommendation metformin (en, blocks)",
+   "result": "0 命中",
+   "retrievedAt": "2026-09-09T06:09:36Z"
+  },
+  {
+   "tool": "literature_search",
+   "query": "metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "result": "total=902；采用 6 条（Lord 2003、Creanga 2008、Guan 2020、Kim 2020、Song 2021、Melin 2023 等）",
+   "retrievedAt": "2026-09-09T06:08:57Z"
+  },
+  {
+   "tool": "literature_search",
+   "query": "metformin polycystic ovary syndrome randomized trial ovulation menstrual regularity insulin resistant women",
+   "result": "total=5229；采用 Trolle 2007、Chou 2003、Ng 2001、Rouzi 2006、Yavangi 2024、Morgante 2020 等；排除已撤稿记录（Abu Hashim 2009/2010、Hamed 2009 等 RETRACTED/EXPRESSION OF CONCERN）",
+   "retrievedAt": "2026-09-09T06:09:01Z"
+  },
+  {
+   "tool": "literature_search",
+   "query": "metformin placebo polycystic ovary syndrome menstrual cycle regularity randomized trial non-obese obese",
+   "result": "total=4046；补充 6 个月交叉 RCT（Trolle 2007）与 90 天 RCT（Chou 2003）等",
+   "retrievedAt": "2026-09-09T06:09:41Z"
+  },
+  {
+   "tool": "literature_search",
+   "query": "metformin lactic acidosis risk systematic review meta-analysis",
+   "result": "total=1631；多为糖尿病/肿瘤方向，安全性引用以队列与个案为主",
+   "retrievedAt": "2026-09-09T06:09:44Z"
+  },
+  {
+   "tool": "literature_search",
+   "query": "lactic acidosis incidence metformin use without contraindications type 2 diabetes cohort",
+   "result": "total=21788；采用 Richy 2014、Trinkley 2018（队列）与 DePalo 2005（个案系列）作为乳酸酸中毒间接证据",
+   "retrievedAt": "2026-09-09T06:13:28Z"
+  },
+  {
+   "tool": "pharmacy_reference_search",
+   "query": "盐酸二甲双胍片 用法用量 多囊卵巢综合征 胰岛素抵抗",
+   "result": "0 命中（私有策展药学参考索引 v1 无相关行）",
+   "retrievedAt": "2026-09-09T06:09:40Z"
+  },
+  {
+   "tool": "clinical_trial_search",
+   "query": "（未执行——本评估以标签/指南/已发表证据为主，注册试验仅作可选补强，未到材料性必要）",
+   "result": "",
+   "retrievedAt": ""
+  }
+ ],
+ "sources": [
+  {
+   "id": "SRC-LAB-01",
+   "title": "盐酸二甲双胍片（美迪康）NMPA 说明书索引记录",
+   "indexId": "EVIMED-LABEL:nmpa-0",
+   "source": "evimed-nmpa-label",
+   "url": "https://www.evimed.com/drug-details?source=nmpa&name=ce4d33bd4dffea71ba3e00d906db1b2a.pdf",
+   "jurisdiction": "China (NMPA)",
+   "productScope": "盐酸二甲双胍片 0.5 g，重庆药友制药有限责任公司",
+   "versionEffectiveDate": "未提供（EviMed 索引记录无修订日期字段；官方现行性未核）",
+   "retrievedAt": "2026-09-09T06:08:26.993777Z",
+   "queryUsed": "drug_label_search: drug=盐酸二甲双胍片; jurisdiction=NMPA; limit=3",
+   "evidenceAccess": "regulatory_record",
+   "observedFields": {
+    "indicationsAndUsage": "本品首选用于单纯饮食控制及体育锻炼控制血糖无效的2 型糖尿病。对于成人，本品可用于单药治疗，也可以与磺脲类药物或胰岛素联合治疗。对于 10 岁及以上的儿童和青少年，本品可用于单药治疗或与胰岛素联合治疗。",
+    "contraindications": "● 严重的肾功能衰竭（eGFR<45 mL/min/1.73m2）；",
+    "storage": "密封保存。"
+   },
+   "note": "锚定品规（0.5 g 普通片，新模板）。索引记录未包含【用法用量】小节文本。"
+  },
+  {
+   "id": "SRC-LAB-02",
+   "title": "盐酸二甲双胍片 NMPA 说明书索引记录（天津太平洋制药）",
+   "indexId": "EVIMED-LABEL:nmpa-1",
+   "source": "evimed-nmpa-label",
+   "url": "https://www.evimed.com/drug-details?source=nmpa&name=40a83297ce1d5c5f3d9baffbfc6f0954.pdf",
+   "jurisdiction": "China (NMPA)",
+   "productScope": "盐酸二甲双胍片 0.25 g，天津太平洋制药有限公司",
+   "versionEffectiveDate": "未提供",
+   "retrievedAt": "2026-09-09T06:08:26.993830Z",
+   "queryUsed": "drug_label_search: drug=盐酸二甲双胍片; jurisdiction=NMPA; limit=3",
+   "evidenceAccess": "regulatory_record",
+   "observedFields": {
+    "indicationsAndUsage": "同 SRC-LAB-01（新模板适应证文本）"
+   },
+   "note": "佐证同模板适应证文本的一致性。"
+  },
+  {
+   "id": "SRC-LAB-03",
+   "title": "盐酸二甲双胍片（格华止 0.85 g）NMPA 说明书索引记录",
+   "indexId": "EVIMED-LABEL:nmpa-2",
+   "source": "evimed-nmpa-label",
+   "url": "https://www.evimed.com/drug-details?source=nmpa&name=47fba214d74c6741071fa375f0999aa4.pdf",
+   "jurisdiction": "China (NMPA)",
+   "productScope": "盐酸二甲双胍片 0.85 g，默克制药（江苏）有限公司",
+   "versionEffectiveDate": "未提供",
+   "retrievedAt": "2026-09-09T06:08:26.993848Z",
+   "queryUsed": "drug_label_search: drug=盐酸二甲双胍片; jurisdiction=NMPA; limit=3",
+   "evidenceAccess": "regulatory_record",
+   "observedFields": {
+    "indicationsAndUsage": "同 SRC-LAB-01（新模板）",
+    "adverseReactions": "初始治疗时，最常见的不良反应有恶心、呕吐、腹泻、腹痛和食欲不振，大多数患者通常可以自行缓解。以下不良反应可能在服用二甲双胍时出现。不良反应发生频率定义如下：十分常见（ ≥ 10%）；常见（1%-10%，含 1%），偶见（0.1%-1%，含 0.1%），罕见（0.01%-0.1%，含 0.01%），十分罕见（<0.01%）。"
+   },
+   "note": "含不良反应频率定义与胃肠道反应描述；不含【用法用量】。"
+  },
+  {
+   "id": "SRC-LAB-04",
+   "title": "盐酸二甲双胍片（迪化唐锭 0.5 g，进口）NMPA 说明书索引记录",
+   "indexId": "EVIMED-LABEL:nmpa-0（第二次检索）",
+   "source": "evimed-nmpa-label",
+   "url": "https://www.evimed.com/drug-details?source=nmpa&name=50e16769c71f0baf406b16abe93a4146.pdf",
+   "jurisdiction": "China (NMPA)",
+   "productScope": "盐酸二甲双胍片 0.5 g，Alphapharm Pty Limited（进口分包装）",
+   "versionEffectiveDate": "未提供",
+   "retrievedAt": "2026-09-09T06:12:37.068171Z",
+   "queryUsed": "drug_label_search: drug=二甲双胍; limit=3",
+   "evidenceAccess": "regulatory_record",
+   "observedFields": {
+    "indicationsAndUsage": "同 SRC-LAB-01（新模板适应证文本）"
+   },
+   "note": "0.5 g 进口品规佐证。"
+  },
+  {
+   "id": "SRC-LAB-05",
+   "title": "盐酸二甲双胍片 NMPA 说明书索引记录（万全万特（厦门））",
+   "indexId": "EVIMED-LABEL:nmpa-1（第二次检索）",
+   "source": "evimed-nmpa-label",
+   "url": "https://www.evimed.com/drug-details?source=nmpa&name=a55c4ff685e782087e5a54dfcc51d885.pdf",
+   "jurisdiction": "China (NMPA)",
+   "productScope": "盐酸二甲双胍片 0.25 g，万全万特制药(厦门)有限公司",
+   "versionEffectiveDate": "未提供",
+   "retrievedAt": "2026-09-09T06:12:37.068206Z",
+   "queryUsed": "drug_label_search: drug=二甲双胍; limit=3",
+   "evidenceAccess": "regulatory_record",
+   "observedFields": {
+    "indicationsAndUsage": "用于单纯饮食控制不满意的Ⅱ型糖尿病病人，尤其是肥胖和伴高胰岛素血症者，用本药不但有降血糖作用，还可能有减轻体重和高胰岛素血症的效果。对某些磺酰脲类疗效差的患者可奏效，如与磺酰脲类、小肠糖苷酶抑制剂或噻唑烷二酮类降糖药合用，较分别单用的效果更好。亦可用于胰岛素治疗的患者，以减少胰岛素用量。",
+    "contraindications": "下列情况应禁用：",
+    "adverseReactions": "1、常见的有：恶心、呕吐、腹泻、口中有金属味。",
+    "pregnancyLactationUse": "妊娠及哺乳期妇女禁用。",
+    "elderlyUse": "70 岁以上患者可出现乳酸性酸中毒，宜慎用。"
+   },
+   "note": "旧模板适应证文本；含妊娠哺乳禁用与老年乳酸性酸中毒警示。"
+  },
+  {
+   "id": "SRC-LAB-06",
+   "title": "盐酸二甲双胍片 NMPA 说明书索引记录（湖南明瑞制药）",
+   "indexId": "EVIMED-LABEL:nmpa-2（第二次检索）",
+   "source": "evimed-nmpa-label",
+   "url": "https://www.evimed.com/drug-details?source=nmpa&name=f103366c515e83fb7b718be58374a7fd.pdf",
+   "jurisdiction": "China (NMPA)",
+   "productScope": "盐酸二甲双胍片 0.25 g，湖南明瑞制药股份有限公司",
+   "versionEffectiveDate": "未提供",
+   "retrievedAt": "2026-09-09T06:12:37.068221Z",
+   "queryUsed": "drug_label_search: drug=二甲双胍; limit=3",
+   "evidenceAccess": "regulatory_record",
+   "observedFields": {
+    "indicationsAndUsage": "同 SRC-LAB-05（旧模板适应证文本）",
+    "pregnancyLactationUse": "妊娠及哺乳期妇女禁用。"
+   },
+   "note": "旧模板佐证。"
+  },
+  {
+   "id": "SRC-GDL-01",
+   "title": "多囊卵巢综合征中国诊疗指南（2018）",
+   "indexId": "EVIMED-GUIDE:1（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=03b1277e9f4128d7",
+   "jurisdiction": "中国",
+   "productScope": "中华医学会妇产科学分会（内分泌学组组织制定）",
+   "versionEffectiveDate": "2018",
+   "retrievedAt": "2026-09-09T06:09:33.387315Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "二甲双胍：为胰岛素增敏剂……适应证：(1)PCOS伴胰岛素抵抗的患者；(2)PCOS不孕、枸橼酸氯米酚(CC)抵抗患者促性腺激素促排卵前的预治疗。禁忌证：心肝肾功能不全、酗酒等。",
+    "胰岛素增敏剂在辅助生殖治疗中的应用：推荐在PCOS患者辅助生殖治疗过程中使用二甲双胍。二甲双胍目前在治疗PCOS中的方案有：(1)单独应用：适用于非肥胖的PCOS患者(BMI<30kg/m²)……"
+   ],
+   "note": "正文工件为 EviMed 收录副本，个别字符存在 OCR 噪声（如“枸橡酸氯米酚”），引用时按上下文校正并保留原期刊用名克罗米芬/氯米芬。",
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/03b1277e9f4128d7/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-02",
+   "title": "多囊卵巢综合征诊治路径专家共识（2023）",
+   "indexId": "EVIMED-GUIDE:2（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=c1a53fb80f84a8c3",
+   "jurisdiction": "中国",
+   "productScope": "多囊卵巢综合征诊治路径共识专家组",
+   "versionEffectiveDate": "2023",
+   "retrievedAt": "2026-09-09T06:09:33.391744Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "（2）二甲双胍：适用于PCOS合并有胰岛素抵抗、糖调节受损（IGR）或糖尿病，且通过生活方式干预效果欠佳的患者。对于BMI≥25kg/m2的成年PCOS患者以及确诊青春期PCOS患者，除生活方式外，还应考虑使用二甲双胍来管理体质量和代谢水平。……育龄期患者中，非肥胖者推荐剂量1000~1500mg/d，肥胖者推荐剂量2000~2500mg/d，疗程3~6个月及以上。治疗期间可有腹胀腹泻、恶心等不良反应，推荐餐中服用，从小剂量开始逐渐增加耐受性。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/c1a53fb80f84a8c3/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-03",
+   "title": "多囊卵巢综合征合并胰岛素抵抗诊治专家共识（2024）",
+   "indexId": "EVIMED-GUIDE:8（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=00366ec0605bf45d",
+   "jurisdiction": "中国",
+   "productScope": "中华预防医学会（专家共识）",
+   "versionEffectiveDate": "2024",
+   "retrievedAt": "2026-09-09T06:09:33.393567Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "（五）IR的药物治疗 二甲双胍是经典的胰岛素增敏剂之一……其最佳有效剂量为每天1500～2000mg……主要不良反应是胃肠道不适，二甲双胍缓释片和缓释胶囊的胃肠道反应更小，依从性更高。……研究表明，二甲双胍用于PCOS患者可以改善IR和多种代谢异常，还可以降低高雄激素水平，诱导排卵，恢复月经，改善辅助生殖结局。最新国际指南推荐，BMI≥25kg/m²的PCOS成人患者，应考虑单独使用二甲双胍，以改善IR、血糖和血脂等。",
+    "PCOS患者在妊娠期间是否继续使用二甲双胍仍存在争议，我国尚无二甲双胍在孕妇中应用的适应证推荐，且药物可以通过胎盘……属于妊娠B类药物，建议妊娠期慎用。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/00366ec0605bf45d/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-04",
+   "title": "超重/肥胖多囊卵巢综合征患者体重管理内分泌专家共识（2025）",
+   "indexId": "EVIMED-GUIDE:18（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=e0a848fc8ea2e431",
+   "jurisdiction": "中国",
+   "productScope": "中华医学会内分泌学分会",
+   "versionEffectiveDate": "2025",
+   "retrievedAt": "2026-09-09T06:09:33.415877Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "推荐二甲双胍作为超重/肥胖PCOS患者的一线治疗药物，尤其是伴有IR/糖耐量异常/糖尿病的患者，最佳有效治疗剂量1000~2500mg/d。主要不良反应为胃肠道反应，可通过小剂量起始或者使用肠溶或缓释剂型以减少不良反应。",
+    "（2）育龄期：伴有代谢指标异常（IR、血糖异常）的超重/肥胖PCOS患者可首选二甲双胍治疗……对于存在COCP禁忌、不接受或不耐受的超重/肥胖PCOS患者，二甲双胍可被用于调整月经周期；对高代谢风险人群，包括BMI>30kg/m²、糖尿病、糖耐量受损和高危人群，给予COCP联合二甲双胍治疗可能更有益。",
+    "长期用药且有维生素B12缺乏风险的人群（如糖尿病、减重术后、恶性贫血、素食主义者）建议定期监测维生素B12。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/e0a848fc8ea2e431/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-05",
+   "title": "多囊卵巢综合征评估和管理国际循证指南推荐建议（2023 年版·中文译文）",
+   "indexId": "EVIMED-GUIDE:12（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=be4a81bb078630eb",
+   "jurisdiction": "国际（2023 年国际循证 PCOS 指南更新；中文译本由国内生殖医学中心翻译整理）",
+   "productScope": "国际 PCOS 循证指南（基于 2018 版更新；原指南开发遵循 GRADE 流程）",
+   "versionEffectiveDate": "2023",
+   "retrievedAt": "2026-09-09T06:09:33.405772Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "联合口服避孕药是治疗月经不调和高雄激素血症的一线药……二甲双胍主要用于代谢异常患者，其疗效高于肌醇，后者对PCOS的临床作用有限。二甲双胍不常规推荐用于患有PCOS的孕妇。",
+    "注：……示非适应证用药，由于制药公司尚未申请批准用于PCOS，来曲唑、二甲双胍和其他药物治疗对于PCOS通常是非适应证用药。即便如此，这些非适应证用药大多有循证依据，并且在许多国家都被允许使用，在允许非适应证用药的前提下，医疗专业人员应充分告知并与患者讨论药物治疗的依据、可能的疑虑和相关不良反应。",
+    "来曲唑是治疗不孕症的一线药物，克罗米芬单独使用或与二甲双胍、促性腺激素或卵巢手术联合可作为二线治疗。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/be4a81bb078630eb/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-06",
+   "title": "多囊卵巢综合征诊治内分泌专家共识（2018）",
+   "indexId": "EVIMED-GUIDE:5（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=822b2e1823408936",
+   "jurisdiction": "中国",
+   "productScope": "中国医师协会内分泌代谢科医师分会",
+   "versionEffectiveDate": "2018",
+   "retrievedAt": "2026-09-09T06:09:33.395425Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "育龄期（合并IGR）：……非肥胖患者推荐1000～1500mg/d，肥胖患者推荐2000～2500mg/d，餐时或餐后立即服用，疗程至少3到6个月。若胰岛素抵抗或糖调节异常明显改善，备孕患者建议使用至确诊妊娠，无妊娠计划患者可使用至糖调节异常恢复；若治疗3～6个月没有效果，建议调整治疗方案……",
+    "合并重度肥胖、糖脂代谢紊乱的患者，建议联合二甲双胍或胰岛素增敏剂治疗（针对短效口服避孕药调整周期的段落）。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/822b2e1823408936/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-07",
+   "title": "多囊卵巢综合征评估和管理的国际循证指南的建议（2018 版国际循证指南·2019 中文译文）",
+   "indexId": "EVIMED-GUIDE:19（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=ca29d5355692035f",
+   "jurisdiction": "国际（2018 International Evidence-based Guideline，中文译文 2019）",
+   "productScope": "国际 PCOS 循证指南 2018（NHMRC 资助、ESHRE/ASRM 等 37 个协会组织参与，AGREE II 流程 + GRADE 分级）",
+   "versionEffectiveDate": "2018/2019",
+   "retrievedAt": "2026-09-09T06:09:33.419009Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "联合口服避孕药(COCP)是月经不调和雄激素过多症的一线治疗药物，未推荐特定配方，优选低剂量制剂。建议补充或单独使用二甲双胍，主要用于治疗代谢异常。来曲唑是治疗不孕症的一线药物：克罗米芬和二甲双胍均具有单独和联合的作用。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/ca29d5355692035f/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-08",
+   "title": "2014 RCOG 多囊卵巢综合征的远期影响指南（No. 33，第三版）",
+   "indexId": "EVIMED-GUIDE:4（英文记录检索）",
+   "source": "evimed-guideline (en record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=46ccdfba7dee4c19",
+   "jurisdiction": "英国（RCOG）",
+   "productScope": "PCOS 远期健康影响管理",
+   "versionEffectiveDate": "2014-11",
+   "retrievedAt": "2026-09-09T06:09:33.390206Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)（工件复用；原英文检索 06:08:54 返回该记录）",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "metformin has been shown to have beneficial short-term effects on insulin resistance and other cardiovascular risk markers in women with PCOS without type II diabetes. There is evidence that metformin may modestly reduce androgen levels by around 11% in women with PCOS compared to placebo and modest reductions in body weight have been reported by some, but not all, studies.",
+    "It must be emphasised that both metformin and the thiazolidinediones are unlicensed for use in PCOS and women should be counselled before initiating therapy so that they can make an informed choice.",
+    "Metformin can be considered in women with PCOS who are already undergoing lifestyle treatment and do not have improvement in impaired glucose tolerance and in those women with impaired glucose tolerance."
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/46ccdfba7dee4c19/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-09",
+   "title": "多囊卵巢综合征中西医结合诊治指南（2023）",
+   "indexId": "EVIMED-GUIDE:3（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=90af4741af2a6c56",
+   "jurisdiction": "中国",
+   "productScope": "中国中西医结合学会妇产科专业委员会",
+   "versionEffectiveDate": "2023",
+   "retrievedAt": "2026-09-09T06:09:33.393543Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "（3）代谢调整：对于超重、肥胖或存在IR的PCOS患者，可酌情服用二甲双胍；若二甲双胍疗效不佳，或IR较严重，可在二甲双胍的基础上联合应用噻唑烷二酮类药物……",
+    "二甲双胍可单独或联合克罗米芬诱导排卵（尤其在伴有肥胖或克罗米芬抵抗时)，以提高排卵率和妊娠率（1B）。"
+   ],
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/90af4741af2a6c56/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-10",
+   "title": "多囊卵巢综合征评估与处理循证指南（2011，澳大利亚 PCOS 联盟/PCOS Australian Alliance）",
+   "indexId": "EVIMED-GUIDE:6（英文记录检索）",
+   "source": "evimed-guideline (en record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=f5338061725f1a61",
+   "jurisdiction": "澳大利亚",
+   "productScope": "PCOS 评估与处理（38 条 A–D 级循证推荐）",
+   "versionEffectiveDate": "2011",
+   "retrievedAt": "2026-09-09T06:09:33.419009Z（工件）",
+   "queryUsed": "guideline_search: polycystic ovary syndrome metformin guideline (en, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "Evidence-based recommendation - Grade B: Metformin could be used alone to improve ovulation rate and pregnancy rate in women with PCOS who are anovulatory, have a BMI ≥ 30 kg/m2 (obese), and are infertile with no other infertility factors.",
+    "Evidence-based recommendation - Grade A: Metformin should be combined with clomiphene citrate to improve fertility outcomes rather than persisting with further treatment with clomiphene citrate alone in women with PCOS who are clomiphene citrate resistant, anovulatory and infertile."
+   ],
+   "note": "工件文本含 OCR 噪声（如 BMI 30kg/m2 表述），引用时保留原意。",
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/f5338061725f1a61/guideline.md"
+  },
+  {
+   "id": "SRC-GDL-11",
+   "title": "2013 年美国内分泌学会（ENDO）PCOS 诊疗指南·中文解读",
+   "indexId": "EVIMED-GUIDE:17（中文记录检索）",
+   "source": "evimed-guideline (zh record + local artifact)",
+   "url": "https://www.evimed.com/guide-details?id=d265ca7b28f5dafb",
+   "jurisdiction": "中国（对 2013 ENDO 指南的解读文献）",
+   "productScope": "ENDO 2013 PCOS 指南（Legro 等，GRADE 分级）中文解读",
+   "versionEffectiveDate": "2014（解读）/2013（原指南）",
+   "retrievedAt": "2026-09-09T06:09:33.414239Z",
+   "queryUsed": "guideline_search: 多囊卵巢综合征 (zh, records)",
+   "evidenceAccess": "full_text",
+   "observedExcerpts": [
+    "本指南对于二甲双胍的定位是辅助用药，用于预防PCOS患者在接受体外受孕治疗中卵巢过度刺激综合征（OHSS)的发生。对于合并IGT或代谢综合征且单纯生活方式调整无效的PCOS患者，建议加用二甲双胍。",
+    "二甲双胍不仅有利于控制血糖，还能增加机体组织对胰岛素的敏感性，改善血管炎症、脂质代谢等动脉粥样硬化危险因素，并对子宫内膜功能、高雄激素血症、月经周期及排卵功能均有改善作用。"
+   ],
+   "note": "解读性二次文献，非指南原文；引用作为对 ENDO 2013 定位的转述。",
+   "localArtifact": "/workspace/.evimed-sources/evimed-guidelines/d265ca7b28f5dafb/guideline.md"
+  },
+  {
+   "id": "SRC-LIT-01",
+   "title": "Lord JM, Flight IH, Norman RJ. Metformin in polycystic ovary syndrome: systematic review and meta-analysis. BMJ. 2003.",
+   "indexId": "EVIMED-LITERATURE:2_276_64d25cd6097b1c99c9b4868f",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/14576245/",
+   "jurisdiction": "国际",
+   "productScope": "13 项 RCT、543 例 PCOS 女性",
+   "versionEffectiveDate": "2003",
+   "retrievedAt": "2026-09-09T06:08:57.763459Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "Meta-analysis showed that metformin is effective in achieving ovulation in women with polycystic ovary syndrome, with odds ratios of 3.88 (95% confidence interval 2.25 to 6.69) for metformin compared with placebo and 4.41 (2.37 to 8.22) for metformin and clomifene compared with clomifene alone.",
+    "Metformin has an effect in reducing fasting insulin concentrations, blood pressure, and low density lipoprotein cholesterol. We found no evidence of any effect on body mass index or waist:hip ratio. Metformin was associated with a higher incidence of nausea, vomiting, and other gastrointestinal disturbance."
+   ]
+  },
+  {
+   "id": "SRC-LIT-02",
+   "title": "Creanga AA, et al. Use of metformin in polycystic ovary syndrome: a meta-analysis. Obstet Gynecol. 2008.",
+   "indexId": "EVIMED-LITERATURE:2_242_64d2091495f1b423cd89ce2f",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/18378757/",
+   "jurisdiction": "国际",
+   "productScope": "17 项 RCT、1639 例 PCOS 女性",
+   "versionEffectiveDate": "2008",
+   "retrievedAt": "2026-09-09T06:08:57.763468Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "Metformin improved the odds of ovulation in women with polycystic ovary syndrome when compared with placebo (odds ratio [OR] 2.94; 95% confidence interval [CI] 1.43-6.02; number-needed-to-treat 4.0)...",
+    "These treatment effects were greater for trials with shorter follow-up."
+   ]
+  },
+  {
+   "id": "SRC-LIT-03",
+   "title": "Guan Y, et al. The Effect of Metformin on PCOS in Overweight Women: SR and MA of RCTs. Int J Endocrinol（检索记录所示期刊字段缺失，PMID 33014044）. 2020.",
+   "indexId": "EVIMED-LITERATURE:3_308_64d221ae50644a72f8961a21",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/33014044/",
+   "jurisdiction": "国际",
+   "productScope": "12 项 RCT，超重 PCOS 女性",
+   "versionEffectiveDate": "2020",
+   "retrievedAt": "2026-09-09T06:08:57.763512Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "...significant differences in the changes in body mass index (BMI) (WMD = -1.25, 95% CI (-1.60, -0.91), p < 0.00001) and waist circumference (WC) (WMD = -1.41, 95% CI (-2.46, -0.37), p=0.008) after metformin.",
+    "...metformin did not regulate the secretion indexes of fasting insulin, homeostasis model assessment of insulin resistance, sex hormone-binding globulin, high-density lipoprotein cholesterol, total cholesterol, triglycerides, fasting blood glucose, and androstenedione."
+   ]
+  },
+  {
+   "id": "SRC-LIT-04",
+   "title": "Kim CH, Chon SJ, Lee SH. Effects of lifestyle modification in PCOS compared to metformin only or metformin addition: SR and MA. Sci Rep. 2020.",
+   "indexId": "EVIMED-LITERATURE:4_411_64d24f77097b1c99c9ac4a28",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/32385376/",
+   "jurisdiction": "国际",
+   "productScope": "生活方式干预 vs 二甲双胍（含联用）的系统综述与 Meta 分析",
+   "versionEffectiveDate": "2020",
+   "retrievedAt": "2026-09-09T06:08:57.763563Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "...there was no significant difference in the improvements in the menstrual cycles between LSM and metformin alone (weighted mean difference [MD] = 1.62) and between LSM + metformin and LSM (MD = 1.20).",
+    "LSM reduced insulin resistance (MD = -0.52) and increased serum levels of sex hormone-binding globulins (MD = 8.27) compared with metformin."
+   ]
+  },
+  {
+   "id": "SRC-LIT-05",
+   "title": "Song Y, et al. Effects of Metformin and Exercise in PCOS: SR and MA. Horm Metab Res. 2021.",
+   "indexId": "EVIMED-LITERATURE:0_30_64d21adb50644a72f892aa4f",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/34740275/",
+   "jurisdiction": "国际",
+   "productScope": "9 项研究：运动±二甲双胍",
+   "versionEffectiveDate": "2021",
+   "retrievedAt": "2026-09-09T06:08:57.763571Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "The meta-analysis reveals that metformin offers additive benefits to exercise, leading to modest improvements in menstrual cycles, hyperandrogenism, and abdominal fat."
+   ]
+  },
+  {
+   "id": "SRC-LIT-06",
+   "title": "Metformin and lifestyle modification in polycystic ovary syndrome: systematic review and meta-analysis. Hum Reprod Update. 2015（PMID 26060208；正文即检索记录所示“Morley 2015 段”）",
+   "indexId": "EVIMED-LITERATURE:4_408_6878b4bbd2536d6b903bc551",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/26060208/",
+   "jurisdiction": "国际",
+   "productScope": "生活方式+二甲双胍 vs 生活方式 ± 安慰剂（6 个月终点）",
+   "versionEffectiveDate": "2015",
+   "retrievedAt": "2026-09-09T06:08:57.763534Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "...metformin combined with lifestyle modifications leads to lower BMI and subcutaneous adipose tissue, as well as improved menstruation, in women with PCOS compared to lifestyle modifications alone. Metformin alone compared with lifestyle showed similar BMI at 6 months."
+   ]
+  },
+  {
+   "id": "SRC-LIT-07",
+   "title": "Melin J, et al. Metformin and COCP in the management of PCOS: SR and MA（2023 国际 PCOS 指南更新组成部分）. J Clin Endocrinol Metab. 2023.",
+   "indexId": "EVIMED-LITERATURE:0_63_6557195532d4ee1d187ed5a3",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/37554096/",
+   "jurisdiction": "国际",
+   "productScope": "36 项 RCT（二甲双胍 vs COCP vs 联合）",
+   "versionEffectiveDate": "2023",
+   "retrievedAt": "2026-09-09T06:08:57.763541Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome systematic review meta-analysis menstrual cycle HOMA-IR",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "Metformin lowered insulin (-27.12 pmol/l, 95%CI -40.65; -13.59) and triglycerides (-0.15 mmol/l, 95%CI -0.29; -0.01) compared with COCP.",
+    "Metformin was inferior on free androgen index (FAI), sex hormone binding globulin (SHBG) and testosterone compared with COCP.",
+    "GRADE 质量评估见原文（2023 国际指南更新组成部分）。"
+   ]
+  },
+  {
+   "id": "SRC-LIT-08",
+   "title": "Trolle B, et al. Efficacy of metformin in obese and non-obese women with PCOS: randomized, double-blinded, placebo-controlled cross-over trial. Hum Reprod. 2007.",
+   "indexId": "EVIMED-LITERATURE:4_426_64d220369112c86e36966f46",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/17766923/",
+   "jurisdiction": "国际",
+   "productScope": "56 例 18–45 岁 PCOS；二甲双胍 850 mg bid vs 安慰剂，各 6 个月交叉",
+   "versionEffectiveDate": "2007",
+   "retrievedAt": "2026-09-09T06:09:41.726156Z",
+   "queryUsed": "literature_search: metformin placebo polycystic ovary syndrome menstrual cycle regularity randomized trial non-obese obese",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "There were no changes in menstrual frequency.",
+    "In the intention-to-treat analysis, weight and systolic BP were reduced on metformin treatment (p=0.009 and 0.047, respectively), while high-density lipoprotein (HDL) increased (p=0.001).",
+    "Post-hoc subgrouping according to BMI revealed reductions in testosterone (p=0.013), FPG (p=0.018), insulin (p=0.045) and HOMA-index (p=0.022) in obese women.",
+    "Non-obese women did not benefit from metformin."
+   ]
+  },
+  {
+   "id": "SRC-LIT-09",
+   "title": "Chou KH, et al. Clinical, metabolic and endocrine parameters in response to metformin in obese women with PCOS: RCT. Horm Metab Res. 2003.",
+   "indexId": "EVIMED-LITERATURE:0_30_64d243209112c86e36a755e7",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/12734787/",
+   "jurisdiction": "国际",
+   "productScope": "30 例肥胖非糖尿病 PCOS；二甲双胍 500 mg tid vs 安慰剂 90 天",
+   "versionEffectiveDate": "2003",
+   "retrievedAt": "2026-09-09T06:09:41.726165Z",
+   "queryUsed": "literature_search: metformin placebo polycystic ovary syndrome menstrual cycle regularity randomized trial non-obese obese",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "After 90 days of metformin use, PCOS women presented significantly lower levels of total testosterone (p = 0.030) and total cholesterol (p = 0.023) compared to the women that used placebo.",
+    "obese women with PCOS may benefit from the use of metformin through the reduction of hyperandrogenemia, total cholesterol, and possibly by restoration of regular menstrual cycles."
+   ]
+  },
+  {
+   "id": "SRC-LIT-10",
+   "title": "Ng EH, Wat NM, Ho PC. Effects of metformin on ovulation rate, hormonal and metabolic profiles in CC-resistant PCO: RCT. Hum Reprod. 2001.",
+   "indexId": "EVIMED-LITERATURE:4_426_64d22b8a097b1c99c99ac935",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/11473953/",
+   "jurisdiction": "国际（中国香港人群）",
+   "productScope": "20 例 <40 岁 CC 抵抗 PCO 华人女性；二甲双胍 500 mg tid × 3 个月",
+   "versionEffectiveDate": "2001",
+   "retrievedAt": "2026-09-09T06:09:01.279521Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome randomized trial ovulation menstrual regularity insulin resistant women",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "There was no improvement in the ovulation rate despite a significant reduction of body mass index, serum testosterone and fasting leptin concentrations in the metformin group.",
+    "The median ovulation rate in the placebo group was 0% (range: 0--50%) after placebo only ... whereas the corresponding rates in the metformin group were 0% (range: 0--22%) ..."
+   ]
+  },
+  {
+   "id": "SRC-LIT-11",
+   "title": "Rouzi AA, Ardawi MS. RCT of rosiglitazone+CC vs metformin+CC in CC-resistant PCOS. Fertil Steril. 2006.",
+   "indexId": "EVIMED-LITERATURE:0_84_64d28ff28edd340620a801e5",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/16595222/",
+   "jurisdiction": "国际",
+   "productScope": "25 例 CC 抵抗 PCOS；二甲双胍 500 mg tid + CC 方案",
+   "versionEffectiveDate": "2006",
+   "retrievedAt": "2026-09-09T06:09:01.279480Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome randomized trial ovulation menstrual regularity insulin resistant women",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "Ovulation rate was significantly higher in the rosiglitazone and CC group (18 out of 28 cycles [64.3%]) than the metformin and CC group (12 out of 33 cycles [36.4%]) (P=.035)."
+   ]
+  },
+  {
+   "id": "SRC-LIT-12",
+   "title": "Morgante G, et al. Metformin doses and body mass index: clinical outcomes in insulin resistant PCOS women. Eur Rev Med Pharmacol Sci. 2020.",
+   "indexId": "EVIMED-LITERATURE:1_167_64d2090a50644a72f888cbf0",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/32767342/",
+   "jurisdiction": "国际",
+   "productScope": "108 例 22–35 岁胰岛素抵抗超重/肥胖 PCOS；二甲双胍 1500 mg/d（500 mg×3）首 6 个月，HOMA 未正常化者增至 2500 mg/d 再用 6 个月（前瞻非随机队列）",
+   "versionEffectiveDate": "2020",
+   "retrievedAt": "2026-09-09T06:09:01.279584Z",
+   "queryUsed": "literature_search: metformin polycystic ovary syndrome randomized trial ovulation menstrual regularity insulin resistant women",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "All patients received 1500 mg of metformin (500 mg x 3 times/day) for the first 6 months.",
+    "Overall results showed a good response to metformin therapy in insulin-resistant PCOS patients with BMI >25, while in patients with higher BMI (31.15 ± 0.40), no normalization of HOMA was found.",
+    "At the higher dose of metformin, obese patients achieved a good response to therapy, with improvement in BMI, menstrual pattern, cholesterol levels and hyperandrogenism."
+   ]
+  },
+  {
+   "id": "SRC-LIT-13",
+   "title": "Richy FF, et al. Incidence of lactic acidosis in patients with T2DM with and without renal impairment treated with metformin: retrospective cohort. Diabetes Care. 2014.",
+   "indexId": "EVIMED-LITERATURE:2_244_64d205d3c195413e5e87eca8",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/24879835/",
+   "jurisdiction": "英国（CPRD 数据库）",
+   "productScope": "77,601 例二甲双胍治疗的 2 型糖尿病患者",
+   "versionEffectiveDate": "2014",
+   "retrievedAt": "2026-09-09T06:13:28.421283Z",
+   "queryUsed": "literature_search: lactic acidosis incidence metformin use without contraindications type 2 diabetes cohort",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "There were 35 LA events (10.37 [95% CI 7.22-14.42] per 100,000 patient-years) of which none were fatal and 23 were linked to a comorbidity.",
+    "No significant difference in the incidence of LA was observed across N, Mi, Mo and Se renal function groups."
+   ],
+   "note": "人群为 2 型糖尿病——间接人群（非糖尿病 PCOS 无直接发生率数据）。"
+  },
+  {
+   "id": "SRC-LIT-14",
+   "title": "Trinkley KE, et al. Assessing the incidence of acidosis in patients receiving metformin with and without risk factors for lactic acidosis. Ther Adv Chronic Dis. 2018.",
+   "indexId": "EVIMED-LITERATURE:1_132_64d1fdea95f1b423cd8257c0",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/30181847/",
+   "jurisdiction": "美国（行政索赔数据库）",
+   "productScope": "132,780 例新诊断 2 型糖尿病（二甲双胍单药 24,936 例）",
+   "versionEffectiveDate": "2018",
+   "retrievedAt": "2026-09-09T06:13:28.421298Z",
+   "queryUsed": "literature_search: lactic acidosis incidence metformin use without contraindications type 2 diabetes cohort",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "Acidosis was observed in 1.45 per 10,000 patient months (0.78 metformin, 1.59 other antihyperglycemic medication, 1.51 no medication).",
+    "There was no significant difference in risk of acidosis between exposure groups, irrespective of risk factors for lactic acidosis."
+   ]
+  },
+  {
+   "id": "SRC-LIT-15",
+   "title": "Yavangi M, et al. Green tea tablets and metformin on ovulation and menstrual cycle regularity in PCOS（临床试验）. J Med Life. 2024.",
+   "indexId": "EVIMED-LITERATURE:2_245_6645c58761e2a20c49833f4e",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/38737668/",
+   "jurisdiction": "国际",
+   "productScope": "94 例 PCOS（绿茶 33/二甲双胍 29/对照 32），3 个月",
+   "versionEffectiveDate": "2024",
+   "retrievedAt": "2026-09-09T06:09:41.726129Z",
+   "queryUsed": "literature_search: metformin placebo polycystic ovary syndrome menstrual cycle regularity randomized trial non-obese obese",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "Following the intervention, the mean menstrual cycle duration in the green tea, metformin, and control groups was 32.22 ± 12.78, 48.72 ± 37.06, and 48.53 ± 31.04 days, respectively (P = 0.040)."
+   ],
+   "note": "该试验为三组随机对照但无盲法描述；二甲双胍组 3 个月后周期长度未显著短于对照。"
+  },
+  {
+   "id": "SRC-LIT-16",
+   "title": "Glueck CJ, et al. Metformin-diet ... resumption of regular menses in adolescents with PCOS（病例系列，20 例 ≤17 岁）. J Pediatr Endocrinol Metab. 2009.",
+   "indexId": "EVIMED-LITERATURE:4_498_64d2166d097b1c99c9902491",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/19960891/",
+   "jurisdiction": "国际",
+   "productScope": "20 例青春期（≤17 岁）PCOS，二甲双胍 2550 mg/d+饮食，1 年（病例系列）",
+   "versionEffectiveDate": "2009",
+   "retrievedAt": "2026-09-09T06:09:41.726214Z",
+   "queryUsed": "literature_search: metformin placebo polycystic ovary syndrome menstrual cycle regularity randomized trial non-obese obese",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "The percentage of cycles with normal menses rose from a pre-treatment median of 8% to 100%, p < 0.0001."
+   ],
+   "note": "未成年人群，间接证据。"
+  },
+  {
+   "id": "SRC-LIT-17",
+   "title": "DePalo VA, et al. Lactic acidosis associated with metformin use in treatment of T2DM（4 例老年住院患者个案系列）. Geriatrics. 2005.",
+   "indexId": "EVIMED-LITERATURE:4_400_64d207df50644a72f8882ceb",
+   "source": "evimed-literature (PubMed)",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/16287340/",
+   "jurisdiction": "国际",
+   "productScope": "4 例老年 2 型糖尿病住院患者二甲双胍相关乳酸酸中毒个案系列",
+   "versionEffectiveDate": "2005",
+   "retrievedAt": "2026-09-09T06:13:28.421287Z",
+   "queryUsed": "literature_search: lactic acidosis incidence metformin use without contraindications type 2 diabetes cohort",
+   "evidenceAccess": "abstract",
+   "observedExcerpts": [
+    "A rare, but important complication associated with this drug is the development of lactic acidosis: Overall mortality of lactic acidosis is approximately 50%.",
+    "Certain subsets of patients taking metformin are at greater risk of developing lactic acidosis."
+   ],
+   "note": "老年糖尿病住院人群；乳酸酸中毒总死亡率约 50% 为该文献对已发酸中毒病例的转述，非本拟用人群发生率。"
+  },
+  {
+   "id": "SRC-CHEM-01",
+   "title": "PubChem Compound 14219: Metformin Hydrochloride",
+   "indexId": "14219",
+   "source": "pubchem",
+   "url": "https://pubchem.ncbi.nlm.nih.gov/compound/14219",
+   "jurisdiction": "国际（化学结构库）",
+   "productScope": "盐酸二甲双胍化学标识",
+   "versionEffectiveDate": "检索时点记录",
+   "retrievedAt": "2026-09-09T06:10:51.196032Z",
+   "queryUsed": "biomedical_source_search: pubchem, query=metformin hydrochloride",
+   "evidenceAccess": "full_text",
+   "observedFields": {
+    "molecularFormula": "C4H12ClN5",
+    "molecularWeight": "165.62",
+    "inchiKey": "OETHQSJEHLVLGH-UHFFFAOYSA-N"
+   }
+  }
+ ],
+ "unresolvedGaps": [
+  "本院确切在用品规（生产厂家/规格）与批准文号：未随题面提供，EviMed NMPA 索引记录不含批准文号字段；按通用“NMPA 批准的盐酸二甲双胍普通片 0.5 g”口径完成评估。用户提供本院说明书或批准文号后可锁定并复核。",
+  "NMPA 官方现行性：EviMed 索引记录无修订日期，官方现行版本未能在本网关核验（需 NMPA 药品说明书数据库或本院现行说明书确认）。",
+  "说明书【用法用量】小节：6 条索引记录均未返回该小节文本，剂量/频次/疗程的标签维度无法核实（判 unclear，不推定 match/mismatch）。",
+  "决策日（2026-03-01）早于证据冻结时点（2026-09-09），决策当日官方标签状态无法回溯核实。",
+  "许可型证据库（Micromedex/UpToDate/Lexicomp 等）无网关访问且未提供摘录/导出；院内私有药学参考索引检索 0 命中。",
+  "权威工具书（如《中华人民共和国药典临床用药须知》等）文本未能经可解析来源核验。",
+  "PCOS 指南对“二甲双胍单用于调整月经周期”不作一线推荐：周期紊乱首选孕激素后半周期疗法/COCP——拟用方案将月经周期改善列为主要目标之一，与指南定位存在错位，须在适用性部分说明（不属于标签缺口，属临床定位问题）。",
+  "18–40 岁、BMI 24–25 亚组：多数指南推荐的二甲双胍代谢角色以 BMI≥25（国际）或超重（中国 BMI≥24）为界，BMI 24–25 区间的循证覆盖靠推断，证据直接性降级。"
+ ]
+}
