@@ -44,16 +44,16 @@
       "evalHarness": "evals/bibliometric-analysis",
       "briefCount": 4,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/bibliometric-analysis/results/2026-09-09-biblio-001-glp1-obesity-landscape",
+        "at": "2026-09-09T13:05:58",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/specialist-smoke/results/evimed_bibliometric_analysis.json",
         "PROGRESS.md@2026-07-21 06:13"
       ],
-      "note": "The managed bibliometric engine has succeeded with artifacts on the harness surface, and the 2026-07-21 six-specialist content acceptance produced grounded artifacts under the retired kernel. Neither is the capability package delivering its declared outputs. Four briefs are now written under evals/bibliometric-analysis and none has been run."
+      "note": "Accepted on 2026-09-09 against evimed-20260909-7f88cf2 on a fresh project: brief biblio-001 (GLP-1 receptor agonists for obesity, 2015–2025) ended succeeded/accepted in 21 minutes with the report, the run record and revision notes, no repair round, no notices. The gate accepted it because the report is honest, and what it is honest about is an engine defect: the managed bibliometric engine's query generation, translation and MeSH mapping all failed with `No module named 'httpx'` — the adapter image installed openai 3.8.0 from an unbounded pin, which no longer pulls httpx — so the corpus was a bare GLP-1 search truncated to the newest 5,000 records of 2023–2026, and the report's own most important section says its numbers cannot be read as the brief's decade. The pin is fixed in the engine's requirements (openai <2, httpx declared); the adapter image has not been rebuilt yet. Read before this row was changed. The managed bibliometric engine has succeeded with artifacts on the harness surface, and the 2026-07-21 six-specialist content acceptance produced grounded artifacts under the retired kernel. Neither is the capability package delivering its declared outputs. Four briefs are now written under evals/bibliometric-analysis and none has been run."
     },
     {
       "id": "clinical-evidence-synthesis",

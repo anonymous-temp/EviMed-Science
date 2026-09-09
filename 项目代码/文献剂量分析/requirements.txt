@@ -15,7 +15,13 @@ wordcloud>=1.8.0
 scipy>=1.10.0
 
 # DeepSeek V4 (OpenAI-compatible SDK; leave the key empty to use template fallback)
-openai>=1.50.0
+# Bounded below 2: the LLM client passes its own httpx client into OpenAI(),
+# which the 3.x line no longer takes, and 3.x no longer pulls httpx in at
+# all. The hosted adapter image installed openai 3.8.0 from this unbounded
+# pin and every query-generation step failed with "No module named 'httpx'"
+# (production, 2026-09-09) — the engine then searched a bare "GLP-1".
+openai>=1.50.0,<2
+httpx>=0.27,<1
 
 # Tests
 pytest>=8.0.0
