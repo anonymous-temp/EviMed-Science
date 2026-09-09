@@ -96,14 +96,27 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     };
     const Name = () => h('span', { style: { fontWeight: 600, letterSpacing: '0.01em' } }, 'EviMed');
     const Nothing = () => null;
-    ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.inject('sidebar.brand.name', function* () {
-      yield ctx.slots.register({ name: 'sidebar.brand.mark' }, Mark);
-      yield ctx.slots.register({ name: 'sidebar.brand.name' }, Name);
-    }));
-    ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark' }, Mark));
+    // A single slot renders its LOWEST-priority registration and refuses a
+    // second one at the same priority. The kernel's own occupants register at
+    // the default 0 — the workspace picker always, the official brand in an
+    // official build — so ours sit below them and shadow rather than collide.
+    // Registered at 0, the picker slot threw "already has a registration",
+    // and that one throw failed the whole loader entry, bridge included: the
+    // frame never bound its session (2026-09-09, first release of this file).
+    const below = -1;
+    /** Cosmetic work must never sink the bridge that shares this bundle.
+     *  @param {string} label @param {() => unknown} fn */
+    const guarded = (label, fn) => {
+      try { return fn(); } catch (error) { target.console?.warn?.(`[evimed-shell] ${label} unavailable:`, error); return undefined; }
+    };
+    guarded('sidebar brand', () => ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.inject('sidebar.brand.name', function* () {
+      yield ctx.slots.register({ name: 'sidebar.brand.mark', priority: below }, Mark);
+      yield ctx.slots.register({ name: 'sidebar.brand.name', priority: below }, Name);
+    })));
+    guarded('hero brand', () => ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: below }, Mark)));
     // The picker is a popup the chip opens; an occupant that renders nothing
     // leaves the chip (the bound workspace's name) and removes the choice.
-    ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register({ name: 'conversation.hero.workspace' }, Nothing));
+    guarded('workspace picker', () => ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register({ name: 'conversation.hero.workspace', priority: below }, Nothing)));
   }
 
   // --- language ----------------------------------------------------------
