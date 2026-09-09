@@ -326,7 +326,7 @@ function normalizedRequest(body, config) {
     ...body,
     model: config.deepseekModel,
     thinking: { type: "enabled" },
-    reasoning_effort: "high",
+    reasoning_effort: config.deepseekReasoningEffort ?? "high",
     stream,
     ...(body.max_tokens == null && body.max_completion_tokens == null
       ? { max_completion_tokens: configuredOutputLimit } : {}),

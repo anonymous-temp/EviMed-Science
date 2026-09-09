@@ -253,6 +253,10 @@ services:
       OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
       OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-v4-pro}
+      # The thinking budget of every managed call (low / high / max). Absent
+      # here it would be a knob that changes nothing, which is the shape the
+      # deploymentEnvReachesTheContainer test exists to refuse.
+      OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
       OPEN_SCIENCE_LLM_ROUTING_ENABLED:
       OPEN_SCIENCE_LLM_ROUTING_CONFIDENCE_THRESHOLD:
       # The learning loop's levers. It defaults on, which is exactly why these

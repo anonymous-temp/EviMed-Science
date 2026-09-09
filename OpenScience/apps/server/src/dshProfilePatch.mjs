@@ -54,6 +54,7 @@ export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
  * @typedef {object} ProfilePatchInput
  * @property {string} modelGatewayUrl        absolute URL of /internal/model/v1
  * @property {string} model                  the certified model id
+ * @property {string} [reasoningEffort]      low | high | max; the gateway enforces the same value
  * @property {number} contextWindow
  * @property {string} sessionsDir            absolute path inside the container
  * @property {string} mcpServerPath          absolute path to the MCP server entrypoint
@@ -108,7 +109,7 @@ export function renderProfilePatch(input) {
     `    baseURL: ${yamlScalar(input.modelGatewayUrl)}`,
     `    apiKeyEnv: ${yamlScalar(WORKLOAD_TOKEN_REF)}`,
     "    thinking: enabled",
-    "    reasoningEffort: high",
+    `    reasoningEffort: ${yamlScalar(input.reasoningEffort || "high")}`,
     "    models:",
     `      - id: ${yamlScalar(input.model)}`,
     `        contextWindow: ${Number(input.contextWindow) || 1000000}`,
