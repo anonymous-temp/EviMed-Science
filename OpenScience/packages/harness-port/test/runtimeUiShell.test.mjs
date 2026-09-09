@@ -9,6 +9,7 @@ import { apply, inject, EVIMED_DICTIONARIES, EVIMED_LOCALE } from '../src/runtim
 
 function fixture({ framed = true, withReact = true, localeApi = true } = {}) {
   /** @type {Record<string, any>} */ const occupants = {};
+  /** @type {Record<string, number>} */ const priorities = {};
   /** @type {any[]} */ const injected = [];
   /** @type {any[]} */ const languages = [];
   /** @type {any[]} */ const dictionaries = [];
@@ -33,7 +34,13 @@ function fixture({ framed = true, withReact = true, localeApi = true } = {}) {
       if (result && typeof result.next === 'function') for (const _ of result) { /* drain the registration set */ }
       return () => {};
     },
-    register: (/** @type {{name: string}} */ spec, /** @type {any} */ component) => { occupants[spec.name] = component; return () => {}; },
+    register: (/** @type {{name: string, priority?: number}} */ spec, /** @type {any} */ component) => {
+      // The kernel's rule: a single slot renders its lowest priority and
+      // refuses a second registration at an occupied one. The kernel's own
+      // picker holds `conversation.hero.workspace` at 0.
+      if (spec.name === 'conversation.hero.workspace' && (spec.priority ?? 0) === 0) throw new Error(`single slot "${spec.name}" already has a registration at priority 0`);
+      occupants[spec.name] = component; priorities[spec.name] = spec.priority ?? 0; return () => {};
+    },
   };
   const locale = localeApi ? {
     addLanguage: (/** @type {any} */ input) => { languages.push(input); return () => {}; },
@@ -42,7 +49,7 @@ function fixture({ framed = true, withReact = true, localeApi = true } = {}) {
   } : {};
   const ctx = { slots, locale, effect: (/** @type {any} */ setup, /** @type {string} */ label) => { effects.push(label); return setup(); } };
   const require = withReact ? (/** @type {string} */ id) => (id === 'react' ? { createElement: (/** @type {string} */ type, /** @type {any} */ props, /** @type {any[]} */ ...children) => ({ type, props, children }) } : undefined) : undefined;
-  return { ctx, target, require, occupants, injected, languages, dictionaries, selected, effects, styles };
+  return { ctx, target, require, occupants, priorities, injected, languages, dictionaries, selected, effects, styles };
 }
 
 test('the shell injects exactly the slot registry and the locale runtime', () => {
@@ -65,6 +72,20 @@ test('the three brand slots and the hero workspace picker are occupied, nothing 
   assert.equal(f.occupants['sidebar.brand.name']({}).children[0], 'EviMed');
   // An occupant that renders nothing is how a popup slot is withdrawn.
   assert.equal(f.occupants['conversation.hero.workspace']({}), null);
+  // Every occupant sits below the kernel's default priority: single slots
+  // render the lowest, and a collision at 0 fails the whole loader entry.
+  for (const [name, priority] of Object.entries(f.priorities)) assert.ok(priority < 0, `${name} registered at ${priority}`);
+});
+
+test('a slot the kernel refuses costs that slot, never the bridge sharing the bundle', () => {
+  const f = fixture();
+  f.ctx.slots.register = (spec, component) => {
+    if (spec.name === 'conversation.hero.workspace') throw new Error('single slot already has a registration');
+    f.occupants[spec.name] = component; return () => {};
+  };
+  assert.doesNotThrow(() => apply(f.ctx, {}, f.target, f.require));
+  assert.deepEqual(Object.keys(f.occupants).sort(), ['conversation.hero.brand.mark', 'sidebar.brand.mark', 'sidebar.brand.name']);
+  assert.deepEqual(f.selected, [EVIMED_LOCALE], 'the language still applies after a slot failure');
 });
 
 test('the product language is a private-use pack over zh, and it is selected', () => {
