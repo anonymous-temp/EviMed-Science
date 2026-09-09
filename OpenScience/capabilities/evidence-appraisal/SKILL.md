@@ -165,6 +165,16 @@ is not a judgement about evidence.
   each body landed where it did.
 - `citation-ledger.csv` — header row plus one row per study, carrying the
   identifier from the table.
+- `delivery-summary.md` — one page for whoever commissioned the appraisal:
+  how many studies were appraised and which outcomes, one line per body with
+  its certainty, and every assumption you made where the brief was silent.
+
+All five are required, at exactly these names, inside this deliverable's
+`deliverables/<id>/` directory. The manifest checks for them by name before it
+reads any of them: an appraisal written into a differently named file — or into
+a `clinical-evidence-report.md`, which belongs to another capability — is an
+appraisal that was never delivered, however good it is. This capability does
+not write a clinical evidence report; it writes the table.
 
 ### Registers do not mix
 

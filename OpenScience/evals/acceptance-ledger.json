@@ -132,15 +132,15 @@
       "evalHarness": "evals/evidence-appraisal",
       "briefCount": 4,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "failed",
+        "evidence": "evals/evidence-appraisal/results/2026-09-09-appraisal-001-sglt2-hfpef",
+        "at": "2026-09-09T07:23:38",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/evidence-appraisal/briefs.json"
       ],
-      "note": "Four real briefs are written and none has been run: the harness ships no results directory."
+      "note": "First real run on 2026-09-09 against evimed-20260909-c7434fb on a clean project: brief appraisal-001 (SGLT2 inhibitors in HFpEF) ran sixty minutes, 237 messages and 135 tool calls, was reviewed by the independent reviewer (which found a wrong PMID for the ESC 2023 focused update and a hundredfold unit error in event rates) and ended specialist_required_output_missing: it wrote clinical-evidence-report.md, citation-audit.md and revision-notes.md — the clinical-evidence-synthesis package — and none of the five appraisal files. Root cause on our side, not the model's: the manifest required delivery-summary.md and the skill never named it, and the skill described the table without ever saying the appraisal is the deliverable rather than a report. Both fixed the same day (skill names all five files and says so; a test now refuses any manifest whose required outputs no skill text names — geo-content and research-grant-development had the same defect). Not re-run yet."
     },
     {
       "id": "geo-content",

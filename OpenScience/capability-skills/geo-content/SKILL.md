@@ -127,6 +127,28 @@ medical context is the defect.
 - An `faq` block for the pack. Questions in the user's words, taken from the
   question set you actually measured, not invented.
 
+### The files, at their names
+
+The pack is checked by file name before any of it is read. Inside this
+deliverable's `deliverables/<id>/` directory, all of these are required:
+
+- `geo-measurement.md`, `geo-monitor.csv`, `geo-probe-log.jsonl` — the
+  measurement half, as described in part one.
+- `geo-content-pack.json` — the machine-readable pack: `blocks[]`, each with
+  its `conclusion`, `basis` and `conditions` paragraphs, `citations[]` (two or
+  more, resolvable in the ledger), `jsonLd`, `author` and `updatedAt`; plus
+  `llmsTxt`, `faq[]`, and `measurement.measured` equal to the rounds the probe
+  log actually holds.
+- `geo-content-pack.md` — the same blocks as a reader sees them.
+- `llms.txt` — the site-level fragment, also carried as `llmsTxt` in the pack.
+- `brand-entity.json` — the entity the pack is about: at least `name` and
+  `approval` (the registration number), taken from the label record, never
+  typed from memory.
+- `citation-ledger.csv` — one row per cited source.
+- `delivery-summary.md` — one page: which questions were measured on which
+  engines, how many blocks were written, and every assumption made where the
+  brief was silent.
+
 ### Registers do not mix
 
 `geo-content-pack.md` is what a reader sees. Anything about *how the work went* —
