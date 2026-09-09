@@ -72,6 +72,9 @@ const operatorLevers = {
   OPEN_SCIENCE_LEARNING_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_WINDOW: ["open-science-web"],
   OPEN_SCIENCE_LEARNING_CONCURRENCY: ["open-science-web"],
+  // The thinking budget was a literal `high` in the gateway until 2026-09-09,
+  // so the lever is new and this is what makes it real.
+  OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT: ["open-science-web"],
 };
 
 async function composeFiles() {

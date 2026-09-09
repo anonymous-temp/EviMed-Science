@@ -207,6 +207,34 @@ test("model gateway authenticates runtime, forces DeepSeek policy, and forwards 
   assert.equal(upstreamRequest.body.tools[0].function.name, "lookup");
 });
 
+test("the thinking effort is the deployment's setting, not the caller's and not a literal", async (t) => {
+  // `reasoning_effort` was a literal `high` here, so the one experiment the
+  // clinical line's number-integrity failures called for — the same brief at
+  // `max` — needed a release. A caller still cannot pick it: the run is not
+  // trusted to raise its own budget.
+  let upstreamBody = null;
+  const upstream = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    upstreamBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ id: "chat-2", choices: [] }));
+  });
+  const upstreamBase = await listen(upstream);
+  t.after(() => close(upstream));
+  const gateway = createServer(createModelGatewayHandler(config(upstreamBase, { deepseekReasoningEffort: "max" }), runtimeManager()));
+  const gatewayBase = await listen(gateway);
+  t.after(() => close(gateway));
+
+  const response = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ model: "x", messages: [{ role: "user", content: "hi" }], stream: false, reasoning_effort: "low" }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(upstreamBody.reasoning_effort, "max");
+});
+
 test("model gateway preserves streaming response content type and chunks", async (t) => {
   const upstream = createServer(async (req, res) => {
     for await (const _chunk of req) { /* consume */ }

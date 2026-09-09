@@ -220,3 +220,11 @@ test("the kernel is not selectable, and the variable that used to select it is r
     else process.env.OPEN_SCIENCE_RUNTIME_KERNEL = saved;
   }
 });
+
+test("the thinking effort is a closed vocabulary, refused at load rather than upstream", () => {
+  assert.equal(loadConfig({ rootDir: repoRoot }).deepseekReasoningEffort, "high");
+  assert.equal(loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "MAX" }).deepseekReasoningEffort, "max");
+  // A typo here used to ride to the provider on every call and be refused
+  // there, one run at a time, with a provider error nobody had configured.
+  assert.throws(() => loadConfig({ rootDir: repoRoot, deepseekReasoningEffort: "highest" }), /OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of low, high, max/);
+});

@@ -29,6 +29,19 @@ const bundledEviMedMcpDir = path.resolve(
   "../../../runtime/mcp/evimed-research",
 );
 
+/** DeepSeek's thinking-effort levels, exactly. Anything else is a typo that
+ *  would otherwise ride to the provider on every call. */
+export const DEEPSEEK_REASONING_EFFORTS = Object.freeze(["low", "high", "max"]);
+
+/** @param {unknown} value */
+function parseReasoningEffort(value) {
+  const effort = String(value ?? "").trim().toLowerCase();
+  if (!DEEPSEEK_REASONING_EFFORTS.includes(effort)) {
+    throw new Error(`OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of ${DEEPSEEK_REASONING_EFFORTS.join(", ")}, got ${JSON.stringify(value)}.`);
+  }
+  return effort;
+}
+
 function boolEnv(name, fallback) {
   const value = process.env[name];
   if (value == null || value === "") return fallback;
@@ -851,6 +864,15 @@ export function loadConfig(overrides = {}) {
       overrides.deepseekBaseUrl ?? process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
     deepseekModel:
       overrides.deepseekModel ?? process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "deepseek-v4-pro",
+    // The thinking budget every managed model call runs at. DeepSeek exposes
+    // three levels since 2026-08-13 (low / high / max); this was a literal
+    // `high` in the gateway, so the one experiment the clinical line's
+    // number-integrity failures call for — the same brief at `max` — needed a
+    // code change and a release. A deployment lever, closed vocabulary,
+    // refused at load rather than passed upstream to be refused there.
+    deepseekReasoningEffort: parseReasoningEffort(
+      overrides.deepseekReasoningEffort ?? process.env.OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT ?? "high",
+    ),
     // LLM-augmented open-domain routing. On by default: the classifier only
     // runs after the regex router returns no match and fails safe to
     // open-domain on any error (see specialistClassifier.mjs). Set

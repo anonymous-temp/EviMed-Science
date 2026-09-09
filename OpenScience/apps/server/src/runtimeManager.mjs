@@ -1686,6 +1686,9 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
   return {
     modelGatewayUrl: modelGatewayProviderUrl(config),
     model,
+    // Rendered into the profile so the kernel asks for what the gateway will
+    // send anyway; the gateway is the one that decides.
+    reasoningEffort: String(config.deepseekReasoningEffort ?? "high"),
     contextWindow: Number(config.runtimeContextWindow) || Number(config.runMaxTokens) || 400_000,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",

@@ -23,7 +23,14 @@ COPY . .
 # A clean Git context contains no ignored skill packs or generated assets.
 # Hydrate the existing immutable AI4S pin inside the image, applying the same
 # compatibility patch as local/CI installs. Caller environment cannot move it.
-RUN apk add --no-cache bash curl python3 \
+#
+# The same mirror rewrite the runtime stage does. This stage installed from
+# the default Alpine CDN, which the Tencent host reaches at tens of KB/s, so
+# a build whose every other fetch was mirrored still spent seven minutes on
+# twenty-five packages here (2026-09-09).
+ARG APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
+  && apk add --no-cache bash curl python3 \
   && env -u AI4S_SKILLS_COMMIT bash scripts/dev/fetch-skills.sh
 
 RUN pnpm --filter @evimed/dsh-socket prepack

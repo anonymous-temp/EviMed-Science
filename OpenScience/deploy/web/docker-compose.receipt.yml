@@ -50,6 +50,7 @@ services:
       OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
       OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_MODEL_GATEWAY_INTERNAL_URL:-}
       OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-}
+      OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT:
       OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       # Where the freshly signed receipt lands. The web service mounts this same
       # host file read-only; a mint that wrote anywhere else would succeed and

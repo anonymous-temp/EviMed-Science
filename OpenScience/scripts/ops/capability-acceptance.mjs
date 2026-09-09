@@ -110,6 +110,17 @@ const say = (message) => process.stdout.write(`${stamp()} ${message}\n`);
  */
 function renderBrief(brief) {
   const inputs = brief?.inputs ?? {};
+  // Only the clinical-evidence family phrases its brief as a `question` with
+  // PICO fields; the other harnesses declare the capability manifest's own
+  // input names (topic, drug, exposure, section, ...). Those render as one
+  // `name: value` line each, in the brief's order, so the run receives every
+  // declared input and nothing the harness made up.
+  if (!inputs.question) {
+    const rendered = Object.entries(inputs)
+      .filter(([, value]) => value !== null && value !== undefined && value !== "")
+      .map(([key, value]) => `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
+    return rendered.join("\n").trim();
+  }
   const lines = [String(inputs.question ?? "").trim()];
   if (inputs.reviewType) lines.push(`\nReview design: ${inputs.reviewType}.`);
   for (const [key, label] of [["population", "Population"], ["intervention", "Intervention"],
