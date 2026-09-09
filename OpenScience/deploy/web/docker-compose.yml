@@ -173,6 +173,15 @@ services:
       OPEN_SCIENCE_REQUIRE_MEMOS: "true"
       OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
       OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000}
+      # Which component ranks a recall. `builtin` needs nothing deployed;
+      # `openviking` needs the `docker-compose.openviking.yml` overlay. Listed
+      # here rather than in that overlay so that selecting a provider the
+      # deployment does not run is visible in readiness instead of silent.
+      OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ${OPEN_SCIENCE_MEMORY_INDEX_PROVIDER:-builtin}
+      OPEN_SCIENCE_MEMORY_INDEX_STRICT: ${OPEN_SCIENCE_MEMORY_INDEX_STRICT:-false}
+      OPEN_SCIENCE_OPENVIKING_URL: ${OPEN_SCIENCE_OPENVIKING_URL:-}
+      OPEN_SCIENCE_OPENVIKING_ACCOUNT: ${OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed}
+      OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS: ${OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS:-8000}
       # Autopilot's levers belong to the base stack, not to an overlay. Compose
       # passes environment item by item, and these were listed only in
       # `docker-compose.ingestion.yml` — so on a deployment without that overlay

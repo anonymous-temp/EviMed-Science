@@ -75,6 +75,14 @@ const operatorLevers = {
   // The thinking budget was a literal `high` in the gateway until 2026-09-09,
   // so the lever is new and this is what makes it real.
   OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT: ["open-science-web"],
+  // Selecting a recall index is a deployment decision, and the failure mode of
+  // a missing lever here is the quiet one: the provider stays `builtin`, every
+  // recall still returns memories, and the only evidence that the setting was
+  // ignored is that quality never changed.
+  OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_INDEX_STRICT: ["open-science-web"],
+  OPEN_SCIENCE_OPENVIKING_URL: ["open-science-web"],
+  OPEN_SCIENCE_OPENVIKING_ACCOUNT: ["open-science-web"],
 };
 
 async function composeFiles() {

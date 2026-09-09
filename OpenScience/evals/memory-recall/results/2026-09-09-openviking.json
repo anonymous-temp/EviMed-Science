@@ -1,0 +1,221 @@
+{
+  "arm": "openviking",
+  "active": true,
+  "lastError": null,
+  "corpus": 300,
+  "queries": 12,
+  "limit": 5,
+  "recallAtLimit": 0.8,
+  "meanReciprocalRank": 0.9167,
+  "queriesWithNothingRelevant": 0,
+  "medianMs": 650,
+  "rows": [
+    {
+      "query": "列净类药物对肾功能下降有什么影响？",
+      "expected": [
+        "r06",
+        "r07"
+      ],
+      "returned": [
+        "d006",
+        "r07",
+        "d005",
+        "d273",
+        "d018"
+      ],
+      "hit": 1,
+      "of": 2,
+      "reciprocalRank": 0.5,
+      "ms": 596
+    },
+    {
+      "query": "这个病人是慢性肾脏病，钠-葡萄糖共转运蛋白抑制剂能用吗",
+      "expected": [
+        "r06",
+        "r07",
+        "r05"
+      ],
+      "returned": [
+        "r05",
+        "d233",
+        "d017",
+        "r04",
+        "d156"
+      ],
+      "hit": 1,
+      "of": 3,
+      "reciprocalRank": 1,
+      "ms": 1057
+    },
+    {
+      "query": "中成药治疗冠心病的证据够硬吗",
+      "expected": [
+        "r08"
+      ],
+      "returned": [
+        "r08",
+        "r12",
+        "d218",
+        "d224",
+        "d251"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 1177
+    },
+    {
+      "query": "精神科用药在老人身上的不良反应资料多不多",
+      "expected": [
+        "r09"
+      ],
+      "returned": [
+        "r09",
+        "d229",
+        "d245",
+        "d041",
+        "d224"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 605
+    },
+    {
+      "query": "抗凝药出血风险的种族差异",
+      "expected": [
+        "r15"
+      ],
+      "returned": [
+        "r15",
+        "r13",
+        "d125",
+        "d237",
+        "d032"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 632
+    },
+    {
+      "query": "我该怎么排版这份报告",
+      "expected": [
+        "r01"
+      ],
+      "returned": [
+        "r02",
+        "r01",
+        "r14",
+        "d103",
+        "r10"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 0.5,
+      "ms": 628
+    },
+    {
+      "query": "文献检索到什么时候为止",
+      "expected": [
+        "r10"
+      ],
+      "returned": [
+        "r10",
+        "r01",
+        "d207",
+        "r03",
+        "d063"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 469
+    },
+    {
+      "query": "降脂治疗值不值得做一级预防",
+      "expected": [
+        "r13"
+      ],
+      "returned": [
+        "r13",
+        "d211",
+        "d139",
+        "d127",
+        "d067"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 744
+    },
+    {
+      "query": "这个数字能不能写成大约",
+      "expected": [
+        "r02"
+      ],
+      "returned": [
+        "r02",
+        "r01",
+        "d115",
+        "d127",
+        "d175"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 650
+    },
+    {
+      "query": "间接比较要放在主分析里吗",
+      "expected": [
+        "r11"
+      ],
+      "returned": [
+        "r11",
+        "d258",
+        "d102",
+        "d126",
+        "r02"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 809
+    },
+    {
+      "query": "还差哪些图没做",
+      "expected": [
+        "r14"
+      ],
+      "returned": [
+        "r14",
+        "r08",
+        "r02",
+        "r10",
+        "d098"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 666
+    },
+    {
+      "query": "二甲双胍的心血管证据可靠吗",
+      "expected": [
+        "r12"
+      ],
+      "returned": [
+        "r12",
+        "r08",
+        "d238",
+        "d237",
+        "d250"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 467
+    }
+  ]
+}
