@@ -171,12 +171,13 @@ export class OpenVikingClient {
    *  and a 404 means it already does. */
   async remove(userId, uri, { recursive = false } = {}) {
     this.#assertConfigured();
+    // Query parameters, not a body: `DELETE /api/v1/fs` reads `uri` and
+    // `recursive` from the query string and answers 400 to a JSON body. Found
+    // by deleting against a running server, which is the only way this route's
+    // shape was ever going to be confirmed.
+    const query = new URLSearchParams({ uri, recursive: recursive ? "true" : "false" });
     try {
-      await this.#request("/api/v1/fs", {
-        method: "DELETE",
-        userId,
-        body: { uri, recursive: Boolean(recursive) },
-      });
+      await this.#request(`/api/v1/fs?${query.toString()}`, { method: "DELETE", userId });
       return true;
     } catch (error) {
       if (error instanceof HttpError && error.code === "memory_index_not_found") return false;

@@ -123,6 +123,25 @@ test("a hit is read for its content, and falls back through the tiers rather tha
   assert.deepEqual(hits.map((row) => row.score), [0.9, 0.5, 0.2]);
 });
 
+test("a delete sends its target as query parameters, because a body is refused", async () => {
+  // Found against a running server: `DELETE /api/v1/fs` reads `uri` and
+  // `recursive` from the query string and answers 400 to a JSON body. The
+  // route sits on the privacy path — it is how a deleted project stops being
+  // recallable — so the shape is pinned rather than remembered.
+  const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: { estimated_deleted_count: 3 } } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+
+  await client.remove("usr_alice", "viking://user/u-x/memories/evimed/project/p-y", { recursive: true });
+
+  const [call] = fetchImpl.calls;
+  assert.equal(call.options.method, "DELETE");
+  assert.equal(call.options.body, undefined, "a body here is a 400");
+  const url = new URL(call.url);
+  assert.equal(url.pathname, "/api/v1/fs");
+  assert.equal(url.searchParams.get("uri"), "viking://user/u-x/memories/evimed/project/p-y");
+  assert.equal(url.searchParams.get("recursive"), "true");
+});
+
 test("a delete of something already gone is a success, because the index is meant to agree", async () => {
   const fetchImpl = recordingFetch([{ status: 404, body: { message: "not found" } }]);
   const client = new OpenVikingClient(config, { fetchImpl });

@@ -1,0 +1,80 @@
+{
+  "$comment": "Each query is worded the way a researcher would ask, not the way the record is written. A query that shares the record's words measures nothing an index could improve.",
+  "queries": [
+    {
+      "query": "列净类药物对肾功能下降有什么影响？",
+      "expected": [
+        "r06",
+        "r07"
+      ]
+    },
+    {
+      "query": "这个病人是慢性肾脏病，钠-葡萄糖共转运蛋白抑制剂能用吗",
+      "expected": [
+        "r06",
+        "r07",
+        "r05"
+      ]
+    },
+    {
+      "query": "中成药治疗冠心病的证据够硬吗",
+      "expected": [
+        "r08"
+      ]
+    },
+    {
+      "query": "精神科用药在老人身上的不良反应资料多不多",
+      "expected": [
+        "r09"
+      ]
+    },
+    {
+      "query": "抗凝药出血风险的种族差异",
+      "expected": [
+        "r15"
+      ]
+    },
+    {
+      "query": "我该怎么排版这份报告",
+      "expected": [
+        "r01"
+      ]
+    },
+    {
+      "query": "文献检索到什么时候为止",
+      "expected": [
+        "r10"
+      ]
+    },
+    {
+      "query": "降脂治疗值不值得做一级预防",
+      "expected": [
+        "r13"
+      ]
+    },
+    {
+      "query": "这个数字能不能写成大约",
+      "expected": [
+        "r02"
+      ]
+    },
+    {
+      "query": "间接比较要放在主分析里吗",
+      "expected": [
+        "r11"
+      ]
+    },
+    {
+      "query": "还差哪些图没做",
+      "expected": [
+        "r14"
+      ]
+    },
+    {
+      "query": "二甲双胍的心血管证据可靠吗",
+      "expected": [
+        "r12"
+      ]
+    }
+  ]
+}
