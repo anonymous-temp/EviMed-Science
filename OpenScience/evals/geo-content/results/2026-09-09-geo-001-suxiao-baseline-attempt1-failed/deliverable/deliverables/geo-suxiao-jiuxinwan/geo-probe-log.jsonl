@@ -1,0 +1,20 @@
+{"event":"attempt","op":"providers","seq":1,"when":"session_start_window","result":"mcp_timeout","detail":"op=providers request timed out (MCP -32001)","inDenominator":false}
+{"event":"attempt","op":"providers","seq":2,"when":"session_start_window","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":3,"when":"session_start_window","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"ask","seq":4,"when":"session_start_window","question":"速效救心丸可以长期服用吗？","provider":"deepseek","surface":{"mode":"default","session":"new_chat"},"result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":5,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":6,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":7,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"ask","seq":8,"when":"mid_session","question":"速效救心丸可以长期服用吗？","provider":"deepseek","surface":{"mode":"default","session":"new_chat"},"result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":9,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":10,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":11,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":12,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":13,"when":"mid_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"ask","seq":14,"when":"mid_session","question":"胸闷气短心慌吃什么中成药？","provider":"doubao","surface":{"mode":"default","session":"new_chat"},"result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":15,"when":"late_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":16,"when":"late_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"ask","seq":17,"when":"late_session","question":"速效救心丸能预防心梗吗？","provider":"kimi","surface":{"mode":"default","session":"new_chat"},"result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":18,"when":"late_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":19,"when":"late_session","result":"mcp_timeout","inDenominator":false}
+{"event":"attempt","op":"providers","seq":20,"when":"end_of_round","result":"mcp_timeout","inDenominator":false}

@@ -1,37 +1,16 @@
 {
-  "schemaVersion": 1,
-  "brandEntity": {
-    "name": "速效救心丸",
-    "approval": "国药准字Z12020025",
-    "labelIndication": "行气活血，祛瘀止痛。用于气滞血瘀所致的胸痹，症见心痛、胸闷、憋气",
-    "nmpaIndexedLabel": {
-      "indicationsAndUsage": "行气活血，祛瘀止痛，增加冠脉血流量，缓解心绞痛。用于气滞血瘀型冠心病，心绞痛",
-      "specification": "每丸重 40 mg",
-      "manufacturer": "津药达仁堂集团股份有限公司第六中药厂",
-      "contraindications": "孕妇禁用",
-      "precautions": "寒凝血瘀、阴虚血瘀胸痹心痛不宜单用。有过敏史者、过敏体质者慎用。伴有中重度心力衰竭的心肌缺血者慎用。在治疗期间，心绞痛持续发作，宜加用硝酸酯类药",
-      "adverseReactions": "恶心、呕吐、口干、腹痛、胃部不适、头痛、头晕、皮疹、瘙痒、潮红、乏力、过敏及过敏样反应等",
-      "retrievedAt": "2026-09-09T06:43:09Z",
-      "verificationRequired": "EviMed 索引记录，官方现行版本需到 NMPA 核验"
-    },
-    "questionSet": [
-      "速效救心丸可以长期服用吗？",
-      "速效救心丸和硝酸甘油有什么区别？",
-      "速效救心丸饭前吃还是饭后吃？",
-      "心绞痛发作时含服几粒速效救心丸？",
-      "速效救心丸能预防心梗吗？"
-    ],
-    "unbrandedQuestionSet": [
-      "胸闷气短心慌吃什么中成药？",
-      "冠心病心绞痛平时含服什么药应急？",
-      "家里给老人常备哪种救心药比较好？",
-      "突然心口疼含什么药能缓解？",
-      "心绞痛发作时应该怎么办？"
-    ],
-    "platforms": ["deepseek", "doubao", "kimi", "qianwen", "yuanbao"],
-    "deepMode": 0,
-    "measurementRoundsAttempted": 20,
-    "measurementRoundsCompleted": 0,
-    "measurementNote": "geo_visibility_probe 后端本轮全程不可用（MCP -32001 超时，20 次重试全部失败），无任何有效测量轮次；详见 geo-measurement.md 与 geo-probe-log.jsonl"
+  "name": "速效救心丸",
+  "approval": "国药准字Z12020025",
+  "approvalSource": "用户提供的注册记录（brandEntity 输入），检索日期 2026-09-09；本运行未另行核验批号真伪",
+  "labelIndicationUserProvided": "行气活血，祛瘀止痛。用于气滞血瘀所致的胸痹，症见心痛、胸闷、憋气",
+  "nmpaIndexedLabel": {
+    "sourceNote": "EviMed NMPA 说明书索引候选记录（EVIMED-LABEL:nmpa-0/nmpa-1），2026-09-09 检索；索引副本，正式使用前须与现行核准说明书核对",
+    "indicationsAndUsage": "行气活血，祛瘀止痛，增加冠脉血流量，缓解心绞痛。用于气滞血瘀型冠心病，心绞痛。",
+    "specifications": "每丸重 40 mg。",
+    "contraindications": "1. 孕妇禁用。",
+    "precautions": "寒凝血瘀、阴虚血瘀胸痹心痛不宜单用。有过敏史者、过敏体质者慎用。伴有中重度心力衰竭的心肌缺血者慎用。在治疗期间，心绞痛持续发作，宜加用硝酸酯类药。",
+    "adverseReactions": "监测数据显示，本品可见以下不良反应：恶心、呕吐、口干、腹痛、胃部不适、头痛、头晕、皮疹、瘙痒、潮红、乏力、过敏及过敏样反应等。",
+    "manufacturer": "津药达仁堂集团股份有限公司第六中药厂",
+    "storage": "密封，置阴凉干燥处（不超过 20 ℃）。"
   }
 }
