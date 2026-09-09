@@ -30,7 +30,7 @@ services:
       - memory-recall-internal
 
   evimed-openviking:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:0.4.19}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.19}
     environment:
       # The bot gateway is a second product on the same image — a chat frontend
       # with its own channels. Nothing here calls it, and it would be the only
@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
 
   evimed-openviking-secrets-init:
-    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:0.4.19}
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.19}
     user: "0:0"
     entrypoint: ["python", "-c"]
     command:
