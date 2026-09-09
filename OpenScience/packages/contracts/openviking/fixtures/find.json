@@ -1,0 +1,37 @@
+{
+  "status": "ok",
+  "result": {
+    "memories": [
+      {
+        "context_type": "memory",
+        "uri": "viking://user/u-7f372317e879c89e6c0dfd30/memories/evimed/user/analysis/d006.md",
+        "level": 2,
+        "score": 0.6100215911865234,
+        "abstract": "一项网络meta分析比较了卡格列净对肾功能恶化的影响，间接比较的传递性假设未被充分检验。",
+        "tags": [],
+        "content": "一项网络meta分析比较了卡格列净对肾功能恶化的影响，间接比较的传递性假设未被充分检验。"
+      },
+      {
+        "context_type": "memory",
+        "uri": "viking://user/u-7f372317e879c89e6c0dfd30/memories/evimed/user/analysis/r07.md",
+        "level": 2,
+        "score": 0.5888285040855408,
+        "abstract": "达格列净在 DAPA-CKD 中降低了终末期肾病复合终点。",
+        "tags": [],
+        "content": "达格列净在 DAPA-CKD 中降低了终末期肾病复合终点。"
+      },
+      {
+        "context_type": "memory",
+        "uri": "viking://user/u-7f372317e879c89e6c0dfd30/memories/evimed/user/analysis/d005.md",
+        "level": 2,
+        "score": 0.5813872814178467,
+        "abstract": "一项病例对照研究比较了卡格列净对急性肾损伤的影响，回忆偏倚不能排除。",
+        "tags": [],
+        "content": "一项病例对照研究比较了卡格列净对急性肾损伤的影响，回忆偏倚不能排除。"
+      }
+    ],
+    "resources": [],
+    "skills": [],
+    "total": 3
+  }
+}

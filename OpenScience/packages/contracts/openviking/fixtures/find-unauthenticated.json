@@ -1,0 +1,11 @@
+{
+  "status": "error",
+  "result": null,
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "Missing API Key in trusted mode with Root API Key enabled.",
+    "details": {}
+  },
+  "telemetry": null,
+  "profile": null
+}
