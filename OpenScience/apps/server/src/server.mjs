@@ -51,6 +51,8 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { MemosClient } from "./memosClient.mjs";
+import { MemorySubstrate } from "./memorySubstrate.mjs";
+import { OpenVikingClient } from "./openVikingClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
@@ -929,6 +931,11 @@ export function createWebApiApp(overrides = {}) {
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
   const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
+  const openVikingClient = overrides.openVikingClient
+    ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
+  // Which component ranks a recall. The records themselves stay in the
+  // research-memory service whichever provider is selected.
+  const memorySubstrate = new MemorySubstrate(config, { memos: memosClient, openViking: openVikingClient });
   const memoryIntelligence = new MemoryIntelligence(config, memosClient, {
     // A conversation that changes a memory the researcher confirmed is worth
     // telling them about, and the inbox is where that is told. It never holds
@@ -1704,7 +1711,7 @@ export function createWebApiApp(overrides = {}) {
             const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
             let memories = [];
             let memoryError = null;
-            try { memories = await memosClient.relevant(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
+            try { memories = await memorySubstrate.recall(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
             catch (error) {
               memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
               if (config.requireMemos) throw error;
@@ -2047,7 +2054,7 @@ export function createWebApiApp(overrides = {}) {
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase);
+        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -2059,6 +2066,7 @@ export function createWebApiApp(overrides = {}) {
           taskManager,
           runtimeManager,
           memosClient,
+          memorySubstrate,
           memOsEngine,
           memoryIndexWorker,
           usageLedger,
@@ -2683,7 +2691,7 @@ export function createWebApiApp(overrides = {}) {
             throw error;
           }
           try {
-            memories = await memosClient.relevant(ctx.user.id, text, {
+            memories = await memorySubstrate.recall(ctx.user.id, text, {
               projectId: ctx.project.id,
               sessionId: session.sessionId,
             });
@@ -2882,6 +2890,7 @@ export function createWebApiApp(overrides = {}) {
         const memoryPurge = memosClient.configured
           ? await memosClient.purgeUserMemory(user.id)
           : { structured: 0, manual: 0 };
+        await memorySubstrate.forgetUser(user.id);
         let memoryIndexPurge = null;
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
@@ -2964,6 +2973,12 @@ export function createWebApiApp(overrides = {}) {
           await runtimeManager.stop(project);
           await audit({ config, user, project }, "project.delete", "completed", { target: project.id });
           if (memosClient.configured) await memosClient.deleteProjectMemory(user.id, project.id);
+          // Derived copies go with the record they were derived from. Awaited
+          // and not swallowed: an index that still answers with a deleted
+          // project's memories is a copy of deleted data, so a failure here
+          // fails the delete rather than reporting a deletion that did not
+          // happen.
+          await memorySubstrate.forgetProject(user.id, project.id);
           const data = await store.deleteProject(user, projectId);
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
@@ -3567,6 +3582,8 @@ export function createWebApiApp(overrides = {}) {
     store,
     runtimeManager,
     memosClient,
+    memorySubstrate,
+    openVikingClient,
     memOsEngine,
     memoryIndexing,
     memoryIndexWorker,
@@ -4435,8 +4452,8 @@ function runPairedEvaluation(command, request) {
   });
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -4732,7 +4749,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null) {
+async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -4747,6 +4764,7 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
     memory: await readinessCheck(async () => readinessMemory(config, memosClient)),
     memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memOsEngine, memoryIndexWorker)),
+    memoryRecall: await readinessCheck(async () => readinessMemoryRecall(memorySubstrate)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
@@ -4831,6 +4849,24 @@ async function readinessMemory(config, memosClient) {
     });
   }
   return { required: true, connected: true };
+}
+
+/** Which component ranks a recall, and whether it can be reached.
+ *
+ * Reported, never required. A deployment that selected an index and cannot
+ * reach it still answers — recall falls back to the term matcher — so failing
+ * readiness would take a working product offline over a degraded one. What the
+ * operator needs is to see that it is degraded, which is what this is for. */
+async function readinessMemoryRecall(substrate) {
+  if (!substrate) return { required: false, provider: "builtin" };
+  const status = await substrate.status();
+  return {
+    required: false,
+    provider: status.provider,
+    configured: Boolean(status.configured),
+    connected: Boolean(status.connected),
+    ...(status.code ? { code: status.code } : {}),
+  };
 }
 
 async function readinessMemoryIndex(config, memOsEngine, worker) {

@@ -396,6 +396,14 @@ export function loadConfig(overrides = {}) {
     codePrefix: "memos_access_token",
     defaultFile: localSecretFile("memos.pat"),
   });
+  const openVikingSecret = preferredFileSecret(overrides, {
+    overrideValue: "openVikingApiKey",
+    overrideFile: "openVikingApiKeyFile",
+    valueEnv: "OPEN_SCIENCE_OPENVIKING_API_KEY",
+    fileEnv: "OPEN_SCIENCE_OPENVIKING_API_KEY_FILE",
+    codePrefix: "openviking_api_key",
+    defaultFile: localSecretFile("openviking.api-key"),
+  });
   const documentParserSecret = preferredFileSecret(overrides, {
     overrideValue: "documentParserToken",
     overrideFile: "documentParserTokenFile",
@@ -1067,6 +1075,28 @@ export function loadConfig(overrides = {}) {
     ),
     memosContextMaxChars: Number(
       overrides.memosContextMaxChars ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS ?? 20_000,
+    ),
+    // Which component decides *which* memories a question sees. `builtin` is
+    // the term matcher inside the research-memory client and needs nothing
+    // deployed; `openviking` delegates the ranking to a context database. The
+    // record itself is authoritative in the research-memory service either way,
+    // so this switch changes recall quality and nothing else.
+    memoryIndexProvider: String(
+      overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "builtin",
+    ),
+    // Report-only by default (development principle 4: a new check ships as a
+    // notice before it may block). Set this and a recall whose index is down
+    // fails instead of falling back to the term matcher.
+    memoryIndexStrict: overrides.memoryIndexStrict ?? boolEnv("OPEN_SCIENCE_MEMORY_INDEX_STRICT", false),
+    openVikingUrl: String(overrides.openVikingUrl ?? process.env.OPEN_SCIENCE_OPENVIKING_URL ?? "").replace(/\/+$/, ""),
+    openVikingApiKey: openVikingSecret.value,
+    openVikingApiKeySource: openVikingSecret.source,
+    openVikingApiKeyError: openVikingSecret.error,
+    openVikingAccount: String(
+      overrides.openVikingAccount ?? process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT ?? "evimed",
+    ),
+    openVikingRequestTimeoutMs: Number(
+      overrides.openVikingRequestTimeoutMs ?? process.env.OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS ?? 8_000,
     ),
     memOsEngineUrl: String(overrides.memOsEngineUrl ?? process.env.OPEN_SCIENCE_MEMOS_ENGINE_URL ?? ""),
     requireMemoryIndex:

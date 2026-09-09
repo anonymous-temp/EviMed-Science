@@ -1,0 +1,24 @@
+{
+  "dependencyVersion": "0.4.19",
+  "imageRef": "ghcr.io/volcengine/openviking:v0.4.19",
+  "imageDigest": "sha256:49e20c09ec7ea2f16c116d9ddb2ea90b4c24bf3f5a83078609e52399487dbec1",
+  "sourceRepo": "https://github.com/volcengine/OpenViking",
+  "sourceCommitAtObservation": "39670e7b95a26ab6d562e018c7b8681ae3dba17a",
+  "observedAt": "2026-09-09",
+  "observedOn": "an isolated evaluation instance holding only records generated for this measurement; no user memory was read or written",
+  "fixtureEvidence": "Every file beside this one is a verbatim response from that running server, captured with curl against the same routes apps/server/src/openVikingClient.mjs calls. find.json is trimmed to its first three hits and re-indented; no field was added, renamed or invented. Recording rather than authoring is deliberate: a hand-written fixture once certified a shape the wire never produced and defeated the audit that depended on it.",
+  "configuration": {
+    "auth_mode": "trusted",
+    "root_api_key": "set (value never leaves the host)",
+    "embedding": "ollama / bge-m3, dimension 1024 — the model the MemOS overlay already runs, so a comparison between them is not a comparison of embedders",
+    "vlm": "not configured",
+    "memory.extraction_enabled": false
+  },
+  "observations": [
+    "Trusted mode with root_api_key set requires X-API-Key on EVERY request, not only when asserting a role as the multi-tenant documentation implies. A client sending only the account and user headers is refused with UNAUTHENTICATED; find-unauthenticated.json is that refusal.",
+    "A write with no VLM configured returns semantic_status 'skipped' and vector_status 'complete': L0/L1 directory summaries are not generated, and the record is still embedded and retrievable. Recall therefore needs no language model, only an embedder.",
+    "The container tag is v0.4.19 while the PyPI version is 0.4.19; the unprefixed tag does not exist.",
+    "ghcr.io answers its API but stalls on blob download from the Aliyun builder; ghcr.m.daocloud.io serves the same digest.",
+    "The server refuses to start in dev auth mode when bound to 0.0.0.0, which is why the deployment uses trusted mode rather than a localhost bind."
+  ]
+}

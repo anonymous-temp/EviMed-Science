@@ -99,6 +99,7 @@ const inputPaths = [
   "deploy/web/docker-compose.saas.yml",
   "deploy/web/docker-compose.monitoring.yml",
   "deploy/web/docker-compose.memos-engine.yml",
+  "deploy/web/docker-compose.openviking.yml",
   "deploy/web/docker-compose.ingestion.yml",
   "deploy/web/saas-capability-contract.json",
   "deploy/web/Caddyfile",
