@@ -1,0 +1,35 @@
+{
+  "capability": "bibliometric-analysis",
+  "brief": "biblio-001-glp1-obesity-landscape",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-bibliometric-analysis",
+  "session": "acc-bibliometric-analysi-mtu4ho9e",
+  "runId": "run_3b14152f3667bdb8d3c57502da3d90c6",
+  "agentVersion": "1.0.1",
+  "dispatchedAt": "2026-09-09T13:42:08Z",
+  "prompt": "topic: GLP-1 受体激动剂用于肥胖与体重管理\ndateFrom: 2015\ndateTo: 2025\nmaxRecords: 5000\noutputLanguage: zh-CN",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/bibliometric-glp1-obesity-2015-2025/bibliometric-analysis-report.md",
+      "deliverables/bibliometric-glp1-obesity-2015-2025/bibliometric-analysis-run.json"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "review contradicted: R1-3-THEME-SHARE — R1 §3 称「题名或摘要含 obesity/overweight/weight loss/weight management/BMI/bariatr- 等关键词的记录 1,158/4,961（23.3%）」。在同一语料（两份 raw_records.json 经独立计数内容一致）上复算：题名命中 1,051/4,987（21.1%，含 BMI 词条）；仅摘要行命中即达 2,322/4,987（46.6%）。因此任何「题名或摘要」口径的并集 ≥2,322（约 46–49%），不可能等于 23.3%。1,158（23",
+      "review weakened: R1-5-THEME-GAP — R1 §5 用同一数字（约 76.7% 非主题，即 23.3% 主题）支撑「不能当作肥胖领域语料」的差距行，但该处注明口径为『题名测算』，与本报告 §3 把它标为『题名或摘要』直接矛盾（同一数字、两个口径）。作为「仅题名」口径其量级尚可（实测 21.1–23.3% 区间内），作为「题名或摘要」口径则被数据否定。结论方向（语料不限于肥胖主题）正确，但口径表述不统一削弱了该结论的可信呈现。",
+      "review weakened: R1-3-SOURCE-SCOPE — R1 §3 声称该主题构成统计「直接对 cleaned_records.csv 计数得出」，但 cleaned_records.csv 只有 pmid,title,year,journal,authors,institutions,countries,keywords,doi 八列、无 abstract 字段——在它之上不可能算出『题名或摘要』命中；能做摘要级统计的是含 abstract 的 raw_records.json（4,987 条）。来源工件与其声明的指标不匹配，进一步说明 1,158 实为题名口径计数而 §3",
+      "review weakened: R1-4-3-OBESITY-26PCT — R1 §4.3 称「Obesity 1,318（约占语料 26.6%）」。1,318 与 top_keywords.csv（两份运行逐字节相同）相符；但把合并关键词计数直接除以 4,961 得出『占语料』比例在方法上不成立：MeSH 词与作者词合并计数可能对同一篇重复计、一篇可携带多词（R1 §4.3 自述、R2 §3 亦明确警告不可相除）。未发现数字性矛盾，但该百分比表述被削弱。",
+      "review weakened: R1-4-2-JOURNAL-TOP10-POINTER — R1 §4.2 期刊条目只列 5 种期刊后写「……（Top10 如上表所列）」，但 R1 全文没有任何 Top10 期刊表——存在悬空指称（自洽性缺陷）。所列 5 个数字（DOM 206/Cureus 178/FronEndo 81/IJMS 77/JCM 70）本身与 top_journals.csv 相符。R2 §4.2 完整列出 Top10 且与表一致。",
+      "review weakened: R2-4-2-INST-TOP10 — R2 §4.2 声称给出机构 Top10，但列表（NHS…Eli Lilly 34）跳过了 top_institutions.csv 中实际排第 8 位的噪声残片『s Hospital』（55）。报告另处已注明该残片不应视为真实机构，故属可辩护的呈现取舍；但『Top10』字样与其所引表的排名第 8–11 位不完全对应，轻微削弱索引自洽。",
+      "review weakened: R1-R2-CLUSTER-NODECOUNT — 两报告沿用管道散文的每聚类节点数「Therapeutics 17 / Obesity 13 / Peptide 20」（output/report.md 亦写 n=20/13/17），但唯一含成员归属的工件 keyword_network.json 的 cluster 字段逐节点计数为 {id0=19, id1=13, id2=18}：仅 13（Obesity 聚类）与报告相符，17 与 20 无法与该成员划分对上（差 1）；cluster_summary.csv 只含 activity（12,562/5,5"
+    ],
+    "effectiveAgentId": "bibliometric-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1484220,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}
