@@ -149,3 +149,36 @@
 - P0-1：MR 通道 Ed25519 回执 + 新 OpenGWAS token（账号主）；
 - P0-7：S3 兼容桶、密钥、端点；
 - #14：一次真浏览器会话。
+
+## 6. 上线复核与上线前 TODO（2026-09-09）
+
+**一句话结论：发布链路与运维底座已到可上线级，产品面与验收面还没有。** 今天核实的现状：`evimed-20260909-c7434fb`（合并了并行分支的 main）在线，`/api/ready` 24/24、deployment-smoke 13/13、备份加密且恢复演练通过、证书自动续期、两个周运维定时在位、来源清单三处一致；并行分支已合入且远端所有分支都是 main 的祖先；验收账号的 27 个脏项目已清、验收电池在干净项目上开跑。**但**：主交互面仍是 DSH 原生预览 UI（英文、DeepSeek 品牌），15 个公开能力里只有 2 个在线上验收通过，告警没有接收人，备份只在本机，花费没有上限而自注册开着，并发上限是 2。这些不是修缺陷，是上线前必须做的决定与配置。
+
+### A. 硬阻断（代码与产品，我这边能推进的）
+
+- **A1 · 主会话面（P0-2 / P1-14 的那个产品决定）。** 真浏览器登录后 `/app/chat` 的中央区域是 DSH 内核自带的预览界面：鲸鱼 logo、「Into the Unknown · Preview」、英文占位「Describe what you want to build… / commands, @ files or sessions」、agent 下拉「Evimed Hosted」。研究者看到的第一屏是第三方开发者预览。两条路：把从未上路由的 `RunStreamSessionPage`（约 1,550 行、5 个测试文件全绿）接回来替代 iframe；或对 iframe 做语言与品牌覆盖（受 DSH 版本变化牵制）。**建议前者**——它同时把逐件交付物的裁决树（`DeliverableCard`/`RunTree`）带回给研究者。
+- **A2 · 能力验收覆盖。** `evals/acceptance-ledger.json`：accepted 2（adr-analysis、dataset-research-scoping）、failed 2（clinical-evidence-synthesis、meta-analysis）、never-run 11。今天电池跑 7 个（off-label、geo-content、evidence-appraisal、meta-analysis、bibliometric、manuscript-support、research-grant）；剩 peer-review（简报要稿件 PDF）、mendelian-randomization（OpenGWAS token）、research-topic-selection（harness 简报无 `capability` 字段）、clinical（等结构修法）。上线规则：**对外展示的每个能力至少一次 accepted，否则在 UI 标「测试中」或把 `visibility` 收起来**——检查表里「按钮存在、后台没有执行能力」的假上线就是这个。
+- **A3 · 部署即事故（P2-22 的未做部分 + P1-12）。** 控制面重启后不接管既有容器，在飞运行的网关 token 从内存表消失，以「认证失败」告终。今天无人使用所以无感；有真实用户后每次部署都会打断他们的运行。修法是 runtimeManager 的容器接管 + 控制器协议 6→7。
+- **A4 · 花费上限。** `OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT` / `WEEKLY` 都是 0（不设限），而 `OPEN_SCIENCE_SELF_REGISTRATION_ENABLED=1`。开放注册前必须设上限（一个月真实用量后再调），否则一个账号可以无限花。
+- **A5 · 临床证据能力的结构修法（本轮第二问题的决策，见下）。**
+
+### B. 需要用户输入的外部项（不是代码）
+
+- **B1 · 域名与证书。** 现在 `OPEN_SCIENCE_PUBLIC_URL=https://82.156.128.153`，Let's Encrypt 6 天短证书对 IP 签发、自动续。正式域名是 Cookie/CSP/OIDC/对外发布的前提。
+- **B2 · bootstrap 账号口令。** `sxjxw-research` 是操作者本人的登录账号，口令按 2026-09-04 的指示设为 6 位且在公网 IP 上；上线前改强口令（我不能替你选）。
+- **B3 · 告警接收人。** Alertmanager 唯一接收器是示例占位 `http://127.0.0.1:5001/`——13 条规则（含证书 < 3 天、磁盘 < 20 GB、就绪探针失败）一条都到不了人。给我一个企业微信/飞书/钉钉 webhook 或 SMTP。
+- **B4 · 异地备份。** `OPEN_SCIENCE_BACKUP_EXTERNAL_ACK=false`、对象存储 URI 为空，备份只在本机盘上；给一个 S3 兼容桶 + 密钥 + 端点（检查表 P0-7）。
+- **B5 · OpenGWAS token + MR 通道回执。** `audit:capabilities` 自 8 月中起红（探针证据 07-31、14 天窗口），`ci:web` 因此不能全绿；只有账号主能续 token。
+- **B6 · 法律最小交付。** 产品内没有隐私政策、服务条款、科研辅助免责声明页（0 处）。此前裁定不做合规闸，但发布这三页是运营事项。
+- **B7 · 容量。** 全局并发任务 2、每用户运行时 2、第 3 个派发直接 429；主机 4 核 15 GB 与另外四个产品共用，可用内存 5 GB。要么专用主机，要么邀请制 ≤ N 人试点。
+- **B8 · 删号点名。** 死实验账号 `rq01-pipeline`（43 项目/361 MB）、`scoping-v12`（6/74 MB）、`qa-native-cbc94a7a3f`（1/2.6 MB）与两个孤儿目录；你自己账号下 8 月的 sxjxw v1–fin 迭代（1.2 GB）。没有管理员删号路由，删是 DB + 卷两步。
+
+### C. 上线后第一周（不阻断）
+
+- C1 · 第二问题的结构修法与 A/B（下面）；C2 · DSH 0.1.3 到 rc 时的活线探测（上游 0.1.3-alpha 起 session 格式 v3、`agentLoop.create()` 异步、插件 API 去 `ctx.agent`，是一次真适配）；C3 · `Runtime stream capacity` 一次性观测（DSH UI 打开 58 s 内打满 128 条流，第二次未复现）→ 服务端计数与日志；C4 · P1 #11/#16/#17、P2 #18/#20；C5 · retention 定时加 `--images`（同日多版的排序已修，`current` 永远保留）。
+
+### 第二问题的决策（临床证据能力：2/8 产出、19 条引用完整性、数值自相矛盾）
+
+联网核查（2026-09-09）：生产跑 `deepseek-v4-flash`（= V4-Flash-0731，官方 7/31 正式版，九项 agent 基准超过 V4-Pro-Preview，官方明言「不要仅因价格改用 V4-Pro 做 agent 工作」）；`deepseek-v4-pro` = V4-Pro-0813，约三倍价格，Artificial Analysis 智能指数只高 1 分；**8/13 起两者都支持 low/high/max 三档 thinking effort**，我们的网关此前写死 `high`。文献侧：JBI 2026-09 系统综述（27 项研究）——LLM 数据提取里数值类准确率 47–88%、分类类 74–96%，主要错误是遗漏（60–74%）而非编造（0.08–6%），推荐「双提取 + 人工核验」与结构化提示。这与我们两次运行的失败形状一致：错在数字与缺项，不在虚构文献。
+
+**决定：不盲切模型。**（1）结构先行——矩阵先于报告：先把每条效应量连同逐字 `supportQuote` 写进 `clinical-evidence-matrix.json`，报告再从矩阵渲染，报告中的每个数字由代码对照矩阵核验（原则 10c「数字是渲染产物」，原则 1「数值判断归代码」）；8 个必需产出分阶段提交，缺项在计划层可见而不是终局才发现。（2）杠杆已备——`OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT` 已做成部署开关（`cc1b5c30a`，下版生效）。（3）用自己的 eval 裁定模型——同一简报、干净项目、三组：Flash@high（已有两次）、Flash@max、Pro@high，按门禁计数（必需产出数、引用完整性条数、自相矛盾数）比较；Pro 只有在计数上胜出才切，且只对文件交付类能力切。
