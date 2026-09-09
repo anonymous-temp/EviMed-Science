@@ -1,0 +1,37 @@
+{
+  "capability": "evidence-appraisal",
+  "brief": "appraisal-001-sglt2-hfpef",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-evidence-appraisal",
+  "session": "acc-evidence-appraisal-mttppqdx",
+  "runId": "run_5be81487ae1a53a5fed0c4d9db47ca27",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-09-09T07:23:37Z",
+  "prompt": "在射血分数保留的心衰（HFpEF）患者中，SGLT2 抑制剂能否降低心衰再住院？证据的确定性有多高？\nPopulation: 射血分数 ≥ 40% 的慢性心衰成人.\nIntervention: 恩格列净、达格列净.\nOutcomes: 心衰再住院; 心血管死亡; 全因死亡.",
+  "outcome": {
+    "status": "failed",
+    "errorCode": "specialist_required_output_missing",
+    "verification": null,
+    "artifacts": [
+      "deliverables/d1-hfpef-sglt2-evidence/citation-audit.md",
+      "deliverables/d1-hfpef-sglt2-evidence/clinical-evidence-report.md",
+      "deliverables/d1-hfpef-sglt2-evidence/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "The required deliverable appraisal-table.json is not in the workspace. Write it at exactly that name, either at the workspace root or inside this deliverable's deliverables/<id>/ directory, before finishing.",
+      "guideline_search searched and returned no source",
+      "literature_search searched and returned no source",
+      "review weakened: CLM-010 — 引文 HR 0.78 (0.69–0.88) 逐字存在于 Yang 2022 摘要（PMID 36158789），但 Yang 正文 Figure 3A 分析报告同一复合终点为 HR 0.77 (0.65–0.91)，且其结论称'23% 降幅'对应 0.77——同篇来源摘要与结果不一致，被采用的摘要值不是该 Meta 正文报告的分析结果，效应量保真度受损。",
+      "review weakened: CLM-012 — 引文逐字命中 Hamid 2024 摘要（PMID 39400108）结论句。但该综述自称以 EF>40% 人群为对象，其 Table 1 实际纳入 8 项试验多为非 HFpEF/糖尿病 CV 结局试验（EMPA-REG、DECLARE、SCORED、VERTIS、SOLOIST-WHF 等），且正文自相矛盾（先称 CV 死亡被降低、后称未降低）；'以射血分数较高人群随机试验为对象'的框定超出其实际证据集。方向与主体证据一致，作独立佐证的权重削弱。",
+      "review weakened: CLM-018 — 剂量/给药（两药各 10 mg OD）事实正确，但该项仅引 [3]（Böhm/EMPEROR），支持引语为随机化句，不支撑'两项试验均设 eGFR 斜率与安全性监测'中 DELIVER 一侧；主张-来源契合度不足（内容本身未被推翻）。",
+      "review contradicted: citation-audit-ESC-PMID — citation-audit.md 与 ledger/references.bib 将 ESC 2023 HF 聚焦更新记为 PMID 37622657，声称经 Europe PMC 核验'题名、刊名、年份一致'。PubMed 核验：37622657 = Arbelo E, et al. 2023 ESC Guidelines for the management of cardiomyopathies (Eur Heart J, doi 10.1093/eurheartj/ehad194)；所引 H",
+      "review weakened: CLM-023 — 主体推算可复核:13.3%-10.5%=2.8 个百分点,1/0.028≈36,已在报告以〔推导〕标注方法与假设。但 matrix sensitivity 仍写'6.5 对 5.0 次/人年'——原文为每100患者-年(DELIVER Table2 表头),单位错100倍,且 revision-notes 声称该单位错误已修正,与实际产物不符;报告第57行亦漏'每100'分母。建议将矩阵与报告统一为'次/100患者-年'。"
+    ],
+    "effectiveAgentId": "evidence-appraisal",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 3595403,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}

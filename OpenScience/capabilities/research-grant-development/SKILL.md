@@ -74,6 +74,27 @@ carry it as an open risk. **An unresolved feasibility risk that survives into
 the audit is worth more than one that quietly disappears** — the second is the
 version that surfaces during review instead.
 
+## The files, at their names
+
+The manifest checks the package by file name before it reads a line, so the
+aims and the approach above have to land in the files it looks for:
+
+- `call-requirements.json` — every stated requirement of the call, quoted.
+- `specific-aims.md` — the aims page: problem, gap, premise, objective, and
+  the two to four aims with the seven parts each aim carries.
+- `proposal-outline.md` — the approach: population, data, methods, sample size
+  rationale, reproducibility, ethics, personnel, dependencies, risk controls,
+  budget and timeline, with the three things never invented marked as
+  preliminary, published or proposed.
+- `milestones.csv` and `grant-audit.md` — as described below.
+- `citation-ledger.csv` — one row per cited source.
+- `delivery-summary.md` — one page: which call, which direction, what the
+  package contains, and every assumption made where the call was silent.
+
+All of them are required, inside this deliverable's `deliverables/<id>/`
+directory. A proposal written into one long file, however complete, is a
+proposal the gate cannot find.
+
 ## milestones.csv
 
 Columns `milestone,date,outcome,owner`, one row per milestone. A milestone with
