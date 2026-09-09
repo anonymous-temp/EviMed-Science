@@ -1017,11 +1017,14 @@ test("the composed feedback ledger queues the distillation exactly one worker cl
 });
 
 test("a deployment without the learning loop records the fact and queues nothing", async (t) => {
-  // The other direction of the same invariant, and the default shape of every
-  // deployment today. Without this the assertion above would be satisfied by a
-  // build that simply never composes a claimer.
-  const { app } = await composedApp(t);
-  assert.equal(app.learningWorker, null, "learning is off by default");
+  // The other direction of the same invariant. Without this the assertion
+  // above would be satisfied by a build that simply never composes a claimer.
+  //
+  // Turned off explicitly rather than by omission: the loop defaults on since
+  // 2026-09-08, and a test that read the default would have been asserting
+  // "the default is off" while claiming to assert "off composes nothing".
+  const { app } = await composedApp(t, { learningEnabled: false });
+  assert.equal(app.learningWorker, null, "an opted-out deployment composes no claimer");
   assert.equal(app.feedbackEvents.jobs, null, "and the ledger must not queue work nothing will claim");
 
   const subject = { type: "deliverable", id: deliverableSubjectId("run-adopted", "reports/evidence.md") };

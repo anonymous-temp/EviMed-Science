@@ -1100,13 +1100,22 @@ export function loadConfig(overrides = {}) {
     autopilotLeaseMs: Number(overrides.autopilotLeaseMs ?? process.env.OPEN_SCIENCE_AUTOPILOT_LEASE_MS ?? 300_000),
     // The learning loop's own knobs.
     //
-    // Off by default, including in production. Every other subsystem here
-    // defaults on in production because a deployment without it is missing a
-    // product feature; a deployment without distillation is missing nothing a
-    // researcher asked for, and turning it on costs model calls against the
-    // same budget their runs use. It goes on when a deployment has decided to
-    // spend that, not because it was installed.
-    learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", false),
+    // On by default since 2026-09-08, and the reason it was off is worth keeping
+    // rather than deleting. It costs model calls against the same budget a
+    // researcher's runs use, so it stayed off while it was a feature nobody had
+    // asked for. What changed is that the loop is now the thing being measured:
+    // its counters are the production distribution that the retirement window,
+    // the contribution floor and the promotion thresholds are supposed to be
+    // calibrated against, and every one of those numbers is a guess until a
+    // deployment has run with it on. A knob that must be found and set before
+    // any evidence accumulates is a knob that produces no evidence.
+    //
+    // Three things bound what being on costs. The worker declines outside
+    // `learningWindow`, where model calls are half price; `learningConcurrency`
+    // is 2; and a run is only queued for distillation when it needed at least
+    // one repair round and then succeeded, which is a small fraction of runs.
+    // Setting `OPEN_SCIENCE_LEARNING_ENABLED=false` still turns it off.
+    learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
     learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),
     // Two, because the learning worker shares a 15 GB machine with the

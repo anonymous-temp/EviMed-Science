@@ -215,6 +215,12 @@ async function writeTlsTargets() {
   await fsp.mkdir(targetsDir, { recursive: true, mode: 0o755 });
   await assertNoSymlinkPath(targetsDir);
   await fsp.writeFile(tlsTargetsFile, `${JSON.stringify([{ targets, labels: { probe: "public-tls" } }], null, 2)}\n`, { mode: 0o644 });
+  // `mode` on writeFile applies only when the file is created, so a file that
+  // already exists keeps whatever mode it had — and this one is checked in, so
+  // on a host whose umask is 002 the checkout is group-writable and `check()`
+  // rejects the generator's own output. The secret writer above chmods for the
+  // same reason.
+  await fsp.chmod(tlsTargetsFile, 0o644);
 }
 
 async function check() {

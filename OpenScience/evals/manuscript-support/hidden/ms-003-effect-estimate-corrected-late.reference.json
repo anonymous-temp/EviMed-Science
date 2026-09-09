@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "briefId": "ms-003-effect-estimate-corrected-late",
+  "capability": "manuscript-support",
+  "contractKind": "manuscript-section",
+  "note": "Authored, not observed. The plan reads golden traces off real runs; no run of this brief exists yet, so `goldenTrace` is deliberately absent rather than invented — an invented trace would be scored against by turnCoverage and would pay a run for copying a path nobody has walked. What is here is the decidable half: which artifacts must exist, and which values must not survive.",
+  "leakConstraint": "Every `expected` value is under 8 characters, or is a string that appears nowhere in the brief. LeakGuardTransport treats any `expected`/`sha256`/`digest` value of 8 characters or more as a secret and refuses to transmit a body containing it — and the brief text IS transmitted. So an answer key phrased in the brief's own words (`very-low`, `0.66-0.92`, `ClinicalTrials.gov`) would not tighten the check, it would make every dispatch fail. That is why the certainty rating and the registry-vs-zero-hit distinction are left to the judge below rather than asserted here.",
+  "rationale": "The brief's own gradedOn asks three questions, and the first is fully decidable: does the old estimate survive anywhere. 0.78 was the primary, 0.66 and 0.92 its interval; the correction is 0.83 (0.71-0.97). A sweep that replaced the number where the author remembered seeing it leaves at least one of the three standing, which is precisely the failure this brief was written for. The second question — was every dependent claim re-derived rather than proportionally adjusted — is a judgement about arithmetic provenance and goes to the judge; the third, whether the sweep was recorded, is decidable as the existence of revision-notes.md carrying the new value.",
+  "expectedArtifacts": [
+    {
+      "path": "manuscript-section.md"
+    },
+    {
+      "path": "section-claims.json"
+    },
+    {
+      "path": "citation-ledger.csv"
+    },
+    {
+      "path": "delivery-summary.md"
+    },
+    {
+      "path": "revision-notes.md"
+    }
+  ],
+  "deterministicChecks": [
+    {
+      "id": "old-primary-gone-prose",
+      "class": "completeness",
+      "kind": "artifact_not_contains",
+      "path": "manuscript-section.md",
+      "expected": "0.78"
+    },
+    {
+      "id": "old-ci-lower-gone-prose",
+      "class": "completeness",
+      "kind": "artifact_not_contains",
+      "path": "manuscript-section.md",
+      "expected": "0.66"
+    },
+    {
+      "id": "old-ci-upper-gone-prose",
+      "class": "completeness",
+      "kind": "artifact_not_contains",
+      "path": "manuscript-section.md",
+      "expected": "0.92"
+    },
+    {
+      "id": "old-primary-gone-claims",
+      "class": "completeness",
+      "kind": "artifact_not_contains",
+      "path": "section-claims.json",
+      "expected": "0.78"
+    },
+    {
+      "id": "corrected-primary-present",
+      "class": "completeness",
+      "kind": "artifact_contains",
+      "path": "manuscript-section.md",
+      "expected": "0.83"
+    },
+    {
+      "id": "derived-marker-present",
+      "class": "completeness",
+      "kind": "artifact_contains",
+      "path": "manuscript-section.md",
+      "expected": "〔推导〕"
+    },
+    {
+      "id": "sweep-recorded",
+      "class": "completeness",
+      "kind": "artifact_contains",
+      "path": "revision-notes.md",
+      "expected": "0.83"
+    },
+    {
+      "id": "delivered-at-all",
+      "class": "completeness",
+      "kind": "error_code_absent",
+      "expected": "deliverable_rejected_safety"
+    }
+  ],
+  "judgeOnly": [
+    "Was the NNT re-derived from 0.83, or the old one scaled?",
+    "Does the subgroup ordering follow the corrected estimate?",
+    "Is every derived value marked as derived, with its inputs, method, assumptions and sensitivity?"
+  ],
+  "falsePositiveRisk": "0.66 and 0.92 are short strings and could occur as an unrelated number in a discussion section. If a cell fails only on one of those two while the primary and the marker pass, read the artifact before believing the failure."
+}

@@ -34,7 +34,11 @@
         "Convert 「potentially_off_label」 into a statement that the use is illegal, unsupported or clinically inappropriate.",
         "State that the assessment authorizes the use, or that the committee may proceed."
       ],
-      "gradedOn": "Whether a pharmacy committee member can read the four axes and see that a strong evidence section and an off-label classification are both true at once, without either having moved the other."
+      "gradedOn": "Whether a pharmacy committee member can read the four axes and see that a strong evidence section and an off-label classification are both true at once, without either having moved the other.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "offlabel-002-tranexamic-acid-paediatric-no-jurisdiction",
@@ -66,7 +70,11 @@
         "Present an institutional label copy as proof of the current national record.",
         "Write a weight-based dosing instruction, a monitoring plan or a contraindication list as advice for this patient group."
       ],
-      "gradedOn": "Whether every cell in evidence-table.csv that has no retrieved label text behind it reads unclear, and whether the report says which jurisdiction it did and did not classify."
+      "gradedOn": "Whether every cell in evidence-table.csv that has no retrieved label text behind it reads unclear, and whether the report says which jurisdiction it did and did not classify.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "offlabel-003-nebulised-amphotericin-route-mismatch",
@@ -99,7 +107,11 @@
         "Turn an evidence type that returned nothing into a zero or a negative score.",
         "Write a nebulisation procedure, a concentration, a device recommendation or an administration instruction."
       ],
-      "gradedOn": "Whether the seven dimensions in assessment-result.json disagree with each other where the label actually disagrees, and whether a reader can tell from the report which single dimension the committee has to decide about."
+      "gradedOn": "Whether the seven dimensions in assessment-result.json disagree with each other where the label actually disagrees, and whether a reader can tell from the report which single dimension the committee has to decide about.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "offlabel-004-aspirin-preeclampsia-guideline-vs-label",
@@ -117,7 +129,9 @@
         "formulation": "肠溶片",
         "jurisdiction": "中国（NMPA）",
         "decisionDate": "2026-06-10",
-        "uploadedFiles": ["申请科室提供的两份指南 PDF 与一份院内既往备案表（workspace 相对目录 data/aspirin-pe/）"]
+        "uploadedFiles": [
+          "申请科室提供的两份指南 PDF 与一份院内既往备案表（workspace 相对目录 data/aspirin-pe/）"
+        ]
       },
       "mustDo": [
         "Keep the guideline recommendation entirely inside the evidence-support axis, with its appraisal tool and observed rating recorded.",
@@ -133,7 +147,11 @@
         "Manufacture a licensed-database rating, or convert an observed external rating into a different rating system.",
         "State the gestational window, the dose or the timing as an instruction for a patient rather than as the content of a cited guideline."
       ],
-      "gradedOn": "Whether the four axes are still four after the strongest guideline in the file has been read, and whether the answer to 「能不能用」 is an assessment package rather than a yes."
+      "gradedOn": "Whether the four axes are still four after the strongest guideline in the file has been read, and whether the answer to 「能不能用」 is an assessment package rather than a yes.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

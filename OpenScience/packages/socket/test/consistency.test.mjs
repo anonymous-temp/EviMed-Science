@@ -26,6 +26,7 @@ import { CONTRACT_KINDS, SOCKET_TOOL_NAME_LIST, workspaceLayout } from "@evimed/
 import { buildGuidanceText } from "../src/guidanceText.mjs";
 import { RUN_DOMAIN_SPEC, projectRunState } from "../src/runMirror.mjs";
 import { evidenceFromOutcome } from "../src/evidenceIngest.mjs";
+import { skillBodyDigestAsync } from "../src/digest.mjs";
 import {
   buildDelegation,
   completionCheck,
@@ -896,6 +897,63 @@ test("a running delegation projects its child id before the child settles", asyn
   assert.equal(running.childSessionId, "child-session-live");
   settle({ stopReason: "completed", output: "done" });
   await pending;
+});
+
+test("the delegation receipt names first and hashes beside the child, and the retry keeps the receipt", async () => {
+  // The receipt's digests go through WebCrypto, which resolves off the event
+  // loop. Hashing before the child starts — or between the start and the
+  // running row — pushes that row past the tick a reader waits for it in, and
+  // the combined-plan suite found no running children and waited forever. So
+  // the running row is written by name at once, the digests are filled into it
+  // when they arrive, and the settled record awaits them: the control plane
+  // never reads a receipt without them, and a watcher never reads a run
+  // without its children. No skills dir is mounted in this fixture, so the
+  // skill list is empty by construction; the capsule methods carry the claim.
+  /** @type {(value: any) => void} */
+  let settleRetry = () => {};
+  const retryResult = new Promise((resolve) => { settleRetry = resolve; });
+  let starts = 0;
+  const f = await nativePolicyFixture({
+    briefId: "delegation_owner",
+    subagentStart: () => {
+      starts += 1;
+      return starts === 1
+        ? { id: "child-first", result: Promise.resolve({ stopReason: "error", diagnostic: "temporary failure" }) }
+        : { id: "child-retry", result: retryResult };
+    },
+  });
+  const body = "# Quote first\n\nQuote the source before you summarise it.\n";
+  f.ctx.provide("evimedCapsuleMethods", [{ name: "quote-first", body }]);
+  const expected = [{ name: "quote-first", digest: await skillBodyDigestAsync(body) }];
+  await f.step(1);
+  await f.execute("evimed_plan", {
+    action: "write",
+    clarifications: ["A bounded report"],
+    deliverables: [{ id: "d1", contractKind: "research-brief", capability: "research-brief", title: "Brief", dependsOn: [] }],
+  });
+  const pending = f.execute("evimed_delegate", { deliverableId: "d1", inputs: {} });
+  // One tick: a running row, by name, before any hashing has had a chance.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal([...f.childRows.values()][0]?.status, "running", "the running row must not wait for the receipt");
+  // The retry replaces the first child; wait for its running row, then for the
+  // receipt to be filled into whichever running row is current.
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const row = [...f.childRows.values()][0];
+    if (row?.childSessionId === "child-retry" && row.methods) break;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  const running = [...f.childRows.values()][0];
+  assert.equal(running.status, "running");
+  assert.equal(running.childSessionId, "child-retry");
+  assert.deepEqual(running.methods, expected, "the retried child's running row carries the same receipt as the first");
+  assert.deepEqual(running.skillDigests, [], "no skills dir is mounted here, and an absent list would be a different claim");
+  settleRetry({ stopReason: "completed", output: "done" });
+  await pending;
+  const settled = [...f.childRows.values()][0];
+  assert.equal(settled.status, "completed");
+  assert.equal(settled.retried, true);
+  assert.deepEqual(settled.methods, expected, "the settled receipt is what the learning loop attributes against");
+  assert.equal(settled.receiptError, undefined);
 });
 
 test("a retry replaces the failed child with its running session id before settling", async () => {

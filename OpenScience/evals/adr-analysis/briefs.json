@@ -10,9 +10,18 @@
       "inputs": {
         "drug": "奥希替尼（osimertinib）",
         "adverseEvent": "心力衰竭、左室射血分数下降、QT 间期延长",
-        "drugAliases": ["Osimertinib", "AZD9291", "泰瑞沙", "TAGRISSO"],
-        "suspectRoles": ["PS"],
-        "administrationRoutes": ["ORAL"],
+        "drugAliases": [
+          "Osimertinib",
+          "AZD9291",
+          "泰瑞沙",
+          "TAGRISSO"
+        ],
+        "suspectRoles": [
+          "PS"
+        ],
+        "administrationRoutes": [
+          "ORAL"
+        ],
         "studyDateFrom": "2023-01-01",
         "studyDateTo": "2025-12-31",
         "backgroundDateFrom": "2016-01-01",
@@ -31,7 +40,11 @@
         "Round a disproportionality metric to more digits than the adapter reported, or restate an interval without its bound.",
         "Recommend monitoring intervals, dose reductions or a switch — a signal report names what to watch for, and the prescribing decision is not its output."
       ],
-      "gradedOn": "Whether a reviewer holding only safety-report.md can tell which report set the numbers were computed over — database, suspect binding, roles, routes and both windows — and reproduce the query from the report alone."
+      "gradedOn": "Whether a reviewer holding only safety-report.md can tell which report set the numbers were computed over — database, suspect binding, roles, routes and both windows — and reproduce the query from the report alone.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "adr-002-febuxostat-after-the-warning",
@@ -40,8 +53,16 @@
       "inputs": {
         "drug": "非布司他（febuxostat）",
         "adverseEvent": "心血管死亡、心源性猝死、心肌梗死",
-        "drugAliases": ["Febuxostat", "ULORIC", "优立通", "非布索坦"],
-        "suspectRoles": ["PS", "SS"],
+        "drugAliases": [
+          "Febuxostat",
+          "ULORIC",
+          "优立通",
+          "非布索坦"
+        ],
+        "suspectRoles": [
+          "PS",
+          "SS"
+        ],
         "studyDateFrom": "2017-01-01",
         "studyDateTo": "2022-12-31",
         "backgroundDateFrom": "2010-01-01",
@@ -60,7 +81,11 @@
         "Convert ROR or IC into a relative risk against allopurinol, or into a probability of causation.",
         "Write that the medicine should be avoided, restricted or replaced in any patient group."
       ],
-      "gradedOn": "Whether the report separates a change in reporting behaviour from a change in risk, in prose a gout clinic pharmacist would act on correctly — and whether the pre/post split appears in signals.csv rather than only in a caveat sentence."
+      "gradedOn": "Whether the report separates a change in reporting behaviour from a change in risk, in prose a gout clinic pharmacist would act on correctly — and whether the pre/post split appears in signals.csv rather than only in a caveat sentence.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "adr-003-rivaroxaban-incidence-request",
@@ -69,8 +94,14 @@
       "inputs": {
         "drug": "利伐沙班（rivaroxaban）",
         "adverseEvent": "消化道出血、上消化道出血、黑便",
-        "drugAliases": ["Rivaroxaban", "XARELTO", "拜瑞妥"],
-        "suspectRoles": ["PS"],
+        "drugAliases": [
+          "Rivaroxaban",
+          "XARELTO",
+          "拜瑞妥"
+        ],
+        "suspectRoles": [
+          "PS"
+        ],
         "studyDateFrom": "2018-01-01",
         "studyDateTo": "2025-06-30",
         "backgroundDateFrom": "2012-01-01",
@@ -89,7 +120,11 @@
         "Answer with the label's frequency table and let the reader take it as this analysis's finding, without saying it came from the label and applies to the trial population.",
         "Write bleeding-risk management advice, a monitoring schedule or a switching recommendation."
       ],
-      "gradedOn": "Whether the report refuses the incidence without refusing the requester — the missing denominator named, the answerable analysis delivered, and no number in the file that a reader could mistake for a rate."
+      "gradedOn": "Whether the report refuses the incidence without refusing the requester — the missing denominator named, the answerable analysis delivered, and no number in the file that a reader could mistake for a rate.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "adr-004-esketamine-sparse-plus-local-line-list",
@@ -98,14 +133,25 @@
       "inputs": {
         "drug": "艾司氯胺酮鼻喷雾剂（esketamine nasal spray）",
         "adverseEvent": "膀胱炎、间质性膀胱炎、排尿困难、血尿",
-        "drugAliases": ["Esketamine", "SPRAVATO", "艾司氯胺酮"],
-        "suspectRoles": ["PS", "SS"],
-        "administrationRoutes": ["NASAL"],
+        "drugAliases": [
+          "Esketamine",
+          "SPRAVATO",
+          "艾司氯胺酮"
+        ],
+        "suspectRoles": [
+          "PS",
+          "SS"
+        ],
+        "administrationRoutes": [
+          "NASAL"
+        ],
         "studyDateFrom": "2019-03-01",
         "studyDateTo": "2025-12-31",
         "backgroundDateFrom": "2019-03-01",
         "backgroundDateTo": "2025-12-31",
-        "uploadedFiles": ["精神科提供的院内 ADR 线列表（12 例，2023-01 至 2025-11，含用药起止、症状、处理与转归；无对照）"]
+        "uploadedFiles": [
+          "精神科提供的院内 ADR 线列表（12 例，2023-01 至 2025-11，含用药起止、症状、处理与转归；无对照）"
+        ]
       },
       "mustDo": [
         "Read gps_prior_fitted and, when it is false, describe EBGM and EB05 as exploratory output from an unfitted starting prior, in the sentence that reports the number.",
@@ -121,7 +167,11 @@
         "Carry the recreational-exposure uropathy literature onto this product as though the exposure pattern were the same one.",
         "Write 「建议停药」, a taper schedule, a cystoscopy interval or any other instruction about what to do with a patient."
       ],
-      "gradedOn": "Whether the two denominators stay separate through every table and sentence, whether the unfitted prior is stated where the EBGM is printed rather than in a methods footnote, and whether the deliverable survives the clinical gate — a safety report that answers 「要不要停药」 with advice is the failure this brief is here to catch."
+      "gradedOn": "Whether the two denominators stay separate through every table and sentence, whether the unfitted prior is stated where the EBGM is printed rather than in a methods footnote, and whether the deliverable survives the clinical gate — a safety report that answers 「要不要停药」 with advice is the failure this brief is here to catch.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

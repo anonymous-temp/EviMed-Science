@@ -79,21 +79,6 @@ test("an off-peak window is parsed, wraps midnight, and a typo costs the discoun
   assert.equal(withinWindow(null, new Date("2026-09-07T12:00:00")), true, "no window means always");
 });
 
-test("the worker declines to claim outside its window, and says which reason", async () => {
-  const { jobs, worker: instance } = worker({
-    window: "22:00-09:00",
-    now: () => new Date("2026-09-07T12:00:00"),
-    jobs: fakeJobs([{ id: "j1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
-  });
-  assert.equal(await instance.tick(), null);
-  assert.equal(jobs.queue.length, 1, "the job is still queued, not consumed and dropped");
-  assert.equal(instance.status().lastSkippedReason, "outside_learning_window");
-
-  const disabled = worker({ enabled: false, jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", payload: {} }]) });
-  assert.equal(await disabled.worker.tick(), null);
-  assert.equal(disabled.worker.status().lastSkippedReason, "learning_disabled");
-});
-
 test("inside the window a consolidate job reaches the consolidation and finishes", async () => {
   const consolidator = { calls: [], async run(request) { this.calls.push(request); return { action: "sleep", promoted: [] }; } };
   const { jobs, worker: instance } = worker({
@@ -239,4 +224,31 @@ test("overlapping reconciles collapse into one, like the job tick", async () => 
   });
   await Promise.all([slow.reconcile(), slow.reconcile(), slow.reconcile()]);
   assert.equal(peak, 1, "a slow sweep must not be started again on top of itself");
+});
+
+// ---------------------------------------------------------------------------
+// One kind, two producers, one claimer.
+//
+// The feedback ledger queues `distill` jobs of its own shape — an adopted
+// deliverable and the edit made to it — and its own worker reads them. While
+// the learning loop is on, this worker is the only claimer of the kind, so
+// those jobs arrive here and have to be handed to the code that knows them.
+// ---------------------------------------------------------------------------
+
+test("the worker declines to claim outside its window, and says which reason", async () => {
+  // Every learning job dispatches a bounded run or a model call, so the window
+  // is both the spending gate and the claiming gate: there is no free work
+  // being stranded behind it.
+  const { jobs, worker: instance } = worker({
+    window: "22:00-09:00",
+    now: () => new Date("2026-09-07T12:00:00"),
+    jobs: fakeJobs([{ id: "j1", kind: "consolidate", userId: "u1", projectId: "p1", payload: { action: "sleep" } }]),
+  });
+  assert.equal(await instance.tick(), null);
+  assert.equal(jobs.queue.length, 1, "the job is still queued, not consumed and dropped");
+  assert.equal(instance.status().lastSkippedReason, "outside_learning_window");
+
+  const disabled = worker({ enabled: false, jobs: fakeJobs([{ id: "j1", kind: "distill", userId: "u1", payload: {} }]) });
+  assert.equal(await disabled.worker.tick(), null);
+  assert.equal(disabled.worker.status().lastSkippedReason, "learning_disabled");
 });
