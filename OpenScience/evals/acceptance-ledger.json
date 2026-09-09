@@ -286,15 +286,15 @@
       "evalHarness": "evals/research-grant-development",
       "briefCount": 3,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/research-grant-development/results/2026-09-09-grant-001-nsfc-general",
+        "at": "2026-09-09T12:34:52",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/research-grant-development/briefs.json"
       ],
-      "note": "Three real briefs are written and none has been run: the harness ships no results directory."
+      "note": "Accepted on 2026-09-09 against evimed-20260909-7f88cf2, the release carrying the skill fix that named its files, on a fresh project: brief grant-001 (an NSFC general programme proposal) ended succeeded/accepted in 23 minutes with all seven required outputs — a 15 KB specific-aims page, a 14 KB proposal outline, the call requirements quoted into JSON, twenty milestones, the audit mapping every requirement id, the ledger — no repair round, and four advisory notices, the sharpest a reviewer contradiction: the delivery summary stated the guide's publication date as fact where the package elsewhere marked it as an assumption. Two searches returned no source. Read before this row was changed. Three real briefs are written and none has been run: the harness ships no results directory."
     },
     {
       "id": "research-topic-selection",
