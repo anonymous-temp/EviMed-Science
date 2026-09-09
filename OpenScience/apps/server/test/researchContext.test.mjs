@@ -105,7 +105,7 @@ test("injects the live specialist registry into open-domain routing without forc
   });
 });
 
-test("a direct specialist route names every skill its completion gate requires", async () => {
+test("a direct specialist route tells the model to delegate, and names what delegation injects", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       routedSpecialist: {
@@ -119,8 +119,15 @@ test("a direct specialist route names every skill its completion gate requires",
       prepared.system,
       /clinical-evidence-synthesis、deep-research、biomedical-database-search、citation-integrity、manuscript-humanize/,
     );
-    assert.match(prepared.system, /逐个调用 skill 工具并成功加载/);
-    assert.match(prepared.system, /任一项未成功加载/);
+    assert.match(prepared.system, /用 evimed_delegate 把该专项的交付物委派给能力 clinical-evidence-synthesis/);
+    // The capability bodies are not in the kernel's skill roots. Telling the
+    // model to fetch them with the skill tool asked for the impossible, and a
+    // geo-content run that obeyed the rest of that instruction did an hour of
+    // work in the root session and failed the gate for the method it could
+    // never load.
+    assert.match(prepared.system, /无需也无法用 skill 工具在本会话中加载专项方法/);
+    assert.doesNotMatch(prepared.system, /逐个调用 skill 工具/);
+    assert.match(prepared.system, /evimed_complete_run/);
   });
 });
 
@@ -267,7 +274,7 @@ test("a skill with an empty body is not reported as mounted", async () => {
   });
 });
 
-test("a routed specialist turn mounts nothing and keeps its own load instruction", async () => {
+test("a routed specialist turn mounts nothing and keeps its own delegation instruction", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       routedSpecialist: {
@@ -284,6 +291,6 @@ test("a routed specialist turn mounts nothing and keeps its own load instruction
 
     assert.deepEqual(prepared.mountedSkills, []);
     assert.doesNotMatch(prepared.system, /<evimed-skill/);
-    assert.match(prepared.system, /必须逐个调用 skill 工具并成功加载/);
+    assert.match(prepared.system, /用 evimed_delegate 把该专项的交付物委派给能力 clinical-evidence-synthesis/);
   });
 });

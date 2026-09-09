@@ -29,6 +29,24 @@ import { runStateFileFor, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 
+/**
+ * A completed `skill` tool call as the kernel reports one: the result is the
+ * rendered `<skill_content>` block for the name that was asked for. The
+ * block's first line is the shape `dsh-skill` renders on every successful path.
+ * @param {string} name
+ */
+function skillToolPart(name) {
+  return {
+    type: "tool",
+    tool: "skill",
+    state: {
+      status: "completed",
+      input: { name },
+      output: `<skill_content name="${name}">\n<skill_resources>\nBase directory for this skill: /opt/evimed/socket/presets/evimed-universal/skills/core/${name}\n</skill_resources>\n\n<skill_instructions>\n# ${name}\n</skill_instructions>\n</skill_content>`,
+    },
+  };
+}
+
 async function withApp(fn, overrides = {}) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-agent-runs-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, ...overrides });
@@ -664,11 +682,7 @@ test("a deep clinical evidence run fails closed unless every companion skill is 
         "biomedical-database-search",
         "citation-integrity",
         "clinical-evidence-synthesis",
-      ].map((name) => ({
-        type: "tool",
-        tool: "skill",
-        state: { status: "completed", input: { name } },
-      })),
+      ].map((name) => skillToolPart(name)),
     }];
     const loaded = await store.reconcileSession(project, binding.sessionId);
     assert.equal(loaded.status, "failed");
@@ -734,11 +748,7 @@ async function withAnswerModeRun(fn) {
         parts,
       }];
     };
-    const skillLoadedPart = {
-      type: "tool",
-      tool: "skill",
-      state: { status: "completed", input: { name: "open-domain-answer" } },
-    };
+    const skillLoadedPart = skillToolPart("open-domain-answer");
     await fn({ project, binding, dispatch, appendHistory, skillLoadedPart, store, frames });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -5245,9 +5255,21 @@ test("a pre-injected skill counts as loaded, because the model is never asked to
     // call the tool.
     await rm(path.join(project.workspaceDir, workspaceLayout.runStateFile));
     const viaTool = await loadedOrInjectedSkillsForTest(project, [
-      { parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name: "open-domain-answer" } } }] },
+      { parts: [skillToolPart("open-domain-answer")] },
     ]);
     assert.ok(viaTool.has("open-domain-answer"));
+
+    // The kernel renders a lookup failure as the text result of a call the
+    // session reports as completed. An evidence-appraisal run passed the gate
+    // on 2026-09-09 with exactly one such call for its own capability —
+    // `skill "evidence-appraisal" is unknown or no longer available` — so a
+    // completed call is a load only when the skill block for that name came back.
+    const refused = await loadedOrInjectedSkillsForTest(project, [
+      { parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name: "evidence-appraisal" }, output: 'Error: skill "evidence-appraisal" is unknown or no longer available' } }] },
+      { parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name: "geo-content" } } }] },
+      { parts: [{ type: "tool", tool: "skill", state: { status: "completed", input: { name: "deep-research" }, output: skillToolPart("citation-integrity").state.output } }] },
+    ]);
+    assert.deepEqual([...refused], [], "an error text, no output, or another skill's block is not a load");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
