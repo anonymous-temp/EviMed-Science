@@ -332,13 +332,20 @@ class RealLedgerTests(unittest.TestCase):
         and `build_pack.py` assembled it — the harness delivered, not the
         capability — so it moved to relatedEvidence, which is where this ledger
         already puts a succeeded managed engine job.
+
+        off-label-analysis and manuscript-support joined on 2026-09-09: each
+        is one dispatch of its own first brief through `capability-acceptance`
+        against `evimed-20260909-c7434fb` on a clean project, ended
+        succeeded/accepted by the delivery gate, with the package kept under
+        `evals/<harness>/results/` beside the run record and read before the
+        row changed.
         """
         document = checker.load_ledger(REPO)
         accepted = sorted(
             row["id"] for row in document["capabilities"]
             if row["realDelivery"]["status"] == "accepted"
         )
-        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping"])
+        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping", "manuscript-support", "off-label-analysis"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":
@@ -382,11 +389,13 @@ class RealLedgerTests(unittest.TestCase):
     def test_geo_content_keeps_its_deliverable_as_related_evidence(self):
         # Downgrading a row must not throw the artifact away: the pack is still
         # the most advanced thing this capability has produced, and a row that
-        # dropped it would read as if nothing had ever been built.
+        # dropped it would read as if nothing had ever been built. The row has
+        # since recorded a real failed run (2026-09-09), which is a fact about
+        # the capability and no reason to lose the harness-built pack either.
         row = next(
             item for item in checker.load_ledger(REPO)["capabilities"] if item["id"] == "geo-content"
         )
-        self.assertEqual(row["realDelivery"]["status"], "not-run")
+        self.assertEqual(row["realDelivery"]["status"], "failed")
         self.assertIn(
             "evals/geo-content/results/2026-08-30-geo-001/deliverable", row["relatedEvidence"]
         )

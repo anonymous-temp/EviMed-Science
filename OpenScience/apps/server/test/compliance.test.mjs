@@ -54,7 +54,6 @@ test("hosted compliance audit passes the default Web redistribution boundary", (
     "workspace_descriptor_io_boundary",
     "hosted_notebook_kernel",
     "hosted_desktop_boundary",
-    "hosted_event_stream_recovery",
     "task_resource_control",
     "production_local_auth_secret_boundary",
     "hosted_metadata_boundary",

@@ -33,15 +33,14 @@ import { RUN_STREAM_EVENT_TYPES } from "../src/runEventStream.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-/** The browser's registered listeners, read from its own source. */
-async function browserFrameTypes() {
-  const source = await readFile(path.join(repoRoot, "apps/web/src/lib/runStream.ts"), "utf8");
-  const block = /export const RUN_STREAM_FRAME_TYPES = \[([\s\S]*?)\]/.exec(source);
-  assert.ok(block, "RUN_STREAM_FRAME_TYPES not found — this test cannot conclude anything");
-  const types = [...block[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-  assert.ok(types.length >= 5, `parsed only ${types.length} frame types; the parse, not the code, is wrong`);
-  return types;
-}
+// The browser half of this file is gone. On 2026-09-09 the decision landed
+// that the kernel's own web application is the session surface, and our
+// never-routed page — the only registered listener on `/api/runs/:id/events`
+// — was deleted with it. The kernel's application hears the kernel's own
+// events over the mux; nothing in the browser registers for this stream any
+// more, so "every declared type has a listener" has no subject. What remains
+// worth pinning is the publisher side: which declared types are actually
+// sent, so wiring one is a decision and not an assumption.
 
 // Declared but unpublished. One remains, and it is one half of a pair:
 //
@@ -61,18 +60,13 @@ async function browserFrameTypes() {
 // makes a watching tab close its stream.
 const DECLARED_WITHOUT_PUBLISHER = ["approval/requested", "question/requested"];
 
-test("every declared type has a listener, so none of them is published into a void", async () => {
-  const browser = await browserFrameTypes();
-  const extra = browser.filter((type) => !RUN_STREAM_EVENT_TYPES.includes(type));
-  assert.deepEqual(extra, [], "the browser listens for types the publisher does not declare");
-
-  const unheard = RUN_STREAM_EVENT_TYPES.filter((type) => !browser.includes(type)).sort();
-  assert.deepEqual(
-    unheard,
-    [],
-    "a declared type the browser cannot hear never arrives and shows nothing while the wire is busy; "
-    + "register its listener before publishing it",
-  );
+test("no browser source registers for the run stream any more, and this test says so rather than reading a ghost", async () => {
+  // The listener set used to be parsed out of `apps/web/src/lib/runStream.ts`.
+  // A test that kept reading a file the surface decision deleted would fail
+  // with ENOENT and look like a broken checkout; this one names the absence.
+  const { access } = await import("node:fs/promises");
+  await assert.rejects(access(path.join(repoRoot, "apps/web/src/lib/runStream.ts")), /ENOENT/,
+    "the browser run-stream client is back; restore the listener-set assertion this replaced");
 });
 
 test("a type with no publisher is named, not assumed to work", async () => {

@@ -148,17 +148,17 @@
       "evalHarness": "evals/geo-content",
       "briefCount": 4,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "failed",
+        "evidence": "evals/geo-content/results/2026-09-09-geo-001-suxiao-baseline",
+        "at": "2026-09-09T09:01:53",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/geo-content/results/2026-08-30-geo-001/deliverable",
         "evals/geo-content/results/2026-08-30-geo-002",
         "evals/geo-content/results/2026-08-30-geo-003"
       ],
-      "note": "Downgraded from accepted on review, for the reason this ledger exists. The measurement is real — fifty rounds against the live probe — and the retained geo-001 deliverable carries all nine required outputs and passes the geo-content-pack contract validator today; the delivery summary states the shrunken denominator and the unbranded 18/25 rather than the flattering 25/25. But no run of the capability package produced it: evals/geo-content/measure.mjs collected the two probe ledgers, evals/geo-content/build_pack.py assembled the pack from them, and its blocks were repaired by hand in the commit that made geo-content-pack a clinical contract kind. The contract declares three checks and only requiredOutputsExist was ever evaluated; skillsLoaded cannot have passed, because nothing loaded a skill. This is the same line the bibliometric row already draws for a succeeded managed engine job: the harness delivering is not the capability delivering, so the deliverable is relatedEvidence. The other two runs retained only their probe logs."
+      "note": "First real run on 2026-09-09 against evimed-20260909-c7434fb on a clean project: brief geo-001 (速效救心丸 baseline) ran 2 h 55 min, 464 messages and 248 tool calls, wrote fourteen files, and ended specialist_deliverable_not_accepted — the one planned deliverable failed contract validation. The independent reviewer also found a journal field written as 'PubMed' and a dose attribution hung on the wrong sources. The contract failure is the same defect the evidence-appraisal run exposed the same morning: the manifest requires geo-content-pack.json, brand-entity.json and delivery-summary.md and the skill described the pack without ever naming those files. Fixed in the skill and guarded by a test; this run predates the fix. Downgraded from accepted on review, for the reason this ledger exists. The measurement is real — fifty rounds against the live probe — and the retained geo-001 deliverable carries all nine required outputs and passes the geo-content-pack contract validator today; the delivery summary states the shrunken denominator and the unbranded 18/25 rather than the flattering 25/25. But no run of the capability package produced it: evals/geo-content/measure.mjs collected the two probe ledgers, evals/geo-content/build_pack.py assembled the pack from them, and its blocks were repaired by hand in the commit that made geo-content-pack a clinical contract kind. The contract declares three checks and only requiredOutputsExist was ever evaluated; skillsLoaded cannot have passed, because nothing loaded a skill. This is the same line the bibliometric row already draws for a succeeded managed engine job: the harness delivering is not the capability delivering, so the deliverable is relatedEvidence. The other two runs retained only their probe logs."
     },
     {
       "id": "manuscript-support",
@@ -166,15 +166,15 @@
       "evalHarness": "evals/manuscript-support",
       "briefCount": 4,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/manuscript-support/results/2026-09-09-ms-001-strobe-methods-retrospective-cohort",
+        "at": "2026-09-09T09:19:09",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/manuscript-support/briefs.json"
       ],
-      "note": "Four real briefs are written and none has been run: the harness ships no results directory."
+      "note": "First real delivery on 2026-09-09 against evimed-20260909-c7434fb on a clean project: brief ms-001 (a STROBE methods section for a retrospective cohort) ended succeeded/accepted in 17 minutes with all four required outputs and no repair round. Four advisory notices: six non-derived claims had no ledger row, the reviewer disagreed with one claim's source characterisation, and the delivery summary miscounted its own placeholders by one — the section is a scaffold with twenty 〔待补〕 placeholders for the numbers the brief did not supply, which is what the brief asked for. Read before this row was changed. Four real briefs are written and none has been run: the harness ships no results directory."
     },
     {
       "id": "mendelian-randomization",

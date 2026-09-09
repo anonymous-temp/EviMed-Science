@@ -710,3 +710,52 @@ test("no connector names a credential profile the gateway does not define", () =
   }
   assert.ok(named >= 1, `the scan found ${named} credential-profile asks; it is not reading the connectors`);
 });
+
+test("a researcher's own credential fills a profile the deployment has not configured, and only theirs", async (t) => {
+  // OpenGWAS is the standing case: its token belongs to a person and the
+  // deployment has none. Alice saved hers; Bob did not. The deployment's
+  // UMLS key wins over Alice's own, because a personal key fills a gap and
+  // never overrides how a deployment reaches a source.
+  const observations = [];
+  const asked = [];
+  const connectorCredentials = {
+    async resolveOwn(userId, connector) {
+      asked.push([userId, connector]);
+      return userId === "alice" && connector === "opengwas" ? "alice-opengwas-jwt" : null;
+    },
+  };
+  const manager = {
+    assertActiveModelGatewayToken(token) {
+      if (token === "alice-token") return { userId: "alice", projectId: "p" };
+      if (token === "bob-token") return { userId: "bob", projectId: "p" };
+      throw new Error("invalid token");
+    },
+  };
+  const server = createServer(createPublicSourceGatewayHandler({
+    publicSourceCredentials: { umls: "deployment-umls" },
+  }, manager, {
+    fetchImpl: async (url, options) => {
+      observations.push({ url: new URL(url), headers: options.headers });
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+    },
+    connectorCredentials,
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+
+  const opengwas = { url: "https://api.opengwas.io/api/gwasinfo?id=ieu-a-2", accept: ["application/json"], credentialProfile: "opengwas" };
+  assert.equal((await gatewayRequest(base, opengwas, "alice-token")).status, 200);
+  assert.equal(observations.at(-1).headers.authorization, "Bearer alice-opengwas-jwt");
+
+  const refused = await gatewayRequest(base, opengwas, "bob-token");
+  assert.equal(refused.status, 503);
+  const body = await refused.json();
+  assert.equal(body.error.code, "public_source_opengwas_credential_missing");
+  assert.match(body.error.message, /账户与额度/, "the refusal says where a credential can be added");
+
+  const umls = { url: "https://uts-ws.nlm.nih.gov/rest/search/current?string=TP53", accept: ["application/json"], credentialProfile: "umls" };
+  assert.equal((await gatewayRequest(base, umls, "alice-token")).status, 200);
+  assert.equal(observations.at(-1).url.searchParams.get("apiKey"), "deployment-umls");
+  // The store was never consulted for a profile the deployment serves.
+  assert.deepEqual(asked, [["alice", "opengwas"], ["bob", "opengwas"]]);
+});

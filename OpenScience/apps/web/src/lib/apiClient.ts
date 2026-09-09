@@ -1366,6 +1366,44 @@ export interface WebUsageSummary {
   priceVersions?: string[];
 }
 
+/** One external data source, with where its credential comes from for this
+ *  account. The credential itself is never read back. */
+export interface WebConnector {
+  id: string;
+  title: string;
+  kind: "api-key" | "jwt" | "email";
+  unlocks: string;
+  obtainUrl: string;
+  capabilities: string[];
+  keyless: boolean;
+  validityDays: number | null;
+  source: "deployment" | "user" | "none";
+  own: { updatedAt: string; expiresAt: string | null; expired: boolean } | null;
+  needsAttention: boolean;
+}
+
+export async function fetchWebConnectors(): Promise<WebConnector[]> {
+  if (!hasWebApi) throw new BackendUnavailableError("connectors.list");
+  const res = await fetchWithWebAuth(apiUrl("/connectors"));
+  return parseApiResponse<WebConnector[]>(res);
+}
+
+export async function saveWebConnectorCredential(connector: string, value: string): Promise<{ expiresAt: string | null }> {
+  if (!hasWebApi) throw new BackendUnavailableError("connectors.save");
+  const res = await fetchWithWebAuth(apiUrl(`/connectors/${encodeURIComponent(connector)}`), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  });
+  return parseApiResponse<{ connector: string; source: "user"; expiresAt: string | null }>(res);
+}
+
+export async function removeWebConnectorCredential(connector: string): Promise<void> {
+  if (!hasWebApi) throw new BackendUnavailableError("connectors.remove");
+  const res = await fetchWithWebAuth(apiUrl(`/connectors/${encodeURIComponent(connector)}`), { method: "DELETE" });
+  await parseApiResponse<{ connector: string; removed: boolean }>(res);
+}
+
 export async function fetchWebAccountUsage(): Promise<WebUsageSummary> {
   if (!hasWebApi) throw new BackendUnavailableError("account.usage");
   const res = await fetchWithWebAuth(apiUrl("/account/usage"));

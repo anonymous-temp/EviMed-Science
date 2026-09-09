@@ -24,7 +24,7 @@ import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
 import { runMethodObservations } from "./methodObservations.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { mountedMethodDigest } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, mountedMethodDigest } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -55,6 +55,7 @@ import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
 import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
+import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemOsClient } from "./memOsEngineClient.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
@@ -387,6 +388,8 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/inbox/")) return "/api/inbox/:id/:action";
   if (pathname === "/api/auth/register") return pathname;
   if (pathname === "/api/account" || pathname === "/api/account/export" || pathname === "/api/account/usage") return pathname;
+  if (pathname === "/api/connectors") return pathname;
+  if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (
@@ -426,7 +429,8 @@ function routePattern(pathname) {
     pathname === PUBLIC_SOURCE_GATEWAY_PATH ||
     pathname === WEB_SEARCH_GATEWAY_PATH ||
     pathname === GEO_PROBE_GATEWAY_PATH ||
-    pathname === REVISION_GATEWAY_PATH
+    pathname === REVISION_GATEWAY_PATH ||
+    pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
   ) return pathname;
   return pathname === "/" ? "/" : "/static";
 }
@@ -584,6 +588,12 @@ export function createWebApiApp(overrides = {}) {
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
   const productDatabase = "database" in store ? store.database : null;
+  // A researcher's own connector credentials. Postgres-backed and keyed under
+  // the gateway signing secret; a file-store deployment has neither the table
+  // nor a reason to hold personal keys, and answers 503 by name.
+  const connectorCredentials = productDatabase && typeof config.modelGatewaySigningSecret === "string" && config.modelGatewaySigningSecret.length >= 32
+    ? new ConnectorCredentialStore({ database: productDatabase, secret: config.modelGatewaySigningSecret, config })
+    : null;
   let maintenanceService = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
@@ -1781,7 +1791,9 @@ export function createWebApiApp(overrides = {}) {
   const gatewayFetch = resolveGatewayFetch(process.env, overrides.publicSourceFetch ?? globalThis.fetch);
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     fetchImpl: gatewayFetch,
+    connectorCredentials,
   });
+  const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
   });
@@ -1954,6 +1966,8 @@ export function createWebApiApp(overrides = {}) {
         ? revisionGatewayHandler
       : pathname === PUBLIC_SOURCE_GATEWAY_PATH
         ? publicSourceGatewayHandler
+      : pathname === CONNECTOR_CREDENTIAL_GATEWAY_PATH
+        ? connectorCredentialGatewayHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
           ? webSearchGatewayHandler
           : pathname === GEO_PROBE_GATEWAY_PATH
@@ -2775,6 +2789,33 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // A researcher's own credentials for the external data sources: which
+      // connectors the deployment serves, which they have filled in, which are
+      // waiting. Values travel one way — in — and are never read back.
+      if (pathname === "/api/connectors" && req.method === "GET") {
+        const user = await store.ensureUser(req, res);
+        if (!connectorCredentials) throw new HttpError(503, "connector_credentials_unavailable", "Connector credentials are not available on this deployment.");
+        sendJson(res, 200, { data: await connectorCredentials.status(user.id) });
+        return;
+      }
+      if (pathname.startsWith("/api/connectors/") && (req.method === "PUT" || req.method === "DELETE")) {
+        const user = await store.ensureUser(req, res);
+        const connector = decodeRouteComponent(pathname.slice("/api/connectors/".length), "connector");
+        if (!CONNECTOR_CREDENTIAL_IDS.has(connector)) throw new HttpError(404, "connector_unknown", "The connector is not one a credential can be held for.");
+        if (!connectorCredentials) throw new HttpError(503, "connector_credentials_unavailable", "Connector credentials are not available on this deployment.");
+        if (req.method === "PUT") {
+          const body = await readJson(req, 16 * 1024);
+          const saved = await connectorCredentials.set(user.id, connector, body?.value);
+          await securityAudit(config, "connector.credential.set", "completed", { userId: user.id, connector, expiresAt: saved.expiresAt });
+          sendJson(res, 200, { data: { connector, source: "user", expiresAt: saved.expiresAt } });
+          return;
+        }
+        const removed = await connectorCredentials.remove(user.id, connector);
+        await securityAudit(config, "connector.credential.removed", removed ? "completed" : "noop", { userId: user.id, connector });
+        sendJson(res, 200, { data: { connector, removed } });
+        return;
+      }
+
       if (pathname === "/api/account/usage" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
         // This month, because that is the period a person is asked to pay for
@@ -3554,6 +3595,7 @@ export function createWebApiApp(overrides = {}) {
     async listen(port = config.port, host = config.host) {
       await agentRegistry;
       if (productDatabase) await migrateProductStore(productDatabase);
+      await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
       await retryCapsuleCleanup();
       await runStartupRuntimeCleanup();

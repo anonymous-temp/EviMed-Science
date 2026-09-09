@@ -582,6 +582,11 @@ services:
       # Mendelian-randomization agent that had been healthy for two days.
       # The old name stays as a fallback so an existing .env keeps working.
       OPENGWAS_JWT: ${OPEN_SCIENCE_OPENGWAS_JWT:-${OPENGWAS_JWT:-}}
+      # Where a job asks for the credential its researcher configured, with
+      # the workload token the runtime handed it. The deployment's JWT above
+      # still wins when it is set; a researcher's own fills the gap when it is
+      # not. Reached over the shared default network, like the model gateway.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
     volumes:
       - open-science-data:/data
       - type: bind

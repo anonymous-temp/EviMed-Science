@@ -738,7 +738,7 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, signal }) {
   );
 }
 
-export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch } = {}) {
+export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch, connectorCredentials = null } = {}) {
   return async function publicSourceGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -753,8 +753,9 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
     timeout.unref?.();
     try {
       const token = bearerToken(req);
+      let identity;
       try {
-        runtimeManager.assertActiveModelGatewayToken(token);
+        identity = runtimeManager.assertActiveModelGatewayToken(token);
       } catch {
         throw gatewayError(401, "public_source_gateway_token_invalid", "Public-source gateway authentication failed.");
       }
@@ -772,14 +773,20 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
         if (request.method === "POST") upstreamHeaders["content-type"] = "application/json";
         if (request.credentialProfile) {
           const profile = credentialProfiles.get(request.credentialProfile);
-          const credential = String((profile.configValue
+          let credential = String((profile.configValue
             ? config[profile.configValue]
             : config.publicSourceCredentials?.[profile.configKey]) ?? "").trim();
+          // The deployment has none: the researcher's own, if they saved one.
+          // Deployment first, always — a personal key fills a gap, it does not
+          // override a deployment's decision about how a source is reached.
+          if (!credential && connectorCredentials && typeof identity?.userId === "string") {
+            credential = String(await connectorCredentials.resolveOwn(identity.userId, request.credentialProfile) ?? "").trim();
+          }
           if (!credential || credential.length > 8 * 1024 || /[\r\n\0]/.test(credential)) {
             throw gatewayError(
               503,
               `public_source_${request.credentialProfile.replaceAll("-", "_")}_credential_missing`,
-              `The server-managed ${request.credentialProfile} credential is unavailable.`,
+              `No ${request.credentialProfile} credential is configured for this deployment or this account; one can be added under 账户与额度 → 数据源凭据.`,
             );
           }
           if (profile.header) {

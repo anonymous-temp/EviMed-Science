@@ -156,6 +156,8 @@
 
 ### A. 硬阻断（代码与产品，我这边能推进的）
 
+> **2026-09-09 更新：A1 已决定并落地** ——保留内核自带的应用作为会话面，通过它的插槽系统换上 EviMed 品牌、以私有语言包强制中文、撤掉工作区选择器，托管权限表收成一行；我们自己那套 1,550 行的会话面已删除（建而可删）。**B5 部分闭合**：研究者现在可以在「账户与额度 → 数据源凭据」填入自己的 OpenGWAS 等凭据，登录后有一次提示；部署级密钥仍优先。**B8 已执行**：三个死实验账号与孤儿目录已删，两个账号各剩 default。
+
 - **A1 · 主会话面（P0-2 / P1-14 的那个产品决定）。** 真浏览器登录后 `/app/chat` 的中央区域是 DSH 内核自带的预览界面：鲸鱼 logo、「Into the Unknown · Preview」、英文占位「Describe what you want to build… / commands, @ files or sessions」、agent 下拉「Evimed Hosted」。研究者看到的第一屏是第三方开发者预览。两条路：把从未上路由的 `RunStreamSessionPage`（约 1,550 行、5 个测试文件全绿）接回来替代 iframe；或对 iframe 做语言与品牌覆盖（受 DSH 版本变化牵制）。**建议前者**——它同时把逐件交付物的裁决树（`DeliverableCard`/`RunTree`）带回给研究者。
 - **A2 · 能力验收覆盖。** `evals/acceptance-ledger.json`：accepted 2（adr-analysis、dataset-research-scoping）、failed 2（clinical-evidence-synthesis、meta-analysis）、never-run 11。今天电池跑 7 个（off-label、geo-content、evidence-appraisal、meta-analysis、bibliometric、manuscript-support、research-grant）；剩 peer-review（简报要稿件 PDF）、mendelian-randomization（OpenGWAS token）、research-topic-selection（harness 简报无 `capability` 字段）、clinical（等结构修法）。上线规则：**对外展示的每个能力至少一次 accepted，否则在 UI 标「测试中」或把 `visibility` 收起来**——检查表里「按钮存在、后台没有执行能力」的假上线就是这个。
 - **A3 · 部署即事故（P2-22 的未做部分 + P1-12）。** 控制面重启后不接管既有容器，在飞运行的网关 token 从内存表消失，以「认证失败」告终。今天无人使用所以无感；有真实用户后每次部署都会打断他们的运行。修法是 runtimeManager 的容器接管 + 控制器协议 6→7。

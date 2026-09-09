@@ -1,0 +1,34 @@
+{
+  "capability": "manuscript-support",
+  "brief": "ms-001-strobe-methods-retrospective-cohort",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-manuscript-support",
+  "session": "acc-manuscript-support-mttvdmgy",
+  "runId": "run_6450c24d7c5bb380eecd7c425129beee",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-09-09T09:19:08Z",
+  "prompt": "section: methods\nsources: 本院数据仓库导出的队列定义、数据字典与统计分析计划（二甲双胍用于合并 CKD 3 期的 2 型糖尿病患者，2019-01 至 2024-12，n=4,812），以及已确定的协变量清单\nreportingGuideline: STROBE（队列研究，22 条）\ntargetJournal: 《中华糖尿病杂志》\nwordBudget: 900–1200 字",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/methods-metformin-ckd3-strobe/citation-ledger.csv",
+      "deliverables/methods-metformin-ckd3-strobe/manuscript-section.md",
+      "deliverables/methods-metformin-ckd3-strobe/section-claims.json",
+      "delivery-summary.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "6 non-derived claim(s) have no row in citation-ledger.csv: CLM-001, CLM-002, CLM-003, CLM-004, CLM-005. The ledger is where a claim's quote is checked against the source it names.",
+      "review weakened: CLM-001 — 正文设计句作为草稿可接受，但主张台账的来源定性不准确：工作区题面文件 research-brief.md 无\"单中心/回顾性\"字样；task-plan.json 澄清2 记为\"假定研究为单中心回顾性队列研究\"而澄清1 又将其列入\"题面已给事实\"，计划澄清内部自相矛盾；section-claims.json 采\"任务题面给定事实\"标签，把假定记为既定事实。无文献可解析核验该设计，投稿前须以队列定义原文核对（其 uncertainty 字段已提示，但标签仍误导）。",
+      "review weakened: META-PLACEHOLDER-COUNT — delivery-summary 称\"正文 19 处〔待补〕占位\"，直接清点 manuscript-section.md 得 20 处（第3行×2、第5行×3、第7行×4、第9行×4、第11行×6、第13行×1）；revision-notes 第二节 19 条中第 2、3 条同指第 1 段同一括号，且第 3 条要求的\"数据提取日期\"在正文无对应占位。除非采用未说明的合并口径，19 与 20 不自洽，应修正为 20 处或明示计数口径。",
+      "review weakened: META-NO-MUTUAL-PRESUPPOSITION — revision-notes 第五节称第 3、5 段\"相互独立占位，避免相互预设\"，但正文占位脚手架本身预设了未给定架构：第 7 行\"未暴露对照人群的定义与确定方式\"、第 9 行\"如采用匹配设计\"、第 11 行\"组间比较…比例风险假定检验\"、第 7 行\"竞争风险的处理\"分别预设对照人群存在、两组比较与时间-事件结局模型；题面与澄清明确未交代对照结构与主要结局。占位未写成结论（成立），但脚手架并非中性，宜改为条件式表述（\"若研究含未暴露对照…按 SAP 原文\"）。"
+    ],
+    "effectiveAgentId": "manuscript-support",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1016928,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}

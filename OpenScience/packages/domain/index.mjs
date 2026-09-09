@@ -490,3 +490,12 @@ export {
   sourceUnderstandingSchema,
   validateSourceUnderstanding,
 } from './src/sourceUnderstanding.mjs'
+
+// connectorCredentials — 5 exports
+export {
+  CONNECTOR_CREDENTIALS,
+  CONNECTOR_CREDENTIAL_IDS,
+  connectorCredentialSpec,
+  connectorDeploymentSource,
+  validateConnectorCredentialValue,
+} from './src/connectorCredentials.mjs'

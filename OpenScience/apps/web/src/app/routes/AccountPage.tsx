@@ -5,6 +5,7 @@ import { describeWebUsageBudget, fetchWebMe, lastWebUsageBudgetRefusal } from "@
 import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
 import { WebAccountCard } from "@/components/settings/WebAccountCard";
 import { UsageCard } from "@/components/settings/UsageCard";
+import { ConnectorsCard } from "@/components/settings/ConnectorsCard";
 import { Card } from "@/components/ui/Card";
 
 export function AccountPage() {
@@ -80,6 +81,9 @@ export function AccountPage() {
         )}
 
         <UsageCard />
+        <div id="connectors">
+          <ConnectorsCard />
+        </div>
 
         <WebAccountCard onAccountDeleted={leaveHostedSession} onSignedOut={leaveHostedSession} />
 
