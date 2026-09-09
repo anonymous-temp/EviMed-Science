@@ -1,0 +1,147 @@
+{
+  "question": {
+    "population": "射血分数≥40%（含 HFmrEF 41–49% 与 HFpEF ≥50%）的慢性心力衰竭成人",
+    "intervention": "SGLT2 抑制剂（恩格列净、达格列净），加于常规治疗",
+    "comparator": "安慰剂（常规治疗基础上）",
+    "outcomes": [
+      "心衰住院（含首次事件与首发+复发总体事件；本表将其作为“心衰再住院”的操作化结局）",
+      "心血管死亡",
+      "全因死亡"
+    ],
+    "appraisalNote": "本表按 GRADE 的风险偏倚、间接性、不精确性等领域与 high/moderate/low/very-low 四档阶梯对给定研究做描述性评价，不是经认证的 GRADE 或其他工具评定；每一档都来自起始等级减去/加上步数的算术。本表不做效应量合并，不给出用药建议。"
+  },
+  "studies": [
+    {
+      "id": "empero-preserved",
+      "name": "EMPEROR-Preserved（恩格列净）",
+      "identifier": { "type": "nct", "value": "NCT03057951" },
+      "publications": [
+        { "type": "doi", "value": "10.1056/NEJMoa2107038", "role": "primary" },
+        { "type": "pmid", "value": "34449189", "role": "primary" },
+        { "type": "doi", "value": "10.1161/CIRCULATIONAHA.121.056824", "role": "companion" },
+        { "type": "doi", "value": "10.1038/s41591-022-02041-5", "role": "companion" }
+      ],
+      "design": "randomized-controlled-trial",
+      "designNote": "双盲、安慰剂对照、事件驱动的 III 期随机对照试验；恩格列净 10 mg 每日一次对比安慰剂，加于常规治疗；共 5,988 例（恩格列净 2,997，安慰剂 2,991）；意向治疗分析。",
+      "populationNote": "慢性心衰、NYHA II–IV、LVEF>40%、NT-proBNP 升高，且合并入组前 12 个月内因心衰住院或超声提示结构异常（左房扩大或左室肥厚）；除外既往稳定状态下 LVEF≤40% 的患者。中位随访 26.2 个月（IQR 18.1–33.1）。",
+      "riskOfBias": "low",
+      "riskOfBiasReason": "随机、双盲、安慰剂对照；心衰住院等事件经设盲的独立终点委员会裁定（伙伴分析明确报告 adjudicated heart failure hospitalizations）；分析遵循意向治疗原则。NEJM 主文仅能核实至出版方摘要，具体失访比例与依从性表未能逐项复核，但在可获取的记录中未见分组隐匿、结局测量或选择性报告方面的已知偏倚环节。",
+      "indirectness": "low",
+      "indirectnessReason": "人群（LVEF>40% 的慢性心衰、NYHA II–IV、需合并 NP 升高与结构异常或近期心衰住院）与所问人群直接对应：试验界值写作 >40%，与题面 ≥40% 的差异只是写法（试验中 2 例基线 LVEF 40% 的患者被归入 41–49% 组）；干预为恩格列净 10 mg 每日一次对比安慰剂；结局为裁定后的心衰住院、心血管死亡、全因死亡等直接临床结局，无替代终点。",
+      "imprecision": "moderate",
+      "imprecisionReason": "对心衰住院结局区间窄且排除无效：主复合终点（心血管死亡或首次心衰住院）HR 0.79（95% CI 0.69–0.90）、总体（首发+复发）心衰住院 HR 0.73（95% CI 0.61–0.88）；对死亡结局则不精确：EF≥50% 亚组心血管死亡 HR 0.89（95% CI 0.70–1.13）、全因死亡 HR 1.02（95% CI 0.86–1.21），41–49% 组亦相似，区间均跨 1。",
+      "appraised": true
+    },
+    {
+      "id": "deliver",
+      "name": "DELIVER（达格列净）",
+      "identifier": { "type": "nct", "value": "NCT03619213" },
+      "publications": [
+        { "type": "doi", "value": "10.1056/NEJMoa2206286", "role": "primary" },
+        { "type": "pmid", "value": "36027570", "role": "primary" },
+        { "type": "doi", "value": "10.1002/ejhf.2249", "role": "companion" },
+        { "type": "doi", "value": "10.1001/jamacardio.2023.0711", "role": "companion" }
+      ],
+      "design": "randomized-controlled-trial",
+      "designNote": "国际多中心、平行组、事件驱动、随机、双盲、安慰剂对照试验；达格列净 10 mg 每日一次对比安慰剂，加于常规治疗；共 6,263 例（达格列净 3,131，安慰剂 3,132）；意向治疗分析。",
+      "populationNote": "慢性心衰、LVEF>40%、NYHA II–IV，需同时满足利钠肽升高与结构心脏病证据（左房扩大或左室肥厚）；门诊及住院/出院后 30 天内患者均可入选；允许既往曾为 LVEF≤40% 后改善的患者。中位随访 2.3 年（IQR 1.7–2.8）。",
+      "riskOfBias": "low",
+      "riskOfBiasReason": "随机、双盲、安慰剂对照；随机化经交互式语音/网络系统以平衡区组分配并按糖尿病状态分层；独立心血管终点委员会对死亡分类并设盲裁定非致死心血管事件（设计论文明确报告）；分析遵循意向治疗原则。主文仅能核实至出版方摘要，失访与依从细节未逐项复核，但未见已知的偏倚环节。",
+      "indirectness": "low",
+      "indirectnessReason": "人群（LVEF>40% 的慢性心衰，NP 升高加结构异常，含 HFmrEF 与 HFpEF）与所问人群直接对应；干预为达格列净 10 mg 每日一次对比安慰剂；结局为心衰住院、总心衰事件、心血管死亡、全因死亡等直接临床结局并经设盲裁定。轻微差异：试验允许出院后 30 天内（亚急性）患者入选并纳入紧急心衰就诊事件，与“慢性门诊心衰”存在细微错位，但不改变判断。",
+      "imprecision": "moderate",
+      "imprecisionReason": "对心衰住院结局区间窄且排除无效：主要复合终点 HR 0.82（95% CI 0.73–0.92）、总（首发+复发）心衰事件 RR 0.73（95% CI 0.62–0.87）；对死亡结局不精确：心血管死亡 HR 0.88（95% CI 0.74–1.05），全因死亡 RR 0.93（95% CI 0.81–1.06），区间跨 1。",
+      "appraised": true
+    }
+  ],
+  "bodies": [
+    {
+      "id": "b-hf-hospitalization",
+      "outcome": "心衰住院（心衰再住院；首发与总体复发事件）",
+      "studies": ["empero-preserved", "deliver"],
+      "startingCertainty": "high",
+      "downgrades": [
+        {
+          "domain": "riskOfBias",
+          "steps": 0,
+          "reason": "两试验均为双盲安慰剂对照 RCT、事件设盲裁定、意向治疗分析；已考虑但未降级（可获取记录中未见系统性偏倚环节）。"
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 0,
+          "reason": "两试验效应方向与幅度一致（EMPEROR-Preserved 总体首发+复发心衰住院 HR 0.73，95% CI 0.61–0.88；DELIVER 总心衰事件 RR 0.73，95% CI 0.62–0.87），且均未见按 LVEF 的治疗异质性；已考虑但未降级。"
+        },
+        {
+          "domain": "indirectness",
+          "steps": 0,
+          "reason": "人群、干预、对照与结局均直接对应所问问题；已考虑但未降级。"
+        },
+        {
+          "domain": "imprecision",
+          "steps": 0,
+          "reason": "两试验该结局区间窄且排除无效，效应量足以支持临床决策；已考虑但未降级。"
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "证据体为两项大规模注册临床试验及其预设汇总，未见小样本阳性研究群而缺阴性研究的形态；已考虑但未降级。"
+        }
+      ],
+      "upgrades": [],
+      "certainty": "high",
+      "whatWouldChange": "若未来更大规模试验或个体水平汇总显示总心衰住院效应明显衰减（如 EF≥60% 亚组此前提示的减弱趋势被证实并扩大到总体），或新证据显示两药效应不一致，则确定性可能下调。"
+    },
+    {
+      "id": "b-cv-death",
+      "outcome": "心血管死亡",
+      "studies": ["empero-preserved", "deliver"],
+      "startingCertainty": "high",
+      "downgrades": [
+        {
+          "domain": "imprecision",
+          "steps": 1,
+          "reason": "两个试验在 EF>40% 人群中该结局的估计均未达统计学显著且 95% CI 跨 1：EMPEROR-Preserved EF≥50% 组 HR 0.89（95% CI 0.70–1.13）、41–49% 组 HR 0.92（95% CI 0.69–1.22）；DELIVER HR 0.88（95% CI 0.74–1.05）。EF>40% 研究的汇总亦跨 1（HR 0.92，95% CI 0.81–1.03），无法排除无获益或仅小幅获益。"
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 0,
+          "reason": "两试验点估计方向一致（约 0.88–0.92），跨全射血分数谱的个体水平汇总未显示按 EF 的异质性；已考虑但未降级。"
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "证据体为两项大规模注册试验及预设汇总；已考虑但未降级。"
+        }
+      ],
+      "upgrades": [],
+      "certainty": "moderate",
+      "whatWouldChange": "目前心血管死亡的统计学显著结果主要来自跨全射血分数谱（含 HFrEF）的合并分析；若出现对 EF≥40% 人群有足够把握度的个体水平汇总，或事件数更多的针对性试验显示 CI 上界低于 1，则确定性可上调，反之若更大样本显示 CI 更宽则下调。"
+    },
+    {
+      "id": "b-allcause-death",
+      "outcome": "全因死亡",
+      "studies": ["empero-preserved", "deliver"],
+      "startingCertainty": "high",
+      "downgrades": [
+        {
+          "domain": "imprecision",
+          "steps": 1,
+          "reason": "两试验估计均未达统计学显著且区间跨 1：EMPEROR-Preserved EF≥50% 组 HR 1.02（95% CI 0.86–1.21）、41–49% 组 HR 0.96（95% CI 0.78–1.19）；DELIVER 全因死亡率比 0.93（95% CI 0.81–1.06）。EF>40% 汇总为 0.97（95% CI 0.89–1.06）：基本排除大于约 10% 的相对获益，但未能证实降低。"
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 0,
+          "reason": "两试验点估计均接近无效且方向一致；已考虑但未降级。"
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "证据体为两项大规模注册试验及预设汇总；已考虑但未降级。"
+        }
+      ],
+      "upgrades": [],
+      "certainty": "moderate",
+      "whatWouldChange": "若出现针对 EF≥40% 人群的更大规模试验或个体水平汇总显示全因死亡 CI 上界明确低于 1，则可上调；若进一步确认效应接近无效且 CI 更窄，则对“未证实降低”的把握将更强，评级逻辑仍按不精确性领域处理。"
+    }
+  ]
+}

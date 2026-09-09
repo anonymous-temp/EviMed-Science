@@ -1,0 +1,28 @@
+{
+  "capability": "meta-analysis",
+  "brief": "ma-001-tranexamic-acid-tka",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-meta-analysis",
+  "session": "acc-meta-analysis-mttrv7lr",
+  "runId": "run_5d6961d5b88d2f39299c618a3ad3f4eb",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-09-09T11:44:24Z",
+  "prompt": "topic: 氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析\npopulation: 接受初次单侧全膝关节置换术的成年患者\nintervention: 氨甲环酸（静脉、局部或联合给药）\ncomparator: 安慰剂或不使用氨甲环酸\noutcomes: [\"总失血量\",\"输血率\",\"症状性静脉血栓栓塞事件\"]\nstudyDesign: 随机对照试验\nanalysisType: pairwise",
+  "outcome": {
+    "status": "failed",
+    "errorCode": "runtime_monitor_timeout",
+    "verification": null,
+    "artifacts": [],
+    "unverifiedArtifacts": [
+      "deliverables/txa-tka-meta/meta-analysis-run.json"
+    ],
+    "qualityNotices": [
+      "这次运行没有通过交付前的质量门，因此下面的文件标记为「未经核验」——它们是运行真实写出来的成果，没有被删除，可以直接查看和取用，只是还没有拿到质量门的通过判定。上面的退回理由说明了差在哪里；按它修好后重新提交，同一份成果就会变成已核验。"
+    ],
+    "effectiveAgentId": "meta-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 15630215,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}
