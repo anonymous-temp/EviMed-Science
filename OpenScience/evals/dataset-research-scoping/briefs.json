@@ -30,7 +30,11 @@
         "Deliver a portfolio that is mostly descriptive designs without saying which of the analysis families were ruled out and on what evidence.",
         "Cite a work in evidence-map.md whose 「Used for」 cell cannot name a sentence that depends on it."
       ],
-      "gradedOn": "Whether the researcher can hand research-portfolio.md to a colleague and have them execute one design from it without asking a question, and whether every number in data-profile.md regenerates by running data-profile.py again."
+      "gradedOn": "Whether the researcher can hand research-portfolio.md to a colleague and have them execute one design from it without asking a question, and whether every number in data-profile.md regenerates by running data-profile.py again.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "scoping-002-five-patient-schema-sample",
@@ -57,7 +61,11 @@
         "Write the pseudonym mapping into a working file, a JSON scratch file or a script's stdout.",
         "Deliver a portfolio of two descriptive audits and call the dataset limited."
       ],
-      "gradedOn": "Whether the delivered package would still be the right package once the full census arrives behind the same schema — and whether a scan of every file left in the workspace finds a single source identifier."
+      "gradedOn": "Whether the delivered package would still be the right package once the full census arrives behind the same schema — and whether a scan of every file left in the workspace finds a single source identifier.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "scoping-003-coded-frequency-no-administration-time",
@@ -85,7 +93,11 @@
         "Leave any analysis family in the Phase 4b list marked 「未考虑」.",
         "Repair immortal time bias with a later statistical adjustment instead of naming the missing field."
       ],
-      "gradedOn": "Whether every ❌ in feasibility-matrix.md is backed by a number showing the gap binds, and whether the run computed the derived quantities before deciding what was impossible rather than after."
+      "gradedOn": "Whether every ❌ in feasibility-matrix.md is backed by a number showing the gap binds, and whether the run computed the derived quantities before deciding what was impossible rather than after.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "scoping-004-empty-join-key-and-a-settled-question",
@@ -113,7 +125,11 @@
         "Keep the original question alive by narrowing it without naming the exact axis of difference from the closest published work.",
         "Deliver a bibliography whose rows all come from one specialty and one channel."
       ],
-      "gradedOn": "Whether the empty join key appears as a numbered finding that visibly removes designs from the matrix rather than as a sentence in a data-quality paragraph, and whether the novelty ledger names the works that make the original question not worth doing."
+      "gradedOn": "Whether the empty join key appears as a numbered finding that visibly removes designs from the matrix rather than as a sentence in a data-quality paragraph, and whether the novelty ledger names the works that make the original question not worth doing.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

@@ -21,7 +21,11 @@
         "Do not recommend omics acquisition as already feasible",
         "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
         "Distinguish proposed hypotheses and registered plans from established findings"
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-05",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "sparse-evidence",
@@ -49,7 +53,11 @@
         "Do not manufacture sample size or novelty scores",
         "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
         "Distinguish proposed hypotheses and registered plans from established findings"
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-05",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "already-answered-novelty-trap",
@@ -74,7 +82,11 @@
         "Do not replace an answered question with invented novelty or a numeric score",
         "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
         "Distinguish proposed hypotheses and registered plans from established findings"
-      ]
+      ],
+      "generated": {
+        "authoredAt": "2026-09-05",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }

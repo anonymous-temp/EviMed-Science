@@ -27,7 +27,11 @@
         "Round the corpus size in prose while the run file carries the exact number.",
         "State an efficacy, effect size or evidence-certainty conclusion about the medicines anywhere in the report."
       ],
-      "gradedOn": "Whether a second analyst can re-run the exact query on the stated date range and land on the same corpus size, and whether every figure in the report has a named artifact behind it."
+      "gradedOn": "Whether a second analyst can re-run the exact query on the stated date range and land on the same corpus size, and whether every figure in the report has a named artifact behind it.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "biblio-002-tcm-injection-adr-one-index",
@@ -51,7 +55,11 @@
         "Convert a low English-language publication count into a statement that the field is under-researched.",
         "Draw any conclusion about whether the injections are safe."
       ],
-      "gradedOn": "Whether the coverage limit sits in the sentences that carry the numbers rather than in a limitations paragraph at the end — a country ranking with a caveat three pages later is still a country ranking."
+      "gradedOn": "Whether the coverage limit sits in the sentences that carry the numbers rather than in a limitations paragraph at the end — a country ranking with a caveat three pages later is still a country ranking.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "biblio-003-antihypertensive-value-ranking",
@@ -76,7 +84,11 @@
         "Assign an evidence level or a quality score to any record from bibliometric metadata.",
         "Recommend a drug class, a first-line choice or a research investment."
       ],
-      "gradedOn": "Whether the deliverable is useful to the person who asked while declining the ordering they asked for, and whether any table in it can be read as a value ranking with the caption removed."
+      "gradedOn": "Whether the deliverable is useful to the person who asked while declining the ordering they asked for, and whether any table in it can be read as a value ranking with the caption removed.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     },
     {
       "id": "biblio-004-semaglutide-alzheimer-thin-corpus",
@@ -101,7 +113,11 @@
         "Read a rising count over a handful of papers a year as an established growth trend.",
         "Predict whether the trials will succeed, or state anything about efficacy in dementia."
       ],
-      "gradedOn": "Whether the set of sections in bibliometric-analysis-report.md matches the set of modules the job actually completed, and whether the record count in prose equals the one in the run file."
+      "gradedOn": "Whether the set of sections in bibliometric-analysis-report.md matches the set of modules the job actually completed, and whether the record count in prose equals the one in the run file.",
+      "generated": {
+        "authoredAt": "2026-09-07",
+        "authoredAtSource": "first-commit"
+      }
     }
   ]
 }
