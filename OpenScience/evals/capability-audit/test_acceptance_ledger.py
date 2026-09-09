@@ -311,10 +311,14 @@ class RealLedgerTests(unittest.TestCase):
     def test_coverage_notice_reports_the_real_counts(self):
         document = checker.load_ledger(REPO)
         statuses = [row["realDelivery"]["status"] for row in document["capabilities"]]
-        # The ledger is a record, not a target: most rows are honestly "not-run"
-        # today, and this test exists so a future edit that flips rows to
-        # "accepted" has to change a number here on purpose.
-        self.assertGreater(statuses.count("not-run"), len(statuses) // 2)
+        # The ledger is a record, not a target, and this line exists so an edit
+        # that flips rows has to change a number here on purpose. On 2026-09-09
+        # the acceptance battery ran on the deployed product and half the rows
+        # stopped being "not-run": six accepted, three failed with their
+        # packages kept, nine still never run (three of them internal).
+        self.assertEqual(statuses.count("not-run"), 9)
+        self.assertEqual(statuses.count("accepted"), 6)
+        self.assertEqual(statuses.count("failed"), 3)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -333,8 +337,9 @@ class RealLedgerTests(unittest.TestCase):
         capability — so it moved to relatedEvidence, which is where this ledger
         already puts a succeeded managed engine job.
 
-        off-label-analysis, manuscript-support and evidence-appraisal joined on
-        2026-09-09 (the last on the release carrying its skill fix): each
+        off-label-analysis, manuscript-support, evidence-appraisal and
+        research-grant-development joined on 2026-09-09 (the last two on the
+        release carrying their skill fixes): each
         is one dispatch of its own first brief through `capability-acceptance`
         against `evimed-20260909-c7434fb` on a clean project, ended
         succeeded/accepted by the delivery gate, with the package kept under
@@ -346,7 +351,7 @@ class RealLedgerTests(unittest.TestCase):
             row["id"] for row in document["capabilities"]
             if row["realDelivery"]["status"] == "accepted"
         )
-        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis"])
+        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis", "research-grant-development"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":
