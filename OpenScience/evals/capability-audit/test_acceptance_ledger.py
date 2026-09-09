@@ -333,7 +333,8 @@ class RealLedgerTests(unittest.TestCase):
         capability — so it moved to relatedEvidence, which is where this ledger
         already puts a succeeded managed engine job.
 
-        off-label-analysis and manuscript-support joined on 2026-09-09: each
+        off-label-analysis, manuscript-support and evidence-appraisal joined on
+        2026-09-09 (the last on the release carrying its skill fix): each
         is one dispatch of its own first brief through `capability-acceptance`
         against `evimed-20260909-c7434fb` on a clean project, ended
         succeeded/accepted by the delivery gate, with the package kept under
@@ -345,7 +346,7 @@ class RealLedgerTests(unittest.TestCase):
             row["id"] for row in document["capabilities"]
             if row["realDelivery"]["status"] == "accepted"
         )
-        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping", "manuscript-support", "off-label-analysis"])
+        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

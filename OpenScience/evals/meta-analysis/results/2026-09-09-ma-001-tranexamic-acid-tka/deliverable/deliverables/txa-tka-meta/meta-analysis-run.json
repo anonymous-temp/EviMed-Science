@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "deliverableId": "txa-tka-meta",
+  "jobId": "meta-20260909073421-16bb43539b25",
+  "jobStatus": "running",
+  "terminal": false,
+  "releaseStatus": null,
+  "outputLanguage": "zh",
+  "analysisType": null,
+  "maxPapers": 150,
+  "projectRelativePath": null,
+  "artifacts": [],
+  "warnings": [],
+  "blockers": [],
+  "notes": "交付物尚未完成：托管 MetaAgent 任务仍在运行，本文件为运行台账的中间态，数值与状态在任务终态后更新。",
+  "retrievedAt": null,
+  "previousAttempts": [
+    {
+      "jobId": "meta-20260909072435-ed554342c259",
+      "status": "failed",
+      "reason": "analysisType=pairwise 被映射进 study design 槽位，intervention_rct 注册表不支持设计记号 pairwise（MethodCompilationError）。非方法学不支持，属参数映射问题。",
+      "attempt": 1
+    },
+    {
+      "jobId": "meta-20260909072606-5d4bed547b30",
+      "status": "failed",
+      "reason": "题目中「三臂试验按 pairwise 拆分」的表述被规划器归类为设计记号 three_arm_trials_split_into_pairwise_comparisons，注册表不支持。",
+      "attempt": 2
+    },
+    {
+      "jobId": "meta-20260909072801-9494858a4679",
+      "status": "failed",
+      "reason": "结局措辞被规划器拼入 effect measure 字段（MD_FOR_CONTINUOUS_OUTCOMES_..._RR_FOR_DICHOTOMOUS_OUTCOMES_...），intervention_rct 注册表不支持该复合记号。",
+      "attempt": 3
+    }
+  ]
+}
