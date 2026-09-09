@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CapabilitiesPage, capabilityBrief } from "./CapabilitiesPage";
-import { useUiStore } from "@/lib/store";
 
 const agents = [
   {
@@ -92,7 +91,6 @@ describe("CapabilitiesPage", () => {
     mocks.listWebResearchAgents.mockReset();
     mocks.listWebResearchAgents.mockResolvedValue(agents);
     mocks.hasWebApi = true;
-    useUiStore.setState({ composerDraft: null });
   });
 
   it("points desktop users to the hosted workspace instead of an empty catalog", () => {
@@ -184,7 +182,6 @@ describe("CapabilitiesPage", () => {
     expect(intent).toMatchObject({ kind: "create", projectId: "default" });
     expect(intent.sessionId).toBeTruthy();
     expect(intent.requestId).toBeTruthy();
-    expect(useUiStore.getState().composerDraft).toBeNull();
     const draft = intent.draft;
     expect(draft).toContain("药品安全性分析");
     expect(draft).toContain("分析奥希替尼相关的心脏安全性信号");

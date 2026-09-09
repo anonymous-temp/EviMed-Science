@@ -15,7 +15,8 @@
     "./package.json": "./package.json",
     "./runtime-ui-transport": "./src/runtimeUiTransport.mjs",
     "./runtime-ui-bridge": "./src/runtimeUiBridge.mjs",
-    "./compaction": "./src/compaction.mjs"
+    "./compaction": "./src/compaction.mjs",
+    "./runtime-ui-shell": "./src/runtimeUiShell.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

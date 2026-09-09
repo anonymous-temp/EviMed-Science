@@ -279,14 +279,12 @@ function HostedRunsView() {
   /**
    * "复查与复现" — drafted into the session surface that actually reads it.
    *
-   * This used to call `setComposerDraft` and navigate. The only reader of
-   * `composerDraft` is the unrouted `components/thread/Composer`, so the draft
-   * was written to a store nothing reads and the researcher landed on an empty
-   * runtime chat: a button whose tooltip promised a drafted prompt and which
-   * silently did nothing. The channel that works already ships —
-   * `runtimeUiIntent` in the navigation state, forwarded by RuntimeUiFrame and
-   * applied by the harness bridge's `setDraft` — and CapabilitiesPage has been
-   * using it. Reuse it rather than resurrecting a second composer.
+   * This used to write a store field only our own, never-routed composer read
+   * (deleted 2026-09-09 with the rest of that surface), so the draft went
+   * nowhere and the researcher landed on an empty runtime chat: a button whose
+   * tooltip promised a drafted prompt and which silently did nothing. The
+   * channel that works is `runtimeUiIntent` in the navigation state, forwarded
+   * by RuntimeUiFrame and applied by the harness bridge's `setDraft`.
    */
   const reproduce = (run: WebAgentRun) => {
     const activeAgent = run.effectiveAgentId ?? run.agentId;

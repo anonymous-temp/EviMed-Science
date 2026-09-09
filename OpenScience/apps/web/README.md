@@ -12,14 +12,14 @@ client (`packages/sdk`) were deleted on 2026-09-04, so this is the whole client.
   redirects), `layout/AppShell.tsx` (auth gate, sidebar, palette),
   `routes/` (one file per page), `providers/`.
 - `src/components/` — `sidebar/` (nav, project switcher), `run/` (the run
-  ledger's cards and the side panel beside the conversation), `thread/`,
+  ledger's cards and the side panel beside the conversation),
   `notebook/`, `inspector/` (scientific file previews), `settings/` (the cards
   the settings and account pages compose), `cards/`, `command-palette/`,
   `code-viewer/`, `markdown-viewer/`, `ui/` (the primitives).
 - `src/lib/` — `apiClient.ts` (the only place an HTTP call to the control plane
   is made), `projects.ts` (which project the shell is looking at), `backend.ts`
-  (the command endpoint), `runStream.ts` + `useRunStream.ts` (the run event
-  stream), `store.ts` (UI preferences), plus the scientific file parsers.
+  (the command endpoint), `store.ts` (UI preferences), plus the scientific
+  file parsers.
 
 ## The session surface
 

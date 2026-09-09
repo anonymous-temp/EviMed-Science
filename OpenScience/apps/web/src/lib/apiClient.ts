@@ -8,8 +8,6 @@
  */
 import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage } from "@evimed/domain";
 
-import type { RunTranscript } from "@/lib/runStream";
-
 const rawWebApiBase = import.meta.env.VITE_OPEN_SCIENCE_API_URL?.trim() ?? "";
 
 export const webApiBase = rawWebApiBase.replace(/\/+$/, "");
@@ -1313,25 +1311,6 @@ export async function dispatchWebAgentRun(
   return parseApiResponse<WebAgentRun>(res);
 }
 
-
-/**
- * One run's transcript, in the control plane's own vocabulary.
- *
- * Fetched before the event stream opens, because the stream's replay buffer is
- * bounded: a run that started before this page did would otherwise render as an
- * empty thread that claims to be live.
- */
-export async function fetchWebRunTranscript(sessionId: string): Promise<RunTranscript | null> {
-  if (!hasWebApi) return null;
-  const res = await fetchWithWebAuth(
-    apiUrl(`/runtime/sessions/${encodeURIComponent(sessionId)}/transcript`),
-    { headers: { "X-Open-Science-Project": getWebProjectId() } },
-  );
-  // A session the kernel has not created yet has produced nothing; that is the
-  // baseline every run starts from, not a failure.
-  if (res.status === 404) return null;
-  return parseApiResponse<RunTranscript>(res);
-}
 
 /**
  * Report what the researcher did with a deliverable.

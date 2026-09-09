@@ -49,6 +49,10 @@ export const TOOL_UNIVERSE_SERVER_NAME = "tooluniverse";
 /** The permission preset a hosted deployment runs under: confined *and*
  *  unattended, which is a pair the kernel does not ship. */
 export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
+/** What the composer's access-mode chip shows for it. The product face is
+ *  Chinese; the id stays the kernel-facing English identifier. */
+export const HOSTED_PERMISSION_PRESET_NAME = "项目工作区";
+export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工作区；任何离开工作区的操作都会被拒绝。";
 
 /**
  * @typedef {object} ProfilePatchInput
@@ -362,30 +366,37 @@ function presetRows(input) {
     "# because inside the sandbox nothing needs approval and the only things",
     "# that ask are attempts to leave it, which an unattended run should refuse.",
     "#",
-    "# The table is replaced wholesale rather than extended, so the three shipped",
-    "# rows are restated here; dropping one would remove a preset a user could",
-    "# otherwise select.",
+    "# The table is replaced wholesale rather than extended. A local profile",
+    "# restates the three shipped rows so a person keeps every preset they could",
+    "# otherwise select. A hosted profile holds ONE: the browser's composer",
+    "# offers every row of this table as an access mode, and the switch travels",
+    "# as a `/permission <id>` command through the same prompt path a research",
+    "# question takes — so a table that listed `danger-full-access` was a menu",
+    "# item away from an unconfined sandbox, behind nothing but a checkbox.",
+    "# The runtime-UI deny list never covered it, because it is not an API",
+    "# method. With one row there is nothing to switch to.",
     "- id: permission",
     "  config:",
     "    presets:",
-    "      read-only:",
-    "        sandbox: read-only",
-    "        approval: ask",
-    "      workspace-write:",
-    "        sandbox: workspace-write",
-    "        approval: ask",
-    "      danger-full-access:",
-    "        sandbox: danger-full-access",
-    "        approval: never",
     ...(input.flags.hosted
       ? [
           `      ${HOSTED_PERMISSION_PRESET}:`,
           "        sandbox: workspace-write",
           "        approval: never",
-          `        name: ${yamlScalar(HOSTED_PERMISSION_PRESET)}`,
-          "        description: 'Confined to the workspace, and refuses anything that asks to leave it.'",
+          `        name: ${yamlScalar(HOSTED_PERMISSION_PRESET_NAME)}`,
+          `        description: ${yamlScalar(HOSTED_PERMISSION_PRESET_DESCRIPTION)}`,
         ]
-      : []),
+      : [
+          "      read-only:",
+          "        sandbox: read-only",
+          "        approval: ask",
+          "      workspace-write:",
+          "        sandbox: workspace-write",
+          "        approval: ask",
+          "      danger-full-access:",
+          "        sandbox: danger-full-access",
+          "        approval: never",
+        ]),
     `    defaultPreset: ${yamlScalar(input.flags.hosted ? HOSTED_PERMISSION_PRESET : "workspace-write")}`,
   ];
 }

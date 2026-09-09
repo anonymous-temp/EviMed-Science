@@ -174,11 +174,11 @@ describe("RunsPage (hosted web)", () => {
   });
 
   /**
-   * "复查与复现" used to write `composerDraft` and navigate. The only reader of
-   * that store field is the unrouted `components/thread/Composer`, so the
-   * draft went nowhere and the researcher landed on an empty runtime chat —
-   * a button whose tooltip promised a drafted prompt and which did nothing.
-   * The intent channel is the one that already ships and is already read.
+   * "复查与复现" used to write a store field only our own, never-routed
+   * composer read (deleted with that surface), so the draft went nowhere and
+   * the researcher landed on an empty runtime chat — a button whose tooltip
+   * promised a drafted prompt and which did nothing. The intent channel is
+   * the one the kernel's application actually reads.
    */
   it("hands 复查与复现 to the session surface that actually reads the draft", async () => {
     renderPage();

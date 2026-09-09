@@ -51,7 +51,6 @@ interface UiState {
   paletteOpen: boolean;
   /** One-shot text placed into the composer by another surface (e.g. the
    *  provenance Reproduce action) — consumed on the next composer render. */
-  composerDraft: string | null;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setInspectorOpen: (open: boolean) => void;
@@ -61,7 +60,6 @@ interface UiState {
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
   setPaletteOpen: (open: boolean) => void;
-  setComposerDraft: (draft: string | null) => void;
 }
 
 export const useUiStore = create<UiState>((set, get) => ({
@@ -104,6 +102,4 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ sidebarWidth });
   },
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-  composerDraft: null,
-  setComposerDraft: (composerDraft) => set({ composerDraft }),
 }));

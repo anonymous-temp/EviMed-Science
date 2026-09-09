@@ -1,9 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProvenanceRecord } from "@ai4s/shared";
-import { useUiStore } from "@/lib/store";
 import { ProvenancePanel, reproducePrompt } from "./ProvenancePanel";
 
 const records: ProvenanceRecord[] = [
@@ -32,10 +31,23 @@ vi.mock("@/lib/provenance", () => ({
   readEnvLockfile: (hash: string) => readEnvLockfile(hash),
 }));
 
+/** Where the panel navigated and what it carried: the draft must reach the
+ *  channel the kernel's application reads, not a store nothing reads. */
+function NavProbe() {
+  const location = useLocation();
+  return (
+    <>
+      <div data-testid="location">{location.pathname}</div>
+      <div data-testid="nav-state">{JSON.stringify(location.state ?? null)}</div>
+    </>
+  );
+}
+
 const renderPanel = () =>
   render(
     <MemoryRouter>
       <ProvenancePanel path="fig/plot.py" language="python" />
+      <NavProbe />
     </MemoryRouter>,
   );
 
@@ -73,14 +85,18 @@ describe("ProvenancePanel", () => {
 
   it("shows the recorded environment and drafts a reproduce prompt", async () => {
     listProvenance.mockResolvedValue(records);
-    useUiStore.setState({ composerDraft: null });
     renderPanel();
 
     // Latest version (expanded) shows its captured environment.
     expect(await screen.findByText("py 3.12.4 · macos-aarch64 · app 0.1.0")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /复现/ }));
-    const draft = useUiStore.getState().composerDraft;
+    // The draft rides the navigation state as a runtime-UI intent on the
+    // version's own session; the bridge inside the kernel's page reads it.
+    const state = JSON.parse(screen.getByTestId("nav-state").textContent || "null");
+    expect(screen.getByTestId("location")).toHaveTextContent(`/app/chat/${records[records.length - 1].sessionId}`);
+    expect(state.runtimeUiIntent.kind).toBe("open");
+    const draft: string = state.runtimeUiIntent.draft;
     expect(draft).toContain("复现 `fig/plot.py`（来源记录 v2）");
     expect(draft).toContain("Python 3.12.4");
     expect(draft).toContain("print(2)");

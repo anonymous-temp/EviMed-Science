@@ -262,8 +262,18 @@ test("the composed sandbox and approval pair is a named preset, hosted or not", 
   const hosted = renderProfilePatch(input);
   assert.match(hosted, /policy: 'never'/);
   assert.match(hosted, new RegExp(`defaultPreset: '${HOSTED_PERMISSION_PRESET}'`));
-  const presetBlock = hosted.slice(hosted.indexOf("- id: permission"));
+  const presetBlock = hosted.slice(hosted.indexOf("- id: permission"), hosted.indexOf("defaultPreset:"));
   assert.match(presetBlock, new RegExp(`${HOSTED_PERMISSION_PRESET}:\\n\\s+sandbox: workspace-write\\n\\s+approval: never`));
+  // One row, and only one. The composer offers every row of this table as an
+  // access mode and switches by a `/permission <id>` command on the prompt
+  // path, which no runtime-UI method rule sees; a hosted table that also
+  // listed the shipped `danger-full-access` put an unconfined sandbox one
+  // menu item and one checkbox away from any browser (found 2026-09-09).
+  const rows = [...presetBlock.matchAll(/^ {6}([a-z-]+):$/gm)].map((match) => match[1]);
+  assert.deepEqual(rows, [HOSTED_PERMISSION_PRESET]);
+  assert.doesNotMatch(presetBlock, /danger-full-access|read-only|workspace-write:/);
+  // The chip shows the name; the product face is Chinese.
+  assert.match(presetBlock, /name: '项目工作区'/);
 
   const local = renderProfilePatch({ ...input, flags: { ...input.flags, hosted: false } });
   assert.match(local, /policy: 'ask'/);

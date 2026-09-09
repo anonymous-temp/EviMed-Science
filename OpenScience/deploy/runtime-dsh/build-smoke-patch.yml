@@ -127,26 +127,18 @@
 # because inside the sandbox nothing needs approval and the only things
 # that ask are attempts to leave it, which an unattended run should refuse.
 #
-# The table is replaced wholesale rather than extended, so the three shipped
-# rows are restated here; dropping one would remove a preset a user could
-# otherwise select.
+# The table is replaced wholesale rather than extended, and a hosted profile
+# holds ONE row: the browser's composer offers every row as an access mode,
+# switched by a `/permission <id>` command on the prompt path, so a second row
+# is a second sandbox a user can pick. With one row there is nothing to pick.
 - id: permission
   config:
     presets:
-      read-only:
-        sandbox: read-only
-        approval: ask
-      workspace-write:
-        sandbox: workspace-write
-        approval: ask
-      danger-full-access:
-        sandbox: danger-full-access
-        approval: never
       evimed-hosted:
         sandbox: workspace-write
         approval: never
-        name: 'evimed-hosted'
-        description: 'Confined to the workspace, and refuses anything that asks to leave it.'
+        name: '项目工作区'
+        description: '只能读写本项目的工作区；任何离开工作区的操作都会被拒绝。'
     defaultPreset: 'evimed-hosted'
 
 # Panels the hosted browser application does not show; see
