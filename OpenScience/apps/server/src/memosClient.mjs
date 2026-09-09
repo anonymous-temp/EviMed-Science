@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
 
 const internalTagPattern = /^#evimed-user-[a-f0-9]{24}$/gm;
@@ -38,42 +39,7 @@ const memoryEnums = {
   },
 };
 
-// Memories that describe the user rather than a past task: who they are, how
-// they want work done, how they work, and what they have already corrected.
-// Together these are the long-term profile, so they stay relevant whatever the
-// question is. Every other kind is episodic and must match the query. A
-// correction belongs here because repeating a mistake the user already fixed
-// costs more than carrying it into an unrelated question.
-const DURABLE_RECALL_KINDS = new Set(["profile", "preference", "behavior", "correction"]);
 
-// The profile must not crowd out memories that are relevant to this particular
-// question, so it gets at most half the recall budget and episodic matches keep
-// the rest.
-const DURABLE_RECALL_BUDGET_SHARE = 0.5;
-
-/** What a recalled memory contributes to the prompt.
- *
- * A run summary stores the whole run as JSON — run and session ids, model,
- * error code, timings, and the full previous answer. That is the right record
- * to keep, and the wrong thing to paste into a prompt: the model reads internal
- * identifiers as content. Project it back to the exchange it describes. */
-function recallContent(record) {
-  if (record.kind !== "run_summary") {
-    return [record.summary, record.value].filter(Boolean).join("\n");
-  }
-  let parsed = null;
-  try {
-    parsed = JSON.parse(record.value);
-  } catch {
-    return record.summary ?? "";
-  }
-  const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
-  const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
-  if (!question && !answer) return record.summary ?? "";
-  return [question && `Earlier question: ${question}`, answer && `Earlier answer: ${answer}`]
-    .filter(Boolean)
-    .join("\n");
-}
 
 const reverseMemoryEnums = Object.fromEntries(
   Object.entries(memoryEnums).map(([group, values]) => [
@@ -243,14 +209,6 @@ function upstreamMessage(body) {
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} value
  */
-function searchTokens(value) {
-  const normalized = String(value ?? "").toLowerCase();
-  const tokens = new Set(normalized.match(/[a-z0-9][a-z0-9._-]{1,}|[\u3400-\u9fff]{2,}/g) ?? []);
-  for (const run of normalized.match(/[\u3400-\u9fff]{3,}/g) ?? []) {
-    for (let index = 0; index < run.length - 1; index += 1) tokens.add(run.slice(index, index + 2));
-  }
-  return [...tokens].filter((token) => token.length >= 2).slice(0, 64);
-}
 
 export class MemosClient {
   constructor(config, { fetchImpl = globalThis.fetch } = {}) {
@@ -410,35 +368,11 @@ export class MemosClient {
       .filter((row) => row.score > 0);
     const byScore = (left, right) =>
       right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt));
-    const isDurable = (row) => DURABLE_RECALL_KINDS.has(row.memo.kind);
     const ranked = [...structured, ...legacy].sort(byScore);
-    const durableSlots = Math.max(1, Math.floor(this.contextLimit * DURABLE_RECALL_BUDGET_SHARE));
-    const durableChars = Math.floor(this.contextMaxChars * DURABLE_RECALL_BUDGET_SHARE);
-
-    const selected = [];
-    let total = 0;
-    let durableCount = 0;
-    let durableTotal = 0;
-    for (const row of ranked) {
-      if (selected.length >= this.contextLimit) break;
-      const durable = isDurable(row);
-      // Cap the profile's share so a question-specific memory still fits.
-      if (durable && (durableCount >= durableSlots || durableTotal >= durableChars)) continue;
-      const remaining = Math.min(
-        this.contextMaxChars - total,
-        durable ? durableChars - durableTotal : this.contextMaxChars,
-      );
-      if (remaining <= 0) continue;
-      const content = row.memo.content.slice(0, remaining);
-      if (!content) continue;
-      selected.push({ ...row.memo, content });
-      total += content.length;
-      if (durable) {
-        durableCount += 1;
-        durableTotal += content.length;
-      }
-    }
-    return selected;
+    return selectWithinBudget(ranked, {
+      contextLimit: this.contextLimit,
+      contextMaxChars: this.contextMaxChars,
+    });
   }
 
   async listRecords(userId, {

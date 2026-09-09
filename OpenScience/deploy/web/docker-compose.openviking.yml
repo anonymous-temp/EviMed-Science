@@ -1,0 +1,129 @@
+# The OpenViking context database, as the recall index behind `memorySubstrate`.
+#
+# An overlay rather than part of the base stack, because it holds no original
+# data: everything in it is derived from the research-memory service and can be
+# rebuilt with `scripts/ops/rebuild-memory-index.mjs`. A deployment that does
+# not compose this file recalls with the term matcher and loses nothing but
+# ranking quality.
+#
+# The levers that select it (`OPEN_SCIENCE_MEMORY_INDEX_PROVIDER` and the
+# `OPEN_SCIENCE_OPENVIKING_*` values) live in the base compose file on purpose.
+# Compose passes environment item by item, so a knob listed only here would
+# leave an operator on a deployment without this overlay setting a variable
+# that silently does nothing.
+services:
+  open-science-web:
+    environment:
+      # Defaulted to the service this overlay starts, still movable: a
+      # deployment may point at an OpenViking it manages elsewhere, and a
+      # literal here would make the value in `.env` unreachable.
+      OPEN_SCIENCE_OPENVIKING_URL: ${OPEN_SCIENCE_OPENVIKING_URL:-http://evimed-openviking:1933}
+      OPEN_SCIENCE_OPENVIKING_API_KEY_FILE: /run/openviking-secrets/api-key
+    volumes:
+      - evimed-openviking-secrets:/run/openviking-secrets:ro
+    depends_on:
+      evimed-openviking:
+        condition: service_healthy
+    networks:
+      - default
+      - runtime-internal
+      - memory-recall-internal
+
+  evimed-openviking:
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:0.4.19}
+    environment:
+      # The bot gateway is a second product on the same image — a chat frontend
+      # with its own channels. Nothing here calls it, and it would be the only
+      # part of this container that wants to reach the internet.
+      OPENVIKING_WITH_BOT: "0"
+      OPENVIKING_SERVER_PORT: "1933"
+      # Read-only: the configuration carries the model-gateway credential, and
+      # the entrypoint rewrites this path only when OPENVIKING_CONF_CONTENT is
+      # set, which would put that credential in `docker inspect` output.
+      OPENVIKING_CONFIG_FILE: /run/openviking-secrets/ov.conf
+    volumes:
+      - evimed-openviking-data:/app/.openviking
+      - evimed-openviking-secrets:/run/openviking-secrets:ro
+    depends_on:
+      evimed-openviking-secrets-init:
+        condition: service_completed_successfully
+    # No published ports. The control plane is the only caller and reaches it
+    # over the internal network; the runtime container never learns it exists.
+    networks:
+      - memory-recall-internal
+    healthcheck:
+      test: ["CMD", "openviking-entrypoint", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # The upstream image declares no USER and its entrypoint writes into its own
+    # installation, so it is not run as an unprivileged uid here the way the
+    # rest of the stack is. That is acceptable while this is an isolated
+    # evaluation on the internal network with no original data; it is the one
+    # thing to settle before the provider could be selected in production.
+    restart: unless-stopped
+
+  evimed-openviking-secrets-init:
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:0.4.19}
+    user: "0:0"
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import json, os, pathlib
+        output = pathlib.Path('/output')
+        output.mkdir(parents=True, exist_ok=True)
+        for source, name in (('/input/ov.conf', 'ov.conf'), ('/input/api-key', 'api-key')):
+            target = output / name
+            temporary = output / (name + '.tmp')
+            with open(source, 'rb') as stream:
+                payload = stream.read(65537)
+            if not payload or len(payload) > 65536:
+                raise SystemExit('protected memory-index secret has invalid size')
+            if name == 'ov.conf':
+                # A malformed configuration makes the server exit into a restart
+                # loop whose only symptom is an unhealthy container. Rejecting it
+                # here names the file instead.
+                json.loads(payload.decode('utf-8'))
+            with open(temporary, 'wb') as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, target)
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}
+        target: /input/ov.conf
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE}
+        target: /input/api-key
+        read_only: true
+      - evimed-openviking-secrets:/output
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    restart: "no"
+
+volumes:
+  evimed-openviking-data:
+  evimed-openviking-secrets:
+
+networks:
+  memory-recall-internal:
+    internal: true
