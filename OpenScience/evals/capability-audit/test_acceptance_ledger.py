@@ -316,8 +316,8 @@ class RealLedgerTests(unittest.TestCase):
         # the acceptance battery ran on the deployed product and half the rows
         # stopped being "not-run": six accepted, three failed with their
         # packages kept, nine still never run (three of them internal).
-        self.assertEqual(statuses.count("not-run"), 9)
-        self.assertEqual(statuses.count("accepted"), 6)
+        self.assertEqual(statuses.count("not-run"), 8)
+        self.assertEqual(statuses.count("accepted"), 7)
         self.assertEqual(statuses.count("failed"), 3)
         self.assertIn("notice:", checker.coverage_notice())
 
@@ -337,9 +337,10 @@ class RealLedgerTests(unittest.TestCase):
         capability — so it moved to relatedEvidence, which is where this ledger
         already puts a succeeded managed engine job.
 
-        off-label-analysis, manuscript-support, evidence-appraisal and
-        research-grant-development joined on 2026-09-09 (the last two on the
-        release carrying their skill fixes): each
+        off-label-analysis, manuscript-support, evidence-appraisal,
+        research-grant-development and bibliometric-analysis joined on
+        2026-09-09 (the middle two on the release carrying their skill fixes):
+        each
         is one dispatch of its own first brief through `capability-acceptance`
         against `evimed-20260909-c7434fb` on a clean project, ended
         succeeded/accepted by the delivery gate, with the package kept under
@@ -351,7 +352,7 @@ class RealLedgerTests(unittest.TestCase):
             row["id"] for row in document["capabilities"]
             if row["realDelivery"]["status"] == "accepted"
         )
-        self.assertEqual(accepted, ["adr-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis", "research-grant-development"])
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis", "research-grant-development"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

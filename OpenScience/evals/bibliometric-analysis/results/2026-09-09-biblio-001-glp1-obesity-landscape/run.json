@@ -3,23 +3,25 @@
   "brief": "biblio-001-glp1-obesity-landscape",
   "base": "https://82.156.128.153",
   "project": "acceptance-bibliometric-analysis",
-  "session": "acc-bibliometric-analysi-mtu16kp1",
-  "runId": "run_eb3420977507825ac2d3fd0fa67fd77d",
+  "session": "acc-bibliometric-analysi-mtu3cpyh",
+  "runId": "run_3005de2c6f03139babaf4d7820c5a2ca",
   "agentVersion": "1.0.1",
-  "dispatchedAt": "2026-09-09T11:45:23Z",
+  "dispatchedAt": "2026-09-09T13:05:57Z",
   "prompt": "topic: GLP-1 受体激动剂用于肥胖与体重管理\ndateFrom: 2015\ndateTo: 2025\nmaxRecords: 5000\noutputLanguage: zh-CN",
   "outcome": {
-    "status": "failed",
-    "errorCode": "runtime_stopped",
-    "verification": "unchecked",
-    "artifacts": [],
-    "unverifiedArtifacts": [],
-    "qualityNotices": [
-      "记忆抽取未产出记录：消息 0 条、候选 0 条、采纳 0 条、驳回 0 条。空对话与抽取失效在结果上一样，这行区分它们。"
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+      "deliverables/glp1-obesity-bibliometric/bibliometric-analysis-run.json",
+      "deliverables/glp1-obesity-bibliometric/revision-notes.md"
     ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [],
     "effectiveAgentId": "bibliometric-analysis",
     "effectiveRouteReason": "session-binding",
-    "durationMs": 23448,
+    "durationMs": 1232350,
     "repairRounds": null,
     "model": "deepseek/deepseek-v4-flash"
   }
