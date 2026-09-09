@@ -92,20 +92,66 @@ export async function mountedReleases(releasesDir) {
 export async function plan(releasesDir, keep, heldBy = mountedReleases) {
   await assertReleasesDir(releasesDir);
   const entries = await fsp.readdir(releasesDir, { withFileTypes: true });
-  const releases = entries
+  const named = entries
     .filter((entry) => entry.isDirectory() && RELEASE_RE.test(entry.name))
-    .map((entry) => entry.name)
-    .sort();
+    .map((entry) => entry.name);
+  const releases = await sortByBuildTime(releasesDir, named);
   const newest = new Set(releases.slice(-keep));
   const held = await heldBy(releasesDir);
+  const current = await currentRelease(releasesDir);
   const keptFor = new Map();
   for (const name of releases) {
     const reasons = [];
     if (newest.has(name)) reasons.push("newest");
     if (held.has(name)) reasons.push("mounted");
+    if (name === current) reasons.push("current");
     if (reasons.length) keptFor.set(name, reasons.join("+"));
   }
   return { releases, keep: keptFor, remove: releases.filter((name) => !keptFor.has(name)) };
+}
+
+/**
+ * Oldest first, by the build time each release's own manifest records.
+ *
+ * The id sorts chronologically only to the day. Three releases were cut on
+ * 2026-09-08, and by name `7bd5117` — the morning's — came after `5898a48`,
+ * the one that was live until the next cutover; a keep-2 by name would have
+ * kept the older one and deleted the rollback target. The manifest's
+ * `source.createdAt` is the build timestamp both images are labelled with,
+ * so it orders same-day releases as they were actually built. A release
+ * without a readable manifest falls back to its name, which still places it
+ * on the right day.
+ *
+ * @param {string} releasesDir @param {readonly string[]} names
+ */
+async function sortByBuildTime(releasesDir, names) {
+  const keyed = await Promise.all(names.map(async (name) => {
+    let createdAt = "";
+    try {
+      const manifest = JSON.parse(await fsp.readFile(path.join(releasesDir, name, "OpenScience/deploy/web/release-manifest.json"), "utf8"));
+      createdAt = typeof manifest?.source?.createdAt === "string" ? manifest.source.createdAt : "";
+    } catch { /* no manifest, or unreadable: the name decides */ }
+    return { name, key: `${name.slice(7, 15)}T${createdAt || "00:00:00.000Z"}#${name}` };
+  }));
+  return keyed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)).map((entry) => entry.name);
+}
+
+/**
+ * The release `current` points at, beside the releases directory, if any.
+ * It is kept whatever the other rules say: a cutover that has just moved the
+ * link and not yet recreated every container is the one moment neither the
+ * name rule nor the mount rule is guaranteed to protect it.
+ *
+ * @param {string} releasesDir
+ */
+async function currentRelease(releasesDir) {
+  try {
+    const target = await fsp.realpath(path.join(path.dirname(releasesDir), "current"));
+    const name = path.basename(target);
+    return path.dirname(target) === (await fsp.realpath(releasesDir)) && RELEASE_RE.test(name) ? name : null;
+  } catch {
+    return null;
+  }
 }
 
 /** @param {string} dir @param {string} name */
