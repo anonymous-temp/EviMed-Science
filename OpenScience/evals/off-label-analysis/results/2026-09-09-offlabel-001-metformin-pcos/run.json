@@ -1,0 +1,34 @@
+{
+  "capability": "off-label-analysis",
+  "brief": "offlabel-001-metformin-pcos",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-off-label-analysis",
+  "session": "acc-off-label-analysis-mttp40mg",
+  "runId": "run_59c14e8c666a45804a008f3c31fb7dfc",
+  "agentVersion": "2.2.1",
+  "dispatchedAt": "2026-09-09T06:23:24Z",
+  "prompt": "drug: 二甲双胍\nproposedUse: 多囊卵巢综合征（PCOS）伴胰岛素抵抗患者的代谢与月经周期改善\nproduct: 盐酸二甲双胍片（本院在用品规，运行时核对确切产品与批准文号）\npopulation: 18–40 岁、BMI ≥ 24、伴胰岛素抵抗的 PCOS 女性，未合并糖尿病\ndose: 500 mg\nroute: 口服\nfrequency: 每日三次\nduration: 6 个月\nformulation: 普通片\njurisdiction: 中国（NMPA）\ndecisionDate: 2026-03-01",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/offlabel-metformin-pcos/assessment-result.json",
+      "deliverables/offlabel-metformin-pcos/evidence-snapshot.json",
+      "deliverables/offlabel-metformin-pcos/evidence-table.csv",
+      "deliverables/offlabel-metformin-pcos/off-label-report.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "交付物在写下回执之后被改动了 1 个文件：deliverables/offlabel-metformin-pcos/evidence-table.csv。服务端已用同一套门禁对盘上的实际字节重判并通过，按实际交付重出回执；发出去的就是被验过的那一版。若这不是有意的收尾修改，请让运行在最后一次修改之后再提交一次。",
+      "biomedical_source_search searched and returned no source",
+      "guideline_search searched and returned no source",
+      "pharmacy_reference_search searched and returned no source"
+    ],
+    "effectiveAgentId": "off-label-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 999352,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}

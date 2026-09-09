@@ -253,15 +253,15 @@
       "evalHarness": "evals/off-label-analysis",
       "briefCount": 4,
       "realDelivery": {
-        "status": "not-run",
-        "evidence": null,
-        "at": null,
-        "surface": null
+        "status": "accepted",
+        "evidence": "evals/off-label-analysis/results/2026-09-09-offlabel-001-metformin-pcos",
+        "at": "2026-09-09T06:23:24",
+        "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/drug-evidence-quality/benchmark_cases.json"
       ],
-      "note": "Also covered by the offLabelCase of the drug-evidence benchmark, which grades the deterministic assessment compiler rather than a delivered package. No delivery on record. Four briefs are now written under evals/off-label-analysis and none has been run."
+      "note": "First real delivery on 2026-09-09 against evimed-20260909-c7434fb on a clean project: brief offlabel-001 (metformin for insulin-resistant PCOS, NMPA) ended succeeded/accepted in 16.7 minutes with all four required outputs (report, evidence table, snapshot, assessment result), zero repair rounds and four advisory notices (three searches returned no source; the evidence table was edited after the receipt and re-judged server-side). The report resolves six NMPA label records, keeps its four axes independent and declares seven gaps by name; classification potentially_off_label. Read in full before this row was changed. Also covered by the offLabelCase of the drug-evidence benchmark, which grades the deterministic assessment compiler rather than a delivered package. Three more briefs remain unrun."
     },
     {
       "id": "peer-review",
