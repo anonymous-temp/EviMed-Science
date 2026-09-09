@@ -1041,6 +1041,19 @@ function injectedSkills(projection) {
   return injected;
 }
 
+/**
+ * Skill names the model loaded with the `skill` tool and actually received.
+ *
+ * The kernel's skill tool has one model-facing success shape, the
+ * `<skill_content name="…">` block, and it renders a thrown lookup failure —
+ * `skill "x" is unknown or no longer available` — as the text result of a
+ * call that the session then reports as completed. Counting every completed
+ * call as a load passed an evidence-appraisal run whose one `skill` call for
+ * its own capability had returned exactly that error: the gate certified a
+ * method the model never saw. A call is a load only when its result is the
+ * block for the name that was asked for.
+ * @param {any[]} messages @returns {Set<string>}
+ */
 function successfullyLoadedSkills(messages) {
   const loaded = new Set();
   for (const message of messages) {
@@ -1051,10 +1064,23 @@ function successfullyLoadedSkills(messages) {
         || part?.state?.status !== "completed"
       ) continue;
       const name = part?.state?.input?.name;
-      if (typeof name === "string" && name.trim()) loaded.add(name.trim());
+      if (typeof name !== "string" || !name.trim()) continue;
+      if (skillContentDelivered(part?.state?.output, name.trim())) loaded.add(name.trim());
     }
   }
   return loaded;
+}
+
+/**
+ * Whether a `skill` tool result is the kernel's rendered block for `name`.
+ * The marker is the kernel's own output format, not prose: `dsh-skill`
+ * renders `<skill_content name="<escaped name>">` first on every successful
+ * path, and skill names admit no character that escaping would change.
+ * @param {unknown} output @param {string} name
+ */
+function skillContentDelivered(output, name) {
+  if (typeof output !== "string") return false;
+  return output.trimStart().startsWith(`<skill_content name="${name}">`);
 }
 
 function parsedToolErrorCode(part) {
@@ -1715,8 +1741,22 @@ async function specialistCompletionOutcome(
   if (agent.completionChecks.includes("skillsLoaded")) {
     const loadedSkills = await loadedOrInjectedSkills(project, assistantMessages, run);
     const requiredSkills = [...(agent.companionSkills ?? []), agent.skill];
-    if (requiredSkills.some((skill) => !loadedSkills.has(skill))) {
-      return { artifacts: [], errorCode: "specialist_required_skill_missing" };
+    const missing = requiredSkills.filter((skill) => !loadedSkills.has(skill));
+    if (missing.length > 0) {
+      // Name what was missing and the route that supplies it. A capability's
+      // method bodies travel inside the delegated child's prompt; the root
+      // session cannot fetch them with the `skill` tool, so a run that did the
+      // work itself instead of delegating fails here after producing every
+      // file — a verdict that, without this line, reads as a mystery.
+      return {
+        artifacts: [],
+        errorCode: "specialist_required_skill_missing",
+        qualityIssues: [
+          `The run finished without the ${missing.join(", ")} method(s) in front of the model. `
+          + `Delegating the deliverable to the ${agent.id} capability with evimed_delegate injects every method its manifest lists; `
+          + "the skill tool cannot load a capability method into the root session.",
+        ],
+      };
     }
   }
   const required = agent.outputs.filter((output) => output.required).map((output) => output.path);

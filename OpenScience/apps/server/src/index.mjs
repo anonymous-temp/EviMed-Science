@@ -14,6 +14,18 @@ net.setDefaultAutoSelectFamilyAttemptTimeout(
   Math.max(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1_000),
 );
 
+// The last line of defence for a background promise nobody awaited. Node
+// makes an unhandled rejection fatal, and on 2026-09-09 one from a scheduler
+// timer took the whole control plane down with the runs it was monitoring.
+// Every timer now reports its own failure, so this should never fire; when
+// it does, the process stays up and the line says where to look. Only the
+// error's name and code are written: a message can carry a URL or a token.
+process.on("unhandledRejection", (reason) => {
+  const error = /** @type {any} */ (reason);
+  const frame = typeof error?.stack === "string" ? error.stack.split("\n").find((line) => line.trimStart().startsWith("at ")) ?? "" : "";
+  process.stderr.write(`unhandled rejection kept off the process: ${error?.name ?? typeof reason} ${typeof error?.code === "string" ? error.code : ""}${frame ? ` ${frame.trim()}` : ""}\n`);
+});
+
 const app = createWebApiApp();
 const address = await app.listen();
 const host = typeof address === "object" && address ? address.address : app.config.host;

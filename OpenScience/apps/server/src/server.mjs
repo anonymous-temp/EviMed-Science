@@ -3392,7 +3392,13 @@ export function createWebApiApp(overrides = {}) {
     autopilotScheduleRun = maintenanceMutation(schedule)
       .catch((error) => {
         if (error?.code === "maintenance_active") return null;
-        throw error;
+        // This runs from a timer under `void`. Rethrowing here made a Postgres
+        // connection timeout on 2026-09-09 an unhandled rejection, which Node
+        // treats as fatal: the whole control plane died mid-battery and came
+        // back only because the container restarts. A scheduler that cannot
+        // reach the ledger this minute says so and tries again next minute.
+        process.stderr.write(`autopilot scheduling failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "autopilot_schedule_failed"}\n`);
+        return null;
       })
       .finally(() => { autopilotScheduleRun = null; });
     return autopilotScheduleRun;
@@ -3454,7 +3460,9 @@ export function createWebApiApp(overrides = {}) {
     consolidationScheduleRun = maintenanceMutation(schedule)
       .catch((error) => {
         if (error?.code === "maintenance_active") return null;
-        throw error;
+        // Same timer-under-`void` shape as the autopilot scheduler above.
+        process.stderr.write(`consolidation scheduling failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "consolidation_schedule_failed"}\n`);
+        return null;
       })
       .finally(() => { consolidationScheduleRun = null; });
     return consolidationScheduleRun;
