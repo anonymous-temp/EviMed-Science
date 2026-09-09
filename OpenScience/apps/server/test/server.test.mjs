@@ -6554,3 +6554,31 @@ test("an unreadable project directory is an error, not an empty account", async 
     assert.equal(recovered.status, 200, "and it recovers once the directory is readable again");
   });
 });
+
+test("connector credentials are a named absence on a file-store deployment, and need a session", async () => {
+  // The routes exist on every deployment; the store exists only where there is
+  // a database to keep encrypted rows in and a gateway secret to key them
+  // under. A file-store deployment therefore answers 503 by name rather than
+  // 404, so a client can tell "not here" from "no such route".
+  await withAuthApp(async ({ base }) => {
+    assert.equal((await fetch(`${base}/api/connectors`)).status, 401);
+    const loggedIn = await login(base);
+    const list = await fetch(`${base}/api/connectors`, { headers: { Cookie: loggedIn.cookie } });
+    assert.equal(list.status, 503);
+    assert.equal((await list.json()).code, "connector_credentials_unavailable");
+    const put = await fetch(`${base}/api/connectors/opengwas`, {
+      method: "PUT",
+      headers: { Cookie: loggedIn.cookie, "Content-Type": "application/json", "X-Open-Science-CSRF": loggedIn.csrfToken },
+      body: JSON.stringify({ value: "x" }),
+    });
+    assert.equal(put.status, 503);
+    // An unknown connector is refused by name before the store is consulted,
+    // on any deployment.
+    const unknown = await fetch(`${base}/api/connectors/evimed-evidence`, {
+      method: "DELETE",
+      headers: { Cookie: loggedIn.cookie, "X-Open-Science-CSRF": loggedIn.csrfToken },
+    });
+    assert.equal(unknown.status, 404);
+    assert.equal((await unknown.json()).code, "connector_unknown");
+  });
+});

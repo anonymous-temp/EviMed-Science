@@ -29,6 +29,10 @@ vi.mock("@/components/settings/WebAccountCard", () => ({
 vi.mock("@/components/settings/UsageCard", () => ({
   UsageCard: () => <div>本月用量</div>,
 }));
+// So do the connector credentials.
+vi.mock("@/components/settings/ConnectorsCard", () => ({
+  ConnectorsCard: () => <div>数据源凭据</div>,
+}));
 
 describe("AccountPage", () => {
   beforeEach(() => {

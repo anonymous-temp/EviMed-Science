@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "section": "methods",
+  "claims": [
+    {
+      "claimId": "CLM-001",
+      "claimType": "direct",
+      "claim": "本研究为单中心、回顾性队列研究。",
+      "referenceNumber": null,
+      "sourceTitle": "任务题面给定事实（父代理核实并写入计划澄清）",
+      "sourceUrl": "",
+      "identifier": "",
+      "supportQuote": "单中心回顾性队列研究",
+      "applicability": "方法学章节第一段对研究设计的表述。",
+      "uncertainty": "队列的详细设计安排（对照结构、随访结构、匹配与否）不在题面内，正文以〔待补〕标注；原始队列文件未上传工作区，投稿前须以队列定义与数据提取记录核对后再定稿。"
+    },
+    {
+      "claimId": "CLM-002",
+      "claimType": "direct",
+      "claim": "数据来源于我院数据仓库。",
+      "referenceNumber": null,
+      "sourceTitle": "任务题面给定事实（父代理核实并写入计划澄清）",
+      "sourceUrl": "",
+      "identifier": "",
+      "supportQuote": "本院数据仓库导出",
+      "applicability": "方法学章节数据来源表述；稿中统一写作“我院”，正式投稿时按作者单位信息核对。",
+      "uncertainty": "数据仓库所覆盖的业务模块、数据字典版本等不在题面内，正文以〔待补〕标注。"
+    },
+    {
+      "claimId": "CLM-003",
+      "claimType": "direct",
+      "claim": "研究期间为 2019 年 1 月至 2024 年 12 月。",
+      "referenceNumber": null,
+      "sourceTitle": "任务题面给定事实（父代理核实并写入计划澄清）",
+      "sourceUrl": "",
+      "identifier": "",
+      "supportQuote": "2019-01 至 2024-12",
+      "applicability": "方法学章节对研究时间范围的表述。",
+      "uncertainty": "该期间在分析中是指入组窗口还是含随访期、随访截止日期如何设定，须以统计分析计划原文补全（正文已〔待补〕）。"
+    },
+    {
+      "claimId": "CLM-004",
+      "claimType": "direct",
+      "claim": "研究人群为合并慢性肾脏病（CKD）3 期的 2 型糖尿病患者。",
+      "referenceNumber": null,
+      "sourceTitle": "任务题面给定事实（父代理核实并写入计划澄清）",
+      "sourceUrl": "",
+      "identifier": "",
+      "supportQuote": "合并 CKD 3 期的 2 型糖尿病患者",
+      "applicability": "方法学章节研究对象界定。",
+      "uncertainty": "2 型糖尿病诊断标准、CKD 3 期判定条款（eGFR 计算公式与阈值、是否需重复测定确认）及患者识别规则不在题面内，正文以〔待补〕标注，须按数据字典与队列定义原文补全。"
+    },
+    {
+      "claimId": "CLM-005",
+      "claimType": "direct",
+      "claim": "暴露因素为二甲双胍的使用。",
+      "referenceNumber": null,
+      "sourceTitle": "任务题面给定事实（父代理核实并写入计划澄清）",
+      "sourceUrl": "",
+      "identifier": "",
+      "supportQuote": "暴露=二甲双胍",
+      "applicability": "方法学章节暴露定义起始句。",
+      "uncertainty": "暴露的操作化定义（用药记录来源、持续用药/累计暴露标准、暴露窗口、剂量资料）、对照人群定义不在题面内，正文以〔待补〕标注，须按数据字典与统计分析计划补全。"
+    },
+    {
+      "claimId": "CLM-006",
+      "claimType": "direct",
+      "claim": "本研究共纳入患者 4 812 例。",
+      "referenceNumber": null,
+      "sourceTitle": "任务题面给定事实（父代理核实并写入计划澄清）",
+      "sourceUrl": "",
+      "identifier": "",
+      "supportQuote": "n=4,812",
+      "applicability": "方法学章节样本量表述。",
+      "uncertainty": "该例数系题面给定的队列规模，非本章推导或测算所得；样本量确定方式（是否全量纳入既定提取）不在题面内，正文以〔待补〕标注。"
+    },
+    {
+      "claimId": "CLM-007",
+      "claimType": "direct",
+      "claim": "本稿方法学报告遵循 STROBE 声明中队列研究条目设计并报告。",
+      "referenceNumber": 1,
+      "sourceTitle": "VON ELM E, et al. The Strengthening the Reporting of Observational Studies in Epidemiology (STROBE) statement: guidelines for reporting observational studies. PLoS Medicine, 2007, 4(10): e296.",
+      "sourceUrl": "https://doi.org/10.1371/journal.pmed.0040296",
+      "identifier": "PMID:17941714; PMCID:PMC2020495",
+      "supportQuote": "The workshop and the subsequent iterative process of consultation and revision resulted in a checklist of 22 items (the STROBE Statement) that relate to the title, abstract, introduction, methods, results, and discussion sections of articles.",
+      "applicability": "方法学章节开篇对报告规范的声明；STROBE 清单（含队列研究条目）仅作报告组织框架，不替代本文对具体方法的描述。",
+      "uncertainty": "声明仅覆盖本章节对 STROBE 条目 4–12 的应答与覆盖说明；整稿对全部 22 条的符合性由组装稿件的作者在投稿前核对。"
+    }
+  ]
+}

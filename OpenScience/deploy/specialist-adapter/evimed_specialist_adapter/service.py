@@ -17,11 +17,14 @@ import stat
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .mr_job_store import MRJobStore
 from . import audit_receipt
@@ -446,7 +449,46 @@ def _model_ready() -> bool:
     return os.getenv("LLM_MODEL", "").strip() == "deepseek-v4-pro"
 
 
-def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+# The connectors this adapter's engine reads directly, outside the control
+# plane's public-source gateway, keyed by the environment variable the engine
+# expects. Every other source goes through the gateway, which applies the same
+# precedence — deployment first, then the researcher's own — without our help.
+_JOB_CONNECTOR_ENV = {"mendelian-randomization": {"opengwas": "OPENGWAS_JWT"}}
+_JOB_ENV_PREFIX = "EVIMED_JOB_CREDENTIAL_"
+
+
+def _job_credentials(workload_token: str | None) -> dict[str, str]:
+    """Credentials for one job, resolved from the control plane for the workload that asked.
+
+    Asked with the runtime's own workload token while it is still valid, and
+    handed to the worker only through its spawn environment: the value never
+    reaches the queued state file. A control plane without the endpoint, or a
+    connector nobody configured, leaves the engine on this container's own
+    environment exactly as before.
+    """
+    wanted = _JOB_CONNECTOR_ENV.get(_kind(), {})
+    url = os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
+    if not wanted or not url or not workload_token:
+        return {}
+    resolved: dict[str, str] = {}
+    for connector, env_name in wanted.items():
+        request = urllib.request.Request(
+            f"{url}?connector={connector}",
+            headers={"accept": "application/json", "Authorization": f"Bearer {workload_token}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 — operator-configured internal URL
+                payload = json.loads(response.read(64 * 1024).decode("utf-8"))
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+            continue
+        value = payload.get("data", {}).get("value") if isinstance(payload, dict) else None
+        if isinstance(value, str) and value and len(value) <= 8 * 1024 and not re.search(r"[\r\n\0\s]", value):
+            resolved[f"{_JOB_ENV_PREFIX}{env_name}"] = value
+    return resolved
+
+
+def _start(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, str] | None = None) -> dict[str, Any]:
     if not _model_ready():
         return _error(
             "specialist_model_config_unavailable",
@@ -553,7 +595,7 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 str(state_path),
             ],
             cwd=str(Path(__file__).resolve().parents[1]),
-            env=dict(os.environ),
+            env={**os.environ, **(job_credentials or {})},
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -712,7 +754,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     }
 
 
-def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
+def call(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, str] | None = None) -> dict[str, Any]:
     action = arguments["action"]
     if action == "capabilities":
         if not _model_ready():
@@ -738,7 +780,7 @@ def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             "sources": [_source("service")],
         }
     if action == "start":
-        return _start(arguments, workspace)
+        return _start(arguments, workspace, job_credentials)
     deadline = time.monotonic() + int(arguments.get("waitSeconds", 0))
     while True:
         result = _status(arguments, workspace)
@@ -754,6 +796,12 @@ def _child_environment() -> dict[str, str]:
     api_key = _read_secret(os.getenv("LLM_API_KEY_FILE", "").strip())
     environment = dict(os.environ)
     environment.pop("EVIMED_SPECIALIST_AUDIT_SIGNING_KEY_FILE", None)
+    # A credential resolved for this job at submission arrives prefixed in the
+    # worker's own environment; the engine sees it under the name it expects,
+    # in place of whatever this container was started with.
+    for name in list(environment):
+        if name.startswith(_JOB_ENV_PREFIX):
+            environment[name[len(_JOB_ENV_PREFIX):]] = environment.pop(name)
     environment.update({
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/"),
@@ -993,6 +1041,7 @@ def _create_app() -> FastAPI:
     def specialist_call(
         arguments: dict[str, Any] = Body(...),
         claims: dict[str, Any] = Security(_authorized_claims),
+        bearer: HTTPAuthorizationCredentials | None = Security(HTTPBearer(auto_error=False)),
     ) -> dict[str, Any]:
         try:
             validated = _validated_arguments(arguments)
@@ -1004,7 +1053,12 @@ def _create_app() -> FastAPI:
             ).startswith("mr_input_"):
                 return _error(exc.code, str(exc))
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return call(validated, workspace_for_claims(claims))
+        job_credentials = (
+            _job_credentials(bearer.credentials if bearer is not None else None)
+            if validated.get("action") == "start"
+            else None
+        )
+        return call(validated, workspace_for_claims(claims), job_credentials)
 
     instance.add_api_route(spec["endpoint"], specialist_call, methods=["POST"])
     return instance

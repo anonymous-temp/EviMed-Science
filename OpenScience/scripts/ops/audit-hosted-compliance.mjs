@@ -1242,32 +1242,13 @@ async function checkHostedDesktopBoundary() {
   }
 }
 
-async function checkHostedEventStreamRecovery() {
-  // The browser used to hold a kernel client and recover by re-reading the
-  // kernel's own session state after a dropped SSE stream. It reads the control
-  // plane's run stream now, so recovery is resumption by our own sequence
-  // number: a reconnecting tab says where it got to, replayed frames it has
-  // already applied are no-ops, and a gap the server cannot replay is reported
-  // rather than papered over.
-  const stream = await read("apps/web/src/lib/runStream.ts");
-  const hook = await read("apps/web/src/lib/useRunStream.ts");
-  const streamTests = await read("apps/web/src/lib/runStream.test.ts");
-  const hookTests = await read("apps/web/src/lib/useRunStream.test.tsx");
-
-  if (
-    /\?since=\$\{encodeURIComponent\(String\(options\.since\)\)\}/.test(stream) &&
-    /if \(frame\.seq <= view\.seq && frame\.type !== "stream\/gap"\) return view;/.test(stream) &&
-    /case "stream\/gap":/.test(stream) &&
-    /reconnection resumes from `view\.seq`/.test(hook) &&
-    /ignores a frame it has already applied, so a reconnect does not duplicate anything/.test(streamTests) &&
-    /surfaces a replay gap so a client that fell too far behind re-reads instead of guessing/.test(streamTests) &&
-    /counts reconnects instead of retrying silently/.test(hookTests)
-  ) {
-    pass("hosted_event_stream_recovery", "Hosted run streams resume by sequence number, ignore replayed frames, and report a gap the server could not replay.");
-  } else {
-    fail("hosted_event_stream_recovery_missing", "Hosted run streams must resume from the client's own sequence number, treat replayed frames as no-ops, and surface an unreplayable gap.");
-  }
-}
+// `checkHostedEventStreamRecovery` lived here until 2026-09-09. It read the
+// browser's run-stream client and proved it resumed by sequence number. That
+// client was our own session surface's, and the surface was deleted when the
+// kernel's application became the session surface; the kernel's page hears
+// the kernel's own events over the mux, which is authenticated and resumed by
+// the kernel. A check that reads a deleted file is not a weaker check — it is
+// ENOENT dressed as an audit — so the check went with the file it read.
 
 async function checkTaskResourceControl() {
   const taskManager = await read("apps/server/src/taskManager.mjs");
@@ -1912,7 +1893,6 @@ async function main() {
   await checkWorkspaceIoBoundary();
   await checkHostedNotebookKernel();
   await checkHostedDesktopBoundary();
-  await checkHostedEventStreamRecovery();
   await checkTaskResourceControl();
   await checkHostedMetadataBoundary();
   await checkDshLoaderResolution();

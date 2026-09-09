@@ -42,7 +42,10 @@ test("every git-ignored path the web image copies is generated inside the build"
   const hydratedPath = fetcher.match(/^OUT_DIR="\$ROOT\/([^"\n]+)"$/m)?.[1];
   assert.ok(hydratedPath);
   assert.match(fetcher, /^AI4S_SKILLS_COMMIT="\$\{AI4S_SKILLS_COMMIT:-[a-f0-9]{40}\}"$/m);
-  const hydrates = recipe => /RUN apk add --no-cache bash curl python3\s*\\\s*\n\s*&& env -u AI4S_SKILLS_COMMIT bash scripts\/dev\/fetch-skills\.sh/.test(recipe);
+  // The apk step rewrites the mirror first since 2026-09-09 (the build stage
+  // installed from the default Alpine CDN, which the Tencent host reaches at
+  // tens of KB/s); the hydration itself is the same immutable-pin invocation.
+  const hydrates = recipe => /RUN (?:sed -ri "[^"]*" \/etc\/apk\/repositories\s*\\\s*\n\s*&& )?apk add --no-cache bash curl python3\s*\\\s*\n\s*&& env -u AI4S_SKILLS_COMMIT bash scripts\/dev\/fetch-skills\.sh/.test(recipe);
 
   // A git-ignored path is only a problem if it has to arrive WITH the context.
   // `apps/web/dist` is git-ignored and copied, and is fine: the build stage
