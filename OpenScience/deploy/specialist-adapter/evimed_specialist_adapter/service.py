@@ -1006,6 +1006,30 @@ def run_job(state_file: str) -> int:
         return completed.returncode or 1
     if state.get("sourceEvidence") != _source_evidence(root):
         raise RuntimeError("specialist source changed while the job was running")
+    # Which of the engine's own steps did not do what they were meant to.
+    #
+    # The status is still `succeeded`: the engine finished and produced its
+    # artifacts, and a job that renames that outcome breaks every consumer that
+    # switches on it. What was missing is a channel at all. On 2026-09-09 a
+    # bibliometric run lost query generation, translation and MeSH mapping to a
+    # missing dependency, degraded its search to a bare `GLP-1`, and finished
+    # `succeeded` with nothing anywhere saying which steps had not run -- the
+    # report said so, and only because the model chose to.
+    #
+    # Passed through verbatim rather than derived. An engine that does not
+    # populate `modules` yet leaves both fields absent, which is honestly
+    # "not reported" and not "nothing was degraded".
+    degradation = {}
+    modules = result.get("modules")
+    if isinstance(modules, dict):
+        degradation["modules"] = modules
+    if isinstance(result.get("degraded"), bool):
+        degradation["degraded"] = result["degraded"]
+    elif isinstance(modules, dict):
+        degradation["degraded"] = any(
+            isinstance(entry, dict) and entry.get("status") in {"degraded", "failed"}
+            for entry in modules.values()
+        )
     state.update(
         {
             "status": "succeeded",
@@ -1013,6 +1037,7 @@ def run_job(state_file: str) -> int:
             "finishedAt": _now(),
             "returnCode": 0,
             "artifacts": _collect_artifacts(workspace, output_root),
+            **degradation,
         }
     )
     _write_state(state_path, state)
