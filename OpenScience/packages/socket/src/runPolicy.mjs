@@ -30,6 +30,7 @@ import {
   errorCodeMessage,
   deliverableIdOfPath,
   isGateImplementationPath,
+  PROTECTED_WRITE_PREFIXES,
   isProtectedWritePath,
   layeredIssues,
   matchedClinicalTriggers,
@@ -208,6 +209,44 @@ export function concurrentWriteNotice(writers, write) {
 }
 
 /**
+ * The paths worth looking at in a shell command, built from the same list the
+ * write guard enforces.
+ *
+ * It was a hand-written alternation naming four of the protected prefixes. So
+ * when `.evimed-sources/` was added to the domain's list, `write` and `edit`
+ * began refusing it and `bash` went on allowing it -- the guard was closed on
+ * the tool a run is told to use and open on the tool it would reach for
+ * instead, which is worse than not guarding at all because it reads as
+ * protection. Derived now, so a prefix added to the domain is a prefix this
+ * sees, and `guardedBashPrefixesAreDerived` asserts the two agree.
+ *
+ * `data/` keeps its leading boundary: bare, it matches the `data` in any word.
+ * @returns {RegExp}
+ */
+export function guardedBashCandidatePattern() {
+  const alternatives = PROTECTED_WRITE_PREFIXES.map((entry) => {
+    const isDirectory = entry.endsWith('/')
+    const bare = isDirectory ? entry.slice(0, -1) : entry
+    const escaped = bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // A name that does not begin with a dot is an ordinary word -- `data`,
+    // `delivery-receipt.json` -- so it needs a boundary or it matches inside
+    // `metadata/` and `my-delivery-receipt.json`. A directory's own trailing
+    // slash is that boundary; a file gets a word boundary instead.
+    return isDirectory ? `${escaped}\\/` : `${escaped}\\b`
+  })
+  // The path is captured, and the boundary in front of it is not. Written as
+  // one flat match the boundary rode along inside the candidate -- `rm -rf
+  // data/tmp` produced the candidate `-rf data/tmp`, which `isProtectedWritePath`
+  // rejects, so `data/` was never actually guarded through bash at all. Only a
+  // path start, so `metadata/` cannot match: the character before must be the
+  // line start, whitespace, a quote, or `=`.
+  // An absolute path is the ordinary way a shell command names one of these
+  // (`tee /workspace/.evimed-run/state.json`), and the domain resolves it, so
+  // the capture has to admit a leading slash.
+  return new RegExp(`(?:^|[\\s'"=])(\\/?(?:[\\w.-]+\\/)*(?:${alternatives.join('|')})[\\w./-]*)`, 'g')
+}
+
+/**
  * A crude but honest read of a shell command's write targets. It errs toward
  * refusing: a redirect or a destructive verb aimed at a protected prefix is
  * denied even when the exact path cannot be parsed, because the alternative is
@@ -218,7 +257,9 @@ export function concurrentWriteNotice(writers, write) {
 export function guardedBashTarget(command) {
   const text = String(command ?? '')
   if (!text) return null
-  const candidates = text.match(/[\w./-]*(?:\.evimed-brief|\.evimed-run|\.evimed-capsule|delivery-receipt\.json|(?:^|\s|\/)data\/)[\w./-]*/g) ?? []
+  // Group 1, not the whole match: the boundary in front of the path is part of
+  // the pattern and must not become part of the path.
+  const candidates = [...text.matchAll(guardedBashCandidatePattern())].map((match) => match[1])
   if (!candidates.length) return null
   const mutating = /(?:^|[|;&]\s*)(?:rm|mv|cp|sed\s+-i|tee|truncate|install|chmod|chown|dd|ln)\b/.test(text) || /(?<![<>])>{1,2}(?!&)/.test(text)
   if (!mutating) return null
