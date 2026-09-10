@@ -166,6 +166,20 @@
 - **A4 · 花费上限。** `OPEN_SCIENCE_USER_DAILY_SPEND_LIMIT` / `WEEKLY` 都是 0（不设限），而 `OPEN_SCIENCE_SELF_REGISTRATION_ENABLED=1`。开放注册前必须设上限（一个月真实用量后再调），否则一个账号可以无限花。
 - **A5 · 临床证据能力的结构修法（本轮第二问题的决策，见下）。**
 
+> **2026-09-10 更新（合并、门禁缺陷、一次由我造成的事故、`evimed-20260910-*` 上线）**
+>
+> **合并。** `feat/memory-substrate` 四个提交并入 main（`a8f9c0f9d`）：`STATUS` 与 `PROGRESS.md` 两处追加型冲突按时间戳交错；`server.mjs`、`docker-compose.yml`、`.env.example` 三个自动合并文件逐段人读，两侧都在；合并树上跑了全量 `test:web`（server 2183 通过、vitest 549 通过）与 `ci:web` 的全部八项静态审计，全绿。生产用 `builtin` 召回，`memoryRecall` 成了第 25 个就绪检查（report-only）。
+>
+> **第二轮电池的最后两项，读记录而不是信判决。** geo-content 第二次运行 63 分钟、289 条消息、150 次工具调用、十个文件全写、提交时通过合约，最后被 `specialist_required_skill_missing` 判失败。记录显示的原因是控制面自己的：路由指令要模型「逐个用 skill 工具加载」六个方法并「自行执行 SKILL.md」，而其中两个（`geo-content`、`autopilot-episode`）是能力正文，故意不在内核的技能根目录里，只能经 `evimed_delegate` 注入；模型加载了能加载的四个、在根会话里自己干完，门禁再按它拿不到的方法判它失败。更糟的是 evidence-appraisal 昨天的「accepted」是假阳性：它对自己能力的那一次 `skill` 调用返回的是 `skill "evidence-appraisal" is unknown or no longer available`，门禁把「已完成的调用」一律计为加载。三处修法（`15df67354`）：门禁只认内核为该名字渲染的 `<skill_content>` 块；路由指令改为「先 evimed_plan，再 evimed_delegate 委派给该能力，方法由委派注入」；判决带上缺的方法名和补救路线。台账：evidence-appraisal 回退为 failed，两个包保留为证据，bibliometric 的第三次运行（审稿人推翻一个手打百分比）作为原则 10c 的评测案例记入。
+>
+> **事故（我造成的）。** 2026-09-09 23:17 CST，为追查一次负载尖峰我在生产主机上跑了只读的 `docker buildx history ls`，dockerd 29.1.3 在 BuildKit 的 `filterHistoryEvents` 空指针崩溃（几乎肯定是十六分钟前一次被 OOM 杀掉的构建留下的坏记录——那次构建不是我发起的），systemd 重启了守护进程，但**共享主机上 38 个容器（含 tcm-cdss 之外的其他四个产品）全部停在 exited**，`unless-stopped` 对守护进程崩溃时标记为已停止的容器不生效。直到今早 01:50 UTC 我查 `/api/health` 得到 nginx 502 才发现，停机约 10.5 小时；按依赖顺序 `docker start` 逐个拉起，数据无损，PostgreSQL 备份定时器在停机中失败的一次已补跑、回执 healthy。已写入记忆：那台主机上永远不要再查询 build history；任何守护进程重启后要按 `FinishedAt` 找出被停的容器手工拉起。顺带修了控制面自己的一处崩溃：autopilot 与 consolidation 两个定时器的 catch 会把非维护错误重新抛出，Postgres 连接超时因此成为未处理的 Promise 拒绝、Node 直接退出（15:01 UTC 发生过一次，容器重启拉回）；两处改为报告后下一轮重试，入口加了兜底处理器，测试钉住「五个定时任务的 catch 都不再抛」。
+>
+> **上线。** `evimed-20260910-a8f9c0f`：主机上以 `sudo cp -a` 从 7f88cf2 播种、按 `git ls-files` 同步跟踪树（1805 文件、零残差）、五处锚点改写、一个 `BUILD_CREATED` 传给两个镜像并写入 `.env`、三个镜像共 7 分钟（web 1.5 分钟、runtime 51 秒缓存命中、bibliometric 适配器 4 分钟）、标签核对、清单生成与 `--verify-images`、`preflight:host` 只红回执、切换、receipt 容器 20 秒后重签、`/api/ready` **25/25**、`smoke:deployment` **13/13**、英文浏览器实测会话面全中文。bibliometric 适配器镜像已重建上线：旧镜像 openai 3.8.0 且无 httpx，新镜像 openai 1.109.1 + httpx 0.28.1。随后发现内核在插槽之外直接渲染的「workspace」芯片（撤掉的只是它打开的弹窗）成了首屏一个无效按钮，已隐藏（`bd7d2dd03`），随下一版上线。
+>
+> **第三轮电池（修复后的复验）：** evidence-appraisal 在 dae363e 上 **accepted**（15 分钟；根会话一次委派、四方法注入、交付物第二次提交零问题、九项研究评级全在 `domains` 下、无重做；审稿人 14 条通知，2 条 contradicted，均随包交付）。geo-content 在 dae363e 上运行中：已确认根会话委派、子代理注入全部六个方法（`geo-content, autopilot-episode, citation-integrity, manuscript-humanize, deep-research, biomedical-database-search`），结果见台账。台账现为 accepted 7 / failed 3 / not-run 8。
+>
+> **上线前仍需你决定/提供的（不变，加两条）：** B1 域名、B2 强口令（现为 6 位且在公网 IP 上）、B3 告警接收人（今天的 10.5 小时停机没有任何告警能到人，就是这一条的代价）、B4 异地备份、B5 OpenGWAS token、B6 法律三页、B7 容量——**今天的事故正是共享主机的代价：别的产品在生产主机上跑构建被 OOM 杀掉，坏记录再让守护进程崩溃，五个产品一起停**；建议专用主机或至少禁止在生产主机上构建。新增：**B9 · GEO 探测主机未配置**——geo-content 两次运行的全部探测轮都在 183 秒通道级超时，该能力在这个部署上测不到任何东西，需要一个可达的探测主机（或明确先不发布 GEO）；**A4 · 花费上限**仍是 0，开放注册前要一个数字。
+
 ### B. 需要用户输入的外部项（不是代码）
 
 - **B1 · 域名与证书。** 现在 `OPEN_SCIENCE_PUBLIC_URL=https://82.156.128.153`，Let's Encrypt 6 天短证书对 IP 签发、自动续。正式域名是 Cookie/CSP/OIDC/对外发布的前提。
