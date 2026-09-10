@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
 import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security.mjs";
 
 /** The directory name under the project's runtime root. */
@@ -326,6 +327,21 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
 /**
  * Write the project's mountable methods, and say how many there are.
  *
+ * Two sources land in one directory. The capsule half is what the researcher
+ * wrote or imported; the learned half is what the distillation loop inferred
+ * and a paired evaluation admitted. The plugin registers whatever it finds
+ * here, so from the run's point of view they are the same thing, and the caps
+ * that matter — how many methods and how many bytes ride along in every
+ * child's prompt — are properties of the directory rather than of either
+ * source. One budget is therefore spent across both, capsules first.
+ *
+ * Reaching the learned half at all is the point of this parameter. The
+ * selector existed and had no caller: approving a learned method changed
+ * nothing anywhere, and the counters that decide whether one may be approved
+ * could never move, because moving them requires the method to have been in a
+ * run. `learning` closes that circle; without it this function behaves exactly
+ * as it did before, which is what a deployment with no product database gets.
+ *
  * The directory is rebuilt from scratch on every launch rather than merged
  * into: a method the user retired between two runs has to disappear from the
  * runtime, and a leftover file is a rule the user believes they removed. It is
@@ -338,16 +354,48 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * (0444) inside 0700 directories: the container reads them, and nothing —
  * including the run — writes its own method.
  *
- * @param {{ capsules: any, project: any, directory: string, writeFile?: typeof writeFileAtomicNoFollow }} options
- * @returns {Promise<{ directory: string, count: number, bytes: number }>}
+ * @param {{ capsules: any, project: any, directory: string, learning?: any,
+ *   trialMethodIds?: readonly string[], writeFile?: typeof writeFileAtomicNoFollow }} options
+ * @returns {Promise<{ directory: string, count: number, bytes: number,
+ *   learned: {id: string, name: string, digest: string, trial?: boolean}[] }>}
  */
-export async function materializeCapsuleMethods({ capsules, project, directory, writeFile = writeFileAtomicNoFollow }) {
+export async function materializeCapsuleMethods({
+  capsules,
+  project,
+  directory,
+  learning = null,
+  trialMethodIds = [],
+  writeFile = writeFileAtomicNoFollow,
+}) {
   await assertNoSymlinkPath(project.rootDir, directory, { allowMissingTail: true });
-  const methods = capsules
-    ? await selectCapsuleMethods(capsules, { userId: String(project.userId), projectId: String(project.id) })
+  const userId = String(project.userId);
+  const projectId = String(project.id);
+  const capsuleMethods = capsules
+    ? await selectCapsuleMethods(capsules, { userId, projectId })
     : [];
+  const capsuleBytes = capsuleMethods.reduce((total, method) => total + method.bytes, 0);
+  // What the capsule half left on the table. Both numbers can go to zero or
+  // below, and `selectLearnedMethods` returns nothing for a non-positive
+  // budget, so a project whose capsules already fill the directory mounts no
+  // learned method rather than overflowing the prompt.
+  const learnedMethods = learning
+    ? await selectLearnedMethods(learning, {
+      userId,
+      projectId,
+      maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - capsuleMethods.length),
+      maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES - capsuleBytes,
+      trialMethodIds,
+    })
+    : [];
+  const methods = [...capsuleMethods, ...learnedMethods];
   await fs.rm(directory, { recursive: true, force: true });
-  if (methods.length === 0) return { directory, count: 0, bytes: 0 };
+  const learned = learnedMethods.map((method) => ({
+    id: method.id,
+    name: method.name,
+    digest: method.digest,
+    ...(method.trial ? { trial: true } : {}),
+  }));
+  if (methods.length === 0) return { directory, count: 0, bytes: 0, learned };
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, directory);
   let bytes = 0;
@@ -358,7 +406,21 @@ export async function materializeCapsuleMethods({ capsules, project, directory, 
       method.document,
       { encoding: "utf8", mode: 0o444 },
     );
+    // A code skill is a body plus the scripts it tells the run to execute.
+    // Writing only the body mounted an instruction to run a file that was not
+    // there, which reads to the model as its own mistake. Same scope root and
+    // same read-only mode as the body: the container executes them, and
+    // nothing — including the run — writes its own.
+    const files = "files" in method ? method.files : {};
+    for (const [relative, content] of Object.entries(files ?? {})) {
+      await writeFile(
+        directory,
+        path.join(directory, method.directoryName, relative),
+        content,
+        { encoding: "utf8", mode: 0o444 },
+      );
+    }
     bytes += method.bytes;
   }
-  return { directory, count: methods.length, bytes };
+  return { directory, count: methods.length, bytes, learned };
 }

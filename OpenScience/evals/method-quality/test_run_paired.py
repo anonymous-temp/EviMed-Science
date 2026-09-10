@@ -1,6 +1,8 @@
 """Offline tests for the paired method-quality runner. No server, no model."""
 
+import contextlib
 import importlib.util
+import io
 import json
 import pathlib
 import tempfile
@@ -40,6 +42,10 @@ class FakeBackend(runner.Transport):
         self.sessions = {}
         self.runs = {}
         self.counter = 0
+        # The trial the server currently holds for the eval project, so a test
+        # can assert what each arm was actually mounting when it dispatched.
+        self.trial = None
+        self.trial_history = []
         self.lock = threading.Lock()
 
     def _next(self, prefix):
@@ -64,6 +70,20 @@ class FakeBackend(runner.Transport):
             return 200, {"data": {"path": body["filename"]}}, {}
         if path.startswith("/api/memory/records/"):
             return 200, {"data": {"id": path.rsplit("/", 1)[-1], "version": body["expectedVersion"] + 1}}, {}
+        if path == "/api/methods/trial" and method == "PUT":
+            expires = "2099-01-01T00:00:00.000Z"
+            with self.lock:
+                self.trial = {"methodIds": list(body["methodIds"]), "expiresAt": expires,
+                              "digestById": {method_id: f"sha256:{method_id}" for method_id in body["methodIds"]}}
+                self.trial_history.append(list(body["methodIds"]))
+            return 200, {"data": self.trial}, {}
+        if path == "/api/methods/trial" and method == "DELETE":
+            with self.lock:
+                self.trial = None
+                self.trial_history.append([])
+            return 200, {"data": {"cleared": True}}, {}
+        if path.startswith("/api/runs/") and path.endswith("/usage"):
+            return 200, {"data": {"cost": None}}, {}
         if path == "/api/commands/start_runtime":
             return 200, {"data": "http://fake-runtime.invalid/api/runtime"}, {}
         if path.endswith("/api/runtime/sessions") and method == "POST":
@@ -194,6 +214,7 @@ class Harness:
             results_dir=self.results_dir,
             log=lambda _message: None,
             sleep=lambda _seconds: None,
+            project_id="eval-project",
         )
 
 
@@ -498,6 +519,119 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(candidate["run"]["compaction"][0]["tokens"], 40_000)
         self.assertEqual(candidate["run"]["methodsLoaded"][0]["digest"], "sha256:" + "d" * 64)
         self.assertEqual(candidate["scores"]["reuse"], 1.0)
+
+
+class ArmApplicationTests(unittest.TestCase):
+    """The candidate arm has to differ from the baseline arm on the server.
+
+    Until 2026-09-10 both arms applied the same memory-record patch and nothing
+    else: the learned-method ledger lives behind `/api/methods`, the snapshot
+    spoke to `/api/memory/records`, and "method" meant two different things on
+    the two sides. Every paired evaluation was therefore a comparison of a
+    deployment with itself.
+    """
+
+    def _harness(self, stack, trial_ids, digests):
+        harness = Harness(stack.name, ["fam-001-a"])
+        raw = json.loads(harness.config_file.read_text(encoding="utf-8"))
+        raw["candidate"]["methodSnapshot"]["trialMethodIds"] = list(trial_ids)
+        raw["candidate"]["methodSnapshot"]["trialDigestById"] = dict(digests)
+        harness.config_file.write_text(json.dumps(raw), encoding="utf-8")
+        harness.config = runner.load_config(harness.config_file, harness.splits)
+        return harness
+
+    def test_the_candidate_arm_mounts_the_candidate_and_the_baseline_clears_it(self):
+        stack = tempfile.TemporaryDirectory()
+        self.addCleanup(stack.cleanup)
+        method_id = "method:learned:quote-first"
+        harness = self._harness(stack, [method_id], {method_id: f"sha256:{method_id}"})
+        backend = FakeBackend(harness.briefs, {
+            ("fam-001-a", arm): succeeded(methodsLoaded=[{"name": "quote-first", "digest": f"sha256:{method_id}"}] if arm == "candidate" else [])
+            for arm in ("baseline", "candidate")
+        })
+        cells = harness.make_runner(backend).execute()
+        self.assertEqual(len(cells), 2)
+        # One arm asked for it, the other cleared it. Both had to speak to the
+        # trial route, or the two arms are the same arm.
+        self.assertIn([method_id], backend.trial_history)
+        self.assertIn([], backend.trial_history)
+        by_arm = {cell["arm"]: cell for cell in cells}
+        self.assertEqual(by_arm["candidate"]["methodSnapshot"]["trial"]["methodIds"], [method_id])
+        self.assertEqual(by_arm["baseline"]["methodSnapshot"]["trial"]["methodIds"], [])
+
+    def test_a_cell_whose_arm_never_reached_the_container_is_not_scored_as_a_null_result(self):
+        stack = tempfile.TemporaryDirectory()
+        self.addCleanup(stack.cleanup)
+        method_id = "method:learned:quote-first"
+        harness = self._harness(stack, [method_id], {method_id: f"sha256:{method_id}"})
+        # The run loads nothing: an expired trial, a container reused, an amend
+        # between the request and the launch. All of them look like "the
+        # candidate changed nothing" unless the mount is read back.
+        backend = FakeBackend(harness.briefs, {
+            ("fam-001-a", arm): succeeded(methodsLoaded=[]) for arm in ("baseline", "candidate")
+        })
+        cells = harness.make_runner(backend).execute()
+        candidate = next(cell for cell in cells if cell["arm"] == "candidate")
+        self.assertFalse(candidate["armVerified"]["mounted"])
+        self.assertEqual(candidate["excluded"]["reason"], "arm_not_applied")
+        report = runner.build_report(harness.config, cells)
+        self.assertEqual(report["armsVerified"]["candidate"]["cellsInvalidated"], 1)
+
+
+class EvaluationContractTests(unittest.TestCase):
+    """The command line and the stdout the control plane depends on.
+
+    The server spawned `--method/--candidate-digest/--baseline-digest` and
+    parsed stdout as JSON; the script accepted only `--config` and printed a
+    table. Neither half was wrong on its own and no configured command could
+    ever have worked.
+    """
+
+    def test_the_arms_are_synthesised_around_one_candidate(self):
+        raw = {
+            "baseline": {
+                "methodSnapshot": {"id": "template", "records": [{"id": "mem_1", "status": "active", "expectedVersion": 1}],
+                                   "capabilitySkillsDir": "/opt/evimed/capability-skills"},
+                "compactionPolicy": "structured",
+            },
+        }
+        synthesised = runner.synthesize_arms(raw, "method:learned:x", "sha256:cand", "sha256:base")
+        self.assertEqual(synthesised["candidate"]["methodSnapshot"]["trialMethodIds"], ["method:learned:x"])
+        self.assertEqual(synthesised["candidate"]["methodSnapshot"]["trialDigestById"], {"method:learned:x": "sha256:cand"})
+        self.assertEqual(synthesised["baseline"]["methodSnapshot"]["trialMethodIds"], [])
+        # One thing differs. The memory records, the skills root and the
+        # compaction policy come from the template and are the same on both.
+        for arm in ("baseline", "candidate"):
+            self.assertEqual(synthesised[arm]["compactionPolicy"], "structured")
+            self.assertEqual(synthesised[arm]["methodSnapshot"]["records"], raw["baseline"]["methodSnapshot"]["records"])
+            self.assertEqual(synthesised[arm]["methodSnapshot"]["capabilitySkillsDir"], "/opt/evimed/capability-skills")
+
+    def test_json_mode_puts_one_verdict_line_on_stdout_and_the_table_on_stderr(self):
+        stack = tempfile.TemporaryDirectory()
+        self.addCleanup(stack.cleanup)
+        harness = Harness(stack.name, ["fam-001-a"])
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = runner.main([
+                "--config", str(harness.config_file), "--splits", str(harness.splits_file),
+                "--results-dir", str(harness.results_dir), "--reports-dir", str(harness.root / "reports"),
+                "--report-only", "--json",
+            ])
+        self.assertEqual(code, 0)
+        lines = [line for line in out.getvalue().splitlines() if line.strip()]
+        self.assertEqual(len(lines), 1, f"stdout must carry exactly one line, got {lines}")
+        parsed = json.loads(lines[0])
+        self.assertIn(parsed["verdict"], (*runner.VERDICTS, "invalid"))
+        self.assertTrue(parsed["report"].endswith(".json"))
+        self.assertIn("candidateDigest", parsed)
+        # And the human summary is still produced, on the other stream.
+        self.assertIn("verdict:", err.getvalue())
+
+    def test_method_without_a_template_is_a_named_error_not_a_traceback(self):
+        with self.assertRaises(SystemExit) as caught:
+            with contextlib.redirect_stderr(io.StringIO()):
+                runner.main(["--method", "method:learned:x"])
+        self.assertEqual(caught.exception.code, 2)
 
 
 class WholeFlowTests(unittest.TestCase):

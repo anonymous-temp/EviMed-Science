@@ -3,6 +3,12 @@ import { HttpError } from "./security.mjs";
 export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
   "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
+  // The candidates one project is mounting under trial. One row per project,
+  // written only by an evaluation identity, read by every launch of that
+  // project. Its own kind rather than a field on `method`, because it is a
+  // property of the project's next run and not of any one method: a method can
+  // be on trial in one project and absent from another at the same instant.
+  "method-trial",
 ]);
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "plugin-apply"]);
 
@@ -81,6 +87,23 @@ BEGIN
   END IF;
 END $document_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-06-product-digest-kind-v1') ON CONFLICT DO NOTHING;
+DO $method_trial_kind$
+BEGIN
+  -- The same shape as the block above, and it needs its own: that one only
+  -- re-adds the constraint when the existing one does not already mention the
+  -- digest kind, so on a deployment that has already run it a newly added kind
+  -- would be refused by a constraint nothing would rebuild -- and the symptom
+  -- would be a 500 on the first write of the new kind, months later.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check' AND pg_get_constraintdef(c.oid) LIKE '%method-trial%'
+  ) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $method_trial_kind$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-10-product-method-trial-kind-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.revisions (
   user_id text NOT NULL,
   kind text NOT NULL,

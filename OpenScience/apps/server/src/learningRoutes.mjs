@@ -81,8 +81,9 @@ export function methodView(document) {
   };
 }
 
-/** @param {{store: any, service: any, maxJsonBytes: number}} dependencies */
-export function createLearningRoutes({ store, service, maxJsonBytes }) {
+/** @param {{store: any, service: any, maxJsonBytes: number, evaluationUsers?: readonly string[], trialTtlMs?: number}} dependencies */
+export function createLearningRoutes({ store, service, maxJsonBytes, evaluationUsers = [], trialTtlMs = 6 * 60 * 60 * 1000 }) {
+  const evaluators = new Set((evaluationUsers ?? []).map((value) => String(value)));
   /** @param {any} req @param {any} res */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -106,6 +107,38 @@ export function createLearningRoutes({ store, service, maxJsonBytes }) {
         cursor: url.searchParams.get("cursor"),
       });
       return reply({ items: (page.items ?? []).map(methodView), nextCursor: page.nextCursor ?? null });
+    }
+    // Before the by-id branch: a method id is authored text, so `trial` has to
+    // be claimed as a literal here or `GET /api/methods/trial` reads as a
+    // lookup of a method named "trial" and answers 404 forever.
+    if (parts.length === 1 && parts[0] === "trial") {
+      const projectId = url.searchParams.get("projectId") ?? (method === "PUT" ? undefined : "");
+      if (method === "GET") {
+        return reply(await service.methodTrial(user.id, String(projectId ?? "")));
+      }
+      // Writing a trial mounts text no gate has admitted into a real container.
+      // The allowlist is the whole access rule -- no new role, no approval
+      // queue -- and it is empty by default, so a deployment that has not
+      // opted in answers 403 to everyone including its own operator.
+      if (!evaluators.has(String(user.id))) {
+        throw new HttpError(403, "method_trial_forbidden", "Only an evaluation identity may put a method on trial.");
+      }
+      if (method === "PUT") {
+        const body = await bodyOf(req, maxJsonBytes, ["projectId", "methodIds", "ttlMs"]);
+        if (!Array.isArray(body.methodIds)) {
+          throw new HttpError(400, "method_trial_invalid", "methodIds must be an array of method ids.");
+        }
+        return reply(await service.setMethodTrial(user.id, {
+          projectId: String(body.projectId ?? ""),
+          methodIds: body.methodIds,
+          requestedBy: String(user.id),
+          ttlMs: Number.isSafeInteger(body.ttlMs) && Number(body.ttlMs) > 0 ? Number(body.ttlMs) : trialTtlMs,
+        }));
+      }
+      if (method === "DELETE") {
+        return reply({ cleared: await service.clearMethodTrial(user.id, String(projectId ?? "")) });
+      }
+      throw new HttpError(405, "method_not_allowed", "Trial supports GET, PUT and DELETE.");
     }
     if (parts.length === 1 && method === "GET") {
       return reply(methodView(await service.getMethod(user.id, parts[0])));

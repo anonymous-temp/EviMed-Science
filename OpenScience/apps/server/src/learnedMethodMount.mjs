@@ -30,7 +30,7 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
+import { METHOD_FILE_PREFIXES, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -83,6 +83,36 @@ export function renderLearnedMethod(payload) {
 }
 
 /**
+ * The attached files of one method, keyed by their path under its directory.
+ *
+ * Only the two prefixes the domain allows, and only strings: the payload is a
+ * stored document, so this is the last place before the filesystem where a
+ * path that should never have been stored can still be dropped rather than
+ * written. `writeFileAtomicNoFollow` scopes the write as well, so this is the
+ * cheap half of two checks rather than the only one.
+ * @param {any} payload @returns {Record<string, string>}
+ */
+export function methodFiles(payload) {
+  const files = payload?.files;
+  if (!files || typeof files !== "object" || Array.isArray(files)) return {};
+  /** @type {Record<string, string>} */
+  const kept = {};
+  for (const [path, content] of Object.entries(files)) {
+    if (typeof content !== "string") continue;
+    if (!METHOD_FILE_PREFIXES.some((prefix) => path.startsWith(prefix))) continue;
+    if (path.includes("..") || path.includes("\\") || path.startsWith("/")) continue;
+    kept[path] = content;
+  }
+  return kept;
+}
+
+/** @param {any} payload @returns {number} */
+function methodFileBytes(payload) {
+  return Object.values(methodFiles(payload))
+    .reduce((total, content) => total + Buffer.byteLength(content, "utf8"), 0);
+}
+
+/**
  * The approved learned methods this project's runs should mount.
  *
  * Project-scoped methods first, then account-wide ones, deduplicated by id —
@@ -110,7 +140,7 @@ export function renderLearnedMethod(payload) {
  *
  * @param {any} learning `LearningService`
  * @param {{userId: string, projectId: string, maxCount?: number, maxBytes?: number, trialMethodIds?: readonly string[]}} scope
- * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, bytes: number, trial?: boolean}[]>}
+ * @returns {Promise<{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, trial?: boolean}[]>}
  */
 export async function selectLearnedMethods(learning, scope) {
   if (!learning) return [];
@@ -140,7 +170,7 @@ export async function selectLearnedMethods(learning, scope) {
     }
   }
 
-  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, bytes: number, approvedAt: number, trial?: boolean}[]} */
+  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, approvedAt: number, trial?: boolean}[]} */
   const candidates = [];
   for (const document of documents) {
     const payload = document?.payload ?? {};
@@ -158,7 +188,13 @@ export async function selectLearnedMethods(learning, scope) {
       digest: mountedMethodDigest(payload, sha256),
       directoryName: learnedMethodDirectoryName(String(document.id)),
       document: rendered,
-      bytes: Buffer.byteLength(rendered, "utf8"),
+      // A code skill's scripts, tests and tool schema, which the validator has
+      // already checked against each other and against the prefix rules. They
+      // ride in the byte budget with the body: the container is what has to
+      // hold them, and a method whose body is small and whose scripts are not
+      // taxes the launch exactly as much.
+      files: methodFiles(payload),
+      bytes: Buffer.byteLength(rendered, "utf8") + methodFileBytes(payload),
       approvedAt: Date.parse(String(payload.statusChangedAt ?? payload.createdAt ?? "")) || 0,
     });
   }
@@ -169,7 +205,7 @@ export async function selectLearnedMethods(learning, scope) {
     || right.approvedAt - left.approvedAt
     || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 
-  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, bytes: number, trial?: boolean}[]} */
+  /** @type {{id: string, name: string, digest: string, directoryName: string, document: string, files: Record<string, string>, bytes: number, trial?: boolean}[]} */
   const selected = [];
   let bytes = 0;
   for (const { approvedAt: _approvedAt, ...candidate } of candidates) {

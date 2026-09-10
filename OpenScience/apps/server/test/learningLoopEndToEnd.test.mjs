@@ -184,10 +184,13 @@ test("a distilled candidate reaches effect through evidence, and nothing asserts
     (error) => error.code === "method_not_promotable",
   );
 
-  // 5. The evaluation returns, against the baseline that is current.
+  // 5. The evaluation returns, against the baseline that is current, naming
+  // the candidate text it measured. Without that name the verdict describes
+  // nothing in particular and cannot support a promotion.
   await learning.recordEvaluation("u1", methodId, {
     report: "evals/method-quality/reports/e1.json",
     baselineDigest: "sha256:" + "c".repeat(64),
+    candidateDigest: document.payload.contentDigest,
     verdict: "better",
   });
   document = await learning.getMethod("u1", methodId);
@@ -227,6 +230,7 @@ test("three trajectories inside one run are not enough, and the reason says whic
   await foldRun(learning, finishedRun("run_1", ["d1", "d2", "d3"], known[0]), known);
   await learning.recordEvaluation("u1", applied.methodId, {
     report: "r.json", baselineDigest: "sha256:" + "c".repeat(64), verdict: "better",
+    candidateDigest: (await learning.getMethod("u1", applied.methodId)).payload.contentDigest,
   });
   const document = await learning.getMethod("u1", applied.methodId);
   assert.equal(document.payload.learning.counts.succeeded, 3);

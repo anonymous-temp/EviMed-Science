@@ -259,15 +259,28 @@ test("nothing that generates a method can approve one", async () => {
     (error) => error.code === "method_not_promotable" && /no paired evaluation/.test(error.message),
   );
 
-  // 3. With a passing evaluation against the current baseline, it goes through.
+  // 3. Nor by an evaluation that does not name the text it measured: a verdict
+  //    with no candidate digest describes nothing in particular, and crediting
+  //    it is how a score for one revision became the first vote for another.
+  document = await learning.recordEvaluation("u1", created.id, {
+    report: "evals/method-quality/reports/0.json", baselineDigest: `sha256:${"b".repeat(64)}`, verdict: "better",
+  });
+  await assert.rejects(
+    () => learning.approve("u1", created.id, { expectedRevision: document.revision }),
+    (error) => error.code === "method_not_promotable" && /does not name the text it measured/.test(error.message),
+  );
+
+  // 4. With a passing evaluation on this text and against the current
+  //    baseline, it goes through.
   const baseline = `sha256:${"b".repeat(64)}`;
   document = await learning.recordEvaluation("u1", created.id, {
     report: "evals/method-quality/reports/1.json", baselineDigest: baseline, verdict: "better",
+    candidateDigest: document.payload.contentDigest,
   });
   const approved = await learning.approve("u1", created.id, { expectedRevision: document.revision, currentBaselineDigest: baseline });
   assert.equal(approved.payload.status, "approved");
 
-  // 4. And a baseline that has since moved takes the approval away again.
+  // 5. And a baseline that has since moved takes the approval away again.
   const moved = await learning.amendMethod("u1", created.id, {
     expectedRevision: approved.revision, frontmatter: frontmatter(), body: `${BODY}\n\nA later thought.`,
   });

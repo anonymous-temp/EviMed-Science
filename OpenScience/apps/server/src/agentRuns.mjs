@@ -544,7 +544,7 @@ function normalizeMountedSkills(value) {
 
 function normalizeMethodDigests(value) {
   if (!Array.isArray(value)) return undefined;
-  /** @type {{name: string, digest: string, seq?: number}[]} */
+  /** @type {{name: string, digest: string, seq?: number, trial?: boolean}[]} */
   const entries = [];
   for (const item of value.slice(0, maxLearningMethods)) {
     if (!item || typeof item.name !== "string" || !item.name) continue;
@@ -553,6 +553,10 @@ function normalizeMethodDigests(value) {
       name: item.name.slice(0, 128),
       digest: item.digest,
       ...(Number.isSafeInteger(item.seq) && item.seq >= 0 ? { seq: item.seq } : {}),
+      // Whether this method was on trial rather than approved. Dropped here
+      // once, and the ledger could no longer tell a measured arm from an
+      // ordinary run -- so every later comparison would quietly mix the two.
+      ...(item.trial === true ? { trial: true } : {}),
     });
   }
   return entries;
@@ -1133,9 +1137,17 @@ function terminalFromMessages(messages) {
     const error = message?.info?.error;
     const serialized = JSON.stringify(error ?? "").toLowerCase();
     if (serialized.includes("abort") || serialized.includes("cancel")) {
-      return { status: "canceled", errorCode: "runtime_canceled" };
+      return { status: "canceled", errorCode: "runtime_canceled", errorSubCode: null };
     }
-    if (error) return { status: "failed", errorCode: "runtime_session_error" };
+    // The sub-code the kernel already told us and the ledger threw away.
+    // `runtime_session_error` covered a context overflow and an ordinary
+    // session fault with the same string, so the one failure whose remedy is a
+    // different context policy was indistinguishable from every other — which
+    // is exactly the measurement the compaction decision needs.
+    if (error) {
+      const subCode = typeof error.subCode === "string" && error.subCode ? error.subCode : null;
+      return { status: "failed", errorCode: "runtime_session_error", errorSubCode: subCode };
+    }
   }
   const toolParts = messages.flatMap((message) => message?.parts ?? []).filter((part) => part?.type === "tool");
   for (const [index, part] of toolParts.entries()) {
@@ -1163,9 +1175,9 @@ function terminalFromMessages(messages) {
     const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
       candidate.tool === part.tool && successfulToolPart(candidate)
     ));
-    if (!correctedByLaterSuccess) return { status: "failed", errorCode: "runtime_tool_error" };
+    if (!correctedByLaterSuccess) return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: null };
   }
-  return { status: "succeeded", errorCode: null };
+  return { status: "succeeded", errorCode: null, errorSubCode: null };
 }
 
 /** @param {any} issues @param {any} shrinkage @param {boolean} revisionRequired */
@@ -3542,6 +3554,11 @@ export class AgentRunStore {
     const normalized = {
       status: terminal.status,
       errorCode: sanitizeErrorCode(terminal.errorCode),
+      // The kernel's own finer reason, when it gave one. Kept beside the code
+      // rather than folded into it: `runtime_session_error` is a stable string
+      // other things key on, and a context overflow is a different remedy from
+      // a session fault -- which the ledger could not distinguish at all.
+      ...(sanitizeErrorCode(terminal.errorSubCode) ? { errorSubCode: sanitizeErrorCode(terminal.errorSubCode) } : {}),
       artifacts: normalizeArtifacts(terminal.artifacts),
       /** Files the run wrote that no gate accepted. Empty is "none"; the field
        *  is always present so a reader never has to treat absent as unknown. */
@@ -3755,7 +3772,9 @@ export class AgentRunStore {
       .slice(repairBaselineIndex + 1)
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
     if (assistants.length === 0) {
-      if (ownEnd?.code) return this.finishInternal(project, run.id, { ...terminalFromMessages(history), artifacts: [],
+      if (ownEnd?.code) return this.finishInternal(project, run.id, {
+        ...terminalFromMessages([{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...history]),
+        artifacts: [],
         ...(run.nativeTurn && ownEnd.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
       });
       return run;
@@ -3768,7 +3787,7 @@ export class AgentRunStore {
     // A steering input can be the final message in a turn. The end belongs to
     // the turn, irrespective of the role of the message carrying it.
     const terminal = terminalFromMessages(ownEnd?.code
-      ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code } } }, ...assistants]
+      ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...assistants]
       : assistants);
     let runtimeWorkspaceRoot;
     try {

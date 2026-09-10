@@ -86,6 +86,7 @@ import { MemoryIntelligence } from "./memoryIntelligence.mjs";
 import { OidcService, validateOidcSettings } from "./oidc.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
+  RUNTIME_CAPABILITY_SKILLS_DIR,
   RUNTIME_KERNEL_NAME,
   RuntimeManager,
   runtimeNetworkRequiresEgressOptIn,
@@ -414,6 +415,7 @@ function routePattern(pathname) {
   if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/* (retired)";
   if (pathname.startsWith("/api/runs/") && pathname.includes("/interactions/")) return "/api/runs/:id/interactions/:eventId";
   if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events")) return "/api/runs/:id/events";
+  if (pathname.startsWith("/api/runs/") && pathname.endsWith("/usage")) return "/api/runs/:id/usage";
   if (pathname === "/api/runtime/sessions") return "/api/runtime/sessions";
   if (pathname.startsWith("/api/runtime/sessions/") && pathname.endsWith("/transcript")) return "/api/runtime/sessions/:id/transcript";
   if (pathname.startsWith("/api/files/preview/")) return "/api/files/preview/:path";
@@ -672,7 +674,11 @@ export function createWebApiApp(overrides = {}) {
   const learningService = productDocuments
     ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService })
     : null;
-  const learningRoutes = createLearningRoutes({ store, service: learningService, maxJsonBytes: config.maxJsonBytes });
+  const learningRoutes = createLearningRoutes({
+    store, service: learningService, maxJsonBytes: config.maxJsonBytes,
+    evaluationUsers: config.learningEvaluationUsers,
+    trialTtlMs: config.learningTrialTtlMs,
+  });
   // Terminal-hook writes still in flight.
   //
   // `onRunFinished` fires from the run store's own monitor, so a transcript
@@ -706,19 +712,46 @@ export function createWebApiApp(overrides = {}) {
     if (!projection) return;
     const approved = await learningService.approvedMethods(project.userId, { projectId: project.id });
     const accountWide = await learningService.approvedMethods(project.userId, { projectId: null });
-    /** @type {{id: string, name: string, digest: string}[]} */
+    // The candidates this project is mounting under trial, which are the whole
+    // reason the trial exists: a candidate is promoted on observed
+    // trajectories, and reading only the approved list meant a mounted
+    // candidate earned none of them. It stays unpromotable forever, and the
+    // symptom is a loop that looks like it is running and never learns.
+    //
+    // A trial that cannot be read costs the approved methods nothing.
+    /** @type {any[]} */
+    let trialled = [];
+    try {
+      const trial = await learningService.methodTrial(project.userId, project.id);
+      for (const methodId of trial.methodIds ?? []) {
+        const document = await learningService.getMethod(project.userId, methodId).catch(() => null);
+        if (document) trialled.push(document);
+      }
+    } catch { trialled = []; }
+    /** @type {{id: string, name: string, digest: string, trial?: boolean}[]} */
     const methods = [];
-    for (const document of [...approved, ...accountWide]) {
+    for (const document of [...trialled, ...approved, ...accountWide]) {
       if (methods.some((method) => method.id === document.id)) continue;
       const name = String(document.payload?.frontmatter?.name ?? "");
       if (!name) continue;
-      methods.push({ id: String(document.id), name, digest: mountedMethodDigest(document.payload, sha256Hex) });
+      methods.push({
+        id: String(document.id),
+        name,
+        digest: mountedMethodDigest(document.payload, sha256Hex),
+        ...(trialled.some((candidate) => candidate.id === document.id) ? { trial: true } : {}),
+      });
     }
     const derived = runMethodObservations({ run, projection, methods, sessions });
     if (derived.methodsLoaded.length || derived.methodsInvoked.length) {
+      // A run that carried an unproven method has to say so on its own row.
+      // Without it a reader of the ledger cannot tell a measured arm from an
+      // ordinary run, and every later comparison silently mixes the two.
+      const trialNames = new Set(methods.filter((method) => method.trial).map((method) => method.name));
+      const mark = (/** @type {{name: string, digest: string}[]} */ entries) => entries.map((entry) => (
+        trialNames.has(entry.name) ? { ...entry, trial: true } : entry));
       await agentRuns.recordLearning(project, run.id, {
-        methodsLoaded: derived.methodsLoaded,
-        methodsInvoked: derived.methodsInvoked,
+        methodsLoaded: mark(derived.methodsLoaded),
+        methodsInvoked: mark(derived.methodsInvoked),
       });
     }
     // A method the run read without any delegation to hang it on. It earns no
@@ -1038,6 +1071,12 @@ export function createWebApiApp(overrides = {}) {
   // have the same lifetime -- both are null exactly when no product database is
   // configured.
   runtimeManager.capsuleService = capsuleService;
+  // And the other source of mountable methods. Without this assignment
+  // `materializeCapsuleMethods` writes only capsule entries, which is what the
+  // deployment did until 2026-09-10: approving a learned method changed nothing
+  // anywhere, and the counters that decide whether one may be approved could
+  // never move, because moving them requires the method to have been in a run.
+  runtimeManager.learningService = learningService;
   if (pluginService) pluginService.runtimeGeneration = project => runtimeManager.runtimeGeneration(project);
   const pluginApplyWorker = pluginService ? new PluginApplyWorker({
     service: pluginService, runtime: runtimeManager,
@@ -1474,6 +1513,11 @@ export function createWebApiApp(overrides = {}) {
       evaluate: config.learningEvaluationCommand
         ? (request) => runPairedEvaluation(config.learningEvaluationCommand, request)
         : null,
+      audit: (job, event, detail) => securityAudit(config, event, "recorded", {
+        userId: job.userId, projectId: job.projectId,
+        code: typeof detail?.verdict === "string" ? detail.verdict : "unknown",
+        detail: `method=${detail?.methodId ?? ""}`,
+      }),
     });
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
@@ -3192,6 +3236,38 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
+      // What one run cost, for the person or the harness that ran it.
+      //
+      // `usageLedger.summaryRun` existed and had no route, so the only way to
+      // join a cost to a run was to export the whole account and match by id
+      // offline. The paired evaluation did exactly that and reported "cost
+      // unavailable" whenever nobody had exported anything, which is most of
+      // the time. Scoped to the caller's own project like every other run
+      // route, so it discloses nothing an account holder cannot already read.
+      if (pathname.startsWith("/api/runs/") && pathname.endsWith("/usage") && req.method === "GET") {
+        const ctx = await context(req, res);
+        const runId = decodeRouteComponent(pathname.slice("/api/runs/".length, -"/usage".length), "run id");
+        const run = (await agentRuns.list(ctx.project)).find((candidate) => candidate.id === runId);
+        if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
+        if (!usageLedger) throw new HttpError(503, "usage_ledger_unavailable", "The usage ledger is unavailable.");
+        // Keyed by `dispatchId`, which is what the gateway stamps on each call;
+        // the same key `finishInternal` uses, so the two agree by construction.
+        const summary = await usageLedger.summaryRun(ctx.project.userId, run.dispatchId ?? run.id);
+        sendJson(res, 200, { data: {
+          runId: run.id,
+          cost: summary.actualCost,
+          openCost: summary.openCost,
+          currency: summary.currency,
+          calls: summary.settledCalls,
+          uncertain: summary.uncertain,
+          cacheHitTokens: null,
+          cacheMissTokens: null,
+          inputTokens: summary.inputTokens,
+          outputTokens: summary.outputTokens,
+          modelId: summary.modelId,
+        } });
+        return;
+      }
       if (pathname.startsWith("/api/runs/") && pathname.endsWith("/events") && req.method === "GET") {
         const ctx = await context(req, res);
         const runId = decodeRouteComponent(
@@ -4417,14 +4493,23 @@ function addHistogramMetric(lines, name, help, series) {
  * same API a person would. What comes back is only the verdict and the path of
  * the report it wrote — the control plane does not re-derive the statistics,
  * because a second implementation of the analysis is a second answer.
+ * `--json` is passed here rather than left to the configured command, because
+ * it is the half of the contract this side depends on: with it the harness
+ * prints one verdict line on stdout and its human table on stderr, and without
+ * it stdout is a table and `JSON.parse` below can only ever fail. The two
+ * halves disagreed for exactly that reason until 2026-09-10 — the server sent
+ * flags the script did not accept, and the script printed output the server
+ * could not read, so no configured command could have worked.
+ *
  * @param {string} command
  * @param {{userId: string, projectId: string, methodId: string, candidateDigest: string, baselineDigest: string}} request
- * @returns {Promise<{verdict: string, report: string, baselineDigest?: string}>}
+ * @returns {Promise<{verdict: string, report: string, baselineDigest?: string, candidateDigest?: string}>}
  */
 function runPairedEvaluation(command, request) {
   return new Promise((resolve, reject) => {
     const [program, ...args] = command.split(/\s+/).filter(Boolean);
     const child = spawn(program, [...args,
+      "--json",
       "--method", request.methodId,
       "--candidate-digest", request.candidateDigest,
       ...(request.baselineDigest ? ["--baseline-digest", request.baselineDigest] : []),
@@ -4442,9 +4527,18 @@ function runPairedEvaluation(command, request) {
         return;
       }
       try {
-        resolve(JSON.parse(stdout));
+        // The last non-empty line. `--json` promises one machine-readable line
+        // on stdout, and taking the last one survives a harness that prints a
+        // progress line before it — the alternative is a parse failure whose
+        // message blames the verdict for the noise in front of it.
+        const line = stdout.split("\n").map((entry) => entry.trim()).filter(Boolean).at(-1) ?? "";
+        const parsed = JSON.parse(line);
+        if (!parsed || typeof parsed !== "object" || typeof parsed.verdict !== "string") {
+          throw new TypeError("no verdict");
+        }
+        resolve(parsed);
       } catch {
-        const error = new Error("The paired evaluation printed no readable verdict.");
+        const error = new Error(`The paired evaluation printed no readable verdict: ${stdout.trim().slice(-200)}`);
         /** @type {any} */ (error).code = "method_evaluation_invalid";
         reject(error);
       }
@@ -5579,7 +5673,18 @@ async function readinessRuntime(config, runtimeManager) {
   // Which kernel this deployment is on and at which version, reported on every
   // branch. There is one kernel now, but "what am I actually running" is still
   // a question an operator must be able to answer without reading env files.
-  const kernel = { kernel: RUNTIME_KERNEL_NAME, kernelVersion: config.dshVersion };
+  //
+  // `compactionPolicy` and `capabilitySkillsDir` ride along because they are
+  // the two settings a paired evaluation declares about the deployment it ran
+  // on and cannot set over HTTP. Without them in readiness the harness could
+  // only write the word "declaredOnly" in its report, which reads like a
+  // result and is an admission that nobody checked.
+  const kernel = {
+    kernel: RUNTIME_KERNEL_NAME,
+    kernelVersion: config.dshVersion,
+    compactionPolicy: config.runtimeCompactionPolicy,
+    capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
+  };
   // The kernel's browser application is this product's session surface, so a
   // production deployment that switches it on and leaves it unaddressable has
   // no session surface at all -- and would say nothing about it. Both halves
