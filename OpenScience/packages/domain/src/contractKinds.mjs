@@ -10,6 +10,8 @@
  * contract nobody enforces, which is worse than no contract at all.
  */
 
+import capabilityContracts from './capability-contracts.json' with { type: 'json' }
+
 /** @typedef {typeof CONTRACT_KINDS[number]} ContractKind */
 
 export const CONTRACT_KINDS = Object.freeze([
@@ -63,40 +65,54 @@ export function isContractKind(value) {
  */
 export const SAFETY_CLASSES = Object.freeze(['general', 'clinical', 'regulated'])
 
+/** Kinds that may only leave the platform after the server-side gate passes. */
+export const REGULATED_CONTRACT_KINDS = Object.freeze(['clinical-decision-brief'])
+
 /**
  * Which kinds carry clinical content and therefore must satisfy the safety
  * content triggers even when their own validator is lenient (§9.4).
+ *
+ * Derived, not written. This was a hand-kept list for eight months and three
+ * capabilities that declare `safetyClass: clinical` were never added to it —
+ * evidence-appraisal, manuscript-support and meta-analysis. The cost was not
+ * theoretical: one mention of a medicine in an appraisal table or a manuscript
+ * section came back as `clinical_content_without_clinical_contract`, blocking,
+ * telling a capability whose whole subject is that medicine to remove it. The
+ * comment in `appraisalContract.mjs` described the defect months before
+ * anything fixed it, because the fix was "remember to edit the other file".
+ *
+ * `capability-contracts.json` is generated from `capabilities/*\/capability.yaml`
+ * by `scripts/build/generate-capability-manifests.mjs`, and `--check` (wired
+ * into `ci:web` as `check:capabilities`) fails when it drifts. So declaring a
+ * capability clinical is now the whole action: nothing else has to be
+ * remembered, and nothing else can be forgotten.
+ *
+ * The regulated kinds are unioned in because a regulated deliverable is clinical
+ * by definition and `clinical-decision-brief` is produced by no capability yet —
+ * it is reserved (§9.9). A reserved kind that silently stopped being clinical
+ * the moment the list became derived would be the derivation quietly losing a
+ * rule, which is worse than the hand-kept list it replaced.
+ *
+ * A GEO content pack about a medicine is medicine advice, which is why
+ * `geo-content` declares itself clinical in its own manifest. Spec 9.11 says so —
+ * "含用药 / 急症指导的块必须同时满足 clinical 契约，营销文案不能绕过安全规则".
+ * Being on this list only silences the trigger check; the safety rules have to
+ * be applied by the validator, which is the other half of the same change in
+ * `contractRegistry.mjs`. A kind that calls itself clinical and enforces
+ * nothing is a label.
  */
-export const CLINICAL_CONTRACT_KINDS = Object.freeze([
-  'clinical-evidence-report',
-  'drug-evaluation-report',
-  'drug-selection-report',
-  'off-label-report',
-  'adr-analysis-report',
-  'clinical-decision-brief',
-  // A GEO content pack about a medicine is medicine advice. Spec 9.11 says so —
-  // "含用药 / 急症指导的块必须同时满足 clinical 契约，营销文案不能绕过安全规则" —
-  // and until this line existed the implementation did the opposite of what that
-  // sentence asks: it rejected every such pack with
-  // `clinical_content_without_clinical_contract`, advice the capability could
-  // not act on, because there is no clinical GEO kind and removing the medicine
-  // removes the deliverable. Found by assembling a real pack and running it
-  // through the real gate.
-  //
-  // This line alone would have been worse than the defect. It only silences the
-  // trigger check; the safety rules have to be applied by the validator, which
-  // is the other half of the same change in contractRegistry.mjs. A kind that
-  // calls itself clinical and enforces nothing is a label.
-  'geo-content-pack',
-])
+export const CLINICAL_CONTRACT_KINDS = Object.freeze([...new Set([
+  ...(Array.isArray(capabilityContracts?.capabilities) ? capabilityContracts.capabilities : [])
+    .filter((capability) => capability?.safetyClass === 'clinical')
+    .flatMap((capability) => (Array.isArray(capability?.contractKinds) ? capability.contractKinds : []))
+    .map((kind) => String(kind)),
+  ...REGULATED_CONTRACT_KINDS,
+])].sort())
 
 /** @param {string} kind @returns {boolean} */
 export function isClinicalContractKind(kind) {
   return CLINICAL_CONTRACT_KINDS.includes(String(kind))
 }
-
-/** Kinds that may only leave the platform after the server-side gate passes. */
-export const REGULATED_CONTRACT_KINDS = Object.freeze(['clinical-decision-brief'])
 
 /** @param {string} kind @returns {boolean} */
 export function isRegulatedContractKind(kind) {

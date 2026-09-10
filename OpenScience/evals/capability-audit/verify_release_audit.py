@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -74,9 +75,77 @@ def specialist_source_root(recorded, tool):
     return root
 
 
+TOOL_PROBE_WINDOW_DAYS = 14
+
+
+def tool_probe_currency(document, registry, not_offered):
+    """Say what is stale, by how much, and what would refresh it.
+
+    "tool audit evidence is stale" was the whole message, and it was the first
+    thing this function checked, so it was also the only thing anyone learned:
+    the run died before loading the registry and therefore before it could
+    notice that the probe covers 25 tools while the registry declares 34.
+    Someone reading that message re-runs the probe expecting a green audit and
+    gets "tool registry count is not 34" instead - two cycles for one report.
+
+    Both facts are computed before either is raised, and the message carries
+    the age, the window, the counts and the names. The window is not widened
+    and the timestamp is not touched: a probe records what a live deployment
+    answered, and there is no way to make it current except to ask a live
+    deployment again. A gate the run can talk its way past is not a gate.
+    """
+    declared = registry - not_offered
+    expected = len(declared)
+    recorded = document.get("registered")
+    probed = {str(item.get("tool")) for item in document.get("results", []) if item.get("tool")}
+    reasons = []
+    # The 2026-07-31 probe records every tool as `evimed_<base>`, a spelling the
+    # server retired. Reported as its own fact: without it the name diff below
+    # reads as "59 tools unprobed", which sends the reader looking for 59
+    # missing probes instead of for one rename.
+    renamed = {name for name in probed if name.startswith("evimed_") and name[len("evimed_"):] in registry}
+    if renamed:
+        reasons.append("records %d tool(s) under the retired `evimed_` prefix (e.g. %s)" % (len(renamed), sorted(renamed)[0]))
+        probed = {name[len("evimed_"):] if name in renamed else name for name in probed}
+    uncovered = sorted(declared - probed)
+    surplus = sorted(probed - declared)
+    try:
+        observed = datetime.fromisoformat(str(document.get("probedAt")).replace("Z", "+00:00"))
+    except ValueError:
+        reasons.append("probedAt %r is not a timestamp" % document.get("probedAt"))
+        observed = None
+    if observed is not None:
+        now = datetime.now(timezone.utc)
+        require(observed <= now + timedelta(minutes=5), "tool audit timestamp is in the future")
+        age = now - observed
+        if age > timedelta(days=TOOL_PROBE_WINDOW_DAYS):
+            reasons.append(
+                "probed %s (%d days ago); the window is %d days"
+                % (observed.date().isoformat(), age.days, TOOL_PROBE_WINDOW_DAYS)
+            )
+    if recorded != expected or uncovered or surplus:
+        reasons.append(
+            "covers %s tool(s); the registry declares %d (%d offered, %d not offered)%s%s"
+            % (recorded, len(registry), expected, len(not_offered),
+               (" - never probed: %s" % ", ".join(uncovered)) if uncovered else "",
+               (" - probed but no longer declared: %s" % ", ".join(surplus)) if surplus else "")
+        )
+    if not reasons:
+        return
+    raise SystemExit(
+        "tool audit evidence is out of date: %s.\n"
+        "  evidence: %s\n"
+        "  refresh:  run evals/capability-audit/run_tool_audit.py --probe-workspace <ws> against a running deployment,\n"
+        "            then commit the regenerated results/tool-probe-v3.json.\n"
+        "  note:     nothing here can be repaired by editing the file. The probe is a record of what a live\n"
+        "            deployment answered; with no deployment reachable this check stays red, and that is the\n"
+        "            correct reading of the evidence."
+        % ("; ".join(reasons), (RESULTS / "tool-probe-v3.json").relative_to(REPO))
+    )
+
+
 def verify_tools():
     document = read("tool-probe-v3.json")
-    parsed_fresh(document.get("probedAt"), "tool audit")
     require(document.get("schemaVersion") == 3, "tool audit schema is stale")
     # Derived from the live registry, never written down.
     #
@@ -111,6 +180,9 @@ def verify_tools():
         "tools this product does not declare optional were switched off: %s" % ", ".join(unapproved),
     )
     expected = len(registry - not_offered)
+    # Currency is judged here rather than at the top of the function, because
+    # the useful message needs the registry this line has just finished reading.
+    tool_probe_currency(document, registry, not_offered)
     require(document.get("registered") == expected, "tool registry count is not %d" % expected)
     require(document.get("executionCertified") == expected, "all %d tools are not execution-certified" % expected)
     require(document.get("operational") == expected, "tool operational count is not %d" % expected)
@@ -213,26 +285,47 @@ def verify_sources():
     conditional = set(public_sources.CONDITIONAL_BIOMEDICAL_SOURCE_IDS)
     summary = module.integration_summary()
     states = summary.get("connectionStateCounts", {})
+    # Every count below is recomputed from the catalog rows and from the live
+    # connector registry. It used to be eleven literals -- 123 reviewed, 13
+    # skill-guidance, 4/18/11/8/2/3 by connection state, 8 conditional -- in the
+    # same file whose own comment, forty lines up, criticises "a number in one
+    # file and a registry in another". Every one of them was a release blocked
+    # by a message naming a count instead of the change that moved it, and the
+    # only way past was to edit the expectation, which is the audit grading
+    # itself.
+    #
+    # What is worth checking is not the totals: it is that the three
+    # descriptions of the same catalog agree -- the rows, the summary the
+    # product publishes from them, and the connector registry the runtime
+    # actually mounts. A miscount in `integration_summary()` fails here; adding
+    # a data source does not.
+    rows = module.sources()
+    require(rows, "the source catalog is empty")
+    counted = Counter(str(item.get("connectionState")) for item in rows)
     require(len(registered) == len(public_sources.BIOMEDICAL_SOURCE_IDS), "public connector registry contains duplicate ids")
-    require(len(conditional) == 8 and not registered.intersection(conditional), "conditional connector registry is invalid")
+    require(not registered.intersection(conditional), "conditional connector registry is invalid")
     require(set(public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS) == registered | conditional, "queryable connector registry drifted")
     require(set(module.active_connector_ids()) == registered, "catalogued public connectors do not exactly match the live registry")
-    require(summary.get("reviewedTotal") == 123 and sum(states.values()) == 123, "reviewed data-source count drifted")
+    require(
+        summary.get("reviewedTotal") == len(rows) and sum(states.values()) == len(rows),
+        "reviewed data-source count does not reconcile with the catalog: summary %s, states %d, rows %d"
+        % (summary.get("reviewedTotal"), sum(states.values()), len(rows)),
+    )
+    require(
+        dict(states) == dict(counted),
+        "connection-state counts do not reconcile with the catalog rows: summary %s, rows %s"
+        % (sorted(states.items()), sorted(counted.items())),
+    )
     require(summary.get("connectedPublic") == len(registered) and states.get("connected_public") == len(registered), "connected data-source count is inflated")
-    require(summary.get("skillGuidanceOnly") == 13 and states.get("skill_guidance") == 13, "skill-guidance data-source count drifted")
-    require(summary.get("notConnected") == 123 - len(registered) - 13, "not-connected data-source count drifted")
-    require({key: states.get(key) for key in (
-        "blocked_approval", "blocked_license", "blocked_no_api", "ready_credentials",
-        "adapter_credentials_required", "ready_private_adapter", "catalog_only",
-    )} == {
-        "blocked_approval": 4,
-        "blocked_license": 18,
-        "blocked_no_api": 11,
-        "ready_credentials": 8,
-        "adapter_credentials_required": 2,
-        "ready_private_adapter": 3,
-        "catalog_only": None,
-    }, "blocked or conditional data-source counts drifted")
+    require(summary.get("skillGuidanceOnly") == counted.get("skill_guidance", 0), "skill-guidance data-source count drifted")
+    require(
+        summary.get("notConnected") == len(rows) - len(registered) - counted.get("skill_guidance", 0),
+        "not-connected data-source count drifted",
+    )
+    # The one state that must stay empty: `catalog_only` means a row nobody
+    # classified, and a classification nobody made is not a review.
+    require(counted.get("catalog_only", 0) == 0, "%d data source(s) are catalogued and unclassified" % counted.get("catalog_only", 0))
+    require(len(conditional) == counted.get("ready_credentials", 0), "credential-ready catalog rows and implemented adapters disagree")
     conditional_items = [item for item in module.sources() if item.get("connectionState") == "ready_credentials"]
     require({item.get("id") for item in conditional_items} == conditional, "credential-ready catalog entries do not match implemented adapters")
     require(all(item.get("connector") == item.get("id") for item in conditional_items), "credential-ready connector ids drifted")

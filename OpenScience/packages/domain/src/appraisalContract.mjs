@@ -66,16 +66,28 @@
  *   'appraisal-certainty-arithmetic', 'appraisal-citation-coverage',
  *   'appraisal-table-rendered'
  *
+ * All eleven are registered as of 2026-09-10, and a test walks this module to
+ * hold them there. Until it did, this paragraph was the registry: it named the
+ * eleven, asked for them, and nothing read it — so every advisory finding this
+ * module produced landed on an axis value nothing enumerated, which is why
+ * "ship as a notice and watch the distribution" had no distribution to watch.
+ * A comment cannot fail.
+ *
  * ## One more thing the registry owns
  *
- * `appraisal-table` is not in `CLINICAL_CONTRACT_KINDS`, so the shared
- * `proseHygieneIssues` rejects any appraisal whose prose names a trigger entity
- * with `clinical_content_without_clinical_contract` — advice no appraisal of
- * that medicine's trials can act on, because removing the medicine removes the
- * deliverable. It is the same defect `geo-content-pack` was fixed for. If the
- * kind is moved into `CLINICAL_CONTRACT_KINDS` to close it, the registry must
- * apply `evaluateClinicalSafetyRules` to this kind in the same change: a kind
- * that calls itself clinical and enforces nothing is a label.
+ * `appraisal-table` is a clinical contract kind as of 2026-09-10, derived from
+ * `evidence-appraisal`'s own `safetyClass: clinical` rather than remembered.
+ * Before that it was not, and the shared `proseHygieneIssues` rejected any
+ * appraisal whose prose named a trigger entity with
+ * `clinical_content_without_clinical_contract` — advice no appraisal of that
+ * medicine's trials could act on, because removing the medicine removes the
+ * deliverable. It was the same defect `geo-content-pack` was fixed for.
+ *
+ * The other half of that change landed with it, because a kind that calls
+ * itself clinical and enforces nothing is a label: the registry now runs
+ * `clinicalSafetyRuleHits` on the branch every report-shaped clinical kind
+ * shares, this one included. Those findings are advisory, like everything else
+ * this module raises.
  *
  * The vocabularies are deliberately module-local. They are the same words
  * SKILL.md teaches, and a run that reads them out of an export would be reading

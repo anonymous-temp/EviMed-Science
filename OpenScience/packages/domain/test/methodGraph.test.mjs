@@ -104,13 +104,24 @@ test("changing the body resets what was measured about the old one, but keeps th
   assert.equal(resetLearningForDigest(learning, DIGEST_A), learning, "an unchanged digest is not a reset");
 });
 
-test("an evaluation counts as validation only when it passed", () => {
-  const passed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r1.json", baselineDigest: DIGEST_B, verdict: "non_inferior" });
+test("an evaluation counts as validation only when it passed, on the text it measured", () => {
+  const passed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r1.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "non_inferior" });
   assert.equal(passed.counts.validated, 1);
-  const failed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r2.json", baselineDigest: DIGEST_B, verdict: "worse" });
+  const failed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r2.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" });
   assert.equal(failed.counts.validated, 0);
   assert.equal(failed.evaluations.length, 1, "a failing verdict is still recorded");
   assert.equal(foldEvaluation(emptyLearning(DIGEST_A), { report: "r", baselineDigest: DIGEST_B, verdict: "vibes" }).evaluations.length, 0);
+
+  // An evaluation takes hours of real runs and the method can be amended while
+  // it is in flight; the amendment resets this record for the new digest. A
+  // verdict folded in unconditionally therefore made the old text's score the
+  // new text's first vote. Recorded either way -- "we measured something else"
+  // is a fact worth keeping -- and counted only when the digests agree.
+  const elsewhere = foldEvaluation(emptyLearning(DIGEST_A), { report: "r3.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_B, verdict: "better" });
+  assert.equal(elsewhere.counts.validated, 0, "a verdict about other text must not count");
+  assert.equal(elsewhere.evaluations.length, 1, "and must still be on the record");
+  const unnamed = foldEvaluation(emptyLearning(DIGEST_A), { report: "r4.json", baselineDigest: DIGEST_B, verdict: "better" });
+  assert.equal(unnamed.counts.validated, 0, "a verdict that names no text counts for none");
 });
 
 test("a relation is upserted by (type, target) so a nightly re-proposal is not a duplicate", () => {
@@ -172,8 +183,8 @@ test("an explicitly taught method takes effect immediately", () => {
   assert.deepEqual(verdict.missing, []);
 });
 
-test("an inferred method needs the threshold, a passing evaluation, and a live baseline", () => {
-  const passing = foldEvaluation(threeSuccesses(), { report: "r.json", baselineDigest: DIGEST_B, verdict: "better" });
+test("an inferred method needs the threshold, a passing evaluation on its own text, and a live baseline", () => {
+  const passing = foldEvaluation(threeSuccesses(), { report: "r.json", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "better" });
   const good = promotionVerdict(method({ learning: passing }), { currentBaselineDigest: DIGEST_B });
   assert.equal(good.status, "approved", good.missing.join("; "));
 
@@ -184,7 +195,7 @@ test("an inferred method needs the threshold, a passing evaluation, and a live b
 
   // Evaluated and lost.
   const lost = promotionVerdict(method({
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, verdict: "worse" }),
+    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "worse" }),
   }));
   assert.equal(lost.status, "candidate");
   assert.match(lost.missing.join(" "), /returned worse/);
@@ -192,13 +203,28 @@ test("an inferred method needs the threshold, a passing evaluation, and a live b
   // Inconclusive is not a pass. A confidence interval that spans the margin
   // means we do not know, and "we do not know" must not promote.
   const unclear = promotionVerdict(method({
-    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, verdict: "inconclusive" }),
+    learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_A, verdict: "inconclusive" }),
   }));
   assert.equal(unclear.status, "candidate");
 
   // Won against a baseline that has since moved: the comparison is stale.
   const stale = promotionVerdict(method({ learning: passing }), { currentBaselineDigest: DIGEST_C });
   assert.equal(stale.status, "candidate");
+
+  // Won, but about text this method no longer holds. The verdict was real and
+  // it is not about what would be mounted, which is the same answer as never
+  // having been evaluated -- and the message has to say which of the two it is.
+  const otherText = promotionVerdict(
+    method({ learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, candidateDigest: DIGEST_C, verdict: "better" }) }),
+    { currentBaselineDigest: DIGEST_B },
+  );
+  assert.equal(otherText.status, "candidate");
+  assert.match(otherText.missing.join(" "), /no longer holds/);
+  const unnamedText = promotionVerdict(
+    method({ learning: foldEvaluation(threeSuccesses(), { report: "r", baselineDigest: DIGEST_B, verdict: "better" }) }),
+    { currentBaselineDigest: DIGEST_B },
+  );
+  assert.match(unnamedText.missing.join(" "), /does not name the text it measured/);
   assert.match(stale.missing.join(" "), /baseline that has since moved/);
 
   // Not enough trajectories.

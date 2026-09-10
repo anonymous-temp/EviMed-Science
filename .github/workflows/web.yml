@@ -72,6 +72,8 @@ jobs:
           pnpm test:acceptance-ledger
           pnpm test:eval-briefs
           pnpm test:specialist-driver
+          pnpm test:release-audit
+          pnpm test:phi-masking
 
       - name: Check generated artifacts are current
         run: |

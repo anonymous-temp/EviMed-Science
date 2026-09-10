@@ -790,3 +790,122 @@ test("every gate check declares its own id, and no finding function is left anon
   for (const id of attached) assert.ok(axis.has(id), `the contract registry attaches "${id}", which is not in GATE_CHECK_IDS`);
   for (const id of clinicalEvidenceCheckIds) assert.ok(axis.has(id), `"${id}" is a gate check and is missing from GATE_CHECK_IDS`);
 });
+
+// One axis, walked. The check-id registry used to be held by a comment: eleven
+// ids in `appraisalContract.mjs` and one in `manuscriptContract.mjs` were
+// raised on every real run and registered nowhere, and the module that raised
+// the eleven had listed them in its own header with the words "belong on
+// GATE_CHECK_IDS" for as long as it had existed. Nothing read that sentence, so
+// four contract kinds produced advisory findings on an axis value nothing
+// enumerated — which is why "ship as a notice, watch the distribution, then
+// decide" had no distribution to watch (development principle 4).
+//
+// The scan reads the modules rather than running them, because a runtime test
+// only covers the ids its fixtures happen to trip, and an id is raised on a
+// path no fixture reaches exactly when it matters. It reads two call shapes:
+// the `check:` key most modules use, and the positional id
+// `researchTopicContract.mjs` passes to its own helpers — the second shape is
+// how `topic-publication-status` stayed invisible to the first reading of this
+// file that went looking for the whole class.
+test("every check id a contract module raises is registered on GATE_CHECK_IDS", async () => {
+  const modules = [
+    "contractRegistry.mjs",
+    "appraisalContract.mjs",
+    "manuscriptContract.mjs",
+    "researchTopicContract.mjs",
+    "sourceUnderstanding.mjs",
+    "methodSkill.mjs",
+    "methodGraph.mjs",
+  ];
+  const axis = new Set(GATE_CHECK_IDS);
+  assert.equal(axis.size, GATE_CHECK_IDS.length, "a duplicate id silently merges two checks into one bucket");
+
+  /** @type {Map<string, string[]>} */
+  const raisedBy = new Map();
+  let walked = 0;
+  for (const name of modules) {
+    const source = await readFile(new URL(`../src/${name}`, import.meta.url), "utf8");
+    assert.ok(source.length > 0, `${name} is empty — the walk read nothing`);
+    const keyed = [...source.matchAll(/check: ["']([a-z0-9-]+)["']/g)].map((match) => match[1]);
+    const positional = [...source.matchAll(/\b(?:notice|requirement|note)\(issues, ["']([a-z0-9-]+)["']/g)].map((match) => match[1]);
+    for (const id of [...keyed, ...positional]) {
+      walked += 1;
+      raisedBy.set(id, [...(raisedBy.get(id) ?? []), name]);
+    }
+  }
+
+  // The walk has to prove it walked. A regex that stopped matching would find
+  // no unregistered id and pass forever, which is the failure mode this whole
+  // test exists to prevent one level down.
+  assert.ok(walked >= 40, `only ${walked} check attributions found across ${modules.length} modules — the scan did not read them`);
+  assert.ok(raisedBy.size >= 25, `only ${raisedBy.size} distinct check ids found — the scan did not read the modules`);
+  for (const name of ["appraisalContract.mjs", "manuscriptContract.mjs", "researchTopicContract.mjs", "contractRegistry.mjs"]) {
+    assert.ok(
+      [...raisedBy.values()].some((sources) => sources.includes(name)),
+      `${name} contributed no check id — the scan skipped it`,
+    );
+  }
+
+  for (const [id, sources] of raisedBy) {
+    assert.ok(axis.has(id), `${sources.join(", ")} attributes a finding to "${id}", which is not in GATE_CHECK_IDS; add it there or the finding lands on an axis value nothing enumerates`);
+  }
+
+  // The eleven the appraisal module named in its header, by name: a scan that
+  // silently stopped seeing them would still pass everything above.
+  for (const id of [
+    "appraisal-json-parse", "appraisal-document-shape", "appraisal-study-identifier",
+    "appraisal-study-design", "appraisal-domain-rating", "appraisal-study-coverage",
+    "appraisal-body-certainty", "appraisal-downgrade-domain", "appraisal-certainty-arithmetic",
+    "appraisal-citation-coverage", "appraisal-table-rendered",
+  ]) {
+    assert.ok(raisedBy.has(id), `the appraisal contract no longer raises "${id}" — either it was removed, or the scan stopped seeing it`);
+    assert.ok(axis.has(id), `"${id}" is raised and unregistered`);
+  }
+
+  // And the other direction: an id registered and raised by nothing is a bucket
+  // nobody fills, which reads as a rule that never fires. The clinical ids are
+  // declared at their own rules and checked by the test above, so only the ones
+  // this file adds are held to it here.
+  const clinical = new Set(clinicalEvidenceCheckIds);
+  for (const id of GATE_CHECK_IDS) {
+    if (clinical.has(id)) continue;
+    assert.ok(raisedBy.has(id), `"${id}" is registered on GATE_CHECK_IDS and raised by no contract module`);
+  }
+});
+
+// A gate finding is only measurable if the id survives to the caller. The scan
+// above reads source; this runs the real gate over real deliverables and
+// asserts the ids arrive attached, one contract kind per family that the scan
+// found ids for.
+test("the ids a run's verdict carries are all on the one axis", () => {
+  const axis = new Set(GATE_CHECK_IDS);
+  const verdicts = [
+    runGate({
+      contractKind: "appraisal-table",
+      files: new Map([
+        ["appraisal-table.json", JSON.stringify({ studies: [{ id: "S1" }] })],
+        ["appraisal-table.md", "# 评价表\n"],
+      ]),
+      expectedOutputs: [],
+    }),
+    runGate({
+      contractKind: "research-brief",
+      files: new Map([["brief.md", "# 标题\n速效救心丸的用法建议如下。\n本文同时讨论 warfarin 的证据。\n"]]),
+      expectedOutputs: [{ path: "brief.md", required: true }],
+    }),
+    runGate({
+      contractKind: "drug-selection-report",
+      files: new Map([["report.md", "患者可以先服用胃药，然后观察症状变化。\n"]]),
+      expectedOutputs: [],
+    }),
+  ];
+  let attributed = 0;
+  for (const verdict of verdicts) {
+    for (const finding of verdict.issues ?? []) {
+      if (!finding.check) continue;
+      attributed += 1;
+      assert.ok(axis.has(finding.check), `a live verdict carried check "${finding.check}", which is not on GATE_CHECK_IDS`);
+    }
+  }
+  assert.ok(attributed >= 3, `only ${attributed} attributed findings came back from three real gate runs — the fixtures stopped tripping anything`);
+});
