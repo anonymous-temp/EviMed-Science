@@ -5020,8 +5020,30 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
+        from new_meta.core.method_planning import MethodCapabilityBlockedError
         from new_meta.core.release_contract import ReleaseBlockedError
 
         if isinstance(exc, ReleaseBlockedError):
+            sys.exit(2)
+        if isinstance(exc, MethodCapabilityBlockedError):
+            # A scope outside the validated capability set is a decision, not a
+            # crash: write it where every other terminal state is written and
+            # use the same exit code, so the caller reads a narrower capability
+            # instead of "meta_agent_execution_failed" plus a log tail.
+            decision = exc.release_decision()
+            decision.setdefault(
+                "summary",
+                f"Release blocked: {exc}",
+            )
+            if exc.project is not None:
+                from new_meta.core.release_contract import persist_release_decision
+
+                try:
+                    persist_release_decision(exc.project, decision)
+                except Exception:  # never mask the original decision
+                    pass
+            print(decision["summary"])
+            for action in decision.get("next_actions") or []:
+                print(f"  - {action}")
             sys.exit(2)
         raise

@@ -8,7 +8,13 @@ import pytest
 from mr_agent.models import DataSource, DataSourceType, MRAnalysisResult, SessionState
 from mr_agent.paper.generator import PaperGenerator
 from mr_agent.tools.mr_executor import _build_local_both_script
+from r_scripts.templates import _ERROR_HANDLING_BLOCK
 from test_local_r_statistics import run_r
+
+# The clumping block classifies its failure through the shared helpers, so a
+# script exercising it in isolation has to carry them the way every composed
+# template does. The block has no placeholders, only escaped braces.
+ERROR_HELPERS = _ERROR_HANDLING_BLOCK.format()
 
 
 def source(tmp_path, **values):
@@ -28,6 +34,7 @@ def clumping_block(tmp_path, exposure):
 def test_clump_api_failure_cannot_continue_with_unclumped_instruments(tmp_path):
     script = (
         'library(jsonlite)\noutput_dir <- ' + json.dumps(tmp_path.as_posix())
+        + ERROR_HELPERS
         + '\nexposure_dat <- data.frame(SNP=c("rs1","rs2","rs3"))\n'
         'clump_data <- function(...) stop("offline acceptance: network refused")\n'
         + '# Clump via LD reference' + clumping_block(tmp_path, source(tmp_path))
@@ -47,6 +54,7 @@ def test_provided_clumped_data_never_calls_the_api_and_keeps_its_provenance(tmp_
     exposure = source(tmp_path, instruments_preclumped=True, clumping_provenance=note)
     script = (
         'library(jsonlite)\noutput_dir <- ' + json.dumps(tmp_path.as_posix())
+        + ERROR_HELPERS
         + '\nexposure_dat <- data.frame(SNP=c("rs1","rs2","rs3"))\n'
         'clump_data <- function(...) stop("the API must not be called")\n'
         + '# Clump via LD reference' + clumping_block(tmp_path, exposure)
@@ -86,3 +94,21 @@ def test_local_metadata_does_not_become_verified_public_source_metadata(language
     assert "gwas.mrcieu.ac.uk" not in generator._grounded_data_availability([result])
     ethics = generator._grounded_ethics_statement()
     assert "only public" not in ethics and "仅处理公开" not in ethics
+
+
+def test_a_refused_credential_during_clumping_is_not_reported_as_a_clumping_bug(tmp_path):
+    """The stage code is right, but "LD clumping failed" sends the researcher to
+    the wrong problem when the real cause is an expired token."""
+    script = (
+        'library(jsonlite)\noutput_dir <- ' + json.dumps(tmp_path.as_posix())
+        + ERROR_HELPERS
+        + '\nexposure_dat <- data.frame(SNP=c("rs1","rs2","rs3"))\n'
+        'clump_data <- function(...) stop("401 Unauthorized: your OPENGWAS_JWT has expired")\n'
+        + '# Clump via LD reference' + clumping_block(tmp_path, source(tmp_path))
+        + '\nwrite("incorrect-success", file.path(output_dir,"continued.txt"))\n'
+    )
+    with pytest.raises(AssertionError):
+        run_r(script, tmp_path)
+    error = json.loads((tmp_path / "mr_error.json").read_text())
+    assert error["code"] == "opengwas_auth_failed"
+    assert not (tmp_path / "continued.txt").exists()

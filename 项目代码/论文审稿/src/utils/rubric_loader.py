@@ -42,7 +42,7 @@ class RubricLoader:
 
         Args:
             rubric_name: Name of the rubric file (without .yaml extension)
-                        e.g., "consort_2010", "universal_rubric"
+                        e.g., "consort_2025", "universal_rubric"
 
         Returns:
             List of RubricItem objects
@@ -123,10 +123,10 @@ class RubricLoader:
 
         # Study type to rubric mapping
         study_type_to_rubric = {
-            "RCT": "consort_2010",
-            "Cluster RCT": "consort_2010",
-            "Pragmatic RCT": "consort_2010",
-            "Non-Inferiority RCT": "consort_2010",
+            "RCT": "consort_2025",
+            "Cluster RCT": "consort_2025",
+            "Pragmatic RCT": "consort_2025",
+            "Non-Inferiority RCT": "consort_2025",
             "Systematic Review": "prisma_2020",
             "Meta-Analysis": "prisma_2020",
             "Network Meta-Analysis": "prisma_2020",
@@ -158,9 +158,9 @@ class RubricLoader:
             "Cost-Effectiveness Analysis": "cheers_2022",
             "Cost-Utility Analysis": "cheers_2022",
             "Budget Impact Analysis": "cheers_2022",
-            "Clinical Practice Guideline": "grade",
-            "Expert Consensus": "grade",
-            "Recommendation": "grade",
+            "Clinical Practice Guideline": "agree_ii",
+            "Expert Consensus": "agree_ii",
+            "Recommendation": "agree_ii",
             # 组学/基因组学
             "Genomics Study": "miame_minseqe",
             "Transcriptomics Study": "miame_minseqe",

@@ -1,0 +1,356 @@
+# CONSORT 2025 checklist for randomised trials.
+# Item numbers and text follow the published checklist exactly; see `source`.
+# Replaces consort_2010.yaml, whose numbers pointed at the wrong published items
+# (its 3a/3b/4a were the published 4a/4b/5) and which had no trial-design item.
+
+name: "CONSORT 2025"
+version: "2025"
+source:
+  doi: "10.1136/bmj-2024-081123"
+  year: 2025
+  checklist_version: "CONSORT 2025"
+  citation: "Hopewell S, Chan AW, Collins GS, et al. CONSORT 2025 Statement: updated guideline for reporting randomised trials. BMJ 2025;388:e081123."
+  checklist_url: "https://www.consort-spirit.org/"
+applicable_to:
+  - "RCT"
+  - "Cluster RCT"
+  - "Pragmatic RCT"
+  - "Non-Inferiority RCT"
+description: "Reporting checklist for randomised controlled trials"
+
+items:
+  - item_id: CONSORT_1a
+    item_number: "1a"
+    category: "Title and abstract - Title and structured abstract"
+    question: "Title and structured abstract - Identification as a randomised trial"
+    evaluation_criteria: "Identification as a randomised trial"
+    evidence_location_hint: "title"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_1b
+    item_number: "1b"
+    category: "Title and abstract - Title and structured abstract"
+    question: "Title and structured abstract - Structured summary of the trial design, methods, results, and conclusions"
+    evaluation_criteria: "Structured summary of the trial design, methods, results, and conclusions"
+    evidence_location_hint: "abstract"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_2
+    item_number: "2"
+    category: "Open science - Trial registration"
+    question: "Trial registration - Name of trial registry, identifying number (with URL) and date of registration"
+    evaluation_criteria: "Name of trial registry, identifying number (with URL) and date of registration"
+    evidence_location_hint: "other.registration"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_3
+    item_number: "3"
+    category: "Open science - Protocol and statistical analysis plan"
+    question: "Protocol and statistical analysis plan - Where the trial protocol and statistical analysis plan can be accessed"
+    evaluation_criteria: "Where the trial protocol and statistical analysis plan can be accessed"
+    evidence_location_hint: "other.protocol"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_4
+    item_number: "4"
+    category: "Open science - Data sharing"
+    question: "Data sharing - Where and how the individual de-identified participant data (including data dictionary), statistical code and any other materials can be accessed"
+    evaluation_criteria: "Where and how the individual de-identified participant data (including data dictionary), statistical code and any other materials can be accessed"
+    evidence_location_hint: "other.data_sharing"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_5a
+    item_number: "5a"
+    category: "Open science - Funding and conflicts of interest"
+    question: "Funding and conflicts of interest - Sources of funding and other support (eg, supply of drugs), and role of funders in the design, conduct, analysis and reporting of the trial"
+    evaluation_criteria: "Sources of funding and other support (eg, supply of drugs), and role of funders in the design, conduct, analysis and reporting of the trial"
+    evidence_location_hint: "other.funding"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_5b
+    item_number: "5b"
+    category: "Open science - Funding and conflicts of interest"
+    question: "Funding and conflicts of interest - Financial and other conflicts of interest of the manuscript authors"
+    evaluation_criteria: "Financial and other conflicts of interest of the manuscript authors"
+    evidence_location_hint: "other.conflicts"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_6
+    item_number: "6"
+    category: "Introduction - Background and rationale"
+    question: "Background and rationale - Scientific background and rationale"
+    evaluation_criteria: "Scientific background and rationale"
+    evidence_location_hint: "introduction"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_7
+    item_number: "7"
+    category: "Introduction - Objectives"
+    question: "Objectives - Specific objectives related to benefits and harms"
+    evaluation_criteria: "Specific objectives related to benefits and harms"
+    evidence_location_hint: "introduction.objectives"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_8
+    item_number: "8"
+    category: "Methods - Patient and public involvement"
+    question: "Patient and public involvement - Details of patient or public involvement in the design, conduct and reporting of the trial"
+    evaluation_criteria: "Details of patient or public involvement in the design, conduct and reporting of the trial"
+    evidence_location_hint: "methods.ppi"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_9
+    item_number: "9"
+    category: "Methods - Trial design"
+    question: "Trial design - Description of trial design including type of trial (eg, parallel group, crossover), allocation ratio, and framework (eg, superiority, equivalence, non-inferiority, exploratory)"
+    evaluation_criteria: "Description of trial design including type of trial (eg, parallel group, crossover), allocation ratio, and framework (eg, superiority, equivalence, non-inferiority, exploratory)"
+    evidence_location_hint: "methods.design"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_10
+    item_number: "10"
+    category: "Methods - Changes to trial protocol"
+    question: "Changes to trial protocol - Important changes to the trial after it commenced including any outcomes or analyses that were not prespecified, with reason"
+    evaluation_criteria: "Important changes to the trial after it commenced including any outcomes or analyses that were not prespecified, with reason"
+    evidence_location_hint: "methods.changes"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_11
+    item_number: "11"
+    category: "Methods - Trial setting"
+    question: "Trial setting - Settings (eg, community, hospital) and locations (eg, countries, sites) where the trial was conducted"
+    evaluation_criteria: "Settings (eg, community, hospital) and locations (eg, countries, sites) where the trial was conducted"
+    evidence_location_hint: "methods.setting"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_12a
+    item_number: "12a"
+    category: "Methods - Eligibility criteria"
+    question: "Eligibility criteria - Eligibility criteria for participants"
+    evaluation_criteria: "Eligibility criteria for participants"
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_12b
+    item_number: "12b"
+    category: "Methods - Eligibility criteria"
+    question: "Eligibility criteria - If applicable, eligibility criteria for sites and for individuals delivering the interventions (eg, surgeons, physiotherapists)"
+    evaluation_criteria: "If applicable, eligibility criteria for sites and for individuals delivering the interventions (eg, surgeons, physiotherapists)"
+    evidence_location_hint: "methods.eligibility"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_13
+    item_number: "13"
+    category: "Methods - Intervention and comparator"
+    question: "Intervention and comparator - Intervention and comparator with sufficient details to allow replication. If relevant, where additional materials describing the intervention and comparator (eg, intervention manual) can be accessed"
+    evaluation_criteria: "Intervention and comparator with sufficient details to allow replication. If relevant, where additional materials describing the intervention and comparator (eg, intervention manual) can be accessed"
+    evidence_location_hint: "methods.interventions"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_14
+    item_number: "14"
+    category: "Methods - Outcomes"
+    question: "Outcomes - Prespecified primary and secondary outcomes, including the specific measurement variable (eg, systolic blood pressure), analysis metric (eg, change from baseline, final value, time to event), method of aggregation (eg, median, proportion), and time point for each outcome"
+    evaluation_criteria: "Prespecified primary and secondary outcomes, including the specific measurement variable (eg, systolic blood pressure), analysis metric (eg, change from baseline, final value, time to event), method of aggregation (eg, median, proportion), and time point for each outcome"
+    evidence_location_hint: "methods.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_15
+    item_number: "15"
+    category: "Methods - Harms"
+    question: "Harms - How harms were defined and assessed (eg, systematically, non-systematically)"
+    evaluation_criteria: "How harms were defined and assessed (eg, systematically, non-systematically)"
+    evidence_location_hint: "methods.harms"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_16a
+    item_number: "16a"
+    category: "Methods - Sample size"
+    question: "Sample size - How sample size was determined, including all assumptions supporting the sample size calculation"
+    evaluation_criteria: "How sample size was determined, including all assumptions supporting the sample size calculation"
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_16b
+    item_number: "16b"
+    category: "Methods - Sample size"
+    question: "Sample size - Explanation of any interim analyses and stopping guidelines"
+    evaluation_criteria: "Explanation of any interim analyses and stopping guidelines"
+    evidence_location_hint: "methods.sample_size"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_17a
+    item_number: "17a"
+    category: "Methods - Randomisation: sequence generation"
+    question: "Randomisation: sequence generation - Who generated the random allocation sequence and the method used"
+    evaluation_criteria: "Who generated the random allocation sequence and the method used"
+    evidence_location_hint: "methods.randomisation"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_17b
+    item_number: "17b"
+    category: "Methods - Randomisation: sequence generation"
+    question: "Randomisation: sequence generation - Type of randomisation and details of any restriction (eg, stratification, blocking and block size)"
+    evaluation_criteria: "Type of randomisation and details of any restriction (eg, stratification, blocking and block size)"
+    evidence_location_hint: "methods.randomisation"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_18
+    item_number: "18"
+    category: "Methods - Randomisation: allocation concealment mechanism"
+    question: "Randomisation: allocation concealment mechanism - Mechanism used to implement the random allocation sequence (eg, central computer/telephone; sequentially numbered, opaque, sealed containers), describing any steps to conceal the sequence until interventions were assigned"
+    evaluation_criteria: "Mechanism used to implement the random allocation sequence (eg, central computer/telephone; sequentially numbered, opaque, sealed containers), describing any steps to conceal the sequence until interventions were assigned"
+    evidence_location_hint: "methods.allocation_concealment"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_19
+    item_number: "19"
+    category: "Methods - Randomisation: implementation"
+    question: "Randomisation: implementation - Whether the personnel who enrolled and those who assigned participants to the interventions had access to the random allocation sequence"
+    evaluation_criteria: "Whether the personnel who enrolled and those who assigned participants to the interventions had access to the random allocation sequence"
+    evidence_location_hint: "methods.implementation"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_20a
+    item_number: "20a"
+    category: "Methods - Blinding"
+    question: "Blinding - Who was blinded after assignment to interventions (eg, participants, care providers, outcome assessors, data analysts)"
+    evaluation_criteria: "Who was blinded after assignment to interventions (eg, participants, care providers, outcome assessors, data analysts)"
+    evidence_location_hint: "methods.blinding"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_20b
+    item_number: "20b"
+    category: "Methods - Blinding"
+    question: "Blinding - If blinded, how blinding was achieved and description of the similarity of interventions"
+    evaluation_criteria: "If blinded, how blinding was achieved and description of the similarity of interventions"
+    evidence_location_hint: "methods.blinding"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_21a
+    item_number: "21a"
+    category: "Methods - Statistical methods"
+    question: "Statistical methods - Statistical methods used to compare groups for primary and secondary outcomes, including harms"
+    evaluation_criteria: "Statistical methods used to compare groups for primary and secondary outcomes, including harms"
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_21b
+    item_number: "21b"
+    category: "Methods - Statistical methods"
+    question: "Statistical methods - Definition of who is included in each analysis (eg, all randomised participants), and in which group"
+    evaluation_criteria: "Definition of who is included in each analysis (eg, all randomised participants), and in which group"
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_21c
+    item_number: "21c"
+    category: "Methods - Statistical methods"
+    question: "Statistical methods - How missing data were handled in the analysis"
+    evaluation_criteria: "How missing data were handled in the analysis"
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_21d
+    item_number: "21d"
+    category: "Methods - Statistical methods"
+    question: "Statistical methods - Methods for any additional analyses (eg, subgroup and sensitivity analyses), distinguishing prespecified from post hoc"
+    evaluation_criteria: "Methods for any additional analyses (eg, subgroup and sensitivity analyses), distinguishing prespecified from post hoc"
+    evidence_location_hint: "methods.statistics"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_22a
+    item_number: "22a"
+    category: "Results - Participant flow, including flow diagram"
+    question: "Participant flow, including flow diagram - For each group, the numbers of participants who were randomly assigned, received intended intervention, and were analysed for the primary outcome"
+    evaluation_criteria: "For each group, the numbers of participants who were randomly assigned, received intended intervention, and were analysed for the primary outcome"
+    evidence_location_hint: "results.flow"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_22b
+    item_number: "22b"
+    category: "Results - Participant flow, including flow diagram"
+    question: "Participant flow, including flow diagram - For each group, losses and exclusions after randomisation, together with reasons"
+    evaluation_criteria: "For each group, losses and exclusions after randomisation, together with reasons"
+    evidence_location_hint: "results.flow"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_23a
+    item_number: "23a"
+    category: "Results - Recruitment"
+    question: "Recruitment - Dates defining the periods of recruitment and follow-up for outcomes of benefits and harms"
+    evaluation_criteria: "Dates defining the periods of recruitment and follow-up for outcomes of benefits and harms"
+    evidence_location_hint: "results.recruitment"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_23b
+    item_number: "23b"
+    category: "Results - Recruitment"
+    question: "Recruitment - If relevant, why the trial ended or was stopped"
+    evaluation_criteria: "If relevant, why the trial ended or was stopped"
+    evidence_location_hint: "results.recruitment"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_24a
+    item_number: "24a"
+    category: "Results - Intervention and comparator delivery"
+    question: "Intervention and comparator delivery - Intervention and comparator as they were actually administered (eg, where appropriate, who delivered the intervention/comparator, how participants adhered, whether they were delivered as intended (fidelity))"
+    evaluation_criteria: "Intervention and comparator as they were actually administered (eg, where appropriate, who delivered the intervention/comparator, how participants adhered, whether they were delivered as intended (fidelity))"
+    evidence_location_hint: "results.delivery"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_24b
+    item_number: "24b"
+    category: "Results - Intervention and comparator delivery"
+    question: "Intervention and comparator delivery - Concomitant care received during the trial for each group"
+    evaluation_criteria: "Concomitant care received during the trial for each group"
+    evidence_location_hint: "results.delivery"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_25
+    item_number: "25"
+    category: "Results - Baseline data"
+    question: "Baseline data - A table showing baseline demographic and clinical characteristics for each group"
+    evaluation_criteria: "A table showing baseline demographic and clinical characteristics for each group"
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_26
+    item_number: "26"
+    category: "Results - Numbers analysed, outcomes and estimation"
+    question: "Numbers analysed, outcomes and estimation - For each primary and secondary outcome, by group: the number of participants included in the analysis; the number of participants with available data at the outcome time point; result for each group, and the estimated effect size and its precision (such as 95% confidence interval); for binary outcomes, presentation of both absolute and relative effect size"
+    evaluation_criteria: "For each primary and secondary outcome, by group: the number of participants included in the analysis; the number of participants with available data at the outcome time point; result for each group, and the estimated effect size and its precision (such as 95% confidence interval); for binary outcomes, presentation of both absolute and relative effect size"
+    evidence_location_hint: "results.outcomes"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_27
+    item_number: "27"
+    category: "Results - Harms"
+    question: "Harms - All harms or unintended events in each group"
+    evaluation_criteria: "All harms or unintended events in each group"
+    evidence_location_hint: "results.harms"
+    severity_if_missing: CRITICAL
+
+  - item_id: CONSORT_28
+    item_number: "28"
+    category: "Results - Ancillary analyses"
+    question: "Ancillary analyses - Any other analyses performed, including subgroup and sensitivity analyses, distinguishing prespecified from post hoc"
+    evaluation_criteria: "Any other analyses performed, including subgroup and sensitivity analyses, distinguishing prespecified from post hoc"
+    evidence_location_hint: "results.ancillary"
+    severity_if_missing: MINOR
+
+  - item_id: CONSORT_29
+    item_number: "29"
+    category: "Discussion - Interpretation"
+    question: "Interpretation - Interpretation consistent with results, balancing benefits and harms, and considering other relevant evidence"
+    evaluation_criteria: "Interpretation consistent with results, balancing benefits and harms, and considering other relevant evidence"
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: CONSORT_30
+    item_number: "30"
+    category: "Discussion - Limitations"
+    question: "Limitations - Trial limitations, addressing sources of potential bias, imprecision, generalisability, and, if relevant, multiplicity of analyses"
+    evaluation_criteria: "Trial limitations, addressing sources of potential bias, imprecision, generalisability, and, if relevant, multiplicity of analyses"
+    evidence_location_hint: "discussion.limitations"
+    severity_if_missing: MAJOR

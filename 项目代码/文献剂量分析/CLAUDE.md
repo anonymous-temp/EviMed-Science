@@ -11,7 +11,7 @@ CLI工具：PubMed检索 → 元数据清洗 → 网络分析 → CiteSpace复�
 ## 模块结构
 - `pubmed/` - PubMed数据获取 (connector, parser, search_strategy)
 - `cleaning/` - 元数据清洗与消歧 (normalizer, dedup, ror_lookup)
-- `analysis/` - 分析引擎 (statistics, matrix_builder, network_analyzer, burst_detector, timeline_engine, frontier_detector, cluster_labeler, citation_simulator, bib_laws)
+- `analysis/` - 分析引擎 (statistics, matrix_builder, network_analyzer, burst_detector, timeline_engine, frontier_detector, cluster_labeler, citations, bib_laws)
 - `export/` - VOSviewer兼容输出 (vosviewer)
 - `visualization/` - 图表生成 (trend_charts, network_charts)
 - `insight/` - 洞察挖掘与AI叙事 (miner, ai_narrator, templates)

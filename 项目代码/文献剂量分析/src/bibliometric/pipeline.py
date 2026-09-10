@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import datetime, timezone
 
 import pandas as pd
 from rich.console import Console
@@ -148,7 +149,7 @@ class AnalysisPipeline:
 
         from bibliometric.pubmed.parser import parse_articles
         self.articles = parse_articles(xml_chunks)
-        self._save_metadata(len(pmids))
+        self._save_metadata(getattr(connector, "last_search", {}) or {}, len(pmids))
         self._save_raw(self.articles)
         console.print(f"  Retrieved [bold]{len(self.articles)}[/] articles")
 
@@ -285,16 +286,41 @@ class AnalysisPipeline:
 
     def _step_citations(self, progress):
         task = progress.add_task("Fetching citations...", total=None)
-        from bibliometric.analysis.citation_simulator import (
-            fetch_real_citations,
+        from bibliometric.analysis.citations import (
+            build_bibliographic_coupling_pairs,
+            build_cocitation_pairs,
             compute_citation_statistics,
+            fetch_citations,
         )
 
-        self.articles, real_count, sim_count = fetch_real_citations(self.articles)
+        self.articles, coverage = fetch_citations(
+            self.articles,
+            openalex_api_key=getattr(self.config, "openalex_api_key", "") or None,
+        )
         self.stats["citation_stats"] = compute_citation_statistics(self.articles)
-        self.stats["citation_real_count"] = real_count
-        self.stats["citation_sim_count"] = sim_count
+        self.stats["citation_coverage"] = dict(coverage)
+        self.stats["cocitation_pairs"] = build_cocitation_pairs(self.articles)
+        self.stats["bibliographic_coupling_pairs"] = build_bibliographic_coupling_pairs(
+            self.articles
+        )
+        self._save_citation_artifacts(coverage)
         progress.update(task, completed=True)
+
+    def _save_citation_artifacts(self, coverage: dict) -> None:
+        """Write the citation ledger and the two reference-relation tables."""
+        self._ensure_data_dir()
+        path = self.output_dir / "data" / "citation_coverage.json"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(dict(coverage), handle, indent=2, ensure_ascii=False)
+        table_dir = self.output_dir / "tables"
+        table_dir.mkdir(parents=True, exist_ok=True)
+        for name, key in (
+            ("cocitation_pairs", "cocitation_pairs"),
+            ("bibliographic_coupling_pairs", "bibliographic_coupling_pairs"),
+        ):
+            frame = self.stats.get(key)
+            if frame is not None and not frame.empty:
+                frame.to_csv(table_dir / f"{name}.csv", index=False)
 
     def _step_ai_narratives(self, progress):
         task = progress.add_task("Generating AI narratives...", total=None)
@@ -324,14 +350,25 @@ class AnalysisPipeline:
         progress.update(task, completed=True)
         console.print(f"  Report: {self.output_dir / 'report.md'}")
 
-    def _save_metadata(self, total_found: int):
+    def _save_metadata(self, last_search: dict, retrieved: int):
+        """Record identification and retrieval separately.
+
+        ``total_found`` is what PubMed matched; ``retrieved`` is what the
+        max_records cap let through. Collapsing the two made the PRISMA
+        identification row always equal the cap.
+        """
         self._ensure_data_dir()
+        total_found = int(last_search.get("total_found", retrieved))
         meta = {
             "query": self.query,
             "date_from": self.date_from,
             "date_to": self.date_to,
             "max_records": self.max_records,
             "total_found": total_found,
+            "retrieved": retrieved,
+            "truncated": bool(last_search.get("truncated", total_found > retrieved)),
+            "esearch_sort": last_search.get("sort", ""),
+            "searched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "total_fetched": len(self.articles),
             "search_strategy": getattr(self, "search_strategy", {}),
         }

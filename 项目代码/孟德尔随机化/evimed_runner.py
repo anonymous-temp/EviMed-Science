@@ -38,11 +38,80 @@ SECTION_ORDER = (
 )
 
 
+# Source access, LD clumping and the primary MR estimate change what the paper
+# means, so they fail the job. Optional sensitivity analyses may degrade, but
+# only into this ledger.
+_SOURCE_FAILURE_CODES = frozenset({
+    "opengwas_auth_failed", "opengwas_rate_limited", "opengwas_unavailable",
+})
+
+
 def _write_result(output_dir: Path, value: dict) -> None:
     (output_dir / "result.json").write_text(
         json.dumps(value, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def _module(status: str, reason: str = "", *, fatal: bool = False) -> dict:
+    entry: dict = {"status": status}
+    if reason:
+        entry["reason"] = reason
+    if fatal:
+        entry["fatal"] = True
+    return entry
+
+
+def _module_ledger(results: list, bidirectional: bool) -> dict:
+    """Per-step ledger for the specialist-job receipt."""
+    modules = {
+        "instrumentSelection": _module("ok"),
+        "primaryEstimate": _module("ok"),
+    }
+
+    skipped: list[str] = []
+    for result in results:
+        skipped.extend(result.skipped_analyses or [])
+    if skipped:
+        modules["sensitivityAnalyses"] = _module(
+            "degraded", "; ".join(sorted(set(skipped)))
+        )
+    else:
+        modules["sensitivityAnalyses"] = _module("ok")
+
+    if any(result.steiger_correct is None for result in results):
+        modules["steigerDirection"] = _module(
+            "degraded", "the Steiger directionality test produced no verdict"
+        )
+    else:
+        modules["steigerDirection"] = _module("ok")
+
+    if bidirectional:
+        forward = {(r.exposure_id, r.outcome_id) for r in results}
+        executed = any((out, exp) in forward for exp, out in forward)
+        modules["reverseMR"] = (
+            _module("ok") if executed
+            else _module("degraded", "bidirectional was requested but no reverse pair produced instruments")
+        )
+    else:
+        modules["reverseMR"] = _module("skipped", "bidirectional analysis was not requested")
+
+    return modules
+
+
+def _degraded(modules: dict) -> bool:
+    return any(entry["status"] in {"degraded", "failed"} for entry in modules.values())
+
+
+def _failure_ledger(code: str) -> dict:
+    """Ledger for a run that never reached a result."""
+    if code in _SOURCE_FAILURE_CODES:
+        return {"instrumentSelection": _module("failed", f"OpenGWAS: {code}", fatal=True)}
+    if code == "ld_clumping_failed":
+        return {"instrumentSelection": _module("failed", "LD clumping failed", fatal=True)}
+    if code.startswith("mr_input_"):
+        return {"localInputs": _module("failed", code, fatal=True)}
+    return {"primaryEstimate": _module("failed", code or "analysis produced no result", fatal=True)}
 
 
 def _paper_markdown(sections: dict, exposure: str, outcome: str) -> str:
@@ -154,6 +223,16 @@ def _validate_release(paper: str, results: list) -> None:
         if result.pleiotropy and result.pleiotropy.pval < 0.05:
             if "多效" not in paper and "pleiotropy" not in paper.casefold():
                 raise RuntimeError("MR paper omitted significant directional pleiotropy")
+            # The word alone was satisfied by the sentence that denies it. These
+            # are this generator's own two sentences, not open prose patterns.
+            denials = (
+                "未检出显著方向性多效性",
+                "no significant directional pleiotropy was detected",
+            )
+            if any(denial in lowered_paper for denial in denials):
+                raise RuntimeError(
+                    "MR paper denied directional pleiotropy while the Egger intercept was significant"
+                )
         if result.sample_overlap_warning:
             unsupported_overlap_claims = (
                 "两个数据集在样本构成上不存在重叠",
@@ -290,7 +369,15 @@ def run(
         ]
         if not valid_results:
             detail = agent.state.errors[-1] if agent.state.errors else analysis_message
-            raise RuntimeError("MR analysis produced no valid instruments: %s" % detail)
+            # A refused or unreachable source is not "no instruments found".
+            source_code = str(getattr(agent.state, "error_code", "") or "")
+            failure = RuntimeError(
+                ("MR source unavailable (%s): %s" % (source_code, detail))
+                if source_code else
+                ("MR analysis produced no valid instruments: %s" % detail)
+            )
+            failure.code = source_code or "mr_no_instruments"
+            raise failure
         if provenance:
             bind_result_provenance(valid_results, provenance, request)
             if repository_metadata:
@@ -327,6 +414,7 @@ def run(
             ),
             encoding="utf-8",
         )
+        modules = _module_ledger(valid_results, agent.state.slots.bidirectional)
         _write_result(
             output_dir,
             {
@@ -337,17 +425,30 @@ def run(
                 "instruments": sum(result.n_instruments for result in valid_results),
                 "report": report_path.name,
                 "artifacts": [report_path.name, analysis_path.name, *copied_artifacts],
+                "modules": modules,
+                "degraded": _degraded(modules),
             },
         )
         return 0
     except MRInputError as error:
+        modules = _failure_ledger(error.code)
         _write_result(
-            output_dir, {"status": "failed", "errorCode": error.code, "error": str(error)}
+            output_dir,
+            {
+                "status": "failed", "errorCode": error.code, "error": str(error),
+                "modules": modules, "degraded": True,
+            },
         )
         return 1
     except Exception as error:
         traceback.print_exc()
-        _write_result(output_dir, {"status": "failed", "error": str(error)})
+        code = str(getattr(error, "code", "") or "")
+        failure = {"status": "failed", "error": str(error)}
+        if code:
+            failure["errorCode"] = code
+        failure["modules"] = _failure_ledger(code)
+        failure["degraded"] = True
+        _write_result(output_dir, failure)
         return 1
 
 

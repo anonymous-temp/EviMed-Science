@@ -16,6 +16,20 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+class SearchStrategyError(RuntimeError):
+    """Raised when a concept block cannot be turned into a searchable clause.
+
+    Dropping such a block would silently delete an AND term from the strategy
+    and run a broader search than the one reported, so this step is not
+    degradable: it fails and names the block.
+    """
+
+    def __init__(self, message: str, *, code: str, labels: list[str] | None = None):
+        super().__init__(message)
+        self.code = code
+        self.labels = labels or []
+
 _EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 _ESEARCH_URL = f"{_EUTILS_BASE}/esearch.fcgi"
 _EFETCH_URL = f"{_EUTILS_BASE}/efetch.fcgi"
@@ -480,6 +494,7 @@ def _compile_query(
 ) -> str:
     """Compile concept blocks into a PubMed Boolean query."""
     block_parts = []
+    unresolved = []
     for block in blocks:
         clauses = []
         # MeSH term with explosion
@@ -489,9 +504,24 @@ def _compile_query(
         for ft in block.free_terms:
             clauses.append(f'"{ft}"[Title/Abstract]')
 
-        if clauses:
-            inner = " OR ".join(clauses)
-            block_parts.append(f"({inner})")
+        if not clauses:
+            unresolved.append(block.label)
+            continue
+        inner = " OR ".join(clauses)
+        block_parts.append(f"({inner})")
+
+    if unresolved:
+        raise SearchStrategyError(
+            "concept block(s) produced no searchable clause: "
+            + ", ".join(repr(label) for label in unresolved),
+            code="concept_block_unresolved",
+            labels=unresolved,
+        )
+    if not block_parts:
+        raise SearchStrategyError(
+            "search strategy has no concept blocks",
+            code="concept_block_unresolved",
+        )
 
     query = " AND ".join(block_parts)
 

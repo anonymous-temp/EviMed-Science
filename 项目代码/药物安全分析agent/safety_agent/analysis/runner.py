@@ -14,13 +14,18 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from pathlib import Path
 
 from safety_agent.analysis.models import AnalysisResult
 from safety_agent.core.config import get_settings
 from safety_agent.core.logging import configure_logging, get_logger
 from safety_agent.report.docx_export import export_docx, export_pdf
-from safety_agent.report.markdown import render_markdown, signal_table_csv
+from safety_agent.report.markdown import (
+    render_markdown,
+    signal_provenance,
+    signal_table_csv,
+)
 
 logger = get_logger(__name__)
 
@@ -77,6 +82,78 @@ async def run_to_files(
     return write_artifacts(result, outdir, stem=stem)
 
 
+def module_ledger(result: AnalysisResult) -> dict[str, dict]:
+    """Per-step ledger for the specialist-job receipt.
+
+    The data source and the disproportionality statistics are what the report
+    means, so they never appear here as "degraded" with the job still succeeding.
+    LLM interpretation, label checking and evidence retrieval may degrade, but
+    only into this ledger.
+    """
+
+    def entry(status: str, reason: str = "", *, fatal: bool = False) -> dict:
+        item: dict = {"status": status}
+        if reason:
+            item["reason"] = reason
+        if fatal:
+            item["fatal"] = True
+        return item
+
+    modules: dict[str, dict] = {
+        "dataSource": entry(
+            "ok",
+            f"tier={result.data_source}"
+            + (f"; snapshot={result.snapshot_id}" if result.snapshot_id else ""),
+        ),
+        "disproportionality": (
+            entry("ok") if result.signals
+            else entry("failed", "no signal row was produced", fatal=True)
+        ),
+    }
+
+    if result.unmatched_reactions:
+        modules["reactionMatching"] = entry(
+            "degraded",
+            "no FAERS report matched: " + ", ".join(result.unmatched_reactions),
+        )
+    else:
+        modules["reactionMatching"] = entry("ok")
+
+    if result.llm_status == "ok":
+        modules["llmInterpretation"] = entry("ok")
+    elif result.llm_status == "not_configured":
+        modules["llmInterpretation"] = entry(
+            "skipped", "DEEPSEEK_API_KEY is empty; the report carries statistics only"
+        )
+    else:
+        modules["llmInterpretation"] = entry(
+            "degraded",
+            "; ".join(result.degradation_notes) or "LLM interpretation failed",
+        )
+
+    if result.label_check is None:
+        modules["labelCheck"] = entry("degraded", "no label data was available")
+    else:
+        modules["labelCheck"] = entry("ok")
+
+    modules["evidenceRetrieval"] = (
+        entry("ok") if result.evidence is not None
+        else entry("skipped", "the EviMed evidence layer was not configured")
+    )
+
+    # The GPS prior is a paper-grade input; an unfitted starting prior is a
+    # narrower claim, not a silent equivalence.
+    modules["gpsPrior"] = (
+        entry("ok", f"fitted prior {result.gps_prior_id}") if result.gps_prior_fitted
+        else entry("degraded", "unfitted starting prior; EBGM/EB05 are reported, not used to decide")
+    )
+    return modules
+
+
+def module_ledger_is_degraded(modules: dict[str, dict]) -> bool:
+    return any(entry["status"] in {"degraded", "failed"} for entry in modules.values())
+
+
 def write_artifacts(
     result: AnalysisResult, outdir: Path, *, stem: str = "report"
 ) -> dict[str, Path | None]:
@@ -88,7 +165,22 @@ def write_artifacts(
     csv_path.write_text(signal_table_csv(result), encoding="utf-8")
     docx_path = export_docx(result, outdir / f"{stem}.docx")
     pdf_path = export_pdf(docx_path, outdir)
-    return {"markdown": md_path, "csv": csv_path, "docx": docx_path, "pdf": pdf_path}
+    provenance_path = outdir / "signal-provenance.json"
+    provenance_path.write_text(
+        json.dumps(
+            {**signal_provenance(result), "modules": module_ledger(result)},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "markdown": md_path,
+        "csv": csv_path,
+        "docx": docx_path,
+        "pdf": pdf_path,
+        "provenance": provenance_path,
+    }
 
 
 def main() -> None:

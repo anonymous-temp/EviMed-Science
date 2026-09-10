@@ -1,0 +1,205 @@
+# AGREE II instrument for appraising clinical practice guidelines.
+# This file was named grade.yaml and titled 'GRADE for Clinical Guidelines', but its
+# items are AGREE II's 23 items in AGREE II's six domains. GRADE is a certainty-of-
+# evidence and strength-of-recommendation framework, not a reporting appraisal
+# instrument, so the name pointed reviewers at the wrong method.
+# Item numbers and text follow the published instrument exactly; see `source`.
+
+name: "AGREE II"
+version: "2017"
+source:
+  doi: "10.1503/cmaj.090449"
+  year: 2010
+  checklist_version: "AGREE II (2009, 2017 update)"
+  citation: "Brouwers MC, Kho ME, Browman GP, et al. AGREE II: advancing guideline development, reporting and evaluation in health care. CMAJ 2010;182:E839-42."
+  checklist_url: "https://www.agreetrust.org/resource-centre/agree-ii/"
+applicable_to:
+  - "Clinical Practice Guideline"
+  - "Expert Consensus"
+  - "Recommendation"
+description: "Appraisal instrument for clinical practice guidelines (23 items in 6 domains)"
+
+items:
+  - item_id: AGREE_1
+    item_number: "1"
+    category: "Domain 1 - Scope and Purpose"
+    question: "Scope and Purpose - The overall objective(s) of the guideline is (are) specifically described."
+    evaluation_criteria: "The overall objective(s) of the guideline is (are) specifically described."
+    evidence_location_hint: "introduction.objectives"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_2
+    item_number: "2"
+    category: "Domain 1 - Scope and Purpose"
+    question: "Scope and Purpose - The health question(s) covered by the guideline is (are) specifically described."
+    evaluation_criteria: "The health question(s) covered by the guideline is (are) specifically described."
+    evidence_location_hint: "introduction.questions"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_3
+    item_number: "3"
+    category: "Domain 1 - Scope and Purpose"
+    question: "Scope and Purpose - The population (patients, public, etc.) to whom the guideline is meant to apply is specifically described."
+    evaluation_criteria: "The population (patients, public, etc.) to whom the guideline is meant to apply is specifically described."
+    evidence_location_hint: "introduction.population"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_4
+    item_number: "4"
+    category: "Domain 2 - Stakeholder Involvement"
+    question: "Stakeholder Involvement - The guideline development group includes individuals from all relevant professional groups."
+    evaluation_criteria: "The guideline development group includes individuals from all relevant professional groups."
+    evidence_location_hint: "methods.panel"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_5
+    item_number: "5"
+    category: "Domain 2 - Stakeholder Involvement"
+    question: "Stakeholder Involvement - The views and preferences of the target population (patients, public, etc.) have been sought."
+    evaluation_criteria: "The views and preferences of the target population (patients, public, etc.) have been sought."
+    evidence_location_hint: "methods.panel"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_6
+    item_number: "6"
+    category: "Domain 2 - Stakeholder Involvement"
+    question: "Stakeholder Involvement - The target users of the guideline are clearly defined."
+    evaluation_criteria: "The target users of the guideline are clearly defined."
+    evidence_location_hint: "introduction.users"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_7
+    item_number: "7"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - Systematic methods were used to search for evidence."
+    evaluation_criteria: "Systematic methods were used to search for evidence."
+    evidence_location_hint: "methods.search"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_8
+    item_number: "8"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - The criteria for selecting the evidence are clearly described."
+    evaluation_criteria: "The criteria for selecting the evidence are clearly described."
+    evidence_location_hint: "methods.selection"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_9
+    item_number: "9"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - The strengths and limitations of the body of evidence are clearly described."
+    evaluation_criteria: "The strengths and limitations of the body of evidence are clearly described."
+    evidence_location_hint: "methods.evidence_appraisal"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_10
+    item_number: "10"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - The methods for formulating the recommendations are clearly described."
+    evaluation_criteria: "The methods for formulating the recommendations are clearly described."
+    evidence_location_hint: "methods.recommendation_process"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_11
+    item_number: "11"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - The health benefits, side effects, and risks have been considered in formulating the recommendations."
+    evaluation_criteria: "The health benefits, side effects, and risks have been considered in formulating the recommendations."
+    evidence_location_hint: "methods.benefits_harms"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_12
+    item_number: "12"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - There is an explicit link between the recommendations and the supporting evidence."
+    evaluation_criteria: "There is an explicit link between the recommendations and the supporting evidence."
+    evidence_location_hint: "recommendations"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_13
+    item_number: "13"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - The guideline has been externally reviewed by experts prior to its publication."
+    evaluation_criteria: "The guideline has been externally reviewed by experts prior to its publication."
+    evidence_location_hint: "other.external_review"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_14
+    item_number: "14"
+    category: "Domain 3 - Rigour of Development"
+    question: "Rigour of Development - A procedure for updating the guideline is provided."
+    evaluation_criteria: "A procedure for updating the guideline is provided."
+    evidence_location_hint: "other.updating"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_15
+    item_number: "15"
+    category: "Domain 4 - Clarity of Presentation"
+    question: "Clarity of Presentation - The recommendations are specific and unambiguous."
+    evaluation_criteria: "The recommendations are specific and unambiguous."
+    evidence_location_hint: "recommendations"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_16
+    item_number: "16"
+    category: "Domain 4 - Clarity of Presentation"
+    question: "Clarity of Presentation - The different options for management of the condition or health issue are clearly presented."
+    evaluation_criteria: "The different options for management of the condition or health issue are clearly presented."
+    evidence_location_hint: "recommendations"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_17
+    item_number: "17"
+    category: "Domain 4 - Clarity of Presentation"
+    question: "Clarity of Presentation - Key recommendations are easily identifiable."
+    evaluation_criteria: "Key recommendations are easily identifiable."
+    evidence_location_hint: "recommendations"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_18
+    item_number: "18"
+    category: "Domain 5 - Applicability"
+    question: "Applicability - The guideline describes facilitators and barriers to its application."
+    evaluation_criteria: "The guideline describes facilitators and barriers to its application."
+    evidence_location_hint: "implementation"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_19
+    item_number: "19"
+    category: "Domain 5 - Applicability"
+    question: "Applicability - The guideline provides advice and/or tools on how the recommendations can be put into practice."
+    evaluation_criteria: "The guideline provides advice and/or tools on how the recommendations can be put into practice."
+    evidence_location_hint: "implementation"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_20
+    item_number: "20"
+    category: "Domain 5 - Applicability"
+    question: "Applicability - The potential resource implications of applying the recommendations have been considered."
+    evaluation_criteria: "The potential resource implications of applying the recommendations have been considered."
+    evidence_location_hint: "implementation"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_21
+    item_number: "21"
+    category: "Domain 5 - Applicability"
+    question: "Applicability - The guideline presents monitoring and/or auditing criteria."
+    evaluation_criteria: "The guideline presents monitoring and/or auditing criteria."
+    evidence_location_hint: "implementation"
+    severity_if_missing: MAJOR
+
+  - item_id: AGREE_22
+    item_number: "22"
+    category: "Domain 6 - Editorial Independence"
+    question: "Editorial Independence - The views of the funding body have not influenced the content of the guideline."
+    evaluation_criteria: "The views of the funding body have not influenced the content of the guideline."
+    evidence_location_hint: "other.funding"
+    severity_if_missing: CRITICAL
+
+  - item_id: AGREE_23
+    item_number: "23"
+    category: "Domain 6 - Editorial Independence"
+    question: "Editorial Independence - Competing interests of guideline development group members have been recorded and addressed."
+    evaluation_criteria: "Competing interests of guideline development group members have been recorded and addressed."
+    evidence_location_hint: "other.conflicts"
+    severity_if_missing: CRITICAL

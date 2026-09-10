@@ -150,6 +150,22 @@ class ServiceContext:
             if snapshot_path is not None
             else None
         )
+        # Name the tier. A deployment with no FAERS_SNAPSHOT_PATH silently lost
+        # the frozen snapshot, the fitted GPS prior and the drug-class engine at
+        # once; nothing in a report said which tier had produced it.
+        self.data_tier = "frozen_faers" if self.faers_snapshot is not None else "openfda_live"
+        self.snapshot_status = (
+            "configured"
+            if self.faers_snapshot is not None
+            else "faers_snapshot_not_configured"
+        )
+        if self.faers_snapshot is None:
+            logger.warning(
+                "FAERS_SNAPSHOT_PATH is not set: running the live openFDA tier "
+                "(%s). Report-level drug-class analysis and a fitted GPS prior "
+                "are unavailable in this deployment.",
+                self.snapshot_status,
+            )
         aliases = settings.parsed_faers_drug_aliases if drug_aliases is None else drug_aliases
         roles = settings.parsed_faers_suspect_roles if suspect_roles is None else suspect_roles
         routes = settings.parsed_faers_administration_routes if drug_routes is None else drug_routes
@@ -312,7 +328,9 @@ class ServiceContext:
         """Run exact report-level class methods against the configured snapshot."""
         if self.faers_snapshot is None:
             raise SafetyAgentError(
-                "drug-class analysis requires a configured frozen report-level FAERS snapshot"
+                "faers_snapshot_not_configured: drug-class analysis requires a frozen "
+                "report-level FAERS snapshot; set FAERS_SNAPSHOT_PATH to a snapshot "
+                "built from the quarterly FAERS/AEMS files"
             )
         engine = ClassAnalysisEngine(self.faers_snapshot, prior=self.gps_prior)
         async with self._sem:

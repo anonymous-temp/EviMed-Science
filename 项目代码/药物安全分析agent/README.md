@@ -140,6 +140,21 @@ SQLite 快照(流式导入时按 case version 去重),JSON 仅用于小型回归
 drug 对象上同时匹配规范药名、`ROLE_COD` 与可选给药途径;目标药时间窗可与
 背景报告时间窗分离(用于上市后目标药+全历史背景的论文设计)。live openFDA
 聚合不具备此对象绑定能力,只作为明确标注的报告级近似。
+
+**未配置 `FAERS_SNAPSHOT_PATH` 时不是静默降级**:`ServiceContext` 记录
+`data_tier="openfda_live"` 与 `snapshot_status="faers_snapshot_not_configured"`
+并在启动时告警;药物类别分析以同名错误码拒绝;`signals.csv` 首行、
+`signal-provenance.json` 与 `result.json` 都带 `data_source` / `gps_prior_fitted` /
+`snapshot_id` / `snapshot_sha256` / `extracted_at`,因此一次 live 档运行不会看起来
+像冻结快照运行。仓库中尚无从 FAERS/AEMS 季度 ASCII 文件构建快照的 ETL——
+`write_sqlite_snapshot` 只接收已解析的 `ReportRecord`;补齐 ETL 仍是待办。
+
+**ROR/PRR 只有一份实现**:`safety_agent/signals/disproportionality.py`,入口是
+`build_table_from_counts` + `analyze` + `evaluate`
+(`tests/test_reaction_matching.py` 断言引擎内没有第二份)。平台侧的 MCP 工具
+`adr_signal`(`OpenScience/runtime/mcp/evimed-research/public_sources.py`)另有一份
+药名字段、角色过滤、卡方、零格规则与判定规则都不同的实现;该文件不在本仓库内,
+统一为调用本引擎是平台侧的待办(积压 R055)。
 年龄分桶使用 ICH `patientonsetageunit`(800–805)将年/月/周/日/小时统一到年龄区间,
 并显式输出未报告性别、年龄和国家的桶。
 

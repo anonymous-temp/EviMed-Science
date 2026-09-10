@@ -22,6 +22,7 @@ from .agents.rubric_selector import RubricSelectorAgent
 from .orchestrators.multi_rubric_orchestrator import MultiRubricOrchestrator
 from .agents.meta_reviewer import MetaReviewerAgent
 from .agents.narrative_generator import NarrativeReportGenerator
+from .services.quote_verification import verify_meta_review
 from .agents.statistical_reviewer import StatisticalDeepReviewAgent
 
 from dotenv import load_dotenv
@@ -140,6 +141,16 @@ class ReviewOrchestratorV2:
                         meta_review.minor_issues.append(si)
                 print(f"  → 统计精查追加问题: {len(stat_issues)} 条")
             print(f"  → [问题追踪] 统计精查后(送入NarrativeGen前): fatal={len(meta_review.fatal_issues)}, major={len(meta_review.major_issues)}, minor={len(meta_review.minor_issues)}, 总计={len(meta_review.fatal_issues)+len(meta_review.major_issues)+len(meta_review.minor_issues)}")
+
+            # Stage 5d: every quote is checked against the parsed manuscript.
+            # The meta stage restates quotes from memory, so until this ran a
+            # composed sentence was indistinguishable from a located one.
+            meta_review.quote_verification = verify_meta_review(meta_review, manuscript_text)
+            print(
+                f"  → [引文核验] 定位 {meta_review.quote_verification['quotes_located']}"
+                f"/{meta_review.quote_verification['quotes_checked']} 条引文，"
+                f"降级 {meta_review.quote_verification['issues_demoted']} 个问题"
+            )
 
             narrative_report = await self.narrative_generator.generate_narrative_report(
                 document_ir=document_ir,

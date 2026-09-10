@@ -1,226 +1,290 @@
-# STARD 2015 Checklist for Diagnostic Accuracy Studies
-# Reference: Bossuyt PM, Reitsma JB, Bruns DE, et al. STARD 2015: an updated list of essential items for reporting diagnostic accuracy studies. BMJ 2015;351:h5527
+# STARD 2015 checklist for diagnostic accuracy studies.
+# Item numbers and text follow the published 30-item checklist exactly; see `source`.
+# The previous file numbered 27 flat items with no a/b sub-items and no items for
+# intended sample size (18) or adverse events (25), so its numbers named other items.
 
-name: STARD 2015
-version: "1.0"
+name: "STARD 2015"
+version: "2015"
+source:
+  doi: "10.1136/bmj.h5527"
+  year: 2015
+  checklist_version: "STARD 2015"
+  citation: "Bossuyt PM, Reitsma JB, Bruns DE, et al. STARD 2015: an updated list of essential items for reporting diagnostic accuracy studies. BMJ 2015;351:h5527."
+  checklist_url: "https://www.equator-network.org/reporting-guidelines/stard/"
 applicable_to:
-  - Diagnostic Study
-  - Diagnostic Accuracy Study
-description: "Reporting checklist for studies of diagnostic accuracy"
+  - "Diagnostic Study"
+  - "Diagnostic Accuracy Study"
+description: "Reporting checklist for diagnostic accuracy studies"
 
 items:
   - item_id: STARD_1
     item_number: "1"
-    category: Title and Abstract
-    question: "Does the title identify the study as assessing diagnostic accuracy?"
-    evaluation_criteria: "Title should indicate the study assesses accuracy or performance of a diagnostic test."
+    category: "Title or abstract - Title"
+    question: "Title - Identification as a study of diagnostic accuracy using at least one measure of accuracy (such as sensitivity, specificity, predictive values, or AUC)"
+    evaluation_criteria: "Identification as a study of diagnostic accuracy using at least one measure of accuracy (such as sensitivity, specificity, predictive values, or AUC)"
     evidence_location_hint: "title"
-    severity_if_missing: MAJOR
+    severity_if_missing: MINOR
 
   - item_id: STARD_2
     item_number: "2"
-    category: Abstract
-    question: "Does abstract contain study design, methods, results with estimates of accuracy and precision?"
-    evaluation_criteria: "Structured abstract should include study design, participants, index test, reference standard, and accuracy estimates."
+    category: "Abstract - Abstract"
+    question: "Abstract - Structured summary of study design, methods, results, and conclusions (for specific guidance, see STARD for Abstracts)"
+    evaluation_criteria: "Structured summary of study design, methods, results, and conclusions (for specific guidance, see STARD for Abstracts)"
     evidence_location_hint: "abstract"
-    severity_if_missing: MAJOR
+    severity_if_missing: MINOR
 
   - item_id: STARD_3
     item_number: "3"
-    category: Introduction
-    question: "Is the scientific and clinical background clearly stated?"
-    evaluation_criteria: "Should explain the clinical role of the index test and existing evidence."
+    category: "Introduction - Background"
+    question: "Background - Scientific and clinical background, including the intended use and clinical role of the index test"
+    evaluation_criteria: "Scientific and clinical background, including the intended use and clinical role of the index test"
     evidence_location_hint: "introduction"
     severity_if_missing: MAJOR
 
   - item_id: STARD_4
     item_number: "4"
-    category: Introduction
-    question: "Are study objectives and hypotheses stated?"
-    evaluation_criteria: "Should clearly state the study objectives including what is being estimated (e.g., sensitivity, specificity)."
-    evidence_location_hint: "introduction"
+    category: "Introduction - Objectives"
+    question: "Objectives - Study objectives and hypotheses"
+    evaluation_criteria: "Study objectives and hypotheses"
+    evidence_location_hint: "introduction.objectives"
     severity_if_missing: MAJOR
 
   - item_id: STARD_5
     item_number: "5"
-    category: Methods - Study Design
-    question: "Was this a prospective or retrospective study and were data collected cross-sectionally or longitudinally?"
-    evaluation_criteria: "Should clearly state whether prospective/retrospective and data collection timing."
-    evidence_location_hint: "methods.study_design"
+    category: "Methods - Study design"
+    question: "Study design - Whether data collection was planned before the index test and reference standard were performed (prospective study) or after (retrospective study)"
+    evaluation_criteria: "Whether data collection was planned before the index test and reference standard were performed (prospective study) or after (retrospective study)"
+    evidence_location_hint: "methods.design"
     severity_if_missing: CRITICAL
 
   - item_id: STARD_6
     item_number: "6"
-    category: Methods - Participants
-    question: "Are participant eligibility criteria clearly described?"
-    evaluation_criteria: "Should specify inclusion/exclusion criteria for participants."
-    evidence_location_hint: "methods.eligibility"
+    category: "Methods - Participants"
+    question: "Participants - Eligibility criteria"
+    evaluation_criteria: "Eligibility criteria"
+    evidence_location_hint: "methods.participants"
     severity_if_missing: CRITICAL
 
   - item_id: STARD_7
     item_number: "7"
-    category: Methods - Participants
-    question: "Is the sampling method and data collection described?"
-    evaluation_criteria: "Should describe how participants were recruited (consecutive, random sample, etc.) and setting."
+    category: "Methods - Participants"
+    question: "Participants - On what basis potentially eligible participants were identified (such as symptoms, results from previous tests, inclusion in registry)"
+    evaluation_criteria: "On what basis potentially eligible participants were identified (such as symptoms, results from previous tests, inclusion in registry)"
     evidence_location_hint: "methods.participants"
     severity_if_missing: MAJOR
 
   - item_id: STARD_8
     item_number: "8"
-    category: Methods - Index Test
-    question: "Is the index test described in sufficient detail to permit replication?"
-    evaluation_criteria: "Should provide technical specifications, reagents, procedures, and who performed and interpreted the test."
-    evidence_location_hint: "methods"
-    severity_if_missing: CRITICAL
+    category: "Methods - Participants"
+    question: "Participants - Where and when potentially eligible participants were identified (setting, location and dates)"
+    evaluation_criteria: "Where and when potentially eligible participants were identified (setting, location and dates)"
+    evidence_location_hint: "methods.participants"
+    severity_if_missing: MAJOR
 
   - item_id: STARD_9
     item_number: "9"
-    category: Methods - Reference Standard
-    question: "Is the reference standard described in sufficient detail?"
-    evaluation_criteria: "Should describe the reference standard in detail including rationale for choosing it."
-    evidence_location_hint: "methods"
+    category: "Methods - Participants"
+    question: "Participants - Whether participants formed a consecutive, random or convenience series"
+    evaluation_criteria: "Whether participants formed a consecutive, random or convenience series"
+    evidence_location_hint: "methods.participants"
     severity_if_missing: CRITICAL
 
-  - item_id: STARD_10
-    item_number: "10"
-    category: Methods - Reference Standard
-    question: "Is the definition of the target condition stated?"
-    evaluation_criteria: "Should clearly define what constitutes the target condition (disease/health state)."
-    evidence_location_hint: "methods.outcomes"
+  - item_id: STARD_10a
+    item_number: "10a"
+    category: "Methods - Test methods"
+    question: "Test methods - Index test, in sufficient detail to allow replication"
+    evaluation_criteria: "Index test, in sufficient detail to allow replication"
+    evidence_location_hint: "methods.index_test"
+    severity_if_missing: CRITICAL
+
+  - item_id: STARD_10b
+    item_number: "10b"
+    category: "Methods - Test methods"
+    question: "Test methods - Reference standard, in sufficient detail to allow replication"
+    evaluation_criteria: "Reference standard, in sufficient detail to allow replication"
+    evidence_location_hint: "methods.reference_standard"
     severity_if_missing: CRITICAL
 
   - item_id: STARD_11
     item_number: "11"
-    category: Methods - Blinding
-    question: "Were index test and reference standard interpreted without knowledge of the other?"
-    evaluation_criteria: "Should state whether interpreters were blinded to results of the other test."
-    evidence_location_hint: "methods.blinding"
+    category: "Methods - Test methods"
+    question: "Test methods - Rationale for choosing the reference standard (if alternatives exist)"
+    evaluation_criteria: "Rationale for choosing the reference standard (if alternatives exist)"
+    evidence_location_hint: "methods.reference_standard"
     severity_if_missing: MAJOR
 
-  - item_id: STARD_12
-    item_number: "12"
-    category: Methods - Statistics
-    question: "Are methods for calculating test accuracy measures described?"
-    evaluation_criteria: "Should describe how sensitivity, specificity, predictive values, or likelihood ratios were calculated."
-    evidence_location_hint: "methods.statistics"
+  - item_id: STARD_12a
+    item_number: "12a"
+    category: "Methods - Test methods"
+    question: "Test methods - Definition of and rationale for test positivity cut-offs or result categories of the index test, distinguishing pre-specified from exploratory"
+    evaluation_criteria: "Definition of and rationale for test positivity cut-offs or result categories of the index test, distinguishing pre-specified from exploratory"
+    evidence_location_hint: "methods.index_test"
     severity_if_missing: CRITICAL
 
-  - item_id: STARD_13
-    item_number: "13"
-    category: Methods - Statistics
-    question: "Are methods for handling indeterminate results described?"
-    evaluation_criteria: "Should state how indeterminate/missing results were handled in analyses."
-    evidence_location_hint: "methods.statistics"
+  - item_id: STARD_12b
+    item_number: "12b"
+    category: "Methods - Test methods"
+    question: "Test methods - Definition of and rationale for test positivity cut-offs or result categories of the reference standard, distinguishing pre-specified from exploratory"
+    evaluation_criteria: "Definition of and rationale for test positivity cut-offs or result categories of the reference standard, distinguishing pre-specified from exploratory"
+    evidence_location_hint: "methods.reference_standard"
     severity_if_missing: MAJOR
+
+  - item_id: STARD_13a
+    item_number: "13a"
+    category: "Methods - Test methods"
+    question: "Test methods - Whether clinical information and reference standard results were available to the performers/readers of the index test"
+    evaluation_criteria: "Whether clinical information and reference standard results were available to the performers/readers of the index test"
+    evidence_location_hint: "methods.blinding"
+    severity_if_missing: CRITICAL
+
+  - item_id: STARD_13b
+    item_number: "13b"
+    category: "Methods - Test methods"
+    question: "Test methods - Whether clinical information and index test results were available to the assessors of the reference standard"
+    evaluation_criteria: "Whether clinical information and index test results were available to the assessors of the reference standard"
+    evidence_location_hint: "methods.blinding"
+    severity_if_missing: CRITICAL
 
   - item_id: STARD_14
     item_number: "14"
-    category: Methods - Statistics
-    question: "Are methods for handling multiple observations per patient described?"
-    evaluation_criteria: "If applicable, should describe how multiple lesions/tests per patient were handled."
-    evidence_location_hint: "methods.statistics"
-    severity_if_missing: MAJOR
+    category: "Methods - Analysis"
+    question: "Analysis - Methods for estimating or comparing measures of diagnostic accuracy"
+    evaluation_criteria: "Methods for estimating or comparing measures of diagnostic accuracy"
+    evidence_location_hint: "methods.analysis"
+    severity_if_missing: CRITICAL
 
   - item_id: STARD_15
     item_number: "15"
-    category: Results - Participants
-    question: "Is participant flow through the study shown?"
-    evaluation_criteria: "Should provide flow diagram or description showing numbers at each stage."
-    evidence_location_hint: "results.participant_flow"
-    severity_if_missing: CRITICAL
+    category: "Methods - Analysis"
+    question: "Analysis - How indeterminate index test or reference standard results were handled"
+    evaluation_criteria: "How indeterminate index test or reference standard results were handled"
+    evidence_location_hint: "methods.analysis"
+    severity_if_missing: MAJOR
 
   - item_id: STARD_16
     item_number: "16"
-    category: Results - Participants
-    question: "Are baseline demographics and clinical characteristics reported?"
-    evaluation_criteria: "Should report demographic and clinical characteristics of study population."
-    evidence_location_hint: "results.baseline"
+    category: "Methods - Analysis"
+    question: "Analysis - How missing data on the index test and reference standard were handled"
+    evaluation_criteria: "How missing data on the index test and reference standard were handled"
+    evidence_location_hint: "methods.analysis"
     severity_if_missing: MAJOR
 
   - item_id: STARD_17
     item_number: "17"
-    category: Results - Participants
-    question: "Is distribution of target condition in participants reported?"
-    evaluation_criteria: "Should report prevalence or distribution of disease severity in study sample."
-    evidence_location_hint: "results"
-    severity_if_missing: MAJOR
+    category: "Methods - Analysis"
+    question: "Analysis - Any analyses of variability in diagnostic accuracy, distinguishing pre-specified from exploratory"
+    evaluation_criteria: "Any analyses of variability in diagnostic accuracy, distinguishing pre-specified from exploratory"
+    evidence_location_hint: "methods.analysis"
+    severity_if_missing: MINOR
 
   - item_id: STARD_18
     item_number: "18"
-    category: Results - Test Results
-    question: "Is the time interval between index test and reference standard reported?"
-    evaluation_criteria: "Should report timing and any clinical interventions between tests."
-    evidence_location_hint: "results"
+    category: "Methods - Analysis"
+    question: "Analysis - Intended sample size and how it was determined"
+    evaluation_criteria: "Intended sample size and how it was determined"
+    evidence_location_hint: "methods.sample_size"
     severity_if_missing: MAJOR
 
   - item_id: STARD_19
     item_number: "19"
-    category: Results - Test Results
-    question: "Are cross-tabulation of index test and reference standard results reported?"
-    evaluation_criteria: "Should present 2x2 table or equivalent showing test results vs reference standard."
-    evidence_location_hint: "results.outcomes"
+    category: "Results - Participants"
+    question: "Participants - Flow of participants, using a diagram"
+    evaluation_criteria: "Flow of participants, using a diagram"
+    evidence_location_hint: "results.flow"
     severity_if_missing: CRITICAL
 
   - item_id: STARD_20
     item_number: "20"
-    category: Results - Estimates
-    question: "Are estimates of diagnostic accuracy with confidence intervals reported?"
-    evaluation_criteria: "Should report sensitivity, specificity with 95% CIs and/or predictive values, likelihood ratios."
-    evidence_location_hint: "results.outcomes"
-    severity_if_missing: CRITICAL
+    category: "Results - Participants"
+    question: "Participants - Baseline demographic and clinical characteristics of participants"
+    evaluation_criteria: "Baseline demographic and clinical characteristics of participants"
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
 
-  - item_id: STARD_21
-    item_number: "21"
-    category: Results - Estimates
-    question: "Are indeterminate or missing test results reported?"
-    evaluation_criteria: "Should report number and reasons for indeterminate/missing results."
-    evidence_location_hint: "results"
+  - item_id: STARD_21a
+    item_number: "21a"
+    category: "Results - Participants"
+    question: "Participants - Distribution of severity of disease in those with the target condition"
+    evaluation_criteria: "Distribution of severity of disease in those with the target condition"
+    evidence_location_hint: "results.baseline"
+    severity_if_missing: MAJOR
+
+  - item_id: STARD_21b
+    item_number: "21b"
+    category: "Results - Participants"
+    question: "Participants - Distribution of alternative diagnoses in those without the target condition"
+    evaluation_criteria: "Distribution of alternative diagnoses in those without the target condition"
+    evidence_location_hint: "results.baseline"
     severity_if_missing: MAJOR
 
   - item_id: STARD_22
     item_number: "22"
-    category: Results - Subgroups
-    question: "If subgroup analyses were performed, are they reported?"
-    evaluation_criteria: "Should report accuracy estimates for pre-specified subgroups."
-    evidence_location_hint: "results"
-    severity_if_missing: MINOR
+    category: "Results - Participants"
+    question: "Participants - Time interval and any clinical interventions between index test and reference standard"
+    evaluation_criteria: "Time interval and any clinical interventions between index test and reference standard"
+    evidence_location_hint: "results.participants"
+    severity_if_missing: MAJOR
 
   - item_id: STARD_23
     item_number: "23"
-    category: Discussion - Limitations
-    question: "Are study limitations discussed?"
-    evaluation_criteria: "Should discuss limitations including verification bias, spectrum bias, etc."
-    evidence_location_hint: "discussion.limitations"
-    severity_if_missing: MAJOR
+    category: "Results - Test results"
+    question: "Test results - Cross tabulation of the index test results (or their distribution) by the results of the reference standard"
+    evaluation_criteria: "Cross tabulation of the index test results (or their distribution) by the results of the reference standard"
+    evidence_location_hint: "results.test_results"
+    severity_if_missing: CRITICAL
 
   - item_id: STARD_24
     item_number: "24"
-    category: Discussion - Applicability
-    question: "Is clinical applicability discussed?"
-    evaluation_criteria: "Should discuss clinical applicability including target population and clinical role."
-    evidence_location_hint: "discussion"
-    severity_if_missing: MAJOR
+    category: "Results - Test results"
+    question: "Test results - Estimates of diagnostic accuracy and their precision (such as 95% confidence intervals)"
+    evaluation_criteria: "Estimates of diagnostic accuracy and their precision (such as 95% confidence intervals)"
+    evidence_location_hint: "results.accuracy"
+    severity_if_missing: CRITICAL
 
   - item_id: STARD_25
     item_number: "25"
-    category: Other - Registration
-    question: "Is study registration information provided?"
-    evaluation_criteria: "Should provide registration number and name of registry if applicable."
-    evidence_location_hint: "methods"
-    severity_if_missing: MINOR
+    category: "Results - Test results"
+    question: "Test results - Any adverse events from performing the index test or the reference standard"
+    evaluation_criteria: "Any adverse events from performing the index test or the reference standard"
+    evidence_location_hint: "results.adverse_events"
+    severity_if_missing: MAJOR
 
   - item_id: STARD_26
     item_number: "26"
-    category: Other - Protocol
-    question: "Is information about protocol access provided?"
-    evaluation_criteria: "Should indicate where full study protocol can be accessed."
-    evidence_location_hint: "methods"
-    severity_if_missing: MINOR
+    category: "Discussion - Limitations"
+    question: "Limitations - Study limitations, including sources of potential bias, statistical uncertainty, and generalisability"
+    evaluation_criteria: "Study limitations, including sources of potential bias, statistical uncertainty, and generalisability"
+    evidence_location_hint: "discussion.limitations"
+    severity_if_missing: MAJOR
 
   - item_id: STARD_27
     item_number: "27"
-    category: Other - Funding
-    question: "Are funding sources reported?"
-    evaluation_criteria: "Should state sources of funding and role of funders."
-    evidence_location_hint: "end_matter"
+    category: "Discussion - Implications"
+    question: "Implications - Implications for practice, including the intended use and clinical role of the index test"
+    evaluation_criteria: "Implications for practice, including the intended use and clinical role of the index test"
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: STARD_28
+    item_number: "28"
+    category: "Other information - Registration"
+    question: "Registration - Registration number and name of registry"
+    evaluation_criteria: "Registration number and name of registry"
+    evidence_location_hint: "other.registration"
+    severity_if_missing: MAJOR
+
+  - item_id: STARD_29
+    item_number: "29"
+    category: "Other information - Protocol"
+    question: "Protocol - Where the full study protocol can be accessed"
+    evaluation_criteria: "Where the full study protocol can be accessed"
+    evidence_location_hint: "other.protocol"
+    severity_if_missing: MINOR
+
+  - item_id: STARD_30
+    item_number: "30"
+    category: "Other information - Funding"
+    question: "Funding - Sources of funding and other support; role of funders"
+    evaluation_criteria: "Sources of funding and other support; role of funders"
+    evidence_location_hint: "other.funding"
     severity_if_missing: MAJOR

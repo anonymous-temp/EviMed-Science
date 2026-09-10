@@ -1,274 +1,244 @@
-# CHEERS 2022 - Consolidated Health Economic Evaluation Reporting Standards
-# For reporting health economic evaluations
+# CHEERS 2022 checklist for health economic evaluations.
+# Item numbers and text follow the published 28-item checklist exactly; see `source`.
+# The previous file used CHEERS 2013 numbering with a/b sub-items and omitted the three
+# items CHEERS 2022 added (19 distributional effects, 21 and 25 engagement).
 
-name: CHEERS 2022
+name: "CHEERS 2022"
 version: "2022"
+source:
+  doi: "10.1136/bmj-2021-067975"
+  year: 2022
+  checklist_version: "CHEERS 2022"
+  citation: "Husereau D, Drummond M, Augustovski F, et al. Consolidated Health Economic Evaluation Reporting Standards 2022 (CHEERS 2022) Statement. BMJ 2022;376:e067975."
+  checklist_url: "https://www.equator-network.org/reporting-guidelines/cheers/"
 applicable_to:
   - "Economic Evaluation"
   - "Cost-Effectiveness Analysis"
   - "Cost-Utility Analysis"
-  - "Cost-Benefit Analysis"
   - "Budget Impact Analysis"
-description: "CHEERS 2022 checklist for health economic evaluation reporting"
+description: "Reporting checklist for health economic evaluations"
 
 items:
-  # Title
-  - item_id: CHEERS_TITLE_01
+  - item_id: CHEERS_1
     item_number: "1"
-    category: Title
-    question: "Does the title identify the study as an economic evaluation and specify the interventions being compared?"
-    evaluation_criteria: "Title should explicitly mention 'cost-effectiveness', 'cost-utility', 'economic evaluation', etc., and name the interventions."
+    category: "Title - Title"
+    question: "Title - Identify the study as an economic evaluation and specify the interventions being compared."
+    evaluation_criteria: "Identify the study as an economic evaluation and specify the interventions being compared."
     evidence_location_hint: "title"
-    severity_if_missing: MAJOR
+    severity_if_missing: MINOR
 
-  # Abstract
-  - item_id: CHEERS_ABSTRACT_01
+  - item_id: CHEERS_2
     item_number: "2"
-    category: Abstract
-    question: "Does the abstract provide a structured summary of objectives, perspective, setting, methods, results, and conclusions?"
-    evaluation_criteria: "Abstract should contain all key elements: research question, perspective, population, methods, main results (costs and outcomes), and conclusions."
+    category: "Abstract - Abstract"
+    question: "Abstract - Provide a structured summary that highlights context, key methods, results and alternative analyses."
+    evaluation_criteria: "Provide a structured summary that highlights context, key methods, results and alternative analyses."
     evidence_location_hint: "abstract"
-    severity_if_missing: MAJOR
+    severity_if_missing: MINOR
 
-  # Introduction
-  - item_id: CHEERS_INTRO_01
+  - item_id: CHEERS_3
     item_number: "3"
-    category: Introduction
-    question: "Is background and objectives clearly described, including the rationale for the economic evaluation?"
-    evaluation_criteria: "Should explain why the economic evaluation is needed, what decision problem it addresses."
+    category: "Introduction - Background and objectives"
+    question: "Background and objectives - Give the context for the study, the study question and its practical relevance for decision making in policy or practice."
+    evaluation_criteria: "Give the context for the study, the study question and its practical relevance for decision making in policy or practice."
     evidence_location_hint: "introduction"
     severity_if_missing: MAJOR
 
-  # Methods - Health Economic Analysis Plan
-  - item_id: CHEERS_METHODS_01
+  - item_id: CHEERS_4
     item_number: "4"
-    category: Methods
-    question: "Is there a statement indicating whether a health economic analysis plan was developed?"
-    evaluation_criteria: "Should mention if a pre-specified analysis plan exists and whether it is publicly available."
-    evidence_location_hint: "methods"
-    severity_if_missing: MINOR
+    category: "Methods - Health economic analysis plan"
+    question: "Health economic analysis plan - Indicate whether a health economic analysis plan was developed and where available."
+    evaluation_criteria: "Indicate whether a health economic analysis plan was developed and where available."
+    evidence_location_hint: "methods.plan"
+    severity_if_missing: MAJOR
 
-  # Study Population
-  - item_id: CHEERS_METHODS_02
+  - item_id: CHEERS_5
     item_number: "5"
-    category: Methods
-    question: "Are the characteristics of the study population clearly described?"
-    evaluation_criteria: "Should specify patient demographics, disease severity, inclusion/exclusion criteria."
-    evidence_location_hint: "methods.participants"
-    severity_if_missing: MAJOR
+    category: "Methods - Study population"
+    question: "Study population - Describe characteristics of the study population (such as age range, demographics, socioeconomic, or clinical characteristics)."
+    evaluation_criteria: "Describe characteristics of the study population (such as age range, demographics, socioeconomic, or clinical characteristics)."
+    evidence_location_hint: "methods.population"
+    severity_if_missing: CRITICAL
 
-  # Setting and Location
-  - item_id: CHEERS_METHODS_03
+  - item_id: CHEERS_6
     item_number: "6"
-    category: Methods
-    question: "Is the setting and location of the economic evaluation clearly stated?"
-    evaluation_criteria: "Should specify country, healthcare system, year of study, and relevant context."
-    evidence_location_hint: "methods"
+    category: "Methods - Setting and location"
+    question: "Setting and location - Provide relevant contextual information that may influence findings."
+    evaluation_criteria: "Provide relevant contextual information that may influence findings."
+    evidence_location_hint: "methods.setting"
     severity_if_missing: MAJOR
 
-  # Perspective
-  - item_id: CHEERS_METHODS_04
+  - item_id: CHEERS_7
     item_number: "7"
-    category: Methods
-    question: "Is the perspective of the economic evaluation stated (e.g., healthcare system, societal, payer)?"
-    evaluation_criteria: "Must explicitly state the perspective and justify the choice."
-    evidence_location_hint: "methods"
+    category: "Methods - Comparators"
+    question: "Comparators - Describe the interventions or strategies being compared and why chosen."
+    evaluation_criteria: "Describe the interventions or strategies being compared and why chosen."
+    evidence_location_hint: "methods.comparators"
     severity_if_missing: CRITICAL
 
-  # Comparators
-  - item_id: CHEERS_METHODS_05
+  - item_id: CHEERS_8
     item_number: "8"
-    category: Methods
-    question: "Are the comparators (intervention and alternatives) described in detail?"
-    evaluation_criteria: "Should provide sufficient detail about each intervention/comparator including doses, duration, delivery mode."
-    evidence_location_hint: "methods.interventions"
-    severity_if_missing: MAJOR
+    category: "Methods - Perspective"
+    question: "Perspective - State the perspective(s) adopted by the study and why chosen."
+    evaluation_criteria: "State the perspective(s) adopted by the study and why chosen."
+    evidence_location_hint: "methods.perspective"
+    severity_if_missing: CRITICAL
 
-  # Time Horizon
-  - item_id: CHEERS_METHODS_06
+  - item_id: CHEERS_9
     item_number: "9"
-    category: Methods
-    question: "Is the time horizon stated and justified?"
-    evaluation_criteria: "Should specify the time frame for costs and outcomes, with rationale for why this horizon is appropriate."
-    evidence_location_hint: "methods"
+    category: "Methods - Time horizon"
+    question: "Time horizon - State the time horizon for the study and why appropriate."
+    evaluation_criteria: "State the time horizon for the study and why appropriate."
+    evidence_location_hint: "methods.time_horizon"
     severity_if_missing: CRITICAL
 
-  # Discount Rate
-  - item_id: CHEERS_METHODS_07
+  - item_id: CHEERS_10
     item_number: "10"
-    category: Methods
-    question: "Are discount rates for costs and outcomes reported?"
-    evaluation_criteria: "Must state discount rate (e.g., 3% per year) for both costs and health outcomes if time horizon >1 year."
-    evidence_location_hint: "methods.statistics"
-    severity_if_missing: CRITICAL
+    category: "Methods - Discount rate"
+    question: "Discount rate - Report the discount rate(s) and reason chosen."
+    evaluation_criteria: "Report the discount rate(s) and reason chosen."
+    evidence_location_hint: "methods.discounting"
+    severity_if_missing: MAJOR
 
-  # Selection of Outcomes
-  - item_id: CHEERS_METHODS_08
+  - item_id: CHEERS_11
     item_number: "11"
-    category: Methods
-    question: "Are health outcomes clearly defined and justified?"
-    evaluation_criteria: "Should specify outcome measures (e.g., QALYs, LYs, clinical events) and explain why they were chosen."
+    category: "Methods - Selection of outcomes"
+    question: "Selection of outcomes - Describe what outcomes were used as the measure(s) of benefit(s) and harm(s)."
+    evaluation_criteria: "Describe what outcomes were used as the measure(s) of benefit(s) and harm(s)."
     evidence_location_hint: "methods.outcomes"
     severity_if_missing: CRITICAL
 
-  # Measurement of Effectiveness
-  - item_id: CHEERS_METHODS_09
-    item_number: "12a"
-    category: Methods
-    question: "Are methods for estimating effectiveness described (e.g., RCT data, observational data, synthesis)?"
-    evaluation_criteria: "Should describe data sources and methods used to estimate clinical effectiveness."
-    evidence_location_hint: "methods"
-    severity_if_missing: MAJOR
+  - item_id: CHEERS_12
+    item_number: "12"
+    category: "Methods - Measurement of outcomes"
+    question: "Measurement of outcomes - Describe how outcomes used to capture benefit(s) and harm(s) were measured."
+    evaluation_criteria: "Describe how outcomes used to capture benefit(s) and harm(s) were measured."
+    evidence_location_hint: "methods.outcomes"
+    severity_if_missing: CRITICAL
 
-  # Measurement and Valuation of Preference-Based Outcomes
-  - item_id: CHEERS_METHODS_10
-    item_number: "12b"
-    category: Methods
-    question: "If applicable, are methods for measuring and valuing preference-based outcomes (e.g., QALYs) described?"
-    evaluation_criteria: "Should describe instrument used (EQ-5D, SF-6D), valuation algorithm, and population source."
+  - item_id: CHEERS_13
+    item_number: "13"
+    category: "Methods - Valuation of outcomes"
+    question: "Valuation of outcomes - Describe the population and methods used to measure and value outcomes."
+    evaluation_criteria: "Describe the population and methods used to measure and value outcomes."
     evidence_location_hint: "methods.outcomes"
     severity_if_missing: MAJOR
 
-  # Resource Use Estimation
-  - item_id: CHEERS_METHODS_11
-    item_number: "13a"
-    category: Methods
-    question: "Are methods for estimating resource use described?"
-    evaluation_criteria: "Should explain how resource consumption was measured (e.g., patient records, surveys, assumptions)."
-    evidence_location_hint: "methods"
-    severity_if_missing: MAJOR
-
-  # Unit Costs
-  - item_id: CHEERS_METHODS_12
-    item_number: "13b"
-    category: Methods
-    question: "Are unit costs reported and sources cited?"
-    evaluation_criteria: "Should provide unit costs for key resources with currency, price year, and data sources."
-    evidence_location_hint: "methods or results"
-    severity_if_missing: CRITICAL
-
-  # Currency and Price Date
-  - item_id: CHEERS_METHODS_13
+  - item_id: CHEERS_14
     item_number: "14"
-    category: Methods
-    question: "Are currency and price date reported?"
-    evaluation_criteria: "Must state currency (e.g., USD, EUR) and price year (e.g., 2022 costs)."
-    evidence_location_hint: "methods or results"
+    category: "Methods - Measurement and valuation of resources and costs"
+    question: "Measurement and valuation of resources and costs - Describe how costs were valued."
+    evaluation_criteria: "Describe how costs were valued."
+    evidence_location_hint: "methods.costs"
     severity_if_missing: CRITICAL
 
-  # Analytical Methods
-  - item_id: CHEERS_METHODS_14
+  - item_id: CHEERS_15
     item_number: "15"
-    category: Methods
-    question: "Are the analytical methods described, including model type if used?"
-    evaluation_criteria: "Should specify if decision tree, Markov model, DES, or trial-based, with justification."
-    evidence_location_hint: "methods.model_development"
+    category: "Methods - Currency, price date, and conversion"
+    question: "Currency, price date, and conversion - Report the dates of the estimated resource quantities and unit costs, plus the currency and year of conversion."
+    evaluation_criteria: "Report the dates of the estimated resource quantities and unit costs, plus the currency and year of conversion."
+    evidence_location_hint: "methods.costs"
     severity_if_missing: MAJOR
 
-  # Uncertainty Analysis - Characterization
-  - item_id: CHEERS_METHODS_15
-    item_number: "16a"
-    category: Methods
-    question: "Are methods for characterizing uncertainty described (e.g., PSA, DSA, scenario analysis)?"
-    evaluation_criteria: "Should describe approach to uncertainty analysis: probabilistic, deterministic, or scenarios."
-    evidence_location_hint: "methods.statistics"
+  - item_id: CHEERS_16
+    item_number: "16"
+    category: "Methods - Rationale and description of model"
+    question: "Rationale and description of model - If modelling is used, describe in detail and why used. Report if the model is publicly available and where it can be accessed."
+    evaluation_criteria: "If modelling is used, describe in detail and why used. Report if the model is publicly available and where it can be accessed."
+    evidence_location_hint: "methods.model"
     severity_if_missing: CRITICAL
 
-  # Uncertainty Analysis - Heterogeneity
-  - item_id: CHEERS_METHODS_16
-    item_number: "16b"
-    category: Methods
-    question: "Are methods for characterizing heterogeneity described (e.g., subgroup analysis)?"
-    evaluation_criteria: "Should explain how results vary across patient subgroups if applicable."
-    evidence_location_hint: "methods.statistics"
-    severity_if_missing: MAJOR
-
-  # Results - Study Parameters
-  - item_id: CHEERS_RESULTS_01
+  - item_id: CHEERS_17
     item_number: "17"
-    category: Results
-    question: "Are the values of all study parameters presented (e.g., effectiveness, costs, utilities)?"
-    evaluation_criteria: "Should provide a summary table of key input parameters with point estimates and ranges."
-    evidence_location_hint: "results or tables"
-    severity_if_missing: MAJOR
+    category: "Methods - Analytics and assumptions"
+    question: "Analytics and assumptions - Describe any methods for analysing or statistically transforming data, any extrapolation methods, and approaches for validating any model used."
+    evaluation_criteria: "Describe any methods for analysing or statistically transforming data, any extrapolation methods, and approaches for validating any model used."
+    evidence_location_hint: "methods.analysis"
+    severity_if_missing: CRITICAL
 
-  # Results - Incremental Costs and Outcomes
-  - item_id: CHEERS_RESULTS_02
+  - item_id: CHEERS_18
     item_number: "18"
-    category: Results
-    question: "Are incremental costs and outcomes for each intervention reported?"
-    evaluation_criteria: "Must present incremental costs, incremental effects, and ICERs with appropriate precision."
-    evidence_location_hint: "results"
-    severity_if_missing: CRITICAL
+    category: "Methods - Characterizing heterogeneity"
+    question: "Characterizing heterogeneity - Describe any methods used for estimating how the results of the study vary for sub-groups."
+    evaluation_criteria: "Describe any methods used for estimating how the results of the study vary for sub-groups."
+    evidence_location_hint: "methods.heterogeneity"
+    severity_if_missing: MAJOR
 
-  # Results - Uncertainty
-  - item_id: CHEERS_RESULTS_03
+  - item_id: CHEERS_19
     item_number: "19"
-    category: Results
-    question: "Are uncertainty results presented (e.g., CIs, CEACs, tornado diagrams)?"
-    evaluation_criteria: "Should present confidence intervals, cost-effectiveness acceptability curves, or sensitivity analysis results."
-    evidence_location_hint: "results or figures"
-    severity_if_missing: CRITICAL
+    category: "Methods - Characterizing distributional effects"
+    question: "Characterizing distributional effects - Describe how impacts are distributed across different individuals or adjustments made to reflect priority populations."
+    evaluation_criteria: "Describe how impacts are distributed across different individuals or adjustments made to reflect priority populations."
+    evidence_location_hint: "methods.distributional_effects"
+    severity_if_missing: MAJOR
 
-  # Results - Heterogeneity
-  - item_id: CHEERS_RESULTS_04
+  - item_id: CHEERS_20
     item_number: "20"
-    category: Results
-    question: "Are results for important subgroups reported?"
-    evaluation_criteria: "If heterogeneity analysis was planned, should present subgroup-specific results."
-    evidence_location_hint: "results"
-    severity_if_missing: MAJOR
-
-  # Discussion - Key Findings
-  - item_id: CHEERS_DISC_01
-    item_number: "21"
-    category: Discussion
-    question: "Are study findings summarized with reference to the study question?"
-    evaluation_criteria: "Should clearly state main results and their implications for decision-making."
-    evidence_location_hint: "discussion"
-    severity_if_missing: MAJOR
-
-  # Discussion - Limitations
-  - item_id: CHEERS_DISC_02
-    item_number: "22"
-    category: Discussion
-    question: "Are study limitations discussed?"
-    evaluation_criteria: "Should acknowledge data gaps, methodological limitations, and generalizability concerns."
-    evidence_location_hint: "discussion.limitations"
-    severity_if_missing: MAJOR
-
-  # Discussion - Other Relevant Information
-  - item_id: CHEERS_DISC_03
-    item_number: "23"
-    category: Discussion
-    question: "Are findings compared with other studies and relevance to decision makers discussed?"
-    evaluation_criteria: "Should contextualize results with existing literature and explain policy implications."
-    evidence_location_hint: "discussion"
-    severity_if_missing: MAJOR
-
-  # Other - Funding and Conflicts
-  - item_id: CHEERS_OTHER_01
-    item_number: "24"
-    category: Conflicts and Funding
-    question: "Are funding sources and conflicts of interest disclosed?"
-    evaluation_criteria: "Must state funding source and any potential conflicts (especially industry sponsorship)."
-    evidence_location_hint: "end_matter"
+    category: "Methods - Characterizing uncertainty"
+    question: "Characterizing uncertainty - Describe methods to characterize any sources of uncertainty in the analysis."
+    evaluation_criteria: "Describe methods to characterize any sources of uncertainty in the analysis."
+    evidence_location_hint: "methods.uncertainty"
     severity_if_missing: CRITICAL
 
-  # Other - Data Availability
-  - item_id: CHEERS_OTHER_02
-    item_number: "25"
-    category: Data Availability
-    question: "Is there a statement about data availability (model code, data access)?"
-    evaluation_criteria: "Should indicate whether analysis files, model code, or data are available."
-    evidence_location_hint: "end_matter or methods"
+  - item_id: CHEERS_21
+    item_number: "21"
+    category: "Methods - Approach to engagement with patients and others affected by the study"
+    question: "Approach to engagement with patients and others affected by the study - Describe any approaches to engage patients or service recipients, the general public, communities, or stakeholders (e.g., clinicians or payers) in the design of the study."
+    evaluation_criteria: "Describe any approaches to engage patients or service recipients, the general public, communities, or stakeholders (e.g., clinicians or payers) in the design of the study."
+    evidence_location_hint: "methods.engagement"
     severity_if_missing: MINOR
 
-  # Model Validation
-  - item_id: CHEERS_VALID_01
+  - item_id: CHEERS_22
+    item_number: "22"
+    category: "Results - Study parameters"
+    question: "Study parameters - Report all analytic inputs (e.g., values, ranges, references) including uncertainty or distributional assumptions."
+    evaluation_criteria: "Report all analytic inputs (e.g., values, ranges, references) including uncertainty or distributional assumptions."
+    evidence_location_hint: "results.parameters"
+    severity_if_missing: CRITICAL
+
+  - item_id: CHEERS_23
+    item_number: "23"
+    category: "Results - Summary of main results"
+    question: "Summary of main results - Report the mean values for the main categories of costs and outcomes of interest and summarise them in the most appropriate overall measure."
+    evaluation_criteria: "Report the mean values for the main categories of costs and outcomes of interest and summarise them in the most appropriate overall measure."
+    evidence_location_hint: "results.main"
+    severity_if_missing: CRITICAL
+
+  - item_id: CHEERS_24
+    item_number: "24"
+    category: "Results - Effect of uncertainty"
+    question: "Effect of uncertainty - Describe how uncertainty about analytic judgments, inputs, or projections affect findings. Report the effect of choice of discount rate and time horizon, if applicable."
+    evaluation_criteria: "Describe how uncertainty about analytic judgments, inputs, or projections affect findings. Report the effect of choice of discount rate and time horizon, if applicable."
+    evidence_location_hint: "results.uncertainty"
+    severity_if_missing: CRITICAL
+
+  - item_id: CHEERS_25
+    item_number: "25"
+    category: "Results - Effect of engagement with patients and others affected by the study"
+    question: "Effect of engagement with patients and others affected by the study - Report on any difference patient/service recipient, general public, community, or stakeholder involvement made to the approach or findings of the study."
+    evaluation_criteria: "Report on any difference patient/service recipient, general public, community, or stakeholder involvement made to the approach or findings of the study."
+    evidence_location_hint: "results.engagement"
+    severity_if_missing: MINOR
+
+  - item_id: CHEERS_26
     item_number: "26"
-    category: Validation
-    question: "If model-based, is model validation described?"
-    evaluation_criteria: "Should describe internal validation, external validation, or face validity checks."
-    evidence_location_hint: "methods.model_validation"
+    category: "Discussion - Study findings, limitations, generalizability, and current knowledge"
+    question: "Study findings, limitations, generalizability, and current knowledge - Report key findings, limitations, ethical or equity considerations not captured, and how these could impact patients, policy, or practice."
+    evaluation_criteria: "Report key findings, limitations, ethical or equity considerations not captured, and how these could impact patients, policy, or practice."
+    evidence_location_hint: "discussion"
+    severity_if_missing: MAJOR
+
+  - item_id: CHEERS_27
+    item_number: "27"
+    category: "Other relevant information - Source of funding"
+    question: "Source of funding - Describe how the study was funded and any role of the funder in the identification, design, conduct, and reporting of the analysis."
+    evaluation_criteria: "Describe how the study was funded and any role of the funder in the identification, design, conduct, and reporting of the analysis."
+    evidence_location_hint: "other.funding"
+    severity_if_missing: MAJOR
+
+  - item_id: CHEERS_28
+    item_number: "28"
+    category: "Other relevant information - Conflicts of interest"
+    question: "Conflicts of interest - Report authors conflicts of interest according to journal or International Committee of Medical Journal Editors requirements."
+    evaluation_criteria: "Report authors conflicts of interest according to journal or International Committee of Medical Journal Editors requirements."
+    evidence_location_hint: "other.conflicts"
     severity_if_missing: MAJOR

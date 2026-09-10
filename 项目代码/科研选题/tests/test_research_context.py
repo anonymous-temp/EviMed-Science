@@ -124,10 +124,25 @@ def test_runner_passes_context_and_returns_portfolio(tmp_path):
     assert CONTEXT["availableData"] in (tmp_path / "research-topic-report.md").read_text()
 
 
-def test_fallback_opportunities_do_not_manufacture_scores():
-    record = LiteratureRecord(id="pubmed_420001", pmid="420001", title="Dialysis adherence",
-                              abstract="Observational data on adherence.")
-    opportunities = M5_BreakthroughOpportunityModule._fallback_opportunities([record], "Dialysis")
+def test_validated_opportunities_do_not_manufacture_scores():
+    """Was written against the removed _fallback_opportunities; the property it
+    guards (no invented priority/feasibility/novelty numbers) belongs to the
+    validator that now decides every published opportunity."""
+    opportunities = M5_BreakthroughOpportunityModule._validate_opportunities(
+        [{
+            "opportunity_id": "BOM1",
+            "title": "Adherence monitoring in dialysis",
+            "type": "方法迁移",
+            "validation_pathway": "Prospective cohort with predefined adherence measures.",
+            "evidence_pmids": ["420001"],
+            "priority_score": 0.9,
+            "feasibility_score": 0.8,
+            "novelty_score": 0.7,
+            "clinical_impact_score": 0.6,
+        }],
+        [LiteratureRecord(id="pubmed_420001", pmid="420001", title="Dialysis adherence",
+                          abstract="Observational data on adherence monitoring.")],
+    )
     assert opportunities
     assert all(not any(key.endswith("_score") for key in item) for item in opportunities)
 

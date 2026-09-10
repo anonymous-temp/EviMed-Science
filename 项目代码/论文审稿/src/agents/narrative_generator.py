@@ -13,12 +13,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# 目标报告字数（总体评价 + 修改意见 + 推荐意见）
-_TARGET_CHARS = 8000
-# 二次扩写触发阈值：首轮生成低于此字数且问题数量足够时才扩写
-_EXPAND_THRESHOLD = 3000
-# 触发扩写所需的最少问题数
-_EXPAND_MIN_ISSUES = 3
+# No length target. The report is as long as the verified findings make it: the
+# 8-15 finding quota, the 300-character-per-finding floor, the 5,000-character
+# total and the second expansion pass together meant a clean manuscript could
+# not receive a clean review, only a padded one.
 
 
 class NarrativeReportGenerator:
@@ -280,60 +278,6 @@ class NarrativeReportGenerator:
 
         return verified
 
-    async def _expand_issues(
-        self,
-        issues_text: str,
-        overall_eval: str,
-        document_ir: DocumentIR,
-    ) -> str:
-        """
-        二次扩写：对已生成的修改意见逐条补充原文引证和具体建议，
-        使报告达到目标字数。
-        仅在首轮内容过少时触发。
-        """
-        # 提取原文摘要用于事实核查
-        if document_ir.abstract and hasattr(document_ir.abstract, 'text'):
-            doc_abstract = ' '.join(document_ir.abstract.text[:3])[:800]
-        else:
-            doc_abstract = "无摘要"
-
-        expand_prompt = f"""你是一位资深医学审稿专家。以下是已初步生成的审稿修改意见，但内容较为简短，需要你逐条进行扩写。
-
-【原文摘要（用于事实核查，禁止捏造原文不存在的内容）】
-{doc_abstract}
-
-【需要扩写的修改意见】
-{issues_text}
-
-【扩写要求】
-1. 保持原有编号顺序和章节结构不变，不增减问题数量。
-2. 每条意见扩写至不少于300字，用连贯散文段落展开，内容须涵盖：原文现状描述（引用关键词句，用引号标注）、违反的规范标准（如CONSORT第X条）、可操作修改建议（修改后应达到的可验证标准）。三者融合在流畅段落中，不使用加粗标签。
-3. 只扩写内容，不改变原有判断和立场。
-4. 禁止出现"评分"、"系统分析"、"AI"等暴露内部机制的词汇。
-5. 直接输出扩写后的完整修改意见文本，不要输出JSON，不要添加前言后语。"""
-
-        try:
-            result = await self.llm.call_with_retry(
-                messages=[
-                    {"role": "system", "content": "你是资深医学期刊审稿专家，输出中文。"},
-                    {"role": "user", "content": expand_prompt}
-                ],
-                model_tier=ModelTier.ADVANCED,
-                temperature=0.5,
-                max_tokens=6000,
-                timeout_sec=600,
-            )
-            expanded = result.get("content", "").strip()
-            print(f"  → [_expand_issues] 输入={len(issues_text)}字, 输出={len(expanded)}字")
-            if expanded and len(expanded) > len(issues_text):
-                return self._clean_internal_tags(expanded)
-            else:
-                print(f"  → [_expand_issues] 扩写未增加长度，返回原始内容")
-        except Exception as e:
-            logger.error(f"二次扩写失败（非致命）: {e}", exc_info=True)
-            print(f"  → 二次扩写失败（非致命）: {e}")
-        return issues_text
-
     async def _generate_recommendation(
         self,
         overall_eval: str,
@@ -558,20 +502,14 @@ class NarrativeReportGenerator:
                 combined_minor = (extracted_minor + "\n\n" + minor_raw).strip() if minor_raw else extracted_minor
                 issues_final = self._merge_minor_into_issues(issues_numbered, combined_minor)
 
-                if len(overall_eval) < 30 or len(issues_final) < 100:
+                # A clean manuscript legitimately produces a short issues section,
+                # so only an empty overall evaluation counts as "nothing generated".
+                if len(overall_eval) < 30:
                     if attempt < max_retries:
-                        print(f"  → 报告内容不足 (总体:{len(overall_eval)}字, 问题:{len(issues_final)}字)，重试生成...")
+                        print(f"  → 总体评价为空 ({len(overall_eval)}字)，重试生成...")
                         continue
                     else:
-                        print(f"  → 警告：报告长度不足")
-
-                # ── 后处理5：二次扩写（总字数不足且问题数量足够时触发）──
-                total_chars = len(overall_eval) + len(issues_final) + len(recommendation)
-                if total_chars < _EXPAND_THRESHOLD and len(verified_issues) >= _EXPAND_MIN_ISSUES:
-                    print(f"  → 报告字数不足 ({total_chars}字 < {_EXPAND_THRESHOLD})，触发二次扩写...")
-                    issues_final = await self._expand_issues(issues_final, overall_eval, document_ir)
-                    total_chars = len(overall_eval) + len(issues_final) + len(recommendation)
-                    print(f"  → 扩写后字数: {total_chars}字")
+                        print(f"  → 警告：总体评价过短")
 
                 return NarrativeReport(
                     title=document_ir.title or "未知标题",
@@ -851,7 +789,7 @@ E. 凡涉及引用不一致（动物研究被误引为人群证据）：
             + "\n"
             + '  "overall_evaluation": "【总体评价】300-500字。结构：①2-3句阐述研究背景与意义；②2-3句概括研究方法与主要发现；③1-2句指出本研究的价值与局限，点明\'仍有若干方面有待完善\'。语言客观专业，禁止套话。",\n'
             + "\n"
-            + '  "critical_issues_narrative": "【修改意见】使用全文连续顿号编号（1、2、3、...）分点列出所有问题，每点独立成段，段落之间用空行分隔。绝对禁止使用章节标题（##）。每条意见以连贯散文段落展开，不少于300字，内容须涵盖：①原文在此处的具体做法（引用关键词句，用引号标注）；②违反的规范标准（如CONSORT第X条的具体要求）；③可操作的修改建议——建议必须具体到作者可直接执行的程度，例如：建议补充检索式时须给出示范检索式；建议补充结构段落时须给出段落标题与内容要点示范；建议修改引用语气时须给出改写前后的对比例句；建议系统核查某类问题时须给出具体搜索词或操作指令。不能只说\'建议补充\'而不示范应补充什么。三者融合在流畅的段落叙述中，不使用加粗标签分段。方法学与统计问题优先，写作问题排后。",\n'
+            + '  "critical_issues_narrative": "【修改意见】使用全文连续顿号编号（1、2、3、...）分点列出所有问题，每点独立成段，段落之间用空行分隔。绝对禁止使用章节标题（##）。每条意见以连贯散文段落展开，内容须涵盖：①原文在此处的具体做法（引用关键词句，用引号标注）；②违反的规范标准（如CONSORT第X条的具体要求）；③可操作的修改建议——建议必须具体到作者可直接执行的程度，例如：建议补充检索式时须给出示范检索式；建议补充结构段落时须给出段落标题与内容要点示范；建议修改引用语气时须给出改写前后的对比例句；建议系统核查某类问题时须给出具体搜索词或操作指令。不能只说\'建议补充\'而不示范应补充什么。三者融合在流畅的段落叙述中，不使用加粗标签分段。方法学与统计问题优先，写作问题排后。",\n'
             + "\n"
             + '  "minor_suggestions_narrative": "",\n'
             + "\n"
@@ -859,12 +797,12 @@ E. 凡涉及引用不一致（动物研究被误引为人群证据）：
             + "}}\n"
             + f"\n"
             f"【强制格式要求——这是最高优先级指令】\n"
-            f"0. 【条数硬性要求】critical_issues_narrative 必须至少包含 {min(len(issues_to_use), 8)} 条独立编号的修改意见。上面传入的【核查后的问题】列表中有 {len(issues_to_use)} 个问题，你必须为每个致命/主要问题都撰写一条详细修改意见，不得只写1-2条就结束。如果问题列表超过10条，至少写8条；如果不足10条，则全部写出。\n"
+            f"0. 【覆盖要求】上面传入的【核查后的问题】列表中有 {len(issues_to_use)} 个问题；critical_issues_narrative 必须逐条覆盖它们，不多不少。列表为空时输出\"未发现关键问题。\"，不得自行补充未经核查的问题。\n"
             f"1. critical_issues_narrative 字段：全文连续编号（1、2、3、...），每点独立成段，段落之间用空行分隔，绝对禁止使用 \"1.\" 点号格式，绝对禁止使用 ## 章节标题，绝对禁止使用**【问题】**/**【要求】**/**【建议】**等加粗标签分段。\n"
-            f"2. 每条问题用流畅散文段落展开，将现状描述、规范差距、修改建议融合在一段连贯文字中。每条意见不少于300字。\n"
+            f"2. 每条问题用流畅散文段落展开，将现状描述、规范差距、修改建议融合在一段连贯文字中。长度由内容决定，不设字数下限。\n"
             f"3. minor_suggestions_narrative 字段：必须输出空字符串\"\"。\n"
             f"4. 所有字段中绝对禁止出现 URVAR_、_rubric: 等内部标签。\n"
-            f"5. 字数要求：overall_evaluation 不少于300字，每条修改意见不少于300字，recommendation_narrative 不少于200字。critical_issues_narrative 总字数不得低于5000字。\n"
+            f"5. 篇幅由核查后的问题数量决定；不设总字数下限，也不得为达到篇幅而扩写。\n"
             f"6. recommendation_narrative 字段不得为空字符串，必须撰写完整的推荐意见（200-300字）。\n"
             f"\n"
             f"【输出示例——散文段落格式，含具体示范（必须严格遵循）】\n"

@@ -11,10 +11,40 @@ from new_meta.schemas.protocol import ResearchProtocol
 
 
 class MethodCapabilityBlockedError(RuntimeError):
-    def __init__(self, plan: MethodPlan):
+    """The requested method scope is outside the validated capability set.
+
+    This is a release decision — "the narrower production scope is X" — not a
+    crash. It carries the project so the entry point can write
+    release_decision.json and exit 2 the way ReleaseBlockedError does; before
+    that, it exited 1 and the narrower scope was lost in a 2 kB log tail.
+    """
+
+    def __init__(self, plan: MethodPlan, project: "Project | None" = None):
         self.plan = plan
+        self.project = project
         reasons = "; ".join(plan.blocking_reasons) or "method capability is blocked"
         super().__init__(f"{plan.family.value} cannot execute: {reasons}")
+
+    def release_decision(self) -> dict:
+        """The terminal decision this blocked scope amounts to."""
+        return {
+            "status": "blocked",
+            "blocker_codes": list(self.plan.blocking_reasons) or ["method_capability_blocked"],
+            "blocking_reasons": list(self.plan.blocking_reasons),
+            "narrower_capability": {
+                "family": self.plan.family.value,
+                "capability_id": self.plan.capability_id,
+                "capability_status": self.plan.capability_status.value,
+                "study_designs": list(self.plan.study_designs),
+                "outcome_type": self.plan.outcome_type,
+                "effect_measure": self.plan.effect_measure,
+            },
+            "next_actions": [
+                "Narrow the review to a capability marked production in "
+                "validation/capability_manifest.json, or run it as an explicitly "
+                "labelled validation run.",
+            ],
+        }
 
 
 def infer_review_family(protocol: ResearchProtocol) -> ReviewFamily:
@@ -187,7 +217,7 @@ def compile_project_method_plan(
 
     persist_synthesis_route(project, plan)
     if enforce and not plan.execution_allowed:
-        raise MethodCapabilityBlockedError(plan)
+        raise MethodCapabilityBlockedError(plan, project)
     return plan
 
 

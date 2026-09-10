@@ -49,6 +49,7 @@ def _parse_single_article(el: etree._Element) -> Optional[dict]:
         "journal": _get_journal(article),
         "year": _get_year(article, medline),
         "mesh_terms": _get_mesh_terms(medline),
+        "mesh_qualifiers": _get_mesh_qualifiers(medline),
         "keywords": _get_keywords(medline),
         "pub_types": _get_pub_types(article),
         "doi": _get_doi(el),
@@ -142,6 +143,13 @@ def _get_year(article: etree._Element, medline: etree._Element) -> str:
 
 
 def _get_mesh_terms(medline: etree._Element) -> list[str]:
+    """MeSH descriptors only.
+
+    Qualifiers ("drug therapy", "therapeutic use", "epidemiology") are aspects
+    of a descriptor, not subjects. Counting them as keywords put them at the top
+    of every keyword and burst table; they are returned separately by
+    ``_get_mesh_qualifiers``.
+    """
     terms = []
     mesh_list = medline.find("MeshHeadingList")
     if mesh_list is None:
@@ -152,11 +160,21 @@ def _get_mesh_terms(medline: etree._Element) -> list[str]:
             text = "".join(descriptor.itertext()).strip()
             if text:
                 terms.append(text)
+    return terms
+
+
+def _get_mesh_qualifiers(medline: etree._Element) -> list[str]:
+    """MeSH qualifiers (subheadings), kept out of the keyword vocabulary."""
+    qualifiers = []
+    mesh_list = medline.find("MeshHeadingList")
+    if mesh_list is None:
+        return qualifiers
+    for heading in mesh_list.findall("MeshHeading"):
         for qualifier in heading.findall("QualifierName"):
             text = "".join(qualifier.itertext()).strip()
             if text:
-                terms.append(text)
-    return terms
+                qualifiers.append(text)
+    return qualifiers
 
 
 def _get_keywords(medline: etree._Element) -> list[str]:

@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[str, float], None]
 
+# Significance level for the MR-Egger intercept. The results section used to
+# write "no significant directional pleiotropy" whenever a pleiotropy row
+# existed at all, including for p < 0.05.
+_PLEIOTROPY_ALPHA = 0.05
+
 SECTION_ORDER = [
     "title", "abstract", "introduction", "methods", "results",
     "discussion", "limitations", "conclusion",
@@ -610,13 +615,29 @@ class PaperGenerator:
                     )
             if result.pleiotropy:
                 p = result.pleiotropy
-                lines.append(
-                    f"MR-Egger截距={p.egger_intercept:.4f}，SE={p.se:.4f}，p={self._fmt_p(p.pval)}；"
-                    "未检出显著方向性多效性，但不能排除平衡多效性。"
-                    if zh else
-                    f"MR-Egger intercept={p.egger_intercept:.4f}, SE={p.se:.4f}, p={self._fmt_p(p.pval)}; "
-                    "no significant directional pleiotropy was detected, although balanced pleiotropy remains possible."
-                )
+                directional = p.pval < _PLEIOTROPY_ALPHA
+                if zh:
+                    verdict = (
+                        "存在方向性多效性证据，效应估计可能受水平多效性影响。"
+                        if directional else
+                        "未检出显著方向性多效性，但不能排除平衡多效性。"
+                    )
+                    lines.append(
+                        f"MR-Egger截距={p.egger_intercept:.4f}，SE={p.se:.4f}，"
+                        f"p={self._fmt_p(p.pval)}；{verdict}"
+                    )
+                else:
+                    verdict = (
+                        "this is evidence of directional pleiotropy, so the estimate may be "
+                        "affected by horizontal pleiotropy."
+                        if directional else
+                        "no significant directional pleiotropy was detected, although balanced "
+                        "pleiotropy remains possible."
+                    )
+                    lines.append(
+                        f"MR-Egger intercept={p.egger_intercept:.4f}, SE={p.se:.4f}, "
+                        f"p={self._fmt_p(p.pval)}; {verdict}"
+                    )
             if result.steiger_correct is not None:
                 lines.append(
                     f"Steiger方向检验：correct_causal_direction={str(result.steiger_correct).lower()}，"
@@ -639,12 +660,32 @@ class PaperGenerator:
                     if zh else
                     f"MR-PRESSO recorded {result.presso_n_outliers} candidate outliers, but the global-test p-value was not parsed; no negative global-test claim is made."
                 )
+            if result.radial_pval is not None:
+                lines.append(
+                    f"Radial MR异质性Q检验p={self._fmt_p(result.radial_pval)}。"
+                    if zh else
+                    f"Radial MR heterogeneity Q-test p={self._fmt_p(result.radial_pval)}."
+                )
+            if result.conmix_pval is not None:
+                lines.append(
+                    f"污染混合（contamination mixture）检验p={self._fmt_p(result.conmix_pval)}。"
+                    if zh else
+                    f"Contamination-mixture test p={self._fmt_p(result.conmix_pval)}."
+                )
             if result.sample_overlap_warning:
                 lines.append(
                     "运行时已标记潜在样本重叠；效应量应结合显著异质性和队列重叠不确定性解读。"
                     if zh else
                     "The runtime flagged possible sample overlap; estimates should be interpreted with the significant heterogeneity and overlap uncertainty."
                 )
+            # An analysis that did not run is a fact about this run, not an
+            # absence the reader should have to infer from a missing sentence.
+            if result.skipped_analyses:
+                lines.append(
+                    "未执行的敏感性分析：" if zh else "Sensitivity analyses that did not run:"
+                )
+                for skipped in result.skipped_analyses:
+                    lines.append(f"- {skipped}")
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
@@ -753,8 +794,8 @@ class PaperGenerator:
                 paragraphs.append(
                     ("运行时标记了潜在样本重叠，可能将估计推向观察性关联。"
                      if result.sample_overlap_warning else "源元数据不足以证明队列完全无重叠。")
-                    + "由于本次未运行反向MR、多变量MR、非线性MR或正式功效分析，不对方向反转、"
-                    + "独立性、剂量阈值或最小可检测效应作额外声称。该结果适合作为可追溯的因果推断证据，"
+                    + self._reverse_sentence(result)
+                    + "该结果适合作为可追溯的因果推断证据，"
                     + "不直接生成个体诊疗建议或具体干预阈值。"
                 )
             else:
@@ -778,10 +819,68 @@ class PaperGenerator:
                     ("The runtime flagged possible sample overlap, which may move estimates toward observational associations. "
                      if result.sample_overlap_warning else
                      "Source metadata was insufficient to establish complete cohort non-overlap. ")
-                    + "Reverse, multivariable, and nonlinear MR and formal power analysis were not executed, so no additional claims are made about reversal, independence, thresholds, or minimum detectable effects. "
+                    + self._reverse_sentence(result)
                     + "The result is causal-inference evidence, not a patient-level treatment recommendation or intervention threshold."
                 )
         return "\n\n".join(paragraphs)
+
+    def _reverse_result(self, result: MRAnalysisResult) -> MRAnalysisResult | None:
+        """The executed reverse pair for this direction, if the job ran one.
+
+        Bidirectional jobs already produce the swapped pair; the discussion and
+        limitations used to say "reverse MR was not executed" regardless.
+        """
+        for other in self.state.analysis_results:
+            if (
+                other is not result
+                and other.exposure_id == result.outcome_id
+                and other.outcome_id == result.exposure_id
+                and other.n_instruments > 0
+            ):
+                return other
+        return None
+
+    def _reverse_sentence(self, result: MRAnalysisResult) -> str:
+        """Describe the reverse direction from the run, in one sentence."""
+        zh = self.language == "zh"
+        reverse = self._reverse_result(result)
+        if reverse is None:
+            return (
+                "本次未运行反向MR、多变量MR、非线性MR或正式功效分析，不对方向反转、"
+                "独立性、剂量阈值或最小可检测效应作额外声称。"
+                if zh else
+                "Reverse, multivariable, and nonlinear MR and formal power analysis were "
+                "not executed, so no additional claims are made about reversal, "
+                "independence, thresholds, or minimum detectable effects. "
+            )
+        ivw = find_ivw(reverse.mr_results)
+        exp = reverse.exposure_name or reverse.exposure_id
+        out = reverse.outcome_name or reverse.outcome_id
+        if ivw is None:
+            return (
+                f"反向MR（{exp}→{out}，{reverse.n_instruments}个工具变量）已执行，"
+                "但未解析到IVW估计，因此不据此作方向反转结论。"
+                if zh else
+                f"Reverse MR ({exp} to {out}, {reverse.n_instruments} instruments) was "
+                "executed, but no IVW estimate was parsed, so no reversal conclusion is "
+                "drawn from it. "
+            )
+        if zh:
+            verdict = "达统计学显著" if ivw.pval < 0.05 else "未达统计学显著"
+            return (
+                f"反向MR（{exp}→{out}，{reverse.n_instruments}个工具变量）已执行，"
+                f"IVW估计beta={ivw.beta:.4f}，p={self._fmt_p(ivw.pval)}，{verdict}。"
+                "多变量MR、非线性MR与正式功效分析未执行，不对独立性、剂量阈值或"
+                "最小可检测效应作额外声称。"
+            )
+        verdict = "statistically significant" if ivw.pval < 0.05 else "not statistically significant"
+        return (
+            f"Reverse MR ({exp} to {out}, {reverse.n_instruments} instruments) was executed; "
+            f"the IVW estimate was beta={ivw.beta:.4f}, p={self._fmt_p(ivw.pval)}, {verdict}. "
+            "Multivariable and nonlinear MR and formal power analysis were not executed, so no "
+            "additional claims are made about independence, thresholds, or minimum detectable "
+            "effects. "
+        )
 
     def _grounded_conclusion(self, results: list[MRAnalysisResult]) -> str:
         zh = self.language == "zh"
@@ -876,7 +975,10 @@ class PaperGenerator:
                     ("源数据无法证明暴露与结局队列完全不重叠，且运行时已标记潜在样本重叠；偏倚可能向观察性关联靠近。"
                      if result.sample_overlap_warning else
                      "队列级样本重叠信息不足，不能宣称完全无重叠。")
-                    + "其他限制包括GWAS数据库选择偏倚、赢家诅咒、水平多效性、线性平均效应无法刻画阈值/非线性关系，以及未完成反向或多变量MR。"
+                    + "其他限制包括GWAS数据库选择偏倚、赢家诅咒、水平多效性、"
+                    + "线性平均效应无法刻画阈值/非线性关系"
+                    + ("，以及未完成多变量MR。" if self._reverse_result(result)
+                       else "，以及未完成反向或多变量MR。")
                 )
             else:
                 paragraphs.append(
@@ -896,7 +998,10 @@ class PaperGenerator:
                     ("The source data did not establish complete cohort non-overlap and the runtime flagged possible overlap; bias may move estimates toward observational associations. "
                      if result.sample_overlap_warning else
                      "Cohort-level overlap information was insufficient, so complete non-overlap is not claimed. ")
-                    + "Other limitations include GWAS selection bias, winner's curse, horizontal pleiotropy, linear-average effects that cannot describe thresholds, and the absence of reverse or multivariable MR."
+                    + "Other limitations include GWAS selection bias, winner's curse, horizontal "
+                    + "pleiotropy, linear-average effects that cannot describe thresholds, and the "
+                    + ("absence of multivariable MR." if self._reverse_result(result)
+                       else "absence of reverse or multivariable MR.")
                 )
         return "\n\n".join(paragraphs)
 

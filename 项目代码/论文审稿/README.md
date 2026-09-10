@@ -9,7 +9,7 @@
 - **Plan-Retrieve-Argue 架构**: 三层智能审稿流程，确保判断有据可依
 - **Evidence Gate 机制**: FAIL 判定必须有证据支持，降低误判率
 - **Coverage Meter**: 自动追踪文档解析覆盖率
-- **11 种国际权威 Checklist**: 覆盖 99%+ 医学研究类型
+- **15 种国际权威 Checklist**: 条目号与发表版本一致，`source` 块记录 DOI
 - **高并发低延迟**: 单篇论文审稿 < 3 分钟
 
 ## 快速开始
@@ -143,7 +143,7 @@ Paper-Reading/
 │   │   └── ocr_parser.py          # OCR 解析
 │   │
 │   ├── rubrics/                   # 11 种 Checklist
-│   │   ├── consort_2010.yaml      # RCT
+│   │   ├── consort_2025.yaml      # RCT
 │   │   ├── prisma_2020.yaml       # 系统综述/Meta分析
 │   │   ├── strobe.yaml            # 观察性研究
 │   │   ├── tripod_ai.yaml         # AI/ML 预测模型
@@ -164,21 +164,28 @@ Paper-Reading/
 
 ## 支持的研究类型与 Checklist
 
-| 研究类型 | Checklist | 评估项 |
+条目号与条目文本取自各规范的发表版本；`src/rubrics/*.yaml` 的 `source` 块记录 DOI 与引文，
+`tests/test_rubric_provenance.py` 断言条目号集合与发表清单一致。
+
+| 研究类型 | Checklist | 条目项 |
 |---------|-----------|-------|
-| RCT (随机对照试验) | CONSORT 2010 | 25 |
-| 系统综述/Meta分析 | PRISMA 2020 | 25 |
+| RCT (随机对照试验) | CONSORT 2025 | 42（30 个编号条目） |
+| 系统综述/Meta分析 | PRISMA 2020 | 27 |
+| 范围综述 | PRISMA-ScR | 22 |
 | 观察性研究 | STROBE | 33 |
-| AI/ML 预测模型 | TRIPOD-AI | 25 |
-| 诊断准确性研究 | STARD 2015 | 27 |
-| 病例报告 | CARE 2013 | 28 |
+| AI/ML 预测模型 | TRIPOD-AI | 34 |
+| 诊断准确性研究 | STARD 2015 | 34（30 个编号条目） |
+| 病例报告 | CARE 2013 | 27 |
 | 动物实验 | ARRIVE 2.0 | 20 |
 | 定性研究 | COREQ | 32 |
-| 卫生经济学评价 | CHEERS 2022 | 26 |
-| 临床指南 | GRADE | 24 |
+| 卫生经济学评价 | CHEERS 2022 | 28 |
+| 临床指南 | AGREE II | 23 |
+| 基因组/测序 | MIAME/MINSEQE | 16 |
+| 神经影像 | COBIDAS | 18 |
+| 流式细胞 | MIFlowCyt | 16 |
 | 未映射类型 | Universal Rubric | 21 |
 
-**总计**: 11 个 Checklist，286 评估项
+**总计**: 15 个 Checklist，393 条目项
 
 ## API 服务
 
