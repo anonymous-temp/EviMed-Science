@@ -102,7 +102,13 @@ function install(version) {
   // pnpm, not npm: npm's resolver runs out of heap on this dependency graph on
   // a small host, which reads as a flaky check rather than as a memory limit.
   const direct = Object.keys(REQUIRED_EXPORTS).filter((name) => name.startsWith("@deepseek-ai/dsh-"));
-  execFileSync("pnpm", ["add", `@deepseek-ai/dsh@${version}`, ...direct.map((name) => `${name}@${version}`)], {
+  // `--ignore-scripts`, for two reasons that point the same way. pnpm 10 and
+  // later exit **non-zero** on ERR_PNPM_IGNORED_BUILDS after a successful
+  // install, so without this the probe reported "Command failed: pnpm add" on
+  // an install that had in fact just written 501 packages — a check that cannot
+  // run reads exactly like a check that has nothing to say. And an audit that
+  // reads upstream code should not also execute upstream install scripts.
+  execFileSync("pnpm", ["add", "--ignore-scripts", `@deepseek-ai/dsh@${version}`, ...direct.map((name) => `${name}@${version}`)], {
     cwd: dir,
     stdio: "inherit",
   });
@@ -188,41 +194,133 @@ for (const [name, exports] of Object.entries(REQUIRED_EXPORTS)) {
 }
 
 const deepseekPackages = [...installed.values()];
-const nameGroups = {
-  events: Object.values(seams.events),
-  "session event types": seams.sessionEventTypes,
-  "turn-end kinds": seams.turnEndKinds,
-  "required services": seams.services.required,
-  "optional services": seams.services.optional,
-  "mux frame types": seams.wire.muxFrameTypes,
-  downlink: seams.wire.downlink,
-};
-for (const [group, names] of Object.entries(nameGroups)) {
-  const absent = names.filter((name) => !appearsInCode(deepseekPackages, `"${name}"`) && !appearsInCode(deepseekPackages, `'${name}'`));
-  report(`${group}: ${names.length - absent.length}/${names.length} appear in shipped code`, absent.length === 0, absent.join(", "));
+
+/**
+ * A manifest key, or a named failure.
+ *
+ * This used to read `seams.wire.muxFrameTypes`, a key the manifest has not had
+ * since the 0.1.2 migration renamed it to `muxClientFrames`/`muxServerFrames`.
+ * `undefined.filter` threw, and the script — the only check that reads the
+ * kernel's *shipped* code and would notice upstream renaming a seam — has been
+ * unrunnable ever since, failing before the wire section it exists for. It is
+ * wired to a manual `verify:seams` and to no CI job, so nothing said so.
+ *
+ * A renamed key is now the finding it always was: reported, counted, and the
+ * run continues to the checks after it.
+ * @param {string} label @param {string} keyPath @returns {string[]}
+ */
+function names(label, keyPath) {
+  let node = /** @type {any} */ (seams);
+  for (const key of keyPath.split(".")) node = node?.[key];
+  const list = Array.isArray(node) ? node.map(String) : (node && typeof node === "object" ? Object.values(node).map(String) : null);
+  if (!list) {
+    report(`${label}: seam-manifest has ${keyPath}`, false, "key missing or not a list — the manifest was renamed under this check");
+    return [];
+  }
+  return list;
 }
 
-// The wire surface, both directions. The api-proxy package is the one that
-// enumerates it; reading the names out of the shipped code is what makes this a
-// check on DSH rather than on our own copy of the list.
-const proxy = installed.get("@deepseek-ai/dsh-host-apiproxy");
-if (!proxy) {
-  report("api proxy present", false, "cannot verify the wire surface without it");
-} else {
-  const dotted = new Set();
-  const out = execFileSync("grep", ["-rhoE", "['\"][a-zA-Z]+\\.[a-zA-Z][a-zA-Z]+['\"]", "--include=*.js", path.join(proxy.dir, "lib")], {
-    encoding: "utf8",
-  });
-  for (const raw of out.split("\n")) {
-    const name = raw.replace(/['"]/g, "").trim();
-    // `powershell.exe` and friends are file names, not methods.
-    if (name && !name.endsWith(".exe")) dotted.add(name);
+const nameGroups = {
+  events: names("events", "events"),
+  "session event types": names("session event types", "sessionEventTypes"),
+  "turn-end kinds": names("turn-end kinds", "turnEndKinds"),
+  "required services": names("required services", "services.required"),
+  "optional services": names("optional services", "services.optional"),
+  "stream endpoints": names("stream endpoints", "wire.streamEndpoints"),
+};
+for (const [group, list] of Object.entries(nameGroups)) {
+  if (!list.length) continue;
+  const absent = list.filter((name) => !appearsInCode(deepseekPackages, `"${name}"`) && !appearsInCode(deepseekPackages, `'${name}'`));
+  report(`${group}: ${list.length - absent.length}/${list.length} appear in shipped code`, absent.length === 0, absent.join(", "));
+}
+
+// The mux vocabulary, checked in the shape it is written rather than as bare
+// words. `open`, `item`, `end` and `error` appear in any JavaScript ever
+// written, so a plain literal search over them is a check that cannot fail —
+// worse than no check, because it reports coverage. The gateway writes them as
+// `type: "<frame>"`, and that is what is looked for.
+const muxFrames = [...names("mux client frames", "wire.muxClientFrames"), ...names("mux server frames", "wire.muxServerFrames")];
+if (muxFrames.length) {
+  const absent = muxFrames.filter((frame) => !appearsInCode(deepseekPackages, `type: "${frame}"`) && !appearsInCode(deepseekPackages, `type: '${frame}'`));
+  report(`mux frames: ${muxFrames.length - absent.length}/${muxFrames.length} are emitted as a frame type`, absent.length === 0, absent.join(", "));
+}
+
+// Paths are literal and specific enough to search for as they are.
+for (const [label, keyPath] of [["mux endpoint", "wire.mux"], ["downlink endpoints", "wire.downlink"]]) {
+  const paths = typeof seams.wire?.[keyPath.split(".")[1]] === "string"
+    ? [String(seams.wire[keyPath.split(".")[1]])]
+    : names(label, keyPath);
+  if (!paths.length) continue;
+  const absent = paths.filter((endpoint) => !appearsInCode(deepseekPackages, `"${endpoint}"`) && !appearsInCode(deepseekPackages, `'${endpoint}'`));
+  report(
+    `${label}: ${paths.length - absent.length}/${paths.length} appear in shipped code`,
+    absent.length === 0,
+    absent.length ? `${absent.join(", ")} — DSH 0.1.2 removed the ApiProxy downlink; update seam-manifest.json wire.${keyPath.split(".")[1]}` : "",
+  );
+}
+
+/**
+ * Every RPC method the installed harness registers.
+ *
+ * `@deepseek-ai/dsh-host-apiproxy` used to enumerate the surface and this check
+ * grepped its `lib/` for anything shaped like `"a.b"`. That package does not
+ * exist in 0.1.2 — ApiProxy is gone — so the check reported "api proxy present:
+ * FAIL, cannot verify the wire surface" and stopped, on a run that never got
+ * this far anyway because of the manifest key above.
+ *
+ * The surface is declared structurally in 0.1.2: every host-side endpoint owner
+ * ships a `typert.host.js` carrying `id: '<package>#<namespace>/<method>'`. That
+ * is read here instead of a shape heuristic, deliberately. The obvious
+ * replacement — grep the client bundle for `"x/y"` — sweeps in MIME types
+ * (`image/png`), session events (`turn/end`, `tool/call`) and stream endpoints,
+ * and 45 of its 90 hits are not methods at all. A check that is red for reasons
+ * that are not true is how an audit stops being read.
+ * @returns {Map<string, string[]>} method -> the packages declaring it
+ */
+function declaredMethods() {
+  /** @type {Map<string, string[]>} */
+  const found = new Map();
+  for (const pkg of deepseekPackages) {
+    let out = "";
+    try {
+      out = execFileSync("grep", ["-rhoE", "id: ['\"][^'\"#]+#[A-Za-z][A-Za-z0-9]*/[A-Za-z][A-Za-z0-9]*['\"]", "--include=typert.host.js", pkg.dir], { encoding: "utf8" });
+    } catch {
+      continue; // grep exits non-zero when a package has no host endpoints
+    }
+    for (const line of out.split("\n")) {
+      const method = /#([A-Za-z][A-Za-z0-9]*\/[A-Za-z][A-Za-z0-9]*)['"]/.exec(line)?.[1];
+      if (!method) continue;
+      found.set(method, [...(found.get(method) ?? []), pkg.dir.split("/").at(-1) ?? ""]);
+    }
   }
-  const declared = new Set([...seams.wire.unary, ...seams.wire.denied]);
-  const unclassified = [...dotted].filter((name) => !declared.has(name)).sort();
-  const phantom = [...declared].filter((name) => !dotted.has(name)).sort();
-  report(`wire surface classified (${declared.size} methods)`, unclassified.length === 0, `unclassified: ${unclassified.join(", ")}`);
-  report("no method declared that DSH does not expose", phantom.length === 0, `phantom: ${phantom.join(", ")}`);
+  return found;
+}
+
+const methods = declaredMethods();
+// Prove the scan scanned. A rename upstream that empties this map would
+// otherwise leave every method "classified" and both checks green, which is the
+// precise failure this whole script exists to catch one level up.
+report("the wire surface was read from shipped code", methods.size >= 40, `${methods.size} RPC methods declared across ${deepseekPackages.length} packages`);
+if (methods.size) {
+  // Stream endpoints are classified under `wire.streamEndpoints`, and the
+  // gateway registers them as methods too. Counting them as unclassified would
+  // report three findings nobody can act on.
+  const streams = new Set(Object.values(seams.wire?.streamEndpoints ?? {}).map(String));
+  const declared = new Set([...(seams.wire?.unary ?? []), ...(seams.wire?.denied ?? [])]);
+  const unclassified = [...methods.keys()].filter((name) => !declared.has(name) && !streams.has(name)).sort();
+  // Our own plugin's methods are registered by `packages/socket`, not by DSH,
+  // so upstream never ships them and their absence is not a finding.
+  const phantom = [...declared].filter((name) => !methods.has(name) && !name.startsWith("evimedPlugins/")).sort();
+  report(
+    `wire surface classified (${declared.size} declared, ${methods.size} shipped)`,
+    unclassified.length === 0,
+    unclassified.length ? `${unclassified.length} method(s) the control plane has no opinion about — add each to seam-manifest.json wire.unary or wire.denied: ${unclassified.join(", ")}` : "",
+  );
+  report(
+    "no method declared that DSH does not expose",
+    phantom.length === 0,
+    phantom.length ? `${phantom.length} phantom method(s) — retired upstream, still in seam-manifest.json wire.denied: ${phantom.join(", ")}` : "",
+  );
 }
 
 process.stdout.write(`\n${failures.length ? `${failures.length} seam check(s) failed` : "every seam in the manifest matches the shipped harness"}\n`);

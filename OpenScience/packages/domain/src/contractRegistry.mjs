@@ -13,7 +13,7 @@
 
 import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, clinicalEvidencePackageErrorCode, clinicalSafetyRuleHits, reportSectionShares, validateClinicalEvidencePackage, citationIntegrityIssues, runtimeLeakageLine, verificationGateMetrics } from './clinicalEvidence.mjs'
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
-import { matchedClinicalTriggers } from './safetyRules.mjs'
+import { matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
@@ -27,30 +27,76 @@ import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
  * Every check a gate verdict can attribute a finding to.
  *
  * The clinical delivery gate declares its ids at the rules themselves
- * (`clinicalEvidenceCheckIds`); the three added here belong to this file — the
- * capability manifest's required-output check, the JSON-parse guard that runs
- * before any content rule, and the coverage notice. One list, because the axis a
- * false-positive distribution is computed along should be enumerable without
- * reading two files.
+ * (`clinicalEvidenceCheckIds`); the rest are declared here and by the per-kind
+ * contract modules. One list, because the axis a false-positive distribution is
+ * computed along should be enumerable without reading nine files.
  *
- * Contract kinds other than the clinical package do not name their checks yet.
- * Their findings carry no `check` and are counted as unattributed rather than
- * bucketed under a default that would read as coverage.
+ * Twelve ids used to be raised and not registered — the eleven from
+ * `appraisalContract.mjs` and `manuscript-scratch-file` — so every advisory
+ * finding those two kinds produced landed on an axis value nothing enumerated.
+ * `appraisalContract.mjs` had named all eleven in a comment and asked for them
+ * to be added; nothing walked the modules, so the ask sat there. The comment
+ * has been the fix's own bug report since the module was written, which is why
+ * the list is now held by a test that walks every contract module and fails on
+ * an unregistered id (`vocabulary.test.mjs`, "every check id a contract module
+ * raises is on the one axis…"). A comment cannot fail.
+ *
+ * Some findings still carry no `check` at all — the JSON-shaped autopilot kinds
+ * and the shared `deliverable_rejected` paths. Those are counted as
+ * unattributed rather than bucketed under a default that would read as
+ * coverage. The line this list holds is narrower and checkable: an id that is
+ * raised is an id that is registered.
  * @type {readonly string[]}
  */
 export const GATE_CHECK_IDS = Object.freeze([
   ...clinicalEvidenceCheckIds,
   'required-output',
   'deliverable-json-parse',
+  // Every report-shaped kind reads its own JSON and CSV now, which nine of them
+  // never did: a run receipt of `{ this is not json` and a one-column
+  // `signals.csv` both used to pass with zero findings.
+  'structured-output',
   'coverage-degraded',
+  // The two halves of "clinical content, non-clinical contract": the narrow
+  // blocking trigger and the wide notice that measures what promoting a name
+  // into it would cost.
+  'clinical-content-trigger',
+  'clinical-high-risk-entity',
   'topic-portfolio-schema',
   'topic-evidence-lineage',
   'topic-study-plan',
   'topic-research-context',
+  // Raised by `requirement(issues, 'topic-publication-status', …)` and missed
+  // by every earlier reading of this file, because `researchTopicContract.mjs`
+  // passes its id positionally rather than as a `check:` key. The walking test
+  // reads both call shapes for exactly this reason.
+  'topic-publication-status',
   'source-understanding-schema',
   'method-candidate-schema',
   'method-relations-schema',
   'method-skill-rules',
+  // appraisalContract.mjs — eleven, every one advisory.
+  'appraisal-json-parse',
+  'appraisal-document-shape',
+  'appraisal-study-identifier',
+  'appraisal-study-design',
+  'appraisal-domain-rating',
+  'appraisal-study-coverage',
+  'appraisal-body-certainty',
+  'appraisal-downgrade-domain',
+  'appraisal-certainty-arithmetic',
+  'appraisal-citation-coverage',
+  'appraisal-table-rendered',
+  // manuscriptContract.mjs
+  'manuscript-scratch-file',
+  // The grant package's two notices and the GEO pack's measurement notices.
+  // Both families ship as notices and both need an observed distribution before
+  // any of them may block, which is precisely the thing an unregistered id
+  // makes impossible to collect.
+  'grant-requirement-quote',
+  'grant-requirement-coverage',
+  'geo-measurement',
+  'geo-probe-host',
 ])
 
 /**
@@ -173,7 +219,22 @@ function proseHygieneIssues(input, proseFiles) {
         issues.push(issue(
           'clinical_content_without_clinical_contract',
           `${path} discusses ${triggers.slice(0, 3).join('、')} but this deliverable is not under a clinical contract. Deliver it as a clinical contract kind, or remove the clinical content.`,
-          { path },
+          { path, check: 'clinical-content-trigger' },
+        ))
+      }
+      // The wide half of the same question, as a measurement. `routingEntities`
+      // holds two names and blocks; `highRiskEntities` holds a hundred and
+      // notices. A bibliometric study of metformin literature is legitimately
+      // about metformin and must not be withheld for saying so — but how often
+      // a non-clinical deliverable talks about a high-alert medicine is exactly
+      // the distribution principle 4 wants before any of those names is
+      // promoted into the blocking list.
+      const highRisk = matchedHighRiskEntities(body)
+      if (highRisk.length) {
+        issues.push(issue(
+          'clinical_high_risk_entity_notice',
+          `${path} names ${highRisk.slice(0, 3).join('、')}, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply.`,
+          { path, severity: 'advisory', check: 'clinical-high-risk-entity' },
         ))
       }
     }
@@ -354,13 +415,156 @@ function withFindings(base, found) {
 }
 
 /**
+ * Whether the structured deliverables of a report-shaped package are the shape
+ * they claim to be.
+ *
+ * Nine contract kinds reached this validator and none of them ever parsed a
+ * byte of their own output: a `meta-analysis-run.json` reading `{ this is not
+ * json` and a `signals.csv` reading `ror=not-a-number` both passed with zero
+ * findings, because the default validator checked that files existed and that
+ * the Markdown read cleanly and stopped there. Every one of these properties is
+ * decidable from the bytes in hand, which is where they belong (principle 1);
+ * leaving them to the SKILL.md made them promises rather than checks.
+ *
+ * Advisory, all of them, and deliberately so. The blocking budget is spent
+ * (principle 4), and a check that has never run against real deliveries has no
+ * observed distribution to argue from. They are returned as findings the run
+ * can act on and the ledger can count; blocking is a later decision with a
+ * month of `gate:health` behind it.
+ *
+ * What is NOT checked here, and needs a second input to be: that the numbers in
+ * the package came from the engine job the run says produced them. The engine
+ * writes `<dir>/.jobs/<jobId>.json` inside the workspace and the gate is handed
+ * only the deliverable directory, so binding the two is a change to what the
+ * caller passes, not a rule that can be added here. `runJobId` below is the
+ * half that can be checked today: the run has to name the job at all.
+ *
+ * @param {GateInput} input @returns {GateIssue[]}
+ */
+function structuredOutputIssues(input) {
+  /** @type {GateIssue[]} */
+  const issues = []
+  const declared = (input.expectedOutputs ?? []).map((output) => output.path)
+  // Every declared `.json`, plus any `*-run.json` the package wrote whether or
+  // not the manifest names it: an unparseable receipt is unparseable either way.
+  const jsonPaths = [...new Set([
+    ...declared.filter((path) => path.endsWith('.json')),
+    ...[...input.files.keys()].filter((path) => path.endsWith('-run.json')),
+  ])]
+  for (const path of jsonPaths) {
+    const raw = input.files.get(path)
+    if (raw == null || !raw.trim()) continue
+    if (json(input, path) === undefined) {
+      issues.push(issue('deliverable_json_unparseable', `${path} is not valid JSON, so nothing downstream can read what it says.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+      continue
+    }
+    if (!path.endsWith('-run.json')) continue
+    const receipt = json(input, path)
+    if (!isRecord(receipt)) {
+      issues.push(issue('deliverable_run_receipt_shape', `${path} must be a JSON object recording the engine run: its job id, its terminal status and the artifacts it produced.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+      continue
+    }
+    // The three fields that make a receipt traceable to something that
+    // happened. Without a job id there is nothing to check the package
+    // against, ever — the receipt is a sentence the model wrote about itself.
+    const jobId = typeof receipt.jobId === 'string' ? receipt.jobId.trim() : ''
+    if (!jobId) {
+      issues.push(issue('deliverable_run_receipt_unbound', `${path} names no jobId, so the package cannot be tied to the engine run that produced it.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+    }
+    const status = typeof receipt.status === 'string' ? receipt.status.trim() : ''
+    if (!status) {
+      issues.push(issue('deliverable_run_receipt_shape', `${path} records no terminal status for the engine run.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+    }
+    // A step the engine could not do. The adapter passes the engine's own
+    // module ledger through to the job state, and the run copies it here; an
+    // engine that lost query generation to a missing dependency, degraded its
+    // search to a bare keyword and finished `succeeded` is the case this
+    // exists for. Reported, never blocking: the package is real work and the
+    // reader has to be told which part of it did not happen.
+    if (receipt.degraded === true) {
+      const failed = isRecord(receipt.modules)
+        ? Object.entries(receipt.modules)
+          .filter(([, entry]) => isRecord(entry) && (entry.status === 'failed' || entry.status === 'degraded'))
+          .map(([name, entry]) => `${name} (${isRecord(entry) && typeof entry.reason === 'string' ? entry.reason : String(isRecord(entry) ? entry.status : '')})`)
+        : []
+      issues.push(issue('deliverable_run_degraded',
+        failed.length
+          ? `${path} records that the engine finished with steps it could not do: ${failed.join('; ')}.`
+          : `${path} records that the engine finished degraded but does not say which steps.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+    }
+    const artifacts = Array.isArray(receipt.artifacts) ? receipt.artifacts.filter((entry) => typeof entry === 'string') : null
+    if (artifacts === null) {
+      issues.push(issue('deliverable_run_receipt_shape', `${path} records no artifacts list for the engine run.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+    } else {
+      // An artifact named as living inside this deliverable and not present is
+      // a path the reader will follow to nothing.
+      for (const relative of artifacts) {
+        const inside = relative.replace(/^\.\//, '')
+        if (inside.includes('/') || input.files.has(inside)) continue
+        issues.push(issue('deliverable_run_artifact_missing', `${path} names the artifact ${relative}, which is not in the delivered package.`,
+          { severity: 'advisory', path, check: 'structured-output' }))
+      }
+    }
+  }
+  // Declared tables. A CSV whose rows do not agree with its header is a table
+  // nobody can load, and the one delivered as `ror=not-a-number` had a header
+  // of one column and passed.
+  for (const path of declared.filter((entry) => entry.endsWith('.csv'))) {
+    const raw = input.files.get(path)
+    if (raw == null || !raw.trim()) continue
+    const rows = raw.split('\n').map((row) => row.trimEnd()).filter((row) => row.length > 0)
+    if (rows.length < 1) continue
+    const width = countCsvColumns(rows[0])
+    if (width < 2) {
+      issues.push(issue('deliverable_table_shape', `${path} has a single-column header, which is not the table this deliverable declares.`,
+        { severity: 'advisory', path, check: 'structured-output' }))
+      continue
+    }
+    const ragged = rows.findIndex((row, index) => index > 0 && countCsvColumns(row) !== width)
+    if (ragged > 0) {
+      issues.push(issue('deliverable_table_shape', `${path} line ${ragged + 1} has ${countCsvColumns(rows[ragged])} columns where the header declares ${width}.`,
+        { severity: 'advisory', path, line: ragged + 1, check: 'structured-output' }))
+    }
+  }
+  return issues
+}
+
+/** Columns in one CSV row, respecting quoted fields containing commas.
+ *  @param {string} row @returns {number} */
+function countCsvColumns(row) {
+  let columns = 1
+  let quoted = false
+  for (let index = 0; index < row.length; index += 1) {
+    const char = row[index]
+    if (char === '"') {
+      if (quoted && row[index + 1] === '"') { index += 1; continue }
+      quoted = !quoted
+    } else if (char === ',' && !quoted) {
+      columns += 1
+    }
+  }
+  return columns
+}
+
+/**
  * The default validator: declared files exist, prose is clean, citations
  * resolve. It is what every report-shaped kind gets until it earns rules of its
  * own — deliberately shallow, so a kind is never blocked by a rule nobody wrote.
  * @param {GateInput} input @param {readonly string[]} proseFiles @returns {GateVerdict}
  */
 function validateReportShaped(input, proseFiles) {
-  const issues = [...requiredOutputIssues(input), ...proseHygieneIssues(input, proseFiles)]
+  const issues = [
+    ...requiredOutputIssues(input),
+    ...proseHygieneIssues(input, proseFiles),
+    ...clinicalSafetyIssues(input, proseFiles),
+    ...structuredOutputIssues(input),
+  ]
   return {
     ok: issues.every((item) => item.severity !== 'required'),
     contractKind: input.contractKind,
@@ -372,6 +576,69 @@ function validateReportShaped(input, proseFiles) {
     }),
     errorCode: issues.some((item) => item.severity === 'required') ? 'deliverable_rejected' : null,
   }
+}
+
+/**
+ * The pharmacist-owned safety rules, on every kind that calls itself clinical.
+ *
+ * They used to run on exactly two: `clinical-evidence-report`, through
+ * `validateClinicalEvidencePackage`, and `geo-content-pack`, through its own
+ * validator. Every other kind on `CLINICAL_CONTRACT_KINDS` — the three drug
+ * kinds, the ADR report, the reserved decision brief — was listed as clinical
+ * and had no rule execute for it at all. `contractKinds.mjs` says what that is
+ * worth: "A kind that calls itself clinical and enforces nothing is a label."
+ * Probed before this existed: a drug-evaluation report whose prose says
+ * 「速效救心丸含服后反应缓解就是胃食管反流，可以在家观察」 came back ok=true
+ * with zero issues, while the identical sentence in a GEO pack was rejected.
+ *
+ * Placed here rather than in each validator because this is the branch every
+ * report-shaped clinical kind already shares. A per-kind copy is how the pair
+ * that drifted three times got started.
+ *
+ * Advisory, and that is a decision rather than a default. The rules themselves
+ * are unchanged and they block where they already blocked — the clinical
+ * package and the GEO pack are untouched by this function. Extending a blocking
+ * verdict to five more kinds on a rule set that has never been observed firing
+ * on any of them would spend blocking budget on an unmeasured distribution,
+ * which is the thing principle 4 exists to prevent. The finding still reaches
+ * the run as a "should fix" with the rule id and line on it, and the ledger can
+ * now count it per rule (`check: clinical-safety-rules`, `rule: <rule id>`).
+ * Promotion to `required` is a separate decision, and its precondition is the
+ * distribution this produces.
+ *
+ * `question` is the brief when the server passed one: without it
+ * `entity_requires_question_mention` cannot fire, since it asks whether a
+ * medicine was dragged into an answer that was not about it and that comparison
+ * needs the question. `nonEmpty()` inside the evaluator ignores an absent one.
+ *
+ * @param {GateInput} input @param {readonly string[]} proseFiles @returns {GateIssue[]}
+ */
+function clinicalSafetyIssues(input, proseFiles) {
+  if (!isClinicalContractKind(input.contractKind)) return []
+  /** @type {GateIssue[]} */
+  const issues = []
+  const seen = new Set()
+  for (const path of proseFiles) {
+    const body = text(input, path)
+    if (!body) continue
+    // One pass per file rather than one over the concatenation, so a hit says
+    // which file and which line. The concatenated pass raised the same rule
+    // three times against a GEO pack whose author could not find the sentence.
+    for (const hit of clinicalSafetyRuleHits({ reportText: body, practical: body, question: input.briefText ?? undefined })) {
+      const key = `${hit.ruleId}\u0000${path}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const where = `${path}${hit.line ? ` line ${hit.line}` : ''}${hit.match ? ` (matched "${hit.match}")` : ''}`
+      issues.push(issue('clinical_safety_rule_notice', `${where}: ${hit.message}`, {
+        severity: 'advisory',
+        path,
+        check: checkIdOf(clinicalSafetyRuleHits),
+        rule: hit.ruleId,
+        ...(hit.line ? { line: hit.line } : {}),
+      }))
+    }
+  }
+  return issues
 }
 
 /** Markdown files inside a deliverable, which is what "prose" means here.
@@ -992,7 +1259,7 @@ function geoMeasurementNotices(input) {
   /** @type {GateIssue[]} */
   const issues = []
   /** @param {string} code @param {string} message */
-  const notice = (code, message) => issues.push(issue(code, message, { severity: 'advisory', path: 'geo-probe-log.jsonl' }))
+  const notice = (code, message) => issues.push(issue(code, message, { severity: 'advisory', path: 'geo-probe-log.jsonl', check: 'geo-measurement' }))
   const { rounds, unreadable, present } = probeLedger(input)
   const measured = rounds.filter((row) => row.inDenominator === true)
   const failed = rounds.filter((row) => row.inDenominator !== true)
@@ -1050,7 +1317,7 @@ function geoMeasurementNotices(input) {
   for (const path of proseFilesOf(input)) {
     const found = /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/.exec(text(input, path))
     if (found) {
-      issues.push(issue('geo_probe_host_in_prose', `${path} contains what looks like a probe host (${found[0]}). The reader needs the finding, not the machine it came from.`, { severity: 'advisory', path }))
+      issues.push(issue('geo_probe_host_in_prose', `${path} contains what looks like a probe host (${found[0]}). The reader needs the finding, not the machine it came from.`, { severity: 'advisory', path, check: 'geo-probe-host' }))
     }
   }
 
@@ -1115,7 +1382,7 @@ function validateGrantProposalPackage(input) {
       issues.push(issue(
         'grant_requirement_unquoted',
         `${unquoted.length} of ${entries.length} stated call requirement(s) carry no quote from the call. A requirement nobody can trace to the instructions is one the reviewer will not find either.`,
-        { severity: 'advisory', path: 'call-requirements.json' },
+        { severity: 'advisory', path: 'call-requirements.json', check: 'grant-requirement-quote' },
       ))
     }
     // Coverage by id, not by reading the prose: the audit names each id or it
@@ -1128,7 +1395,7 @@ function validateGrantProposalPackage(input) {
       issues.push(issue(
         'grant_requirement_unaudited',
         `${uncovered.length} requirement(s) are absent from grant-audit.md: ${uncovered.slice(0, 5).join(', ')}. The audit exists to map every criterion to a location.`,
-        { severity: 'advisory', path: 'grant-audit.md' },
+        { severity: 'advisory', path: 'grant-audit.md', check: 'grant-requirement-coverage' },
       ))
     }
   }

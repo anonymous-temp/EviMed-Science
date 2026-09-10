@@ -97,6 +97,18 @@ export const PROTECTED_WRITE_PREFIXES = Object.freeze([
   `${RUN_STATE_DIR}/`,
   `${CAPSULE_DIR}/`,
   `${DATA_DIR}/`,
+  // The preserved sources. Every verbatim-quote check in the clinical gate
+  // reads the bytes on disk, so a run that can edit a preserved full text can
+  // make any quote match — it does not have to fabricate a source, only correct
+  // one. `clinical-evidence-synthesis/SKILL.md` has said "Never create, edit,
+  // replace, or copy a file under `.evimed-sources/`" since the capability
+  // existed, and that sentence was the whole enforcement: the guard's list did
+  // not name the directory, so the write tool allowed it and the instruction
+  // was advice to the party being graded.
+  //
+  // Reads are untouched. The run is meant to read what it retrieved, and the
+  // guard for reading is a different list (`isGateImplementationPath`).
+  `${SOURCES_DIR}/`,
   workspaceLayout.receiptFile,
 ])
 

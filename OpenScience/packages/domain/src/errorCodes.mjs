@@ -412,6 +412,15 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
 /** Codes the socket's own tools return in the `{ok:false, code}` envelope (§8.1). */
 export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   'deliverable_rejected',
+  // The structured half of a report-shaped package, checked from its own bytes.
+  // Advisory: the blocking budget is spent, so these are findings a run repairs
+  // and the ledger counts, not reasons to withhold a delivery.
+  'deliverable_json_unparseable',
+  'deliverable_run_receipt_shape',
+  'deliverable_run_receipt_unbound',
+  'deliverable_run_artifact_missing',
+  'deliverable_table_shape',
+  'deliverable_run_degraded',
   'deliverable_unknown',
   'deliverable_dependency_pending',
   'run_incomplete',
@@ -632,6 +641,12 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   runtime_bundle_version_mismatch: '运行时插座版本与镜像声明不一致。',
   runtime_domain_version_mismatch: '运行时与控制面的契约版本不一致。',
   deliverable_rejected: '交付物未通过契约校验，已列出必修项。',
+  deliverable_json_unparseable: '交付包里的 JSON 文件无法解析，下游读不到它写的内容。',
+  deliverable_run_receipt_shape: '引擎运行回执缺少必要字段（作业 id、终态、产物清单）。',
+  deliverable_run_receipt_unbound: '引擎运行回执没有作业 id，交付包无法与产生它的那次引擎运行对上。',
+  deliverable_run_artifact_missing: '运行回执点名的产物不在交付包里。',
+  deliverable_table_shape: '交付的表件列数与表头不一致，无法作为表加载。',
+  deliverable_run_degraded: '引擎完成了，但有步骤没做成；读者需要知道是哪几步。',
   deliverable_unknown: '计划里没有这件交付物。',
   deliverable_dependency_pending: '这件交付物依赖的产物还没通过。',
   run_incomplete: '还有交付物未通过或缺少澄清记录，运行未结束。',

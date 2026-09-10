@@ -221,12 +221,14 @@ export {
   skillRootGuidance,
 } from './src/skillRoots.mjs'
 
-// safetyRules — 4 exports
+// safetyRules — 6 exports
 export {
   CLINICAL_CONTENT_TRIGGER_ENTITIES,
+  CLINICAL_HIGH_RISK_ENTITIES,
   clinicalContentTriggerPattern,
   clinicalSafetyRules,
   matchedClinicalTriggers,
+  matchedHighRiskEntities,
 } from './src/safetyRules.mjs'
 
 // capsule — 17 exports
