@@ -48,6 +48,21 @@ export const TOOL_UNIVERSE_SERVER_NAME = "tooluniverse";
 
 /** The permission preset a hosted deployment runs under: confined *and*
  *  unattended, which is a pair the kernel does not ship. */
+/**
+ * How long the kernel waits for one MCP tool call before it abandons it.
+ *
+ * This is a ceiling on every gateway an MCP tool talks to, and it was written
+ * as a literal here while the GEO probe gateway's own deadline was set to twice
+ * it. The gateway could therefore never answer inside the caller's window: its
+ * `geo_probe_timeout` — the one that says in words "this is a measurement
+ * failure, not a result" — was unreachable, and every slow probe surfaced as
+ * the kernel's opaque abort at ~183 s instead. Three production geo-content
+ * runs failed that way and none of them could say why.
+ *
+ * A gateway behind this ceiling must finish, and write its answer, before it.
+ */
+export const MCP_TOOL_CALL_TIMEOUT_MS = 180_000;
+
 export const HOSTED_PERMISSION_PRESET = "evimed-hosted";
 /** What the composer's access-mode chip shows for it. The product face is
  *  Chinese; the id stays the kernel-facing English identifier. */
@@ -181,7 +196,7 @@ export function renderProfilePatch(input) {
     "        transport: stdio",
     `        serverName: ${yamlScalar(MCP_SERVER_NAME)}`,
     "        failOnStartupError: true",
-    "        toolCallTimeoutMs: 180000",
+    `        toolCallTimeoutMs: ${MCP_TOOL_CALL_TIMEOUT_MS}`,
     "        command: python3",
     "        args:",
     `          - ${yamlScalar(input.mcpServerPath)}`,
@@ -305,7 +320,7 @@ function toolUniverseRows(input) {
     `        serverName: ${yamlScalar(TOOL_UNIVERSE_SERVER_NAME)}`,
     // A sidecar that is down degrades the run; it must not refuse it.
     "        failOnStartupError: false",
-    "        toolCallTimeoutMs: 180000",
+    `        toolCallTimeoutMs: ${MCP_TOOL_CALL_TIMEOUT_MS}`,
     `        url: ${yamlScalar(url)}`,
     "",
     "",
