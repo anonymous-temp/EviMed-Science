@@ -32,7 +32,7 @@ function fixture(t) {
     mkdirSync(profile, { recursive: true });
     writeFileSync(path.join(profile, "package.json"), JSON.stringify({ name: "dsh-profile-evimed-runtime", private: true, dependencies: {}, dsh: { profile: { bundles: userPlugin ? ["user-plugin", "@evimed/dsh-socket"] : ["@evimed/dsh-socket"], patchReload: "startup" } } }));
     writeFileSync(path.join(profile, "pnpm-workspace.yaml"), "packages:\n  - .\n");
-    const args = ["add", "--offline", "--ignore-scripts", `file:${source}`];
+    const args = ["add", "--workspace-root", "--offline", "--ignore-scripts", `file:${source}`];
     if (userPlugin) args.push(`file:${path.join(root, "user-plugin")}`);
     execFileSync("pnpm", args, { cwd: profile, stdio: "pipe", env: { ...process.env, CI: "1" } });
     return profile;
