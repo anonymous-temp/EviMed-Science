@@ -49,7 +49,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[TestClient, Path]:
     )
     monkeypatch.setenv("EVIMED_WORKLOAD_SIGNING_SECRET", SECRET)
     monkeypatch.setenv("LLM_API_KEY", "test-key-never-persist")
-    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-flash")
     monkeypatch.setenv("LLM_ENABLE_THINKING", "true")
     app = FastAPI()
     app.include_router(evimed_adapter.create_evimed_adapter_router(tmp_path))
@@ -74,7 +74,7 @@ def test_adapter_requires_a_valid_scoped_workload_token(tmp_path, monkeypatch) -
     assert accepted.status_code == 200
     assert accepted.json()["data"] == {
         "available": True,
-        "model": "deepseek-v4-pro",
+        "model": "deepseek-flash",
         "thinking": True,
     }
 
@@ -139,7 +139,7 @@ def test_managed_job_uses_fixed_cli_and_returns_only_workspace_relative_artifact
     monkeypatch.setattr(evimed_adapter.subprocess, "run", fake_run)
     assert evimed_adapter.run_job(str(state_file)) == 0
     assert captured["command"][:3] == [evimed_adapter.sys.executable, "-m", "new_meta.main"]
-    assert captured["command"][captured["command"].index("--model") + 1] == "deepseek-v4-pro"
+    assert captured["command"][captured["command"].index("--model") + 1] == "deepseek-flash"
     assert "--skip-confirm" in captured["command"]
     assert captured["command"][captured["command"].index("--run-mode") + 1] == "review"
 

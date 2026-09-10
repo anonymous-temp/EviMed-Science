@@ -27,9 +27,9 @@ def _env_optional_bool(name: str) -> Optional[bool]:
     return value.strip().lower() not in {"0", "false", "no", "off", ""}
 
 
-LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("DASHSCOPE_API_KEY", "")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL") or os.getenv("DASHSCOPE_BASE_URL", "https://api.openai.com/v1")
-LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("DASHSCOPE_MODEL", "gpt-4o")
+LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or os.getenv("DASHSCOPE_API_KEY", "")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL") or os.getenv("DASHSCOPE_BASE_URL", "https://api.deepseek.com")
+LLM_MODEL = os.getenv("LLM_MODEL") or os.getenv("DASHSCOPE_MODEL", "deepseek-flash")
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", os.getenv("LLM_MAX_TOKENS_DEFAULT", "8192")))
 LLM_MAX_TOKENS_PLANNING = int(os.getenv("LLM_MAX_TOKENS_PLANNING", "4096"))
 LLM_MAX_TOKENS_SCREENING = int(os.getenv("LLM_MAX_TOKENS_SCREENING", "8192"))

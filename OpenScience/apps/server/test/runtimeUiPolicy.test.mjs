@@ -349,7 +349,8 @@ test("every deployment method uses the same denial policy on HTTP and mux", { ti
   const f = await fixture(t);
   const c = f.connect({ Origin: SHELL_ORIGIN });
   assert.equal(await c.opened, 101);
-  const methods = [...RUNTIME_UI_DENIED_METHODS, ...RUNTIME_UI_DENIED_NAMESPACES.map((namespace) => `${namespace}/update`)];
+  const methods = [...RUNTIME_UI_DENIED_METHODS, ...RUNTIME_UI_DENIED_NAMESPACES.map((namespace) => `${namespace}/update`),
+    "workspaceFiles/read", "workspaceFiles/readBytes", "workspaceFiles/readAll", "workspaceFiles/readRelated", "workspaceFiles/stat"];
   for (const [index, endpoint] of methods.entries()) {
     const response = await fetch(`${f.base}/api/${endpoint}`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
     assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", endpoint);

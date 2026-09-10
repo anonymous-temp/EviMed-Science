@@ -74,6 +74,8 @@ def _is_deepseek_v4_chat(base_url: str, model: str) -> bool:
     base = str(base_url or "").rstrip("/").lower()
     model_name = str(model or "").strip().lower()
     return "api.deepseek.com" in base and model_name in {
+        "deepseek-flash",
+        "deepseek-v4-flash-vision-exp",
         "deepseek-v4-flash",
         "deepseek-v4-pro",
     }

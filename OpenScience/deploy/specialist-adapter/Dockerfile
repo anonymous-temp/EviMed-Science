@@ -14,7 +14,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MPLCONFIGDIR=/tmp/matplotlib \
     EVIMED_AGENT_ROOT=/agent \
     EVIMED_DATA_ROOT=/data \
-    LLM_MODEL=deepseek-v4-pro \
+    LLM_MODEL=deepseek-flash \
     LLM_ENABLE_THINKING=true \
     LLM_REASONING_EFFORT=high
 

@@ -9,16 +9,19 @@ import { isPeak, priceUsage, REFERENCE_PRICE_LIST } from "@evimed/domain";
 import { createUsageTail, recordModelUsage } from "./usageMetering.mjs";
 
 export const supportedDeepSeekModels = Object.freeze(new Set([
+  "deepseek-flash",
+  "deepseek-v4-flash-vision-exp",
   "deepseek-v4-pro",
   "deepseek-v4-flash",
 ]));
-export const defaultDeepSeekModel = "deepseek-v4-pro";
+export const defaultDeepSeekModel = "deepseek-flash";
 
 /** The model's name as a reader should see it, derived from the id that is
  *  actually running. Written out by hand, this label kept naming the model the
  *  code was first written for rather than the one the deployment certified. */
 export function deepSeekModelDisplayName(model) {
   const id = String(model ?? "").trim();
+  if (["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"].includes(id)) return "DeepSeek V4.1 Flash";
   const match = /^deepseek-v(\d+)-(\w+)$/.exec(id);
   if (!match) return id || defaultDeepSeekModel;
   const tier = match[2];

@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = Field(default="deepseek", env="LLM_PROVIDER")
     DEEPSEEK_API_KEY: Optional[str] = Field(default=None, env="DEEPSEEK_API_KEY")
     DEEPSEEK_BASE_URL: str = Field(default="https://api.deepseek.com", env="DEEPSEEK_BASE_URL")
-    DEEPSEEK_FLASH_MODEL: str = Field(default="deepseek-v4-flash", env="DEEPSEEK_FLASH_MODEL")
-    DEEPSEEK_PRO_MODEL: str = Field(default="deepseek-v4-pro", env="DEEPSEEK_PRO_MODEL")
+    DEEPSEEK_FLASH_MODEL: str = Field(default="deepseek-flash", env="DEEPSEEK_FLASH_MODEL")
+    DEEPSEEK_PRO_MODEL: str = Field(default="deepseek-flash", env="DEEPSEEK_PRO_MODEL")
     DEEPSEEK_FLASH_TIMEOUT_SECONDS: int = Field(default=60, env="DEEPSEEK_FLASH_TIMEOUT_SECONDS")
     # Keep the client deadline slightly above the server gateway deadline so
     # callers receive the gateway's structured timeout instead of racing it.

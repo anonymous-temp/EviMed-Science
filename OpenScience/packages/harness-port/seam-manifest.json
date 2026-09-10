@@ -1,5 +1,5 @@
 {
-  "dsh": "0.1.2-rc.1",
+  "dsh": "0.1.5-rc.1",
   "cordis": "4.0.2",
   "services": {
     "required": [
@@ -36,7 +36,6 @@
     "step/start",
     "step/end",
     "user/message",
-    "assistant/chunk",
     "assistant/message",
     "tool/call",
     "tool/result",
@@ -48,7 +47,9 @@
     "tool-workflow/run-start",
     "tool-workflow/run-end",
     "tool-workflow/agent-start",
-    "tool-workflow/agent-end"
+    "tool-workflow/agent-end",
+    "system/message",
+    "assistant/attempt"
   ],
   "turnEndKinds": [
     "completed",
@@ -146,34 +147,59 @@
       "agentPresets/deletePreset",
       "agentPresets/read",
       "agentPresets/select",
-      "agentTeams/createTask",
-      "agentTeams/updateTask",
-      "agentTeams/view",
+      "commands/execute",
+      "commands/list",
       "credentials/describe",
       "credentials/set",
       "credentials/unset",
       "directoryPicker/createDirectory",
       "directoryPicker/list",
       "directoryPicker/pick",
+      "dynamicCordisRunner/getClientCode",
+      "dynamicCordisRunner/inventory",
+      "dynamicCordisRunner/invoke",
+      "dynamicCordisRunner/reportClientGuardFailure",
+      "dynamicCordisRunner/reportRenderFailure",
+      "dynamicCordisRunner/resolveInspectQuery",
+      "dynamicCordisRunner/resolveRequestRun",
+      "dynamicCordisRunner/runHostHalf",
+      "dynamicCordisRunner/settleUserRun",
+      "dynamicCordisRunner/stopFromPanel",
+      "dynamicCordisRunner/syncInspectManifest",
+      "dynamicCordisRunner/undefineFromPanel",
+      "fileReferences/list",
+      "fileUploads/upload",
       "goals/clear",
       "goals/complete",
       "goals/create",
       "goals/edit",
+      "goals/get",
       "goals/pause",
       "goals/resume",
       "llm/discoverModels",
+      "llm/listConfigurableProviders",
+      "llm/listProviders",
       "messageFeedback/delete",
       "messageFeedback/list",
       "messageFeedback/put",
+      "pluginInventory/list",
       "session/attachment",
+      "session/canOpenWorkspacePath",
+      "session/control",
       "session/modelCatalog",
       "session/openWorkspacePath",
       "session/rename",
       "session/search",
       "session/selectModel",
       "session/updateQueue",
+      "sessionFeedback/record",
       "sessionReferenceResolver/candidates",
+      "settings/canOpenAgentPresetDirectory",
       "settings/describe",
+      "settings/mutate",
+      "settings/openAgentPresetDirectory",
+      "settings/openSettingsDocument",
+      "settings/replace",
       "settings/update",
       "subagents/interruptByParent",
       "subagents/prompt",
@@ -182,12 +208,16 @@
       "workspace/delete",
       "workspace/insertBefore",
       "workspace/insertSessionBefore",
-      "workspace/rename"
+      "workspace/rename",
+      "workspaceFiles/changes",
+      "workspaceFiles/list",
+      "workspaceFiles/read",
+      "workspaceFiles/readAll",
+      "workspaceFiles/readBytes",
+      "workspaceFiles/readRelated",
+      "workspaceFiles/stat"
     ],
-    "downlink": [
-      "/api/events.mux",
-      "/api/events.host"
-    ],
+    "downlink": [],
     "downlinkTransport": "websocket",
     "unaryArgs": {
       "session/create": [
@@ -266,7 +296,8 @@
     ],
     "sessionStreamFrames": [
       "snapshot",
-      "event"
+      "event",
+      "assistant-stream"
     ],
     "auth": "browser-session-cookie",
     "hostInteractionEvents": {
@@ -302,7 +333,8 @@
     "sessionIdNotInFrame": "A session's events arrive on the `session/follow` stream opened for that session and no longer carry a session id. Whatever opens the stream owns the pairing.",
     "noVersionField": "The wire protocol carries no version field, so method names matching does not prove frame shapes match. Golden frames are the only check that does.",
     "summarizeWithLlmNotExported": "dsh-compaction-basic declares summarizeWithLlm in lib/types/summarizer.d.ts, but the published bundle exports only { BasicCompactionEngine, default }: the function is module-internal, and `./src/*` is in `exports` while not being in `files`. src/compaction.mjs therefore reaches the upstream summarization call through the base class's own summarize() hook, which appends its checkpoint-structure directive after ours. If a later release exports it, the EviMed directive can replace the upstream one instead of composing with it.",
-    "compactionProviderIsAlsoAComposition": "dsh-compaction-basic is a `provider-base`, not a `config-row`, because harness-port subclasses it. It is still named by a composition row and still installed only inside the runtime image, which is why the composition checker treats both roles alike; the distinct word records that a rename of `summarize` silently disables the override rather than erroring."
+    "compactionProviderIsAlsoAComposition": "dsh-compaction-basic is a `provider-base`, not a `config-row`, because harness-port subclasses it. It is still named by a composition row and still installed only inside the runtime image, which is why the composition checker treats both roles alike; the distinct word records that a rename of `summarize` silently disables the override rather than erroring.",
+    "sessionV3": "DSH 0.1.5 uses session format 3. Live assistant deltas use assistant-stream frames; durable assistant/message contains the completed output and attempt stream. Historical v0 chunks remain readable by the EviMed legacy decoder only."
   },
   "browser": {
     "transportGlobal": "__DSH_TRANSPORT__",

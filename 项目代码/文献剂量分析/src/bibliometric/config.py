@@ -30,8 +30,8 @@ class Config:
     # DeepSeek V4 API
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_flash_model: str = "deepseek-v4-flash"
-    deepseek_pro_model: str = "deepseek-v4-pro"
+    deepseek_flash_model: str = "deepseek-flash"
+    deepseek_pro_model: str = "deepseek-flash"
     deepseek_pro_reasoning_reserve_tokens: int = 4096
     deepseek_max_output_tokens: int = 384000
     deepseek_pro_timeout_seconds: float = 300.0
@@ -78,8 +78,8 @@ def load_config(
         openalex_api_key=os.getenv("OPENALEX_API_KEY", ""),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-        deepseek_flash_model=os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash"),
-        deepseek_pro_model=os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"),
+        deepseek_flash_model=os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-flash"),
+        deepseek_pro_model=os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-flash"),
         deepseek_pro_reasoning_reserve_tokens=int(
             os.getenv("DEEPSEEK_PRO_REASONING_RESERVE_TOKENS", "4096")
         ),

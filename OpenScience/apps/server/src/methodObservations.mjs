@@ -113,6 +113,7 @@ export function invokedSkillsBySession(sessions) {
  * @property {string} id
  * @property {string} name       the frontmatter name, which is what the receipt carries
  * @property {string} digest     the digest of the document as mounted
+ * @property {string} [contentDigest] the frozen payload whose observations may be updated
  */
 
 /**
@@ -182,7 +183,8 @@ export function runMethodObservations(input) {
       seenFamilies.add(key);
       observations.push({
         methodId: known.id,
-        observation: { runId, family, outcome, at, invoked: invokedHere.has(toSkillName(name, "capsule")) },
+        observation: { runId, family, outcome, at, invoked: invokedHere.has(toSkillName(name, "capsule")),
+          ...(known.contentDigest ? { contentDigest: known.contentDigest } : {}) },
       });
     }
   }

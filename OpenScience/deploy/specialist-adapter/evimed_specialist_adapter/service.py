@@ -446,7 +446,7 @@ def _model_ready() -> bool:
             _read_secret(os.getenv("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "").strip())
     except (OSError, UnicodeDecodeError, RuntimeError):
         return False
-    return os.getenv("LLM_MODEL", "").strip() == "deepseek-v4-pro"
+    return os.getenv("LLM_MODEL", "").strip() == "deepseek-flash"
 
 
 # The connectors this adapter's engine reads directly, outside the control
@@ -492,7 +492,7 @@ def _start(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str
     if not _model_ready():
         return _error(
             "specialist_model_config_unavailable",
-            "DeepSeek V4 Pro or the specialist credential boundary is unavailable.",
+            "DeepSeek V4.1 Flash or the specialist credential boundary is unavailable.",
             True,
         )
     spec = _spec()
@@ -760,7 +760,7 @@ def call(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, 
         if not _model_ready():
             return _error(
                 "specialist_model_config_unavailable",
-                "DeepSeek V4 Pro or the specialist credential boundary is unavailable.",
+                "DeepSeek V4.1 Flash or the specialist credential boundary is unavailable.",
                 True,
             )
         return {
@@ -768,7 +768,7 @@ def call(arguments: dict[str, Any], workspace: Path, job_credentials: dict[str, 
             "summary": f"{_spec()['label']} is configured for managed EviMed SaaS execution.",
             "data": {
                 "available": True,
-                "model": "deepseek-v4-pro",
+                "model": "deepseek-flash",
                 "thinking": True,
                 **(
                     {"acceptedStartInputs": _accepted_start_inputs()}
@@ -805,10 +805,10 @@ def _child_environment() -> dict[str, str]:
     environment.update({
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/"),
-        "DEEPSEEK_PRO_MODEL": "deepseek-v4-pro",
-        "DEEPSEEK_FLASH_MODEL": "deepseek-v4-pro",
+        "DEEPSEEK_PRO_MODEL": "deepseek-flash",
+        "DEEPSEEK_FLASH_MODEL": "deepseek-flash",
         "LLM_API_KEY": api_key,
-        "LLM_MODEL": "deepseek-v4-pro",
+        "LLM_MODEL": "deepseek-flash",
         "LLM_ENABLE_THINKING": "true",
         "LLM_REASONING_EFFORT": "high",
         "LLM_MAX_CONCURRENT": "2",

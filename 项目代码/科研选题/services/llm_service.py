@@ -292,20 +292,20 @@ class LLMService:
 
     def _resolve_model(self, model: Optional[str], model_tier: str) -> tuple[str, str]:
         selected = model or self.model_for_tier(model_tier)
-        # A managed deployment may intentionally route both tiers to the only
-        # configured Pro model. In that case preserve Pro request semantics
-        # (thinking enabled, reasoning effort, timeout and token reserve).
-        if self.flash_model == self.pro_model and selected == self.pro_model:
-            return selected, "pro"
+        # Both roles may use the same provider model. Preserve the caller's
+        # reasoning policy instead of inferring it from an identical ID.
+        if not model or (self.flash_model == self.pro_model and selected == self.pro_model):
+            self.model_for_tier(model_tier)
+            return selected, model_tier
         if selected == self.flash_model:
             return selected, "flash"
         if selected == self.pro_model:
             return selected, "pro"
         raise ValueError(f"不支持的DeepSeek模型: {selected}")
 
-    def _effective_max_tokens(self, model: str, answer_tokens: int) -> int:
+    def _effective_max_tokens(self, model_tier: str, answer_tokens: int) -> int:
         """为 Pro 推理过程预留输出空间。"""
-        if model != self.pro_model:
+        if model_tier != "pro":
             return answer_tokens
         return min(
             settings.DEEPSEEK_MAX_OUTPUT_TOKENS,
@@ -336,7 +336,7 @@ class LLMService:
         kwargs: Dict[str, Any] = {
             "model": selected_model,
             "messages": messages,
-            "max_tokens": self._effective_max_tokens(selected_model, max_tokens),
+            "max_tokens": self._effective_max_tokens(tier, max_tokens),
             "stream": stream,
             "timeout": timeout,
             "extra_body": {

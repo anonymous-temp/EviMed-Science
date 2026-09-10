@@ -375,7 +375,7 @@ async def _classify_intent_mr(text: str, session_ctx: dict) -> str:
         return "new_analysis"
     api_key = os.getenv("DEEPSEEK_API_KEY", "")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    model = os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash")
+    model = os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-flash")
     if not api_key:
         return _fallback_intent_mr(t)
     try:
@@ -1326,8 +1326,8 @@ async def lifespan(app: FastAPI):
     logger.info(
         f"孟德尔随机化分析服务启动 | port={SERVICE_PORT} "
         f"| LLM={os.getenv('LLM_PROVIDER','deepseek')}:"
-        f"{os.getenv('DEEPSEEK_FLASH_MODEL','deepseek-v4-flash')}/"
-        f"{os.getenv('DEEPSEEK_PRO_MODEL','deepseek-v4-pro')} "
+        f"{os.getenv('DEEPSEEK_FLASH_MODEL','deepseek-flash')}/"
+        f"{os.getenv('DEEPSEEK_PRO_MODEL','deepseek-flash')} "
         f"| Java={JAVA_WS_URL} | MaxSessions={MAX_SESSIONS}"
     )
     _java_client_task = asyncio.create_task(_java_ws_client())

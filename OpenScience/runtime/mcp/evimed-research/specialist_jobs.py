@@ -274,8 +274,8 @@ def _model_environment():
         )
     base_url = os.environ.get("EVIMED_MODEL_GATEWAY_URL", "").strip()
     model = os.environ.get("EVIMED_MODEL_GATEWAY_MODEL", "").strip()
-    if model != "deepseek-v4-pro":
-        raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+    if model != "deepseek-flash":
+        raise SpecialistJobError("specialist_model_config_unavailable", "DeepSeek V4.1 Flash is not configured for this runtime.", True)
     try:
         api_key = _read_bare_token(token_file)
     except Exception as error:  # noqa: BLE001 — the reader's own error type is not this module's vocabulary
@@ -296,11 +296,11 @@ def _model_environment():
     return {
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": base_url.rstrip("/"),
-        "DEEPSEEK_PRO_MODEL": "deepseek-v4-pro",
-        "DEEPSEEK_FLASH_MODEL": "deepseek-v4-pro",
+        "DEEPSEEK_PRO_MODEL": "deepseek-flash",
+        "DEEPSEEK_FLASH_MODEL": "deepseek-flash",
         "LLM_API_KEY": api_key,
         "LLM_BASE_URL": base_url.rstrip("/"),
-        "LLM_MODEL": "deepseek-v4-pro",
+        "LLM_MODEL": "deepseek-flash",
         "LLM_ENABLE_THINKING": "true",
         "LLM_REASONING_EFFORT": "high",
         "LLM_MAX_CONCURRENT": "2",
@@ -400,7 +400,7 @@ def capabilities(tool_name):
         "summary": "%s is configured for managed EviMed execution." % spec["label"],
         "data": {
             "available": True,
-            "model": "deepseek-v4-pro",
+            "model": "deepseek-flash",
             "thinking": True,
             "execution": "managed-background-job",
             "supportedActions": ["capabilities", "start", "status"],

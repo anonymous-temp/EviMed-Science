@@ -144,10 +144,8 @@ test('every registered price list carries its own unique version and a valid eff
     assert.equal(instants.has(list.effectiveFrom), false, `${version} shares an effectiveFrom with another list`)
     instants.add(list.effectiveFrom)
     assert.ok(typeof list.currency === 'string' && list.currency.length > 0, `${version} has no currency`)
-    // Every list must be able to price the models the gateway can route to.
-    for (const model of Object.keys(REFERENCE_PRICE_LIST.model)) {
-      assert.ok(list.model[model], `${version} cannot price ${model}`)
-    }
+    // A historical list prices only models offered when it took effect.
+    assert.ok(Object.keys(list.model).length > 0, `${version} has no model rates`)
     // And every list resolves by date to itself or to a successor.
     assert.notEqual(priceListAt(new Date(Date.parse(list.effectiveFrom))), null)
   }

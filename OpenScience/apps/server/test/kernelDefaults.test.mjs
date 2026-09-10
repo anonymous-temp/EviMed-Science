@@ -73,7 +73,7 @@ test("every setting the runtime depends on still holds in the composition the im
   // rows read out of them is fixed too, and a parser that thinned out silently
   // is the way a checker starts reporting nothing wrong. Re-recording the image
   // moves BASELINE_PROVENANCE and this number in the same edit.
-  assert.equal(report.counts.baselineRows, 150, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
+  assert.equal(report.counts.baselineRows, 157, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);
   assert.equal(baseline.byId.get("evimed-plugin-probe").name, "@evimed/dsh-socket/plugins/plugin-probe");
@@ -122,6 +122,7 @@ test("the invariant list is read out of the composition, not retyped beside it",
     fromPatch.map((invariant) => `${invariant.row}.${invariant.key}=${invariant.value}`).sort(),
     [
       "hmr.disabled=true",
+      "open-in-app.disabled=true",
       "plugin-package-inventory-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",
       // Pinned when 0.1.2-alpha.4 flipped `fetch` on by default for custom
@@ -132,6 +133,7 @@ test("the invariant list is read out of the composition, not retyped beside it",
       // merging keys — dropping it would silently reset the timeout.
       "tool-web.config.fetch=false",
       "tool-web.config.searchTimeoutMs=60000",
+      "ui-open-in-app.disabled=true",
       "web-fetch-http.disabled=true",
     ],
     "every host-scope override the bundle patch makes should become an invariant",

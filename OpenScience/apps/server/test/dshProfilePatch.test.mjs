@@ -6,7 +6,7 @@ import { EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET
 
 const input = {
   modelGatewayUrl: "https://open-science-web:8787/internal/model/v1",
-  model: "deepseek-v4-pro",
+  model: "deepseek-flash",
   contextWindow: 1000000,
   sessionsDir: "/runtime/dsh-home/sessions",
   mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
@@ -23,7 +23,7 @@ const input = {
   capsuleGatewayUrl: "https://open-science-web:8787/internal/capsule/v1",
   workloadTokenFile: "/runtime/secrets/workload-token",
   bundleVersion: "0.1.0",
-  dshVersion: "0.1.2-rc.1",
+  dshVersion: "0.1.5-rc.1",
   limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 },
   flags: { hosted: true, askUser: false, review: false, capsule: true, requiredEnforcement: "full" },
 };
@@ -53,7 +53,7 @@ test("the kernel is pointed at our gateway and never at a provider key", () => {
   assert.match(patch, /baseURL: 'https:\/\/open-science-web:8787\/internal\/model\/v1'/);
   assert.match(patch, new RegExp(`apiKeyEnv: '${WORKLOAD_TOKEN_REF}'`));
   assert.ok(!/DEEPSEEK_API_KEY/.test(patch), "the provider key must not appear anywhere in a container's config");
-  assert.match(patch, /model: 'deepseek-v4-pro'/);
+  assert.match(patch, /model: 'deepseek-flash'/);
   assert.match(patch, /thinking: enabled/);
 });
 

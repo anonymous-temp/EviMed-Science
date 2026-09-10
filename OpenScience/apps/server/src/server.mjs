@@ -3,7 +3,7 @@ import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createServer } from "node:http";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -19,6 +19,7 @@ import { collectRunTranscripts, persistRunTranscript, pruneRunTranscripts } from
 import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
+import { evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
@@ -688,6 +689,7 @@ export function createWebApiApp(overrides = {}) {
   // inbox default pass.
   /** @type {Set<Promise<unknown>>} */
   const learningWrites = new Set();
+  const evaluationAbortControllers = new Set();
   /** @param {Promise<unknown>} work @returns {Promise<unknown>} */
   const trackLearningWrite = (work) => {
     const tracked = work.finally(() => learningWrites.delete(tracked));
@@ -728,9 +730,11 @@ export function createWebApiApp(overrides = {}) {
         if (document) trialled.push(document);
       }
     } catch { trialled = []; }
-    /** @type {{id: string, name: string, digest: string, trial?: boolean}[]} */
+    /** @type {{id: string, name: string, digest: string, contentDigest?: string, trial?: boolean}[]} */
     const methods = [];
-    for (const document of [...trialled, ...approved, ...accountWide]) {
+    const evaluationSnapshot = runtimeManager.evaluationMethodSnapshots.get(runtimeManager.key(project));
+    if (evaluationSnapshot) trialled = evaluationSnapshot.documents.filter((document) => document.payload.status === "candidate");
+    for (const document of evaluationSnapshot?.documents ?? [...trialled, ...approved, ...accountWide]) {
       if (methods.some((method) => method.id === document.id)) continue;
       const name = String(document.payload?.frontmatter?.name ?? "");
       if (!name) continue;
@@ -738,6 +742,7 @@ export function createWebApiApp(overrides = {}) {
         id: String(document.id),
         name,
         digest: mountedMethodDigest(document.payload, sha256Hex),
+        contentDigest: document.payload.contentDigest,
         ...(trialled.some((candidate) => candidate.id === document.id) ? { trial: true } : {}),
       });
     }
@@ -1143,6 +1148,7 @@ export function createWebApiApp(overrides = {}) {
       runEvents.publish(run.id, type, data);
     },
     onRunFinished: async (project, run) => {
+      const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));
       runEvents.publish(run.id, "run/state", {
         state: run.status,
         phase: run.phase ?? null,
@@ -1226,7 +1232,7 @@ export function createWebApiApp(overrides = {}) {
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
-      if (notificationService) {
+      if (notificationService && !evaluationRun) {
         try {
           // Say what happened, in the notice itself. The mapping lives in
           // `notificationService.runFinishedNotice` so it is a tested pure
@@ -1322,6 +1328,9 @@ export function createWebApiApp(overrides = {}) {
           });
         }
       })());
+      // Evaluation receipts feed only the measured method. They must not
+      // recursively distil benchmark answers or seed the researcher's memory.
+      if (evaluationRun) return;
       // Queue the run for distillation when it is worth learning from.
       //
       // Trigger (b) of the plan's three: a package that needed at least one
@@ -1511,7 +1520,35 @@ export function createWebApiApp(overrides = {}) {
       // configure one, it is spawned as its own process with the job's own
       // budget, and its stdout is expected to be the report the runner writes.
       evaluate: config.learningEvaluationCommand
-        ? (request) => runPairedEvaluation(config.learningEvaluationCommand, request)
+        ? async (request) => {
+          const controller = new AbortController();
+          evaluationAbortControllers.add(controller);
+          try { return await evaluateLearnedMethod({
+          config, store, learning: learningService, capsules: capsuleService, runtimeManager,
+          agentRuns, learningRuntime, commands, usageLedger,
+          judge: async (cell, input) => {
+            if (cell.judgeCalls >= 2 || typeof input?.system !== "string" || typeof input?.user !== "string") {
+              throw new HttpError(400, "method_evaluation_judge_invalid", "Invalid or exhausted evaluation judge request.");
+            }
+            cell.judgeCalls += 1;
+            const runtime = runtimeManager.runtimes.get(runtimeManager.key(cell.project));
+            const address = server.address();
+            if (!runtime?.modelGatewayToken || !runtime.modelGatewayScope || !address || typeof address === "string") {
+              throw new HttpError(503, "method_evaluation_judge_unavailable", "The bounded judge runtime is unavailable.");
+            }
+            const response = await fetch(`http://127.0.0.1:${address.port}${MODEL_GATEWAY_PATH}`, {
+              method: "POST", headers: { authorization: `Bearer ${runtime.modelGatewayToken}`, "content-type": "application/json" },
+              body: JSON.stringify({ model: config.deepseekModel, stream: false, max_tokens: 4096,
+                messages: [{ role: "system", content: input.system }, { role: "user", content: input.user }] }),
+              signal: AbortSignal.timeout(120_000),
+            });
+            if (!response.ok) throw new HttpError(502, "method_evaluation_judge_failed", "The bounded evaluation judge failed.");
+            const payload = /** @type {any} */ (await response.json());
+            return { content: payload.choices?.[0]?.message?.content ?? "" };
+          },
+        }, request, { signal: controller.signal }); }
+          finally { evaluationAbortControllers.delete(controller); }
+        }
         : null,
       audit: (job, event, detail) => securityAudit(config, event, "recorded", {
         userId: job.userId, projectId: job.projectId,
@@ -3713,6 +3750,7 @@ export function createWebApiApp(overrides = {}) {
       return address;
     },
     async close() {
+      for (const controller of evaluationAbortControllers) controller.abort();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
       await pluginApplyWorker?.close();
@@ -4483,67 +4521,6 @@ function addHistogramMetric(lines, name, help, series) {
     lines.push(metricLine(`${name}_sum`, item.sum, item.labels));
     lines.push(metricLine(`${name}_count`, item.count, item.labels));
   }
-}
-
-/**
- * Spawn the paired-evaluation harness for one candidate.
- *
- * Deliberately a subprocess and deliberately not part of this process: the
- * harness is Python, it runs for hours, and it dispatches real runs through the
- * same API a person would. What comes back is only the verdict and the path of
- * the report it wrote — the control plane does not re-derive the statistics,
- * because a second implementation of the analysis is a second answer.
- * `--json` is passed here rather than left to the configured command, because
- * it is the half of the contract this side depends on: with it the harness
- * prints one verdict line on stdout and its human table on stderr, and without
- * it stdout is a table and `JSON.parse` below can only ever fail. The two
- * halves disagreed for exactly that reason until 2026-09-10 — the server sent
- * flags the script did not accept, and the script printed output the server
- * could not read, so no configured command could have worked.
- *
- * @param {string} command
- * @param {{userId: string, projectId: string, methodId: string, candidateDigest: string, baselineDigest: string}} request
- * @returns {Promise<{verdict: string, report: string, baselineDigest?: string, candidateDigest?: string}>}
- */
-function runPairedEvaluation(command, request) {
-  return new Promise((resolve, reject) => {
-    const [program, ...args] = command.split(/\s+/).filter(Boolean);
-    const child = spawn(program, [...args,
-      "--json",
-      "--method", request.methodId,
-      "--candidate-digest", request.candidateDigest,
-      ...(request.baselineDigest ? ["--baseline-digest", request.baselineDigest] : []),
-    ], { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += String(chunk).slice(0, 64 * 1024); });
-    child.stderr.on("data", (chunk) => { stderr += String(chunk).slice(0, 8 * 1024); });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code !== 0) {
-        const error = new Error(`The paired evaluation exited ${code}: ${stderr.trim().slice(0, 300)}`);
-        /** @type {any} */ (error).code = "method_evaluation_failed";
-        reject(error);
-        return;
-      }
-      try {
-        // The last non-empty line. `--json` promises one machine-readable line
-        // on stdout, and taking the last one survives a harness that prints a
-        // progress line before it — the alternative is a parse failure whose
-        // message blames the verdict for the noise in front of it.
-        const line = stdout.split("\n").map((entry) => entry.trim()).filter(Boolean).at(-1) ?? "";
-        const parsed = JSON.parse(line);
-        if (!parsed || typeof parsed !== "object" || typeof parsed.verdict !== "string") {
-          throw new TypeError("no verdict");
-        }
-        resolve(parsed);
-      } catch {
-        const error = new Error(`The paired evaluation printed no readable verdict: ${stdout.trim().slice(-200)}`);
-        /** @type {any} */ (error).code = "method_evaluation_invalid";
-        reject(error);
-      }
-    });
-  });
 }
 
 async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {

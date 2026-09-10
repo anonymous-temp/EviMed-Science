@@ -39,7 +39,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         os.environ["OPEN_SCIENCE_WORKSPACE_DIR"] = str(self.workspace)
         os.environ["EVIMED_MODEL_GATEWAY_TOKEN_FILE"] = str(self.model_gateway_token)
         os.environ["EVIMED_MODEL_GATEWAY_URL"] = "https://api.deepseek.com"
-        os.environ["EVIMED_MODEL_GATEWAY_MODEL"] = "deepseek-v4-pro"
+        os.environ["EVIMED_MODEL_GATEWAY_MODEL"] = "deepseek-flash"
 
     def tearDown(self):
         os.environ.clear()
@@ -72,7 +72,7 @@ class SpecialistJobContractTests(unittest.TestCase):
                 result = self.jobs.call(tool_name, {"action": "capabilities"})
                 self.assertEqual(result["status"], "success")
                 self.assertTrue(result["data"]["available"])
-                self.assertEqual(result["data"]["model"], "deepseek-v4-pro")
+                self.assertEqual(result["data"]["model"], "deepseek-flash")
 
     def test_topic_job_preserves_bounded_research_context(self):
         self.install_fake_specialist("research_topic_selection")

@@ -44,13 +44,15 @@ const ENDPOINT_NAME = /^[a-zA-Z][a-zA-Z0-9]*\/[a-zA-Z][a-zA-Z0-9]*$/;
  * fire. `bannedNamespacesAreReal` below exists so that cannot happen silently
  * again: every namespace named here must actually appear in `wire.denied`.
  */
+// Only namespaces published by the pinned kernel belong in this inventory.
+// Retired namespaces (including agentTeams in 0.1.5) remain denied by the
+// browser boundary in runtimeUiSurface; do not invent RPCs to represent them.
 const CONTROL_PLANE_BANNED_NAMESPACES = Object.freeze([
   "settings",
   "credentials",
   "workspace",
   "goals",
   "llm",
-  "agentTeams",
   "directoryPicker",
   "messageFeedback",
   "sessionReferenceResolver",

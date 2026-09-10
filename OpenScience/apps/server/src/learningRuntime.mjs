@@ -151,13 +151,16 @@ export function createLearningRuntime({
   return {
     /**
      * @param {{job: any, dispatchId: string, capabilityId: string, contractKind: string, input: any, question: string,
-     *          userId: string, projectId: string}} request
+     *          userId: string, projectId: string, isolatedProject?: boolean}} request
      */
     async dispatch(request) {
       const { job, dispatchId, capabilityId, input, question } = request;
       const project = await resolveProject({ userId: request.userId ?? job.userId, projectId: request.projectId ?? job.projectId });
       const directory = learningArtifactDirectory(capabilityId, dispatchId);
-      const scoped = learningRunProject(project, directory);
+      // A private evaluation allocates the entire project for one cell. Using
+      // its root also preserves isolation through the runtime controller, whose
+      // launch contract carries project identity rather than an arbitrary path.
+      const scoped = request.isolatedProject === true ? project : learningRunProject(project, directory);
 
       // An existing dispatch is adopted, never repeated. A durable record of a
       // request that was already paid for is not permission to pay again.

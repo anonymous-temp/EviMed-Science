@@ -495,7 +495,7 @@ test("web compose defaults to the hosted docker runtime boundary", async () => {
   assert.match(metaService, /dockerfile:\s+Dockerfile\.evimed/);
   assert.match(metaService, /EVIMED_WORKLOAD_SIGNING_SECRET_FILE:\s+\/run\/secrets\/evimed-workload-signing-key/);
   assert.match(metaService, /LLM_API_KEY_FILE:\s+\/run\/secrets\/deepseek-api-key/);
-  assert.match(metaService, /LLM_MODEL:\s+deepseek-v4-pro/);
+  assert.match(metaService, /LLM_MODEL:\s+deepseek-flash/);
   assert.match(metaService, /open-science-data:\/data/);
   assert.match(metaService, /security_opt:\s*\n\s+- no-new-privileges:true/);
   assert.match(metaService, /cap_drop:\s*\n\s+- ALL/);
@@ -891,7 +891,7 @@ test("web deployment env example documents required hosted settings", async () =
   // launching the image it just built.
   const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
-  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26");
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26");
   assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);

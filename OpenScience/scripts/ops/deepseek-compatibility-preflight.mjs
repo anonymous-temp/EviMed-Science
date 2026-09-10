@@ -2,13 +2,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultDeepSeekModel } from "../../apps/server/src/modelGateway.mjs";
 
 const OFFICIAL_BASE = "https://api.deepseek.com";
-const REQUIRED_MODEL = String(process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "").trim() || "deepseek-v4-pro";
+const REQUIRED_MODEL = String(process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "").trim() || defaultDeepSeekModel;
 const MAX_KEY_BYTES = 8 * 1024;
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_TOOL_ITERATIONS = 4;
+
+/** Official retired Flash aliases return the canonical V4.1 model identity. */
+export function expectedProviderModel(model) {
+  return ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"].includes(model) ? "deepseek-flash" : model;
+}
 
 class CompatibilityError extends Error {
   constructor(code) {
@@ -142,13 +148,14 @@ async function providerRequest(context, capability, body, expectedType) {
   return readBoundedBody(response, context.maxResponseBytes);
 }
 
-function parsedAssistant(text, capability) {
+function parsedAssistant(text, capability, expectedModel) {
   let payload;
   try {
     payload = JSON.parse(text);
   } catch {
     throw failure(`deepseek_${capability}_response_invalid`);
   }
+  if (payload?.model !== expectedProviderModel(expectedModel)) throw failure("deepseek_provider_model_mismatch");
   const message = payload?.choices?.[0]?.message;
   if (message == null || typeof message !== "object" || Array.isArray(message)) {
     throw failure(`deepseek_${capability}_response_invalid`);
@@ -161,7 +168,7 @@ async function baseline(context) {
     messages: [{ role: "user", content: "Reply with the single word compatible." }],
     stream: false,
   }), "application/json");
-  const message = parsedAssistant(text, "baseline");
+  const message = parsedAssistant(text, "baseline", context.model);
   if (typeof message.content !== "string" || !message.content.trim()) throw failure("deepseek_baseline_response_invalid");
 }
 
@@ -179,12 +186,14 @@ async function streaming(context) {
       done = true;
       continue;
     }
+    let frame;
     try {
-      JSON.parse(data);
-      dataFrames += 1;
+      frame = JSON.parse(data);
     } catch {
       throw failure("deepseek_streaming_sse_invalid");
     }
+    if (frame?.model !== expectedProviderModel(context.model)) throw failure("deepseek_provider_model_mismatch");
+    dataFrames += 1;
   }
   if (!done || dataFrames < 1) throw failure("deepseek_streaming_sse_invalid");
 }
@@ -207,7 +216,7 @@ async function toolLoop(context) {
       tool_choice: "auto",
       stream: false,
     }), "application/json");
-    const message = parsedAssistant(text, "tool_loop");
+    const message = parsedAssistant(text, "tool_loop", context.model);
     const calls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
     if (calls.length > 0) {
       if (completed + calls.length > context.maxToolIterations) {
@@ -249,7 +258,7 @@ async function structuredOutput(context) {
     response_format: { type: "json_object" },
     stream: false,
   }), "application/json");
-  const message = parsedAssistant(text, "structured_output");
+  const message = parsedAssistant(text, "structured_output", context.model);
   if (typeof message.content !== "string") throw failure("deepseek_structured_output_invalid");
   try {
     const value = JSON.parse(message.content);

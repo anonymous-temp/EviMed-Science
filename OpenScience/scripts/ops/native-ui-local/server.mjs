@@ -63,7 +63,7 @@ app.runtimeManager.start = async project => {
     const patch = [
       { id: "session-persistence-jsonl", config: { root: path.join(runtimeHome, "sessions") } },
       { id: "session-query-sqlite", config: { path: ":memory:" } },
-      { id: "evimed-seam-probe", config: { requiredEnforcement: "partial", dshVersion: "0.1.2-rc.1" } },
+      { id: "evimed-seam-probe", config: { requiredEnforcement: "partial", dshVersion: "0.1.5-rc.1" } },
       { id: "agent-presets", config: { roots: [{ path: "/opt/evimed/socket-source/presets", trust: "system" }], default: "evimed-universal" } },
       { id: "llm-deepseek", config: { baseURL: "http://127.0.0.1:45990/v1", apiKeyEnv: "EVIMED_WORKLOAD_TOKEN", thinking: "disabled", models: [{ id: "deepseek-v4-flash", contextWindow: 1000000 }] } },
       { id: "agent-default-model", config: { provider: "deepseek-official", model: "deepseek-v4-flash" } },
@@ -105,7 +105,7 @@ app.runtimeManager.start = async project => {
   try { return await work; } finally { starting.delete(key); }
 };
 await app.listen(8787, "0.0.0.0");
-writeFileSync("/acceptance/server-ready.json", JSON.stringify({ shellOrigin, uiOrigin, kernel: "0.1.2-rc.1", provider: "deterministic-local-fixture" }));
+writeFileSync("/acceptance/server-ready.json", JSON.stringify({ shellOrigin, uiOrigin, kernel: "0.1.5-rc.1", provider: "deterministic-local-fixture" }));
 console.log("Native acceptance control plane is ready.");
 const stop = async () => { for (const child of processes) child.kill("SIGTERM"); await app.close(); provider.close(); process.exit(0); };
 process.once("SIGTERM", stop); process.once("SIGINT", stop);

@@ -6,8 +6,10 @@ import {
   SEAMS,
   __setHarnessModule,
   defineTool,
+  injectContext,
   loadHarnessModule,
   onToolObserved,
+  onPreStep,
   onToolPolicy,
   onTurnEnd,
   probeSeams,
@@ -22,6 +24,40 @@ import {
   toTurnEnd,
   toUsage,
 } from "../index.mjs";
+
+test("injected context is an identified user message accepted by session format v3", () => {
+  /** @type {Array<{id: string, role: string, source: unknown, content: unknown}>} */
+  const messages = [];
+  const agent = { inject: (/** @type {any} */ message) => messages.push(message) };
+  injectContext(agent, "Retain the research constraints.", "evimed-guidance");
+  injectContext(agent, "Retain the research constraints.", "evimed-guidance");
+  assert.equal(messages[0].role, "user");
+  assert.equal(typeof messages[0].id, "string");
+  assert.ok(messages[0].id.length > 0);
+  assert.notEqual(messages[0].id, messages[1].id);
+  assert.deepEqual(messages[0].source, { kind: "plugin", plugin: "evimed-guidance" });
+  assert.deepEqual(messages[0].content, [{ type: "text", text: "Retain the research constraints." }]);
+});
+
+test("context added during pre-step enters that request rather than the next inbox claim", async () => {
+  /** @type {any} */
+  let handler;
+  const queued = [];
+  const agent = { id: "agent-1", session: { id: "s1", header: { cwd: "/work" } }, inject: (/** @type {any} */ message) => queued.push(message) };
+  const ctx = { on: (/** @type {string} */ _event, /** @type {any} */ callback) => { handler = callback; return () => {}; } };
+  onPreStep(ctx, async () => {
+    injectContext(agent, "Reply READY on the first step.", "evimed-run-policy");
+    return { allow: true };
+  }, () => ({ first: true, root: true }));
+  const original = { id: "u1", role: "user", content: [{ type: "text", text: "Begin." }], source: { kind: "user" } };
+  const decision = await handler({ agent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages: [original] }));
+  assert.equal(queued.length, 0);
+  assert.equal(decision.messages.length, 2);
+  assert.equal(decision.messages[0], original);
+  assert.equal(decision.messages[1].content[0].text, "Reply READY on the first step.");
+  injectContext(agent, "A later turn.", "evimed-run-policy");
+  assert.equal(queued.length, 1, "the request-local collector is removed after admission");
+});
 
 /** A minimal cordis-shaped context with the seams the probe walks.
  *

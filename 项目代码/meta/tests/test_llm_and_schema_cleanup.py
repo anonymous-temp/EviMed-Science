@@ -1170,3 +1170,12 @@ def test_structured_output_retries_original_prompt_with_more_tokens_for_incomple
     assert calls[1]["kwargs"]["max_tokens"] > calls[0]["kwargs"]["max_tokens"]
     assert calls[1]["messages"][-1]["content"].startswith("Return the answer.")
     assert "Previous response was incomplete" in calls[1]["messages"][-1]["content"]
+
+
+def test_latest_deepseek_flash_retains_thinking_contract():
+    client = LLMClient(api_key="test-key", base_url="https://api.deepseek.com", model="deepseek-flash")
+    client.enable_thinking = True
+    client.reasoning_effort = "high"
+    assert client._chat_extra_body(model="deepseek-flash") == {"thinking": {"type": "enabled"}}
+    assert client._chat_reasoning_effort(model="deepseek-flash") == "high"
+    assert client._chat_supports_temperature(model="deepseek-flash") is False

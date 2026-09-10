@@ -38,6 +38,14 @@
 - id: hmr
   disabled: true
 
+# Opening native host applications is not a capability of a hosted project.
+- id: open-in-app
+  disabled: true
+
+# The hosted browser must not offer native host-application launch controls.
+- id: ui-open-in-app
+  disabled: true
+
 # DSH telemetry has no redaction rules and `FULL` mode ships message bodies,
 # tool arguments and workspace paths off the box. Nothing that may see patient
 # data can leave this on, and the environment variable alone is one deployment

@@ -1,4 +1,5 @@
-import { parseSkillFrontmatter, promotionVerdict } from "@evimed/domain";
+import { createHash } from "node:crypto";
+import { mountedMethodDigest, parseSkillFrontmatter, promotionVerdict } from "@evimed/domain";
 import { methodRecordFrom } from "./learningService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -65,6 +66,7 @@ export function methodView(document) {
     status: payload.status ?? "candidate",
     statusReason: payload.statusReason ?? null,
     contentDigest: payload.contentDigest ?? "",
+    mountedDigest: mountedMethodDigest(payload, (text) => createHash("sha256").update(text).digest("hex")),
     origin: payload.provenance?.origin ?? "inferred",
     derivedFrom: payload.frontmatter?.metadata?.derived_from ?? "",
     dependsOn: payload.frontmatter?.metadata?.depends_on ?? "",

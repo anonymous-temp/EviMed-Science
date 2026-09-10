@@ -79,16 +79,16 @@ class _FakeSession:
 
 
 def _gateway(monkeypatch):
-    monkeypatch.setenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash")
-    monkeypatch.setenv("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro")
+    monkeypatch.delenv("DEEPSEEK_FLASH_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_PRO_MODEL", raising=False)
     return LLMGateway(provider=LLMProvider.DEEPSEEK, api_key="test-key")
 
 
 def test_model_tiers_map_to_flash_and_pro(monkeypatch):
     gateway = _gateway(monkeypatch)
-    assert gateway.model_mapping[ModelTier.FAST] == "deepseek-v4-flash"
-    assert gateway.model_mapping[ModelTier.STANDARD] == "deepseek-v4-pro"
-    assert gateway.model_mapping[ModelTier.ADVANCED] == "deepseek-v4-pro"
+    assert gateway.model_mapping[ModelTier.FAST] == "deepseek-flash"
+    assert gateway.model_mapping[ModelTier.STANDARD] == "deepseek-flash"
+    assert gateway.model_mapping[ModelTier.ADVANCED] == "deepseek-flash"
 
 
 @pytest.mark.asyncio
@@ -105,18 +105,19 @@ async def test_request_payload_switches_thinking_with_model(monkeypatch):
         await gateway._call_llm(
             messages=[{"role": "user", "content": "test"}],
             model=gateway.model_mapping[tier],
+            model_tier=tier,
             temperature=0.2,
             max_tokens=10,
         )
 
     flash_payload, pro_payload = (request["json"] for request in requests)
-    assert flash_payload["model"] == "deepseek-v4-flash"
+    assert flash_payload["model"] == "deepseek-flash"
     assert flash_payload["max_tokens"] == 10
     assert flash_payload["thinking"] == {"type": "disabled"}
     assert flash_payload["temperature"] == 0.2
     assert "reasoning_effort" not in flash_payload
 
-    assert pro_payload["model"] == "deepseek-v4-pro"
+    assert pro_payload["model"] == "deepseek-flash"
     assert pro_payload["max_tokens"] == 4106
     assert pro_payload["thinking"] == {"type": "enabled"}
     assert pro_payload["reasoning_effort"] == "high"
@@ -258,7 +259,7 @@ async def test_stream_parses_content_and_checks_finish_reason(monkeypatch):
         )
     ]
     assert chunks == ["hello"]
-    assert requests[0]["json"]["model"] == "deepseek-v4-pro"
+    assert requests[0]["json"]["model"] == "deepseek-flash"
     assert requests[0]["json"]["stream_options"] == {"include_usage": True}
 
 
@@ -287,3 +288,21 @@ async def test_chat_uses_flash_without_report_and_pro_with_report(monkeypatch):
         "question", send_msg, "m2", "s2", report_context="report"
     )
     assert tiers == [ModelTier.FAST, ModelTier.ADVANCED]
+
+
+@pytest.mark.asyncio
+async def test_shared_model_cache_keeps_reasoning_roles_separate(monkeypatch):
+    gateway = _gateway(monkeypatch)
+    gateway.enable_cache = True
+    calls = []
+
+    async def complete(**kwargs):
+        calls.append(kwargs["model_tier"])
+        return {"text": kwargs["model_tier"].value}
+
+    monkeypatch.setattr(gateway, "_call_llm", complete)
+    messages = [{"role": "user", "content": "same request"}]
+    for tier in (ModelTier.FAST, ModelTier.ADVANCED, ModelTier.FAST):
+        result = await gateway.call_with_retry(messages, model_tier=tier)
+        assert result["text"] == tier.value
+    assert calls == [ModelTier.FAST, ModelTier.ADVANCED]

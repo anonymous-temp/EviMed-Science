@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     # LLM (used from P4 on for text interpretation only, never for statistics)
     deepseek_api_key: SecretStr = SecretStr("")
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_flash_model: str = "deepseek-chat"
-    deepseek_pro_model: str = "deepseek-reasoner"
+    deepseek_flash_model: str = "deepseek-flash"
+    deepseek_pro_model: str = "deepseek-flash"
 
     # openFDA
     openfda_base_url: str = "https://api.fda.gov"

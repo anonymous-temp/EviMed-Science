@@ -48,7 +48,7 @@
   name: '@deepseek-ai/dsh-agent-default-model'
   config:
     provider: deepseek-official
-    model: deepseek-v4-flash
+    model: deepseek-flash
 - id: jobs
   name: '@deepseek-ai/dsh-jobs-local'
 - id: llm-retry
@@ -333,11 +333,6 @@
     subagentProvider: spawn
     maxRounds: 64
   disabled: true
-- id: tool-str-replace-editor
-  name: '@deepseek-ai/dsh-tool-str-replace-editor'
-  config:
-    maxOutputChars: 16000
-  disabled: true
 # == @deepseek-ai/dsh-base
 - id: repeat-tool-reminder
   name: '@deepseek-ai/dsh-repeat-tool-reminder'
@@ -375,9 +370,8 @@
 - id: system-prompt
   name: '@deepseek-ai/dsh-system-prompt'
   config:
-    persona: >-
-      You are a coding agent powered by the {{model}} model. Your working
-      directory is {{cwd}}.
+    personaSuffix: Your working directory is {{cwd}}.
+    personaPrefix: You are a coding agent powered by the {{model}} model.
 # == @deepseek-ai/dsh-base
 - id: agent-loop
   name: '@deepseek-ai/dsh-agent-loop'
@@ -398,6 +392,18 @@
     maxNoteBytes: 8192
 - id: session-log-download
   name: '@deepseek-ai/dsh-session-log-export'
+# == @deepseek-ai/dsh-web-app, patched by @evimed/dsh-socket
+- id: open-in-app
+  name: '@deepseek-ai/dsh-host-open-in-app'
+  config:
+    probeTimeoutMs: 10000
+    iconTimeoutMs: 10000
+    launchWatchMs: 1000
+  disabled: true
+- id: ui-open-in-app
+  name: '@deepseek-ai/dsh-client-ui-open-in-app'
+  disabled: true
+# == @deepseek-ai/dsh-web-app
 - id: workspace
   name: '@deepseek-ai/dsh-workspace'
 - id: session-reference
@@ -414,6 +420,8 @@
   name: '@deepseek-ai/dsh-host-plugin-inventory'
 - id: session-controller
   name: '@deepseek-ai/dsh-api-session-controller'
+- id: workspace-files
+  name: '@deepseek-ai/dsh-api-workspace-files'
 - id: settings-controller
   name: '@deepseek-ai/dsh-api-settings-controller'
 - id: workspace-controller
@@ -451,6 +459,8 @@
     - webRuntime
   config:
     trustedHosts: !!js ctx.webRuntime.trustedHosts
+- id: file-upload
+  name: '@deepseek-ai/dsh-client-file-upload'
 - id: api-remotes
   name: '@deepseek-ai/dsh-api-remotes'
 - id: cordis-client-runner
@@ -465,8 +475,16 @@
   name: '@deepseek-ai/dsh-client-ui-renderer'
 - id: ui-session
   name: '@deepseek-ai/dsh-client-ui-session'
+- id: resources
+  name: '@deepseek-ai/dsh-client-resources'
 - id: ui-sidebar
   name: '@deepseek-ai/dsh-client-ui-sidebar'
+- id: ui-sidebar-right
+  name: '@deepseek-ai/dsh-client-ui-sidebar-right'
+- id: ui-sidebar-documentpreview
+  name: '@deepseek-ai/dsh-client-ui-sidebar-documentpreview'
+- id: ui-sidebar-files
+  name: '@deepseek-ai/dsh-client-ui-sidebar-files'
 - id: ui-settings
   name: '@deepseek-ai/dsh-client-ui-settings'
 - id: ui-settings-general
@@ -532,6 +550,11 @@
   name: '@deepseek-ai/dsh-agent-presets'
   config:
     default: standard
+# == dsh-cite
+- id: cite
+  name: dsh-cite
+  config:
+    timeoutMs: 15000
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'
@@ -541,8 +564,3 @@
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store
   name: '@evimed/dsh-socket/plugins/evidence-store'
-# == dsh-cite
-- id: cite
-  name: dsh-cite
-  config:
-    timeoutMs: 15000

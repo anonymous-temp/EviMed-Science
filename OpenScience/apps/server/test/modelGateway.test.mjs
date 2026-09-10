@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import {
   certifiedDeepSeekModel,
   createModelGatewayHandler,
+  deepSeekModelDisplayName,
   pipeModelGatewayBody,
   supportedDeepSeekModels,
 } from "../src/modelGateway.mjs";
@@ -132,7 +133,8 @@ test("DeepSeek configuration prefers secret files and keeps a safe host-developm
   assert.equal(loaded.deepseekApiKeySource, "file");
   assert.equal(loaded.modelGatewaySigningSecret, "gateway-signing-secret-with-at-least-32-bytes");
   assert.equal(loaded.modelGatewaySigningSecretSource, "file");
-  assert.equal(loaded.deepseekModel, "deepseek-v4-pro");
+  assert.equal(loaded.deepseekModel, "deepseek-flash");
+  assert.equal(loaded.memoryExtractionModel, "deepseek-flash");
   assert.equal(loaded.deepseekBaseUrl, "https://api.deepseek.com");
   assert.equal(loaded.modelGatewayInternalUrl, "http://127.0.0.1:9123/internal/model/v1");
 });
@@ -448,12 +450,17 @@ test("only a certified DeepSeek model is served, and it is the one configured", 
   // runs the tool chain against whatever this resolves to and signs a receipt
   // naming it. An uncertified name must resolve to nothing rather than to a
   // default, or a typo would quietly serve on a model no gate ever exercised.
-  assert.equal(certifiedDeepSeekModel({}), "deepseek-v4-pro");
-  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "" }), "deepseek-v4-pro");
+  assert.equal(certifiedDeepSeekModel({}), "deepseek-flash");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "" }), "deepseek-flash");
   assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4-flash" }), "deepseek-v4-flash");
   assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: " deepseek-v4-flash " }), "deepseek-v4-flash");
   assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4-turbo" }), null);
   assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "gpt-4o" }), null);
+
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-flash" }), "deepseek-flash");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4-flash-vision-exp" }), "deepseek-v4-flash-vision-exp");
+  assert.equal(certifiedDeepSeekModel({ OPEN_SCIENCE_DEEPSEEK_MODEL: "deepseek-v4.1-flash" }), null);
+  assert.equal(deepSeekModelDisplayName("deepseek-flash"), "DeepSeek V4.1 Flash");
 
   for (const model of supportedDeepSeekModels) {
     const config = loadConfig({ dataDir: "/tmp/os-model-gateway-certified", deepseekModel: model });

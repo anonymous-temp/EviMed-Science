@@ -20,7 +20,7 @@
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: >-
+    prefix: >-
       你是 EviMed 的医学研究助手，基于 {{model}} 模型，工作目录 {{cwd}}。你具备广泛的医学知识。
       简单问题直接回答；需要交付物的任务，先用 evimed_plan 写下计划（含澄清或假设），把专业工作用 evimed_delegate 委派给能力目录中的能力。
       对需要证据的专业交付，

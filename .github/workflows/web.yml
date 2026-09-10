@@ -150,6 +150,9 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
+    env:
+      COMPOSE_PARALLEL_LIMIT: "1"
+      EVIMED_FULL_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -172,7 +175,7 @@ jobs:
         shell: bash
         run: |
           echo "OPEN_SCIENCE_APP_VERSION=0.1.3" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_RELEASE_ID=ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_RELEASE_ID=evimed-${GITHUB_SHA:0:12}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_SOURCE_REVISION=${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_BUILD_CREATED=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_WEB_CONTAINER_IMAGE=open-science-web:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
@@ -282,13 +285,52 @@ jobs:
           pnpm configure:production-state
           pnpm check:production-state
 
+      - name: Reserve space on the disposable CI builder
+        shell: bash
+        run: |
+          # These preinstalled SDKs are unused by this Linux web/runtime build.
+          # Never run this cleanup against a saved runner or a serving host.
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Build hosted Web and agent runtime images
-        run: >-
-          docker compose --env-file deploy/web/.env.ci
-          -f deploy/web/docker-compose.yml
-          -f deploy/web/docker-compose.local-auth.yml
-          -f deploy/web/docker-compose.backup.yml
-          --profile backup --profile runtime-image build
+        shell: bash
+        env:
+          OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE: /tmp/ci-unused-memos-provider.json
+          OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
+          OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE: /tmp/ci-unused-parser-token
+          OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE: /tmp/ci-unused-openlist-password
+        run: |
+          # This is an ephemeral CI builder, never the serving host. Stop before
+          # builds or exports exhaust the filesystem; no production volume exists here.
+          test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
+          export BUILDX_BUILDER=evimed-ci
+          extra_compose=()
+          build_flags=()
+          if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
+            extra_compose=(-f deploy/web/docker-compose.memos-engine.yml -f deploy/web/docker-compose.ingestion.yml)
+            build_flags=(--no-cache)
+          fi
+          docker compose --env-file deploy/web/.env.ci \
+            -f deploy/web/docker-compose.yml \
+            -f deploy/web/docker-compose.local-auth.yml \
+            -f deploy/web/docker-compose.backup.yml \
+            "${extra_compose[@]}" \
+            --profile backup --profile runtime-image build "${build_flags[@]}" &
+          build_pid=$!
+          while kill -0 "$build_pid" 2>/dev/null; do
+            if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ]; then
+              kill "$build_pid" 2>/dev/null || true
+              timeout 15 docker buildx stop evimed-ci || true
+              wait "$build_pid" || true
+              echo "CI build stopped at the 10 GiB capacity floor" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          wait "$build_pid"
 
       # The kernel is installed as an npm global, not as a fetched binary, so
       # what is checked is that the launcher resolves, that its version is the
@@ -422,6 +464,70 @@ jobs:
           -f deploy/web/docker-compose.backup.yml
           --profile backup exec -T open-science-backup
           node -e "const fs=require('node:fs');const names=fs.readdirSync('/backups');process.exit(names.some(n=>n.endsWith('.tar.gz.enc'))&&names.includes('.open-science-backup-state.json')?0:1)"
+
+      - name: Package verified full-release images
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        shell: bash
+        env:
+          OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE: /tmp/ci-unused-memos-provider.json
+          OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
+          OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE: /tmp/ci-unused-parser-token
+          OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE: /tmp/ci-unused-openlist-password
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evimed-release"
+          docker compose --env-file deploy/web/.env.ci \
+            -f deploy/web/docker-compose.yml \
+            -f deploy/web/docker-compose.local-auth.yml \
+            -f deploy/web/docker-compose.backup.yml \
+            -f deploy/web/docker-compose.memos-engine.yml \
+            -f deploy/web/docker-compose.ingestion.yml \
+            --profile backup --profile runtime-image config --format json \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(sorted({s["image"] for s in d["services"].values() if s.get("build") and (not s.get("profiles") or set(s["profiles"]) & {"backup", "runtime-image"})})))' \
+            > "$RUNNER_TEMP/evimed-release/images.txt"
+          test -s "$RUNNER_TEMP/evimed-release/images.txt"
+          export EVIMED_IMAGE_LIST="$RUNNER_TEMP/evimed-release/images.txt"
+          export EVIMED_IMAGE_ARCHIVE="$RUNNER_TEMP/evimed-release/images.tar.gz"
+          test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          setsid bash -euo pipefail -c 'mapfile -t images < "$EVIMED_IMAGE_LIST"; docker save "${images[@]}" | gzip -1 > "$EVIMED_IMAGE_ARCHIVE"' &
+          export_pid=$!
+          while kill -0 "$export_pid" 2>/dev/null; do
+            if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ]; then
+              kill -- "-$export_pid" 2>/dev/null || true
+              wait "$export_pid" || true
+              echo "CI export stopped at the 10 GiB capacity floor" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          wait "$export_pid"
+          gzip -t "$EVIMED_IMAGE_ARCHIVE"
+          (cd "$RUNNER_TEMP/evimed-release" && sha256sum images.tar.gz > images.tar.gz.sha256)
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, tarfile
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "evimed-release"
+          with tarfile.open(root / "images.tar.gz", "r:gz") as archive:
+              manifest = json.load(archive.extractfile("manifest.json"))
+              images = []
+              for entry in manifest:
+                  content = archive.extractfile(entry["Config"]).read()
+                  config = json.loads(content)
+                  images.append({"references": entry["RepoTags"], "configDigest": "sha256:" + hashlib.sha256(content).hexdigest(),
+                                 "platform": config.get("os", "") + "/" + config.get("architecture", ""),
+                                 "rootfs": config.get("rootfs"), "labels": config.get("config", {}).get("Labels", {})})
+          report = {"sourceRevision": os.environ["GITHUB_SHA"], "releaseId": os.environ["OPEN_SCIENCE_RELEASE_ID"],
+                    "workflowRun": os.environ["GITHUB_RUN_ID"], "workflowAttempt": os.environ["GITHUB_RUN_ATTEMPT"], "images": images}
+          (root / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
+          PY
+
+      - name: Upload verified full-release images
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: evimed-full-release-${{ github.sha }}
+          path: ${{ runner.temp }}/evimed-release/
+          compression-level: 0
+          retention-days: 3
 
       - name: Print Compose logs on failure
         if: failure()

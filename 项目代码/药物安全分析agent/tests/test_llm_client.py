@@ -5,6 +5,8 @@ All HTTP is mocked with respx; no real API key is used.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -50,8 +52,8 @@ async def test_complete_returns_content_and_sends_auth():
     assert out == "PONG"
     request = route.calls[0].request
     assert request.headers["Authorization"] == "Bearer test-key-not-real"
-    assert '"model": "deepseek-chat"' in request.content.decode() or (
-        '"model":"deepseek-chat"' in request.content.decode()
+    assert '"model": "deepseek-flash"' in request.content.decode() or (
+        '"model":"deepseek-flash"' in request.content.decode()
     )
 
 
@@ -186,3 +188,17 @@ async def test_other_4xx_fails_fast():
 def test_empty_key_rejected():
     with pytest.raises(LLMAuthError):
         DeepSeekClient("", BASE)
+
+
+@pytest.mark.parametrize("tier, thinking", [("flash", "disabled"), ("pro", "enabled")])
+@respx.mock
+async def test_shared_flash_model_preserves_logical_reasoning_tier(tier, thinking):
+    route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_payload("ok")))
+    async with _client() as llm:
+        await llm.complete([{"role": "user", "content": "ping"}], tier=tier, max_tokens=1000)
+    body = json.loads(route.calls[0].request.content)
+    assert body["model"] == "deepseek-flash"
+    assert body["thinking"] == {"type": thinking}
+    assert body["max_tokens"] == 1000
+    assert ("temperature" in body) == (tier == "flash")
+    assert body.get("reasoning_effort") == ("high" if tier == "pro" else None)

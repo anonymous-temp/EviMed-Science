@@ -460,10 +460,18 @@ export class LearningService {
    * @param {string} userId @param {string} methodId @param {any} observation
    */
   async recordObservation(userId, methodId, observation) {
-    const document = await this.getMethod(userId, methodId);
-    const learning = foldObservation(document.payload.learning, observation);
-    if (learning === document.payload.learning) return document;
-    return this.#saveLearning(userId, methodId, document, learning);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const document = await this.getMethod(userId, methodId);
+      if (observation?.contentDigest && observation.contentDigest !== document.payload.contentDigest) return document;
+      const learning = foldObservation(document.payload.learning, observation);
+      if (learning === document.payload.learning) return document;
+      try {
+        return await this.#saveLearning(userId, methodId, document, learning);
+      } catch (error) {
+        if (error?.code !== "product_revision_conflict" || attempt === 7) throw error;
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "Concurrent method observations did not settle.");
   }
 
   /** @param {string} userId @param {string} methodId */

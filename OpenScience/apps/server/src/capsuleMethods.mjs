@@ -355,7 +355,8 @@ export async function selectCapsuleMethods(capsules, { userId, projectId }) {
  * including the run — writes its own method.
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
- *   trialMethodIds?: readonly string[], writeFile?: typeof writeFileAtomicNoFollow }} options
+ *   trialMethodIds?: readonly string[], frozenMethods?: {capsuleMethods: any[], learnedMethods: any[]} | null,
+ *   writeFile?: typeof writeFileAtomicNoFollow }} options
  * @returns {Promise<{ directory: string, count: number, bytes: number,
  *   learned: {id: string, name: string, digest: string, trial?: boolean}[] }>}
  */
@@ -365,12 +366,13 @@ export async function materializeCapsuleMethods({
   directory,
   learning = null,
   trialMethodIds = [],
+  frozenMethods = null,
   writeFile = writeFileAtomicNoFollow,
 }) {
   await assertNoSymlinkPath(project.rootDir, directory, { allowMissingTail: true });
   const userId = String(project.userId);
   const projectId = String(project.id);
-  const capsuleMethods = capsules
+  const capsuleMethods = frozenMethods ? frozenMethods.capsuleMethods : capsules
     ? await selectCapsuleMethods(capsules, { userId, projectId })
     : [];
   const capsuleBytes = capsuleMethods.reduce((total, method) => total + method.bytes, 0);
@@ -378,7 +380,7 @@ export async function materializeCapsuleMethods({
   // below, and `selectLearnedMethods` returns nothing for a non-positive
   // budget, so a project whose capsules already fill the directory mounts no
   // learned method rather than overflowing the prompt.
-  const learnedMethods = learning
+  const learnedMethods = frozenMethods ? frozenMethods.learnedMethods : learning
     ? await selectLearnedMethods(learning, {
       userId,
       projectId,

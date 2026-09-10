@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill, evaluationEligible } from "@evimed/domain";
 
 import { LearningService, learnedMethodId, methodRecordFrom } from "../src/learningService.mjs";
 
@@ -234,6 +234,21 @@ test("a reading is recorded against the method, and is not an observation", asyn
 });
 
 /* ------------------------------------------------------------------ the rule */
+
+test("concurrent successful bootstrap observations all survive CAS conflicts", async () => {
+  const { learning } = service();
+  const created = await create(learning);
+  const observations = [1, 2, 3].map((index) => ({
+    runId: `parallel-${index}`, family: `parallel-family-${index}`, outcome: "accepted", invoked: true,
+    at: "2026-09-10T00:00:00.000Z", contentDigest: created.payload.contentDigest,
+  }));
+  await Promise.all(observations.map((observation) => learning.recordObservation("u1", created.id, observation)));
+  const stored = await learning.getMethod("u1", created.id);
+  assert.equal(stored.payload.learning.observations.length, 3);
+  assert.equal(evaluationEligible(methodRecordFrom(stored)).eligible, true);
+  await Promise.all(observations.map((observation) => learning.recordObservation("u1", created.id, observation)));
+  assert.equal((await learning.getMethod("u1", created.id)).payload.learning.observations.length, 3);
+});
 
 test("nothing that generates a method can approve one", async () => {
   const { learning } = service();

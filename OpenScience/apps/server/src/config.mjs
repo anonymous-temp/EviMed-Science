@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { defaultDeepSeekModel } from "./modelGateway.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS } from "./dshProfilePatch.mjs";
@@ -745,7 +746,7 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DSH_VERSION ??
       release.manifest?.runtime?.dshVersion ??
       depsVersions.dsh?.version ??
-      "0.1.2-rc.1",
+      "0.1.5-rc.1",
     socketBundleVersion:
       overrides.socketBundleVersion ??
       process.env.OPEN_SCIENCE_SOCKET_BUNDLE_VERSION ??
@@ -882,7 +883,7 @@ export function loadConfig(overrides = {}) {
     deepseekBaseUrl:
       overrides.deepseekBaseUrl ?? process.env.OPEN_SCIENCE_DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
     deepseekModel:
-      overrides.deepseekModel ?? process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? "deepseek-v4-pro",
+      overrides.deepseekModel ?? process.env.OPEN_SCIENCE_DEEPSEEK_MODEL ?? defaultDeepSeekModel,
     // The thinking budget every managed model call runs at. DeepSeek exposes
     // three levels since 2026-08-13 (low / high / max); this was a literal
     // `high` in the gateway, so the one experiment the clinical line's
@@ -1289,7 +1290,7 @@ export function loadConfig(overrides = {}) {
     // Structured extraction rather than reasoning, so the flash tier fits: it
     // measures ~22s against the pro model's ~38s on the same prompt.
     memoryExtractionModel: String(
-      overrides.memoryExtractionModel ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL ?? "deepseek-v4-flash",
+      overrides.memoryExtractionModel ?? process.env.OPEN_SCIENCE_MEMORY_EXTRACTION_MODEL ?? defaultDeepSeekModel,
     ),
     // How long a per-run episodic memory stays recallable. The profile
     // extracted from those runs has no expiry.

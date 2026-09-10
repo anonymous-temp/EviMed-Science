@@ -1,0 +1,49 @@
+{
+  "id": "method-release-v1",
+  "capability": "evidence-appraisal",
+  "briefsFile": "evals/evidence-appraisal/briefs.json",
+  "hiddenDir": "evals/evidence-appraisal/hidden",
+  "briefs": [
+    "appraisal-001-sglt2-hfpef",
+    "appraisal-002-tirzepatide-companion-papers",
+    "appraisal-004-nfl-primary-care-indirectness",
+    "appraisal-003-suxiao-jiuxin-wan-formulary"
+  ],
+  "repeats": 3,
+  "seed": 20260908,
+  "concurrency": 1,
+  "margin": 0.02,
+  "bootstrapSamples": 2000,
+  "timeoutMinutes": 45,
+  "pollSeconds": 5,
+  "budget": {
+    "costCap": 12.0,
+    "latencyCapMs": 2400000
+  },
+  "project": {
+    "id": "eval-method-release",
+    "name": "Method release evaluation"
+  },
+  "fixtures": [],
+  "judge": {
+    "enabled": true,
+    "model": "deepseek-flash"
+  },
+  "baseline": {
+    "methodSnapshot": {
+      "id": "memory-off",
+      "records": [],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "candidate": {
+    "methodSnapshot": {
+      "id": "memory-on",
+      "records": [],
+      "capabilitySkillsDir": null
+    },
+    "compactionPolicy": "basic"
+  },
+  "_note": "Private job template: bootstrap uses only the first three development briefs with one repeat. Full comparison additionally opens the held-out fourth brief and preserves three repeats. Each cell uses its own same-owner runtime; results describe this finite corpus, not general clinical effectiveness."
+}

@@ -1,8 +1,8 @@
 """Async DeepSeek chat client (OpenAI-compatible) over plain httpx.
 
 Two-tier routing via settings: ``flash`` (DEEPSEEK_FLASH_MODEL, default
-deepseek-chat) for cheap tasks like label cross-checks, ``pro``
-(DEEPSEEK_PRO_MODEL, default deepseek-reasoner) for report interpretation.
+deepseek-flash) for cheap tasks like label cross-checks, ``pro``
+(DEEPSEEK_PRO_MODEL, default deepseek-flash) for report interpretation.
 
 Hard rules enforced here:
 - the key is read from settings (SecretStr) and only ever placed in the
@@ -56,8 +56,8 @@ class DeepSeekClient:
         api_key: str,
         base_url: str = "https://api.deepseek.com",
         *,
-        flash_model: str = "deepseek-chat",
-        pro_model: str = "deepseek-reasoner",
+        flash_model: str = "deepseek-flash",
+        pro_model: str = "deepseek-flash",
         timeout: float = 120.0,
         max_retries: int = 3,
         backoff_initial: float = 1.0,
@@ -121,10 +121,14 @@ class DeepSeekClient:
         payload: dict[str, Any] = {
             "model": self.model_for(tier),
             "messages": messages,
-            "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
+            "thinking": {"type": "disabled" if tier == "flash" else "enabled"},
         }
+        if tier == "flash":
+            payload["temperature"] = temperature
+        else:
+            payload["reasoning_effort"] = "high"
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         body = await self._post("/chat/completions", payload)

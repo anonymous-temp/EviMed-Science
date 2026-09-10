@@ -174,6 +174,30 @@ services with `compose up --no-build --pull never`. The host preflight keeps a
 10 GiB default floor and refuses overrides below 5 GiB. Build/transfer success
 alone is not deployment or OPS03 acceptance.
 
+## Full rebuild on the isolated CI runner
+
+For a dependency upgrade, push the reviewed candidate to a `codex/release-*`
+branch with `[full-release]` in the commit message. The `web` workflow first
+runs the normal checks, then builds all twelve application/runtime images from
+that exact source revision with `--no-cache`, including the ingestion and
+memory-index overlays. The runner reserves disk space and stops build/export
+at a 10 GiB floor. Production credentials never enter this runner. Ordinary
+PR builds do not enable the extra release overlays or artifact export.
+
+After the workflow succeeds, obtain its `evimed-full-release-<sha>` artifact.
+Transfer it directly to protected staging on the serving host when local disk
+cannot hold the archive. Verify the artifact's source revision and workflow run,
+then run `sha256sum -c images.tar.gz.sha256` from its extracted directory.
+Before loading, account for both the archive and expanded layers against live
+free space, with at least a 10 GiB serving reserve. Do not build on that host.
+After loading, compare every image's native config digest, platform and rootfs
+layers with `manifest.json`; tags alone are not evidence of image identity.
+The isolated runner's baseline smoke does not certify the ingestion or memory
+services: validate those against the candidate's protected configuration before
+opening traffic. Preserve tenant volumes, credentials and tested backups;
+recreate the selected services using `--no-build --pull never`, then complete
+the deployment checks below. Keep other products on a shared host untouched.
+
 ## Deployment Check
 
 Run before opening traffic and after every deployment:
