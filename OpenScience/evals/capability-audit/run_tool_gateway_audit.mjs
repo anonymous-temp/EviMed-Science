@@ -86,11 +86,17 @@ const config = loadConfig();
  * uncertified" twenty minutes later instead of one line now.
  */
 const required = [
-  ["OPEN_SCIENCE_WEB_SEARCH_URL", config.webSearchUrl, "web_search reaches no backend"],
-  ["OPEN_SCIENCE_GEO_PROBE_URL", config.geoProbeUrl, "geo_visibility_probe reaches no probe host"],
   ["a DeepSeek API key", config.deepseekApiKey, "the managed specialists have no model"],
   ["the EviMed evidence credential", config.publicSourceCredentials?.evimedEvidence, "the EviMed guideline and pharmacy connectors are unauthenticated"],
 ];
+// A specialist-only run does not invoke either optional probe tool. Their
+// endpoints are still mandatory for the complete tool certification sweep.
+if (auditScript(process.argv.slice(2)).script !== "run_specialist_jobs.py") {
+  required.push(
+    ["OPEN_SCIENCE_WEB_SEARCH_URL", config.webSearchUrl, "web_search reaches no backend"],
+    ["OPEN_SCIENCE_GEO_PROBE_URL", config.geoProbeUrl, "geo_visibility_probe reaches no probe host"],
+  );
+}
 const missing = required.filter(([, value]) => !String(value ?? "").trim());
 if (missing.length > 0) {
   for (const [name, , consequence] of missing) console.error(`missing ${name}: ${consequence}`);
@@ -168,8 +174,8 @@ async function specialistEnvironment() {
   ];
   const environment = {};
   for (const [prefix, directory] of agents) {
-    const root = path.resolve(repo, "..", "项目代码", directory);
-    const python = path.join(root, ".venv", "bin", "python");
+    const root = process.env[`${prefix}_ROOT`] ?? path.resolve(repo, "..", "项目代码", directory);
+    const python = process.env[`${prefix}_PYTHON`] ?? path.join(root, ".venv", "bin", "python");
     try {
       await fs.access(python);
     } catch {
@@ -202,7 +208,7 @@ function runPython(gatewayUrl, specialists) {
         EVIMED_WEB_SEARCH_GATEWAY_URL: `${gatewayUrl}${WEB_SEARCH_GATEWAY_PATH}`,
         EVIMED_GEO_PROBE_GATEWAY_URL: `${gatewayUrl}${GEO_PROBE_GATEWAY_PATH}`,
         EVIMED_MODEL_GATEWAY_URL: `${gatewayUrl}${modelGatewayBase}`,
-        EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
+        EVIMED_MODEL_GATEWAY_MODEL: config.deepseekModel,
         EVIMED_MODEL_GATEWAY_TOKEN_FILE: gatewayTokenFile,
         EVIMED_PUBLIC_CONNECTORS_ENABLED: "1",
         EVIMED_UNPAYWALL_EMAIL: String(config.publicSourceCredentials?.unpaywall ?? ""),

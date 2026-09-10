@@ -1,3 +1,4 @@
+import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -180,7 +181,7 @@ test("a crash after the actual ledger append recovers the protected launch and t
   f.app.agentRuns.monitorIntervalMs = 1;
   await f.app.store.database.query("UPDATE evimed_product.jobs SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", [job.id]);
   await f.app.sourceWorker.tick();
-  await Promise.all([...f.app.agentRuns.monitors.values()].map(monitor => monitor.promise));
+  await awaitBackgroundMonitor(Promise.all([...f.app.agentRuns.monitors.values()].map(monitor => monitor.promise)));
   const recovered = (await f.app.agentRuns.list(f.project)).find(run => run.id === identity.runId);
   assert.equal(recovered.dispatchStatus, "unknown");
   assert.notEqual(recovered.status, "running", "the recovered monitor must reach a bounded terminal state");

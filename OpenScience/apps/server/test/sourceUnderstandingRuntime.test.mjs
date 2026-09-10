@@ -1,3 +1,4 @@
+import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
@@ -310,7 +311,7 @@ test("AgentRunStore recovery passes the durable source workspace into the actual
   });
   const changed = { ...f.project, activeWorkspace: "replacement", workspaceDir: path.join(f.project.baseDir, "replacement") };
   await recovered.recover(changed);
-  await Promise.all([...recovered.monitors.values()].map(monitor => monitor.promise));
+  await awaitBackgroundMonitor(Promise.all([...recovered.monitors.values()].map(monitor => monitor.promise)));
   assert.ok(observed.length > 0);
   assert.ok(observed.every(root => root === path.join(f.project.baseDir, f.state.bound.artifactDirectory)));
   assert.equal(await f.runtime.resolveRunProject(changed, { id: "unbound", agentId: "source-understanding" }), null);
@@ -356,7 +357,7 @@ for (const entry of ["adoptRunningRuns", "existingDispatch", "adoptRuntimeTurns"
           parts: [{ type: "text", text: "Read the frozen source." }] }],
       });
     }
-    await Promise.all([...restarted.monitors.values()].map(monitor => monitor.promise));
+    await awaitBackgroundMonitor(Promise.all([...restarted.monitors.values()].map(monitor => monitor.promise)));
     assert.ok(resolutions > 0, "the actual recovery entry must consult durable ownership");
     if (denied) {
       assert.deepEqual(observed, [], "denied ownership must precede history reads and reconciliation");
