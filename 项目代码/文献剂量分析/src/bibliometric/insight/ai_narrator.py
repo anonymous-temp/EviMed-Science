@@ -676,7 +676,7 @@ def _smart_template_narratives(
     if h_index > 0:
         impact_word = "substantial" if h_index > 20 else "growing"
         disc_parts.append(
-            f"The estimated h-index of {h_index} for this body of literature "
+            f"The h-index of {h_index} over the articles with observed citations "
             f"indicates a {impact_word} "
             f"citation impact. "
             f"These findings have several practical implications: researchers "
@@ -791,7 +791,7 @@ def _smart_template_narratives_zh(
     if h_index > 0:
         impact_word = "显著" if h_index > 20 else "持续增长的"
         disc_parts.append(
-            f"该领域文献的估算h指数为{h_index}，体现出{impact_word}的引用影响力。"
+            f"在取得引用观测值的文献上，该领域的 h 指数为 {h_index}，体现出{impact_word}的引用影响力。"
             f"上述发现具有多方面实践价值：进入该领域的研究者应重点关注已识别的知识缺口与前沿方向；"
             f"资助机构可借助聚类分析评估研究组合的均衡性；"
             f"系统综述团队可利用主题图谱合理界定综述范围。"

@@ -18,6 +18,10 @@ class Config:
     # PubMed API
     ncbi_api_key: str = ""
     ncbi_email: str = ""
+    esearch_sort: str = "relevance"   # recorded in search_metadata.json
+
+    # Citation sources
+    openalex_api_key: str = ""        # OpenAlex has required a key since 2026-02
     rate_limit: float = 3.0
     batch_size: int = 500       # 每批获取记录数（从200提升到500，减少API调用次数）
     max_retries: int = 3
@@ -70,6 +74,8 @@ def load_config(
     return Config(
         ncbi_api_key=api_key or os.getenv("NCBI_API_KEY", ""),
         ncbi_email=email or os.getenv("NCBI_EMAIL", ""),
+        esearch_sort=os.getenv("PUBMED_ESEARCH_SORT", "relevance"),
+        openalex_api_key=os.getenv("OPENALEX_API_KEY", ""),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         deepseek_flash_model=os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash"),

@@ -132,6 +132,9 @@ class AnalysisPipeline:
         self._background_date_from = validated_scope.background_date_from
         self._background_date_to = validated_scope.background_date_to
         self._gps_prior = gps_prior
+        # Reaction terms that matched no FAERS report at all. Reported as
+        # unmatched instead of becoming a zero-cell-corrected ROR row.
+        self._unmatched_reactions: list[str] = []
 
     async def run(
         self,
@@ -314,6 +317,16 @@ class AnalysisPipeline:
                 await self._emit("interpret", "degraded", reason=exc.message)
 
         # 6) assemble
+        if self._unmatched_reactions:
+            notes.append(
+                "以下反应术语在 FAERS 中无任何匹配报告,未产生信号行(可能非 MedDRA PT 或拼写不符):"
+                + "、".join(self._unmatched_reactions)
+            )
+            await self._emit(
+                "signals", "degraded",
+                reason="unmatched_reaction_terms",
+                terms=list(self._unmatched_reactions),
+            )
         query_urls = (
             self._label_query_url(drug_norm.normalized)
             if snapshot_scope is not None
@@ -333,6 +346,7 @@ class AnalysisPipeline:
             interpretation=interpretation,
             llm_status=llm_status,  # type: ignore[arg-type]
             degradation_notes=notes,
+            unmatched_reactions=list(self._unmatched_reactions),
             query_urls=query_urls,
             drug_field=self._drug_field,
             # Deprecated compatibility flag: True only when the target drug
@@ -435,8 +449,12 @@ class AnalysisPipeline:
         targets: list[tuple[str, str]] = [(pt, "user-specified") for pt in user_pts]
         targets += [(pt, "top-pt") for pt in top_pts]
 
-        async def one(reaction: str, source: str) -> SignalRow:
-            clause = reaction_clause(reaction)
+        async def one(reaction: str, source: str) -> SignalRow | None:
+            # .exact, matching how the Top-PT candidates are counted. Without it
+            # the term is tokenised: "Pain" also matched "Back pain", "Chest
+            # pain" and the rest, so the a that scored a PT was not the a that
+            # selected it (live openFDA, 2026-09-10: 2,213,074 vs 607,158).
+            clause = reaction_clause(reaction, exact=True)
             async with self._sem:
                 joint, event_total = await asyncio.gather(
                     self._count(f"({drug_search}) AND ({clause})"),
@@ -446,6 +464,15 @@ class AnalysisPipeline:
                         else clause
                     ),
                 )
+            if event_total == 0:
+                # The term matched no report in the background at all: it is not
+                # a MedDRA PT as spelled. A row here would be zero-cell-corrected
+                # into ROR = d/b, which reads as an enormous signal.
+                self._unmatched_reactions.append(reaction)
+                logger.warning(
+                    "reaction %r matched no FAERS report; no signal row produced", reaction
+                )
+                return None
             table = build_table_from_counts(joint, drug_total, event_total, grand_total)
             metrics = analyze(table, prior=self._gps_prior)
             decision = evaluate(metrics)
@@ -474,7 +501,8 @@ class AnalysisPipeline:
                 gps_prior_id=self._gps_prior.fit_id,
             )
 
-        rows = await asyncio.gather(*(one(pt, src) for pt, src in targets))
+        produced = await asyncio.gather(*(one(pt, src) for pt, src in targets))
+        rows = [row for row in produced if row is not None]
         # user-specified first, then top PTs; both ranked by case count
         return sorted(rows, key=lambda r: (r.source != "user-specified", -r.a))
 
@@ -615,9 +643,9 @@ class AnalysisPipeline:
         }
         for pt in user_pts:
             urls[f"signal_joint[{pt}]"] = event_url(
-                f"({drug_search}) AND ({reaction_clause(pt)})"
+                f"({drug_search}) AND ({reaction_clause(pt, exact=True)})"
             )
-            event_search = reaction_clause(pt)
+            event_search = reaction_clause(pt, exact=True)
             background_search = self._background_search()
             if background_search:
                 event_search = f"({event_search}) AND ({background_search})"

@@ -109,9 +109,21 @@ def run(request_path: Path, output_dir: Path) -> int:
         )
         names = [
             path.name
-            for path in (artifacts.get("markdown"), artifacts.get("docx"), artifacts.get("pdf"), artifacts.get("csv"))
+            for path in (
+                artifacts.get("markdown"),
+                artifacts.get("docx"),
+                artifacts.get("pdf"),
+                artifacts.get("csv"),
+                artifacts.get("provenance"),
+            )
             if path is not None
         ]
+        provenance_path = artifacts.get("provenance")
+        provenance = (
+            json.loads(provenance_path.read_text(encoding="utf-8"))
+            if provenance_path is not None
+            else {}
+        )
         _write_result(
             output_dir,
             {
@@ -121,6 +133,20 @@ def run(request_path: Path, output_dir: Path) -> int:
                 "report": "safety-report.md",
                 "signals": "signals.csv",
                 "artifacts": names,
+                "modules": provenance.get("modules", {}),
+                "degraded": any(
+                    entry.get("status") in {"degraded", "failed"}
+                    for entry in (provenance.get("modules") or {}).values()
+                ),
+                # Which tier produced these numbers. Without it, a run on the
+                # live openFDA tier looked identical to a frozen-snapshot run.
+                "dataSource": provenance.get("data_source", ""),
+                "statisticsVersion": provenance.get("statistics_version", ""),
+                "gpsPriorFitted": provenance.get("gps_prior_fitted", "") == "true",
+                "gpsPriorId": provenance.get("gps_prior_id", ""),
+                "snapshotId": provenance.get("snapshot_id", ""),
+                "snapshotSha256": provenance.get("snapshot_sha256", ""),
+                "extractedAt": provenance.get("extracted_at", ""),
                 "scope": {
                     "drugAliases": list(aliases or ()),
                     "suspectRoles": list(roles or ()),

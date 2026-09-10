@@ -34,6 +34,36 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PVAL_THRESHOLDS = [5e-8, 5e-6, 5e-5]
 
+
+class MRSourceError(RuntimeError):
+    """A data source refused or could not answer.
+
+    Distinct from "the analysis ran and found too few instruments": an expired
+    OpenGWAS JWT used to arrive as `Insufficient instrumental variables (< 3)`
+    with exit 0, which reads as a scientific finding rather than a credential
+    problem.
+    """
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.code = code
+
+
+# Codes the R templates write into mr_error.json. Source codes mean the data
+# never arrived; analysis codes mean it arrived and did not support a run.
+SOURCE_ERROR_CODES = frozenset({
+    "opengwas_auth_failed",
+    "opengwas_rate_limited",
+    "opengwas_unavailable",
+    "ld_clumping_failed",
+    "analysis_failed",
+})
+ANALYSIS_ERROR_CODES = frozenset({
+    "no_instruments",
+    "no_outcome_data",
+    "insufficient_harmonised_snps",
+})
+
 # Per-pair R script timeout (seconds). OpenGWAS API calls from China to UK can be
 # slow; allow override via env var for tuning without code changes.
 _R_TIMEOUT_SEC = int(os.getenv("MR_R_TIMEOUT_SEC", "900"))
@@ -180,6 +210,9 @@ def run_mr_analysis(
         exposure_id, outcome_id, output_dir, gwas_token, pval_thresholds
     )
     success = _execute_r_script(r_script, output_dir)
+    # A classified failure exits non-zero on purpose, so the error file must be
+    # read before the exit code is treated as "nothing to parse".
+    raise_for_source_failure(output_dir)
     if not success:
         logger.error(f"MR analysis failed: {exposure_id} -> {outcome_id}")
         return MRAnalysisResult(exposure_id=exposure_id, outcome_id=outcome_id)
@@ -199,19 +232,6 @@ def _build_standard_script(
         token_line=token_line, output_dir=out,
         exposure_id=exposure_id, outcome_id=outcome_id,
         thresholds=thresholds,
-    )
-
-
-def _build_moe_script(
-    exposure_id: str, outcome_id: str, output_dir: Path, gwas_token: str,
-) -> str:
-    """Build R script from template for MOE MR."""
-    from r_scripts.templates import MR_MOE_TEMPLATE
-    token_line = _token_line(gwas_token)
-    out = _r_path(output_dir)
-    return MR_MOE_TEMPLATE.format(
-        token_line=token_line, output_dir=out,
-        exposure_id=exposure_id, outcome_id=outcome_id,
     )
 
 
@@ -251,6 +271,21 @@ def _execute_r_script(script: str, work_dir: Path) -> bool:
         Path(script_path).unlink(missing_ok=True)
 
 
+def _write_r_logs(work_dir: Path, stdout: str, stderr: str) -> None:
+    """Keep the R transcript beside the results.
+
+    The classified failure lives in mr_error.json, but the message OpenGWAS
+    actually returned only ever reached stdout, which was logged at 500
+    characters and then discarded with the temporary directory.
+    """
+    try:
+        work_dir.mkdir(parents=True, exist_ok=True)
+        (work_dir / "r_stdout.log").write_text(stdout or "", encoding="utf-8")
+        (work_dir / "r_stderr.log").write_text(stderr or "", encoding="utf-8")
+    except OSError as error:
+        logger.warning("Could not persist R transcript in %s: %s", work_dir, error)
+
+
 def _execute_r_file(script_path: Path, work_dir: Path) -> bool:
     """Execute an existing entry without rewriting or deleting its code."""
     try:
@@ -259,6 +294,7 @@ def _execute_r_file(script_path: Path, work_dir: Path) -> bool:
             cwd=str(work_dir), capture_output=True,
             text=True, timeout=_R_TIMEOUT_SEC, env=_r_subprocess_env(),
         )
+        _write_r_logs(work_dir, result.stdout, result.stderr)
         if result.returncode != 0:
             # Strip TwoSampleMR startup banner (first ~500 chars) to surface real error
             stderr_full = result.stderr
@@ -278,19 +314,6 @@ def _execute_r_file(script_path: Path, work_dir: Path) -> bool:
     except FileNotFoundError:
         logger.error("Rscript not found. Install R and TwoSampleMR.")
         return False
-
-
-def run_mr_moe(
-    exposure_id: str, outcome_id: str,
-    output_dir: Path, gwas_token: str = "",
-) -> MRAnalysisResult:
-    """Execute MR with Mixture-of-Experts method."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    r_script = _build_moe_script(exposure_id, outcome_id, output_dir, gwas_token)
-    success = _execute_r_script(r_script, output_dir)
-    if not success:
-        return MRAnalysisResult(exposure_id=exposure_id, outcome_id=outcome_id)
-    return _parse_results(exposure_id, outcome_id, output_dir)
 
 
 def run_mr_local(
@@ -325,6 +348,7 @@ def run_mr_local(
             gwas_token, pval_thresholds,
         )
         success = _execute_r_script(r_script, output_dir)
+    raise_for_source_failure(output_dir)
     if not success:
         logger.error(f"Local MR failed: {exp_id} -> {out_id}")
         return _empty_local_result(exposure_source, outcome_source)
@@ -421,12 +445,44 @@ def _parse_summary(result: MRAnalysisResult, output_dir: Path) -> None:
         result.instrument_selection = json.loads(selection_file.read_text(encoding="utf-8"))
 
 
-def _check_error_file(output_dir: Path) -> None:
-    """Log error if mr_error.json exists."""
+def read_error_file(output_dir: Path) -> dict:
+    """Return the classified failure the R template wrote, if any."""
     error_file = output_dir / "mr_error.json"
-    if error_file.exists():
+    if not error_file.exists():
+        return {}
+    try:
         data = json.loads(error_file.read_text())
-        logger.error(f"MR error: {data.get('error')}")
+    except (OSError, json.JSONDecodeError) as error:
+        logger.error("Unreadable mr_error.json in %s: %s", output_dir, error)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def raise_for_source_failure(output_dir: Path) -> dict:
+    """Turn a source-level R failure into a coded exception.
+
+    An analysis-level failure (too few instruments, no outcome rows) is
+    returned instead: those are results, and other exposure-outcome pairs in
+    the same job can still run.
+    """
+    data = read_error_file(output_dir)
+    if not data:
+        return {}
+    code = str(data.get("code") or "")
+    message = str(data.get("error") or "MR analysis failed")
+    if code in SOURCE_ERROR_CODES:
+        raise MRSourceError(message, code=code)
+    if code:
+        logger.error("MR analysis failure [%s]: %s", code, message)
+    else:
+        # Pre-classification artifact, or a template that has not been updated.
+        logger.error("MR error without a code: %s", message)
+    return data
+
+
+def _check_error_file(output_dir: Path) -> None:
+    """Raise for a source failure, log an analysis failure."""
+    raise_for_source_failure(output_dir)
 
 
 def _parse_mr_csv(result: MRAnalysisResult, output_dir: Path) -> None:
@@ -558,9 +614,11 @@ def _build_local_clumping(source: DataSource) -> str:
         block = '''tryCatch({
     exposure_dat <- clump_data(exposure_dat, clump_r2=0.001, clump_kb=10000)
 }, error=function(e) {
-    failure <- list(code="ld_clumping_failed", error="LD clumping failed; no unselected instruments were analyzed.")
-    write(toJSON(failure, auto_unbox=TRUE), file.path(output_dir,"mr_error.json"))
-    quit(status=1)
+    # A refused token reaches this handler too; reporting it as a clumping
+    # failure sends the researcher to the wrong problem.
+    guard_auth_failure("LD clumping failed", e$message)
+    mr_fail("ld_clumping_failed",
+        sprintf("LD clumping failed; no unselected instruments were analyzed: %s", e$message))
 })
 instrument_selection <- list(mode="opengwas", r2=0.001, kb=10000, ld_rechecked=TRUE)
 '''
@@ -718,39 +776,6 @@ def _build_local_both_script(
 # --- New method executors ---
 
 
-def run_mr_mrlap(
-    exposure_id: str, outcome_id: str,
-    output_dir: Path, gwas_token: str = "",
-    pval_thresholds: list[float] | None = None,
-) -> MRAnalysisResult:
-    """Execute MR-LAP analysis (sample overlap correction)."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    if pval_thresholds is None:
-        pval_thresholds = DEFAULT_PVAL_THRESHOLDS
-    r_script = _build_mrlap_script(
-        exposure_id, outcome_id, output_dir, gwas_token, pval_thresholds,
-    )
-    success = _execute_r_script(r_script, output_dir)
-    if not success:
-        return MRAnalysisResult(exposure_id=exposure_id, outcome_id=outcome_id)
-    return _parse_results(exposure_id, outcome_id, output_dir)
-
-
-def _build_mrlap_script(
-    exposure_id: str, outcome_id: str, output_dir: Path,
-    gwas_token: str, pval_thresholds: list[float],
-) -> str:
-    """Build R script for MR-LAP."""
-    from r_scripts.templates import MR_MRLAP_TEMPLATE
-    out = _r_path(output_dir)
-    thresholds = ", ".join(str(t) for t in pval_thresholds)
-    return MR_MRLAP_TEMPLATE.format(
-        token_line=_token_line(gwas_token), output_dir=out,
-        exposure_id=exposure_id, outcome_id=outcome_id,
-        thresholds=thresholds,
-    )
-
-
 def run_mr_mvmr(
     exposure_ids: list[str], outcome_id: str,
     output_dir: Path, gwas_token: str = "",
@@ -761,6 +786,7 @@ def run_mr_mvmr(
         exposure_ids, outcome_id, output_dir, gwas_token,
     )
     success = _execute_r_script(r_script, output_dir)
+    raise_for_source_failure(output_dir)
     exp_label = "+".join(exposure_ids)
     if not success:
         return MRAnalysisResult(exposure_id=exp_label, outcome_id=outcome_id)

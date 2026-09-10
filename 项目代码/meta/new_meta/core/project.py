@@ -1,8 +1,10 @@
 """Project management: directory structure, persistence, PRISMA flow tracking, checkpointing."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -86,6 +88,7 @@ class Project:
             self.base_dir = (output_dir or OUTPUT_DIR) / f"{ts}_{safe_topic}"
         if not skip_disk:
             self._init_dirs()
+            self._record_topic()
         self.prisma = PRISMAFlow()
         if not skip_disk:
             prisma_data = self.load_json("prisma_flow.json")
@@ -128,15 +131,66 @@ class Project:
     # Checkpoint management
     # ------------------------------------------------------------------
 
+    TOPIC_FILE = "project_topic.json"
+
+    @staticmethod
+    def _fingerprint(topic: str) -> str:
+        return hashlib.sha256(str(topic).strip().casefold().encode("utf-8")).hexdigest()[:16]
+
+    def _record_topic(self) -> None:
+        """Write the project's own topic once, when its directory is created.
+
+        Resume entry points construct Project with a placeholder label
+        ("resume project", "override", ...) because the real topic lives on
+        disk, so the constructor argument cannot be the authority for what this
+        directory is about.
+        """
+        if self.skip_disk:
+            return
+        path = self.base_dir / self.TOPIC_FILE
+        if path.exists():
+            return
+        payload = {"topic": self.topic, "fingerprint": self._fingerprint(self.topic)}
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    def topic_fingerprint(self) -> str:
+        """Stable id of the topic this project directory belongs to."""
+        if not self.skip_disk:
+            path = self.base_dir / self.TOPIC_FILE
+            if path.exists():
+                try:
+                    recorded = json.loads(path.read_text(encoding="utf-8"))
+                    if isinstance(recorded, dict) and recorded.get("fingerprint"):
+                        return str(recorded["fingerprint"])
+                except (json.JSONDecodeError, OSError):
+                    logger.warning("Ignoring unreadable topic record at %s", path)
+        return self._fingerprint(self.topic)
+
+    def _write_checkpoint(self, completed: list[str]) -> None:
+        """Atomically replace .checkpoint, recording the topic it belongs to.
+
+        The file used to be a bare list written in place: a kill during the
+        write left a truncated list, and resuming with a different topic reused
+        another run's completed steps without noticing.
+        """
+        cp_path = self.base_dir / ".checkpoint"
+        payload = {
+            "schema_version": 2,
+            "topic_fingerprint": self.topic_fingerprint(),
+            "completed": list(completed),
+        }
+        temporary = cp_path.with_suffix(".checkpoint.tmp")
+        temporary.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(temporary, cp_path)
+
     def save_checkpoint(self, step: str):
         """Mark a pipeline step as completed."""
         if self.skip_disk:
             return
-        cp_path = self.base_dir / ".checkpoint"
         completed = self._load_completed_steps()
         if step not in completed:
             completed.append(step)
-        cp_path.write_text(json.dumps(completed), encoding="utf-8")
+        self._write_checkpoint(completed)
         self.save_step_manifest(step, status="complete")
 
     def save_step_manifest(
@@ -210,8 +264,7 @@ class Project:
         completed = self._load_completed_steps()
         if step in completed:
             completed.remove(step)
-            cp_path = self.base_dir / ".checkpoint"
-            cp_path.write_text(json.dumps(completed), encoding="utf-8")
+            self._write_checkpoint(completed)
         self.save_step_manifest(step, status="invalidated")
 
     def clear_downstream(self, step: str, include_self: bool = False) -> list[str]:
@@ -291,7 +344,19 @@ class Project:
         if not cp_path.exists():
             return []
         try:
-            return json.loads(cp_path.read_text(encoding="utf-8"))
+            loaded = json.loads(cp_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                return loaded  # schema 1: a bare list, no topic binding
+            if not isinstance(loaded, dict):
+                raise json.JSONDecodeError("checkpoint is not a list or object", "", 0)
+            recorded = str(loaded.get("topic_fingerprint") or "")
+            if recorded and recorded != self.topic_fingerprint():
+                raise RuntimeError(
+                    f"checkpoint at {cp_path} belongs to a different topic "
+                    f"({recorded} != {self.topic_fingerprint()}); refusing to resume"
+                )
+            completed = loaded.get("completed")
+            return list(completed) if isinstance(completed, list) else []
         except (json.JSONDecodeError, OSError) as exc:
             corrupt_path = self.base_dir / f".checkpoint.corrupt.{int(time.time())}"
             try:

@@ -29,6 +29,10 @@ class ConsolidatedIssue(BaseModel):
     confidence: float = Field(default=0.7, description="置信度 0-1")
     standard_reference: str = Field(default="", description="违反的具体规范条目，如 PRISMA-ScR 第17条")
     location_in_paper: str = Field(default="", description="问题在原文中的位置，如 方法部分第4页")
+    quote_verification: Dict = Field(
+        default_factory=dict,
+        description="引文核验结果：checked/located/kept/dropped/verified（见 services/quote_verification.py）",
+    )
 
 
 class MetaReviewResult(BaseModel):
@@ -44,6 +48,10 @@ class MetaReviewResult(BaseModel):
     applied_rubrics: List[str] = Field(default_factory=list, description="实际采纳的规范列表")
     rejected_rubrics: List[Dict[str, str]] = Field(default_factory=list, description="被拒绝的规范及原因")
     hallucination_rejected: List[Dict[str, str]] = Field(default_factory=list, description="被驳回的幻觉问题")
+    quote_verification: Dict = Field(
+        default_factory=dict,
+        description="全部问题的引文核验汇总：核验条数、定位数、丢弃数、降级数",
+    )
 
 
 class NarrativeReport(BaseModel):

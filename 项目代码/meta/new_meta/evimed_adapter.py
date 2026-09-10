@@ -33,6 +33,14 @@ _SAFE_JOB = re.compile(r"^meta-[a-z0-9-]{8,80}$")
 _STATE_LIMIT = 256 * 1024
 _LOG_TAIL_LIMIT = 16 * 1024
 _WORKERS: dict[str, subprocess.Popen] = {}
+#: Upper bound on a status poll's bounded wait, in seconds.
+MAX_STATUS_WAIT_SECONDS = 60
+_STATUS_POLL_INTERVAL_SECONDS = 1.0
+
+#: The engine's terminal release vocabulary (new_meta/core/release_contract.py).
+#: The adapter reports these values verbatim; anything else is named as unknown
+#: rather than folded into one of them.
+RELEASE_STATUSES = ("ready", "ready_with_warnings", "blocked")
 
 
 class EviMedMetaRequest(BaseModel):
@@ -46,6 +54,11 @@ class EviMedMetaRequest(BaseModel):
     analysisType: str | None = Field(default=None, pattern=r"^(pairwise|network)$")
     userPdfDirectory: str | None = Field(default=None, min_length=1, max_length=512)
     ipdData: str | None = Field(default=None, min_length=1, max_length=512)
+    #: Bounded wait for a terminal state on action=status. The MCP tool schema
+    #: has always carried this field and forwarded it verbatim; extra="forbid"
+    #: turned every status poll that used it into a 422, which is not retryable,
+    #: so a running job became unreachable.
+    waitSeconds: int | None = Field(default=None, ge=0, le=MAX_STATUS_WAIT_SECONDS)
 
 
 def _now() -> str:
@@ -384,6 +397,20 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     }
 
 
+def _await_terminal_state(
+    state_path: Path, state: dict[str, Any], wait_seconds: int
+) -> dict[str, Any]:
+    """Poll the job state for up to ``wait_seconds``; return the latest state."""
+    deadline = time.monotonic() + min(wait_seconds, MAX_STATUS_WAIT_SECONDS)
+    while state.get("status") in {"queued", "running"} and time.monotonic() < deadline:
+        time.sleep(_STATUS_POLL_INTERVAL_SECONDS)
+        try:
+            state = _read_state(state_path)
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+            break
+    return state
+
+
 def _reap(job_id: str) -> None:
     worker = _WORKERS.pop(job_id, None)
     if worker is None:
@@ -392,6 +419,26 @@ def _reap(job_id: str) -> None:
         worker.wait(timeout=1)
     except subprocess.TimeoutExpired:
         _WORKERS[job_id] = worker
+
+
+def _worker_alive(state: dict[str, Any]) -> bool:
+    """Is the worker that claimed this job still running?
+
+    A job left in "running" by a killed worker used to stay running forever on
+    the HTTP path; the local path already recovered orphans.
+    """
+    pid = state.get("workerPid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return True
+    return True
 
 
 def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
@@ -403,7 +450,20 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return _error("meta_job_unavailable", "The requested MetaAgent job is unavailable.")
     if state.get("jobId") != job_id or Path(state.get("workspace", "")).resolve() != workspace.resolve():
         return _error("meta_job_state_invalid", "The MetaAgent job state is invalid.")
+    wait_seconds = arguments.get("waitSeconds")
+    if isinstance(wait_seconds, int) and wait_seconds > 0:
+        state = _await_terminal_state(state_path, state, wait_seconds)
     job_status = state.get("status")
+    if job_status == "running" and not _worker_alive(state):
+        state.update({
+            "status": "failed",
+            "updatedAt": _now(),
+            "finishedAt": _now(),
+            "retryable": True,
+            "error": "MetaAgent worker exited without recording a terminal state.",
+        })
+        _atomic_json(state_path, state)
+        job_status = "failed"
     if job_status in {"queued", "running"}:
         return {
             "status": "warning",
@@ -434,6 +494,9 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     if job_status != "succeeded":
         return _error("meta_job_state_invalid", "The MetaAgent job state is invalid.")
     release_status = str(state.get("releaseStatus") or "unknown")
+    if release_status not in RELEASE_STATUSES and release_status != "unknown":
+        # Report what the engine wrote rather than folding it into one of ours.
+        release_status = f"unrecognized:{release_status}"
     result: dict[str, Any] = {
         "status": "success" if release_status == "ready" else "warning",
         "summary": f"MetaAgent job {job_id} completed with release status {release_status}.",
@@ -441,6 +504,15 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             "jobId": job_id,
             "jobStatus": "succeeded",
             "releaseStatus": release_status,
+            # The engine's own vocabulary, so a consumer can check its
+            # expectations against the set the engine can actually produce.
+            "releaseStatusVocabulary": list(RELEASE_STATUSES),
+            "blockingReasons": state.get("blockingReasons") or [],
+            "modules": state.get("modules") or {},
+            "degraded": any(
+                entry.get("status") in {"degraded", "failed"}
+                for entry in (state.get("modules") or {}).values()
+            ),
             "projectPath": state.get("projectRelativePath"),
         },
         "sources": [_source(job_id)],
@@ -450,6 +522,56 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         result["warnings"] = ["Release warnings or blockers must be preserved in every summary."]
         result["next_actions"] = state.get("nextActions") or ["Review release_decision.json before publication."]
     return result
+
+
+#: Pipeline stages whose failure changes what the manuscript means. A warning
+#: from one of these is a failed module, not a degraded one; the rest degrade.
+_NON_DEGRADABLE_STAGES = frozenset({
+    "method_planning", "extraction", "effect_sizes", "meta_analysis",
+})
+
+
+def _module_ledger(project: Path) -> dict[str, dict[str, Any]]:
+    """Per-step ledger from pipeline_warnings.json.
+
+    Nothing read pipeline_warnings.json before this: grade_failed,
+    forest_plot_failed, pdf_parse_failed and low_parse_rate were written by the
+    pipeline and then consumed by nobody, so a manuscript with no forest plot
+    and no GRADE table looked exactly like one with both.
+    """
+    path = project / "pipeline_warnings.json"
+    if not path.is_file():
+        return {}
+    try:
+        warnings = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(warnings, list):
+        return {}
+
+    modules: dict[str, dict[str, Any]] = {}
+    for warning in warnings:
+        if not isinstance(warning, dict):
+            continue
+        stage = str(warning.get("stage") or "").strip() or "pipeline"
+        severity = str(warning.get("severity") or "warning").strip().lower()
+        code = str(warning.get("code") or "").strip()
+        message = str(warning.get("message") or "").strip()
+        reason = f"{code}: {message}" if code else message
+        fatal = severity == "error" or stage in _NON_DEGRADABLE_STAGES
+        status = "failed" if fatal else "degraded"
+        existing = modules.get(stage)
+        if existing is None:
+            modules[stage] = {"status": status, "reason": reason}
+            if fatal:
+                modules[stage]["fatal"] = True
+            continue
+        if existing["reason"] and reason and reason not in existing["reason"]:
+            existing["reason"] = f"{existing['reason']}; {reason}"
+        if fatal:
+            existing["status"] = "failed"
+            existing["fatal"] = True
+    return modules
 
 
 def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
@@ -466,6 +588,21 @@ def _artifact_list(workspace: Path, project: Path) -> list[dict[str, str]]:
         for kind, candidate in candidates
         if candidate.is_file()
     ]
+
+
+def _resumable_project(output_root: Path) -> Path | None:
+    """The most recent project under ``output_root`` with a checkpoint to reuse."""
+    if not output_root.is_dir():
+        return None
+    candidates = sorted(
+        (entry for entry in output_root.iterdir() if entry.is_dir()),
+        key=lambda entry: entry.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for candidate in candidates:
+        if (candidate / ".checkpoint").is_file():
+            return candidate
+    return None
 
 
 def run_job(state_file: str) -> int:
@@ -486,6 +623,13 @@ def run_job(state_file: str) -> int:
         "--skip-confirm",
         "--run-mode", "review",
     ]
+    # A killed managed job used to restart from step 1 because neither bridge
+    # passed --resume, discarding hours of retrieval and extraction.
+    resume_dir = _resumable_project(output_root)
+    if resume_dir is not None:
+        command.extend(["--resume", str(resume_dir)])
+        state["resumedFrom"] = resume_dir.name
+        state["attempts"] = int(state.get("attempts") or 0) + 1
     for field, option in [
         ("outputLanguage", "--language"),
         ("maxPapers", "--max-papers"),
@@ -543,6 +687,12 @@ def run_job(state_file: str) -> int:
         "returnCode": completed.returncode,
         "projectRelativePath": project.relative_to(workspace).as_posix(),
         "releaseStatus": str(release.get("status") or "unknown"),
+        "blockingReasons": [
+            str(item)
+            for item in (release.get("blocker_codes") or release.get("blocking_reasons") or [])
+            if str(item).strip()
+        ][:20],
+        "modules": _module_ledger(project),
         "nextActions": [str(item) for item in release.get("next_actions", []) if str(item).strip()][:20],
         "artifacts": _artifact_list(workspace, project),
     })

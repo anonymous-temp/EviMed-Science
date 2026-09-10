@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import traceback
 from pathlib import Path
@@ -13,6 +14,8 @@ from core.research_context import CONTEXT_FIELDS, render_research_context, valid
 from core.research_portfolio import build_research_portfolio
 
 ROOT = Path(__file__).resolve().parent
+# Marks the managed path so services/llm_service.py refuses its development stub.
+os.environ["EVIMED_MANAGED_RUN"] = "1"
 
 
 def _write_result(output_dir: Path, value: dict) -> None:
@@ -35,6 +38,45 @@ def _dump_evidence_record(record):
         "statusSource": value.get("status_source"),
         "statusNote": value.get("status_note"),
     }
+
+
+def _module(status: str, reason: str = "", *, fatal: bool = False) -> dict:
+    entry: dict = {"status": status}
+    if reason:
+        entry["reason"] = reason
+    if fatal:
+        entry["fatal"] = True
+    return entry
+
+
+def _module_ledger(completed, evidence_records) -> dict:
+    """Per-step ledger for the specialist-job receipt.
+
+    Evidence retrieval and the six analysis modules change what the portfolio
+    means, so a failed one fails the job (see the invalid-module check above).
+    An empty internal-library response or a module that produced no candidates
+    is recorded here instead of disappearing.
+    """
+    modules: dict[str, dict] = {}
+    for module_id, output in (completed.module_outputs or {}).items():
+        status = getattr(output, "status", "")
+        reason = str(getattr(output, "error_message", "") or "")
+        if status == "success":
+            modules[module_id] = _module("ok")
+        elif status == "skipped":
+            modules[module_id] = _module("skipped", reason)
+        else:
+            modules[module_id] = _module("failed", reason or status, fatal=True)
+
+    modules["evidenceRetrieval"] = (
+        _module("ok") if evidence_records
+        else _module("failed", "no literature records were retrieved", fatal=True)
+    )
+    return modules
+
+
+def _degraded(modules: dict) -> bool:
+    return any(entry["status"] in {"degraded", "failed"} for entry in modules.values())
 
 
 def _normalize_report_certainty(content: str) -> str:
@@ -390,17 +432,35 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
             + (f"; service note: {note}" if note else "")
         )
     invalid_modules = []
+    module_codes = {}
     for module_id, module_output in completed.module_outputs.items():
         serialized = json.dumps(module_output.data, ensure_ascii=False, default=str)
         if module_output.status != "success" or any(
             marker in serialized for marker in ("分析失败", "生成失败", "使用默认输出")
         ):
             invalid_modules.append(module_id)
+            code = str(module_output.error_message or "").split(":", 1)[0].strip()
+            if code and re.fullmatch(r"[a-z0-9_]+", code):
+                module_codes[module_id] = code
     if invalid_modules:
-        raise RuntimeError(
+        failure = RuntimeError(
             "research-topic pipeline contains failed analysis modules: "
             + ", ".join(sorted(invalid_modules))
+            + "".join(
+                f"; {module_id}: {(completed.module_outputs[module_id].error_message or '').strip()}"
+                for module_id in sorted(invalid_modules)
+                if completed.module_outputs[module_id].error_message
+            )
         )
+        # A named module failure (insufficient_grounded_opportunities, ...) must
+        # reach the caller as a code, not as free text inside one message.
+        failure.code = next(
+            (module_codes[module_id] for module_id in sorted(invalid_modules)
+             if module_id in module_codes),
+            "research_topic_module_failed",
+        )
+        failure.modules = _module_ledger(completed, completed.evidence_records)
+        raise failure
     evidence_text = "\n".join(
         (record.title or "") + "\n" + (record.abstract or "")
         for record in completed.evidence_records
@@ -467,11 +527,14 @@ async def _analyze_with_service(request: dict, output_dir: Path, service) -> dic
         ),
         encoding="utf-8",
     )
+    modules = _module_ledger(completed, completed.evidence_records)
     return {
         "status": "succeeded",
         "taskId": task.task_id,
         "report": report_path.name,
         "evidenceCount": len(completed.evidence_records),
+        "modules": modules,
+        "degraded": _degraded(modules),
         "artifacts": [
             report_path.name,
             "research-topic-run.json",
@@ -561,7 +624,17 @@ def run(request_path: Path, output_dir: Path) -> int:
         return 0
     except Exception as error:
         traceback.print_exc()
-        _write_result(output_dir, {"status": "failed", "error": str(error)})
+        failure = {"status": "failed", "error": str(error)}
+        code = str(getattr(error, "code", "") or "")
+        if code:
+            failure["errorCode"] = code
+        modules = getattr(error, "modules", None)
+        if modules is None and code:
+            modules = {"pipeline": _module("failed", code, fatal=True)}
+        if modules is not None:
+            failure["modules"] = modules
+            failure["degraded"] = True
+        _write_result(output_dir, failure)
         return 1
 
 

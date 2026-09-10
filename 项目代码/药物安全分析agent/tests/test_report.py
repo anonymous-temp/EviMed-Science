@@ -217,14 +217,17 @@ def test_signal_csv_same_data_source():
 
     csv_text = signal_table_csv(_result())
     rows = list(csv_module.reader(io.StringIO(csv_text)))
-    assert rows[0][:7] == ["reaction", "source", "a", "b", "c", "d", "N"]
-    assert len(rows) == 2
-    cells = rows[1]
+    # Row 0 names the tier that produced the numbers; row 1 is the header.
+    assert rows[0][0].startswith("# data_source=")
+    assert "statistics_version=" in rows[0][0]
+    assert rows[1][:7] == ["reaction", "source", "a", "b", "c", "d", "N"]
+    assert len(rows) == 3
+    cells = rows[2]
     assert cells[0] == "myalgia"
     assert cells[2:7] == ["10", "90", "20", "1,880", "2,000"]
     assert cells[7] == "10.444"
     assert cells[-1] == "yes"
-    assert rows[0][-4:] == [
+    assert rows[1][-4:] == [
         "expected_count",
         "haldane_anscombe_applied",
         "gps_prior_id",

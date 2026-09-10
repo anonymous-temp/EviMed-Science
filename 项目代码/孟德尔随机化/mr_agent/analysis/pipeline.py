@@ -40,7 +40,7 @@ from mr_agent.tools import gwas, pubmed, umls
 from mr_agent.tools.gwas import sanitize_gwas_id
 from mr_agent.tools.mr_executor import (
     check_r_environment,
-    run_mr_analysis, run_mr_local, run_mr_moe, run_mr_mrlap, run_mr_mvmr,
+    run_mr_analysis, run_mr_local, run_mr_mvmr,
     run_summary_forest,
 )
 
@@ -551,16 +551,6 @@ class MRPipeline:
                 f"for single pair {eid} → {oid}"
             )
             result = run_mr_analysis(
-                exposure_id=eid, outcome_id=oid,
-                output_dir=pair_dir, gwas_token=slots.gwas_token or "",
-            )
-        elif slots.mr_method == MRMethod.MRLAP:
-            result = run_mr_mrlap(
-                exposure_id=eid, outcome_id=oid,
-                output_dir=pair_dir, gwas_token=slots.gwas_token or "",
-            )
-        elif slots.mr_method == MRMethod.MOE:
-            result = run_mr_moe(
                 exposure_id=eid, outcome_id=oid,
                 output_dir=pair_dir, gwas_token=slots.gwas_token or "",
             )

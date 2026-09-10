@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from core.new_report_generator import ReportGenerator
 from models.schemas import EvidenceStats, LiteratureRecord
@@ -186,40 +187,15 @@ def test_research_topics_inherit_opportunity_evidence_exactly():
     assert topics[0]["hypothesis"].startswith("待验证：")
 
 
-def test_fallback_opportunities_carry_release_grounding_fields():
-    fallback = M5_BreakthroughOpportunityModule._fallback_opportunities(
-        [_record("42", pmid="42", source="pubmed")],
-        "precision dosing",
-    )
-
-    assert len(fallback) == 2
-    assert all(item["support_level"] == "indirect" for item in fallback)
-    assert all(item["support_rationale"] for item in fallback)
-    assert all(item["missing_evidence_concepts"] for item in fallback)
-
-
-def test_adult_fallback_prefers_adult_only_evidence_over_mixed_pediatric_records():
-    mixed = LiteratureRecord(
-        id="pubmed_mixed",
-        pmid="41",
-        title="Precision dosing in Pediatrics and young adults",
-        abstract="An ICU pharmacometric study including young adults.",
-        study_design="Pharmacometric Study",
-    )
-    adult = LiteratureRecord(
-        id="pubmed_adult",
-        pmid="42",
-        title="Model-informed precision dosing in critically ill adults",
-        abstract="An adult multicentre cohort evaluating dose models and monitoring.",
-        study_design="Cohort",
-    )
-
-    fallback = M5_BreakthroughOpportunityModule._fallback_opportunities(
-        [mixed, adult],
-        "Critical Illness, Adult, Precision Dosing",
-    )
-
-    assert all(item["evidence_pmids"] == ["42"] for item in fallback)
+def test_too_few_grounded_opportunities_fails_instead_of_templating_two():
+    """These two tests used to certify the templated BOM-F1/BOM-F2 candidates.
+    Those are gone: a run that cannot ground two opportunities in retrieved
+    evidence now fails with insufficient_grounded_opportunities."""
+    assert not hasattr(M5_BreakthroughOpportunityModule, "_fallback_opportunities")
+    source = Path(__file__).resolve().parents[1] / "modules" / "new_analysis_modules.py"
+    body = source.read_text(encoding="utf-8")
+    assert '"opportunity_id": "BOM-F' not in body
+    assert "insufficient_grounded_opportunities" in body
 
 
 def test_research_topic_fallback_preserves_one_to_one_grounding():

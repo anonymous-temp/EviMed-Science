@@ -28,6 +28,7 @@ class PubMedConnector:
         self.session = requests.Session()
         self._last_request_time = 0.0
         self._throttle_lock = threading.Lock()  # 多线程并发时保护速率限制
+        self.last_search: dict = {}  # filled by search(): true Count, sort, cap
 
     def _throttle(self):
         """Enforce rate limit between requests (thread-safe)."""
@@ -94,12 +95,21 @@ class PubMedConnector:
         date_to: Optional[str] = None,
         max_results: int = 10000,
     ) -> list[str]:
-        """Search PubMed and return list of PMIDs."""
+        """Search PubMed and return list of PMIDs.
+
+        The number of records PubMed actually matched is kept on
+        ``self.last_search`` so callers can report identification and retrieval
+        separately. Truncation to ``max_results`` is a documented sampling step,
+        not a smaller search: without an explicit ``sort`` the API returns the
+        newest records first, which biases every downstream trend.
+        """
+        sort = getattr(self.config, "esearch_sort", "") or "relevance"
         params = {
             **self._base_params(),
             "term": query,
             "retmax": 0,
             "usehistory": "y",
+            "sort": sort,
         }
         if date_from:
             params["mindate"] = date_from
@@ -109,14 +119,29 @@ class PubMedConnector:
             params["datetype"] = "pdat"
 
         resp = self._request_with_retry(f"{BASE_URL}/esearch.fcgi", params)
-        webenv, query_key, total = self._parse_search_response(resp.text)
+        webenv, query_key, total_found = self._parse_search_response(resp.text)
+        self.last_search = {
+            "query": query,
+            "sort": sort,
+            "date_from": date_from or "",
+            "date_to": date_to or "",
+            "total_found": total_found,
+            "max_records": max_results,
+            "truncated": total_found > max_results,
+        }
         if not webenv:
             logger.warning("Empty WebEnv; falling back to direct ID fetch")
-            return self._direct_id_search(params, min(total, max_results))
-        total = min(total, max_results)
-        logger.info("Found %d records (fetching up to %d)", total, max_results)
+            pmids = self._direct_id_search(params, min(total_found, max_results))
+            self.last_search["retrieved"] = len(pmids)
+            return pmids
+        to_fetch = min(total_found, max_results)
+        logger.info(
+            "PubMed matched %d records (sort=%s); fetching %d (cap %d)",
+            total_found, sort, to_fetch, max_results,
+        )
 
-        pmids = self._fetch_all_pmids(webenv, query_key, total)
+        pmids = self._fetch_all_pmids(webenv, query_key, to_fetch)
+        self.last_search["retrieved"] = len(pmids)
         return pmids
 
     def _direct_id_search(self, base_params: dict, total: int) -> list[str]:

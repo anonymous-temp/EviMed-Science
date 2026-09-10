@@ -20,10 +20,10 @@ class MultiRubricOrchestrator:
         "Meta-Analysis":                  ["prisma_2020", "universal_rubric"],
         "Scoping Review":                 ["prisma_scr", "universal_rubric"],
         "Protocol":                       ["prisma_2020", "universal_rubric"],
-        "Protocol for Clinical Practice Guideline": ["prisma_2020", "grade", "universal_rubric"],
+        "Protocol for Clinical Practice Guideline": ["prisma_2020", "agree_ii", "universal_rubric"],
         # 随机对照试验
-        "RCT":                            ["consort_2010", "universal_rubric"],
-        "Cluster RCT":                    ["consort_2010", "universal_rubric"],
+        "RCT":                            ["consort_2025", "universal_rubric"],
+        "Cluster RCT":                    ["consort_2025", "universal_rubric"],
         # 观察性研究
         "Cohort Study":                   ["strobe", "universal_rubric"],
         "Case-Control Study":             ["strobe", "universal_rubric"],
@@ -35,8 +35,8 @@ class MultiRubricOrchestrator:
         "AI":                             ["tripod_ai", "universal_rubric"],
         "Machine Learning":               ["tripod_ai", "universal_rubric"],
         # 指南
-        "Guideline Development":          ["grade", "prisma_2020", "universal_rubric"],
-        "Clinical Practice Guideline":    ["grade", "universal_rubric"],
+        "Guideline Development":          ["agree_ii", "prisma_2020", "universal_rubric"],
+        "Clinical Practice Guideline":    ["agree_ii", "universal_rubric"],
         # 病例报告
         "Case Report":                    ["care", "universal_rubric"],
         # 卫生经济学

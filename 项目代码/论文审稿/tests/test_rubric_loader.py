@@ -27,7 +27,7 @@ class TestRubricLoader:
         assert isinstance(rubrics, list)
         assert len(rubrics) > 0
         assert "universal_rubric" in rubrics
-        assert "consort_2010" in rubrics
+        assert "consort_2025" in rubrics
 
     def test_load_universal_rubric(self, loader):
         """Test loading universal rubric"""
@@ -45,11 +45,11 @@ class TestRubricLoader:
         assert isinstance(first_item.severity_if_missing, SeverityLevel)
 
     def test_load_consort_rubric(self, loader):
-        """Test loading CONSORT 2010 rubric"""
-        items = loader.load_rubric("consort_2010")
+        """Test loading CONSORT 2025 rubric"""
+        items = loader.load_rubric("consort_2025")
 
         assert isinstance(items, list)
-        assert len(items) >= 20  # CONSORT has 25+ items
+        assert len(items) >= 30  # CONSORT 2025 has 30 numbered items (42 entries)
 
         # Check that item IDs are unique
         item_ids = [item.item_id for item in items]
@@ -107,7 +107,7 @@ class TestRubricLoader:
 
         # Should include ONLY CONSORT (no Universal when specialized checklist exists)
         checklists = set(item.checklist_name for item in items)
-        assert "CONSORT 2010" in checklists
+        assert "CONSORT 2025" in checklists
         # New behavior: Universal should NOT be loaded when specialized checklist exists
         assert "Universal" not in str(checklists)
 
@@ -137,7 +137,7 @@ class TestRubricLoader:
         items = loader.load_rubrics_for_study_types(["RCT", "AI"])
 
         checklists = set(item.checklist_name for item in items)
-        assert "CONSORT 2010" in checklists
+        assert "CONSORT 2025" in checklists
         assert "TRIPOD-AI" in checklists
         # New behavior: Universal should NOT be loaded when specialized checklists exist
         assert "Universal" not in str(checklists)
@@ -169,12 +169,12 @@ class TestRubricLoader:
 
         checklists = set(item.checklist_name for item in items)
         # Should load CONSORT (specialized), but NOT Universal
-        assert "CONSORT 2010" in checklists
+        assert "CONSORT 2025" in checklists
         assert "Universal" not in str(checklists)
 
     def test_get_rubric_metadata(self, loader):
         """Test getting rubric metadata"""
-        metadata = loader.get_rubric_metadata("consort_2010")
+        metadata = loader.get_rubric_metadata("consort_2025")
 
         assert isinstance(metadata, dict)
         assert "name" in metadata
@@ -182,7 +182,7 @@ class TestRubricLoader:
         assert "applicable_to" in metadata
         assert "item_count" in metadata
 
-        assert metadata["name"] == "CONSORT 2010"
+        assert metadata["name"] == "CONSORT 2025"
         assert metadata["item_count"] > 0
 
     def test_load_nonexistent_rubric(self, loader):
@@ -192,7 +192,7 @@ class TestRubricLoader:
 
     def test_severity_levels_valid(self, loader):
         """Test that all rubric items have valid severity levels"""
-        for rubric_name in ["universal_rubric", "consort_2010", "prisma_2020"]:
+        for rubric_name in ["universal_rubric", "consort_2025", "prisma_2020"]:
             items = loader.load_rubric(rubric_name)
 
             for item in items:

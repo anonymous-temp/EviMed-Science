@@ -55,7 +55,7 @@
   "multidrug_publication_anchors_file": "multidrug_publication_anchors.json",
   "multidrug_publication_anchors_sha256": "7793e6d7fd72bddbdf8a09ccd99aea4a5ed55828f91122031b0f01168705663f",
   "analysis_coverage_matrix_file": "analysis_coverage_matrix.json",
-  "analysis_coverage_matrix_sha256": "ec1f00bdb94bc2345c7d0e0ca477f150d225b8edc489e483dc9267fb6ccf6707",
+  "analysis_coverage_matrix_sha256": "2b41098a93c3fd5fefc896b4b87f56369008f2bc9bb17c9e9d415a7a86dbcc0b",
   "class_publication_anchors_file": "class_publication_anchors.json",
   "class_publication_anchors_sha256": "c20fdcebf68ad798e9da4c086563a4aa3662b5e3de54645d7655659f89f8c679"
 }

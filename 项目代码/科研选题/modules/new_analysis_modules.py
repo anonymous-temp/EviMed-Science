@@ -439,17 +439,21 @@ class M1_ProblemLandscapeModule(BaseAnalysisModule):
         )
 
         # 5. 查找支撑论据 V5.0
-        key_insights = analysis_result.get("core_problems", [])
+        # Keys here are the ones M1_PROBLEM_LANDSCAPE_PROMPT actually emits.
+        # They used to be "core_problems"/"problem_evolution"/"focus_migration"/
+        # "action_paths", none of which the prompt ever produced, so every one of
+        # these fields was permanently empty.
+        problem_tree = analysis_result.get("problem_space_tree", {}) or {}
+        core_problems = list(problem_tree.get("top_level", []) or [])
         supporting_evidence = []
-        if key_insights:
-            for insight in key_insights[:3]:
-                evidence = self.find_supporting_evidence(
-                    insight.get("description", ""),
-                    list(canonical_themes.keys())[:5],
-                    evidence_records,
-                    max_results=3
-                )
-                supporting_evidence.extend(evidence)
+        for problem in core_problems[:3]:
+            evidence = self.find_supporting_evidence(
+                problem.get("problem_statement", ""),
+                list(canonical_themes.keys())[:5],
+                evidence_records,
+                max_results=3
+            )
+            supporting_evidence.extend(evidence)
 
         return ModuleOutput(
             module_id=self.MODULE_ID,
@@ -460,16 +464,23 @@ class M1_ProblemLandscapeModule(BaseAnalysisModule):
                     "counts": [year_counts[y] for y in sorted_years]
                 },
                 "domain_stage": analysis_result.get("domain_stage", "未知"),
-                "core_scientific_problems": analysis_result.get("core_problems", []),
-                "problem_evolution": analysis_result.get("problem_evolution", {}),
-                "research_focus_migration": analysis_result.get("focus_migration", ""),
+                "domain_stage_reasoning": analysis_result.get("stage_reasoning", ""),
+                "core_scientific_problems": core_problems,
+                "problem_space_tree": problem_tree,
+                "problem_evolution": analysis_result.get("research_evolution", {}),
+                "research_focus_migration": (
+                    (analysis_result.get("research_evolution", {}) or {}).get("emerging", {}) or {}
+                ).get("trends", ""),
                 "scientific_tensions": analysis_result.get("scientific_tensions", []),
                 "llm_deep_analysis": analysis_result.get("deep_analysis", ""),
-                "action_paths": analysis_result.get("action_paths", [])
             },
             charts=charts,
             supporting_evidence=supporting_evidence,
-            key_insights=[p.get("description", "") for p in analysis_result.get("core_problems", [])]
+            key_insights=[
+                problem.get("problem_statement", "")
+                for problem in core_problems
+                if problem.get("problem_statement")
+            ]
         )
 
     def _create_publication_trend_chart(
@@ -572,8 +583,11 @@ class M1_ProblemLandscapeModule(BaseAnalysisModule):
             logger.error(f"[M1] 分析失败: {e}")
             return {
                 "domain_stage": "分析失败",
-                "core_problems": [],
-                "deep_analysis": "分析生成失败，使用默认输出。"
+                "stage_reasoning": "",
+                "scientific_tensions": [],
+                "problem_space_tree": {},
+                "research_evolution": {},
+                "deep_analysis": "分析生成失败，使用默认输出。",
             }
 
 
@@ -666,16 +680,24 @@ class M2_ResearchEcosystemModule(BaseAnalysisModule):
                 "core_journals": [{"name": n, "count": c} for n, c in journal_counts.most_common(10)],
                 "keyword_network": keyword_network,
                 "hotspot_distribution": dict(hotspot_counts),
-                "network_density": ecosystem_analysis.get("network_density", 0),
-                "fragmentation_index": ecosystem_analysis.get("fragmentation_index", 0),
-                "research_structure_type": ecosystem_analysis.get("research_structure_type", ""),
-                "structure_impact": ecosystem_analysis.get("structure_impact", {}),
-                "dominance_analysis": ecosystem_analysis.get("dominance", {}),
-                "journal_level": ecosystem_analysis.get("journal_level", ""),
+                # Network density is measured on the co-occurrence graph this
+                # module builds, not asked of the model.
+                "network_density": keyword_network.get("density", 0),
+                "research_structure": ecosystem_analysis.get("research_structure", {}),
+                "research_structure_type": (
+                    ecosystem_analysis.get("research_structure", {}) or {}
+                ).get("structure_type", ""),
+                "structure_impact": (
+                    ecosystem_analysis.get("research_structure", {}) or {}
+                ).get("innovation_implications", ""),
+                "dominance_analysis": ecosystem_analysis.get("dominance_analysis", {}),
+                "journal_structure": ecosystem_analysis.get("journal_structure", {}),
+                "journal_level": (
+                    ecosystem_analysis.get("journal_structure", {}) or {}
+                ).get("primary_level", ""),
                 "knowledge_network": ecosystem_analysis.get("knowledge_network", {}),
                 "ecological_bottlenecks": ecosystem_analysis.get("ecological_bottlenecks", []),
                 "llm_deep_analysis": ecosystem_analysis.get("deep_analysis", ""),
-                "strategic_implications": ecosystem_analysis.get("implications", [])
             },
             charts=charts
         )
@@ -923,10 +945,12 @@ class M2_ResearchEcosystemModule(BaseAnalysisModule):
         except Exception as e:
             logger.error(f"[M2] 分析失败: {e}")
             return {
-                "network_density": keyword_network.get('density', 0),
-                "fragmentation_index": 0.5,
-                "research_structure_type": "分析失败",
-                "deep_analysis": "生态分析生成失败。"
+                "research_structure": {"structure_type": "分析失败"},
+                "dominance_analysis": {},
+                "journal_structure": {},
+                "knowledge_network": {},
+                "ecological_bottlenecks": [],
+                "deep_analysis": "生态分析生成失败。",
             }
 
 
@@ -995,14 +1019,19 @@ class M3_EvidenceSystemModule(BaseAnalysisModule):
                     "designs": designs,
                     "matrix": matrix
                 },
-                "chain_completeness": system_analysis.get("completeness", 0),
-                "fracture_types": system_analysis.get("fracture_types", []),
-                "bridge_gaps": system_analysis.get("bridge_gaps", []),
+                "chain_completeness": system_analysis.get("chain_completeness", 0),
+                "fracture_type": system_analysis.get("fracture_type", ""),
+                "fracture_analysis": system_analysis.get("fracture_analysis", {}),
+                # The bottlenecks M5 bridges are the cross-domain signals M3
+                # emits; "bridge_gaps" was never a key of this reply, so M5's
+                # prompt received an empty list on every run.
+                "bridge_gaps": [
+                    signal.get("bottleneck", "")
+                    for signal in (system_analysis.get("cross_domain_signals", []) or [])
+                    if isinstance(signal, dict) and signal.get("bottleneck")
+                ],
                 "cross_domain_signals": system_analysis.get("cross_domain_signals", []),
-                "mechanism_clinical_balance": system_analysis.get("balance", ""),
-                "weak_links": system_analysis.get("weak_links", []),
                 "llm_deep_analysis": system_analysis.get("deep_analysis", ""),
-                "strengthening_paths": system_analysis.get("paths", [])
             },
             charts=charts
         )
@@ -1265,10 +1294,11 @@ class M3_EvidenceSystemModule(BaseAnalysisModule):
         except Exception as e:
             logger.error(f"[M3] 分析失败: {e}")
             return {
-                "completeness": 0.5,
-                "bridge_gaps": [],
-                "balance": "分析失败",
-                "deep_analysis": "证据体系分析生成失败。"
+                "chain_completeness": 0,
+                "fracture_type": "",
+                "fracture_analysis": {},
+                "cross_domain_signals": [],
+                "deep_analysis": "证据体系分析生成失败。",
             }
 
 
@@ -1348,10 +1378,11 @@ class M4_ScientificContradictionModule(BaseAnalysisModule):
             data={
                 "identified_contradictions": contradictions,
                 "knowledge_fractures": contradiction_analysis.get("knowledge_fractures", []),
-                "conflict_sources": contradiction_analysis.get("conflict_sources", {}),
-                "resolution_priority": contradiction_analysis.get("priority", []),
+                "paradigm_shift_signal": contradiction_analysis.get("paradigm_shift_signal", {}),
+                "precision_medicine_opportunity": contradiction_analysis.get(
+                    "precision_medicine_opportunity", {}
+                ),
                 "llm_deep_analysis": contradiction_analysis.get("deep_analysis", ""),
-                "resolution_paths": contradiction_analysis.get("paths", [])
             },
             charts=charts,
             supporting_evidence=supporting_evidence,
@@ -1485,8 +1516,16 @@ class M4_ScientificContradictionModule(BaseAnalysisModule):
             logger.error(f"[M4] 分析失败: {e}")
             return {
                 "contradictions": [],
-                "deep_analysis": "矛盾分析生成失败。"
+                "knowledge_fractures": [],
+                "paradigm_shift_signal": {},
+                "precision_medicine_opportunity": {},
+                "deep_analysis": "矛盾分析生成失败。",
             }
+
+
+# Fewer than this many evidence-traceable opportunities is a failed module,
+# not an occasion to write some.
+MIN_GROUNDED_OPPORTUNITIES = 2
 
 
 class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
@@ -1526,20 +1565,36 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
             stream_callback=stream_callback,
         )
 
-        # LLM返回的key是 breakthrough_opportunities，兼容 opportunities
+        # M5_BREAKTHROUGH_OPPORTUNITY_PROMPT emits "breakthrough_opportunities".
         opportunities = self._validate_opportunities(
-            bom_analysis.get("breakthrough_opportunities", bom_analysis.get("opportunities", [])),
+            bom_analysis.get("breakthrough_opportunities", []),
             evidence_records,
         )
-        if len(opportunities) < 2:
-            fallback = self._fallback_opportunities(evidence_records, query_context)
-            existing_titles = {str(item.get("title")) for item in opportunities}
-            for item in fallback:
-                if item["title"] not in existing_titles:
-                    opportunities.append(item)
-                    existing_titles.add(item["title"])
-                if len(opportunities) >= 3:
-                    break
+        if len(opportunities) < MIN_GROUNDED_OPPORTUNITIES:
+            # The two templated opportunities that used to be inserted here
+            # (a "preregistered multicentre validation" and a "target trial
+            # emulation") were written from the query string, cited one
+            # arbitrary record each, and then passed every downstream check. A
+            # job that found nothing must say so.
+            logger.error(
+                "[M5] 仅 %d 个突破机会通过证据核验，少于要求的 %d 个",
+                len(opportunities), MIN_GROUNDED_OPPORTUNITIES,
+            )
+            return ModuleOutput(
+                module_id=self.MODULE_ID,
+                status="failed",
+                error_message=(
+                    f"insufficient_grounded_opportunities: {len(opportunities)} of "
+                    f"{MIN_GROUNDED_OPPORTUNITIES} required breakthrough opportunities "
+                    "were traceable to retrieved evidence"
+                ),
+                data={
+                    "opportunities": opportunities,
+                    "cross_domain_mapping": bom_analysis.get("cross_domain_mapping", {}),
+                    "bridge_hypotheses": bom_analysis.get("bridge_hypotheses", []),
+                    "llm_deep_analysis": bom_analysis.get("deep_analysis", ""),
+                },
+            )
         charts = []  # 不生成气泡图
 
         evidence_by_pmid = {record.pmid: record for record in evidence_records if record.pmid}
@@ -1574,10 +1629,16 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
             status="success",
             data={
                 "opportunities": opportunities,
-                "cross_domain_map": bom_analysis.get("cross_domain_map", {}),
-                "transfer_types": bom_analysis.get("transfer_types", {}),
+                "cross_domain_mapping": bom_analysis.get("cross_domain_mapping", {}),
+                "bridge_hypotheses": bom_analysis.get("bridge_hypotheses", []),
+                # Counted from the opportunities that survived validation, not
+                # asked of the model as a separate key it never emitted.
+                "transfer_types": dict(Counter(
+                    opportunity.get("type", "")
+                    for opportunity in opportunities
+                    if opportunity.get("type")
+                )),
                 "llm_deep_analysis": bom_analysis.get("deep_analysis", ""),
-                "action_roadmap": bom_analysis.get("roadmap", [])
             },
             key_insights=opportunity_insights,
             charts=charts,
@@ -1793,78 +1854,6 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
             validated.append(item)
         return validated[:3]
 
-    @staticmethod
-    def _fallback_opportunities(records, query_context):
-        """Create conservative method opportunities when structured LLM output is unusable.
-
-        These do not assert a new mechanism; they convert an observed evidence
-        type into a validation design and cite the record that triggered it.
-        """
-        usable = [record for record in records if record.pmid and record.abstract]
-        if not usable:
-            return []
-        if re.search(r"\badults?\b", str(query_context), flags=re.IGNORECASE) or any(
-            marker in str(query_context) for marker in ("成人", "成年人", "老年")
-        ):
-            pediatric = re.compile(
-                r"\b(pediatrics?|paediatrics?|children?|infants?|neonates?|newborns?|preterm)\b",
-                flags=re.IGNORECASE,
-            )
-            adult = re.compile(r"\b(adults?|elderly|aged)\b", flags=re.IGNORECASE)
-            adult_only = []
-            mixed_or_unspecified = []
-            for record in usable:
-                text = f"{record.title} {record.abstract or ''}"
-                if adult.search(text) and not pediatric.search(text):
-                    adult_only.append(record)
-                else:
-                    mixed_or_unspecified.append(record)
-            # Mixed-age evidence may remain contextual, but it must not become
-            # the primary anchor when adult-specific evidence is available.
-            usable = adult_only + mixed_or_unspecified
-        topic = str(query_context).split("（", 1)[0][:60]
-        observational = next(
-            (record for record in usable if record.study_design in {
-                "Cohort", "Clinical Study", "Cross-sectional", "Case-Control"
-            }),
-            usable[0],
-        )
-        model_record = next(
-            (record for record in usable if any(term in (record.title + " " + (record.abstract or "")).casefold()
-                                               for term in ("model", "monitor", "dose", "algorithm"))),
-            usable[0],
-        )
-        return [
-            {
-                "opportunity_id": "BOM-F1",
-                "title": f"对{topic}关键策略开展预注册、多中心的患者重要结局验证",
-                "type": "方法迁移",
-                "scientific_innovation": "将当前关联性或替代终点证据转化为预注册的临床效应验证。",
-                "validation_pathway": "首先统一干预和结局定义，再开展多中心前瞻性研究，并公开分析计划。",
-                "evidence_pmids": [model_record.pmid],
-                "support_level": "indirect",
-                "support_rationale": (
-                    f"PMID {model_record.pmid} 提供了给药、监测或模型相关的相邻证据；"
-                    "预注册、多中心且以患者重要结局为终点的验证仍是待检验的方法学扩展。"
-                ),
-                "missing_evidence_concepts": ["preregistered_multicenter_outcome_validation"],
-            },
-            {
-                "opportunity_id": "BOM-F2",
-                "title": f"用目标试验模拟检验{topic}观察性关联的因果稳健性",
-                "type": "范式迁移",
-                "scientific_innovation": "显式定义零时点、处理策略和随访，减少适应证混杂与不朽时间偏倚。",
-                "validation_pathway": "基于现有队列预注册目标试验协议，使用加权/克隆-删失方法并开展负对照与定量偏倚分析。",
-                "evidence_pmids": [observational.pmid],
-                "support_level": "indirect",
-                "support_rationale": (
-                    f"PMID {observational.pmid} 提供了可用于因果稳健性评估的观察性或相邻证据；"
-                    "目标试验模拟是待预注册和外部验证的分析扩展，不是已证实的因果结论。"
-                ),
-                "missing_evidence_concepts": ["preregistered_target_trial_emulation"],
-            },
-        ]
-
     def _create_opportunity_bubble_chart(
         self,
         opportunities: List[Dict]
@@ -1947,8 +1936,10 @@ class M5_BreakthroughOpportunityModule(BaseAnalysisModule):
         except Exception as e:
             logger.error(f"[M5] 分析失败: {e}")
             return {
-                "opportunities": [],
-                "deep_analysis": "跨域分析生成失败。"
+                "breakthrough_opportunities": [],
+                "bridge_hypotheses": [],
+                "cross_domain_mapping": {},
+                "deep_analysis": "跨域分析生成失败。",
             }
 
 
@@ -2001,7 +1992,7 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
         # Validate first. The raw model response may contain plausible-looking
         # numeric scores that have no calibration data behind them.
         topics_list = self._validate_topics(
-            agenda.get("research_topics", agenda.get("topics", [])), opportunities
+            agenda.get("research_topics", []), opportunities
         )
 
         # Generate a quantitative chart only from validated, measured scores.
@@ -2031,12 +2022,15 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
             status="success",
             data={
                 "research_topics": topics_list,
-                "implementation_roadmap": agenda.get("roadmap", {}),
-                "resource_requirements": agenda.get("resources", {}),
-                "publication_strategy": agenda.get("publication", {}),
-                "risk_mitigation": agenda.get("risks", []),
+                "implementation_roadmap": agenda.get("research_roadmap", {}),
+                "resource_requirements": agenda.get("resource_plan", {}),
+                "risk_mitigation": agenda.get("risk_management", []),
                 "llm_deep_analysis": agenda.get("deep_analysis", ""),
-                "next_steps": agenda.get("next_steps", [])
+                # Near-term work is the roadmap's own short-term block; the
+                # prompt has no separate "next_steps" key.
+                "next_steps": (
+                    (agenda.get("research_roadmap", {}) or {}).get("short_term", {}) or {}
+                ).get("key_tasks", []),
             },
             charts=charts,
             key_insights=topic_key_insights,
@@ -2255,13 +2249,15 @@ class M6_ResearchAgendaModule(BaseAnalysisModule):
             logger.info(f"[M6] LLM调用成功，响应长度: {len(response)} 字符")
 
             result = safe_parse_json(response)
-            n_topics = len(result.get("research_topics", result.get("topics", [])))
+            n_topics = len(result.get("research_topics", []))
             logger.info(f"[M6] JSON解析成功，生成了 {n_topics} 个研究选题")
             return result
         except Exception as e:
             logger.error(f"[M6] 分析失败: {e}", exc_info=True)
             return {
-                "topics": [],
+                "research_topics": [],
+                "research_roadmap": {},
+                "resource_plan": {},
+                "risk_management": [],
                 "deep_analysis": "研究议程生成失败。",
-                "next_steps": []
             }

@@ -101,6 +101,9 @@ class AnalysisResult(BaseModel):
     interpretation: Interpretation | None = None
     llm_status: Literal["ok", "degraded", "not_configured"] = "ok"
     degradation_notes: list[str] = Field(default_factory=list)
+    #: Reaction terms with zero FAERS reports. Named here rather than turned
+    #: into a zero-cell-corrected row whose ROR is d/b.
+    unmatched_reactions: list[str] = Field(default_factory=list)
     query_urls: dict[str, str] = Field(default_factory=dict)
     # Query conventions actually applied (transparency for the report):
     drug_field: str = "openfda_generic"

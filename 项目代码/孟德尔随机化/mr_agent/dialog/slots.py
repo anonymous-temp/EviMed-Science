@@ -157,9 +157,14 @@ def _generate_recommendations(slots: AnalysisSlots, lang: str = "zh") -> list[st
         exp_id = slots.exposure_source.gwas_id or ""
         out_id = slots.outcome_source.gwas_id or ""
         if exp_id and out_id and same_consortium_prefix(exp_id, out_id):
+            # MR-LAP is not offered: this engine has no working implementation
+            # of it (see r_scripts/templates.py), so recommending it would ask
+            # for a method the job cannot run.
             recs.append(
-                "建议使用MR-LAP校正潜在样本重叠" if lang == "zh"
-                else "Consider MR-LAP to correct for potential sample overlap"
+                "两个GWAS疑似来自同一队列，存在样本重叠；请在解读效应量时说明该不确定性"
+                if lang == "zh"
+                else "The two GWAS appear to share a cohort; report the sample-overlap "
+                     "uncertainty when interpreting the estimate"
             )
     if slots.mr_method.value == "standard":
         recs.append(

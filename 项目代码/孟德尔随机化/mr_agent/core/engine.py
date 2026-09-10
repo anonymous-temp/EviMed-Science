@@ -130,6 +130,9 @@ class MRAgent:
         """Handle and format pipeline error."""
         error_msg = f"分析出错: {e}" if self.language == "zh" else f"Analysis error: {e}"
         self.state.errors.append(str(e))
+        # A classified failure must survive the string conversion: without it the
+        # caller can only report "analysis failed" for a refused credential.
+        self.state.error_code = str(getattr(e, "code", "") or "")
         self.state.add_message("assistant", error_msg)
         save_session(self.state)
         return error_msg

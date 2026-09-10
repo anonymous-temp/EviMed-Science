@@ -21,9 +21,14 @@ class AnalysisMode(str, Enum):
 
 
 class MRMethod(str, Enum):
+    """Methods this engine can actually run.
+
+    MOE and MR-LAP were removed on 2026-09-10: neither had ever produced a
+    result (see the note in r_scripts/templates.py). Restoring a method means
+    shipping its reference data and an end-to-end test, not re-adding a name.
+    """
+
     STANDARD = "standard"
-    MOE = "moe"
-    MRLAP = "mrlap"
     MVMR = "mvmr"
 
 
@@ -275,6 +280,9 @@ class SessionState(BaseModel):
     paper_sections: dict[str, str] = Field(default_factory=dict)
     output_dir: Path | None = None
     errors: list[str] = Field(default_factory=list)
+    # Classified code for the last failure ("opengwas_auth_failed", ...), so a
+    # refused source does not reach the caller as an unlabelled message.
+    error_code: str = ""
     last_completed_step: int = 0
     selected_gwas_ids: dict[str, list[str]] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.now)

@@ -824,29 +824,35 @@ def _results_citation(ctx):
     if not cite_stats:
         return ""
 
-    real_count = stats.get("citation_real_count", 0)
-    sim_count = stats.get("citation_sim_count", 0)
-    total_count = real_count + sim_count
-    all_real = sim_count == 0 and real_count > 0
-    all_sim = real_count == 0
+    from bibliometric.analysis.citations import SOURCE_LABELS
 
-    if all_sim:
+    coverage = cite_stats.get("coverage", {})
+    observed = int(coverage.get("observed", 0))
+    total_count = int(coverage.get("total", 0))
+    if observed == 0:
+        # Nothing was observed: report the gap, do not print citation metrics.
         return ""
 
-    if all_real:
-        section_title = "### 3.7 引用分析\n" if zh else "### 3.7 Citation Analysis\n"
+    complete = observed == total_count
+    by_source = coverage.get("by_source", {})
+    source_names = ", ".join(
+        f"{SOURCE_LABELS.get(name, name)} {count}"
+        for name, count in sorted(by_source.items(), key=lambda item: -item[1])
+    )
+    pct = round(observed / total_count * 100) if total_count else 0
+    section_title = "### 3.7 引用分析\n" if zh else "### 3.7 Citation Analysis\n"
+    if zh:
         source_note = (
-            f"引用数据来源于 Semantic Scholar（共{real_count}篇）。\n"
-            if zh else
-            f"Citation counts sourced from Semantic Scholar ({real_count} articles).\n"
+            f"引用数据来源：{source_names}。覆盖率 {observed}/{total_count}（{pct}%）。"
+            + ("\n" if complete else
+               f"未取得引用数据的 {total_count - observed} 篇不计入本节任何指标。\n")
         )
     else:
-        pct = round(real_count / total_count * 100) if total_count else 0
-        section_title = "### 3.7 引用分析\n" if zh else "### 3.7 Citation Analysis\n"
         source_note = (
-            f"引用数据来源：{real_count}篇来自 Semantic Scholar（占{pct}%），{sim_count}篇为估算值。\n"
-            if zh else
-            f"Citation sources: {real_count} from Semantic Scholar ({pct}%), {sim_count} estimated.\n"
+            f"Citation sources: {source_names}. Coverage {observed}/{total_count} ({pct}%)."
+            + ("\n" if complete else
+               f" The {total_count - observed} articles without observed citations are "
+               "excluded from every metric in this section.\n")
         )
 
     lines = [section_title, source_note]
@@ -857,12 +863,12 @@ def _results_citation(ctx):
     median_c = cite_stats.get("median_citations", 0)
 
     tbl = _next_table(ctx)
-    tbl_label = "文献引用指标" if (zh and all_real) else ("Citation Metrics" if (not zh and all_real) else ("文献引用指标估算" if zh else "Estimated Citation Metrics"))
+    tbl_label = "文献引用指标" if zh else "Citation Metrics"
     lines.append(f"{'表' if zh else 'Table '}{tbl}. {tbl_label}\n")
     if zh:
         lines.append("| 指标 | 数值 |")
         lines.append("|------|------|")
-        h_label = "h 指数" if all_real else "估算 h 指数"
+        h_label = "h 指数"
         lines.append(f"| {h_label} | {h_index} |")
         lines.append(f"| 总引用次数 | {total_c:,} |")
         lines.append(f"| 篇均引用次数 | {mean_c} |")
@@ -870,7 +876,7 @@ def _results_citation(ctx):
     else:
         lines.append("| Metric | Value |")
         lines.append("|--------|-------|")
-        h_label = "h-index" if all_real else "Estimated h-index"
+        h_label = "h-index"
         lines.append(f"| {h_label} | {h_index} |")
         lines.append(f"| Total citations | {total_c:,} |")
         lines.append(f"| Mean citations/paper | {mean_c} |")
@@ -879,12 +885,8 @@ def _results_citation(ctx):
     top_cited = cite_stats.get("top_cited")
     if top_cited is not None and not top_cited.empty:
         tbl2 = _next_table(ctx)
-        if all_real:
-            top_label = "高被引文献Top10" if zh else "Top 10 Highly Cited Articles"
-            col_label = ["标题", "引用次数", "年份"] if zh else ["Title", "Citations", "Year"]
-        else:
-            top_label = "高被引文献Top10（估算）" if zh else "Top 10 Highly Cited Articles (Estimated)"
-            col_label = ["标题", "估算引用", "年份"] if zh else ["Title", "Est. Citations", "Year"]
+        top_label = "高被引文献Top10" if zh else "Top 10 Highly Cited Articles"
+        col_label = ["标题", "引用次数", "年份"] if zh else ["Title", "Citations", "Year"]
         lines.append(f"\n{'表' if zh else 'Table '}{tbl2}. {top_label}\n")
         lines.append(_df_to_table(top_cited.head(10), ["title", "citations", "year"], col_label))
 

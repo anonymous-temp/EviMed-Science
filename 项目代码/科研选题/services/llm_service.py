@@ -21,6 +21,25 @@ from utils import safe_parse_json
 logger = logging.getLogger(__name__)
 
 
+class LLMUnavailableError(RuntimeError):
+    """No usable model. Distinct from "the model answered and found nothing"."""
+
+    code = "llm_unavailable"
+
+
+def _mock_allowed() -> bool:
+    """Mock replies are a local development aid, never a production answer.
+
+    Without a key the service used to return a fixed rituximab / membranous
+    nephropathy PICO for every topic, and the modules downstream reported
+    success, so a misconfigured deployment produced a complete report about a
+    disease nobody asked about.
+    """
+    if os.getenv("EVIMED_MANAGED_RUN") == "1":
+        return False
+    return os.getenv("EVIMED_MOCK") == "1"
+
+
 class _JsonFieldExtractor:
     """从流式 JSON token 中实时提取指定字段字符串值，转发给 callback。"""
 
@@ -954,7 +973,13 @@ class LLMService:
         }
 
     def _get_mock_response(self, prompt: str, json_mode: bool = False) -> str:
-        """获取模拟响应"""
+        """Development-only stand-in; refuses to run unless explicitly enabled."""
+        if not _mock_allowed():
+            raise LLMUnavailableError(
+                "No DeepSeek client is configured. Set DEEPSEEK_API_KEY, or set "
+                "EVIMED_MOCK=1 outside a managed run to use the development stub."
+            )
+        logger.warning("EVIMED_MOCK=1: returning a development stub, not a real analysis")
         if json_mode:
             return json.dumps({
                 "pico_entities": {

@@ -81,10 +81,37 @@ def render_markdown(result: AnalysisResult) -> str:
     return "\n".join(p) + "\n"
 
 
+def signal_provenance(result: AnalysisResult) -> dict[str, str]:
+    """Which tier and which snapshot produced these numbers.
+
+    Section 1 of the report carried this; the CSV and result.json did not, so a
+    live-tier table was indistinguishable from a frozen-snapshot one.
+    """
+    return {
+        "data_source": result.data_source,
+        "statistics_version": result.statistics_version,
+        "gps_prior_fitted": str(result.gps_prior_fitted).lower(),
+        "gps_prior_id": result.gps_prior_id or "",
+        "snapshot_id": result.snapshot_id or "",
+        "snapshot_sha256": result.snapshot_sha256 or "",
+        "extracted_at": result.snapshot_extracted_at or "",
+        "suspect_binding": result.suspect_binding,
+        "study_date_from": result.study_date_from or "",
+        "study_date_to": result.study_date_to or "",
+        "background_date_from": result.background_date_from or "",
+        "background_date_to": result.background_date_to or "",
+        "generated_at": result.generated_at.isoformat(),
+    }
+
+
 def signal_table_csv(result: AnalysisResult) -> str:
     """CSV export of the signal table — same rows as the markdown table."""
     buf = io.StringIO()
     writer = csv.writer(buf)
+    provenance = signal_provenance(result)
+    writer.writerow(
+        ["# " + "; ".join(f"{key}={value}" for key, value in provenance.items())]
+    )
     writer.writerow(_SIGNAL_HEADERS)
     for row in result.signals:
         writer.writerow(_signal_row_cells(row))
