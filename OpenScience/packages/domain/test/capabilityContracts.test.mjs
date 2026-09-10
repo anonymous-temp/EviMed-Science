@@ -112,6 +112,37 @@ test("the snapshot is not graded as report prose", () => {
 
 /* ---------------------------------------------- the appraisal arithmetic */
 
+test("a domain rating written directly on the study is read, not reported missing", () => {
+  // Two production runs (2026-09-09 and 2026-09-10) rated every domain as
+  // `study.riskOfBias = { rating, reason }` while the skill had not yet said
+  // the ratings live under `domains`, and each was told six times that it had
+  // rated nothing. The verdict has to be true of the table it was given.
+  const study = (domainsShape) => ({
+    id: "S1",
+    design: "randomized-controlled-trial",
+    identifier: { type: "doi", value: "10.1056/NEJMoa2107038" },
+    ...domainsShape,
+  });
+  const ratings = {
+    riskOfBias: { rating: "low", reason: "中心随机、分配隐藏、终点委员会设盲" },
+    indirectness: { rating: "low", reason: "四轴与问题一致" },
+    imprecision: { rating: "low", reason: "区间远离决策阈值" },
+  };
+  const body = { id: "B1", outcome: "心衰再住院", studyIds: ["S1"], startingCertainty: "high", downgrades: [], upgrades: [], certainty: "high", whatWouldChange: "无" };
+  const files = (studyRecord) => ({
+    "appraisal-table.json": JSON.stringify({ question: "SGLT2 抑制剂与 HFpEF 再住院？", studies: [studyRecord], bodies: [body] }),
+    "appraisal-table.csv": "studyId\nS1\n",
+    "citation-ledger.csv": "identifier\n10.1056/NEJMoa2107038\n",
+  });
+  const missing = (verdict) => verdict.issues.filter((entry) => entry.code === "appraisal_domain_missing");
+
+  assert.equal(missing(appraisalTableFindings(gateInput("appraisal-table", files(study({ domains: ratings }))))).length, 0, "the canonical shape");
+  assert.equal(missing(appraisalTableFindings(gateInput("appraisal-table", files(study(ratings))))).length, 0, "the shape the runs wrote");
+  const none = missing(appraisalTableFindings(gateInput("appraisal-table", files(study({})))));
+  assert.equal(none.length, 3, "a study with no ratings anywhere is still reported once per domain");
+  assert.match(none[0].message, /under domains\.riskOfBias/, "and the message names the canonical place");
+});
+
 test("a certainty that does not follow from its own downgrades is reported", () => {
   // The one check that finds a table where every field is filled in and the
   // answer is still wrong.
