@@ -146,6 +146,22 @@ class MethodExecutor:
                 )
             supplied_options["outcome_type"] = outcome_type
             supplied_options["effect_measure"] = plan.effect_measure
+        if plan.engine_entrypoint == "new_meta.engines.complex_rct:run_complex_rct":
+            from new_meta.engines.complex_rct import ComplexRCTRecord
+
+            # Preserve schema failures; a missing/malformed record is not a small valid analysis set.
+            rows = [
+                row if isinstance(row, ComplexRCTRecord) else ComplexRCTRecord.model_validate(row)
+                for row in records
+            ]
+            study_count = len({row.study_id for row in rows})
+            if len(rows) < 2 or study_count < 2:
+                raise MethodExecutionBlocked(
+                    "Complex RCT synthesis requires at least 2 contrasts from at least 2 independent studies; "
+                    f"the selected analysis set has {len(rows)} contrast(s) from {study_count} study/studies. "
+                    "Supply eligible independent studies for the same outcome, timepoint and estimand "
+                    "before quantitative synthesis."
+                )
         engine_result = engine(records, **supplied_options)
         if not hasattr(engine_result, "model_dump"):
             raise TypeError("method engine must return a typed Pydantic result")
