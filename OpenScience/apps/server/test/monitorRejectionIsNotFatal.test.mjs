@@ -1,3 +1,4 @@
+import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 // Production crash-looped 48 times on 2026-08-30 and the cause was one missing
 // `.catch`. Startup adopts the previous life's running runs by scheduling a
 // monitor per run; the monitor promise is stored so shutdown can await it, and
@@ -36,7 +37,7 @@ test("a monitor that throws finishes its own run instead of killing the process"
     throw new HttpError(502, "runtime_cleanup_failed", "Runtime controller could not clean up the runtime container.");
   });
   runs.scheduleMonitor({ userId: "u", id: "p" }, "run-1");
-  await runs.monitors.get("run-1")?.promise;
+  await awaitBackgroundMonitor(runs.monitors.get("run-1")?.promise);
 
   assert.deepEqual(runs.finished, [{ runId: "run-1", status: "failed", errorCode: "runtime_cleanup_failed", artifacts: [] }]);
 });
@@ -50,7 +51,7 @@ test("the rejection never escapes to the process", async () => {
   try {
     const runs = runsWith(async () => { throw new Error("controller unreachable"); });
     runs.scheduleMonitor({ userId: "u", id: "p" }, "run-2");
-    await runs.monitors.get("run-2")?.promise;
+    await awaitBackgroundMonitor(runs.monitors.get("run-2")?.promise);
     // Two turns of the microtask queue, because an unhandled rejection is
     // reported after the promise settles rather than when it rejects.
     await new Promise((resolve) => setImmediate(resolve));
@@ -71,7 +72,7 @@ test("a ledger write that also fails does not re-throw into the same catch", asy
     const runs = runsWith(async () => { throw new Error("controller unreachable"); });
     runs.finishInternal = async () => { throw new Error("ledger unwritable"); };
     runs.scheduleMonitor({ userId: "u", id: "p" }, "run-3");
-    await runs.monitors.get("run-3")?.promise;
+    await awaitBackgroundMonitor(runs.monitors.get("run-3")?.promise);
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
   } finally {
@@ -83,6 +84,6 @@ test("a ledger write that also fails does not re-throw into the same catch", asy
 test("the monitor is removed from the map either way", async () => {
   const runs = runsWith(async () => { throw new Error("boom"); });
   runs.scheduleMonitor({ userId: "u", id: "p" }, "run-4");
-  await runs.monitors.get("run-4")?.promise;
+  await awaitBackgroundMonitor(runs.monitors.get("run-4")?.promise);
   assert.equal(runs.monitors.has("run-4"), false, "a failed monitor must not hold its slot forever");
 });

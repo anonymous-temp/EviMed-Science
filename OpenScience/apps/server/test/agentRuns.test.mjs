@@ -1,3 +1,4 @@
+import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -1487,21 +1488,6 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
     assert.equal(listed.body.code, "agent_runs_too_large");
   });
 });
-
-/** Await an unref'ed background monitor without depending on unrelated I/O. */
-async function awaitBackgroundMonitor(promise) {
-  let timer;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("Background monitor did not settle within 30 seconds.")), 30_000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 async function waitForProjection(predicate) {
   const deadline = Date.now() + 2000;
