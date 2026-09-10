@@ -71,6 +71,23 @@ Every appraised study is rated on **`riskOfBias`**, **`indirectness`** and
 **`imprecision`**. The other two GRADE domains are properties of a *set* of
 studies and cannot be assessed one row at a time; they appear in the roll-up.
 
+The three ratings live together under a `domains` object on the study, each
+as a `rating` and a `reason`:
+
+```json
+{
+  "id": "S1",
+  "design": "randomized-controlled-trial",
+  "domains": {
+    "riskOfBias":   { "rating": "low",     "reason": "中心随机、分配隐藏、终点委员会设盲" },
+    "indirectness": { "rating": "low",     "reason": "人群、干预、对照、结局四轴与问题一致" },
+    "imprecision":  { "rating": "serious", "reason": "区间跨越临床决策阈值" }
+  }
+}
+```
+
+Put them there, not at the top level of the study.
+
 Ratings: `low` · `moderate` · `serious` · `critical` · `unclear`
 
 - **`riskOfBias`** — where in *this study's conduct* a systematic error could

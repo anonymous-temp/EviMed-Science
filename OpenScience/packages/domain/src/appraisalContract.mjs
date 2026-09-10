@@ -424,11 +424,17 @@ export function appraisalTableFindings(input) {
 
     const domains = isRecord(study.domains) ? study.domains : {}
     for (const domain of STUDY_DOMAINS) {
-      const cell = isRecord(domains[domain]) ? domains[domain] : null
+      // Under `domains`, which is where the skill puts them; failing that,
+      // directly on the study. Two production runs rated every domain at the
+      // top level while the skill had not yet said where the ratings live,
+      // and each was told six times that it had rated nothing — a verdict that
+      // was false and that the run could not act on. A rating that exists is
+      // read wherever it is; the skill names the canonical place.
+      const cell = isRecord(domains[domain]) ? domains[domain] : isRecord(study[domain]) ? study[domain] : null
       if (!cell) {
         issues.push(advisory(
           'appraisal_domain_missing',
-          `${label} has no ${domain} rating. Every appraised study is rated on all three of ${STUDY_DOMAINS.join(', ')}; an unrated domain reads as "no concern" and is usually "not looked at".`,
+          `${label} has no ${domain} rating under domains.${domain}. Every appraised study is rated on all three of ${STUDY_DOMAINS.join(', ')}; an unrated domain reads as "no concern" and is usually "not looked at".`,
           { path: 'appraisal-table.json', check: 'appraisal-domain-rating' },
         ))
         continue
