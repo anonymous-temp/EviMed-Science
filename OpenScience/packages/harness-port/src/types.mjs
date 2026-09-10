@@ -91,7 +91,10 @@
 /**
  * @typedef {object} SubagentOutcome
  * @property {string} childSessionId
- * @property {'completed'|'error'|'cancelled'|'max-turns'|'unknown'} stopReason
+ * @property {'completed'|'aborted'|'error'|'max-tokens'|'refusal'|'unknown'} stopReason
+ *   The vocabulary is `SUBAGENT_STOP_REASONS` in `convert.mjs`, plus `unknown`
+ *   for a value DSH emits that we have not seen. It said `cancelled` and
+ *   `max-turns` — two values nothing produces — while omitting three that are.
  * @property {string} output
  * @property {unknown} structured
  * @property {string} diagnostic

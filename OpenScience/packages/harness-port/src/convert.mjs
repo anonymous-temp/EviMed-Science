@@ -219,6 +219,19 @@ function isThenable(value) {
   return Boolean(value) && typeof (/** @type {any} */ (value)?.then) === 'function'
 }
 
+/**
+ * DSH's own subagent stop reasons, from `SubagentStopReasonMap`.
+ *
+ * `cancelled` and `max-turns` were this package's guesses and match nothing
+ * DSH emits, so an aborted or token-capped child read as `unknown` —
+ * indistinguishable from a stop reason we had never seen. They were corrected
+ * here and left in the `SubagentOutcome` typedef, which then listed two values
+ * this function cannot produce and omitted three it does. One list now, and
+ * the typedef points at it.
+ * @type {readonly string[]}
+ */
+export const SUBAGENT_STOP_REASONS = Object.freeze(['completed', 'aborted', 'error', 'max-tokens', 'refusal'])
+
 /** @param {any} run @param {any} [settled] the awaited `run.result`, when the
  *   caller has it. Optional on purpose: `settled ?? …` below is the whole point
  *   of the parameter, and a caller handing over only the run must get
@@ -233,11 +246,7 @@ export function toSubagentOutcome(run, settled) {
   // can await it.
   const result = record(settled ?? (isThenable(source.result) ? null : source.result))
   const stopReason = str(result.stopReason)
-  // DSH's own vocabulary, from `SubagentStopReasonMap`. `cancelled` and
-  // `max-turns` were this package's guesses and match nothing DSH emits, so an
-  // aborted or token-capped child read as `unknown` — indistinguishable from a
-  // stop reason we had never seen.
-  const known = ['completed', 'aborted', 'error', 'max-tokens', 'refusal']
+  const known = SUBAGENT_STOP_REASONS
   const output = Array.isArray(result.output)
     ? result.output.map((block) => (record(block).type === 'text' ? str(record(block).text) : '')).filter(Boolean).join('\n')
     : str(result.output)
