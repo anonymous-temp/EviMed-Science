@@ -134,6 +134,10 @@ test('the hidden controls are named by their accessible names in both shipped la
   assert.match(css, /aria-label="Add workspace"/);
   assert.match(css, /aria-label="添加工作区"/);
   assert.match(css, /_previewBadge"\]:empty/);
+  // The hero workspace chip: the kernel renders the button itself and only
+  // its popup through the slot the shell occupies, so withdrawing the popup
+  // left a button that opens nothing.
+  assert.match(css, /_heroWorkspaceRow"\]\{display:none/);
   assert.equal(f.styles[0].attributes['data-evimed-shell'], '');
 });
 
