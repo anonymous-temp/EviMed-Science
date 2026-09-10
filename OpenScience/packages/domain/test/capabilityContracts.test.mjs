@@ -117,6 +117,7 @@ test("a domain rating written directly on the study is read, not reported missin
   // `study.riskOfBias = { rating, reason }` while the skill had not yet said
   // the ratings live under `domains`, and each was told six times that it had
   // rated nothing. The verdict has to be true of the table it was given.
+  /** @param {Record<string, unknown>} domainsShape */
   const study = (domainsShape) => ({
     id: "S1",
     design: "randomized-controlled-trial",
@@ -129,12 +130,14 @@ test("a domain rating written directly on the study is read, not reported missin
     imprecision: { rating: "low", reason: "区间远离决策阈值" },
   };
   const body = { id: "B1", outcome: "心衰再住院", studyIds: ["S1"], startingCertainty: "high", downgrades: [], upgrades: [], certainty: "high", whatWouldChange: "无" };
+  /** @param {Record<string, unknown>} studyRecord */
   const files = (studyRecord) => ({
     "appraisal-table.json": JSON.stringify({ question: "SGLT2 抑制剂与 HFpEF 再住院？", studies: [studyRecord], bodies: [body] }),
     "appraisal-table.csv": "studyId\nS1\n",
     "citation-ledger.csv": "identifier\n10.1056/NEJMoa2107038\n",
   });
-  const missing = (verdict) => verdict.issues.filter((entry) => entry.code === "appraisal_domain_missing");
+  /** @param {{ issues: { code: string, message: string }[] }} verdict */
+  const missing = (verdict) => verdict.issues.filter((/** @type {{ code: string }} */ entry) => entry.code === "appraisal_domain_missing");
 
   assert.equal(missing(appraisalTableFindings(gateInput("appraisal-table", files(study({ domains: ratings }))))).length, 0, "the canonical shape");
   assert.equal(missing(appraisalTableFindings(gateInput("appraisal-table", files(study(ratings))))).length, 0, "the shape the runs wrote");
