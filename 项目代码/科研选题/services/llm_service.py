@@ -170,6 +170,8 @@ class LLMService:
     }
 
     def __init__(self):
+        # The managed launcher supplies the gateway policy independently of logical tier.
+        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
         self.client = None
         self._client_api_key = None
         self._credential_refresh_lock = asyncio.Lock()
@@ -303,9 +305,12 @@ class LLMService:
             return selected, "pro"
         raise ValueError(f"不支持的DeepSeek模型: {selected}")
 
+    def _uses_reasoning(self, model_tier: str) -> bool:
+        return self._gateway_high_thinking or model_tier == "pro"
+
     def _effective_max_tokens(self, model_tier: str, answer_tokens: int) -> int:
-        """为 Pro 推理过程预留输出空间。"""
-        if model_tier != "pro":
+        """Reserve output room whenever reasoning is enabled."""
+        if not self._uses_reasoning(model_tier):
             return answer_tokens
         return min(
             settings.DEEPSEEK_MAX_OUTPUT_TOKENS,
@@ -327,10 +332,10 @@ class LLMService:
         stream: bool,
     ) -> tuple[str, str, int, Dict[str, Any]]:
         selected_model, tier = self._resolve_model(model, model_tier)
-        is_pro = tier == "pro"
+        thinking_enabled = self._uses_reasoning(tier)
         timeout = (
             settings.DEEPSEEK_PRO_TIMEOUT_SECONDS
-            if is_pro
+            if thinking_enabled
             else settings.DEEPSEEK_FLASH_TIMEOUT_SECONDS
         )
         kwargs: Dict[str, Any] = {
@@ -340,10 +345,10 @@ class LLMService:
             "stream": stream,
             "timeout": timeout,
             "extra_body": {
-                "thinking": {"type": "enabled" if is_pro else "disabled"}
+                "thinking": {"type": "enabled" if thinking_enabled else "disabled"}
             },
         }
-        if is_pro:
+        if thinking_enabled:
             kwargs["reasoning_effort"] = "high"
         else:
             kwargs["temperature"] = temperature
@@ -356,9 +361,8 @@ class LLMService:
         usage = getattr(response, "usage", None)
         return int(getattr(usage, field, 0) or 0)
 
-    @classmethod
     def _log_completion(
-        cls,
+        self,
         *,
         model: str,
         tier: str,
@@ -374,10 +378,10 @@ class LLMService:
             "output_tokens=%s output_chars=%s finish_reason=%s",
             model,
             tier,
-            "enabled" if tier == "pro" else "disabled",
+            "enabled" if self._uses_reasoning(tier) else "disabled",
             elapsed,
-            cls._usage_value(response, "prompt_tokens") if response else 0,
-            cls._usage_value(response, "completion_tokens") if response else 0,
+            self._usage_value(response, "prompt_tokens") if response else 0,
+            self._usage_value(response, "completion_tokens") if response else 0,
             output_chars,
             finish_reason,
         )
@@ -441,7 +445,7 @@ class LLMService:
             stream=False,
         )
         budgets = [kwargs["max_tokens"]]
-        if tier == "pro":
+        if self._uses_reasoning(tier):
             expanded = min(
                 settings.DEEPSEEK_MAX_OUTPUT_TOKENS,
                 kwargs["max_tokens"] * 2,

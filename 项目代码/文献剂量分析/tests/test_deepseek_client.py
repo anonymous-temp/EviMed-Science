@@ -188,3 +188,33 @@ async def test_empty_stream_is_rejected():
             [{"role": "user", "content": "x"}], tier="flash"
         ):
             pass
+
+
+@pytest.mark.parametrize("policy", ["", "disabled", "high-thinking"])
+def test_gateway_policy_reserves_flash_reasoning_and_preserves_tier(monkeypatch, caplog, policy):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", policy)
+    managed = policy == "high-thinking"
+    responses = [_response("partial", "length"), _response("complete")] if managed else [_response("complete")]
+    client, api = _sync_client(responses)
+    with caplog.at_level("INFO"):
+        assert client.complete([{"role": "user", "content": "x"}], tier="flash", max_tokens=2000) == "complete"
+    assert [call["max_tokens"] for call in api.calls] == ([6096, 12192] if managed else [2000])
+    request = api.calls[0]
+    assert request["model"] == "deepseek-flash"
+    assert request["extra_body"]["thinking"]["type"] == ("enabled" if managed else "disabled")
+    assert request.get("reasoning_effort") == ("high" if managed else None)
+    assert request["timeout"] == (client.pro_timeout_seconds if managed else client.flash_timeout_seconds)
+    assert ("temperature" in request) is not managed
+    assert "tier=flash" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_gateway_flash_stream_reserves_reasoning_budget(monkeypatch):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    client = DeepSeekClient(api_key="test-key")
+    completions = _AsyncCompletions([_chunk("answer"), _chunk(finish_reason="stop")])
+    client._async_client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    assert [part async for part in client.astream([{"role": "user", "content": "x"}], tier="flash", max_tokens=2000)] == ["answer"]
+    request = completions.calls[0]
+    assert request["max_tokens"] == 6096
+    assert request["reasoning_effort"] == "high"

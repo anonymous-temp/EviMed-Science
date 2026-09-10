@@ -28,7 +28,7 @@ test("the real application wires every provider call into the durable usage ledg
     production: false, runtimeMode: "mock", authMode: "local", devAuth: false,
     bootstrapUser: "", bootstrapPassword: "", deepseekProviderEnabled: true,
     deepseekApiKey: "test-provider-key", deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}`,
-    deepseekModel: "deepseek-v4-flash", modelGatewaySigningSecret: secret,
+    modelGatewaySigningSecret: secret,
     requireDurableUsageLedger: true, modelGatewayReservationMaxOutputTokens: 4096,
     memOsEngineUrl: "", requireMemoryIndex: false,
   });
@@ -49,7 +49,15 @@ test("the real application wires every provider call into the durable usage ledg
     assert.equal(response.status, 200);
     await response.json();
     assert.ok(app.usageLedger);
-    const summary = await app.usageLedger.summary(user.id, { since: new Date("2020-01-01T00:00:00Z") });
+    // The response stream completes before its durable terminal transition.
+    // Observe that transition instead of racing it with an immediate SELECT.
+    let summary;
+    const settlementDeadline = Date.now() + 5000;
+    do {
+      summary = await app.usageLedger.summary(user.id, { since: new Date("2020-01-01T00:00:00Z") });
+      if (summary.settledCalls || summary.uncertainCalls) break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    } while (Date.now() < settlementDeadline);
     assert.equal(summary.settledCalls, 1);
     assert.equal(summary.uncertainCalls, 0);
     assert.equal(summary.cacheHitTokens, 4);

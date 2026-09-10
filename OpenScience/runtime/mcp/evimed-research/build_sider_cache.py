@@ -125,6 +125,29 @@ def build(output: Path) -> None:
     ))
 
 
+def verify(output: Path) -> None:
+    """Exercise the shipped query path without any external request."""
+    import public_sources
+
+    license_file = Path(__file__).resolve().parent / "data" / "sider-4.1.LICENSE.json"
+    if not license_file.is_file() or output.stat().st_mode & 0o222:
+        raise SystemExit("SIDER cache must ship read-only with its license receipt")
+    previous = os.environ.get("EVIMED_SIDER_CACHE_FILE")
+    os.environ["EVIMED_SIDER_CACHE_FILE"] = str(output)
+    try:
+        for query in ("aspirin", "metformin"):
+            result = public_sources.biomedical_search({"source": "sider", "query": query, "limit": 2})
+            if result.get("status") not in {"success", "warning"} or not result.get("data", {}).get("items"):
+                raise SystemExit("SIDER build smoke returned no records for " + query)
+            if not any("research-only" in warning for warning in result.get("warnings", [])):
+                raise SystemExit("SIDER build smoke lost its clinical-use boundary")
+    finally:
+        if previous is None:
+            os.environ.pop("EVIMED_SIDER_CACHE_FILE", None)
+        else:
+            os.environ["EVIMED_SIDER_CACHE_FILE"] = previous
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -133,7 +156,9 @@ def main() -> None:
         default=Path(__file__).resolve().parent / "data" / "sider-4.1.sqlite",
     )
     arguments = parser.parse_args()
-    build(arguments.output.resolve())
+    output = arguments.output.resolve()
+    build(output)
+    verify(output)
 
 
 if __name__ == "__main__":

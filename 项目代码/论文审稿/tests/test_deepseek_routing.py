@@ -291,7 +291,9 @@ async def test_chat_uses_flash_without_report_and_pro_with_report(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_shared_model_cache_keeps_reasoning_roles_separate(monkeypatch):
+@pytest.mark.parametrize("policy", ["", "high-thinking"])
+async def test_shared_model_cache_keeps_reasoning_roles_separate(monkeypatch, policy):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", policy)
     gateway = _gateway(monkeypatch)
     gateway.enable_cache = True
     calls = []
@@ -306,3 +308,42 @@ async def test_shared_model_cache_keeps_reasoning_roles_separate(monkeypatch):
         result = await gateway.call_with_retry(messages, model_tier=tier)
         assert result["text"] == tier.value
     assert calls == [ModelTier.FAST, ModelTier.ADVANCED]
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_gateway_fast_request_reserves_reasoning_and_preserves_logical_tier(monkeypatch, stream):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    requests = []
+    timeouts = []
+
+    def response_factory(request):
+        truncated = not stream and len(requests) == 1
+        return _FakeResponse(
+            request, content="partial" if truncated else "complete",
+            finish_reason="length" if truncated else "stop",
+            stream_lines=[b'data: {"choices":[{"delta":{"content":"complete"},"finish_reason":"stop"}]}\n'],
+        )
+
+    def session(timeout):
+        timeouts.append(timeout)
+        return _FakeSession(requests, response_factory=response_factory)
+
+    monkeypatch.setattr(gateway_module, "_make_session", session)
+    gateway = _gateway(monkeypatch)
+    messages = [{"role": "user", "content": "test"}]
+    if stream:
+        assert [part async for part in gateway.stream_text(messages, model_tier=ModelTier.FAST, max_tokens=2000)] == ["complete"]
+    else:
+        result = await gateway._call_llm(messages, gateway.model_mapping[ModelTier.FAST], 0.2, 2000, model_tier=ModelTier.FAST)
+        assert result["content"] == "complete"
+        assert result["tier"] == "flash"
+        assert result["thinking"] == "enabled"
+    assert [request["json"]["max_tokens"] for request in requests] == ([6096] if stream else [6096, 12192])
+    assert timeouts == [gateway.pro_timeout]
+    for request in requests:
+        assert request["json"]["model"] == "deepseek-flash"
+        assert request["json"]["thinking"] == {"type": "enabled"}
+        assert request["json"]["reasoning_effort"] == "high"
+        assert "temperature" not in request["json"]

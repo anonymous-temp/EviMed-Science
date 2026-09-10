@@ -49,6 +49,8 @@ class LLMClient:
         self.base_url = base_url or os.getenv(
             "DEEPSEEK_BASE_URL", "https://api.deepseek.com"
         )
+        # The managed launcher supplies the gateway policy independently of logical tier.
+        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
         self._client = None
         self._validate_key()
 
@@ -67,9 +69,12 @@ class LLMClient:
             return self.pro_model
         raise ValueError(f"Unsupported DeepSeek model tier: {model_tier}")
 
+    def _uses_reasoning(self, model_tier: str) -> bool:
+        return self._gateway_high_thinking or model_tier == "pro"
+
     def effective_max_tokens(self, model_tier: str, answer_tokens: int) -> int:
-        """Reserve room for Pro reasoning while preserving the answer budget."""
-        if model_tier != "pro":
+        """Reserve room for enabled reasoning while preserving the answer budget."""
+        if not self._uses_reasoning(model_tier):
             return answer_tokens
         return min(
             self.max_output_tokens,
@@ -80,8 +85,8 @@ class LLMClient:
         )
 
     def expanded_max_tokens(self, model_tier: str, current_tokens: int) -> int:
-        """Expand a truncated Pro request once, without exceeding the API cap."""
-        if model_tier != "pro":
+        """Expand a truncated reasoning request once, without exceeding the API cap."""
+        if not self._uses_reasoning(model_tier):
             return current_tokens
         return min(self.max_output_tokens, current_tokens * 2)
 
@@ -143,16 +148,16 @@ class LLMClient:
             all_messages.append({"role": "system", "content": system})
         all_messages.extend(messages)
 
-        is_pro = model_tier == "pro"
+        thinking_enabled = self._uses_reasoning(model_tier)
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": all_messages,
             "max_tokens": request_max_tokens,
             "extra_body": {
-                "thinking": {"type": "enabled" if is_pro else "disabled"}
+                "thinking": {"type": "enabled" if thinking_enabled else "disabled"}
             },
         }
-        if is_pro:
+        if thinking_enabled:
             kwargs["reasoning_effort"] = "high"
         else:
             kwargs["temperature"] = temperature
@@ -188,8 +193,8 @@ class LLMClient:
                 "model=%s tier=%s thinking=%s latency_seconds=%.3f "
                 "input_tokens=%s output_tokens=%s finish_reason=%s",
                 model,
-                "pro" if is_pro else "flash",
-                "enabled" if is_pro else "disabled",
+                model_tier,
+                "enabled" if thinking_enabled else "disabled",
                 time.perf_counter() - start_time,
                 getattr(getattr(response, "usage", None), "prompt_tokens", 0),
                 getattr(getattr(response, "usage", None), "completion_tokens", 0),

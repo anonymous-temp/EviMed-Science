@@ -112,7 +112,9 @@ def test_empty_response_is_rejected(monkeypatch):
         client._chat_openai([], "", 0, 10, client.flash_model, False, "flash")
 
 
-def test_truncated_pro_response_retries_with_expanded_budget(monkeypatch):
+@pytest.mark.parametrize("tier, policy", [("pro", ""), ("flash", "high-thinking")])
+def test_truncated_reasoning_response_retries_with_expanded_budget(monkeypatch, tier, policy):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", policy)
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     client = LLMClient()
 
@@ -137,7 +139,7 @@ def test_truncated_pro_response_retries_with_expanded_budget(monkeypatch):
     completions = SequencedCompletions()
     client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
-    result = client._chat_openai([], "", 0, 10, client.pro_model, False, "pro")
+    result = client._chat_openai([], "", 0, 10, client.model_for_tier(tier), False, tier)
 
     assert result == "complete"
     assert [request["max_tokens"] for request in completions.requests] == [4106, 8212]
@@ -169,3 +171,20 @@ def test_openai_client_bypasses_system_proxy_environment(monkeypatch):
     assert client._get_openai_client() is not None
     assert captured["http"]["trust_env"] is False
     assert isinstance(captured["openai"]["http_client"], FakeHttpClient)
+
+
+@pytest.mark.parametrize("policy", ["", "disabled", "high-thinking"])
+def test_gateway_policy_reserves_reasoning_for_flash_without_changing_tier(monkeypatch, caplog, policy):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", policy)
+    client, completions = _client(monkeypatch)
+    with caplog.at_level("INFO"):
+        client.chat([{"role": "user", "content": "classify"}], model_tier="flash", max_tokens=2000)
+    request = completions.requests[0]
+    managed = policy == "high-thinking"
+    assert request["model"] == "deepseek-flash"
+    assert request["max_tokens"] == (6096 if managed else 2000)
+    assert request["extra_body"]["thinking"]["type"] == ("enabled" if managed else "disabled")
+    assert request.get("reasoning_effort") == ("high" if managed else None)
+    assert ("temperature" in request) is not managed
+    assert "tier=flash" in caplog.text
+    assert client.expanded_max_tokens("flash", request["max_tokens"]) == (12192 if managed else 2000)

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
 import re
 from collections.abc import Awaitable, Callable
@@ -69,6 +70,12 @@ class DeepSeekClient:
             raise LLMAuthError("DeepSeek API key is empty")
         if max_retries < 1:
             raise LLMError("max_retries must be >= 1")
+        # The managed launcher supplies this fixed policy; it grants no permissions.
+        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
+        self._reasoning_reserve_tokens = int(os.getenv("DEEPSEEK_PRO_REASONING_RESERVE_TOKENS", "4096"))
+        self._max_output_tokens = int(os.getenv("DEEPSEEK_MAX_OUTPUT_TOKENS", "384000"))
+        if self._gateway_high_thinking:
+            timeout = max(timeout, float(os.getenv("DEEPSEEK_PRO_TIMEOUT_SECONDS", "300")))
         self._flash_model = flash_model
         self._pro_model = pro_model
         self._max_retries = max_retries
@@ -118,20 +125,21 @@ class DeepSeekClient:
         json_mode: bool = False,
     ) -> str:
         """One chat completion; returns the assistant message content."""
+        thinking_enabled = tier == "pro" or self._gateway_high_thinking
         payload: dict[str, Any] = {
             "model": self.model_for(tier),
             "messages": messages,
             "max_tokens": max_tokens,
             "stream": False,
-            "thinking": {"type": "disabled" if tier == "flash" else "enabled"},
+            "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
         }
-        if tier == "flash":
+        if not thinking_enabled:
             payload["temperature"] = temperature
         else:
             payload["reasoning_effort"] = "high"
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
-        body = await self._post("/chat/completions", payload)
+        body = await self._complete_with_budget(payload)
         choices = body.get("choices")
         if not isinstance(choices, list) or not choices:
             raise LLMResponseError("DeepSeek response carried no choices")
@@ -148,6 +156,28 @@ class DeepSeekClient:
                 usage.get("completion_tokens"),
             )
         return content
+
+    async def _complete_with_budget(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Reserve managed reasoning output and retry a truncated answer once."""
+        if not self._gateway_high_thinking:
+            return await self._post("/chat/completions", payload)
+        answer_tokens = payload["max_tokens"]
+        budget = min(
+            self._max_output_tokens,
+            max(answer_tokens * 2, answer_tokens + self._reasoning_reserve_tokens),
+        )
+        budgets = [budget]
+        expanded = min(self._max_output_tokens, budget * 2)
+        if expanded > budget:
+            budgets.append(expanded)
+        for budget in budgets:
+            payload["max_tokens"] = budget
+            body = await self._post("/chat/completions", payload)
+            choices = body.get("choices")
+            choice = choices[0] if isinstance(choices, list) and choices else None
+            if not isinstance(choice, dict) or choice.get("finish_reason") != "length":
+                return body
+        raise LLMResponseError("DeepSeek response was truncated after reasoning budget expansion")
 
     async def complete_json(
         self,

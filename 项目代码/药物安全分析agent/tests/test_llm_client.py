@@ -202,3 +202,60 @@ async def test_shared_flash_model_preserves_logical_reasoning_tier(tier, thinkin
     assert body["max_tokens"] == 1000
     assert ("temperature" in body) == (tier == "flash")
     assert body.get("reasoning_effort") == ("high" if tier == "pro" else None)
+
+
+
+@pytest.mark.parametrize("policy", ["", "disabled", "high-thinking"])
+@respx.mock
+async def test_gateway_policy_reserves_flash_reasoning_without_affecting_direct_calls(monkeypatch, policy):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", policy)
+    managed = policy == "high-thinking"
+    route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_payload("ok")))
+    async with _client() as llm:
+        assert await llm.complete([{"role": "user", "content": "ping"}], tier="flash", max_tokens=2000) == "ok"
+    request = route.calls[0].request
+    body = json.loads(request.content)
+    assert body["model"] == "deepseek-flash"
+    assert body["max_tokens"] == (6096 if managed else 2000)
+    assert body["thinking"] == {"type": "enabled" if managed else "disabled"}
+    assert body.get("reasoning_effort") == ("high" if managed else None)
+    assert ("temperature" in body) is not managed
+    assert request.extensions["timeout"]["read"] == (300.0 if managed else 120.0)
+
+
+@respx.mock
+async def test_gateway_flash_truncation_expands_once_then_rejects_partial_content(monkeypatch):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    partial = _payload("partial")
+    partial["choices"][0]["finish_reason"] = "length"
+    route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=partial))
+    async with _client() as llm:
+        with pytest.raises(LLMResponseError, match="truncated"):
+            await llm.complete([{"role": "user", "content": "ping"}], tier="flash", max_tokens=2000)
+    assert [json.loads(call.request.content)["max_tokens"] for call in route.calls] == [6096, 12192]
+
+
+@respx.mock
+async def test_gateway_reasoning_budget_cap_prevents_duplicate_retry(monkeypatch):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    monkeypatch.setenv("DEEPSEEK_MAX_OUTPUT_TOKENS", "5000")
+    partial = _payload("partial")
+    partial["choices"][0]["finish_reason"] = "length"
+    route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=partial))
+    async with _client() as llm:
+        with pytest.raises(LLMResponseError, match="truncated"):
+            await llm.complete([{"role": "user", "content": "ping"}], tier="flash", max_tokens=4000)
+    assert [json.loads(call.request.content)["max_tokens"] for call in route.calls] == [5000]
+
+
+@respx.mock
+async def test_gateway_flash_returns_complete_answer_after_expansion(monkeypatch):
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    partial = _payload("partial")
+    partial["choices"][0]["finish_reason"] = "length"
+    route = respx.post(f"{BASE}/chat/completions").mock(side_effect=[
+        httpx.Response(200, json=partial), httpx.Response(200, json=_payload("complete")),
+    ])
+    async with _client() as llm:
+        assert await llm.complete([{"role": "user", "content": "ping"}], tier="flash", max_tokens=2000) == "complete"
+    assert [json.loads(call.request.content)["max_tokens"] for call in route.calls] == [6096, 12192]

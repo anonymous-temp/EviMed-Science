@@ -150,7 +150,7 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // that every such file is in the image. A deployment's bind mount still
 // overrides it; the shipped record is deliberately dated 1970 so every
 // plugin reads as unknown until the nightly matrix writes a real one.
-export const WEB_DOCKERFILE_SHA256 = "sha256:3accdc0f500be46e3694b17b957782283263e1ae43f22fd2275ba1a3899da363";
+export const WEB_DOCKERFILE_SHA256 = "sha256:65f0287dc27160ce5530f6e2a3485dbb772a753726fb42926d5982d9958ac570";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

@@ -217,3 +217,41 @@ def test_401_retries_once_with_the_rotated_managed_gateway_token(monkeypatch, tm
 
     assert result == "fresh-response"
     assert service._client_api_key == "fresh-token"
+
+
+
+def test_gateway_policy_reserves_flash_reasoning_and_retries_truncation(monkeypatch, caplog):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("EVIMED_MODEL_GATEWAY_POLICY", "high-thinking")
+    service = LLMService()
+    service.client = object()
+    requests = []
+
+    async def completion(kwargs, timeout):
+        requests.append(dict(kwargs))
+        truncated = len(requests) == 1
+        return SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content="partial" if truncated else "complete"),
+            finish_reason="length" if truncated else "stop",
+        )])
+
+    monkeypatch.setattr(service, "_create_completion_with_refresh", completion)
+    with caplog.at_level("INFO"):
+        assert asyncio.run(service.complete_messages(MESSAGES, model_tier="flash", max_tokens=2000)) == "complete"
+    assert [request["max_tokens"] for request in requests] == [6096, 12192]
+    assert "tier=flash thinking=enabled" in caplog.text
+    for request in requests:
+        assert request["model"] == "deepseek-flash"
+        assert request["extra_body"]["thinking"] == {"type": "enabled"}
+        assert request["reasoning_effort"] == "high"
+        assert request["timeout"] == settings.DEEPSEEK_PRO_TIMEOUT_SECONDS
+        assert "temperature" not in request
+
+    _, tier, _, stream_request = service._request_kwargs(
+        messages=MESSAGES, model=None, model_tier="flash", temperature=0.2,
+        max_tokens=2000, json_mode=False, stream=True,
+    )
+    assert tier == "flash"
+    assert stream_request["max_tokens"] == 6096
+    assert stream_request["reasoning_effort"] == "high"
