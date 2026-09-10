@@ -160,7 +160,9 @@ function proseHygieneIssues(input, proseFiles) {
     if (!body) continue
     const leak = runtimeLeakageLine(body)
     if (leak) {
-      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names the retrieval machinery: ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
+      // The matched term is the actionable part: the line excerpt alone sent a
+      // run through three rewrites of everything but the two words that tripped it.
+      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names the retrieval machinery (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
     }
     for (const citationIssue of citationIntegrityIssues(body)) {
       issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))
@@ -1186,12 +1188,47 @@ function validateGeoContentPack(input) {
   // Markdown is a stub — "三段见 JSON" — would have had its every block go
   // unexamined while the check reported clean. Found by writing a test whose
   // assertion could not fail and then asking what it should have asserted.
-  const blockProse = /** @type {any[]} */ (Array.isArray(pack?.blocks) ? pack.blocks : [])
-    .flatMap((/** @type {any} */ block) => (isRecord(block) ? [block.conclusion, block.basis, block.conditions] : []))
-    .map((/** @type {any} */ value) => String(value ?? ''))
-  const packProse = [...proseFilesOf(input).map((path) => text(input, path)), ...blockProse].join('\n')
+  //
+  // One pass per file and per block rather than one over the concatenation,
+  // so a hit says which file, which line and which words. The concatenated
+  // pass raised the same rule three times against a pack whose author could
+  // not find the sentence among six files and every block.
+  /** @type {{ path: string, label: string, body: string }[]} */
+  const packPieces = proseFilesOf(input).map((path) => ({ path, label: path, body: text(input, path) }))
+  for (const [index, block] of /** @type {any[]} */ (Array.isArray(pack?.blocks) ? pack.blocks : []).entries()) {
+    if (!isRecord(block)) continue
+    const id = typeof block.id === 'string' && block.id ? block.id : `#${index + 1}`
+    for (const field of ['conclusion', 'basis', 'conditions']) {
+      const body = String(block[field] ?? '')
+      if (body) packPieces.push({ path: 'geo-content-pack.json', label: `geo-content-pack.json block ${id} ${field}`, body })
+    }
+  }
+  const seen = new Set()
+  /** Where each required-sentence rule's trigger first appears, by rule id. */
+  /** @type {Map<string, { piece: { path: string, label: string }, line: number | null, match: string | null }>} */
+  const triggerSites = new Map()
+  for (const piece of packPieces) {
+    for (const hit of clinicalSafetyRuleHits({ reportText: piece.body, practical: piece.body })) {
+      // A required sentence may live in any one piece, so that kind (`where:
+      // "trigger"`) is judged over the whole pack below; here only its trigger's
+      // first location is kept, so the finding can still say where it was set off.
+      if (hit.where === 'trigger') {
+        if (!triggerSites.has(hit.ruleId)) triggerSites.set(hit.ruleId, { piece, line: hit.line, match: hit.match })
+        continue
+      }
+      const key = `${hit.ruleId}\u0000${piece.label}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const where = `${piece.label}${hit.line ? ` line ${hit.line}` : ''}${hit.match ? ` (matched "${hit.match}")` : ''}`
+      issues.push(issue('clinical_safety_rule', `${where}: ${hit.message}`, { path: piece.path, check: checkIdOf(clinicalSafetyRuleHits), rule: hit.ruleId, line: hit.line ?? undefined }))
+    }
+  }
+  const packProse = packPieces.map((piece) => piece.body).join('\n')
   for (const hit of clinicalSafetyRuleHits({ reportText: packProse, practical: packProse })) {
-    issues.push(issue('clinical_safety_rule', hit.message, { check: checkIdOf(clinicalSafetyRuleHits), rule: hit.ruleId, line: hit.line ?? undefined }))
+    if (hit.where !== 'trigger') continue
+    const site = triggerSites.get(hit.ruleId)
+    const where = site ? `${site.piece.label}${site.line ? ` line ${site.line}` : ''}${site.match ? ` (triggered by "${site.match}")` : ''}: ` : ''
+    issues.push(issue('clinical_safety_rule', `${where}${hit.message}`, { path: site?.piece.path, check: checkIdOf(clinicalSafetyRuleHits), rule: hit.ruleId, line: site?.line ?? undefined }))
   }
 
   const measurement = geoMeasurementNotices(input)

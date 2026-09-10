@@ -1,0 +1,37 @@
+{
+  "capability": "geo-content",
+  "brief": "geo-001-suxiao-baseline",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-geo-content",
+  "session": "acc-geo-content-mtuxzr09",
+  "runId": "run_2b99e6f6294c35fb1aaa04340e972143",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-09-10T04:09:33Z",
+  "prompt": "brandEntity: {\"name\":\"速效救心丸\",\"approval\":\"国药准字Z12020025\",\"labelIndication\":\"行气活血，祛瘀止痛。用于气滞血瘀所致的胸痹，症见心痛、胸闷、憋气\"}\nquestionSet: [\"速效救心丸可以长期服用吗？\",\"速效救心丸和硝酸甘油有什么区别？\",\"速效救心丸饭前吃还是饭后吃？\",\"心绞痛发作时含服几粒速效救心丸？\",\"速效救心丸能预防心梗吗？\"]\nplatforms: [\"deepseek\",\"doubao\",\"kimi\",\"qianwen\",\"yuanbao\"]\ndeepMode: 0\nunbrandedQuestionSet: [\"胸闷气短心慌吃什么中成药？\",\"冠心病心绞痛平时含服什么药应急？\",\"家里给老人常备哪种救心药比较好？\",\"突然心口疼含什么药能缓解？\",\"心绞痛发作时应该怎么办？\"]",
+  "outcome": {
+    "status": "failed",
+    "errorCode": "specialist_deliverable_not_accepted",
+    "verification": null,
+    "artifacts": [
+      "deliverables/geo-pack/brand-entity.json",
+      "deliverables/geo-pack/citation-ledger.csv",
+      "deliverables/geo-pack/geo-content-pack.json",
+      "deliverables/geo-pack/geo-content-pack.md",
+      "deliverables/geo-pack/geo-measurement.md",
+      "deliverables/geo-pack/geo-monitor.csv",
+      "deliverables/geo-pack/geo-probe-log.jsonl",
+      "deliverables/geo-pack/llms.txt",
+      "delivery-summary.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "本次运行计划了 1 件交付物，没有一件通过契约校验，因此产物未经质量门。",
+      "biomedical_source_search searched and returned no source"
+    ],
+    "effectiveAgentId": "geo-content",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 3980036,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}

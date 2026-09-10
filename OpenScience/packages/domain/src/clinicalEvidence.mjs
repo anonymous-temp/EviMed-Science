@@ -1792,22 +1792,25 @@ checkedBy(evaluateClinicalSafetyRules, "clinical-safety-rules");
  * the report, and `where: "trigger"` says so rather than letting the number be
  * read as the offending line.
  * @param {{ reportText?: unknown, practical?: unknown, question?: unknown }} input
- * @returns {{ ruleId: string, message: string, line: number | null, where: string }[]}
+ * @returns {{ ruleId: string, message: string, line: number | null, where: string, match: string | null }[]}
  */
 export function clinicalSafetyRuleHits({ reportText, practical, question }) {
   const report = String(reportText ?? "");
   const practicalText = String(practical ?? "");
-  /** @type {{ ruleId: string, message: string, line: number | null, where: string }[]} */
+  /** @type {{ ruleId: string, message: string, line: number | null, where: string, match: string | null }[]} */
   const found = [];
   /** A rule's pattern may carry `g`, and `.test()` on a global regex advances
    *  `lastIndex` — scanning line by line with the rule's own object would skip
-   *  lines and report the wrong one. Locate with a stateless copy.
+   *  lines and report the wrong one. Locate with a stateless copy. The matched
+   *  text rides along: a rule's message says what must not be claimed, and a
+   *  run that cannot see which sentence made the claim rewrites the wrong
+   *  ones — a geo-content run spent all three submissions that way.
    *  @param {string} text @param {RegExp} pattern @param {string} where
-   *  @returns {{ line: number | null, where: string }} */
-  const locate = (text, pattern, where) => ({
-    line: firstMatchingLine(text, new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, "")))?.line ?? null,
-    where,
-  });
+   *  @returns {{ line: number | null, where: string, match: string | null }} */
+  const locate = (text, pattern, where) => {
+    const located = firstMatchingLine(text, new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, "")));
+    return { line: located?.line ?? null, where, match: located?.match ?? null };
+  };
   for (const rule of clinicalSafetyRules) {
     if (rule.kind === "report_forbidden") {
       let text = report;
@@ -2530,12 +2533,13 @@ function withoutReportSections(reportText, headingPattern) {
  *  document. "There is retrieval prose somewhere in your report" is not a
  *  repairable instruction.
  *  @param {string} text @param {RegExp} pattern
- *  @returns {{ line: number, text: string } | null}
+ *  @returns {{ line: number, text: string, match: string } | null}
  */
 function firstMatchingLine(text, pattern) {
   const lines = String(text ?? "").split("\n");
   for (const [index, line] of lines.entries()) {
-    if (pattern.test(line)) return { line: index + 1, text: excerpt(line) };
+    const found = pattern.exec(line);
+    if (found) return { line: index + 1, text: excerpt(line), match: excerpt(found[0]) };
   }
   return null;
 }
@@ -5022,7 +5026,7 @@ export function validateClinicalEvidencePackage({
  * validator applies the same pattern inline; this export is what lets the
  * generic validators reuse the rule rather than restate it (§14 rule 4).
  * @param {string} text
- * @returns {{ line: number, text: string } | null}
+ * @returns {{ line: number, text: string, match: string } | null}
  */
 export function runtimeLeakageLine(text) {
   return firstMatchingLine(text, runtimeLeakagePattern);

@@ -359,6 +359,33 @@ test("naming the probe tool in pack prose is blocked by the shared leakage rule"
   assert.ok(verdict.issues.some((entry) => entry.code === "runtime_leakage"));
 });
 
+test("a leakage finding names the term that tripped it", () => {
+  // A production run rewrote its delivery summary three times around the two
+  // words "访问层级" without ever being told which words had matched.
+  const leaking = goodPack();
+  leaking.files["geo-content-pack.md"] = "# 内容包\n\n速效救心丸不构成对急救的替代，服药不得延误就医。台账中已按来源标注访问层级。\n";
+  const verdict = gate(leaking);
+  const leak = verdict.issues.find((entry) => entry.code === "runtime_leakage");
+  assert.ok(leak, JSON.stringify(verdict.issues));
+  assert.match(leak.message, /matched "访问层级"/);
+  assert.equal(leak.path, "geo-content-pack.md");
+});
+
+test("a safety-rule finding in a block names the block, the field and the sentence", () => {
+  // The same run's other required finding carried no path and a line number
+  // into a concatenation of six files and every block. Per piece, with the
+  // matched text, the author can go straight to it.
+  const pack = goodPack();
+  const parsed = JSON.parse(pack.files["geo-content-pack.json"]);
+  parsed.blocks[0].basis = "含服后疼痛缓解，说明是心绞痛而不是胃病。";
+  pack.files["geo-content-pack.json"] = JSON.stringify(parsed);
+  const verdict = gate(pack);
+  const raised = verdict.issues.filter((entry) => entry.code === "clinical_safety_rule" && /diagnose or exclude/.test(entry.message));
+  assert.equal(raised.length, 1, JSON.stringify(verdict.issues));
+  assert.equal(raised[0].path, "geo-content-pack.json");
+  assert.match(raised[0].message, /^geo-content-pack\.json block B-01 basis line 1 \(matched "/);
+});
+
 test("the probe host in pack prose is noticed, and revision notes are exempt", () => {
   const leaking = goodPack();
   leaking.files["geo-content-pack.md"] = "# 内容包\n\n测量来自 43.248.117.249:9999。\n";

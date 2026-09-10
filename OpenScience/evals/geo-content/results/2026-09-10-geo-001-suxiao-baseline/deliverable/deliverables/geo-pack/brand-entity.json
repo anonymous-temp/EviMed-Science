@@ -1,0 +1,91 @@
+{
+  "name": "速效救心丸",
+  "approval": "国药准字Z12020025",
+  "genericName": "速效救心丸",
+  "manufacturer": "津药达仁堂集团股份有限公司第六中药厂",
+  "specification": "每丸重 40 mg",
+  "dosageForm": "滴丸剂",
+  "activeIngredients": [
+    "川芎",
+    "冰片"
+  ],
+  "indication": "行气活血，祛瘀止痛，增加冠脉血流量，缓解心绞痛。用于气滞血瘀型冠心病，心绞痛。",
+  "contraindication": "孕妇禁用。",
+  "precautions": "寒凝血瘀、阴虚血瘀胸痹心痛不宜单用。有过敏史者、过敏体质者慎用。伴有中重度心力衰竭的心肌缺血者慎用。在治疗期间，心绞痛持续发作，宜加用硝酸酯类药。",
+  "adverseReactions": "监测数据显示，本品可见以下不良反应：恶心、呕吐、口干、腹痛、胃部不适、头痛、头晕、皮疹、瘙痒、潮红、乏力、过敏及过敏样反应等。",
+  "dosage": "含服，一次4~6粒，一日3次；急性发作时，一次10~15粒。",
+  "jurisdiction": "中国大陆",
+  "language": "zh-CN",
+  "verification": {
+    "name": {
+      "status": "verified",
+      "sources": [
+        "C1",
+        "C2",
+        "C9"
+      ]
+    },
+    "approval": {
+      "status": "verified_from_public_sources",
+      "sources": [
+        "C2"
+      ],
+      "note": "批准文号经多个相互独立的公开药品信息页与生产企业公开答复一致印证；本轮未从监管机构官网逐条查得，故不标注为官网直查核验。"
+    },
+    "manufacturer": {
+      "status": "verified",
+      "sources": [
+        "C1"
+      ]
+    },
+    "specification": {
+      "status": "verified",
+      "sources": [
+        "C1"
+      ]
+    },
+    "indication": {
+      "status": "verified",
+      "sources": [
+        "C1",
+        "C9"
+      ]
+    },
+    "contraindication": {
+      "status": "verified",
+      "sources": [
+        "C1"
+      ]
+    },
+    "precautions": {
+      "status": "verified",
+      "sources": [
+        "C1"
+      ]
+    },
+    "adverseReactions": {
+      "status": "verified",
+      "sources": [
+        "C1"
+      ]
+    },
+    "dosage": {
+      "status": "corroborated_public",
+      "sources": [
+        "C2"
+      ],
+      "note": "说明书索引记录(C1)未载用法用量字段；该条来自公开药品信息页并得到指南及共识引述的剂量区间印证，标注为未核实到说明书原文。"
+    },
+    "labelRevisionDate": {
+      "status": "未核实",
+      "sources": []
+    },
+    "nmpaOfficialRegistryLookup": {
+      "status": "未核实",
+      "sources": [],
+      "note": "本轮未从国家药监局官网逐条查询，公开来源一致不能等同于官网核验。"
+    }
+  },
+  "userProvidedIndicationText": "行气活血，祛瘀止痛。用于气滞血瘀所致的胸痹，症见心痛、胸闷、憋气",
+  "userProvidedIndicationNote": "该文字由委托方提供，与说明书记录文字不一致；本包一律采用说明书索引记录文字，用户原文存此备查，差异原因未判定。"
+}
