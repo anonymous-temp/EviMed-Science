@@ -318,9 +318,11 @@ class RealLedgerTests(unittest.TestCase):
         # with their packages kept (evidence-appraisal went back from accepted
         # to failed when its transcript showed the gate had counted an errored
         # skill call as a load), eight still never run (three of them internal).
+        # On 2026-09-10 evidence-appraisal was accepted again on the release
+        # carrying the gate fix, read rather than trusted: seven accepted.
         self.assertEqual(statuses.count("not-run"), 8)
-        self.assertEqual(statuses.count("accepted"), 6)
-        self.assertEqual(statuses.count("failed"), 4)
+        self.assertEqual(statuses.count("accepted"), 7)
+        self.assertEqual(statuses.count("failed"), 3)
         self.assertIn("notice:", checker.coverage_notice())
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):
@@ -354,10 +356,11 @@ class RealLedgerTests(unittest.TestCase):
             row["id"] for row in document["capabilities"]
             if row["realDelivery"]["status"] == "accepted"
         )
-        # evidence-appraisal was on this list for one afternoon. Its transcript
-        # showed the gate had accepted an errored skill call as a load, so the
-        # capability's method was never in front of the model; see its note.
-        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "dataset-research-scoping", "manuscript-support", "off-label-analysis", "research-grant-development"])
+        # evidence-appraisal left this list for one evening: its transcript
+        # showed the gate had accepted an errored skill call as a load. It is
+        # back on the strength of a 2026-09-10 run whose transcript shows the
+        # delegation and the injected skills; see its note.
+        self.assertEqual(accepted, ["adr-analysis", "bibliometric-analysis", "dataset-research-scoping", "evidence-appraisal", "manuscript-support", "off-label-analysis", "research-grant-development"])
         progress = REPO / "PROGRESS.md"
         for row in document["capabilities"]:
             if row["realDelivery"]["status"] != "accepted":

@@ -132,15 +132,15 @@
       "evalHarness": "evals/evidence-appraisal",
       "briefCount": 4,
       "realDelivery": {
-        "status": "failed",
-        "evidence": "evals/evidence-appraisal/results/2026-09-09-appraisal-001-sglt2-hfpef",
-        "at": "2026-09-09T12:11:08",
+        "status": "accepted",
+        "evidence": "evals/evidence-appraisal/results/2026-09-10-appraisal-001-sglt2-hfpef",
+        "at": "2026-09-10T03:02:55",
         "surface": "http-api"
       },
       "relatedEvidence": [
         "evals/evidence-appraisal/briefs.json"
       ],
-      "note": "Downgraded from accepted on 2026-09-09 evening, on reading the run's transcript rather than its verdict. The 12-minute run on evimed-20260909-7f88cf2 (brief appraisal-001, SGLT2 inhibitors in HFpEF) wrote all five appraisal files, no repair round, and the control plane reported succeeded — but its one `skill` call for evidence-appraisal had returned `skill \"evidence-appraisal\" is unknown or no longer available`, and the gate counted any completed call as a load. Capability bodies are not in the kernel's skill roots on purpose; they reach a run only through evimed_delegate, and this run never delegated. So the package was produced by the capability run but without its method in front of the model, and one of the contract's three checks (skillsLoaded) passed on a false positive. The gate now requires the kernel's <skill_content> block for the requested name (agentRuns.mjs successfullyLoadedSkills), the routed-turn instruction now says delegate instead of load, and both are tested. The package is kept as evidence of what the run wrote; the row waits for a run on the release carrying the fix. The same-morning attempt on the previous release that wrote the clinical-evidence package's file names is kept beside it as ...-attempt1-failed."
+      "note": "Accepted on 2026-09-10 against evimed-20260910-dae363e on a fresh project: brief appraisal-001 (SGLT2 inhibitors in HFpEF) ended succeeded in 15 minutes. Read before this row changed: the root planned and delegated once (the plan-then-delegate instruction under test), the child was injected with all four manifest skills, the appraisal-table deliverable was accepted on its second submission with no gate issue at all (the first carried a required runtime_leakage finding and advisories the child repaired in place), nine studies each rated on the three domains under the domains object the skill now shows, three outcome bodies at high / moderate / moderate with every downgrade named, and the root completed without redoing anything. The independent reviewer left fourteen notices, two of them contradictions (a pooled all-cause-death estimate recorded as incoherent with its inputs but not verified; an interaction P value used as proof of consistent direction while a cited pre-specified analysis points the other way) — delivered, and kept here as the eval cases they are. History of this row: the 2026-09-09 acceptance was withdrawn when its transcript showed the gate counting an errored skill call as a load; the 2026-09-10 02:09 run on a8f9c0f proved the delegation fix but was stopped by hand in its third redo of an already-accepted deliverable, after six false appraisal_domain_missing advisories (the validator read only study.domains while the skill never said the ratings live there) — kept beside this one as ...-interrupted, and fixed in dae363e in the skill, the validator and the orchestration guidance. The attempt on the previous release that wrote the clinical-evidence package's file names is kept as ...-attempt1-failed."
     },
     {
       "id": "geo-content",
