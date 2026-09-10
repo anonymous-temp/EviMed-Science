@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import importlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -253,6 +254,83 @@ def test_bibliometric_record_limit_is_rejected_before_queue(tmp_path, monkeypatc
     assert response.status_code == 422
     assert response.json()["detail"] == "maxRecords must be an integer from 20 through 5000"
     assert not (workspace / "bibliometric-analysis-runs").exists()
+
+
+def test_a_degraded_engine_step_reaches_the_job_state(tmp_path, monkeypatch) -> None:
+    """An engine that finished with steps it could not do has to say which.
+
+    On 2026-09-09 a bibliometric run lost query generation, translation and
+    MeSH mapping to a missing dependency, degraded its search to a bare
+    `GLP-1`, and finished `succeeded` with nothing anywhere recording which
+    steps had not run. The status stays `succeeded` -- the engine did finish
+    and did produce artifacts, and renaming that outcome breaks every consumer
+    that switches on it -- but the module ledger now travels with it.
+    """
+    module, client, secret, workspace = _load_service(tmp_path, monkeypatch)
+    agent_root = Path(os.environ["EVIMED_AGENT_ROOT"])
+    (agent_root / "evimed_runner.py").write_text(
+        "import argparse,json\n"
+        "from pathlib import Path\n"
+        "p=argparse.ArgumentParser();p.add_argument('--request');p.add_argument('--output-dir');a=p.parse_args()\n"
+        "out=Path(a.output_dir);(out/'report.md').write_text('# Report\\n\\nEvidence.',encoding='utf-8')\n"
+        "(out/'result.json').write_text(json.dumps({'status':'succeeded','modules':{"
+        "'query_generation':{'status':'failed','reason':'httpx missing','fatal':False},"
+        "'network_analysis':{'status':'ok'}}}),encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    # The HTTP start would fork the worker; this test runs the worker itself,
+    # so the fork is stubbed out and then the real Popen is put back -- the
+    # worker has to actually spawn the fake engine for its result.json to exist.
+    original_popen = module.subprocess.Popen
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _NeverStarts())
+    job_id = client.post(
+        "/api/v1/evimed/bibliometric-analysis",
+        json={"action": "start", "topic": "degradation"},
+        headers={"Authorization": f"Bearer {_token(secret)}"},
+    ).json()["data"]["jobId"]
+    monkeypatch.setattr(module.subprocess, "Popen", original_popen)
+    state_path = workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.json"
+    assert module.run_job(str(state_path)) == 0
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["status"] == "succeeded", state
+    assert state["degraded"] is True, "a failed step must be visible outside the engine's own log"
+    assert state["modules"]["query_generation"]["reason"] == "httpx missing"
+    assert state["modules"]["network_analysis"]["status"] == "ok"
+
+
+def test_an_engine_that_reports_no_modules_is_not_recorded_as_undegraded(tmp_path, monkeypatch) -> None:
+    """Absent is "not reported", which is not the same as "nothing was degraded".
+
+    Defaulting the flag to false would make every engine that has not adopted
+    the ledger yet look like one that had, which is the shape of the silence
+    this field exists to end.
+    """
+    module, client, secret, workspace = _load_service(tmp_path, monkeypatch)
+    original_popen = module.subprocess.Popen
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *args, **kwargs: _NeverStarts())
+    job_id = client.post(
+        "/api/v1/evimed/bibliometric-analysis",
+        json={"action": "start", "topic": "silent"},
+        headers={"Authorization": f"Bearer {_token(secret)}"},
+    ).json()["data"]["jobId"]
+    monkeypatch.setattr(module.subprocess, "Popen", original_popen)
+    state_path = workspace / "bibliometric-analysis-runs" / ".jobs" / f"{job_id}.json"
+    assert module.run_job(str(state_path)) == 0
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["status"] == "succeeded"
+    assert "degraded" not in state
+    assert "modules" not in state
+
+
+class _NeverStarts:
+    """A Popen stand-in for tests that run the worker themselves."""
+
+    def poll(self):
+        return None
+
+    def wait(self, timeout=None):
+        return 0
 
 
 def test_interrupted_worker_is_not_reported_as_running(tmp_path, monkeypatch) -> None:
