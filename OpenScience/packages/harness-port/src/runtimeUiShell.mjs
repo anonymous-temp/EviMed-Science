@@ -143,9 +143,17 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     // Accessible names in both shipped languages, from the kernel's own
     // dictionaries (`workspace.add`). An empty preview badge keeps its pill
     // without this rule.
+    //
+    // The hero's workspace chip is rendered by the kernel itself, outside any
+    // slot; only the picker it opens lives in `conversation.hero.workspace`,
+    // which the shell occupies with nothing. Left alone, the chip stays as a
+    // button labelled with the container's directory name that opens nothing —
+    // a dead control on the first screen. Its row is a CSS-module class, so
+    // the suffix selector is the only handle, and hiding is all it is used for.
     style.textContent = [
       'button[aria-label="Add workspace"],button[aria-label="添加工作区"]{display:none !important}',
       '[class$="_previewBadge"]:empty{display:none !important}',
+      '[class$="_heroWorkspaceRow"]{display:none !important}',
     ].join('\n');
     doc.head.appendChild(style);
     ctx.effect(() => () => { style.remove(); }, 'evimed-shell: stylesheet');
