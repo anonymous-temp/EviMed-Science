@@ -57,18 +57,48 @@ test("every patch row carries an explicit id", async () => {
   }
 });
 
-test("the composition mounts our five agent plugins and nothing we ruled out", async () => {
+test("the composition mounts every agent plugin we own and nothing we ruled out", async () => {
   const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  // Counted, not named in the title: it said "five" while there were eight,
+  // and a number in a sentence is a number nothing checks.
+  assert.equal(AGENT_PLUGIN_IDS.length, 8, "add the row here when a plugin is added, so the count stays a fact");
+  assert.equal(HOST_PLUGIN_IDS.length, 4);
   for (const id of AGENT_PLUGIN_IDS) assert.match(preset, new RegExp(`id: ${id}\\b`), id);
   for (const banned of ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "tool-goal"]) {
     const mounted = new RegExp(`^\\s*-?\\s*id: ${banned}\\s*$`, "m");
     assert.ok(!mounted.test(preset), `${banned} is mounted; it was ruled out on purpose`);
   }
   assert.match(preset, /includeDefaultRoots: false/, "workspace skill discovery would make an uploaded file an instruction");
-  assert.match(preset, /reportDelivery: quiet/);
   assert.match(preset, /thresholdChars: 8192/);
   assert.equal(HOST_PLUGIN_IDS.length + AGENT_PLUGIN_IDS.length, Object.keys(PLUGIN_SPECIFIERS).length);
   assert.equal(PRESET_NAME, "evimed-universal");
+});
+
+test("a child cannot interrupt its parent's synthesis by choosing how its report is delivered", async () => {
+  // This used to be `assert.match(preset, /reportDelivery: quiet/)`, and that
+  // string has not been a setting since 0.1.2-alpha.4 — the row carrying it was
+  // removed upstream. The assertion went on matching the comment that explains
+  // its removal, so it passed while checking nothing about the composition.
+  //
+  // What holds now, and is worth asserting: the row that took the setting is
+  // gone, its replacement takes no configuration at all, and the retired
+  // report tool is mounted nowhere. The property is the same; the mechanism is
+  // construction rather than a value we set.
+  const preset = await readFile(new URL("../presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8");
+  const rows = preset.split("\n").filter((line) => /^\s*-?\s*name: '@deepseek-ai\//.test(line));
+  assert.ok(rows.length > 0, "no plugin rows were read, so this test walked nothing");
+  assert.ok(
+    !rows.some((row) => row.includes("dsh-tool-subagent-report")),
+    "the retired one-way report tool is mounted; delivery would be the model's choice again",
+  );
+  assert.ok(
+    rows.some((row) => row.includes("dsh-tool-subagent-control")),
+    "the replacement row is absent, so a child has no way to reach its parent at all",
+  );
+  const control = preset.slice(preset.indexOf("id: tool-subagent-control"));
+  const nextRow = control.slice(control.indexOf("\n") + 1).search(/^\s*- id: /m);
+  assert.doesNotMatch(control.slice(0, nextRow > 0 ? nextRow : 200), /config:/,
+    "the control row takes configuration, so delivery is a setting again and must be asserted as one");
 });
 
 test("a specialist deliverable is delegated before the parent retrieves its evidence", async () => {
