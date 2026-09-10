@@ -10,6 +10,8 @@ import io
 import os
 import sqlite3
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -35,8 +37,19 @@ def download(spec: dict[str, object]) -> bytes:
         str(spec["url"]),
         headers={"user-agent": "EviMed-SIDER-cache-builder/1.0"},
     )
-    with urllib.request.urlopen(request, timeout=90) as response:
-        payload = response.read(MAX_DOWNLOAD_BYTES + 1)
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = response.read(MAX_DOWNLOAD_BYTES + 1)
+            break
+        except urllib.error.HTTPError as error:
+            error.close()
+            if error.code not in {429, 500, 502, 503, 504} or attempt == 2:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == 2:
+                raise
+        time.sleep(2 ** (attempt + 1))
     digest = hashlib.sha256(payload).hexdigest()
     if len(payload) != spec["bytes"] or digest != spec["sha256"]:
         raise SystemExit(

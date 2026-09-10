@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
 from new_meta.core.method_certainty import (
     build_method_certainty_draft,
@@ -42,7 +44,7 @@ def _outcome(**updates) -> OutcomeData:
     return OutcomeData(**payload)
 
 
-def _prepared_project(tmp_path: Path):
+def _prepared_project(tmp_path: Path, selected_studies=None):
     project = Project("Complex RCT delivery", output_dir=tmp_path / "project")
     protocol = ResearchProtocol(
         research_question="Does Drug improve treatment response compared with Control?",
@@ -113,6 +115,8 @@ def _prepared_project(tmp_path: Path):
             ],
         ),
     ]
+    if selected_studies is not None:
+        studies = [studies[index] for index in selected_studies]
     migration = migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, enforce=True)
     phase = PipelineRunner(project).run_compiled_method_synthesis()
@@ -340,3 +344,21 @@ def test_postoperative_cognitive_dysfunction_is_not_relabelled_as_delirium() -> 
 
     assert canonical_outcome_name(pocd, protocol) == pocd.outcome_name
     assert canonical_outcome_name(pod, protocol) == protocol.pico.outcome_primary
+
+
+@pytest.mark.parametrize("selected_studies, expected_status", [
+    ([], "needs_input"), ([0], "blocked"), ([2], "blocked"), ([0, 1], "succeeded"),
+])
+def test_compiled_rct_minimum_inputs_return_typed_outcomes(tmp_path, selected_studies, expected_status):
+    project, _, _, _, _, phase = _prepared_project(tmp_path, selected_studies)
+    assert phase.status.value == expected_status
+    if expected_status == "blocked":
+        assert phase.error_code == "method_execution_blocked"
+        assert phase.issues[0].blocking is True
+        assert "requires at least 2" in phase.summary
+        assert "selected" in phase.summary
+        assert phase.next_actions[0].action_id == "resolve_method_inputs"
+    if expected_status != "succeeded":
+        assert not project.get_path("method_result.json", subdir="analysis").exists()
+        assert not project.get_path("synthesis_result.json", subdir="analysis").exists()
+        assert not project.get_path("draft.md", subdir="manuscript").exists()

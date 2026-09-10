@@ -152,3 +152,51 @@ def test_method_executor_materializes_verified_records_from_evidence_ledger(tmp_
     assert all(row["source_locators"][0]["quote_verified"] is True for row in audit["inputs"])
     assert audit["ledger_head_hash"] == result.input_ledger_head_hash
     assert audit["plan_fingerprint"] == plan.plan_fingerprint
+
+
+
+def _complex_rct_plan():
+    return default_method_registry().compile(ReviewDesignSpec(
+        review_id="review:minimum-rct", family=ReviewFamily.INTERVENTION_RCT,
+        study_designs=["cluster_rct"], outcome_type="dichotomous", requested_effect_measure="RR",
+    ))
+
+
+def _complex_rct_records():
+    return [{
+        "result_id": f"result-{index}", "study_id": f"study-{index}",
+        "design": "cluster_rct", "measure": "RR", "estimate": estimate,
+        "standard_error": 0.1, "scale": "log", "precision_basis": "reported_cluster_adjusted",
+        "estimand_id": "response", "treatment": "Drug", "comparator": "Control",
+        "contrast_id": f"contrast-{index}",
+    } for index, estimate in enumerate([-0.2, -0.3])]
+
+
+@pytest.mark.parametrize("count", [0, 1])
+def test_executor_blocks_insufficient_rct_records_before_engine(tmp_path, monkeypatch, count):
+    executor = MethodExecutor()
+    called = []
+    monkeypatch.setattr(executor, "resolve_entrypoint", lambda _: lambda *_args, **_kwargs: called.append(True))
+    output = tmp_path / "result.json"
+    with pytest.raises(MethodExecutionBlocked, match="requires at least 2"):
+        executor.execute(_complex_rct_plan(), records=_complex_rct_records()[:count], output_path=output)
+    assert called == []
+    assert not output.exists()
+
+
+def test_executor_does_not_relabel_malformed_record_as_insufficient_evidence():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        MethodExecutor().execute(_complex_rct_plan(), records=[{"study_id": "incomplete"}])
+
+
+def test_executor_preserves_unexpected_engine_value_error(monkeypatch):
+    executor = MethodExecutor()
+
+    def broken_engine(*_args, **_kwargs):
+        raise ValueError("unexpected numerical failure")
+
+    monkeypatch.setattr(executor, "resolve_entrypoint", lambda _: broken_engine)
+    with pytest.raises(ValueError, match="unexpected numerical failure"):
+        executor.execute(_complex_rct_plan(), records=_complex_rct_records())
