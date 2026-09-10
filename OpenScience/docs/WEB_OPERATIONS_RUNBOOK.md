@@ -182,7 +182,8 @@ runs the normal checks, then builds all twelve application/runtime images from
 that exact source revision with `--no-cache`, including the ingestion and
 memory-index overlays. The runner reserves disk space and stops build/export
 at a 10 GiB floor. Production credentials never enter this runner. Ordinary
-PR builds do not enable the extra release overlays or artifact export.
+PR builds verify the same image inventory without forcing `--no-cache` or
+exporting a release artifact.
 
 After the workflow succeeds, obtain its `evimed-full-release-<sha>` artifact.
 Transfer it directly to protected staging on the serving host when local disk

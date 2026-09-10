@@ -88,3 +88,6 @@ evals/session-stream/recordings/
 # in here is corpus until the writing step has run and a human has reviewed it,
 # and a draft with null prose committed by accident reads as a finished brief.
 evals/tool-graph/generated/
+
+# Live audit workspaces contain transient jobs and workload credentials.
+evals/capability-audit/workspaces/

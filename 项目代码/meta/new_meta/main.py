@@ -1068,6 +1068,36 @@ def _finalize_cli_release(
     return decision
 
 
+def _require_cli_method_delivery(project: Project, phase) -> None:
+    """Expose a scientific block through the existing CLI release protocol."""
+    from new_meta.core.method_delivery import MethodDeliveryBlocked
+    from new_meta.core.release_contract import ReleaseBlockedError, persist_release_decision
+    from new_meta.schemas.phase_result import ExecutionStatus
+
+    if phase.status is ExecutionStatus.SUCCEEDED:
+        return
+    project.save_json("method_delivery_status.json", phase, subdir="analysis")
+    if phase.status not in {ExecutionStatus.NEEDS_INPUT, ExecutionStatus.BLOCKED}:
+        raise MethodDeliveryBlocked(phase)
+    blocker_codes = [issue.code for issue in phase.issues if issue.blocking]
+    if not blocker_codes and phase.error_code:
+        blocker_codes = [phase.error_code]
+    decision = persist_release_decision(project, {
+        "schema_version": 1,
+        "status": "blocked",
+        "ready_for_submission": False,
+        "requires_review": True,
+        "summary": phase.summary,
+        "blocker_codes": blocker_codes,
+        "next_actions": [action.title for action in phase.next_actions],
+        "artifacts": [],
+    })
+    print(phase.summary)
+    for action in decision["next_actions"]:
+        print(f"  - {action}")
+    raise ReleaseBlockedError(decision)
+
+
 def _can_write_manuscript_from_cached_artifacts(project: Project) -> bool:
     """Return True when cached artifacts are sufficient to write a manuscript."""
     required_files = [
@@ -4617,7 +4647,7 @@ def main():
 
     synthesis_route = load_synthesis_route(project)
     if synthesis_route.route is SynthesisRoute.METHOD_PLUGIN:
-        from new_meta.core.method_delivery import run_method_delivery, MethodDeliveryBlocked
+        from new_meta.core.method_delivery import run_method_delivery
         from new_meta.core.method_artifacts import clear_stale_compiled_method_outputs
         from new_meta.core.method_figures import generate_method_figures
         from new_meta.core.method_manuscript import merge_method_manuscript_validation
@@ -4677,12 +4707,7 @@ def main():
                 prepare_result_rob=prepare_method_result_rob,
             )
         if method_delivery.phase.status is not ExecutionStatus.SUCCEEDED:
-            project.save_json(
-                "method_delivery_status.json",
-                method_delivery.phase,
-                subdir="analysis",
-            )
-            raise MethodDeliveryBlocked(method_delivery.phase)
+            _require_cli_method_delivery(project, method_delivery.phase)
         if method_delivery.decisions and not args.skip_confirm:
             _prompt_cli_method_certainty(project)
             from new_meta.core.method_manuscript import build_method_manuscript
