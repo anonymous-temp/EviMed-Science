@@ -1,7 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MCP_TOOL_CALL_TIMEOUT_MS } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
+
+/**
+ * How much of the caller's window a gateway leaves itself to answer in.
+ *
+ * A deadline equal to the ceiling is still a deadline the caller never sees:
+ * the abort and the response race, and the response has to be serialized and
+ * written. Thirty seconds is generous on purpose — the cost of being wrong the
+ * other way is an error message nobody receives.
+ */
+const GATEWAY_RESPONSE_MARGIN_MS = 30_000;
 
 // The one place a tracked upstream pin is written. A Dockerfile ARG, a seam
 // manifest, a peer dependency and a release manifest that each carried their
@@ -1014,8 +1025,20 @@ export function loadConfig(overrides = {}) {
         : `http://127.0.0.1:${port}/internal/geo-probe/v1`),
     // One probe drives a browser through a whole answer; the upstream's own
     // ceiling is about five minutes.
-    geoProbeTimeoutMs: Number(
-      overrides.geoProbeTimeoutMs ?? process.env.OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS ?? 360_000,
+    // Under the kernel's tool-call ceiling, with room to write the answer.
+    //
+    // It was 360_000 against a ceiling of 180_000, so the gateway's own
+    // `geo_probe_timeout` could never be delivered: the kernel abandoned the
+    // call first and the run saw an opaque abort at ~183 s. Three production
+    // geo-content runs reported "all 10 probe rounds failed" without being able
+    // to say that the channel, not the engines, was what failed. A configured
+    // value at or above the ceiling is clamped rather than honoured, because
+    // honouring it would restore exactly that silence.
+    geoProbeTimeoutMs: Math.min(
+      MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS,
+      Math.max(1_000, Number(
+        overrides.geoProbeTimeoutMs ?? process.env.OPEN_SCIENCE_GEO_PROBE_TIMEOUT_MS ?? 150_000,
+      ) || 150_000),
     ),
     // Plaintext to a public address is refused unless the operator says
     // otherwise. The questions are not secret; the measurements are the
