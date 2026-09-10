@@ -1,0 +1,45 @@
+{
+  "capability": "evidence-appraisal",
+  "brief": "appraisal-001-sglt2-hfpef",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-evidence-appraisal",
+  "session": "acc-evidence-appraisal-mtuxg91y",
+  "runId": "run_592eefa4ba131b0eb988f808b2b497ef",
+  "agentVersion": "1.0.0",
+  "dispatchedAt": "2026-09-10T03:02:55Z",
+  "prompt": "在射血分数保留的心衰（HFpEF）患者中，SGLT2 抑制剂能否降低心衰再住院？证据的确定性有多高？\nPopulation: 射血分数 ≥ 40% 的慢性心衰成人.\nIntervention: 恩格列净、达格列净.\nOutcomes: 心衰再住院; 心血管死亡; 全因死亡.",
+  "outcome": {
+    "status": "succeeded",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/hfpef-sglt2-hospitalization/appraisal-table.csv",
+      "deliverables/hfpef-sglt2-hospitalization/appraisal-table.json",
+      "deliverables/hfpef-sglt2-hospitalization/appraisal-table.md",
+      "deliverables/hfpef-sglt2-hospitalization/citation-ledger.csv",
+      "delivery-summary.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      "literature_search searched and returned no source",
+      "review weakened: B1-HFH-certainty-high — 核心数字全部可解析核对：DELIVER 心衰住院 HR 0.77（0.67–0.89），329/3131 对 418/3132（PubMed PMID 36027570 摘要与作者接受稿全文 Table 2 一致）；EMPEROR-Preserved 总心衰住院 HR 0.73（0.61–0.88），407 对 541 次（其伴随分析 PMC8522627 全文）。效应方向、量级、确定性等级起点都成立。但『high』这一结论有两处未处理的折扣：其一，判定主要依赖同一对试验的再汇总（S3–S9），本表自己在『内部重",
+      "review weakened: B3-ACM-certainty-moderate — 等级算术成立：DELIVER 全因死亡 HR 0.94（0.83–1.07），497 例（15.9%）对 526 例（16.8%）已逐字核对（PMID 36027570 / 全文 Table 2、Fig 1D）；S4 合并 0.97（0.87–1.08）取自其全文。但不精确性降 1 级的依据只用了两个跨越无效线的合并值，而同一文献集内存在一条更精确、直接来自 EMPEROR-Preserved 的全因死亡数据通路未被使用：S5（全文，PMC9116195）以 5 项试验合并全因死亡 RR 0.99（0.8",
+      "review weakened: S1-EP-ACM-missing — 『该项试验全因死亡的单项数值在可及记录中未见』在直接层面对，但这是一个可关闭的缺口而未被关闭：同一试验的全因死亡数据通过两条可解析路径已经进入本文献集——S5（PMC9116195，全文）以 5 项试验合并全因死亡 RR 0.99（0.88–1.11），其中明确含 EMPEROR-Preserved；S3（PMID 36041474）的五项试验合并 0.92（0.86–0.99）同含该试验。此外 S4 的合并全因死亡 0.97（0.87–1.08）在数学上与该试验～1.00 的值相容（相反，若该试验为 0.94 则合并值",
+      "review contradicted: S4-ACM-incoherent — 同一实体内，S4 的合并估计与 S1、S2 的单项估计互不相容，这一点在交付物中被记录但未被核实。用其自报的固定效应模型反算：仅用 DELIVER 的 0.94（0.83–1.07）与 EMPEROR-Preserved 的 0.94 级别估计，合并结果应为 0.92–0.93，无法得到 0.97（0.87–1.08）；要得到 0.97，EMPEROR-Preserved 的全因死亡须约为 1.00，而与 S4 同源、同期、仅取这两项试验的 0.88（0.77–1.00）在心血管死亡上是自洽的。因此 S4 的全因",
+      "review weakened: S5-Front-2022-population — 12 项 RCT、10883 例、检索至 2021 年 11 月，以及复合终点 0.78（0.70–0.87，I²=0%）、首次心衰住院 0.71（0.62–0.83，I²=0%）、总心衰住院 RR 0.75（0.67–0.84，I²=0%）、心血管死亡 0.96（0.82–1.13，I²=24%）、全因死亡 RR 0.99（0.88–1.11，I²=0%）、LVEF>50% 亚组 0.78（0.68–0.90，I²=22%）——全部逐字核对无误。但『纳入的 12 项中有 5 项是大型心血管或肾脏结局试验的",
+      "review weakened: S8-AnnPharmacother-2026 — 在本次环境内无法对 S8 做任何独立核实：针对题名、作者与期刊的多次 PubMed 检索均未返回 PMID 42218708 或该篇记录（同批检索返回了同期其它 2026 年文献，例如 PMID 42222151，说明 2026 年纪录本身可被索引到）。交付物自己也只声称『DOI 与 PMID 经两个索引来源一致后采用』，未提供可复核的第二来源。因此该来源的全部数值（复合终点 OR 0.71、心衰住院 OR 0.69、心血管死亡 HR 0.92、全因死亡 OR 0.92）与『18 项 RCT／18774 例』",
+      "review weakened: S9-transcription-framing — S9 的引文库只写『DOI、PMID、PMCID 与全部内容取自所获取的全文』，而评价正文把它对 EMPEROR-Preserved 的两次转述标为『未经独立核实，仅作参考』。两处对同一动作的定性不一致：若确已取得全文，则其转述的数值在当时就可与 S1 的摘要层记录（同样为 0.71／0.91，两处一致）比对，这正是关闭该缺口的最短路径。方向不受影响，但『二手且未核实』的标签与『已读全文』的登记相互矛盾，也使结局②中 S1 的 0.91（0.76–1.09）始终以未核实状态进入。",
+      "review contradicted: B1-inconsistency-P0.690 — 该理由把交互作用 P=0.690 当作『分层方向一致』的证明，但同一份交付物所引用的来源给出相反方向的、且属预设的分析：EMPEROR-Preserved 伴随分析（PMC8522627，全文）明确报告心衰住院总事件与射血分数存在交互，EF≥60% 反应衰减（P trend=0.008），扩展到全部心血管住院时该交互仍存在（P trend=0.02）。两个 P 值测的还不是同一个终点——P=0.690 来自 S4 对复合终点做的 meta 回归，P=0.008/0.02 来自 S1 对住院事件的趋势检",
+      "review weakened: B1-imprecision-0 — 两个输入都核对无误（合并首次心衰住院 0.74，0.67–0.83；n=12251），『上界未跨越值得做与不值得做的阈值』在临床上通常可接受（该人群绝对风险下降约 6% 量级，对应 NNT 约 15–20）。因此不降级是可行的判断而非错误。但把它表述为『区间上界 0.83 仍落在临床上值得做的获益一侧』依赖一个未写明的阈值假设；同一份表在结局②、③中用『跨越临床决策阈值』作为降级依据时，也没有给出阈值。三处判定使用了同一把尺子却只标注了结果、未标注刻度，使读者无法判断为何 0.83 算『值得做』而 0.88–1.05 算『",
+      "review contradicted: B3-no-HFpEF-estimate — appraisal-table.json 与 .md 均写『（HFpEF 全因死亡）没有单独估计；S4 的合并全因死亡未按 LVEF 分层给出死亡估计』，同一份交付物内部即与之矛盾：S5（全文，PMC9116195）以 5 项试验合并全因死亡 RR 0.99（0.88–1.11，I²=0%），其中明确含 EMPEROR-Preserved；S3（PMID 36041474）的五项试验合并 0.92（0.86–0.99）同含该试验。这些是含全部受试者的合并估计，其人群即包含该分层，交付物自己在结局③的来源清单",
+      "review weakened: S1-NCT-registration-number — 交付物登记的 EMPEROR-Preserved 登记号为 NCT03057951，MEDLINE/PubMed 记录（PMID 34449189）给出的是 NCT03057977。S4 全文同样使用 NCT03057951（『The EMPEROR-Preserved trial (empagliflozin; NCT03057951)』），说明撰写者看到的是同一错误来源。因此这不是编造，但交付物声称『DOI、PMID、登记号与摘要层数值经 PubMed 与 OpenAlex 两处记录一致后采用』——",
+      "review weakened: EVSET-inclusion-applied-beyond-scope — 纳入标准写的是『以 LVEF>40% 人群为主要评价对象，或对该人群给出单独的合并估计』，但实际纳入的 S5（HFpEF 定义混用 >40%／>45%／>50%，干预含卡格列净、索格列净、埃格列净、鲁格列净，对照混入活性降糖药）、S7（主分析为全部心衰患者，HFpEF 仅为 51 个亚组之一）、S9（只评价恩格列净、纳入观察性研究）均不满足该标准。交付物对此是诚实的——把三者的间接性分别记为 serious／moderate／serious——但标准与执行不一致这一事实本身没有在 r",
+      "review contradicted: CROSS-OUTCOME-inconsistency-steps — 同一实体（≥60% 射血分数分层、以及心衰住院这一结局）上的确定性处理互相矛盾：B1 的不一致性领域记 0 级，理由中包含对 S4 的『LVEF 三层为 0.76、0.79、0.82，交互作用 P=0.690』；而同一份交付物在 HFpEF 分层处承认『≥60% 分层的点估计显示一定衰减』并据此把该分层降为 moderate，同时又从不精确性/间接性各降 1 级。若衰减信号足以支撑分层降级，它同样足以要求在整体不一致性领域给出记录或降级；若 P=0.690 足以否定衰减，分层降级理"
+    ],
+    "effectiveAgentId": "evidence-appraisal",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 898658,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-v4-flash"
+  }
+}

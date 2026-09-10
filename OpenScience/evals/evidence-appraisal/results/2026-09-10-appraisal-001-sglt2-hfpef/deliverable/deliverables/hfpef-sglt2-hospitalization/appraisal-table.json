@@ -1,0 +1,988 @@
+{
+  "question": "在左室射血分数（LVEF）≥40% 的慢性心衰成人（HFmrEF 41–49% 与 HFpEF ≥50%，两者分开报告）中，口服恩格列净（empagliflozin）或达格列净（dapagliflozin）相比安慰剂或常规治疗，能否降低①心衰再住院、②心血管死亡、③全因死亡？每个结局的证据确定性有多高？",
+  "framework": {
+    "name": "GRADE",
+    "note": "本评价使用 GRADE 的五个降级领域与四级确定性阶梯（high / moderate / low / very-low）来记录判断，供读者复核每一步的理由。这不是经过认证的 GRADE 小组评定，也不替代 GRADE 手册要求的完整流程；每个结局的确定性等于本表自己列出的起始等级减去降级级数加上升级级数。"
+  },
+  "pico": {
+    "population": "LVEF ≥40% 的慢性心衰成人；HFmrEF（41–49%）与 HFpEF（≥50%）分开报告，不外推到 LVEF<40%",
+    "intervention": "恩格列净、达格列净，口服",
+    "comparator": "安慰剂或常规治疗",
+    "outcomes": [
+      "心衰再住院",
+      "心血管死亡",
+      "全因死亡"
+    ],
+    "compositeRule": "原始研究报告的复合终点（如『心血管死亡或心衰住院』『恶化心衰事件或心血管死亡』）按原文口径标注，不拆成单项后当作单项结果使用；本表中凡引用复合终点处均标明其为复合终点。"
+  },
+  "evidenceSet": {
+    "status": "已固定",
+    "retrievalDate": "2026-09-10",
+    "retrievalDateNote": "检索、标识符核对与全文获取均在 2026-09-10（UTC）完成；此后新发表的试验不改变本评价的结论范围。",
+    "sourcesUsedForIdentification": [
+      "PubMed",
+      "Europe PMC",
+      "Crossref",
+      "OpenAlex",
+      "ClinicalTrials.gov（登记号由原始出版记录转录）"
+    ],
+    "searchStrings": [
+      "empagliflozin heart failure preserved ejection fraction EMPEROR-Preserved randomized",
+      "dapagliflozin heart failure mildly reduced preserved ejection fraction DELIVER",
+      "SGLT2 inhibitors heart failure preserved ejection fraction systematic review meta-analysis Cochrane",
+      "pooled analysis EMPEROR-Preserved DELIVER ejection fraction subgroups HFmrEF HFpEF",
+      "SGLT2 inhibitors heart failure outcomes cardiovascular death cardiometabolic disease spectrum systematic review",
+      "Sodium-Glucose Cotransporter-2 Inhibitors in Heart Failure With Mildly Reduced or Preserved Ejection Fraction systematic review"
+    ],
+    "inclusionCriteria": [
+      "随机对照试验：恩格列净或达格列净用于 LVEF>40% 的慢性心衰成人，对照为安慰剂或常规治疗，报告至少一项本问题结局或其复合终点",
+      "系统评价／Meta 分析：以 LVEF>40% 人群为主要评价对象，或对该人群给出单独的合并估计，报告至少一项本问题结局或其复合终点",
+      "两项关键试验的预设汇总分析（患者水平或试验水平），因其提供 LVEF 分层估计而纳入，并按衍生证据处理"
+    ],
+    "exclusionCriteria": [
+      "仅评价其他 SGLT2 抑制剂（如索格列净、卡格列净、埃格列净、鲁格列净）且未给出恩格列净或达格列净单独估计者",
+      "人群为急性心衰住院或 LVEF≤40% 者",
+      "仅报告替代结局（KCCQ、NT-proBNP、6 分钟步行距离、超声指标）而无本问题临床结局者",
+      "观察性研究（本问题为干预效果问题，纳入集以随机证据为限）",
+      "无法解析标识符或无法定位于具体文献的检索片段"
+    ],
+    "studiesRetained": 9,
+    "knownOverlap": "S1 与 S2 是同一问题的两项关键试验；S3、S4 均为包含 S1+S2 的汇总分析，S5–S9 为包含 S1、S2 的系统评价。这些来源不是彼此独立的证据单位，重复计入会制造出一致性的假象；本评价在汇总时明确区分『直接随机证据』与『对同一随机证据的再汇总』。"
+  },
+  "studies": [
+    {
+      "id": "S1",
+      "citation": "Empagliflozin in Heart Failure with a Preserved Ejection Fraction（EMPEROR-Preserved）。N Engl J Med 2021;385:1451-61。作者：Anker SD 等。",
+      "design": "randomized-controlled-trial",
+      "designNote": "多中心、双盲、安慰剂对照、事件驱动的随机试验；5988 例 LVEF>40% 的 II–IV 级慢性心衰成人，恩格列净 10 mg 每日一次，中位随访 26.2 个月。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.1056/NEJMoa2107038"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.1056/NEJMoa2107038"
+        },
+        {
+          "type": "pmid",
+          "value": "34449189"
+        },
+        {
+          "type": "nct",
+          "value": "NCT03057951"
+        }
+      ],
+      "accessLevel": "abstract-only",
+      "accessNote": "证据仅限题录：该试验的一级报告为摘要层可及，本行所依据的是其摘要层记录。同一试验的伴随分析（Packer M 等，Effect of Empagliflozin on Worsening Heart Failure Events in Patients With Heart Failure and Preserved Ejection Fraction: EMPEROR-Preserved Trial，Circulation 2021;144:1284-94，PMID 34459213，PMCID PMC8522627）已获取全文，但该伴随分析报告的不是本表所用的主要复合终点，故主要结局仍按摘要层标注。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡（可及记录未报告数值）"
+      ],
+      "keyResults": [
+        {
+          "outcome": "主要复合终点（心血管死亡或心衰住院，复合终点，不拆分使用）",
+          "estimate": "HR 0.79（95% CI 0.69–0.90）；415/2997（13.8%）对 511/2991（17.1%）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "心衰住院（总事件数）",
+          "estimate": "HR 0.73（95% CI 0.61–0.88）；407 对 541 次",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "首次心衰住院",
+          "estimate": "HR 0.71（95% CI 0.60–0.83）",
+          "basis": "二手来源转述本试验结果，未经独立核实，仅作参考"
+        },
+        {
+          "outcome": "心血管死亡",
+          "estimate": "HR 0.91（95% CI 0.76–1.09）",
+          "basis": "二手来源转述本试验结果，未经独立核实，仅作参考"
+        },
+        {
+          "outcome": "全因死亡",
+          "estimate": "未报告",
+          "basis": "可及记录未列出该单项数值"
+        },
+        {
+          "outcome": "心血管死亡、心衰住院或需静脉治疗的急诊／紧急就诊（复合终点）",
+          "estimate": "HR 0.77（95% CI 0.67–0.87）；432 对 546 例",
+          "basis": "伴随分析全文"
+        },
+        {
+          "outcome": "需静脉正性肌力药或缩血管药的住院（总事件）",
+          "estimate": "HR 0.73（95% CI 0.55–0.97）",
+          "basis": "伴随分析全文"
+        },
+        {
+          "outcome": "门诊利尿剂加量事件",
+          "estimate": "HR 0.76（95% CI 0.67–0.86）；482 对 610 例",
+          "basis": "伴随分析全文"
+        },
+        {
+          "outcome": "LVEF ≥60% 亚组的主要复合终点",
+          "estimate": "HR 0.87（95% CI 0.69–1.10）",
+          "basis": "由 S4 转引本试验亚组结果，未在一级记录中核实"
+        }
+      ],
+      "instrument": "RoB 2",
+      "instrumentRating": "some concerns",
+      "domains": {
+        "riskOfBias": {
+          "rating": "moderate",
+          "reason": "随机分组、双盲、安慰剂对照，意向性治疗分母完整（2997 例与 2991 例合计 5988 例，与随机例数一致）；心衰住院在伴随分析中被描述为由不知晓分组的临床事件委员会按预设标准前瞻性裁定。触发 RoB 2 的『some concerns』的是可及记录中未见随机化过程（分配隐藏的具体方式）与统计分析计划的描述，即『随机化过程』与『报告结果的选择』两项无法核实，而非已识别的偏倚行为。另需记入：有系统评价指出该试验因非死亡原因停用研究药物的比例较高，可能使病死类结局的效应量偏向无效方向，即低估而非夸大疗效。"
+        },
+        "indirectness": {
+          "rating": "low",
+          "reason": "人群（LVEF>40% 的 II–IV 级慢性心衰成人）、干预（恩格列净 10 mg 口服）、对照（安慰剂加常规治疗）、结局（心衰住院与心血管死亡）四轴与本问题一致。局限是不按 HFmrEF 与 HFpEF 分别随机，两个分层的分离只能依赖亚组分析。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "主要复合终点的区间较窄（0.69–0.90），总心衰住院 0.61–0.88 仍支持获益方向；但单项心血管死亡与全因死亡的区间未在可及的一级记录中列出，无法判断其精确度，故本行按中度记录。"
+        }
+      },
+      "retrievalSource": "PubMed / OpenAlex（标识符与摘要）；Europe PMC（伴随分析全文）",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI、PMID、登记号与摘要层数值经 PubMed 与 OpenAlex 两处记录一致后采用；伴随分析全文用于方法学描述。一级报告的全文不可获取。"
+    },
+    {
+      "id": "S2",
+      "citation": "Solomon SD, et al. Dapagliflozin in Heart Failure with Mildly Reduced or Preserved Ejection Fraction（DELIVER）。N Engl J Med 2022;387:1089-98。",
+      "design": "randomized-controlled-trial",
+      "designNote": "国际多中心、双盲、安慰剂对照、事件驱动的随机试验；6263 例 LVEF>40% 的慢性心衰成人，达格列净 10 mg 每日一次，中位随访 2.3 年。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.1056/NEJMoa2206286"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.1056/NEJMoa2206286"
+        },
+        {
+          "type": "pmid",
+          "value": "36027570"
+        },
+        {
+          "type": "nct",
+          "value": "NCT03619213"
+        }
+      ],
+      "accessLevel": "full-text",
+      "accessNote": "已获取全文（作者接受稿的 PDF 文本层，非出版版式）；本行所有数值取自该全文的结果表与结果正文。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡"
+      ],
+      "keyResults": [
+        {
+          "outcome": "主要复合终点（恶化心衰事件或心血管死亡；恶化心衰事件＝非计划心衰住院或心衰紧急就诊）",
+          "estimate": "HR 0.82（95% CI 0.73–0.92）；512/3131（16.4%）对 610/3132（19.5%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心衰住院（首次）",
+          "estimate": "HR 0.77（95% CI 0.67–0.89）；329 例（10.5%）对 418 例（13.3%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心衰住院或心衰紧急就诊（复合终点）",
+          "estimate": "HR 0.79（95% CI 0.69–0.91）；368 例（11.8%）对 455 例（14.5%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心衰紧急就诊（单独）",
+          "estimate": "HR 0.76（95% CI 0.55–1.07）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心血管死亡",
+          "estimate": "HR 0.88（95% CI 0.74–1.05）；231 例（7.4%）对 261 例（8.3%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "全因死亡",
+          "estimate": "HR 0.94（95% CI 0.83–1.07）；497 例（15.9%）对 526 例（16.8%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "恶化心衰事件与心血管死亡的总事件数（复合终点）",
+          "estimate": "率比 0.77（95% CI 0.67–0.89）；815 对 1057 次",
+          "basis": "全文"
+        },
+        {
+          "outcome": "LVEF<60% 亚组的主要复合终点",
+          "estimate": "HR 0.83（95% CI 0.73–0.95）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "LVEF ≥60% 亚组的主要复合终点",
+          "estimate": "HR 0.79（95% CI 0.64–0.97）",
+          "basis": "由 S4 转引本试验亚组结果，未在一级记录中核对该具体数值"
+        }
+      ],
+      "instrument": "RoB 2",
+      "instrumentRating": "low",
+      "domains": {
+        "riskOfBias": {
+          "rating": "low",
+          "reason": "随机分组（按糖尿病状态分层）与双盲、安慰剂对照；意向性治疗分析，全因死亡与心血管死亡的分母与随机例数一致（3131 例与 3132 例），试验结束时仅各有 2 例生存状态未知；潜在恶化心衰事件与全部死亡由不知晓分组的事件委员会按预设标准裁定；主要与次要终点按预先设定的层级顺序检验，并对 LVEF<60% 设定了单独的双主要分析与 α 分配。未发现可归因于分配、实施、脱落、结局测量或结果选择环节的系统性误差。"
+        },
+        "indirectness": {
+          "rating": "low",
+          "reason": "人群（LVEF>40% 的慢性心衰成人）、干预（达格列净 10 mg 口服）、对照（安慰剂加常规治疗）、结局（心衰住院与心血管死亡）四轴与本问题一致。需注意该试验的主要复合终点中的『恶化心衰事件』包含心衰紧急就诊，与『再住院』不完全等同；该试验单独报告了『心衰住院』一项，本评价在结局①中使用该单项。局限是不按 HFmrEF 与 HFpEF 分别随机。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "心衰住院（0.67–0.89）与主要复合终点（0.73–0.92）的区间较精确；心血管死亡（0.74–1.05）与全因死亡（0.83–1.07）的区间同时覆盖临床可感知的获益与无效，按结局分项判断属中度。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符）；开放获取全文（作者接受稿）",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI、PMID、登记号与全部数值取自所获取的全文结果表与结果正文。所获取的是作者接受稿，非出版版式。"
+    },
+    {
+      "id": "S3",
+      "citation": "SGLT2 inhibitors in patients with heart failure: a comprehensive meta-analysis of five randomised controlled trials。The Lancet 2022。作者：Vaduganathan M 等。",
+      "design": "systematic-review",
+      "designNote": "预设的试验水平（trial-level）Meta 分析：先合并 DELIVER 与 EMPEROR-Preserved，再纳入 DAPA-HF、EMPEROR-Reduced（LVEF≤40%）与 SOLOIST-WHF（急性心衰住院），采用统一终点定义与固定效应模型；PROSPERO CRD42022327527。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.1016/S0140-6736(22)01429-5"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.1016/S0140-6736(22)01429-5"
+        },
+        {
+          "type": "pmid",
+          "value": "36041474"
+        }
+      ],
+      "accessLevel": "abstract-only",
+      "accessNote": "证据仅限题录：仅摘要层记录可及，未获取全文，故其偏倚风险评价步骤、森林图与补充材料均无法核实。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡（仅见于五项试验的合并）"
+      ],
+      "keyResults": [
+        {
+          "outcome": "两项 LVEF>40% 试验（DELIVER＋EMPEROR-Preserved，n=12251）的主要复合终点（心血管死亡或首次心衰住院，复合终点）",
+          "estimate": "HR 0.80（95% CI 0.73–0.87）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "两项 LVEF>40% 试验的首次心衰住院",
+          "estimate": "HR 0.74（95% CI 0.67–0.83）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "两项 LVEF>40% 试验的心血管死亡",
+          "estimate": "HR 0.88（95% CI 0.77–1.00）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "五项试验（n=21947）的首次心衰住院",
+          "estimate": "HR 0.72（95% CI 0.67–0.78）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "五项试验的主要复合终点",
+          "estimate": "HR 0.77（95% CI 0.72–0.82）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "五项试验的心血管死亡",
+          "estimate": "HR 0.87（95% CI 0.79–0.95）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "五项试验的全因死亡",
+          "estimate": "HR 0.92（95% CI 0.86–0.99）",
+          "basis": "摘要层记录"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "moderate",
+          "reason": "汇总分析本身预先设定并注册（PROSPERO CRD42022327527），使用统一终点定义的试验水平数据与固定效应模型，方法学起点较高。但可及的摘要层未报告对纳入试验的偏倚风险评价，也未给出异质性的量化结果与亚组以外的敏感性分析，因此该综述的执行质量在这两点上无法核实。"
+        },
+        "indirectness": {
+          "rating": "moderate",
+          "reason": "主分析的人群包含 LVEF≤40% 的 DAPA-HF、EMPEROR-Reduced 与急性心衰的 SOLOIST-WHF，与本问题的 HFmrEF/HFpEF 慢性心衰人群不完全一致；本评价只采用其中两项 LVEF>40% 试验的合并估计，五项试验的估计仅作参照。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "两项 LVEF>40% 试验的合并中，主要复合终点（0.73–0.87）与首次心衰住院（0.67–0.83）精确；心血管死亡（0.77–1.00）跨越无效线。"
+        }
+      },
+      "retrievalSource": "Crossref / PubMed / OpenAlex（标识符与摘要）",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI、PMID 与摘要层数值在两个来源一致后采用；全文不可获取。"
+    },
+    {
+      "id": "S4",
+      "citation": "Uniform efficacy of SGLT2 inhibitors across the ejection fraction spectrum and in high-risk patients with HFpEF: a prespecified pooled analysis。Front Cardiovasc Med 2026。DOI 10.3389/fcvm.2026.1790378。",
+      "design": "other",
+      "designNote": "基于已发表报告与补充材料的试验水平预设汇总分析（非个体患者数据分析），未产生新的随机化；PROSPERO CRD420261277529。按设计清单归入 other，其性质是两项随机试验的衍生汇总而非独立的研究设计。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.3389/fcvm.2026.1790378"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.3389/fcvm.2026.1790378"
+        },
+        {
+          "type": "pmid",
+          "value": "41908059"
+        },
+        {
+          "type": "pmcid",
+          "value": "PMC13018101"
+        }
+      ],
+      "accessLevel": "full-text",
+      "accessNote": "已获取全文；本行数值取自其 Methods、Results 与 Limitations。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡"
+      ],
+      "keyResults": [
+        {
+          "outcome": "主要复合终点（心血管死亡或心衰住院，复合终点），n=12251",
+          "estimate": "HR 0.80（95% CI 0.73–0.87）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "主要复合终点，LVEF<50% 分层",
+          "estimate": "HR 0.76（95% CI 0.65–0.88）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "主要复合终点，LVEF 50–59% 分层",
+          "estimate": "HR 0.79（95% CI 0.67–0.93）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "主要复合终点，LVEF ≥60% 分层",
+          "estimate": "HR 0.82（95% CI 0.71–0.96）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "三个 LVEF 分层的交互作用",
+          "estimate": "P=0.690（由本文的 meta 回归计算，非源试验报告值）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心衰住院（合并）",
+          "estimate": "HR 0.75（95% CI 0.66–0.85）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心血管死亡（合并）",
+          "estimate": "HR 0.90（95% CI 0.78–1.04）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "全因死亡（合并）",
+          "estimate": "HR 0.97（95% CI 0.87–1.08）",
+          "basis": "全文"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "serious",
+          "reason": "偏倚风险进入的步骤是可识别的：效应量与事件数来自对两项试验已发表报告与补充材料的二次人工提取，文中未报告提取的核对方式，也未说明与源试验数值不一致之处。本评价注意到其全因死亡合并值（0.97，95% CI 0.87–1.08）与两项试验各自发表的全因死亡估计（例如 S2 的 0.94，0.83–1.07）之间的关系未加说明，其心血管死亡合并值（0.90，0.78–1.04）与同期同源的五项试验合并分析中的两项试验估计（0.88，0.77–1.00）也不相同。此外，二次提取式的汇总在设计上不能提高证据等级，而文中以『definitive evidence』表述其结论。"
+        },
+        "indirectness": {
+          "rating": "low",
+          "reason": "人群为两项试验全部 LVEF>40% 受试者（n=12251），干预为恩格列净与达格列净，对照为安慰剂，结局与问题一致。LVEF<50% 分层与 HFmrEF（41–49%）接近但不等同，该层下界为 40%；分层均为亚组分析。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "主要复合终点（0.73–0.87）与心衰住院合并（0.66–0.85）精确；心血管死亡（0.78–1.04）与全因死亡（0.87–1.08）跨越无效线。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符）；开放获取全文",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI、PMID、PMCID 与全部数值取自所获取的全文。"
+    },
+    {
+      "id": "S5",
+      "citation": "Effect of Sodium-Glucose Cotransporter 2 Inhibitors for Heart Failure With Preserved Ejection Fraction: A Systematic Review and Meta-Analysis of Randomized Clinical Trials。Front Cardiovasc Med 2022。DOI 10.3389/fcvm.2022.875327。",
+      "design": "systematic-review",
+      "designNote": "随机对照试验的系统评价与 Meta 分析，检索至 2021 年 11 月，纳入 12 项 RCT（10883 例 HFpEF），PROSPERO CRD42021291122。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.3389/fcvm.2022.875327"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.3389/fcvm.2022.875327"
+        },
+        {
+          "type": "pmid",
+          "value": "35600478"
+        },
+        {
+          "type": "pmcid",
+          "value": "PMC9116195"
+        }
+      ],
+      "accessLevel": "full-text",
+      "accessNote": "已获取全文；本行的纳入研究构成与合并估计取自其 Results 与 Discussion。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡"
+      ],
+      "keyResults": [
+        {
+          "outcome": "首次心衰住院或心血管死亡（复合终点，5 项试验）",
+          "estimate": "HR 0.78（95% CI 0.70–0.87，I²=0%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "首次心衰住院（3 项试验）",
+          "estimate": "HR 0.71（95% CI 0.62–0.83，I²=0%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心衰住院总事件数（4 项试验）",
+          "estimate": "RR 0.75（95% CI 0.67–0.84，I²=0%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "心血管死亡（3 项试验）",
+          "estimate": "HR 0.96（95% CI 0.82–1.13，I²=24%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "全因死亡（5 项试验）",
+          "estimate": "RR 0.99（95% CI 0.88–1.11，I²=0%）",
+          "basis": "全文"
+        },
+        {
+          "outcome": "以 LVEF>50% 为切点的亚组，首次心衰住院或心血管死亡",
+          "estimate": "HR 0.78（95% CI 0.68–0.90，I²=22%）",
+          "basis": "全文"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "serious",
+          "reason": "纳入的 12 项 RCT 中有 5 项是大型心血管或肾脏结局试验的事后或亚组分析，且该综述把同一试验的多个亚组分析与其他试验并列计入合并，会使同一批受试者被重复计入；另有 5 项试验的对照不是安慰剂而是活性降糖药。综述声明全部纳入试验为低偏倚风险，但支撑该判断的逐条领域信息在可获取的正文中不可读（其风险偏倚汇总图无法从文本层提取），无法核实该判断。"
+        },
+        "indirectness": {
+          "rating": "serious",
+          "reason": "HFpEF 的定义在同一合并中混用了 LVEF>40%、>45% 与 >50% 三种阈值；干预包含卡格列净、索格列净、埃格列净与鲁格列净，超出本问题限定的恩格列净与达格列净；对照混入活性降糖药。因此其合并估计相对本问题属间接。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "首次心衰住院（0.62–0.83）与主要复合终点（0.70–0.87）精确；心血管死亡（0.82–1.13）与全因死亡（0.88–1.11）跨越无效线。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符）；开放获取全文",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI、PMID、PMCID 与全部数值取自所获取的全文。"
+    },
+    {
+      "id": "S6",
+      "citation": "Banerjee M, Pal R, Nair K, Mukhopadhyay S. SGLT2 inhibitors and cardiovascular outcomes in heart failure with mildly reduced and preserved ejection fraction: A systematic review and meta-analysis。Indian Heart J 2023。",
+      "design": "systematic-review",
+      "designNote": "系统评价与 Meta 分析，检索至 2022 年 8 月，纳入 6 项 RCT 或 RCT 的事后分析（15769 例 HFmrEF/HFpEF），固定效应模型。",
+      "identifier": {
+        "type": "pmid",
+        "value": "36914068"
+      },
+      "identifiers": [
+        {
+          "type": "pmid",
+          "value": "36914068"
+        }
+      ],
+      "accessLevel": "abstract-only",
+      "accessNote": "证据仅限题录：仅摘要层记录可及，未获取全文，其检索流程、偏倚风险评价与森林图均无法核实。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院（以复合终点形式）",
+        "心血管死亡"
+      ],
+      "keyResults": [
+        {
+          "outcome": "心血管死亡或心衰住院（复合终点，6 项研究，n=15769）",
+          "estimate": "HR 0.80（95% CI 0.74–0.86，I²=0%）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "同一复合终点，HFpEF（≥50%）分层，n=8891",
+          "estimate": "HR 0.79（95% CI 0.71–0.87，I²=0%）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "同一复合终点，HFmrEF（41–49%）分层，n=4555",
+          "estimate": "HR 0.77（95% CI 0.67–0.89，I²=40%）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "同一复合终点，无糖尿病亚组，n=6507",
+          "estimate": "HR 0.80（95% CI 0.70–0.91，I²=0%）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "心血管死亡（仅 DELIVER 与 EMPEROR-Preserved 的敏感性分析）",
+          "estimate": "HR 0.90（95% CI 0.79–1.02，P=0.08，I²=0%）",
+          "basis": "摘要层记录"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "unclear",
+          "reason": "未能判断而非未发现问题：可及记录未报告纳入研究的偏倚风险评价方法及其结果、发表偏倚检验、异质性处理方式，也未说明如何避免同一试验的事后分析被当作独立研究重复计入。"
+        },
+        "indirectness": {
+          "rating": "moderate",
+          "reason": "人群与本问题一致，并难得地分别给出 HFpEF 与 HFmrEF 的合并估计；但其主结局是『心血管死亡或心衰住院』这一复合终点。按本问题的口径，复合终点不得拆成单项当单项结果使用，因此它对本问题的『心衰再住院』与『心血管死亡』两个单独结局都只是间接证据。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "复合终点 0.74–0.86 较精确；心血管死亡 0.79–1.02 跨越无效线，且其心血管死亡合并仅来自两项试验的敏感性分析。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符与摘要）；期刊与作者信息另经索引记录核对",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "PMID 与摘要层数值经两个索引来源一致后采用；未获取全文，未取得 DOI。"
+    },
+    {
+      "id": "S7",
+      "citation": "Usman MS, Bhatt DL, Hameed I, et al. Effect of SGLT2 inhibitors on heart failure outcomes and cardiovascular death across the cardiometabolic disease spectrum: a systematic review and meta-analysis。Lancet Diabetes Endocrinol 2024。",
+      "design": "systematic-review",
+      "designNote": "系统评价与 Meta 分析，检索至 2024 年 2 月，限定样本量>1000 的试验，纳入 15 项试验（100952 例），随机效应模型，51 个亚组；PROSPERO CRD42024513836。",
+      "identifier": {
+        "type": "pmid",
+        "value": "38768620"
+      },
+      "identifiers": [
+        {
+          "type": "pmid",
+          "value": "38768620"
+        }
+      ],
+      "accessLevel": "abstract-only",
+      "accessNote": "证据仅限题录：仅摘要层记录可及，未获取全文，HFpEF 分层的区间与偏倚风险评价细节均不在可及记录中。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡（可及记录未给出该人群的分层数值）"
+      ],
+      "keyResults": [
+        {
+          "outcome": "首次心衰住院，全部心衰患者",
+          "estimate": "HR 0.71（95% CI 0.67–0.77）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "心血管死亡，全部心衰患者",
+          "estimate": "HR 0.86（95% CI 0.79–0.93）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "HFpEF 亚组",
+          "estimate": "首次心衰住院降低 26%（摘要未给出区间）；心血管死亡无效应（摘要未给出估计值）",
+          "basis": "摘要层记录"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "moderate",
+          "reason": "预设并注册（PROSPERO CRD42024513836），限定大样本试验以降低小研究偏倚，采用随机效应模型并在 51 个亚组中评估一致性；但可及记录未给出纳入试验的偏倚风险评价方法，也未说明 HFpEF 等亚组分析是否预先设定，无法核实其亚组结论的稳健性。"
+        },
+        "indirectness": {
+          "rating": "moderate",
+          "reason": "主分析人群是全部心衰患者（含 LVEF≤40%），HFpEF 只是 51 个亚组之一，且可及记录只给出方向性描述（心衰住院降低 26%、心血管死亡无效应），既没有 HFpEF 的区间，也没有 HFmrEF 分层。对本问题而言，其可直接使用的部分是有限的。"
+        },
+        "imprecision": {
+          "rating": "unclear",
+          "reason": "无法判断而非未发现：HFpEF 分层的心衰住院与心血管死亡区间未在可及记录中报告；可及的只是全部心衰人群的合并区间（首次心衰住院 0.67–0.77），而该人群包含 LVEF≤40% 的试验。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符与摘要）；作者、期刊与年份另经索引记录核对",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "PMID 与摘要层数值经两个索引来源一致后采用；未获取全文，未取得 DOI。"
+    },
+    {
+      "id": "S8",
+      "citation": "Wang T, Zhang R. Efficacy of SGLT2 Inhibitors in Patients With Heart Failure and Mildly Reduced or Preserved Ejection Fraction: An Updated Systematic Review and Meta-Analysis。Ann Pharmacother 2026。",
+      "design": "systematic-review",
+      "designNote": "更新的系统评价与 Meta 分析，限定 LVEF>40%，纳入 18 项 RCT（18774 例；干预组 9564 例、对照组 9210 例）。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.1177/10600280261447498"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.1177/10600280261447498"
+        },
+        {
+          "type": "pmid",
+          "value": "42218708"
+        }
+      ],
+      "accessLevel": "abstract-only",
+      "accessNote": "证据仅限题录：仅摘要层记录可及，未获取全文。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡",
+        "全因死亡"
+      ],
+      "keyResults": [
+        {
+          "outcome": "首次心衰住院或心血管死亡（复合终点）",
+          "estimate": "OR 0.71（95% CI 0.66–0.75）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "首次心衰住院",
+          "estimate": "OR 0.69（95% CI 0.64–0.74）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "心血管死亡",
+          "estimate": "HR 0.92（95% CI 0.84–1.00，P=0.05）",
+          "basis": "摘要层记录"
+        },
+        {
+          "outcome": "全因死亡",
+          "estimate": "OR 0.92（95% CI 0.84–1.02，P=0.10）",
+          "basis": "摘要层记录"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "moderate",
+          "reason": "人群限定明确（LVEF>40%），样本量较大；但可及摘要在同一结果集中混用了比值比与风险比（复合终点与心衰住院报 OR，心血管死亡报 HR，全因死亡又报 OR），提示报告或数据提取环节的度量不一致，读者无法判断各估计之间的可比性；摘要亦未说明偏倚风险评价方法与发表偏倚检验。"
+        },
+        "indirectness": {
+          "rating": "low",
+          "reason": "人群（LVEF>40%）、对照（安慰剂或标准治疗）与三项结局均与本问题一致；干预按 SGLT2 抑制剂类别汇总，未限定恩格列净与达格列净，药物层面的间接性有限但存在。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "复合终点（0.66–0.75）与心衰住院（0.64–0.74）精确；心血管死亡（0.84–1.00）与全因死亡（0.84–1.02）跨越无效线。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符与摘要）；作者、期刊与年份另经索引记录核对",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI 与 PMID 经两个索引来源一致后采用；未获取全文。"
+    },
+    {
+      "id": "S9",
+      "citation": "Evaluating the Clinical Outcomes of Empagliflozin in Heart Failure Patients With Preserved Ejection Fraction: A Systematic Review。Cureus 2025。DOI 10.7759/cureus.84026。",
+      "design": "systematic-review",
+      "designNote": "自称遵循 PRISMA 的系统评价，无定量合并；纳入 11 项研究（以 EMPEROR-Preserved 及其亚组分析为主，另含观察性研究）。",
+      "identifier": {
+        "type": "doi",
+        "value": "10.7759/cureus.84026"
+      },
+      "identifiers": [
+        {
+          "type": "doi",
+          "value": "10.7759/cureus.84026"
+        },
+        {
+          "type": "pmid",
+          "value": "40510065"
+        },
+        {
+          "type": "pmcid",
+          "value": "PMC12161163"
+        }
+      ],
+      "accessLevel": "full-text",
+      "accessNote": "已获取全文；其纳入研究构成、未做定量合并的事实与其对本问题结局的转述均取自全文。",
+      "appraised": true,
+      "notAppraisedReason": null,
+      "outcomesReported": [
+        "心衰再住院",
+        "心血管死亡（仅方向性结论）"
+      ],
+      "keyResults": [
+        {
+          "outcome": "心衰住院（转述 EMPEROR-Preserved 的结果）",
+          "estimate": "HR 0.71（95% CI 0.60–0.83）",
+          "basis": "全文；该数值系转述单项试验，非本文合并所得"
+        },
+        {
+          "outcome": "心血管死亡（转述 EMPEROR-Preserved 的结果）",
+          "estimate": "HR 0.91（95% CI 0.76–1.09）",
+          "basis": "全文；二手转述，未经独立核实"
+        },
+        {
+          "outcome": "合并效应量",
+          "estimate": "未做定量合并（文中说明结果报告的异质性与方法学差异使其无法合并）",
+          "basis": "全文"
+        }
+      ],
+      "instrument": null,
+      "instrumentRating": null,
+      "domains": {
+        "riskOfBias": {
+          "rating": "serious",
+          "reason": "偏倚风险进入的步骤是纳入与计数：11 项被纳入的研究以一项试验（EMPEROR-Preserved）及其多个亚组分析为主，相当于把同一试验的受试者反复计入并与其他研究并列呈现，会制造出多项独立研究结论一致的假象；本文未做定量合并，其报告的心衰住院与心血管死亡估计实为该单项试验的转述。作者在局限性中承认证据来源单一，但披露不改变该结构性问题。"
+        },
+        "indirectness": {
+          "rating": "serious",
+          "reason": "评价对象只覆盖恩格列净（本问题两种干预之一），其 HFpEF 定义采用 LVEF>40%（包含 HFmrEF），且纳入的研究中包括观察性研究。对本问题的两种药物与两个 LVEF 分层，它只覆盖了一部分。"
+        },
+        "imprecision": {
+          "rating": "moderate",
+          "reason": "其所报告的区间实为单项试验的区间（心衰住院 0.60–0.83 较精确，心血管死亡 0.76–1.09 宽），且未做合并，因此不提供超出该单项试验的精密度。"
+        }
+      },
+      "retrievalSource": "PubMed / Europe PMC（标识符）；开放获取全文",
+      "retrievalDate": "2026-09-10",
+      "verificationNote": "DOI、PMID、PMCID 与全部内容取自所获取的全文。"
+    }
+  ],
+  "bodies": [
+    {
+      "id": "B1",
+      "outcome": "①心衰再住院",
+      "outcomeDefinition": "以心衰为原因的非计划住院。原始研究报告的口径不完全一致：S2 单独报告『心衰住院（首次）』，S1 报告『心衰住院总事件数』，另有若干来源使用含心衰紧急就诊的『恶化心衰事件』或含死亡的复合终点。本评价在判定中只使用可归到住院本身的估计，凡使用复合终点处均标明其为复合终点。",
+      "startingCertainty": "high",
+      "startingRationale": "本结局的证据主体是随机对照试验（S1、S2）以及随机试验的合并分析与系统评价（S3–S9），按 GRADE 的起始规则从 high 起步。",
+      "downgrades": [
+        {
+          "domain": "riskOfBias",
+          "steps": 0,
+          "reason": "S2 按 RoB 2 判定为 low；S1 判定为 some concerns，但触发点是可及记录无法核实的随机化过程与统计分析计划一致性，而不是已识别的偏倚行为。两项试验均为双盲、安慰剂对照，意向性治疗分析，心衰住院事件由不知晓分组的事件委员会按预设标准裁定。因此在本领域不降级。"
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 0,
+          "reason": "各来源的点估计集中在 0.69–0.80：S2 首次心衰住院 0.77（0.67–0.89）、S1 心衰住院总事件 0.73（0.61–0.88）、S3 两项试验合并的首次心衰住院 0.74（0.67–0.83）、S4 合并 0.75（0.66–0.85）、S5 首次心衰住院 0.71（0.62–0.83）、S6 复合终点 0.80（0.74–0.86）、S8 心衰住院 0.69（0.64–0.74）。分层方向一致：HFpEF 0.79（0.71–0.87）、HFmrEF 0.77（0.67–0.89）；LVEF<50%、50–59%、≥60% 三层分别为 0.76、0.79、0.82，交互作用 P=0.690。未见方向相反且无法解释的结果，不降级。"
+        },
+        {
+          "domain": "indirectness",
+          "steps": 0,
+          "reason": "S1 与 S2 的人群、干预、对照、结局四轴与本问题一致；S3、S4 的合并人群与结局定义与两项试验一致。S5 与 S7 纳入了其他 SGLT2 抑制剂或 LVEF≤40% 人群，其估计对本问题更间接，但它们不是本结局判定的依据，因此不因这些来源降级。另有两点被记录但不足以降级：『心衰再住院』与试验中的『首次心衰住院』『恶化心衰事件（含紧急就诊）』并非同一口径，S2 单独报告了纯住院一项；两项试验均未按 HFmrEF 与 HFpEF 分别随机。"
+        },
+        {
+          "domain": "imprecision",
+          "steps": 0,
+          "reason": "两项试验合并的首次心衰住院为 0.74（0.67–0.83），合并人群 12251 例；区间上界 0.83 仍落在临床上有意义的获益一侧，未同时跨越『值得做』与『不值得做』。不降级。"
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "本结局的判定主要依赖两项由企业资助、结果均为阳性的大型试验，研究数量不足以用漏斗图或检验评估发表偏倚，这本身是一个限制。但未见与本问题规模相当、已注册却未发表的阴性试验，也没有小样本研究与效应量的系统性关联。记录该限制，不降级。"
+        }
+      ],
+      "upgrades": [],
+      "certainty": "high",
+      "certaintyArithmetic": "high − 0 + 0 = high",
+      "strata": [
+        {
+          "stratum": "HFpEF（LVEF ≥50%）",
+          "estimate": "复合终点（心血管死亡或心衰住院）HR 0.79（95% CI 0.71–0.87，I²=0%，n=8891，S6）；主要复合终点在 50–59% 与 ≥60% 分层分别为 0.79（0.67–0.93）与 0.82（0.71–0.96）（S4）",
+          "certainty": "moderate",
+          "certaintyReason": "分层数据来自两项试验的亚组分析而非按分层随机化，且 ≥60% 分层的点估计显示一定衰减；因此对本分层的问题是 moderate，低于对整体 LVEF>40% 人群的高确定性。降级原因属间接性（分层而非随机化人群）与不精确性（分层区间更宽），各 1 级未在整表算术中体现，因为整体判定针对的是整个 LVEF>40% 人群。"
+        },
+        {
+          "stratum": "HFmrEF（LVEF 41–49%）",
+          "estimate": "复合终点 HR 0.77（95% CI 0.67–0.89，I²=40%，n=4555，S6）；LVEF<50% 分层的复合终点 HR 0.76（0.65–0.88）（S4）",
+          "certainty": "moderate",
+          "certaintyReason": "该分层的受试者少于 HFpEF 分层，区间更宽且合并异质性为 40%；同时缺少纯住院结局的分层估计。降级原因属不精确性与间接性，各 1 级。"
+        }
+      ],
+      "missingForThisOutcome": "两分层均无住院结局（而非复合终点）的单独估计；也无反复住院／总住院事件的分层数据。S1 的反复住院数据出自其伴随分析，未按 LVEF 分层。",
+      "whatWouldChange": [
+        "一项以 HFpEF（≥50%）人群为入选标准、以心衰住院为主要终点、事件数足够的大型随机试验，报告显著更小或为零的效应；",
+        "两项关键试验的个体患者数据再分析，并使用裁定后的纯住院事件与标准化 LVEF 分层；",
+        "以登记库为抽样框、在心衰门诊连续入组的实效性随机试验，其人群比现有试验更老、合并症与肾功能不全更多。"
+      ],
+      "studies": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9"
+      ]
+    },
+    {
+      "id": "B2",
+      "outcome": "②心血管死亡",
+      "outcomeDefinition": "以心血管原因导致的死亡，按各研究报告的口径；凡报告为复合终点者按复合终点记录，不拆分使用。",
+      "startingCertainty": "high",
+      "startingRationale": "同上，证据主体为随机对照试验及其系统评价。",
+      "downgrades": [
+        {
+          "domain": "riskOfBias",
+          "steps": 0,
+          "reason": "与 B1 相同的判断：S2 为 low，S1 为 some concerns（源于不可核实而非已识别偏倚）。补充一点已记录的考量：S1 因非死亡原因停用研究药物的比例较高，有系统评价指出这可能使病死类结局的效应量偏向无效方向，即不会夸大疗效。不降级。"
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 0,
+          "reason": "各来源点估计在 0.86–0.96 之间，一致指向无效或小幅获益：S2 0.88（0.74–1.05）、S3 两项试验合并 0.88（0.77–1.00）、S4 0.90（0.78–1.04）、S5 0.96（0.82–1.13）、S6 敏感性分析 0.90（0.79–1.02）、S8 0.92（0.84–1.00）。S3 的五项试验合并为 0.87（0.79–0.95），其人群包含 LVEF≤40% 的试验，该差异可由人群构成解释，不构成无法解释的不一致。S7 报告 HFpEF 亚组心血管死亡无效应，与上述方向一致。不降级。"
+        },
+        {
+          "domain": "indirectness",
+          "steps": 0,
+          "reason": "本结局的直接依据是 S2 与仅限两项 LVEF>40% 试验的合并（S3 的两项试验部分、S4）。S3 的五项试验合并与 S7 的全部心衰人群合并都包含 HFrEF，只用作参照，不作为本结局的直接支持。不降级。"
+        },
+        {
+          "domain": "imprecision",
+          "steps": 1,
+          "reason": "两项试验合并的心血管死亡为 0.88（0.77–1.00）与 0.90（0.78–1.04），单项试验为 0.88（0.74–1.05）与 0.91（0.76–1.09）。这些区间同时覆盖『无获益』与『约 20% 的相对下降』，跨越了临床决策阈值（是否把降低心血管死亡作为该项治疗的目的之一）。按不精确性降 1 级。"
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "两项大型试验均已按计划发表，且其心血管死亡结果并不支持阳性结论，因此缺少阴性小试验的担忧在本结局上较弱；但研究数量不足以做漏斗图或检验。记录该限制，不降级。"
+        }
+      ],
+      "upgrades": [],
+      "certainty": "moderate",
+      "certaintyArithmetic": "high − 1 + 0 = moderate",
+      "strata": [
+        {
+          "stratum": "HFpEF（LVEF ≥50%）",
+          "estimate": "无独立的单药分层估计。S7 报告该亚组『心血管死亡无效应』（未给出区间）；两项试验合并估计 0.88（0.77–1.00）与 0.90（0.78–1.04）覆盖该分层人群的主体。",
+          "certainty": "low",
+          "certaintyReason": "分层既无区间也未单独报告，且整体估计本身已因不精确性降 1 级；对 HFpEF 单独的心血管死亡问题，证据确定性低于整体判定的 moderate。此处记为 low，理由是不精确性再降 1 级。"
+        },
+        {
+          "stratum": "HFmrEF（LVEF 41–49%）",
+          "estimate": "未见任何来源给出该分层的心血管死亡估计。",
+          "certainty": "very-low",
+          "certaintyReason": "该分层在本固定的文献集中没有单独报告的心血管死亡数据；把整体估计外推到这个分层缺乏依据，故记为 very-low。此判断来自间接性（人群外推）与不精确性各再降 1 级。"
+        }
+      ],
+      "missingForThisOutcome": "两项关键试验的心血管死亡单项区间都在可及记录中部分缺失（S1 仅见二手转述），且没有任何来源按 HFmrEF／HFpEF 报告心血管死亡的单独估计。",
+      "whatWouldChange": [
+        "两项关键试验的个体患者数据汇总分析，按 LVEF 分层给出心血管死亡的时间-事件估计并报告事件数；",
+        "随访更长、以死亡为主要终点的试验或登记库链接的实效性试验，使区间不再跨越无效线；",
+        "事件的独立再裁定，用以排除心血管死亡判归差异带来的影响。"
+      ],
+      "studies": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9"
+      ]
+    },
+    {
+      "id": "B3",
+      "outcome": "③全因死亡",
+      "outcomeDefinition": "任何原因导致的死亡，以意向性治疗人群为分母。",
+      "startingCertainty": "high",
+      "startingRationale": "提供本结局估计的来源均为随机对照试验及其合并分析。",
+      "notContributing": "S1 的可及一级记录未列出全因死亡数值（其伴随分析报告的是死亡或住院的复合终点）；S6、S7、S9 的可及记录未给出本结局在目标人群中的单独估计。这些研究均已在本表逐篇评价，并分别进入 B1、B2 的判定。",
+      "downgrades": [
+        {
+          "domain": "riskOfBias",
+          "steps": 0,
+          "reason": "与 B1、B2 相同的判断（S2 为 low，S1 为 some concerns 且源不可核实）；本结局由 S2 与 S4 等提供。全因死亡的 ascertainment 不依赖判归，是较不易受测量偏倚影响的结局。不降级。"
+        },
+        {
+          "domain": "inconsistency",
+          "steps": 0,
+          "reason": "点估计集中在 0.92–0.99：S2 0.94（0.83–1.07）、S4 0.97（0.87–1.08）、S5 0.99（0.88–1.11，I²=0%）、S8 0.92（0.84–1.02）。S3 的五项试验合并为 0.92（0.86–0.99），其人群含 LVEF≤40% 的试验，方向差异可由人群构成解释。未见无法解释的不一致，不降级。"
+        },
+        {
+          "domain": "indirectness",
+          "steps": 0,
+          "reason": "本结局的直接依据是 S2（LVEF>40% 的达格列净试验）与 S4（两项试验合并）。S3 的五项试验合并包含 HFrEF 人群，只作参照。分层层面存在间接性（见下），但整体判定针对的是整个 LVEF>40% 人群，故本领域不降级。"
+        },
+        {
+          "domain": "imprecision",
+          "steps": 1,
+          "reason": "S2 为 0.94（0.83–1.07），S4 为 0.97（0.87–1.08）。区间同时覆盖约 15% 的相对下降与约 10% 的相对升高，跨越获益与无效（乃至有害）两侧，未达到能支持判断的精确度。按不精确性降 1 级。"
+        },
+        {
+          "domain": "publicationBias",
+          "steps": 0,
+          "reason": "两项关键试验的全因死亡结果均为中性或近中性，且均已发表；没有证据提示存在因结果不利而被搁置的同等规模试验。研究数量不足以做漏斗图或检验。记录该限制，不降级。"
+        }
+      ],
+      "upgrades": [],
+      "certainty": "moderate",
+      "certaintyArithmetic": "high − 1 + 0 = moderate",
+      "strata": [
+        {
+          "stratum": "HFpEF（LVEF ≥50%）",
+          "estimate": "无单独估计；S4 的合并全因死亡 0.97（0.87–1.08）覆盖该分层人群的主体，但该合并未按 LVEF 分层给出死亡估计。",
+          "certainty": "low",
+          "certaintyReason": "分层无单独估计，且整体估计已因不精确性降 1 级；对 HFpEF 单独的全因死亡问题再降 1 级（不精确性），记为 low。"
+        },
+        {
+          "stratum": "HFmrEF（LVEF 41–49%）",
+          "estimate": "未见任何来源给出该分层的全因死亡估计。",
+          "certainty": "very-low",
+          "certaintyReason": "本固定的文献集中该分层没有单独报告的全因死亡数据；外推缺乏依据，记为 very-low（间接性 1 级＋不精确性 1 级）。"
+        }
+      ],
+      "missingForThisOutcome": "没有任何来源按 HFmrEF／HFpEF 报告全因死亡；S1 的全因死亡数值亦未在可及的一级记录中出现。",
+      "whatWouldChange": [
+        "两项关键试验的个体患者数据汇总分析，按 LVEF 分层报告全因死亡；",
+        "随访更长的试验或登记库链接研究，使全因死亡的区间窄到不再跨越无效线；",
+        "以死亡为主要终点、事件数足够的独立试验，用于检验现有估计是否稳定。"
+      ],
+      "studies": [
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S8"
+      ]
+    }
+  ],
+  "safetyNote": "本表是对证据质量的评价，不构成用药建议：不涉及具体剂量、不判断任何个体是否应当使用或停用某药。若出现静息时呼吸困难、端坐呼吸、夜间憋醒、下肢水肿或体重短期内明显增加、活动耐量急剧下降、晕厥或意识改变，应立即就医；这一提示与是否正在使用任何药物无关，也不以任何药物是否起效为条件。"
+}
