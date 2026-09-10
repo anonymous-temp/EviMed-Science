@@ -176,7 +176,7 @@
 >
 > **上线。** `evimed-20260910-a8f9c0f`：主机上以 `sudo cp -a` 从 7f88cf2 播种、按 `git ls-files` 同步跟踪树（1805 文件、零残差）、五处锚点改写、一个 `BUILD_CREATED` 传给两个镜像并写入 `.env`、三个镜像共 7 分钟（web 1.5 分钟、runtime 51 秒缓存命中、bibliometric 适配器 4 分钟）、标签核对、清单生成与 `--verify-images`、`preflight:host` 只红回执、切换、receipt 容器 20 秒后重签、`/api/ready` **25/25**、`smoke:deployment` **13/13**、英文浏览器实测会话面全中文。bibliometric 适配器镜像已重建上线：旧镜像 openai 3.8.0 且无 httpx，新镜像 openai 1.109.1 + httpx 0.28.1。随后发现内核在插槽之外直接渲染的「workspace」芯片（撤掉的只是它打开的弹窗）成了首屏一个无效按钮，已隐藏（`bd7d2dd03`），随下一版上线。
 >
-> **第三轮电池（修复后的复验）：** evidence-appraisal 在 dae363e 上 **accepted**（15 分钟；根会话一次委派、四方法注入、交付物第二次提交零问题、九项研究评级全在 `domains` 下、无重做；审稿人 14 条通知，2 条 contradicted，均随包交付）。geo-content 在 dae363e 上运行中：已确认根会话委派、子代理注入全部六个方法（`geo-content, autopilot-episode, citation-integrity, manuscript-humanize, deep-research, biomedical-database-search`），结果见台账。台账现为 accepted 7 / failed 3 / not-run 8。
+> **第三轮电池（修复后的复验）：** evidence-appraisal 在 dae363e 上 **accepted**（15 分钟；根会话一次委派、四方法注入、交付物第二次提交零问题、九项研究评级全在 `domains` 下、无重做；审稿人 14 条通知，2 条 contradicted，均随包交付）。geo-content 在 dae363e 上 **failed**（66 分钟，`specialist_deliverable_not_accepted`）：委派与六方法注入成立、交付物三次到合约，三次都栽在两条不可执行的 required 判决（`runtime_leakage` 没说匹配词「访问层级」；`clinical_safety_rule` 无文件、行号指向拼接、无句子）——已修（`128a6df1f`，两类判决带匹配文本、内容包规则按文件按块定位）并作为 `evimed-20260910-128a6df` 上线，第四次运行已在其上启动。GEO 探测主机未配置仍是该能力在此部署上的硬阻断（B9）。台账现为 accepted 7 / failed 3 / not-run 8。
 >
 > **上线前仍需你决定/提供的（不变，加两条）：** B1 域名、B2 强口令（现为 6 位且在公网 IP 上）、B3 告警接收人（今天的 10.5 小时停机没有任何告警能到人，就是这一条的代价）、B4 异地备份、B5 OpenGWAS token、B6 法律三页、B7 容量——**今天的事故正是共享主机的代价：别的产品在生产主机上跑构建被 OOM 杀掉，坏记录再让守护进程崩溃，五个产品一起停**；建议专用主机或至少禁止在生产主机上构建。新增：**B9 · GEO 探测主机未配置**——geo-content 两次运行的全部探测轮都在 183 秒通道级超时，该能力在这个部署上测不到任何东西，需要一个可达的探测主机（或明确先不发布 GEO）；**A4 · 花费上限**仍是 0，开放注册前要一个数字。
 
