@@ -113,6 +113,11 @@ function ledgerHealth(root) {
   const now = Date.now();
   /** @type {Map<string, {count: number, lastMs: number}>} */
   const codes = new Map();
+  /** Advisory findings, by their first 80 characters. Keyed on the text
+   *  because that is what the ledger stores; once `qualityNotices` carries the
+   *  check id the key becomes the id and this comment goes. */
+  /** @type {Map<string, {count: number, blocked: number, lastMs: number}>} */
+  const noticeCodes = new Map();
   for (const file of ledgers) {
     let text;
     try { text = readFileSync(file, "utf8"); } catch { continue; }
@@ -123,6 +128,29 @@ function ledgerHealth(root) {
       if (event.event !== "finished") continue;
       finished += 1;
       if (!Array.isArray(event.artifacts) || event.artifacts.length === 0) emptyArtifacts += 1;
+      // What a check said on a run it did not withhold.
+      //
+      // This aggregated the error codes of failed runs and nothing else, so an
+      // advisory finding — every appraisal, manuscript, grant and GEO check,
+      // and now the structured-output ones — reached no ledger at all. A rule
+      // that ships as a notice until it has an observed distribution can never
+      // acquire one that way: "notice first" quietly became "notice forever".
+      // A succeeded run's own notices are exactly that distribution.
+      for (const notice of Array.isArray(event.qualityNotices) ? event.qualityNotices : []) {
+        const text = String(notice ?? "");
+        if (!text) continue;
+        const bucket = noticeCodes.get(text.slice(0, 80)) ?? { count: 0, blocked: 0, lastMs: 0 };
+        const at = Date.parse(event.finishedAt ?? "");
+        noticeCodes.set(text.slice(0, 80), {
+          count: bucket.count + 1,
+          // Whether the run it appeared on was withheld. A notice that only
+          // ever appears beside a delivered package is a notice nobody acted
+          // on; one that appears beside a refusal is doing work the reader
+          // cannot distinguish from the blocking rule beside it.
+          blocked: bucket.blocked + (event.status === "succeeded" ? 0 : 1),
+          lastMs: Math.max(bucket.lastMs, Number.isNaN(at) ? 0 : at),
+        });
+      }
       if (event.status === "succeeded") continue;
       const code = String(event.errorCode ?? "(none)");
       const at = Date.parse(event.finishedAt ?? "");
@@ -164,7 +192,18 @@ function ledgerHealth(root) {
     daysSinceLast: v.lastMs ? Math.floor((now - v.lastMs) / 86_400_000) : null,
   })).sort((a, b) => b.count - a.count);
 
-  return { ledgers: ledgers.length, finished, emptyArtifacts, rows, errorLedgers: errorLedgers.length, refusalRows, refusals: refusalList };
+  const notices = [...noticeCodes].map(([text, v]) => ({
+    text,
+    count: v.count,
+    // How often this finding appeared on a run that was withheld anyway. Near
+    // zero over a real month is the argument that it never needed to block;
+    // near one is the argument that it already does, through something else.
+    blockedShare: v.count ? v.blocked / v.count : 0,
+    rate: finished ? v.count / finished : 0,
+    daysSinceLast: v.lastMs ? Math.floor((now - v.lastMs) / 86_400_000) : null,
+  })).sort((a, b) => b.count - a.count);
+
+  return { ledgers: ledgers.length, finished, emptyArtifacts, rows, notices, errorLedgers: errorLedgers.length, refusalRows, refusals: refusalList };
 }
 
 if (ledgerRoot) {
@@ -176,6 +215,17 @@ if (ledgerRoot) {
     const flag = row.review ? `  <-- ${row.review}` : "";
     const last = row.daysSinceLast == null ? "never" : `${row.daysSinceLast}d ago`;
     console.log(`  ${String(row.count).padStart(4)}  ${(row.rate * 100).toFixed(1).padStart(5)}%  last ${last.padEnd(9)}  ${row.code}${flag}`);
+  }
+  if (health.notices.length > 0) {
+    // The distribution principle 4 asks for. Every one of these was raised by
+    // a check that ships as advisory and, until this existed, reached no
+    // report — so the question "how often does it fire, and does it ever
+    // coincide with a refusal" had no answer and no check could graduate.
+    console.log(`\nAdvisory findings on finished runs (the distribution a notice needs before it may block):`);
+    for (const row of health.notices.slice(0, 15)) {
+      const last = row.daysSinceLast == null ? "never" : `${row.daysSinceLast}d ago`;
+      console.log(`  ${String(row.count).padStart(4)}  ${(row.rate * 100).toFixed(1).padStart(5)}% of runs  ${(row.blockedShare * 100).toFixed(0).padStart(3)}% on withheld  last ${last.padEnd(9)}  ${row.text}`);
+    }
   }
   if (health.refusalRows > 0) {
     console.log(`\nHTTP refusals from ${health.errorLedgers} error ledger(s): ${health.refusalRows} rows`);

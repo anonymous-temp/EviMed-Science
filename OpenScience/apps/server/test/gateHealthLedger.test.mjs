@@ -43,6 +43,38 @@ test("the ledger walk reaches the meta directory the ledger actually lives in", 
   assert.match(out, /specialist_required_output_missing/);
 });
 
+test("an advisory finding on a delivered run reaches the report, which is the only way a notice can graduate", async (t) => {
+  // Principle 4 says a new check ships as a notice and needs an observed
+  // real-world distribution before it may block. This report aggregated the
+  // error codes of failed runs and nothing else, so an advisory finding on a
+  // run that was delivered — which is every advisory finding, most of the time
+  // — reached no report at all. "Notice first" was therefore "notice forever":
+  // there was no way to acquire the distribution the promotion depends on.
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-notices-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = path.join(root, "p", ".openscience");
+  await mkdir(project, { recursive: true });
+  const notice = "meta-analysis-run.json is not valid JSON, so nothing downstream can read what it says.";
+  const other = "appraisal-table.json S1 has no riskOfBias rating.";
+  await writeFile(path.join(project, "runs.jsonl"), [
+    finished({ id: "r1", status: "succeeded", errorCode: null, artifacts: ["d/report.md"], qualityNotices: [notice, other] }),
+    finished({ id: "r2", status: "succeeded", errorCode: null, artifacts: ["d/report.md"], qualityNotices: [other] }),
+    finished({ id: "r3", errorCode: "specialist_required_output_missing", qualityNotices: [notice] }),
+    finished({ id: "r4", status: "succeeded", errorCode: null, artifacts: ["d/report.md"] }),
+  ].join(""));
+
+  const out = run(root);
+  assert.match(out, /Advisory findings on finished runs/, "the distribution section is missing");
+  assert.match(out, /meta-analysis-run\.json is not valid JSON/, "a notice on a delivered run must be counted");
+  assert.match(out, /appraisal-table\.json S1 has no riskOfBias/);
+  // Two of four runs carried it, and one of those two was withheld anyway —
+  // which is the number that argues for or against promoting it to a block.
+  assert.match(out, /2\s+50\.0% of runs\s+50% on withheld/);
+  // And a notice raised on no run at all does not appear, so the report is a
+  // measurement rather than a list of every check that exists.
+  assert.doesNotMatch(out, /has no indirectness rating/);
+});
+
 test("a scan that found nothing fails instead of reporting a clean bill of health", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "gate-health-empty-"));
   t.after(() => rm(root, { recursive: true, force: true }));

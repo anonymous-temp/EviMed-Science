@@ -89,6 +89,20 @@ export const RUN_DOMAIN_SPEC = Object.freeze({
       // run records what the gate said and never which rule said it, and no
       // per-rule false-positive rate can be computed from the ledger at all.
       checks: 'json',
+      // One axis finer than `checks`, and where in the file. `recordGateRun`
+      // has always written both; this schema declared neither, and the
+      // validator strips a field it does not declare on the next `open()` --
+      // so the two columns the false-positive distribution is computed along
+      // were written and then silently dropped, with nothing failing.
+      //
+      // `severities` is why any of it matters. A distribution has to separate
+      // "this rule blocked a delivery" from "this rule was mentioned", and
+      // without it every advisory finding is indistinguishable from a
+      // required one: the observed distribution principle 4 asks for before a
+      // notice may become a block cannot be computed at all.
+      rules: 'json',
+      lines: 'json',
+      severities: 'json',
       metrics: 'json',
       ok: 'boolean',
       at: 'string',

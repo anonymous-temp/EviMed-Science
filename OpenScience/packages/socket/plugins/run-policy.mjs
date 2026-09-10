@@ -1347,6 +1347,11 @@ async function recordGateRun(store, entry, item, verdict, attempt) {
     // never a shared "unknown" bucket that would read as coverage.
     rules: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.rule ?? null),
     lines: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.line ?? null),
+    // Whether each finding withheld the delivery or only spoke. A ledger that
+    // cannot tell the two apart cannot answer the one question the blocking
+    // budget asks -- how often would this check have blocked, and how often
+    // was it wrong -- so a notice can never earn the right to become a block.
+    severities: (verdict.issues ?? []).map((/** @type {any} */ raised) => raised?.severity ?? 'required'),
     metrics: verdict.metrics,
     ok: verdict.ok,
     at: new Date().toISOString(),
