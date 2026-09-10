@@ -35,3 +35,6 @@ evals/**/results/runs
 # Disposable acceptance runtimes may contain signed workload credentials.
 .evimed-local
 **/.evimed-local
+
+# Live audit workspaces contain transient jobs and workload credentials.
+evals/capability-audit/workspaces

@@ -180,6 +180,7 @@ jobs:
       - name: Define immutable CI release
         shell: bash
         run: |
+          echo "OPEN_SCIENCE_DATA_VOLUME=open-science-data" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_APP_VERSION=0.1.3" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_RELEASE_ID=evimed-${GITHUB_SHA:0:12}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_SOURCE_REVISION=${GITHUB_SHA}" >> "$GITHUB_ENV"
@@ -204,6 +205,7 @@ jobs:
           echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/evimed-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
@@ -216,6 +218,7 @@ jobs:
         run: |
           mkdir -p deploy/web/secrets
           umask 077
+          printf '%s\n' 'ci-fake-evimed-evidence-key-no-external-calls' > deploy/web/secrets/evimed-api-key.txt
           printf '%s\n' 'ci-fake-deepseek-key-no-external-calls' > deploy/web/secrets/deepseek-api-key.txt
           printf '%s\n' 'ci-model-gateway-signing-secret-0123456789abcdef' > deploy/web/secrets/model-gateway-signing-key.txt
           printf '%s\n' 'ci-fake-materials-project-key-no-external-calls' > deploy/web/secrets/materials-project-api-key.txt
@@ -229,7 +232,8 @@ jobs:
             echo "OPEN_SCIENCE_PREFLIGHT_MONITORING=true"
             echo "OPEN_SCIENCE_PREFLIGHT_ALERT_DELIVERY=false"
             echo "OPEN_SCIENCE_PREFLIGHT_OBJECT_STORAGE=false"
-            echo "OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES=1073741824"
+            echo "OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES=10737418240"
+            echo "OPEN_SCIENCE_DATA_VOLUME=${OPEN_SCIENCE_DATA_VOLUME}"
             echo "OPEN_SCIENCE_APP_VERSION=${OPEN_SCIENCE_APP_VERSION}"
             echo "OPEN_SCIENCE_RELEASE_ID=${OPEN_SCIENCE_RELEASE_ID}"
             echo "OPEN_SCIENCE_SOURCE_REVISION=${OPEN_SCIENCE_SOURCE_REVISION}"
@@ -313,10 +317,9 @@ jobs:
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
           docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
           export BUILDX_BUILDER=evimed-ci
-          extra_compose=()
+          extra_compose=(-f deploy/web/docker-compose.memos-engine.yml -f deploy/web/docker-compose.ingestion.yml)
           build_flags=()
           if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
-            extra_compose=(-f deploy/web/docker-compose.memos-engine.yml -f deploy/web/docker-compose.ingestion.yml)
             build_flags=(--no-cache)
           fi
           docker compose --env-file deploy/web/.env.ci \
@@ -337,6 +340,9 @@ jobs:
             sleep 5
           done
           wait "$build_pid"
+          # Images were loaded into the daemon; discard only this job's owned
+          # BuildKit cache before pulling dependencies or creating an archive.
+          docker buildx rm evimed-ci
 
       # The kernel is installed as an npm global, not as a fetched binary, so
       # what is checked is that the launcher resolves, that its version is the
@@ -355,8 +361,33 @@ jobs:
           test "$(node -p "require(\"/usr/local/lib/node_modules/@deepseek-ai/dsh/package.json\").version")" = "${OPEN_SCIENCE_DSH_VERSION}" &&
           uv --version'
 
-      - name: Pull pinned TLS proxy image
-        run: docker pull "caddy:${OPEN_SCIENCE_CADDY_VERSION}"
+      - name: Pull the pinned manifest dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          timeout 300 docker pull "caddy:${OPEN_SCIENCE_CADDY_VERSION}"
+          mapfile -t images < <(node - <<'JS'
+          const d = require('./deps-version.json');
+          console.log(d.ollama.image + ':' + d.ollama.version + '@' + d.ollama.imageDigest);
+          console.log(d.openlist.image + ':v' + d.openlist.version + '@' + d.openlist.imageDigest);
+          JS
+          )
+          for image in "${images[@]}"; do
+            test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+            timeout 900 docker pull "$image" &
+            pull_pid=$!
+            while kill -0 "$pull_pid" 2>/dev/null; do
+              if [ "$(df -B1 --output=avail / | tail -1)" -lt 10737418240 ]; then
+                kill "$pull_pid" 2>/dev/null || true
+                wait "$pull_pid" || true
+                echo "CI dependency pull stopped at the 10 GiB capacity floor" >&2
+                exit 1
+              fi
+              sleep 5
+            done
+            wait "$pull_pid"
+          done
 
       - name: Generate and verify deployment release manifest
         run: |
@@ -371,8 +402,39 @@ jobs:
           pnpm configure:backup
           pnpm check:backup
 
+      - name: Retain the verified runtime image before preflight
+        run: >-
+          docker compose --env-file deploy/web/.env.ci
+          -f deploy/web/docker-compose.yml
+          --profile runtime-image up --no-build --pull never --no-start dsh-runtime-image
+
       - name: Verify production host prerequisites
         run: pnpm preflight:host --env-file deploy/web/.env.ci
+
+      - name: Seed the synthetic CI pharmacy reference
+        shell: bash
+        run: |
+          # This test-only database stays in the disposable CI volume. It is
+          # never placed in an image or in the full-release image artifact.
+          python3 -B - <<'PYCODE'
+          import hashlib, os, pathlib, sqlite3, sys
+          sys.path.insert(0, 'runtime/mcp/evimed-research')
+          from build_pharmacy_reference import DDL
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'ci-pharmacy-reference.sqlite'
+          with sqlite3.connect(output) as db:
+              db.executescript(DDL)
+              db.execute('INSERT INTO metadata VALUES (?, ?)', ('kind', 'synthetic-ci-fixture'))
+              db.execute('INSERT INTO datasets VALUES (?, ?, ?, ?, ?)', ('ci-fixture', 'ci-fixture.csv', hashlib.sha256(b'synthetic-ci').hexdigest(), 1, '["label"]'))
+              db.execute('INSERT INTO records VALUES (?, ?, ?, ?, ?)', (1, 'ci-fixture', 1, '{"label":"synthetic CI record, not clinical data"}', 'synthetic CI record'))
+              db.execute("INSERT INTO records_fts(records_fts) VALUES ('rebuild')")
+              assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+          PYCODE
+          docker volume create "$OPEN_SCIENCE_DATA_VOLUME"
+          docker run --rm --network none --user 0 --entrypoint sh \
+            -v "${OPEN_SCIENCE_DATA_VOLUME}:/data" \
+            -v "$RUNNER_TEMP/ci-pharmacy-reference.sqlite:/ci-fixture.sqlite:ro" \
+            "$OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE" \
+            -ec 'test ! -e /data/pharmacy-reference.sqlite; cp /ci-fixture.sqlite /data/pharmacy-reference.sqlite; chmod 444 /data/pharmacy-reference.sqlite'
 
       - name: Start production Compose stack
         run: >-
@@ -553,7 +615,7 @@ jobs:
           -f deploy/web/docker-compose.local-auth.yml
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
-          --profile backup --profile monitoring --profile tls down -v --remove-orphans
+          --profile runtime-image --profile backup --profile monitoring --profile tls down -v --remove-orphans
 
   hosted-production-e2e:
     if: github.event_name == 'workflow_dispatch'

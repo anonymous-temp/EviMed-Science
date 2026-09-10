@@ -37,3 +37,6 @@ grok-build-main
 **/*.pfx
 **/*.sqlite
 **/*.sqlite3
+
+# Live audit workspaces contain transient jobs and workload credentials.
+OpenScience/evals/capability-audit/workspaces
