@@ -33,6 +33,9 @@ RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
   && apk add --no-cache bash curl python3 \
   && env -u AI4S_SKILLS_COMMIT bash scripts/dev/fetch-skills.sh
 
+# The hosted MCP source bundle must contain the same verified dataset as DSH.
+RUN python3 runtime/mcp/evimed-research/build_sider_cache.py
+
 RUN pnpm --filter @evimed/dsh-socket prepack
 
 ARG VITE_OPEN_SCIENCE_API_URL=/api

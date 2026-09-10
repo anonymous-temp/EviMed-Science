@@ -61,6 +61,8 @@ class DeepSeekClient:
         self.flash_timeout_seconds = float(
             os.getenv("DEEPSEEK_FLASH_TIMEOUT_SECONDS", "60")
         )
+        # The managed launcher supplies the gateway policy independently of logical tier.
+        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
         self._sync_client = None
         self._async_client = None
 
@@ -92,8 +94,11 @@ class DeepSeekClient:
             return self.pro_model
         raise ValueError(f"Unsupported DeepSeek model tier: {tier}")
 
+    def _uses_reasoning(self, tier: str) -> bool:
+        return self._gateway_high_thinking or tier == "pro"
+
     def effective_max_tokens(self, tier: str, answer_tokens: int) -> int:
-        if tier != "pro":
+        if not self._uses_reasoning(tier):
             return answer_tokens
         return min(
             self.max_output_tokens,
@@ -104,7 +109,7 @@ class DeepSeekClient:
         )
 
     def expanded_max_tokens(self, tier: str, current_tokens: int) -> int:
-        if tier != "pro":
+        if not self._uses_reasoning(tier):
             return current_tokens
         return min(self.max_output_tokens, current_tokens * 2)
 
@@ -151,20 +156,20 @@ class DeepSeekClient:
         stream: bool,
     ) -> tuple[str, dict[str, Any]]:
         model = self.model_for_tier(tier)
-        is_pro = tier == "pro"
+        thinking_enabled = self._uses_reasoning(tier)
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "max_tokens": self.effective_max_tokens(tier, max_tokens),
             "stream": stream,
             "timeout": (
-                self.pro_timeout_seconds if is_pro else self.flash_timeout_seconds
+                self.pro_timeout_seconds if thinking_enabled else self.flash_timeout_seconds
             ),
             "extra_body": {
-                "thinking": {"type": "enabled" if is_pro else "disabled"}
+                "thinking": {"type": "enabled" if thinking_enabled else "disabled"}
             },
         }
-        if is_pro:
+        if thinking_enabled:
             kwargs["reasoning_effort"] = "high"
         else:
             kwargs["temperature"] = temperature
@@ -328,7 +333,7 @@ class DeepSeekClient:
             "output_tokens=%s finish_reason=%s",
             model,
             tier,
-            "enabled" if tier == "pro" else "disabled",
+            "enabled" if self._uses_reasoning(tier) else "disabled",
             time.perf_counter() - start_time,
             input_tokens,
             output_tokens,
@@ -354,8 +359,8 @@ class DeepSeekClient:
                         continue
         raise ValueError("DeepSeek response did not contain valid JSON")
 
-    @staticmethod
     def _log_completion(
+        self,
         model: str,
         tier: str,
         finish_reason: str | None,
@@ -369,7 +374,7 @@ class DeepSeekClient:
             "output_tokens=%s finish_reason=%s",
             model,
             tier,
-            "enabled" if tier == "pro" else "disabled",
+            "enabled" if self._uses_reasoning(tier) else "disabled",
             latency_seconds,
             getattr(usage, "prompt_tokens", 0) if usage else 0,
             getattr(usage, "completion_tokens", 0) if usage else 0,

@@ -290,6 +290,9 @@ COPY runtime/skills/community /opt/evimed/skills/community
 # second copy of the same instruction text is what this tree forbids.
 COPY runtime/skills/evimed/open-domain-answer /opt/evimed/skills/evimed/open-domain-answer
 COPY runtime/mcp/evimed-research /opt/evimed/mcp/evimed-research
+# Generated assets are absent from a clean Git context. Verify pinned upstream
+# bytes and execute offline queries before sealing the runtime filesystem.
+RUN python3 /opt/evimed/mcp/evimed-research/build_sider_cache.py
 COPY packages/socket /opt/evimed/socket
 COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
 COPY capability-skills /opt/evimed/capability-skills

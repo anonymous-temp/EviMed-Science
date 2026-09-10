@@ -209,7 +209,8 @@ class SpecialistJobContractTests(unittest.TestCase):
     def test_project_environment_is_allowlisted_and_cannot_override_model_config(self):
         root = self.install_fake_specialist("mendelian_randomization")
         (root / ".env").write_text(
-            "OPENGWAS_JWT=project-token\nDEEPSEEK_API_KEY=untrusted-model-key\nUNRELATED=value\n",
+            "OPENGWAS_JWT=project-token\nDEEPSEEK_API_KEY=untrusted-model-key\n"
+            "EVIMED_MODEL_GATEWAY_POLICY=disabled\nUNRELATED=value\n",
             encoding="utf-8",
         )
         with mock.patch.object(self.jobs.subprocess, "Popen") as popen:
@@ -222,6 +223,7 @@ class SpecialistJobContractTests(unittest.TestCase):
         environment = popen.call_args.kwargs["env"]
         self.assertEqual(environment["OPENGWAS_JWT"], "project-token")
         self.assertEqual(environment["DEEPSEEK_API_KEY"], "test-key")
+        self.assertEqual(environment["EVIMED_MODEL_GATEWAY_POLICY"], "high-thinking")
         self.assertNotIn("UNRELATED", environment)
 
     def test_drug_safety_receives_only_allowlisted_evidence_configuration(self):
@@ -247,6 +249,11 @@ class SpecialistJobContractTests(unittest.TestCase):
         self.assertEqual(environment["EVIMED_EVIDENCE_SEARCH_KEY_FILE"], str(key_file))
         self.assertEqual(environment["OPENFDA_BASE_URL"], "https://api.fda.gov")
         self.assertNotIn("UNRELATED", environment)
+
+    def test_managed_model_environment_emits_fixed_gateway_reasoning_policy(self):
+        os.environ["EVIMED_MODEL_GATEWAY_POLICY"] = "disabled"
+        environment = self.jobs._model_environment()
+        self.assertEqual(environment["EVIMED_MODEL_GATEWAY_POLICY"], "high-thinking")
 
     def test_managed_model_environment_limits_specialist_concurrency(self):
         environment = self.jobs._model_environment()

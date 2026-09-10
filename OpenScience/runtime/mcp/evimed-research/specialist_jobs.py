@@ -294,6 +294,8 @@ def _model_environment():
             True,
         )
     return {
+        # Budget metadata for the fixed gateway policy, never request authority.
+        "EVIMED_MODEL_GATEWAY_POLICY": "high-thinking",
         "DEEPSEEK_API_KEY": api_key,
         "DEEPSEEK_BASE_URL": base_url.rstrip("/"),
         "DEEPSEEK_PRO_MODEL": "deepseek-flash",

@@ -121,6 +121,8 @@ class LLMGateway:
         self.enable_cache = enable_cache
         self.max_retries = max_retries
         self.timeout = timeout
+        # The managed launcher supplies the gateway policy independently of logical tier.
+        self._gateway_high_thinking = os.getenv("EVIMED_MODEL_GATEWAY_POLICY") == "high-thinking"
         self._cache: Dict[str, Any] = {}
         self.pro_reasoning_reserve_tokens = int(
             os.getenv("DEEPSEEK_PRO_REASONING_RESERVE_TOKENS", "4096")
@@ -154,9 +156,12 @@ class LLMGateway:
 
         return {}
 
+    def _uses_reasoning(self, model_tier: ModelTier) -> bool:
+        return self._gateway_high_thinking or model_tier != ModelTier.FAST
+
     def _effective_max_tokens(self, model_tier: ModelTier, answer_tokens: int) -> int:
-        """Reserve output room for Pro reasoning without exceeding the API cap."""
-        if model_tier == ModelTier.FAST:
+        """Reserve output room for enabled reasoning without exceeding the API cap."""
+        if not self._uses_reasoning(model_tier):
             return answer_tokens
         return min(
             self.max_output_tokens,
@@ -167,8 +172,8 @@ class LLMGateway:
         )
 
     def _expanded_max_tokens(self, model_tier: ModelTier, current_tokens: int) -> int:
-        """Expand a truncated Pro request once."""
-        if model_tier == ModelTier.FAST:
+        """Expand a truncated reasoning request once."""
+        if not self._uses_reasoning(model_tier):
             return current_tokens
         return min(self.max_output_tokens, current_tokens * 2)
 
@@ -293,8 +298,8 @@ class LLMGateway:
         start_time = time.time()
         effective_timeout = timeout_sec or self.timeout
         request_max_tokens = self._effective_max_tokens(model_tier, max_tokens)
-        is_pro = model_tier != ModelTier.FAST
-        if is_pro:
+        thinking_enabled = self._uses_reasoning(model_tier)
+        if thinking_enabled:
             effective_timeout = max(effective_timeout, self.pro_timeout)
 
         if self.provider == LLMProvider.DEEPSEEK:
@@ -313,9 +318,9 @@ class LLMGateway:
                 "messages": deepseek_messages,
                 "max_tokens": request_max_tokens,
                 "stream": False,
-                "thinking": {"type": "enabled" if is_pro else "disabled"},
+                "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
             }
-            if is_pro:
+            if thinking_enabled:
                 payload["reasoning_effort"] = "high"
             else:
                 payload["temperature"] = temperature
@@ -371,8 +376,8 @@ class LLMGateway:
                                 return {
                                     "content": content,
                                     "model": model,
-                                    "tier": "pro" if is_pro else "flash",
-                                    "thinking": "enabled" if is_pro else "disabled",
+                                    "tier": "flash" if model_tier == ModelTier.FAST else "pro",
+                                    "thinking": "enabled" if thinking_enabled else "disabled",
                                     "finish_reason": finish_reason,
                                     "input_tokens": data.get("usage", {}).get("prompt_tokens", 0),
                                     "output_tokens": data.get("usage", {}).get("completion_tokens", 0),
@@ -409,8 +414,8 @@ class LLMGateway:
         model = self.model_mapping.get(model_tier, self.model_mapping[ModelTier.STANDARD])
         start_time = time.perf_counter()
         request_max_tokens = self._effective_max_tokens(model_tier, max_tokens)
-        is_pro = model_tier != ModelTier.FAST
-        effective_timeout = max(self.timeout, self.pro_timeout) if is_pro else self.timeout
+        thinking_enabled = self._uses_reasoning(model_tier)
+        effective_timeout = max(self.timeout, self.pro_timeout) if thinking_enabled else self.timeout
 
         if self.provider == LLMProvider.DEEPSEEK:
             headers = {
@@ -424,9 +429,9 @@ class LLMGateway:
                 "max_tokens": request_max_tokens,
                 "stream": True,
                 "stream_options": {"include_usage": True},
-                "thinking": {"type": "enabled" if is_pro else "disabled"},
+                "thinking": {"type": "enabled" if thinking_enabled else "disabled"},
             }
-            if is_pro:
+            if thinking_enabled:
                 payload["reasoning_effort"] = "high"
             else:
                 payload["temperature"] = temperature
@@ -487,8 +492,8 @@ class LLMGateway:
                     )
                 self._log_completion({
                     "model": model,
-                    "tier": "pro" if is_pro else "flash",
-                    "thinking": "enabled" if is_pro else "disabled",
+                    "tier": "flash" if model_tier == ModelTier.FAST else "pro",
+                    "thinking": "enabled" if thinking_enabled else "disabled",
                     "latency_seconds": time.perf_counter() - start_time,
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
