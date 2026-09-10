@@ -256,6 +256,10 @@ function hostedBrowserPanelRows(input) {
  * disabling anything.
  */
 export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
+  // Paired with what stops each one being reached another way in
+  // `test/hiddenPanelsHaveAMethodBan.test.mjs`. Adding a row here without a
+  // pairing fails that test, which is the only moment anyone decides whether
+  // hiding the panel was the whole of the change.
   "ui-settings-general",
   "ui-settings-models",
   "ui-settings-plugin-inventory",
