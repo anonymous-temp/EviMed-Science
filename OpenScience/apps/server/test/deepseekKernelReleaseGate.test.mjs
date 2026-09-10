@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { mcpToolName } from "@evimed/domain";
+import { defaultDeepSeekModel } from "../src/modelGateway.mjs";
 import {
   RELEASE_GATE_ARTIFACT,
   createReleaseGateUsageLedger,
@@ -33,7 +34,7 @@ function unsignedReceipt(overrides = {}) {
     productionEligible: true,
     createdAt: "2026-07-17T00:00:00.000Z",
     dshVersion: requiredDshVersion,
-    model: "deepseek-v4-pro",
+    model: defaultDeepSeekModel,
     sourceRevision: "source-1",
     configRevision: "config-1",
     capabilities: {

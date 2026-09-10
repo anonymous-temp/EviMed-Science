@@ -12,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -66,7 +67,7 @@ def _load_service(tmp_path: Path, monkeypatch, *, kind="bibliometric-analysis"):
     monkeypatch.setenv("EVIMED_DATA_ROOT", str(data))
     monkeypatch.setenv("EVIMED_WORKLOAD_SIGNING_SECRET_FILE", str(signing))
     monkeypatch.setenv("LLM_API_KEY_FILE", str(model))
-    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-flash")
     parent = Path(__file__).resolve().parent
     monkeypatch.syspath_prepend(str(parent))
     sys.modules.pop("evimed_specialist_adapter.service", None)
@@ -95,7 +96,7 @@ def test_capabilities_prove_model_and_managed_service(tmp_path, monkeypatch) -> 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
-    assert body["data"] == {"available": True, "model": "deepseek-v4-pro", "thinking": True}
+    assert body["data"] == {"available": True, "model": "deepseek-flash", "thinking": True}
     assert body["sources"][0]["source"] == "Bibliometric analysis"
 
 
@@ -396,3 +397,13 @@ def test_evidence_adapter_is_authenticated_and_keeps_fixed_tool_mapping(tmp_path
     assert response.status_code == 200
     assert response.json()["summary"] == "Traceable evidence packet."
     assert calls == [("offlabel_evidence_packet", {"drug": "aspirin"})]
+
+
+@pytest.mark.parametrize("model", ["deepseek-v4.1-flash", "deepseek-unknown", ""])
+def test_capabilities_reject_an_uncertified_model(tmp_path, monkeypatch, model):
+    _, client, secret, _ = _load_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("LLM_MODEL", model)
+    response = client.post("/api/v1/evimed/bibliometric-analysis",
+        json={"action": "capabilities"},
+        headers={"Authorization": f"Bearer {_token(secret)}"})
+    assert response.json()["error"]["code"] == "specialist_model_config_unavailable"

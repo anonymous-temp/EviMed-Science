@@ -38,10 +38,10 @@ class DeepSeekClient:
             "DEEPSEEK_BASE_URL", "https://api.deepseek.com"
         )
         self.flash_model = flash_model or os.getenv(
-            "DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash"
+            "DEEPSEEK_FLASH_MODEL", "deepseek-flash"
         )
         self.pro_model = pro_model or os.getenv(
-            "DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"
+            "DEEPSEEK_PRO_MODEL", "deepseek-flash"
         )
         self.pro_reasoning_reserve_tokens = (
             pro_reasoning_reserve_tokens
@@ -92,8 +92,8 @@ class DeepSeekClient:
             return self.pro_model
         raise ValueError(f"Unsupported DeepSeek model tier: {tier}")
 
-    def effective_max_tokens(self, model: str, answer_tokens: int) -> int:
-        if model != self.pro_model:
+    def effective_max_tokens(self, tier: str, answer_tokens: int) -> int:
+        if tier != "pro":
             return answer_tokens
         return min(
             self.max_output_tokens,
@@ -103,8 +103,8 @@ class DeepSeekClient:
             ),
         )
 
-    def expanded_max_tokens(self, model: str, current_tokens: int) -> int:
-        if model != self.pro_model:
+    def expanded_max_tokens(self, tier: str, current_tokens: int) -> int:
+        if tier != "pro":
             return current_tokens
         return min(self.max_output_tokens, current_tokens * 2)
 
@@ -151,11 +151,11 @@ class DeepSeekClient:
         stream: bool,
     ) -> tuple[str, dict[str, Any]]:
         model = self.model_for_tier(tier)
-        is_pro = model == self.pro_model
+        is_pro = tier == "pro"
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "max_tokens": self.effective_max_tokens(model, max_tokens),
+            "max_tokens": self.effective_max_tokens(tier, max_tokens),
             "stream": stream,
             "timeout": (
                 self.pro_timeout_seconds if is_pro else self.flash_timeout_seconds
@@ -194,7 +194,7 @@ class DeepSeekClient:
             stream=False,
         )
         budgets = [kwargs["max_tokens"]]
-        expanded = self.expanded_max_tokens(model, kwargs["max_tokens"])
+        expanded = self.expanded_max_tokens(tier, kwargs["max_tokens"])
         if expanded > kwargs["max_tokens"]:
             budgets.append(expanded)
 
@@ -244,7 +244,7 @@ class DeepSeekClient:
             stream=False,
         )
         budgets = [kwargs["max_tokens"]]
-        expanded = self.expanded_max_tokens(model, kwargs["max_tokens"])
+        expanded = self.expanded_max_tokens(tier, kwargs["max_tokens"])
         if expanded > kwargs["max_tokens"]:
             budgets.append(expanded)
 

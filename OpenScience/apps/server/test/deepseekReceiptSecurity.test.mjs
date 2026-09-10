@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
+import { defaultDeepSeekModel } from "../src/modelGateway.mjs";
 import {
   deepSeekReleaseReceiptFreshness,
   signDeepSeekReleaseReceipt,
@@ -28,7 +29,7 @@ function unsignedReceipt(overrides = {}) {
     productionEligible: true,
     createdAt: new Date(now).toISOString(),
     dshVersion: requiredDshVersion,
-    model: "deepseek-v4-pro",
+    model: defaultDeepSeekModel,
     sourceRevision: "source-1",
     configRevision: "config-1",
     capabilities: {
@@ -166,7 +167,7 @@ test("production server readiness verifies the signed and fresh release receipt"
     deepseekProviderEnabled: true,
     deepseekApiKey: "test-provider-key",
     deepseekBaseUrl: "https://api.deepseek.com",
-    deepseekModel: "deepseek-v4-pro",
+    deepseekModel: defaultDeepSeekModel,
     modelGatewaySigningSecret: signingSecret,
     deepseekReleaseReceiptFile: receiptFile,
     deepseekReleaseReceiptId: receipt.id,

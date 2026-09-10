@@ -236,7 +236,7 @@ services:
       OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS:-500}
       OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ${OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS:-300000}
       OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL: "false"
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -261,7 +261,7 @@ services:
       OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS: ${OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS:-true}
       OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE: /run/secrets/deepseek-api-key
       OPEN_SCIENCE_DEEPSEEK_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-v4-pro}
+      OPEN_SCIENCE_DEEPSEEK_MODEL: ${OPEN_SCIENCE_DEEPSEEK_MODEL:-deepseek-flash}
       # The thinking budget of every managed call (low / high / max). Absent
       # here it would be a knob that changes nothing, which is the shape the
       # deploymentEnvReachesTheContainer test exists to refuse.
@@ -277,6 +277,7 @@ services:
       OPEN_SCIENCE_LEARNING_ENABLED:
       OPEN_SCIENCE_LEARNING_WINDOW:
       OPEN_SCIENCE_LEARNING_CONCURRENCY:
+      OPEN_SCIENCE_LEARNING_EVALUATION_COMMAND:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without
@@ -517,7 +518,7 @@ services:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      LLM_MODEL: deepseek-v4-pro
+      LLM_MODEL: deepseek-flash
       LLM_ENABLE_THINKING: "true"
       LLM_REASONING_EFFORT: high
       LLM_TRUST_ENV: "false"
@@ -583,7 +584,7 @@ services:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      LLM_MODEL: deepseek-v4-pro
+      LLM_MODEL: deepseek-flash
       # One credential, one host variable. This read `${OPENGWAS_JWT}` while
       # the control plane read `${OPEN_SCIENCE_OPENGWAS_JWT}`, so setting the
       # documented one left this container's JWT empty -- which is exactly
@@ -734,7 +735,7 @@ services:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      LLM_MODEL: deepseek-v4-pro
+      LLM_MODEL: deepseek-flash
     volumes:
       - open-science-data:/data
       - type: bind
@@ -780,7 +781,7 @@ services:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      LLM_MODEL: deepseek-v4-pro
+      LLM_MODEL: deepseek-flash
     volumes:
       - open-science-data:/data
       - type: bind
@@ -826,7 +827,7 @@ services:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      LLM_MODEL: deepseek-v4-pro
+      LLM_MODEL: deepseek-flash
     volumes:
       - open-science-data:/data
       - type: bind
@@ -872,7 +873,7 @@ services:
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
       LLM_BASE_URL: ${OPEN_SCIENCE_DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-      LLM_MODEL: deepseek-v4-pro
+      LLM_MODEL: deepseek-flash
       CACHE_DIR: /tmp/openfda-cache
       EVIMED_EVIDENCE_SEARCH_URL: ${EVIMED_EVIDENCE_SEARCH_URL:-https://www.evimed.com/api-evimed/medicine-api/ai-api}
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
@@ -964,7 +965,7 @@ services:
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -1028,12 +1029,12 @@ services:
   # nothing else. While two kernels shipped this service built under a second
   # name, so the profile produced the image the control plane never launched.
   dsh-runtime-image:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.2-rc.1-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26}
     build:
       context: ../..
       dockerfile: deploy/runtime-dsh/Dockerfile
       args:
-        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.2-rc.1}
+        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.5-rc.1}
         DSH_CORDIS_VERSION: ${OPEN_SCIENCE_DSH_CORDIS_VERSION:-4.0.2}
         SOCKET_VERSION: ${OPEN_SCIENCE_SOCKET_VERSION:-0.1.0}
         NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-22.22.0}

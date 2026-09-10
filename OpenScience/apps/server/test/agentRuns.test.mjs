@@ -204,7 +204,7 @@ test("starts immutable open-domain and specialist run identities from research-s
         effectiveAgentId: "open-domain-answer",
         effectiveAgentVersion: "1.0.0",
         effectiveRuntimeAgent: "evimed-open-domain-answer",
-        model: "deepseek/deepseek-v4-pro",
+        model: "deepseek/deepseek-flash",
         status: "running",
       },
     );
@@ -1669,12 +1669,21 @@ test("changing model-writable projection counters cannot keep a stalled run aliv
   let step = 1;
   await writeProjection({ evidence: { total: step, byStatus: { ready: step } }, budget: { steps: step, children: 1 } });
   const run = await store.start(project, { sessionId: "ses_deleg" });
+  const pendingWrites = new Set();
+  let projectionWriteError;
   const ticking = setInterval(() => {
     step += 1;
-    void writeProjection({ evidence: { total: step, byStatus: { ready: step } }, budget: { steps: step, children: 1 } });
+    const pending = writeProjection({ evidence: { total: step, byStatus: { ready: step } }, budget: { steps: step, children: 1 } });
+    pendingWrites.add(pending);
+    void pending.then(() => pendingWrites.delete(pending), (error) => {
+      projectionWriteError = error;
+      pendingWrites.delete(pending);
+    });
   }, 2);
   await store.monitors.get(run.id)?.promise;
   clearInterval(ticking);
+  await Promise.all(pendingWrites);
+  if (projectionWriteError) throw projectionWriteError;
 
   const [finished] = await store.list(project);
   assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "workspace counters are display data, not a trusted heartbeat");

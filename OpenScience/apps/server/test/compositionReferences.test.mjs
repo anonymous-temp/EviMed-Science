@@ -339,7 +339,7 @@ test("the patch's override rows are collected as host-row references, not lost",
   });
   const patchReferences = collected.references.filter((reference) => reference.file === SOURCE_FILES.patch);
   const hostRows = patchReferences.filter((reference) => reference.kind === "host-row-id").map((reference) => reference.specifier);
-  assert.deepEqual(hostRows.sort(), ["hmr", "plugin-package-inventory-deepseek", "session-telemetry-otel", "tool-web", "web-fetch-http"]);
+  assert.deepEqual(hostRows.sort(), ["hmr", "open-in-app", "plugin-package-inventory-deepseek", "session-telemetry-otel", "tool-web", "ui-open-in-app", "web-fetch-http"]);
   assert.ok(collected.hostRowIds.size > 40, `the dumped host composition read as only ${collected.hostRowIds.size} rows`);
 });
 

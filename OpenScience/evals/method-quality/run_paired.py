@@ -114,7 +114,7 @@ DEEPSEEK_KEY_FILE = WORKSPACE_ROOT / ".evimed-local" / "secrets" / "deepseek.api
 SCHEMA_VERSION = 1
 JUDGE_PROMPT_VERSION = 1
 DEFAULT_BASE_URL = "http://127.0.0.1:8798"
-DEFAULT_JUDGE_MODEL = "deepseek-v4-pro"
+DEFAULT_JUDGE_MODEL = "deepseek-flash"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 ARMS = ("baseline", "candidate")
@@ -561,17 +561,17 @@ class PlatformClient:
 
     def set_method_trial(self, project_id: str, method_ids: Sequence[str], ttl_ms: int) -> Any:
         """Mount candidates into the next launch of the evaluation project."""
-        return self._call("PUT", f"{self.base}/api/methods/trial",
-                          {"projectId": project_id, "methodIds": list(method_ids), "ttlMs": ttl_ms})
+        return unwrap(self._call("PUT", f"{self.base}/api/methods/trial",
+                          {"projectId": project_id, "methodIds": list(method_ids), "ttlMs": ttl_ms}), "method trial")
 
     def clear_method_trial(self, project_id: str) -> Any:
         return self._call("DELETE", f"{self.base}/api/methods/trial?projectId={urllib.parse.quote(project_id)}")
 
     def method(self, method_id: str) -> Any:
-        return self._call("GET", f"{self.base}/api/methods/{urllib.parse.quote(method_id, safe='')}")
+        return unwrap(self._call("GET", f"{self.base}/api/methods/{urllib.parse.quote(method_id, safe='')}"), "method")
 
     def run_usage(self, run_id: str) -> Any:
-        return self._call("GET", f"{self.base}/api/runs/{urllib.parse.quote(run_id, safe='')}/usage")
+        return unwrap(self._call("GET", f"{self.base}/api/runs/{urllib.parse.quote(run_id, safe='')}/usage"), "run usage")
 
     def patch_memory_record(self, record_id: str, patch: dict[str, Any]) -> Any:
         url = f"{self.base}/api/memory/records/{urllib.parse.quote(record_id)}"
@@ -582,6 +582,25 @@ class PlatformClient:
         if not isinstance(runtime_url, str) or not runtime_url.startswith("http"):
             raise EvalError(f"start_runtime returned an unexpected value: {str(runtime_url)[:200]}")
         return runtime_url.rstrip("/")
+
+    def stop_runtime(self) -> None:
+        self._call("POST", f"{self.base}/api/commands/stop_runtime", {})
+
+    def evaluation_cell(self, payload: dict[str, Any]) -> dict[str, Any]:
+        cell = unwrap(self._call("POST", f"{self.base}/api/evaluation/cells", payload, timeout=300), "evaluation cell")
+        self.scope_to_project(cell["projectId"])
+        self.evaluation_project_id = cell["projectId"]
+        return cell
+
+    def close_evaluation_cell(self) -> None:
+        project_id = getattr(self, "evaluation_project_id", None)
+        if project_id:
+            self._call("DELETE", f"{self.base}/api/evaluation/cells/{urllib.parse.quote(project_id, safe='')}")
+            self.evaluation_project_id = None
+
+    def evaluation_judge(self, system: str, user: str) -> str:
+        result = unwrap(self._call("POST", f"{self.base}/api/evaluation/judge", {"system": system, "user": user}, timeout=150), "evaluation judge")
+        return str(result.get("content") or "")
 
     def create_session(self, runtime_url: str) -> str:
         created = unwrap(self._call("POST", f"{runtime_url}/sessions", {}), "runtime session")
@@ -663,6 +682,9 @@ def normalize_arm(block: Any, where: str) -> dict[str, Any]:
     trial_digests = snapshot.get("trialDigestById", {})
     if not isinstance(trial_digests, dict) or any(not isinstance(value, str) for value in trial_digests.values()):
         raise EvalError(f"{where}.methodSnapshot.trialDigestById must map method id to content digest")
+    mounted_digests = snapshot.get("trialMountedDigestById", trial_digests)
+    if not isinstance(mounted_digests, dict) or any(not isinstance(value, str) for value in mounted_digests.values()):
+        raise EvalError(f"{where}.methodSnapshot.trialMountedDigestById must map method id to mounted digest")
     arm = {
         "methodSnapshot": {
             "id": str(snapshot.get("id") or "unnamed"),
@@ -674,6 +696,8 @@ def normalize_arm(block: Any, where: str) -> dict[str, Any]:
             # methods and every paired evaluation was measuring nothing.
             "trialMethodIds": sorted(trial_ids),
             "trialDigestById": {key: trial_digests[key] for key in sorted(trial_digests)},
+            "trialMountedDigestById": {key: mounted_digests[key] for key in sorted(mounted_digests)},
+            "expectedMethods": snapshot.get("expectedMethods"),
             # Declared, not applied: the skills root and the compaction policy
             # are image environment (EVIMED_CAPABILITY_SKILLS_DIR,
             # OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY), which an HTTP client
@@ -1470,7 +1494,12 @@ def verify_arm_mounted(arm: dict[str, Any], methods_loaded: Sequence[Any]) -> li
     cell scored under an arm that was never applied — and every one of them
     looks exactly like a null result.
     """
-    expected = arm["methodSnapshot"]["trialDigestById"]
+    expected = arm["methodSnapshot"].get("trialMountedDigestById", arm["methodSnapshot"]["trialDigestById"])
+    expected_methods = arm["methodSnapshot"].get("expectedMethods")
+    if expected_methods is not None:
+        wanted = {(entry["name"], entry["digest"]) for entry in expected_methods}
+        observed = {(entry.get("name"), entry.get("digest")) for entry in methods_loaded if isinstance(entry, dict)}
+        return [] if wanted == observed else ["the mounted method set differs from this frozen arm"]
     if not expected:
         return []
     mounted = {
@@ -1517,6 +1546,8 @@ class PairedRunner:
         sleep: Callable[[float], None] = time.sleep,
         project_id: str = "",
         cost_source: str = "usage-route",
+        private_grant: dict[str, Any] | None = None,
+        fixtures: list[dict[str, str]] | None = None,
     ):
         self.project_id = project_id or str((config.get("project") or {}).get("id") or "")
         self.config = config
@@ -1531,8 +1562,17 @@ class PairedRunner:
         self.sleep = sleep
         self.skipped = 0
         self.executed = 0
+        self.private_grant = private_grant
+        self.fixtures = fixtures or []
 
     def run_cell(self, client: PlatformClient, runtime_url: str, plan: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self._run_cell(client, runtime_url, plan)
+        finally:
+            if self.private_grant:
+                client.close_evaluation_cell()
+
+    def _run_cell(self, client: PlatformClient, runtime_url: str, plan: dict[str, Any]) -> dict[str, Any]:
         brief = self.briefs[plan["briefId"]]
         arm = self.config[plan["arm"]]
         record: dict[str, Any] = {
@@ -1551,18 +1591,22 @@ class PairedRunner:
             "compactionPolicy": arm["compactionPolicy"],
             "startedAt": now_iso(),
         }
-        snapshot = apply_method_snapshot(client, arm, self.project_id)
-        record["methodSnapshot"] = snapshot
-        session_id = client.create_session(runtime_url)
-        client.bind_session(session_id, {"mode": "open-domain"})
         dispatch_id = f"mq_{plan['arm']}_{plan['repeat']}_{sha256_text(record['cell'] + self.config['digest'])[:16]}"
-        run_id = client.dispatch({
-            "sessionId": session_id,
-            "dispatchId": dispatch_id,
-            # Only the brief. The hidden reference is not in scope here, and
-            # LeakGuardTransport re-checks the serialized body before it goes.
-            "text": brief_prompt(brief),
-        })
+        if self.private_grant:
+            cell = client.evaluation_cell({
+                **{key: self.private_grant[key] for key in ("userId", "projectId", "methodId", "candidateDigest", "mountedDigest", "snapshotDigest")},
+                "cellId": record["cell"], "arm": plan["arm"], "capabilityId": self.config["capability"],
+                "text": brief_prompt(brief), "fixtures": self.fixtures,
+            })
+            run_id, session_id = cell["runId"], cell["sessionId"]
+            record["methodSnapshot"] = {"frozen": self.private_grant["snapshotDigest"], "projectId": cell["projectId"]}
+        else:
+            client.stop_runtime()
+            record["methodSnapshot"] = apply_method_snapshot(client, arm, self.project_id)
+            runtime_url = client.start_runtime()
+            session_id = client.create_session(runtime_url)
+            client.bind_session(session_id, {"mode": "open-domain"})
+            run_id = client.dispatch({"sessionId": session_id, "dispatchId": dispatch_id, "text": brief_prompt(brief)})
         run = client.wait_for_run(
             run_id,
             timeout_seconds=self.config["timeoutMinutes"] * 60,
@@ -1599,18 +1643,23 @@ class PairedRunner:
             TURN_COVERAGE_KEY: turn_coverage(reference.golden_trace() if reference else [], observed),
         }
         judge_result = None
-        if self.judge_call is not None:
+        judge_call = client.evaluation_judge if self.private_grant and (self.config["judge"] or {}).get("enabled") else self.judge_call
+        if judge_call is not None:
             delivery = delivery_text(run, client.read_artifact)
             if delivery.strip():
                 try:
-                    judge_result = judge_delivery(brief, delivery, self.judge_call, sleep=self.sleep)
+                    judge_result = judge_delivery(brief, delivery, judge_call, sleep=self.sleep)
                 except EvalError as error:
                     record["judgeError"] = str(error)[:300]
         record["judge"] = judge_result
-        usage = self.usage_lookup(str(run.get("id") or ""))
+        if self.private_grant and (self.config["judge"] or {}).get("enabled") and judge_result is None:
+            record["excluded"] = {"reason": "judge_unavailable"}
+        usage = load_usage_lookup(None, client)(str(run.get("id") or "")) if self.private_grant else self.usage_lookup(str(run.get("id") or ""))
         cost = usage["cost"] if usage else None
         record["usage"] = usage
         record["cost"] = {"value": cost, "currency": "CNY", "source": self.cost_source if usage else "unavailable"}
+        if self.private_grant and usage is None:
+            record["excluded"] = {"reason": "usage_unsettled_or_unavailable"}
         record["scores"] = score_cell(run, deterministic, judge_result, self.config["budget"], cost)
         # §6.1: a run whose transcript is partial or unavailable is not a
         # positive sample. Kept in the file with its reason so the report can
@@ -1653,7 +1702,7 @@ class PairedRunner:
             if getattr(local, "client", None) is None:
                 client = self.client_factory()
                 local.client = client
-                local.runtime_url = client.start_runtime()
+                local.runtime_url = ""
             try:
                 record = self.run_cell(local.client, local.runtime_url, plan)
             except HiddenReferenceLeak:
@@ -1683,7 +1732,9 @@ class PairedRunner:
             self.log(f"[{'done' if record.get('complete') else 'error'}] {record['cell']}")
             return record
 
-        workers = max(1, min(self.config["concurrency"], 4))
+        # Legacy arm mutations share one project; serialize them. Private jobs
+        # allocate a new project and runtime per cell, so their arms cannot race.
+        workers = max(1, min(self.config["concurrency"], 4)) if self.private_grant else 1
         if pending:
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 for record in executor.map(worker, pending):
@@ -2057,6 +2108,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true",
                         help="print one machine-readable verdict line on stdout; the human summary goes to stderr")
     args = parser.parse_args(argv)
+    if os.environ.get("OPEN_SCIENCE_EVAL_OUTPUT_ROOT"):
+        output_root = Path(os.environ["OPEN_SCIENCE_EVAL_OUTPUT_ROOT"])
+        args.results_dir = output_root / "results"
+        args.reports_dir = output_root / "reports"
 
     if args.config is None and args.method and args.template is None:
         parser.error("--method needs --template (or --config) to take the brief set, budget and judge from")
@@ -2078,6 +2133,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     missing = [brief_id for brief_id in config["briefs"] if brief_id not in briefs]
     if missing:
         raise SystemExit(f"briefs missing from {briefs_file}: {sorted(missing)}")
+    # Resolve the private job's phase before opening any held-out reference.
+    # Bootstrap gathers development observations and must never read holdout.
+    early_job_token = os.environ.get("OPEN_SCIENCE_EVAL_JOB_TOKEN", "")
+    if early_job_token and not args.dry_run and not args.report_only:
+        early_base = os.environ.get("OPEN_SCIENCE_EVAL_BASE_URL", "").rstrip("/")
+        if urllib.parse.urlsplit(early_base).hostname != "127.0.0.1":
+            raise SystemExit("A private evaluation grant only authorizes its loopback bridge.")
+        early_client = PlatformClient(UrllibTransport(http.cookiejar.CookieJar()), early_base)
+        early_client.headers = {"Authorization": f"Bearer {early_job_token}"}
+        early_grant = unwrap(early_client._call("GET", f"{early_base}/api/evaluation/job"), "evaluation job")
+        if early_grant.get("bootstrap"):
+            config["briefs"] = [brief for brief in config["briefs"] if brief not in splits["holdout"]["briefs"]][:3]
+            config["repeats"] = 1
+            config["holdoutBriefs"] = []
+            if len(config["briefs"]) < 3:
+                raise SystemExit("Bootstrap requires three development briefs in the evaluation template.")
     if config["holdoutBriefs"] and not args.use_holdout:
         raise SystemExit(
             f"config names holdout briefs {config['holdoutBriefs']}. Pass --use-holdout --holdout-reason '<why>' "
@@ -2106,8 +2177,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         base_url = os.environ.get("OPEN_SCIENCE_EVAL_BASE_URL", DEFAULT_BASE_URL).strip().rstrip("/") or DEFAULT_BASE_URL
         username = os.environ.get("OPEN_SCIENCE_EVAL_USERNAME", "evimed").strip() or "evimed"
-        password = resolve_password()
-        if not password:
+        job_token = os.environ.get("OPEN_SCIENCE_EVAL_JOB_TOKEN", "")
+        password = "" if job_token else resolve_password()
+        if not password and not job_token:
             raise SystemExit(
                 "No server password. Set OPEN_SCIENCE_EVAL_PASSWORD or provide "
                 f"{BOOTSTRAP_PASSWORD_FILE} (never commit it)."
@@ -2119,15 +2191,55 @@ def main(argv: Sequence[str] | None = None) -> int:
         jar = http.cookiejar.CookieJar()
 
         primary = PlatformClient(LeakGuardTransport(UrllibTransport(jar), secrets), base_url)
-        primary.login(username, password)
-        primary.ensure_project(project_id, project_name)
-        primary.scope_to_project(project_id)
-        environment = primary.readiness()
+        private_grant = None
+        private_fixtures = []
+        if job_token:
+            if urllib.parse.urlsplit(base_url).hostname != "127.0.0.1":
+                raise SystemExit("A private evaluation grant only authorizes its loopback bridge.")
+            primary.headers = {"Authorization": f"Bearer {job_token}"}
+            private_grant = unwrap(primary._call("GET", f"{base_url}/api/evaluation/job"), "evaluation job")
+            if private_grant["methodId"] != args.method or private_grant["candidateDigest"] != args.candidate_digest:
+                raise SystemExit("The evaluation grant names a different candidate.")
+            if args.baseline_digest and private_grant["baselineDigest"] != args.baseline_digest:
+                raise SystemExit("The evaluation grant names a different baseline.")
+            if private_grant.get("bootstrap"):
+                # Development observations only; this report cannot admit a
+                # method and never opens a held-out brief to obtain a counter.
+                config["briefs"] = [brief for brief in config["briefs"] if brief not in splits["holdout"]["briefs"]][:3]
+                config["repeats"] = 1
+                config["holdoutBriefs"] = []
+                if len(config["briefs"]) < 3:
+                    raise SystemExit("Bootstrap requires three development briefs in the evaluation template.")
+            for arm_name in ARMS:
+                block = config[arm_name]
+                snapshot = block["methodSnapshot"]
+                snapshot["trialMountedDigestById"] = {args.method: private_grant["mountedDigest"]} if arm_name == "candidate" else {}
+                snapshot["expectedMethods"] = private_grant["expectedMethods"][arm_name]
+                config[arm_name] = normalize_arm(block, arm_name)
+            config["id"] += "-" + digest_of({"grant": private_grant, "bootstrap": private_grant.get("bootstrap")}).split(":")[-1][:16]
+            config["digest"] = digest_of({key: value for key, value in config.items() if key != "digest"})
+            if len(config["briefs"]) * config["repeats"] * 2 > private_grant["maxCells"]:
+                raise SystemExit("The configured evaluation exceeds its private job cell budget.")
+        else:
+            primary.login(username, password)
+            primary.ensure_project(project_id, project_name)
+            primary.scope_to_project(project_id)
+            environment = primary.readiness()
+            if args.method:
+                method = primary.method(args.method)
+                if method.get("contentDigest") != args.candidate_digest or not method.get("mountedDigest"):
+                    raise SystemExit("The candidate method changed or has no mounted digest.")
+                config["candidate"]["methodSnapshot"]["trialMountedDigestById"] = {args.method: method["mountedDigest"]}
+                config["candidate"] = normalize_arm(config["candidate"], "candidate")
+                config["digest"] = digest_of({key: value for key, value in config.items() if key != "digest"})
         for fixture in config["fixtures"]:
             source = Path(fixture["file"])
             if not source.is_absolute():
                 source = REPO_ROOT / source
-            primary.upload(str(fixture["path"]), source.read_bytes())
+            if private_grant:
+                private_fixtures.append({"path": str(fixture["path"]), "data": base64.b64encode(source.read_bytes()).decode("ascii")})
+            else:
+                primary.upload(str(fixture["path"]), source.read_bytes())
 
         def client_factory() -> PlatformClient:
             client = PlatformClient(LeakGuardTransport(UrllibTransport(jar), secrets), base_url)
@@ -2135,7 +2247,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return client
 
         judge_call = None
-        if (config["judge"] or {}).get("enabled"):
+        if (config["judge"] or {}).get("enabled") and not private_grant:
             api_key = resolve_judge_key()
             if not api_key:
                 raise SystemExit("config.judge.enabled is true but no DeepSeek API key was found.")
@@ -2155,12 +2267,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             results_dir=args.results_dir,
             usage_lookup=load_usage_lookup(args.usage_export, primary),
             project_id=project_id,
+            private_grant=private_grant,
+            fixtures=private_fixtures,
+            log=say,
         )
         batch.execute(rerun=args.rerun)
         say(f"cells: {batch.executed} executed, {batch.skipped} resumed from disk")
         cells = load_cells(args.results_dir, config["id"])
 
     report = build_report(config, cells, environment=environment, holdout_reason=args.holdout_reason or None)
+    if not args.report_only and private_grant:
+        if len(cells) != len(config["briefs"]) * config["repeats"] * 2 or any(not cell.get("complete") or cell.get("excluded") for cell in cells):
+            report["verdict"] = "invalid"
+            report["verdictReasons"].append("the private evaluation did not complete every declared cell on its frozen arm")
+    if not args.report_only and private_grant and private_grant.get("bootstrap") and report["verdict"] != "invalid":
+        report["verdict"] = "inconclusive"
+        report["verdictReasons"].append("bootstrap observations only; a complete paired evaluation is still required")
     report_path = args.reports_dir / f"{config['id']}.json"
     write_json_atomic(report_path, report)
     print_report_summary(report, say)
@@ -2175,6 +2297,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "baselineDigest": args.baseline_digest or config["baseline"]["digest"],
             "candidateDigest": args.candidate_digest or config["candidate"]["digest"],
             "armsVerified": report.get("armsVerified"),
+            "evaluationScope": private_grant if not args.report_only else None,
         }, ensure_ascii=False, separators=(",", ":")))
     return 0
 

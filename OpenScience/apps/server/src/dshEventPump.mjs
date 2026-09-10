@@ -157,7 +157,7 @@ export async function callRuntimeUnary(runtime, method, payload, options = {}) {
  */
 export class RuntimeEventPump {
   /**
-   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void }} options
+   * @param {{ runEvents: import("./runEventStream.mjs").RunEventHub, isDshKernel: boolean, openMux?: typeof openRuntimeMux, callUnary?: typeof callRuntimeUnary, reconnectDelayMs?: number, adoptSession?: (project: any, sessionId: string) => Promise<any>, adoptIntervalMs?: number, onRunActivity?: (project: any, runId: string, activity: { sessionId: string, seq: number, stream?: {attemptId: string, index: number} }) => void, onCompaction?: (project: any, runId: string, record: { seq: number, replaced: number, tokens: number }) => void }} options
    */
   constructor({
     runEvents,
@@ -282,7 +282,18 @@ export class RuntimeEventPump {
     if (!state || !run?.sessionId) return;
     if (run.status === "running") {
       const seq = run.nativeTurn?.startSeq;
-      if (seq != null && seq < (state.rootTurnSeqs.get(run.sessionId) ?? -1)) return;
+      const previousSeq = state.rootTurnSeqs.get(run.sessionId);
+      const sameRun = state.rootSessions.get(run.sessionId) === run.id;
+      if (seq != null && seq < (previousSeq ?? -1) && !sameRun) return;
+      // The ledger can rebase a stable request identity after a kernel log
+      // migration. Its new sequence must replace the same run's old boundary,
+      // including activity watermarks; unrelated older runs still lose above.
+      if (sameRun && seq != null && previousSeq != null && seq !== previousSeq) {
+        state.sessionHeads.delete(run.sessionId);
+        for (const [sessionId, child] of state.childSessions) {
+          if (child.runId === run.id) state.sessionHeads.delete(sessionId);
+        }
+      }
       if (seq == null) {
         state.rootTurnSeqs.delete(run.sessionId);
         state.rootTurnEnds.delete(run.sessionId);
@@ -789,7 +800,13 @@ export class RuntimeEventPump {
       }
     }
     if (!runId) return; // isolated: evimed_runtime_event_pump_unrouted_total
-    if (!options.replay) this.#noteRunActivity(state, sessionId, runId, event.seq);
+    if (!options.replay) {
+      if (event.type === "assistant/delta" && event.stream) {
+        // A stream index is not a durable log sequence. Keep the anchor and
+        // attempt identity separate; reconnect baselines never reach this path.
+        this.onRunActivity(state.project, runId, { sessionId, seq: event.seq, stream: event.stream });
+      } else this.#noteRunActivity(state, sessionId, runId, event.seq);
+    }
     this.runEvents.publish(runId, "run/event", { event });
     if (event.type === "compaction" && !options.replay) {
       try {

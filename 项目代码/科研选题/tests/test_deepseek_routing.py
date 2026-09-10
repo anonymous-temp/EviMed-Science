@@ -16,8 +16,8 @@ MESSAGES = [{"role": "user", "content": "test"}]
 def test_deepseek_configuration_is_active():
     assert settings.LLM_PROVIDER == "deepseek"
     assert settings.DEEPSEEK_BASE_URL == "https://api.deepseek.com"
-    assert settings.DEEPSEEK_FLASH_MODEL == "deepseek-v4-flash"
-    assert settings.DEEPSEEK_PRO_MODEL == "deepseek-v4-pro"
+    assert settings.DEEPSEEK_FLASH_MODEL == "deepseek-flash"
+    assert settings.DEEPSEEK_PRO_MODEL == "deepseek-flash"
     assert settings.JAVA_WS_URL == settings.JAVA_WS_URL.strip()
     assert settings.LLM_MAX_CONCURRENT == 2
     assert settings.LLM_MAX_RETRIES == 2
@@ -38,7 +38,7 @@ def test_flash_request_disables_thinking_and_keeps_temperature():
         stream=False,
     )
 
-    assert model == "deepseek-v4-flash"
+    assert model == "deepseek-flash"
     assert tier == "flash"
     assert timeout == settings.DEEPSEEK_FLASH_TIMEOUT_SECONDS
     assert kwargs["temperature"] == 0.2
@@ -60,7 +60,7 @@ def test_pro_request_enables_thinking_and_reserves_reasoning_tokens():
         stream=True,
     )
 
-    assert model == "deepseek-v4-pro"
+    assert model == "deepseek-flash"
     assert tier == "pro"
     assert timeout == settings.DEEPSEEK_PRO_TIMEOUT_SECONDS
     assert kwargs["max_tokens"] == 5096
@@ -79,9 +79,9 @@ def test_unknown_model_tier_is_rejected():
         raise AssertionError("unknown model tier must raise ValueError")
 
 
-def test_single_pro_model_alias_keeps_thinking_enabled(monkeypatch):
-    monkeypatch.setattr(settings, "DEEPSEEK_FLASH_MODEL", "deepseek-v4-pro")
-    monkeypatch.setattr(settings, "DEEPSEEK_PRO_MODEL", "deepseek-v4-pro")
+def test_shared_model_id_keeps_the_requested_reasoning_tier(monkeypatch):
+    monkeypatch.setattr(settings, "DEEPSEEK_FLASH_MODEL", "deepseek-flash")
+    monkeypatch.setattr(settings, "DEEPSEEK_PRO_MODEL", "deepseek-flash")
     service = LLMService()
 
     model, tier, timeout, kwargs = service._request_kwargs(
@@ -94,12 +94,13 @@ def test_single_pro_model_alias_keeps_thinking_enabled(monkeypatch):
         stream=False,
     )
 
-    assert model == "deepseek-v4-pro"
-    assert tier == "pro"
-    assert timeout == settings.DEEPSEEK_PRO_TIMEOUT_SECONDS
-    assert kwargs["extra_body"]["thinking"]["type"] == "enabled"
-    assert kwargs["reasoning_effort"] == "high"
-    assert "temperature" not in kwargs
+    assert model == "deepseek-flash"
+    assert tier == "flash"
+    assert timeout == settings.DEEPSEEK_FLASH_TIMEOUT_SECONDS
+    assert kwargs["extra_body"]["thinking"]["type"] == "disabled"
+    assert "reasoning_effort" not in kwargs
+    assert kwargs["temperature"] == 0.2
+    assert kwargs["max_tokens"] == 1000
 
 
 def test_deepseek_client_bypasses_system_proxy_environment(monkeypatch):
@@ -212,7 +213,7 @@ def test_401_retries_once_with_the_rotated_managed_gateway_token(monkeypatch, tm
     service._client_api_key = "expired-token"
     monkeypatch.setattr(service, "_new_client", lambda *_args: FakeClient("fresh-response"))
 
-    result = asyncio.run(service._create_completion_with_refresh({"model": "deepseek-v4-pro"}, 2))
+    result = asyncio.run(service._create_completion_with_refresh({"model": "deepseek-flash"}, 2))
 
     assert result == "fresh-response"
     assert service._client_api_key == "fresh-token"

@@ -7,13 +7,22 @@ import path from "node:path";
 import test from "node:test";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { defaultDeepSeekModel } from "../src/modelGateway.mjs";
 import {
   readDeepSeekKeyFile,
   runDeepSeekCompatibility,
+  expectedProviderModel,
 } from "../../../scripts/ops/deepseek-compatibility-preflight.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(repoRoot, "scripts/ops/deepseek-compatibility-preflight.mjs");
+
+test("retired Flash aliases verify the provider identity actually returned on 2026-09-10", () => {
+  for (const model of ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]) {
+    assert.equal(expectedProviderModel(model), "deepseek-flash");
+  }
+  assert.equal(expectedProviderModel("deepseek-v4-pro"), "deepseek-v4-pro");
+});
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -46,7 +55,7 @@ test("DeepSeek compatibility preflight proves baseline, SSE, long tool loop, and
     requests.push({ authorization: req.headers.authorization, body });
     if (body.stream) {
       res.writeHead(200, { "content-type": "text/event-stream" });
-      res.end("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n");
+      res.end(`data: ${JSON.stringify({ model: body.model, choices: [{ delta: { content: "ok" } }] })}\n\ndata: [DONE]\n\n`);
       return;
     }
     let message = { role: "assistant", content: "ok" };
@@ -68,7 +77,7 @@ test("DeepSeek compatibility preflight proves baseline, SSE, long tool loop, and
       }
     }
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ message }] }));
+    res.end(JSON.stringify({ model: body.model, choices: [{ message }] }));
   });
   const baseUrl = await listen(provider);
   t.after(() => close(provider));
@@ -76,7 +85,7 @@ test("DeepSeek compatibility preflight proves baseline, SSE, long tool loop, and
   const result = await runDeepSeekCompatibility({
     keyFile: file,
     baseUrl,
-    model: "deepseek-v4-pro",
+    model: defaultDeepSeekModel,
     allowNonOfficialBaseForTests: true,
     timeoutMs: 1_000,
   });
@@ -87,7 +96,7 @@ test("DeepSeek compatibility preflight proves baseline, SSE, long tool loop, and
   });
   assert.equal(requests.length, 5);
   assert.equal(requests.every((item) => item.authorization === "Bearer fake-provider-key"), true);
-  assert.equal(requests.every((item) => item.body.model === "deepseek-v4-pro"), true);
+  assert.equal(requests.every((item) => item.body.model === defaultDeepSeekModel), true);
   assert.equal(requests.every((item) => item.body.thinking?.type === "enabled"), true);
   assert.equal(requests.every((item) => item.body.reasoning_effort === "high"), true);
   assert.equal(requests.filter((item) => item.body.tools).length, 2);
@@ -107,6 +116,18 @@ test("DeepSeek compatibility preflight proves baseline, SSE, long tool loop, and
   );
   assert.equal(requests.some((item) => item.body.stream === true), true);
   assert.equal(requests.some((item) => item.body.response_format?.type === "json_object"), true);
+});
+
+test("compatibility refuses a provider that answers under a different model identity", async (t) => {
+  const { file } = await keyFixture(t);
+  await assert.rejects(() => runDeepSeekCompatibility({
+    keyFile: file,
+    model: defaultDeepSeekModel,
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "unexpected-model",
+      choices: [{ message: { role: "assistant", content: "compatible" } }],
+    }), { headers: { "content-type": "application/json" } }),
+  }), { code: "deepseek_provider_model_mismatch" });
 });
 
 test("DeepSeek compatibility preflight reads only a private no-follow key file", async (t) => {
@@ -146,7 +167,7 @@ test("DeepSeek compatibility failures expose only stable redacted capability cod
     () => runDeepSeekCompatibility({
       keyFile: file,
       baseUrl,
-      model: "deepseek-v4-pro",
+      model: defaultDeepSeekModel,
       allowNonOfficialBaseForTests: true,
       timeoutMs: 1_000,
     }),

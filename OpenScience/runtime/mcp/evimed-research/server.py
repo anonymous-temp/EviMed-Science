@@ -644,7 +644,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "meta_analysis",
-        "description": "Start or inspect a managed MetaAgent systematic-review and meta-analysis job. The job runs with DeepSeek V4 Pro, writes its auditable package into the current workspace, and preserves release-gate status.",
+        "description": "Start or inspect a managed MetaAgent systematic-review and meta-analysis job. The job runs with DeepSeek V4.1 Flash, writes its auditable package into the current workspace, and preserves release-gate status.",
         "inputSchema": object_schema(
             {
                 "action": {"type": "string", "enum": ["capabilities", "start", "status"]},

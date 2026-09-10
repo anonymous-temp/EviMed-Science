@@ -220,7 +220,7 @@ export const EVIMED_SUMMARY_INSTRUCTION = [
 
 /** Config defaults, recorded from the pinned backend so a change upstream reads
  *  as a diff here rather than as a silently different threshold. Read from
- *  `@deepseek-ai/dsh-compaction-basic@0.1.2-rc.1`. */
+ *  `@deepseek-ai/dsh-compaction-basic@0.1.5-rc.1`. */
 export const COMPACTION_DEFAULTS = Object.freeze({
   policy: 'basic',
   thresholdRatio: 0.8,

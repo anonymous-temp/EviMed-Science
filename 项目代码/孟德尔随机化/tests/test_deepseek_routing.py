@@ -42,13 +42,13 @@ def test_chat_routes_flash_and_pro_with_thinking_modes(monkeypatch):
     client.chat([{"role": "user", "content": "analyze"}], model_tier="pro")
 
     flash_request, pro_request = completions.requests
-    assert flash_request["model"] == "deepseek-v4-flash"
+    assert flash_request["model"] == "deepseek-flash"
     assert flash_request["max_tokens"] == 4096
     assert flash_request["extra_body"] == {"thinking": {"type": "disabled"}}
     assert flash_request["temperature"] == 0.3
     assert "reasoning_effort" not in flash_request
 
-    assert pro_request["model"] == "deepseek-v4-pro"
+    assert pro_request["model"] == "deepseek-flash"
     assert pro_request["max_tokens"] == 8192
     assert pro_request["extra_body"] == {"thinking": {"type": "enabled"}}
     assert pro_request["reasoning_effort"] == "high"
@@ -109,7 +109,7 @@ def test_empty_response_is_rejected(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="empty content"):
-        client._chat_openai([], "", 0, 10, client.flash_model, False)
+        client._chat_openai([], "", 0, 10, client.flash_model, False, "flash")
 
 
 def test_truncated_pro_response_retries_with_expanded_budget(monkeypatch):
@@ -137,7 +137,7 @@ def test_truncated_pro_response_retries_with_expanded_budget(monkeypatch):
     completions = SequencedCompletions()
     client._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
 
-    result = client._chat_openai([], "", 0, 10, client.pro_model, False)
+    result = client._chat_openai([], "", 0, 10, client.pro_model, False, "pro")
 
     assert result == "complete"
     assert [request["max_tokens"] for request in completions.requests] == [4106, 8212]
@@ -147,7 +147,7 @@ def test_pro_budget_is_capped(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setenv("DEEPSEEK_MAX_OUTPUT_TOKENS", "5000")
     client = LLMClient()
-    assert client.effective_max_tokens(client.pro_model, 4000) == 5000
+    assert client.effective_max_tokens("pro", 4000) == 5000
 
 
 def test_openai_client_bypasses_system_proxy_environment(monkeypatch):

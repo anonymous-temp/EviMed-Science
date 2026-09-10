@@ -58,6 +58,9 @@ export {
  */
 const loaded = new Map()
 
+/** Context produced after an inbox claim belongs to the entering step. */
+const enteringStepContext = new WeakMap()
+
 /**
  * @param {string} specifier
  * @returns {Promise<any>}
@@ -301,9 +304,23 @@ export function onSessionStart(ctx, fn) {
  */
 export function onPreStep(ctx, fn, classify) {
   return ctx.on(SEAMS.events.preStep, async (/** @type {any} */ payload, /** @type {any} */ next) => {
-    const decision = await fn(toStepInfo(payload, classify(payload)), payload)
-    if (decision.allow) return next()
-    return { kind: 'reject' }
+    const agent = payload.agent
+    const previous = enteringStepContext.get(agent)
+    /** @type {any[]} */
+    const messages = []
+    enteringStepContext.set(agent, messages)
+    try {
+      const admission = await fn(toStepInfo(payload, classify(payload)), payload)
+      const decision = admission.allow ? await next() : { kind: 'reject' }
+      if (decision?.kind === 'enter' && messages.length) {
+        return { ...decision, messages: [...(decision.messages ?? []), ...messages] }
+      }
+      if (decision?.kind === 'reject') for (const message of messages) agent.inject(message)
+      return decision
+    } finally {
+      if (previous) enteringStepContext.set(agent, previous)
+      else enteringStepContext.delete(agent)
+    }
   })
 }
 
@@ -352,10 +369,15 @@ export function registerSection(ctx, section) {
  * @returns {void}
  */
 export function injectContext(agent, text, plugin) {
-  agent.inject({
+  const message = {
+    id: globalThis.crypto.randomUUID(),
+    role: 'user',
     content: [{ type: 'text', text }],
     source: { kind: 'plugin', plugin },
-  })
+  }
+  const entering = enteringStepContext.get(agent)
+  if (entering) entering.push(message)
+  else agent.inject(message)
 }
 
 /**

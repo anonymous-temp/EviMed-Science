@@ -618,7 +618,10 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
   });
   await applyRunPolicy(ctx, { maxSteps: 100, maxTokens: 100000, maxParallelChildren: 3, deliveryAttemptLimit, structuralAttemptAllowance, bundleVersion: "0.1.0", revisionAuthorizeUrl, tokenFile: "/runtime/revision-token", revisionAuthorizeTimeoutMs: 1000 });
   const step = async (/** @type {number} */ turn) => {
-    for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "allow" }));
+    for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
+      const decision = await handler({ agent, turn, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+      if (decision?.kind === "enter") injected.push(...(decision.messages ?? []));
+    }
   };
   const execute = (/** @type {string} */ name, /** @type {any} */ args) => ctx.tools.execute({ agent, name, callId: `call-${name}`, arguments: args, signal: AbortSignal.timeout(2000) });
   return { ctx, rows, childRows, files, injected, agent, step, execute };

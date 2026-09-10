@@ -90,7 +90,7 @@ def execution_evidence(root, adapter_file):
         "agentSourceFiles": tree["files"],
         "adapterSha256": file_sha256(Path(adapter_file).resolve(strict=True)),
         "evidenceModuleSha256": file_sha256(helper),
-        "model": "deepseek-v4-pro",
+        "model": "deepseek-flash",
         "thinking": True,
         "reasoningEffort": "high",
     }

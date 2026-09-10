@@ -50,7 +50,7 @@ LABEL org.opencontainers.image.source="https://github.com/ai4s-research/open-sci
 
 WORKDIR /app
 RUN sed -ri "s|https?://[^/]+/alpine|${APK_MIRROR}|g" /etc/apk/repositories \
-  && apk add --no-cache aws-cli bash coreutils docker-cli tar
+  && apk add --no-cache aws-cli bash coreutils docker-cli tar python3
 ENV NODE_ENV=production
 ENV OPEN_SCIENCE_HOST=0.0.0.0
 ENV OPEN_SCIENCE_PORT=8787
@@ -76,6 +76,9 @@ COPY --from=build /app/runtime/skills/evimed ./runtime/skills/evimed
 COPY --from=build /app/runtime/mcp/evimed-research ./runtime/mcp/evimed-research
 COPY --from=build /app/examples/climate-trends ./examples/climate-trends
 COPY --from=build /app/scripts/ops ./scripts/ops
+COPY --from=build /app/evals/method-quality ./evals/method-quality
+COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
+COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden
 # The ops scripts ship inside this image and several of them import workspace
 # packages — the release gate, the runtime-image check, the gate health probe,
 # the session-stream acceptance run. `pnpm deploy` puts those packages under

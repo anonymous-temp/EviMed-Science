@@ -178,9 +178,9 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // is what notices a method being added to one half without a decision about
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
-  // The upstream split plus its gateway remains 51. ECO03 adds exactly the
-  // two parameterless, registered EviMed plugin probe endpoints below.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 53);
+  // The 0.1.5 inventory contains 84 classified RPCs, including the two
+  // EviMed probe endpoints, plus the gateway acknowledgement endpoint.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 85);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -384,7 +384,7 @@ test("the live session/page records normalize into a transcript the gate can rea
     ["reasoning"],
     "the tool call must not also appear as a part of the message that made it",
   );
-  assert.deepEqual(assistants.at(-1).parts, [{ type: "text", text: "done" }]);
+  assert.deepEqual(assistants.at(-1).parts.filter((part) => part.type === "text"), [{ type: "text", text: "done" }]);
 
   const tools = transcript.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool");
   assert.deepEqual(tools.map((part) => part.tool), ["write", "subagent"],
@@ -398,9 +398,10 @@ test("the live session/page records normalize into a transcript the gate can rea
   assert.match(tools[0].output, /Created file/);
   assert.deepEqual(tools[0].input, JSON.parse(RECORDED_WRITE.arguments));
 
-  // A `chunks` record is a run of deltas the following message already
-  // summarises; replaying it would double the text.
-  assert.ok(golden.history.some((record) => record.type === "chunks"), "the recording must still contain the chunks record this asserts about");
+  // V3 embeds packed attempts in the final message instead of separate chunks
+  // records. Reading that stream again would double the committed text.
+  assert.ok(golden.history.some((record) => Array.isArray(record.event?.data?.stream) && record.event.data.stream.length),
+    "the v3 fixture must contain packed assistant attempt data");
   assert.equal(transcript.messages.some((message) => message.parts.some((part) => part.text === "recorded")), false);
 });
 
@@ -451,8 +452,10 @@ test("each turn-end kind lands on its own code, and an unknown kind is counted",
 
 /* ------------------------------------------- decoding one session's own stream */
 
-test("every live session/follow frame decodes, and an unrecognized event is visible rather than dropped", () => {
-  const decoded = golden.session.map((frame) => decodeSessionFrame(RECORDED_SESSION, frame)).filter(Boolean);
+test("every live session/follow frame decodes, and an unrecognized event is visible rather than dropped", async () => {
+  const adapter = new DshRuntimeAdapter(scriptedTransport({ "session/follow": golden.session }));
+  const decoded = [];
+  for await (const item of adapter.watchSession({ sessionId: RECORDED_SESSION, signal: AbortSignal.timeout(2000) })) decoded.push(item);
   assert.ok(decoded.length > 0, "the recording must not be empty, or this test proves nothing");
 
   // Not a census of one run — how many deltas a model emits is not a property
@@ -482,24 +485,12 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // that started returning null for a whole class would still satisfy the set
   // above while losing most of the run.
   const dropped = golden.session
-    .filter((frame) => frame?.type !== "snapshot" && !decodeSessionFrame(RECORDED_SESSION, frame))
+    .filter((frame) => frame?.type !== "snapshot" && frame?.type !== "assistant-stream" && !decodeSessionFrame(RECORDED_SESSION, frame))
     .map((frame) => (frame?.event?.type === "assistant/chunk"
       ? `assistant/chunk:${frame.event.data?.chunk?.type ?? "?"}`
       : String(frame?.event?.type ?? "?")));
-  assert.deepEqual([...new Set(dropped)].sort(), [
-    // Structural markers around a block, and the two trailers. The text and
-    // reasoning deltas inside the block are what carry content and every one of
-    // them decodes; these five say only where a block began, ended, what it
-    // cost and why it stopped — all of which arrive again on the
-    // `assistant/message` that follows.
-    "assistant/chunk:block-end",
-    "assistant/chunk:block-start",
-    "assistant/chunk:finish",
-    "assistant/chunk:tool-call-delta",
-    "assistant/chunk:usage",
-  ], "a frame class that stops decoding must be added here deliberately, not discovered in production");
-  assert.ok(dropped.length > 0 && decoded.length > dropped.length * 2,
-    "the recording must contain both kinds, or this accounting is vacuous");
+  assert.deepEqual(dropped, [], "every durable v3 frame is decoded or surfaced as an explicit unknown");
+  assert.ok(golden.session.some((frame) => frame.type === "assistant-stream"), "this fixture must exercise the live v3 presentation channel");
   const unknowns = decoded.filter((item) => item.event.type === "unknown");
   assert.ok(unknowns.length > 0, "an unrecognized frame must still arrive, or this test proves nothing");
 
@@ -596,7 +587,34 @@ test("a session's events are attributed to the session whose stream they arrived
   // The stream this adapter opens, and the address it opens it with.
   assert.deepEqual(transport.opened.map((entry) => entry.endpoint), ["session/follow", "session/follow"]);
   assert.equal(SEAMS.wire.streamEndpoints.session, "session/follow");
-  assert.deepEqual(transport.opened[0].args, { request: { address: { kind: "session", sessionId: "s-parent" } } });
+  assert.deepEqual(transport.opened[0].args, { request: { address: { kind: "session", sessionId: "s-parent" }, assistantStream: true } });
+});
+
+test("v3 assistant streams retain their durable anchor and ignore replayed chunk indexes", async () => {
+  const transport = scriptedTransport({ "session/follow": [
+    { type: "snapshot", records: [], assistantStream: { revision: 3, activeAttempt: { attemptId: "a1", startedAfterSeq: 12, nextIndex: 1, stream: [] } } },
+    { type: "assistant-stream", frame: { type: "chunk", revision: 4, attemptId: "a1", index: 0, chunk: { type: "text-delta", text: "duplicate" } } },
+    { type: "assistant-stream", frame: { type: "chunk", revision: 5, attemptId: "a1", index: 1, chunk: { type: "text-delta", text: "new text" } } },
+    { type: "assistant-stream", frame: { type: "chunk", revision: 5, attemptId: "a1", index: 1, chunk: { type: "text-delta", text: "duplicate" } } },
+    { type: "assistant-stream", frame: { type: "chunk", revision: 6, attemptId: "a1", index: 2, chunk: { type: "reasoning-delta", text: "new reasoning" } } },
+    { type: "assistant-stream", frame: { type: "end", revision: 7, attemptId: "a1", index: 3, outcome: { kind: "committed", eventType: "assistant/message", seq: 13 } } },
+  ] });
+  const seen = [];
+  for await (const item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "s1", signal: AbortSignal.timeout(2000) })) seen.push(item);
+  assert.deepEqual(seen.map(({ event, replay }) => [event.text, event.seq, event.stream, replay]), [
+    ["new text", 12, { attemptId: "a1", index: 1 }, false],
+    ["new reasoning", 12, { attemptId: "a1", index: 2 }, false],
+  ]);
+});
+
+test("v3 assistant stream gaps request a fresh baseline instead of inventing missing text", async () => {
+  const transport = scriptedTransport({ "session/follow": [
+    { type: "assistant-stream", frame: { type: "start", revision: 1, attemptId: "a1", startedAfterSeq: 12, turn: 1, step: 1 } },
+    { type: "assistant-stream", frame: { type: "chunk", revision: 2, attemptId: "a1", index: 2, chunk: { type: "text-delta", text: "suffix" } } },
+  ] });
+  await assert.rejects(async () => {
+    for await (const _item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "s1", signal: AbortSignal.timeout(2000) })) { /* drain */ }
+  }, { code: "runtime_assistant_stream_gap" });
 });
 
 test("the opening snapshot is replayed as events, so a tab that connects mid-run sees what it missed", async () => {
@@ -613,7 +631,7 @@ test("the opening snapshot is replayed as events, so a tab that connects mid-run
   assert.ok(seen.every((item) => item.sessionId === RECORDED_SESSION));
   const direct = golden.session.map((frame) => decodeSessionFrame(RECORDED_SESSION, frame)).filter(Boolean);
   const fromSnapshot = snapshot.records.map((record) => decodeSessionFrame(RECORDED_SESSION, record)).filter(Boolean);
-  assert.deepEqual(seen, [
+  assert.deepEqual(seen.filter(({ event }) => event.type !== "assistant/delta" || !event.stream), [
     ...fromSnapshot.map((item) => ({ ...item, replay: true })),
     ...direct.map((item) => ({ ...item, replay: false })),
   ]);

@@ -262,8 +262,11 @@ export class MethodConsolidation {
         // evaluation but has not had one gets queued for it here — that is the
         // one thing a nightly pass can do about "we do not know yet".
         if (error?.code !== "method_not_promotable") throw error;
-        if (eligibility.eligible && !(document.payload.learning?.evaluations ?? []).length) {
-          await this.enqueueEvaluation(job, document);
+        if (!(document.payload.learning?.evaluations ?? []).length) {
+          // A fresh candidate cannot earn observations until an isolated trial
+          // mounts it. Bootstrap buys a bounded trial, never an approval or a
+          // weaker promotion threshold.
+          await this.enqueueEvaluation(job, document, !eligibility.eligible);
           queuedForEvaluation.push(document.id);
         }
       }
@@ -343,9 +346,18 @@ export class MethodConsolidation {
       methodId,
       candidateDigest,
       baselineDigest,
+      bootstrap: job.payload?.bootstrap === true,
     });
     if (!report?.verdict || !report?.report) {
       throw new HttpError(502, "method_evaluation_invalid", "The paired evaluation returned no verdict.");
+    }
+    if (job.payload?.bootstrap === true) {
+      // Bootstrap only earns observed trajectories. Its small development
+      // sample must never masquerade as the full paired admission evaluation.
+      return { action: "evaluate", methodId, bootstrap: true, report: report.report };
+    }
+    if (report.candidateDigest && report.candidateDigest !== candidateDigest) {
+      throw new HttpError(409, "method_evaluation_stale", "The runner returned a result for a different candidate.");
     }
     // The digest travels with the verdict. Read before the runner started and
     // carried through, so the recorder can refuse a score for text the method
@@ -589,15 +601,16 @@ export class MethodConsolidation {
   }
 
   /** @param {any} job @param {any} document */
-  async enqueueEvaluation(job, document) {
+  async enqueueEvaluation(job, document, bootstrap = false) {
     if (!this.jobs) return;
     try {
       await this.jobs.enqueue(job.userId, "consolidate", {
         action: "evaluate",
         methodId: document.id,
         candidateDigest: document.payload.contentDigest,
+        bootstrap,
       }, {
-        idempotencyKey: `consolidate:evaluate:${document.id}:${document.payload.contentDigest}`,
+        idempotencyKey: `consolidate:evaluate:${document.id}:${document.payload.contentDigest}:${bootstrap ? "bootstrap" : "paired"}`,
         projectId: job.projectId,
       });
     } catch {

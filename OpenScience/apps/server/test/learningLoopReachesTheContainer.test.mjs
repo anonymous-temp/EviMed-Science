@@ -291,3 +291,31 @@ test("a trial expires, and an expired one mounts nothing", async (t) => {
   now = new Date("2026-09-10T02:00:00.000Z");
   assert.equal((await launch(learning, project)).count, 0, "an expired trial must mount nothing");
 });
+
+test("a fresh inferred candidate is queued for bounded bootstrap evaluation without observations", async () => {
+  const learning = new LearningService({ documents: fakeDocuments() });
+  const created = await learning.createCandidate(USER, {
+    projectId: PROJECT, frontmatter: frontmatter("bootstrap-method"), body: BODY,
+    provenance: { origin: "inferred", runId: "run_seed" },
+  });
+  const queued = [];
+  const consolidation = new MethodConsolidation({
+    learning, dispatch: async () => { throw new Error("no model call in scheduling"); }, readResult: async () => null,
+    jobs: { enqueue: async (_userId, _kind, payload) => { queued.push(payload); } },
+  });
+  await consolidation.sleep({ job: { userId: USER, projectId: PROJECT, payload: { action: "sleep" } } });
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].bootstrap, true);
+  assert.equal(queued[0].candidateDigest, created.payload.contentDigest);
+  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "candidate");
+  consolidation.evaluate = async () => ({ verdict: "better", report: "bootstrap-report.json", candidateDigest: created.payload.contentDigest });
+  await consolidation.evaluateCandidate({ job: { userId: USER, projectId: PROJECT, payload: queued[0] } });
+  assert.equal((await learning.getMethod(USER, created.id)).payload.learning.evaluations.length, 0,
+    "a favorable bootstrap result is not a full paired evaluation");
+  for (let i = 0; i < 3; i += 1) {
+    await learning.recordObservation(USER, created.id, { runId: `trial-${i}`, family: `trial-${i}:d1`, outcome: "accepted", contentDigest: created.payload.contentDigest });
+  }
+  await consolidation.sleep({ job: { userId: USER, projectId: PROJECT, payload: { action: "sleep" } } });
+  assert.equal(queued[1].bootstrap, false, "observations unlock the full evaluation, not approval");
+  assert.equal((await learning.getMethod(USER, created.id)).payload.status, "candidate");
+});

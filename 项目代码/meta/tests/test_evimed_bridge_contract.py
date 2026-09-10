@@ -56,7 +56,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[TestClient, Path]:
     )
     monkeypatch.setenv("EVIMED_WORKLOAD_SIGNING_SECRET", SECRET)
     monkeypatch.setenv("LLM_API_KEY", "test-key-never-persist")
-    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-flash")
     monkeypatch.setenv("LLM_ENABLE_THINKING", "true")
     app = FastAPI()
     app.include_router(evimed_adapter.create_evimed_adapter_router(tmp_path))

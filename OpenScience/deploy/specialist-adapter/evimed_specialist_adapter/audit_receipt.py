@@ -206,7 +206,7 @@ def current_evidence(agent_root, adapter_package=PACKAGE):
     return {"executionEvidence": {"schemaVersion": 1, "agentSourceSha256": tree["sha256"],
         "agentSourceFiles": tree["files"], "adapterSha256": digest(_read_file(adapter_package, "service.py")),
         "evidenceModuleSha256": digest(_read_file(adapter_package, "audit_receipt.py")),
-        "model": "deepseek-v4-pro", "thinking": True, "reasoningEffort": "high"},
+        "model": "deepseek-flash", "thinking": True, "reasoningEffort": "high"},
         "adapterEvidence": adapter_evidence(adapter_package)}
 
 

@@ -344,6 +344,7 @@ function foldEvents(events) {
       if (!current) throw corrupt("Runtime input refers to an unknown run.");
       runs.set(id, Object.freeze({ ...current,
         ...(event.event === "runtime-turn" ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
+        ...(event.rebased === true ? { nativeWorkflow: null } : {}),
         // A field on an existing event rather than an event kind of its own.
         // `foldEvents` throws on a kind it does not know, so a new kind means a
         // ledger an older control plane cannot read at all; an unknown *field*
@@ -744,7 +745,7 @@ function storedKernelRequestId(value) {
 function runHistory(run, history) {
   const turns = new Set(history.filter((message) => actualUserMessage(message) && (run.kernelRequestIds ?? []).includes(message.info?.sourceRequestId))
     .map((message) => message.info?.turnStartSeq).filter((seq) => Number.isSafeInteger(seq)));
-  if (run.nativeTurn) turns.add(run.nativeTurn.startSeq);
+  if (run.nativeTurn && !run.kernelRequestIds?.length) turns.add(run.nativeTurn.startSeq);
   if (turns.size) return history.filter((message) => turns.has(message.info?.turnStartSeq));
   // A lost acceptance is not permission to claim the next unrelated input.
   // Histories predating the DSH normalization retain their baseline behavior.
@@ -3034,8 +3035,9 @@ export class AgentRunStore {
         kernelRequestIds = (kernelRequestIds ?? []).map(storedKernelRequestId);
         nativeTurn = validateNativeTurn(nativeTurn);
         const owned = [...runs.values()].find((run) => run.sessionId === session.sessionId && (
-          run.nativeTurn?.startSeq === nativeTurn.startSeq
-          || (kernelRequestIds ?? []).some((id) => (run.kernelRequestIds ?? []).includes(id))
+          kernelRequestIds.length
+            ? kernelRequestIds.some((id) => (run.kernelRequestIds ?? []).includes(id))
+            : !run.kernelRequestIds?.length && run.nativeTurn?.startSeq === nativeTurn.startSeq
         ));
         if (owned) return { run: owned, owner: false };
         const legacy = runs.get(legacyRunId);
@@ -4277,14 +4279,15 @@ export class AgentRunStore {
    * therefore do not manufacture movement.
    * @param {{ userId: string, id: string }} project
    * @param {string} runId
-   * @param {{ sessionId: string, seq: number }} activity
+   * @param {{ sessionId: string, seq: number, stream?: {attemptId: string, index: number} }} activity
    */
   noteKernelActivity(project, runId, activity) {
     if (!project?.userId || !project?.id || !runId || !activity?.sessionId || !Number.isSafeInteger(activity.seq) || activity.seq < 0) return;
+    if (activity.stream && (!activity.stream.attemptId || !Number.isSafeInteger(activity.stream.index) || activity.stream.index < 0)) return;
     const key = `${project.userId}\0${project.id}\0${runId}`;
     this.kernelActivities.set(
       key,
-      createHash("sha256").update(JSON.stringify([activity.sessionId, activity.seq])).digest("hex"),
+      createHash("sha256").update(JSON.stringify([activity.sessionId, activity.seq, ...(activity.stream ? [activity.stream.attemptId, activity.stream.index] : [])])).digest("hex"),
     );
   }
 
@@ -4739,8 +4742,25 @@ export class AgentRunStore {
       const first = turn.inputs[0];
       const requestIds = turn.inputs.map((message) => message.sourceRequestId).filter((id) => typeof id === "string" && id);
       let run = knownRuns.find((item) => item.sessionId === sessionId && (
-        item.nativeTurn?.startSeq === turn.startSeq || requestIds.some((id) => (item.kernelRequestIds ?? []).includes(id))
+        requestIds.length
+          ? requestIds.some((id) => (item.kernelRequestIds ?? []).includes(id))
+          : !item.kernelRequestIds?.length && item.nativeTurn?.startSeq === turn.startSeq
       ));
+      if (run?.nativeTurn && requestIds.length
+        && (run.nativeTurn.startSeq !== turn.startSeq || run.nativeTurn.userSeq !== first.seq)) {
+        const ownedId = run.id;
+        run = await withProjectStorageMutation(project, async () => {
+          const events = parseEvents(await readLedgerText(project, this.maxBytes));
+          const current = foldEvents(events).get(ownedId);
+          if (!current || !requestIds.some((id) => current.kernelRequestIds?.includes(id))) {
+            throw new HttpError(409, "runtime_input_changed", "The migrated turn no longer has its recorded request identity.");
+          }
+          const event = { event: "runtime-turn", id: ownedId, nativeTurn: { startSeq: turn.startSeq, userSeq: first.seq }, requestIds, rebased: true };
+          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          return foldEvents([...events, event]).get(ownedId);
+        });
+        knownRuns[knownRuns.findIndex((item) => item.id === ownedId)] = run;
+      }
       if (!run) {
         const legacyOrdinary = knownRuns.filter((item) => item.sessionId === sessionId && item.dispatchId && !item.kernelRequestIds?.length);
         const legacyBaseline = (item) => {

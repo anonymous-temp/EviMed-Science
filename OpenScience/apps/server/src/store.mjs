@@ -510,7 +510,7 @@ export class InMemoryStore {
     return { id: project.id, name: project.name };
   }
 
-  async deleteProject(user, projectId) {
+  async deleteProject(user, projectId, { beforeDelete = null } = {}) {
     const id = safeId(projectId, "project id");
     if (id === "default") {
       throw new HttpError(400, "default_project_protected", "The default project cannot be deleted.");
@@ -528,6 +528,7 @@ export class InMemoryStore {
     if (!stat?.isDirectory()) {
       throw new HttpError(404, "project_not_found", "Project not found.");
     }
+    if (beforeDelete) await beforeDelete(null);
     await fs.rm(projectRoot, { recursive: true, force: true });
     this.projects.delete(`${user.id}:${id}`);
     return { id };
@@ -1131,12 +1132,13 @@ export class PostgresStore extends InMemoryStore {
     });
   }
 
-  async deleteProject(user, projectId) {
+  async deleteProject(user, projectId, { beforeDelete = null } = {}) {
     const id = safeId(projectId, "project id");
     if (id === "default") {
       throw new HttpError(400, "default_project_protected", "The default project cannot be deleted.");
     }
     await this.database.transaction(async (client) => {
+      if (beforeDelete) await beforeDelete(client);
       const locked = await client.query(
         `SELECT id FROM ${CONTROL_PLANE_SCHEMA}.projects
           WHERE user_id = $1 AND id = $2 FOR UPDATE`,

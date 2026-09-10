@@ -140,11 +140,10 @@ function deepFreeze(value) {
 }
 
 /**
- * The reference price list. A deployment overrides it; the shape is fixed here
- * so a price list is one thing rather than a scattering of constants.
+ * Historical reference rates, retained for rows billed under this version.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20260905 = deepFreeze({
   currency: 'CNY',
   version: 'evimed-reference-2026-09-05',
   effectiveFrom: '2026-09-05T00:00:00.000Z',
@@ -166,6 +165,22 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
   storagePerGigabyteDay: 0.01,
 })
 
+/** Current CNY rates verified against the official DeepSeek table on 2026-09-10.
+ * Legacy Flash aliases are served and billed as V4.1 Flash by the provider.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20260905,
+  version: 'evimed-reference-2026-09-10',
+  effectiveFrom: '2026-09-10T00:00:00.000Z',
+  model: {
+    'deepseek-flash': { cacheHit: 0.04, cacheMiss: 2, output: 8 },
+    'deepseek-v4-flash': { cacheHit: 0.04, cacheMiss: 2, output: 8 },
+    'deepseek-v4-flash-vision-exp': { cacheHit: 0.04, cacheMiss: 2, output: 8 },
+    'deepseek-v4-pro': { cacheHit: 0.3, cacheMiss: 9, output: 27 },
+  },
+})
+
 /**
  * Every price list this platform has billed against, keyed by version.
  *
@@ -177,10 +192,9 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
  * entry with its own `effectiveFrom`, point `REFERENCE_PRICE_LIST` at it, and
  * never touch a list that has already priced a row.
  *
- * There is one entry because there has been one list: the usage ledger was
- * created after `evimed-reference-2026-09-05` and no persisted row can name an
- * earlier one. The rates that preceded it are deliberately not resurrected
- * here — they were billed by an off-peak rule this function no longer applies,
+ * The usage ledger was created after `evimed-reference-2026-09-05`, so no
+ * persisted row can name an earlier one. The rates that preceded it are
+ * deliberately not resurrected here — they were billed by an off-peak rule this function no longer applies,
  * so a reconstruction would be a price list that never charged anyone.
  *
  * Not exported, on purpose. A map handed out is a map indexed, and indexing it
@@ -191,7 +205,8 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
  * @type {Readonly<Record<string, PriceList>>}
  */
 const priceLists = deepFreeze({
-  'evimed-reference-2026-09-05': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-09-05': referencePrices20260905,
+  'evimed-reference-2026-09-10': REFERENCE_PRICE_LIST,
 })
 
 /**
@@ -231,10 +246,8 @@ export function priceListFor(version) {
  * better than dating a charge to prices that did not exist yet.
  *
  * The set to select from is a parameter because the selection is a rule over a
- * set, and this platform has had exactly one list so far: without it, "a
- * boundary instant belongs to the later list" would first be exercised on the
- * day a second list starts billing, which is the worst day to find out it is
- * wrong. It defaults to the registry, and no caller in the platform passes it.
+ * set. Tests can exercise a boundary between lists without changing the live
+ * registry. It defaults to the registry, and no caller in the platform passes it.
  *
  * @param {Date | string | number} instant  a Date, an ISO instant, or epoch milliseconds
  * @param {Readonly<Record<string, PriceList>>} [registry]

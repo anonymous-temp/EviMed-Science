@@ -86,6 +86,8 @@ class FakeBackend(runner.Transport):
             return 200, {"data": {"cost": None}}, {}
         if path == "/api/commands/start_runtime":
             return 200, {"data": "http://fake-runtime.invalid/api/runtime"}, {}
+        if path == "/api/commands/stop_runtime":
+            return 200, {"data": None}, {}
         if path.endswith("/api/runtime/sessions") and method == "POST":
             return 200, {"data": {"id": self._next("ses")}}, {}
         if path.startswith("/api/research-sessions/"):
@@ -586,6 +588,22 @@ class EvaluationContractTests(unittest.TestCase):
     table. Neither half was wrong on its own and no configured command could
     ever have worked.
     """
+
+    def test_real_api_envelopes_preserve_usage_and_trial_receipts(self):
+        class Backend(runner.Transport):
+            def request(self, method, url, body=None, headers=None, timeout=60):
+                return 200, {"data": {"cost": 0.25, "calls": 2, "digestById": {"m": "sha256:content"}}}, {}
+        client = runner.PlatformClient(Backend(), "http://local.invalid")
+        self.assertEqual(runner.load_usage_lookup(None, client)("run-1")["cost"], 0.25)
+        self.assertEqual(client.set_method_trial("p", ["m"], 60000)["digestById"], {"m": "sha256:content"})
+
+    def test_content_and_mounted_digests_are_distinct_receipt_fields(self):
+        arm = runner.normalize_arm({"methodSnapshot": {
+            "id": "candidate", "trialMethodIds": ["method:learned:m"],
+            "trialDigestById": {"method:learned:m": "sha256:content"},
+            "trialMountedDigestById": {"method:learned:m": "sha256:file"},
+        }, "compactionPolicy": "basic"}, "candidate")
+        self.assertEqual(runner.verify_arm_mounted(arm, [{"name": "m", "digest": "sha256:file"}]), [])
 
     def test_the_arms_are_synthesised_around_one_candidate(self):
         raw = {

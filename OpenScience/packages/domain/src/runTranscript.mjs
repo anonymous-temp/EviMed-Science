@@ -157,7 +157,7 @@ export function totalOutputTokens(transcript) {
  *   | { type: 'step/end', seq: number, turn: number, step: number }
  *   | { type: 'message/user', seq: number, text: string, source: 'user'|'plugin'|'system'|'subagent'|'skill-catalog', sourceRequestId?: string }
  *   | { type: 'message/assistant', seq: number, text: string, reasoning: string, usage: { input: number, output: number, cacheHit: number, cacheMiss: number } | null, interrupted: boolean }
- *   | { type: 'assistant/delta', seq: number, kind: 'text'|'reasoning', text: string }
+ *   | { type: 'assistant/delta', seq: number, kind: 'text'|'reasoning', text: string, stream?: {attemptId: string, index: number} }
  *   | { type: 'tool/call', seq: number, callId: string, tool: string, input: Record<string, unknown>, narration: string }
  *   | { type: 'tool/result', seq: number, callId: string, tool: string, status: 'completed'|'error', output: string, errorCode?: string, narration: string, durationMs?: number }
  *   | { type: 'subagent/started', seq: number, childSessionId: string, capability: string, label: string }

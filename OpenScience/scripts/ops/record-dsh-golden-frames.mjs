@@ -304,7 +304,7 @@ async function main() {
   const sessionStream = await openTracked(
     mux,
     "session/follow",
-    { request: { address: { kind: "session", sessionId } } },
+    { request: { address: { kind: "session", sessionId }, assistantStream: true } },
     signal,
     session,
   );

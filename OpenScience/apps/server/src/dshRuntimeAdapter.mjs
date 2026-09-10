@@ -462,13 +462,46 @@ export class DshRuntimeAdapter {
    * @returns {AsyncGenerator<{ sessionId: string, event: import('@evimed/domain').RunEvent, replay: boolean }>}
    */
   async *watchSession({ sessionId, signal }) {
-    const args = { request: { address: { kind: "session", sessionId } } };
+    const args = { request: { address: { kind: "session", sessionId }, assistantStream: true } };
+    /** @type {{attemptId: string, startedAfterSeq: number, nextIndex: number}|null} */
+    let attempt = null;
+    let revision = -1;
     for await (const frame of this.transport.stream(SEAMS.wire.streamEndpoints.session, args, { signal })) {
       if (frame?.type === "snapshot") {
+        const baseline = frame.assistantStream;
+        revision = Number.isSafeInteger(baseline?.revision) ? baseline.revision : -1;
+        const active = baseline?.activeAttempt;
+        attempt = active && typeof active.attemptId === "string" && Number.isSafeInteger(active.startedAfterSeq)
+          && Number.isSafeInteger(active.nextIndex) ? { ...active } : null;
         for (const record of Array.isArray(frame.records) ? frame.records : []) {
           const decoded = decodeSessionFrame(sessionId, record);
           if (decoded) yield { ...decoded, replay: true };
         }
+        continue;
+      }
+      if (frame?.type === "assistant-stream") {
+        const member = frame.frame;
+        if (!member || !Number.isSafeInteger(member.revision) || member.revision <= revision) continue;
+        revision = member.revision;
+        if (member.type === "start") {
+          attempt = typeof member.attemptId === "string" && Number.isSafeInteger(member.startedAfterSeq)
+            ? { attemptId: member.attemptId, startedAfterSeq: member.startedAfterSeq, nextIndex: 0 } : null;
+          continue;
+        }
+        if (!attempt || member.attemptId !== attempt.attemptId) continue;
+        if (member.type === "end") { attempt = null; continue; }
+        if (member.type !== "chunk" || !Number.isSafeInteger(member.index) || member.index < attempt.nextIndex) continue;
+        if (member.index !== attempt.nextIndex) throw new HttpError(502, "runtime_assistant_stream_gap", "The assistant stream needs a fresh baseline.");
+        attempt.nextIndex += 1;
+        const chunk = member.chunk;
+        const kind = chunk?.type === "reasoning-delta" ? "reasoning" : chunk?.type === "text-delta" ? "text" : null;
+        const text = typeof chunk?.text === "string" ? chunk.text : typeof chunk?.delta === "string" ? chunk.delta : "";
+        if (kind && text) yield {
+          sessionId,
+          event: { type: "assistant/delta", seq: attempt.startedAfterSeq, kind, text,
+            stream: { attemptId: attempt.attemptId, index: member.index } },
+          replay: false,
+        };
         continue;
       }
       const decoded = decodeSessionFrame(sessionId, frame);

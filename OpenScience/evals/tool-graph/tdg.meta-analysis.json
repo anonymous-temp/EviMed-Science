@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "meta-analysis",
-  "version": "sha256:69de8e79049fe039920c0d83e5a22aba89d3cf8d76d984ec6864c8388980f591",
+  "version": "sha256:1053da25f7359c2342d6ecfff230be6d123cbda1e8fb261267bd9d49e1a668f3",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 21,
@@ -422,7 +422,7 @@
     {
       "name": "mcp__evimed__meta_analysis",
       "source": "mcp",
-      "description": "Start or inspect a managed MetaAgent systematic-review and meta-analysis job. The job runs with DeepSeek V4 Pro, writes its auditable package into the current workspace, and preserves release-gate status.",
+      "description": "Start or inspect a managed MetaAgent systematic-review and meta-analysis job. The job runs with DeepSeek V4.1 Flash, writes its auditable package into the current workspace, and preserves release-gate status.",
       "inputSchema": {
         "type": "object",
         "properties": {

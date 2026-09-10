@@ -147,16 +147,16 @@ class LLMGateway:
         """Get model names based on provider and tier"""
         if self.provider == LLMProvider.DEEPSEEK:
             return {
-                ModelTier.FAST: os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash"),
-                ModelTier.STANDARD: os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"),
-                ModelTier.ADVANCED: os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro"),
+                ModelTier.FAST: os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-flash"),
+                ModelTier.STANDARD: os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-flash"),
+                ModelTier.ADVANCED: os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-flash"),
             }
 
         return {}
 
-    def _effective_max_tokens(self, model: str, answer_tokens: int) -> int:
+    def _effective_max_tokens(self, model_tier: ModelTier, answer_tokens: int) -> int:
         """Reserve output room for Pro reasoning without exceeding the API cap."""
-        if model != self.model_mapping[ModelTier.ADVANCED]:
+        if model_tier == ModelTier.FAST:
             return answer_tokens
         return min(
             self.max_output_tokens,
@@ -166,9 +166,9 @@ class LLMGateway:
             ),
         )
 
-    def _expanded_max_tokens(self, model: str, current_tokens: int) -> int:
+    def _expanded_max_tokens(self, model_tier: ModelTier, current_tokens: int) -> int:
         """Expand a truncated Pro request once."""
-        if model != self.model_mapping[ModelTier.ADVANCED]:
+        if model_tier == ModelTier.FAST:
             return current_tokens
         return min(self.max_output_tokens, current_tokens * 2)
 
@@ -226,7 +226,7 @@ class LLMGateway:
 
         # Check cache first
         if self.enable_cache:
-            cache_key = self._get_cache_key(messages, model, temperature)
+            cache_key = self._get_cache_key(messages, f"{model}:{model_tier.value}", temperature)
             if cache_key in self._cache:
                 cached_result = dict(self._cache[cache_key])
                 cached_result["from_cache"] = True
@@ -248,6 +248,7 @@ class LLMGateway:
                 result = await self._call_llm(
                     messages=messages,
                     model=model,
+                    model_tier=model_tier,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     response_format=response_format,
@@ -285,13 +286,14 @@ class LLMGateway:
         max_tokens: int = 4096,
         response_format: Optional[Dict] = None,
         timeout_sec: Optional[int] = None,
+        model_tier: ModelTier = ModelTier.STANDARD,
         **kwargs
     ) -> Dict[str, Any]:
         """Internal method to make actual LLM API call"""
         start_time = time.time()
         effective_timeout = timeout_sec or self.timeout
-        request_max_tokens = self._effective_max_tokens(model, max_tokens)
-        is_pro = model == self.model_mapping[ModelTier.ADVANCED]
+        request_max_tokens = self._effective_max_tokens(model_tier, max_tokens)
+        is_pro = model_tier != ModelTier.FAST
         if is_pro:
             effective_timeout = max(effective_timeout, self.pro_timeout)
 
@@ -330,7 +332,7 @@ class LLMGateway:
                             f"Will retry in {_llm_circuit_breaker.recovery_timeout}s."
                         )
                     budgets = [request_max_tokens]
-                    expanded_tokens = self._expanded_max_tokens(model, request_max_tokens)
+                    expanded_tokens = self._expanded_max_tokens(model_tier, request_max_tokens)
                     if expanded_tokens > request_max_tokens:
                         budgets.append(expanded_tokens)
 
@@ -406,8 +408,8 @@ class LLMGateway:
         """
         model = self.model_mapping.get(model_tier, self.model_mapping[ModelTier.STANDARD])
         start_time = time.perf_counter()
-        request_max_tokens = self._effective_max_tokens(model, max_tokens)
-        is_pro = model == self.model_mapping[ModelTier.ADVANCED]
+        request_max_tokens = self._effective_max_tokens(model_tier, max_tokens)
+        is_pro = model_tier != ModelTier.FAST
         effective_timeout = max(self.timeout, self.pro_timeout) if is_pro else self.timeout
 
         if self.provider == LLMProvider.DEEPSEEK:

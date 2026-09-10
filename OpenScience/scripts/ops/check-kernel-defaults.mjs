@@ -98,17 +98,12 @@ export const SOURCES = {
  * ship.
  */
 export const BASELINE_PROVENANCE = {
-  dshVersion: "0.1.2-rc.1",
-  sha256: "ee0977a56ae51ba770bd28e060ec33a90109d58349bb54895e50904d8fc94ef5",
-  recordedBy: "deploy/runtime-dsh/Dockerfile - `dsh --profile evimed-runtime --dump-config` on the seeded profile",
-  // ECO03 plugin-probe was re-recorded with the exact rc.1 CLI in an isolated
-  // network-disabled cached image on 2026-09-07; its only byte change is that row.
-  // The EviMed native-client row was recorded by the actual rc.1 native UI
-  // acceptance image. The dsh-cite row was recorded on 2026-09-06 by adding
-  // dsh-cite@0.3.2 to an isolated rc.1 profile on the production host and
-  // copying that profile's --dump-config output out of the disposable
-  // container. The release image build still diffs its fresh combined dump
-  // against this file before it can be published.
+  dshVersion: "0.1.5-rc.1",
+  sha256: "ff25cd67293b4314f4ae409ff9058f820a1866151e9021f33d947a8e44f5afc8",
+  recordedBy: "dsh@0.1.5-rc.1 --profile evimed-runtime --dump-config on an isolated profile with the image's base, web, cite and socket bundles",
+  // Captured from the actual pinned CLI on 2026-09-10, without the local
+  // recording/gateway patches. The release image must independently generate
+  // and byte-diff its dump before publication.
 };
 
 /**

@@ -1,5 +1,6 @@
 # Local acceptance only: the scientific production image is built separately.
-ARG BASE_IMAGE=hecrs-dsh:0.1.2-rc.1-canary
+# Supply a verified closure image containing /app/harness/node_modules.
+ARG BASE_IMAGE
 FROM --platform=linux/amd64 ${BASE_IMAGE} AS published_closure
 FROM public.ecr.aws/docker/library/node:22.23.2-bookworm-slim
 COPY --from=published_closure /app/harness/node_modules /app/harness/node_modules

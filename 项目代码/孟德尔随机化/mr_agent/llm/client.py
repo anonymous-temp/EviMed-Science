@@ -34,8 +34,8 @@ class LLMClient:
         if self.provider != "deepseek":
             raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
-        self.flash_model = os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash")
-        self.pro_model = model or os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-v4-pro")
+        self.flash_model = os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-flash")
+        self.pro_model = model or os.getenv("DEEPSEEK_PRO_MODEL", "deepseek-flash")
         self.pro_reasoning_reserve_tokens = int(
             os.getenv("DEEPSEEK_PRO_REASONING_RESERVE_TOKENS", "4096")
         )
@@ -67,9 +67,9 @@ class LLMClient:
             return self.pro_model
         raise ValueError(f"Unsupported DeepSeek model tier: {model_tier}")
 
-    def effective_max_tokens(self, model: str, answer_tokens: int) -> int:
+    def effective_max_tokens(self, model_tier: str, answer_tokens: int) -> int:
         """Reserve room for Pro reasoning while preserving the answer budget."""
-        if model != self.pro_model:
+        if model_tier != "pro":
             return answer_tokens
         return min(
             self.max_output_tokens,
@@ -79,9 +79,9 @@ class LLMClient:
             ),
         )
 
-    def expanded_max_tokens(self, model: str, current_tokens: int) -> int:
+    def expanded_max_tokens(self, model_tier: str, current_tokens: int) -> int:
         """Expand a truncated Pro request once, without exceeding the API cap."""
-        if model != self.pro_model:
+        if model_tier != "pro":
             return current_tokens
         return min(self.max_output_tokens, current_tokens * 2)
 
@@ -120,6 +120,7 @@ class LLMClient:
                 max_tokens,
                 model,
                 json_mode,
+                model_tier,
             )
         )
 
@@ -131,17 +132,18 @@ class LLMClient:
         max_tokens: int,
         model: str,
         json_mode: bool,
+        model_tier: str,
     ) -> str:
         """Call the DeepSeek OpenAI-compatible Chat Completions API."""
         start_time = time.perf_counter()
         client = self._get_openai_client()
-        request_max_tokens = self.effective_max_tokens(model, max_tokens)
+        request_max_tokens = self.effective_max_tokens(model_tier, max_tokens)
         all_messages: list[dict[str, str]] = []
         if system:
             all_messages.append({"role": "system", "content": system})
         all_messages.extend(messages)
 
-        is_pro = model == self.pro_model
+        is_pro = model_tier == "pro"
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": all_messages,
@@ -158,7 +160,7 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
 
         budgets = [request_max_tokens]
-        expanded_tokens = self.expanded_max_tokens(model, request_max_tokens)
+        expanded_tokens = self.expanded_max_tokens(model_tier, request_max_tokens)
         if expanded_tokens > request_max_tokens:
             budgets.append(expanded_tokens)
 

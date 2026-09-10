@@ -32,9 +32,9 @@ const havePython = python.status === 0;
  *  rather than restated here: a test that lists them separately is a second
  *  opinion about the contract, which is what this file exists to prevent. */
 async function serverFlags() {
-  const source = await readFile(path.join(here, "../src/server.mjs"), "utf8");
-  const block = source.slice(source.indexOf("function runPairedEvaluation("));
-  const spawnCall = block.slice(block.indexOf("spawn(program, ["), block.indexOf("], { stdio"));
+  const source = await readFile(path.join(here, "../src/learningEvaluationProcess.mjs"), "utf8");
+  const block = source.slice(source.indexOf("function runLearningEvaluationProcess("));
+  const spawnCall = block.slice(block.indexOf("spawn(program, ["), block.indexOf("], {"));
   return [...spawnCall.matchAll(/"(--[a-z-]+)"/g)].map((match) => match[1]);
 }
 

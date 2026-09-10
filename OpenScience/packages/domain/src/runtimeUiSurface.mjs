@@ -60,6 +60,11 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   "credentials",
   "llm",
   "directoryPicker",
+  // DSH 0.1.5 deliberately permits arbitrary absolute paths on this surface.
+  // Hosted artifact reads use the control plane's scoped file APIs instead.
+  "workspaceFiles",
+  "dynamicCordisRunner",
+  "sessionFeedback",
   "goals",
   "agentTeams",
   // Not exported by the composition the hosted image runs: on 2026-09-04,

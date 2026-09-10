@@ -609,6 +609,26 @@ test("a prior terminal callback does not unmap a newer turn and its replay exclu
   assert.deepEqual(eventsOf(runEvents, "run-second").map((event) => event.text), ["current answer"]);
 });
 
+test("a migrated native turn resets the same run's sequence boundary and activity watermark", async (t) => {
+  const activity = [];
+  const { runEvents, pump, muxes } = pumpOnFakeMux({ onRunActivity: (_project, runId, cursor) => activity.push({ runId, ...cursor }) });
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "migrated-turn" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  const run = { id: "same-run", sessionId: "same", status: "running", kernelRequestIds: ["stable-request"] };
+  pump.noteRun(project, { ...run, nativeTurn: { startSeq: 100 } });
+  await waitFor(() => muxes[0]?.follow("same"), "native follow");
+  const stream = muxes[0].follow("same");
+  stream.push(sessionEvent({ type: "assistant/message", seq: 110, data: { message: { content: [{ type: "text", text: "old sequence" }] } } }));
+  await waitFor(() => activity.length > 0, "old watermark");
+  pump.noteRun(project, { ...run, nativeTurn: { startSeq: 10 } });
+  pump.noteRun(project, { id: "older-run", sessionId: "same", status: "running", nativeTurn: { startSeq: 4 } });
+  stream.push(sessionEvent({ type: "assistant/message", seq: 11, data: { message: { content: [{ type: "text", text: "migrated answer" }] } } }));
+  await waitFor(() => eventsOf(runEvents, "same-run").some((event) => event.text === "migrated answer"), "migrated answer");
+  assert.equal(activity.at(-1).seq, 11);
+  assert.deepEqual(eventsOf(runEvents, "older-run"), []);
+});
+
 test("a sweep returning a terminal run never turns it into a live stream owner", async (t) => {
   const runEvents = new RunEventHub();
   const mux = new FakeMux();

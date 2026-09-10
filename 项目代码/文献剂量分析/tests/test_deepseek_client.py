@@ -42,7 +42,7 @@ def test_flash_and_pro_payload_contracts():
     flash, flash_api = _sync_client([_response("flash")])
     assert flash.complete([{"role": "user", "content": "x"}], tier="flash", max_tokens=1000) == "flash"
     flash_call = flash_api.calls[0]
-    assert flash_call["model"] == "deepseek-v4-flash"
+    assert flash_call["model"] == "deepseek-flash"
     assert flash_call["max_tokens"] == 1000
     assert flash_call["temperature"] == 0.3
     assert flash_call["extra_body"] == {"thinking": {"type": "disabled"}}
@@ -51,7 +51,7 @@ def test_flash_and_pro_payload_contracts():
     pro, pro_api = _sync_client([_response("pro")])
     assert pro.complete([{"role": "user", "content": "x"}], tier="pro", max_tokens=1000) == "pro"
     pro_call = pro_api.calls[0]
-    assert pro_call["model"] == "deepseek-v4-pro"
+    assert pro_call["model"] == "deepseek-flash"
     assert pro_call["max_tokens"] == 5096
     assert pro_call["reasoning_effort"] == "high"
     assert pro_call["extra_body"] == {"thinking": {"type": "enabled"}}
@@ -172,7 +172,7 @@ async def test_pro_stream_yields_nonempty_answer():
         [{"role": "user", "content": "x"}], tier="pro", max_tokens=20
     )]
     assert "".join(parts) == "答案"
-    assert completions.calls[0]["model"] == "deepseek-v4-pro"
+    assert completions.calls[0]["model"] == "deepseek-flash"
     assert completions.calls[0]["stream_options"] == {"include_usage": True}
 
 

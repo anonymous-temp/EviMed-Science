@@ -61,6 +61,28 @@ test("the captured native conversation produces two independent runs and replay 
   assert.deepEqual((await f.runs()).map((run) => run.id).sort(), first.map((run) => run.id).sort());
 });
 
+test("session migration rebinds request identities when new sequences collide with old turns", async (t) => {
+  const f = await setup(t);
+  await f.adopt();
+  const before = await f.runs();
+  const starts = fixture.events.filter((event) => event.type === "turn/start");
+  const secondIndex = fixture.events.findIndex((event) => event === starts[1]);
+  const migrated = fixture.events.map((event, index) => ({
+    ...structuredClone(event),
+    seq: index < secondIndex ? index : starts[0].seq + index - secondIndex,
+  }));
+  f.setEvents(migrated);
+  await f.adopt();
+  const after = await f.runs();
+  assert.deepEqual(after.map((run) => run.id).sort(), before.map((run) => run.id).sort());
+  for (const run of after) {
+    const input = migrated.find((event) => event.type === "user/message" && run.kernelRequestIds.includes(event.data.source?.rpcId));
+    assert.equal(run.nativeTurn.userSeq, input.seq);
+    assert.equal(run.question, question(input));
+  }
+  assert.equal(f.routed.length, 2, "migrated historical requests must not be dispatched as new work");
+});
+
 test("the second native input cannot finish from the first answer", async (t) => {
   const f = await setup(t, fixture.events.filter((event) => event.seq <= 140));
   await f.adopt();

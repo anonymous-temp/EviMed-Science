@@ -30,13 +30,13 @@
     thinking: enabled
     reasoningEffort: high
     models:
-      - id: 'deepseek-v4-pro'
+      - id: 'deepseek-flash'
         contextWindow: 1000000
 
 - id: agent-default-model
   config:
     provider: deepseek-official
-    model: 'deepseek-v4-pro'
+    model: 'deepseek-flash'
 
 # Session logs live on the project's own data volume, so they are backed up,
 # exported and deleted with the project.
@@ -100,7 +100,7 @@
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'
-    dshVersion: '0.1.2-rc.1'
+    dshVersion: '0.1.5-rc.1'
 
 
 # Inside a container whose only writable place is the workspace nothing

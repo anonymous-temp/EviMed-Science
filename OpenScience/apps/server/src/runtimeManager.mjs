@@ -2508,6 +2508,8 @@ export class RuntimeManager {
     this.capsuleService = null;
     /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
     this.learningService = null;
+    /** Frozen methods for private evaluation projects only; never a user-controlled override. */
+    this.evaluationMethodSnapshots = new Map();
     this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
@@ -2579,6 +2581,7 @@ export class RuntimeManager {
     return materializeCapsuleMethods({
       capsules: this.capsuleService,
       learning: this.learningService ?? null,
+      frozenMethods: this.evaluationMethodSnapshots.get(this.key(project)) ?? null,
       trialMethodIds,
       project,
       directory: capsuleMethodsHostDir(project),

@@ -95,7 +95,7 @@ class ManagedMetaAgentTests(unittest.TestCase):
             "EVIMED_META_AGENT_PYTHON": sys.executable,
             "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(self.model_gateway_token),
             "EVIMED_MODEL_GATEWAY_URL": "https://api.deepseek.example",
-            "EVIMED_MODEL_GATEWAY_MODEL": "deepseek-v4-pro",
+            "EVIMED_MODEL_GATEWAY_MODEL": "deepseek-flash",
         })
 
     def tearDown(self):
@@ -178,13 +178,13 @@ class ManagedMetaAgentTests(unittest.TestCase):
         invocation = json.loads((project / "invocation.json").read_text(encoding="utf-8"))
         self.assertEqual(invocation, {
             "topic": "Effect of intervention A versus B in adults",
-            "model": "deepseek-v4-pro",
+            "model": "deepseek-flash",
             "run_mode": "review",
             "skip_confirm": True,
             "language": "zh",
             "max_papers": "25",
             "analysis_type": "pairwise",
-            "llm_model": "deepseek-v4-pro",
+            "llm_model": "deepseek-flash",
             "thinking": "true",
             "reasoning_effort": "high",
             "api_key_present": True,

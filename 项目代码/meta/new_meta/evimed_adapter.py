@@ -292,7 +292,7 @@ def _model_ready() -> bool:
         return False
     return (
         bool(os.getenv("LLM_API_KEY", "").strip())
-        and os.getenv("LLM_MODEL", "").strip() == "deepseek-v4-pro"
+        and os.getenv("LLM_MODEL", "").strip() == "deepseek-flash"
         and os.getenv("LLM_ENABLE_THINKING", "true").lower() == "true"
     )
 
@@ -321,11 +321,11 @@ def call(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     action = arguments.get("action")
     if action == "capabilities":
         if not _model_ready():
-            return _error("meta_model_config_unavailable", "DeepSeek V4 Pro thinking mode is not configured.", True)
+            return _error("meta_model_config_unavailable", "DeepSeek V4.1 Flash thinking mode is not configured.", True)
         return {
             "status": "success",
             "summary": "MetaAgent is configured for EviMed SaaS execution.",
-            "data": {"available": True, "model": "deepseek-v4-pro", "thinking": True},
+            "data": {"available": True, "model": "deepseek-flash", "thinking": True},
             "sources": [{"id": "metaagent:service", "source": "MetaAgent", "retrievedAt": _now()}],
         }
     if action == "start":
@@ -340,7 +340,7 @@ def _start(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     if not topic:
         return _error("meta_topic_required", "A concrete meta-analysis topic is required.")
     if not _model_ready():
-        return _error("meta_model_config_unavailable", "DeepSeek V4 Pro thinking mode is not configured.", True)
+        return _error("meta_model_config_unavailable", "DeepSeek V4.1 Flash thinking mode is not configured.", True)
     try:
         pdfs = _workspace_input(workspace, arguments.get("userPdfDirectory"), directory=True)
         ipd = _workspace_input(workspace, arguments.get("ipdData"), directory=False, suffix=".json")
@@ -619,7 +619,7 @@ def run_job(state_file: str) -> int:
         sys.executable, "-m", "new_meta.main",
         "--topic", state["topic"],
         "--output-dir", str(output_root),
-        "--model", "deepseek-v4-pro",
+        "--model", "deepseek-flash",
         "--skip-confirm",
         "--run-mode", "review",
     ]

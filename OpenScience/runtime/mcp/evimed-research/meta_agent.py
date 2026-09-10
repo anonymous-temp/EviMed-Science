@@ -160,8 +160,8 @@ def _model_environment():
         )
     base_url = os.environ.get("EVIMED_MODEL_GATEWAY_URL", "").strip()
     model = os.environ.get("EVIMED_MODEL_GATEWAY_MODEL", "").strip()
-    if model != "deepseek-v4-pro":
-        raise MetaAgentError("meta_model_config_unavailable", "DeepSeek V4 Pro is not configured for this runtime.", True)
+    if model != "deepseek-flash":
+        raise MetaAgentError("meta_model_config_unavailable", "DeepSeek V4.1 Flash is not configured for this runtime.", True)
     try:
         api_key = _read_bare_token(token_file)
     except Exception as error:  # noqa: BLE001 — the reader's own error type is not this module's vocabulary
@@ -259,7 +259,7 @@ def capabilities():
         "summary": "MetaAgent is configured for managed EviMed execution.",
         "data": {
             "available": True,
-            "model": "deepseek-v4-pro",
+            "model": "deepseek-flash",
             "thinking": True,
             "execution": "managed-background-job",
             "supportedActions": ["capabilities", "start", "status"],
@@ -625,7 +625,7 @@ def _run_job(state_path):
         str(python), "-m", "new_meta.main",
         "--topic", state["topic"],
         "--output-dir", str(output_root),
-        "--model", "deepseek-v4-pro",
+        "--model", "deepseek-flash",
         "--skip-confirm",
         "--run-mode", "review",
     ]
