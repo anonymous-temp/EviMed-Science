@@ -302,6 +302,32 @@ test("a child that did not complete is retried once and then reported, never dro
   assert.equal(settleDelegation({ item: {}, outcome: { stopReason: "error", diagnostic: "boom" }, alreadyRetried: true }).action, "fail");
 });
 
+test("the retry recognises a research tool by every spelling the domain knows", async () => {
+  // The retry that keeps a briefly unreachable source from becoming a failed
+  // delivery tested `call.name.startsWith('mcp__evimed__')` by hand. A research
+  // tool has four spellings — bare, that prefix, the historic `evimed_`, and
+  // the retired kernel's wrapper — so on three of them the retry did not
+  // happen, and its absence is indistinguishable from a source that was really
+  // down. Asked of the vocabulary now, which is the thing that knows.
+  const { isMcpToolName } = await import("@evimed/domain");
+  const source = await readFile(new URL("../plugins/run-policy.mjs", import.meta.url), "utf8");
+  const retry = source.slice(source.indexOf("one retry for a recoverable source failure"));
+  assert.match(retry.slice(0, 1200), /isMcpToolName\(call\.name\)/, "the retry must ask the vocabulary");
+  assert.doesNotMatch(retry.slice(0, 1200), /startsWith\('mcp__evimed__'\)/, "and must not test one spelling by hand");
+
+  for (const name of [
+    "literature_search",
+    "mcp__evimed__literature_search",
+    "evimed_literature_search",
+  ]) {
+    assert.equal(isMcpToolName(name), true, `${name} is a research tool and the retry must reach it`);
+  }
+  // And the negative control, or the retry would fire on tools it does not own.
+  for (const name of ["bash", "write", "evimed_plan", "evimed_submit_deliverable"]) {
+    assert.equal(isMcpToolName(name), false, `${name} is not a research tool`);
+  }
+});
+
 test("a recoverable source failure is recognized from where its code actually survives", () => {
   // Our MCP server JSON-encodes the whole `failure()` object into the text
   // block; the kernel's bridge throws `new Error(text)` before it reads
