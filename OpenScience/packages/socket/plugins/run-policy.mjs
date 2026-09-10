@@ -19,6 +19,7 @@
 
 import {
   DOMAIN_VERSION,
+  RECEIPT_FORMAT_VERSION,
   contractKindLabel,
   delegationToolFilter,
   deliverableDir,
@@ -1253,7 +1254,11 @@ async function writeReceipt(ctx, entry, receiptEntry, bundleVersion, call) {
   const existing = parseJson(await readFileAt(ctx, cwd, workspaceLayout.receiptFile) ?? '')
   const entries = Array.isArray(existing?.entries) ? existing.entries.filter((/** @type {any} */ item) => item.deliverableId !== receiptEntry.deliverableId) : []
   const receipt = {
-    formatVersion: 1,
+    // The domain's constant, not a literal. The reader parses this file
+    // against a version it imports; a second copy here is a number that can be
+    // bumped on one side, and the symptom would be a receipt silently read
+    // under the wrong rules rather than an error.
+    formatVersion: RECEIPT_FORMAT_VERSION,
     runId: entry.runId,
     bundleVersion,
     domainVersion: DOMAIN_VERSION,
