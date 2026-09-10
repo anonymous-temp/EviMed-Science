@@ -428,7 +428,11 @@ RUN set -eux; \
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
   cp /opt/evimed/profile-pnpm-workspace.yaml "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "dsh-cite@0.3.2" file:/opt/evimed/socket; \
-  test -n "$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -name "*.node" -path "*node-pty*" -print -quit)"; \
+  node -e 'const fs=require("node:fs"),path=require("node:path"); const [root,want]=process.argv.slice(1),seen=new Set(); for(const entry of fs.readdirSync(root,{recursive:true})){const match=entry.match(/(?:^|\/)@deepseek-ai\/(dsh(?:-[^/]+)?)\/package\.json$/); if(!match)continue; const pkg=JSON.parse(fs.readFileSync(path.join(root,entry),"utf8")); if(pkg.name!=="@deepseek-ai/"+match[1]||pkg.version!==want)throw Error("Profile kernel package differs from the pinned CLI: "+pkg.name); seen.add(pkg.name);} if(seen.size<100)throw Error("Profile kernel inventory is incomplete"); console.log("Verified profile kernel packages:",seen.size,want);' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" "${DSH_VERSION}"; \
+  pty_platform="$(node -p 'process.platform + "-" + process.arch')"; \
+  pty_binding="$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -path "*/node-pty/prebuilds/${pty_platform}/pty.node" -print -quit)"; \
+  test -n "${pty_binding}"; \
+  node -e 'require(process.argv[1])' "${pty_binding}"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
   test -s /opt/evimed/dump-config.baseline.json; \
   diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \

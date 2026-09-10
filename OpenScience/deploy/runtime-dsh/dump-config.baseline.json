@@ -550,11 +550,6 @@
   name: '@deepseek-ai/dsh-agent-presets'
   config:
     default: standard
-# == dsh-cite
-- id: cite
-  name: dsh-cite
-  config:
-    timeoutMs: 15000
 # == @evimed/dsh-socket
 - id: evimed-runtime-ui
   name: '@evimed/dsh-socket'
@@ -564,3 +559,8 @@
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store
   name: '@evimed/dsh-socket/plugins/evidence-store'
+# == dsh-cite
+- id: cite
+  name: dsh-cite
+  config:
+    timeoutMs: 15000
