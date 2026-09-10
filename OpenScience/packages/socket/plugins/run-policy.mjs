@@ -425,8 +425,15 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
   ctx.effect(() => onToolWrap(ctx, async (call, proceed) => {
     const result = await proceed()
     const code = evidenceSourceErrorCode(result)
-    if (!code || !call.name.startsWith('mcp__evimed__')) return result
-    const { classifyEvidenceSourceError } = await import('@evimed/domain')
+    // Asked of the vocabulary, not by prefix. A research tool has four
+    // spellings the domain knows about — bare, `mcp__evimed__`-prefixed, the
+    // historic `evimed_`, and the retired kernel's own wrapper — and a
+    // hand-written prefix test recognises exactly one of them. The retry that
+    // keeps a briefly unreachable source from becoming a failed delivery
+    // therefore did not happen on any of the other three, and its absence
+    // looks identical to a source that was really down.
+    const { classifyEvidenceSourceError, isMcpToolName } = await import('@evimed/domain')
+    if (!code || !isMcpToolName(call.name)) return result
     if (classifyEvidenceSourceError(code) !== 'recoverable') return result
     const entry = sessionState(call.sessionId)
     const key = `${call.name}:${call.callId}`
