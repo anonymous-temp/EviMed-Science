@@ -87,6 +87,14 @@ export function methodRecordFrom(document) {
   };
 }
 
+/**
+ * How many candidates one trial may name.
+ *
+ * A paired evaluation measures one change at a time; a trial naming a dozen
+ * candidates would produce a verdict nobody could attribute to any of them.
+ */
+export const MAX_TRIAL_METHODS = 4;
+
 export class LearningService {
   /**
    * @param {{documents: any, jobs?: any, notifications?: any, now?: () => Date}} dependencies
@@ -245,6 +253,93 @@ export class LearningService {
   }
 
   /**
+   * The candidates this project is mounting under trial, or an empty list.
+   *
+   * A trial is the one way a method the loop has not approved reaches a
+   * container, and it exists because without it the loop cannot close:
+   * promotion needs observed trajectories, trajectories need the method to have
+   * been mounted, and only approved methods are mounted. The paired evaluation
+   * breaks that circle by naming the candidate it is measuring.
+   *
+   * Expiry is applied on read rather than by a sweeper. A row nobody cleared is
+   * then harmless by the time it matters, and there is no job whose failure
+   * would leave an unproven method mounted indefinitely.
+   *
+   * @param {string} userId @param {string} projectId
+   * @returns {Promise<{methodIds: string[], digestById: Record<string, string>, expiresAt: string|null, requestedBy: string|null}>}
+   */
+  async methodTrial(userId, projectId) {
+    const empty = { methodIds: [], digestById: {}, expiresAt: null, requestedBy: null };
+    let document = null;
+    try { document = await this.documents.get(userId, "method-trial", productId(String(projectId), "project id")); }
+    catch { return empty; }
+    const payload = document?.payload;
+    if (!payload || document.deletedAt) return empty;
+    const expiresAt = typeof payload.expiresAt === "string" ? payload.expiresAt : null;
+    if (expiresAt && Date.parse(expiresAt) <= this.now().getTime()) return empty;
+    const methodIds = Array.isArray(payload.methodIds)
+      ? payload.methodIds.filter((value) => typeof value === "string" && value.trim()).map(String)
+      : [];
+    const digestById = payload.digestById && typeof payload.digestById === "object" && !Array.isArray(payload.digestById)
+      ? payload.digestById
+      : {};
+    return { methodIds, digestById, expiresAt, requestedBy: payload.requestedBy ?? null };
+  }
+
+  /**
+   * Put candidates on trial for one project.
+   *
+   * The digest of each method as it stands now is recorded beside its id, so
+   * the arm that asked can read back what it actually got. An evaluation that
+   * measured a method which was amended between the request and the launch
+   * would otherwise report a verdict about text nobody chose.
+   *
+   * Only `candidate` methods may be named: putting an approved method "on
+   * trial" would be a no-op that reads as a control, and putting a retired one
+   * on trial would resurrect it by a route with no promotion rule behind it.
+   *
+   * @param {string} userId
+   * @param {{projectId: string, methodIds: readonly string[], requestedBy: string, ttlMs: number}} input
+   */
+  async setMethodTrial(userId, input) {
+    const projectId = productId(String(input.projectId ?? ""), "project id");
+    const ids = [...new Set((input.methodIds ?? []).map((value) => String(value)))].filter(Boolean);
+    if (ids.length === 0) throw new HttpError(400, "method_trial_empty", "A trial must name at least one method.");
+    if (ids.length > MAX_TRIAL_METHODS) {
+      throw new HttpError(400, "method_trial_too_many", `A trial may name at most ${MAX_TRIAL_METHODS} methods.`);
+    }
+    /** @type {Record<string, string>} */
+    const digestById = {};
+    for (const methodId of ids) {
+      const document = await this.getMethod(userId, methodId);
+      const status = document.payload?.status;
+      if (status !== "candidate") {
+        throw new HttpError(409, "method_trial_not_candidate", `Only a candidate may be put on trial; ${methodId} is ${status}.`);
+      }
+      digestById[methodId] = String(document.payload?.contentDigest ?? "");
+    }
+    const expiresAt = new Date(this.now().getTime() + Math.max(60_000, Number(input.ttlMs) || 0)).toISOString();
+    const payload = { methodIds: ids, digestById, expiresAt, requestedBy: String(input.requestedBy ?? ""), setAt: this.now().toISOString() };
+    // One row per project, replaced in place. A deleted row is restored rather
+    // than inserted over, because the store keeps the revision of a removed
+    // document and an insert at revision 0 would conflict with it forever.
+    const current = await this.documents.get(userId, "method-trial", projectId, { includeDeleted: true });
+    if (current?.deletedAt) await this.documents.restore(userId, "method-trial", projectId, current.revision);
+    const revision = current ? (current.deletedAt ? current.revision + 1 : current.revision) : 0;
+    await this.documents.put(userId, "method-trial", projectId, payload, { expectedRevision: revision, projectId });
+    return payload;
+  }
+
+  /** @param {string} userId @param {string} projectId @returns {Promise<boolean>} */
+  async clearMethodTrial(userId, projectId) {
+    const id = productId(String(projectId ?? ""), "project id");
+    const current = await this.documents.get(userId, "method-trial", id);
+    if (!current) return false;
+    await this.documents.remove(userId, "method-trial", id, current.revision);
+    return true;
+  }
+
+  /**
    * @param {string} userId
    * @param {{projectId?: string|null, status?: string, limit?: number, cursor?: string|null}} [options]
    */
@@ -394,6 +489,18 @@ export class LearningService {
   /** @param {string} userId @param {string} methodId @param {any} evaluation */
   async recordEvaluation(userId, methodId, evaluation) {
     const document = await this.getMethod(userId, methodId);
+    // The verdict names the text it measured, and this is where that claim is
+    // checked against the text the method holds now. An evaluation runs for
+    // hours; the method can be amended while it is in flight, and the amend
+    // resets the record, so an unchecked write made the old text's score the
+    // new text's first vote. Refused loudly rather than folded quietly: a
+    // measurement of something that no longer exists is not a smaller fact, it
+    // is a different one.
+    const measured = typeof evaluation?.candidateDigest === "string" ? evaluation.candidateDigest : null;
+    if (measured !== null && measured !== document.payload.contentDigest) {
+      throw new HttpError(409, "method_evaluation_stale",
+        "The evaluation measured a revision this method no longer holds; it was not recorded.");
+    }
     return this.#saveLearning(userId, methodId, document, foldEvaluation(document.payload.learning, evaluation));
   }
 

@@ -724,6 +724,12 @@ services:
       # shape as the OpenGWAS split. One host variable per credential.
       NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
       NCBI_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
+      # The fallback citation source. iCite needs no key and is tried first;
+      # OpenAlex has required one since 2026-02, so without this the engine
+      # reports that it could not reach a real citation graph rather than
+      # falling back to the keyword-overlap simulation it used to call
+      # "co-citation". Empty is a supported state, not a broken one.
+      OPENALEX_API_KEY: ${OPEN_SCIENCE_OPENALEX_API_KEY:-}
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key

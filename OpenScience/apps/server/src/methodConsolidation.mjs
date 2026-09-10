@@ -168,9 +168,10 @@ export function groupPairs(pairs, limits = {}) {
 export class MethodConsolidation {
   /**
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          jobs?: any, notifications?: any, evaluate?: ((request: any) => Promise<any>) | null, now?: () => Date}} dependencies
+   *          jobs?: any, notifications?: any, evaluate?: ((request: any) => Promise<any>) | null,
+   *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date}} dependencies
    */
-  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, evaluate = null, now = () => new Date() }) {
+  constructor({ dispatch, readResult, learning, jobs = null, notifications = null, evaluate = null, audit = null, now = () => new Date() }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
     }
@@ -181,6 +182,10 @@ export class MethodConsolidation {
     this.jobs = jobs;
     this.notifications = notifications;
     this.evaluate = evaluate;
+    // Optional, and optional on purpose: a consolidation pass that cannot write
+    // an audit line still has to finish, because the line is a record of what
+    // happened and not a step in it.
+    this.audit = audit;
     this.now = now;
   }
 
@@ -203,12 +208,20 @@ export class MethodConsolidation {
   async sleep({ job }) {
     const page = await this.learning.listMethods(job.userId, { projectId: job.projectId, limit: CONSOLIDATION_LIMITS.maxMethods });
     const methods = (page.items ?? []).filter((item) => item.payload?.status !== "retired");
-    if (methods.length < CONSOLIDATION_LIMITS.minGroupSize) {
-      return { action: "sleep", methods: methods.length, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], queuedForEvaluation: [], retirements: [], graphIssues: [] };
+    if (methods.length === 0) {
+      return { action: "sleep", methods: 0, groups: 0, relations: 0, builds: 0, screened: false, screenDropped: 0, promoted: [], queuedForEvaluation: [], retirements: [], graphIssues: [] };
     }
+    // Two methods is the floor for *comparing* them, and nothing else. It used
+    // to return here, which also skipped promotion, evaluation queueing and
+    // retirement — so a researcher's first method could never be promoted, and
+    // with learning on by default the nightly job returned at this line every
+    // night for every user who had one. The comparison is what is conditional.
+    const comparable = methods.length >= CONSOLIDATION_LIMITS.minGroupSize;
 
-    const screen = await this.screenPairs(job, candidatePairs(methods), methods);
-    const groups = groupPairs(screen.pairs);
+    const screen = comparable
+      ? await this.screenPairs(job, candidatePairs(methods), methods)
+      : { pairs: [], screened: false, dropped: 0 };
+    const groups = comparable ? groupPairs(screen.pairs) : [];
     const byId = new Map(methods.map((method) => [method.id, method]));
     let relationCount = 0;
     let builds = 0;
@@ -334,12 +347,25 @@ export class MethodConsolidation {
     if (!report?.verdict || !report?.report) {
       throw new HttpError(502, "method_evaluation_invalid", "The paired evaluation returned no verdict.");
     }
-    await this.learning.recordEvaluation(job.userId, methodId, {
-      report: report.report,
-      baselineDigest: report.baselineDigest ?? baselineDigest,
-      verdict: report.verdict,
-      at: this.now().toISOString(),
-    });
+    // The digest travels with the verdict. Read before the runner started and
+    // carried through, so the recorder can refuse a score for text the method
+    // no longer holds instead of crediting it to whatever is there now.
+    try {
+      await this.learning.recordEvaluation(job.userId, methodId, {
+        report: report.report,
+        baselineDigest: report.baselineDigest ?? baselineDigest,
+        candidateDigest: report.candidateDigest ?? candidateDigest,
+        verdict: report.verdict,
+        at: this.now().toISOString(),
+      });
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code !== "method_evaluation_stale") throw error;
+      // One audit line, not folded into anything: a whole evaluation was spent
+      // and its result is unusable, which is a fact about how the method is
+      // being edited, not about the method.
+      await this.audit?.(job, "method.evaluation.stale", { methodId, candidateDigest, verdict: report.verdict });
+      return { action: "evaluate", methodId, verdict: report.verdict, report: report.report, stale: true };
+    }
     return { action: "evaluate", methodId, verdict: report.verdict, report: report.report };
   }
 

@@ -1705,7 +1705,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     presetRoot: "/opt/evimed/dsh/presets",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
-    capabilitySkillsDir: "/opt/evimed/capability-skills",
+    capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
     // The same rule the launch plan's `--env` list used, applied to the same
     // plan: the methods the container mounts and the methods the profile names
     // are one directory or the feature is dark in whichever half is wrong.
@@ -2172,7 +2172,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         ...Object.entries(runtimeEnvironment({
           presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
           capabilitiesDir: "/opt/evimed/capabilities",
-          capabilitySkillsDir: "/opt/evimed/capability-skills",
+          capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
           capsuleGatewayUrl,
           revisionGatewayUrl,
@@ -2423,6 +2423,15 @@ function assertConnectableSocketPath(socketPath, volumeBacked) {
  * ledger record, a socket name and an authority cannot drift apart.
  */
 export const RUNTIME_KERNEL_NAME = "dsh";
+/**
+ * Where the image keeps the capability skill bodies delegation injects.
+ *
+ * Named once because a paired evaluation declares it as part of an arm and
+ * readiness reports it, so the two have to be the same string; it was written
+ * out twice here and nowhere else, which is how a declared arm and a running
+ * deployment come to disagree with nothing able to notice.
+ */
+export const RUNTIME_CAPABILITY_SKILLS_DIR = "/opt/evimed/capability-skills";
 
 /**
  * The authority the control plane sends as `Host` over the unix transport.
@@ -2497,6 +2506,8 @@ export class RuntimeManager {
      * @type {any}
      */
     this.capsuleService = null;
+    /** @type {any} the learning ledger, assigned by the composition root beside `capsuleService` */
+    this.learningService = null;
     this.pluginOverrides = new Map();
     this.agentRegistry = agentRegistry;
     this.runtimeControllerMode = config.runtimeControllerMode ?? "direct";
@@ -2504,6 +2515,11 @@ export class RuntimeManager {
       ? new RuntimeControllerClient(config)
       : null;
     this.runtimes = new Map();
+    // Which learned methods the last launch of each project mounted, by
+    // project key. Read by the observation producer, which otherwise knows only
+    // about approved methods and would record nothing for a candidate on trial
+    // -- the exact gap that makes a candidate unpromotable forever.
+    this.lastMountedLearnedMethods = new Map();
     this.starts = new Map();
     this.runtimeActivity = new Map();
     this.runtimeQuotaMonitors = new Map();
@@ -2528,21 +2544,42 @@ export class RuntimeManager {
   }
 
   /**
-   * Materialize the approved work-style methods of this project's active
-   * capsules, so the runtime can read them.
+   * Materialize the methods this project's runs may read: the approved
+   * work-style entries of its active capsules, and the learned methods the
+   * distillation loop has admitted.
    *
    * The whole point of a work-style pack: it is exported, signed, encrypted,
    * transferred, imported and approved, and until this ran it was never
    * executed, because the directory the plugin loads methods from was the empty
-   * string at every launch site.
+   * string at every launch site. The learned half had the same shape of hole
+   * one layer up — a selector with no caller — and it is closed here.
    *
-   * Reads `this.capsuleService`, which only the composition root assigns.
+   * Reads `this.capsuleService` and `this.learningService`, which only the
+   * composition root assigns; either being null simply drops that source.
    *
-   * @param {any} project @returns {Promise<{ directory: string, count: number, bytes: number }>}
+   * A trial is read per launch rather than cached: the evaluation harness sets
+   * it immediately before it dispatches, and a cached answer would measure the
+   * previous arm.
+   *
+   * @param {any} project
+   * @returns {Promise<{ directory: string, count: number, bytes: number,
+   *   learned: {id: string, name: string, digest: string, trial?: boolean}[] }>}
    */
   async syncCapsuleMethods(project) {
+    let trialMethodIds = [];
+    if (this.learningService) {
+      // A trial that cannot be read is not a reason to refuse a launch: the
+      // researcher's own run does not depend on it, and failing here would
+      // make an evaluation-only feature able to take the product down.
+      try {
+        const trial = await this.learningService.methodTrial(String(project.userId), String(project.id));
+        trialMethodIds = trial?.methodIds ?? [];
+      } catch { trialMethodIds = []; }
+    }
     return materializeCapsuleMethods({
       capsules: this.capsuleService,
+      learning: this.learningService ?? null,
+      trialMethodIds,
       project,
       directory: capsuleMethodsHostDir(project),
     });
@@ -2918,7 +2955,12 @@ export class RuntimeManager {
     // the privileged controller decide whether to mount the directory by
     // looking at it. Rebuilt every launch, so a method retired between two runs
     // is gone from the next one.
-    const capsuleMethodsMounted = (await this.syncCapsuleMethods(project)).count;
+    const mountedMethods = await this.syncCapsuleMethods(project);
+    const capsuleMethodsMounted = mountedMethods.count;
+    // What the learned half contributed, kept on the runtime so the run ledger
+    // can say which revision of which method was in the room. A digest recorded
+    // at mount time is the only record that survives the container.
+    this.lastMountedLearnedMethods.set(this.key(project), mountedMethods.learned ?? []);
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig });
     plan.pluginConfig = pluginConfig;
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));

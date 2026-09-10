@@ -109,6 +109,7 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  * @property {string} baselineDigest
  * @property {string} verdict
  * @property {string} [at]
+ * @property {string} [candidateDigest]  the content this verdict was measured on
  */
 
 /**
@@ -270,7 +271,18 @@ export function foldEvaluation(learning, evaluation) {
   if (!METHOD_EVALUATION_VERDICTS.includes(evaluation?.verdict)) return current
   const evaluations = [...(current.evaluations ?? []), evaluation]
   const counts = { ...current.counts }
-  if (METHOD_PASSING_VERDICTS.includes(evaluation.verdict)) counts.validated += 1
+  // A verdict counts for the text it measured and for nothing else.
+  //
+  // An evaluation takes hours of real runs; a method can be amended while one
+  // is in flight, and an amendment resets this record to a fresh one for the
+  // new digest. Folding the arriving verdict in unconditionally therefore made
+  // the old text's score the new text's first vote — the score was real, the
+  // text it described no longer existed, and nothing said so. Recorded either
+  // way, because "we measured something else" is a fact about this method
+  // worth keeping; counted only when the digests agree.
+  const measured = typeof evaluation.candidateDigest === 'string' ? evaluation.candidateDigest : null
+  const onCurrentText = measured !== null && measured === current.digest
+  if (onCurrentText && METHOD_PASSING_VERDICTS.includes(evaluation.verdict)) counts.validated += 1
   return { ...current, counts, evaluations }
 }
 
@@ -505,6 +517,13 @@ export function promotionVerdict(method, options = {}) {
     missing.push('no paired evaluation has been run against a frozen baseline')
   } else if (!METHOD_PASSING_VERDICTS.includes(latest.verdict)) {
     missing.push(`the last evaluation returned ${latest.verdict}`)
+  } else if (latest.candidateDigest !== learning.digest) {
+    // Either it names no candidate text at all, or it names text this method
+    // no longer holds. Both are the same fact for a promotion: this verdict is
+    // not about what would be mounted.
+    missing.push(latest.candidateDigest
+      ? 'the last evaluation measured a revision this method no longer holds'
+      : 'the last evaluation does not name the text it measured')
   } else if (options.currentBaselineDigest && latest.baselineDigest !== options.currentBaselineDigest) {
     missing.push('the last evaluation was measured against a baseline that has since moved')
   } else {

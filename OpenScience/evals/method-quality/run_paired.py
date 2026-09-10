@@ -66,10 +66,16 @@ HTTP client cannot set: they are declared, frozen into the arm digest, and the
 report keeps `/api/ready` verbatim so a claimed arm can be checked against the
 deployment it ran on.
 
-Known gap (V-3): per-run cost has no HTTP surface. `usageLedger.summaryRun`
-exists on the server but no route returns it, so cost comes from an account
-export (`--usage-export`) joined by runId, and is reported as unavailable
-otherwise instead of guessed.
+Per-run cost comes from `GET /api/runs/<id>/usage`, the route `usageLedger`
+now exposes; `--usage-export` still joins an account export by runId, wins when
+given, and keeps a finished evaluation re-aggregatable offline. Cost is
+reported as unavailable rather than guessed when neither returns settled rows.
+
+Called two ways. `--config` is the full form a person runs. `--method` with
+`--template` is what the nightly consolidation job spawns: it synthesises the
+two arms around one candidate and, with `--json`, prints one machine-readable
+line on stdout while the human summary goes to stderr. The server parses that
+line, so the two halves have one contract instead of two ideas of one.
 """
 
 from __future__ import annotations
@@ -135,6 +141,10 @@ VERDICTS = ("better", "non_inferior", "inconclusive", "worse")
 DEFAULT_MARGIN = 0.02
 DEFAULT_BOOTSTRAP_SAMPLES = 2000
 DEFAULT_REPEATS = 3
+# How long a trial the harness sets stays valid. Long enough that a slow cell
+# cannot outlive it, short enough that a crashed run leaves no unproven method
+# mounted in the evaluation project overnight.
+TRIAL_TTL_MS = 6 * 60 * 60 * 1000
 DEFAULT_CONCURRENCY = 2
 CONFIDENCE_LEVEL = 0.95
 
@@ -549,6 +559,20 @@ class PlatformClient:
             "data": base64.b64encode(content).decode("ascii"),
         })
 
+    def set_method_trial(self, project_id: str, method_ids: Sequence[str], ttl_ms: int) -> Any:
+        """Mount candidates into the next launch of the evaluation project."""
+        return self._call("PUT", f"{self.base}/api/methods/trial",
+                          {"projectId": project_id, "methodIds": list(method_ids), "ttlMs": ttl_ms})
+
+    def clear_method_trial(self, project_id: str) -> Any:
+        return self._call("DELETE", f"{self.base}/api/methods/trial?projectId={urllib.parse.quote(project_id)}")
+
+    def method(self, method_id: str) -> Any:
+        return self._call("GET", f"{self.base}/api/methods/{urllib.parse.quote(method_id, safe='')}")
+
+    def run_usage(self, run_id: str) -> Any:
+        return self._call("GET", f"{self.base}/api/runs/{urllib.parse.quote(run_id, safe='')}/usage")
+
     def patch_memory_record(self, record_id: str, patch: dict[str, Any]) -> Any:
         url = f"{self.base}/api/memory/records/{urllib.parse.quote(record_id)}"
         return unwrap(self._call("PATCH", url, patch), "memory record update")
@@ -633,15 +657,30 @@ def normalize_arm(block: Any, where: str) -> dict[str, Any]:
         if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
             raise EvalError(f"{where}.methodSnapshot.records[{index}].expectedVersion must be a positive integer")
         normalized_records.append({"id": record["id"], "status": status, "expectedVersion": expected})
+    trial_ids = snapshot.get("trialMethodIds", [])
+    if not isinstance(trial_ids, list) or any(not isinstance(item, str) or not item for item in trial_ids):
+        raise EvalError(f"{where}.methodSnapshot.trialMethodIds must be a list of method ids")
+    trial_digests = snapshot.get("trialDigestById", {})
+    if not isinstance(trial_digests, dict) or any(not isinstance(value, str) for value in trial_digests.values()):
+        raise EvalError(f"{where}.methodSnapshot.trialDigestById must map method id to content digest")
     arm = {
         "methodSnapshot": {
             "id": str(snapshot.get("id") or "unnamed"),
             "records": normalized_records,
+            # The learned methods this arm mounts. Applied, not declared: the
+            # trial route puts a candidate into the next launch of the eval
+            # project, which is the only way an unapproved method reaches a
+            # container. Before this existed both arms mounted exactly the same
+            # methods and every paired evaluation was measuring nothing.
+            "trialMethodIds": sorted(trial_ids),
+            "trialDigestById": {key: trial_digests[key] for key in sorted(trial_digests)},
             # Declared, not applied: the skills root and the compaction policy
             # are image environment (EVIMED_CAPABILITY_SKILLS_DIR,
             # OPEN_SCIENCE_RUNTIME_COMPACTION_POLICY), which an HTTP client
             # cannot set. They are frozen into the arm digest so a report that
-            # claims an arm can be checked against the server it ran on.
+            # claims an arm can be checked against the server it ran on, and
+            # `verify_environment` does exactly that check rather than leaving
+            # the words "declaredOnly" in the report as if they were a result.
             "capabilitySkillsDir": snapshot.get("capabilitySkillsDir") or None,
         },
         "compactionPolicy": policy,
@@ -650,10 +689,54 @@ def normalize_arm(block: Any, where: str) -> dict[str, Any]:
     return arm
 
 
-def load_config(path: Path, splits: dict[str, Any]) -> dict[str, Any]:
+def synthesize_arms(raw: dict[str, Any], method_id: str, candidate_digest: str | None, baseline_digest: str | None) -> dict[str, Any]:
+    """Build the two arms around one candidate, from a template's other fields.
+
+    The nightly job knows a method id and two digests. It does not know which
+    briefs to run, what the budget is, or whether a judge is configured, and it
+    should not: those are the evaluation's design and they live in the template
+    a person wrote. So the arms — and only the arms — are synthesised here.
+
+    The baseline is the same deployment without the candidate mounted. That is
+    what "paired" means for a learned method: one thing differs.
+    """
+    baseline_block = raw.get("baseline") if isinstance(raw.get("baseline"), dict) else {}
+    template_snapshot = baseline_block.get("methodSnapshot") if isinstance(baseline_block.get("methodSnapshot"), dict) else {}
+    policy = baseline_block.get("compactionPolicy") or raw.get("compactionPolicy") or "basic"
+    shared = {
+        "records": template_snapshot.get("records", []),
+        "capabilitySkillsDir": template_snapshot.get("capabilitySkillsDir"),
+    }
+    return {
+        **raw,
+        "baseline": {
+            "methodSnapshot": {**shared, "id": f"baseline-{baseline_digest or 'current'}", "trialMethodIds": [], "trialDigestById": {}},
+            "compactionPolicy": policy,
+        },
+        "candidate": {
+            "methodSnapshot": {
+                **shared,
+                "id": f"candidate-{method_id}",
+                "trialMethodIds": [method_id],
+                **({"trialDigestById": {method_id: candidate_digest}} if candidate_digest else {"trialDigestById": {}}),
+            },
+            "compactionPolicy": policy,
+        },
+    }
+
+
+def load_config(
+    path: Path,
+    splits: dict[str, Any],
+    method: str | None = None,
+    candidate_digest: str | None = None,
+    baseline_digest: str | None = None,
+) -> dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise EvalError(f"{path}: config must be a JSON object")
+    if method:
+        raw = synthesize_arms(raw, method, candidate_digest, baseline_digest)
     config: dict[str, Any] = {
         "id": str(_require(raw, "id", (str,), "config")),
         "capability": str(_require(raw, "capability", (str,), "config")),
@@ -1301,8 +1384,15 @@ def plan_cells(config: dict[str, Any], briefs: dict[str, dict[str, Any]]) -> lis
     return [cell for pair in pairs for cell in pair]
 
 
-def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any]) -> dict[str, Any]:
-    """Put the private methods into the arm's state before the run starts.
+def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any], project_id: str, trial_ttl_ms: int = TRIAL_TTL_MS) -> dict[str, Any]:
+    """Put the arm's state on the server before the run starts.
+
+    Two different things live under the word "method" and this applies both.
+    The memory records are the researcher's own notes, patched by id. The
+    learned methods are the distillation ledger's, mounted through the trial
+    route — and until that second half existed the candidate arm mounted
+    exactly what the baseline arm mounted, so a paired evaluation could only
+    ever report "no difference".
 
     Hard-fails: an arm applied wrong is a comparison of something nobody chose,
     and every cell after it would be scored under a snapshot the report does not
@@ -1315,7 +1405,82 @@ def apply_method_snapshot(client: PlatformClient, arm: dict[str, Any]) -> dict[s
             "expectedVersion": record["expectedVersion"],
         })
         applied.append({"id": record["id"], "status": record["status"], "version": (updated or {}).get("version")})
-    return {"records": applied, "capabilitySkillsDir": arm["methodSnapshot"]["capabilitySkillsDir"], "declaredOnly": ["capabilitySkillsDir", "compactionPolicy"]}
+    trial_ids = arm["methodSnapshot"]["trialMethodIds"]
+    trial: dict[str, Any]
+    if trial_ids:
+        response = client.set_method_trial(project_id, trial_ids, trial_ttl_ms)
+        trial = {
+            "methodIds": list(trial_ids),
+            "expiresAt": (response or {}).get("expiresAt"),
+            "digestById": (response or {}).get("digestById") or {},
+        }
+    else:
+        # The baseline arm clears it. Left set, the previous cell's candidate
+        # would still be mounted and the baseline would measure the candidate.
+        client.clear_method_trial(project_id)
+        trial = {"methodIds": [], "expiresAt": None, "digestById": {}}
+    return {
+        "records": applied,
+        "trial": trial,
+        "capabilitySkillsDir": arm["methodSnapshot"]["capabilitySkillsDir"],
+        "declaredOnly": ["capabilitySkillsDir", "compactionPolicy"],
+    }
+
+
+def verify_environment(arm: dict[str, Any], environment: Any) -> dict[str, list[str]]:
+    """What the arm declared, checked against the server that ran it.
+
+    `capabilitySkillsDir` and `compactionPolicy` are image environment; an HTTP
+    client cannot set them. Recording them as "declaredOnly" and stopping there
+    made a report that named an arm nobody had confirmed. Here the declaration
+    is compared with readiness, and a disagreement is a finding rather than a
+    footnote.
+
+    Two outcomes, and they are different facts. A value the server reports and
+    that disagrees with the arm is a contradiction: every cell ran somewhere the
+    report does not describe, and the report is invalid. A value the server does
+    not report is merely unconfirmed, and says so in the reasons without
+    invalidating anything — a check whose evidence is missing is a notice, not a
+    verdict.
+    """
+    checks = (environment or {}).get("checks") if isinstance(environment, dict) else None
+    runtime = checks.get("runtime") if isinstance(checks, dict) and isinstance(checks.get("runtime"), dict) else {}
+    contradictions: list[str] = []
+    unconfirmed: list[str] = []
+    observed_policy = runtime.get("compactionPolicy")
+    if observed_policy is None:
+        unconfirmed.append("compactionPolicy was not reported by /api/ready, so the arm's value is unconfirmed")
+    elif observed_policy != arm["compactionPolicy"]:
+        contradictions.append(f"compactionPolicy declared {arm['compactionPolicy']!r} but the server reports {observed_policy!r}")
+    declared_dir = arm["methodSnapshot"]["capabilitySkillsDir"]
+    observed_dir = runtime.get("capabilitySkillsDir")
+    if declared_dir and observed_dir is None:
+        unconfirmed.append("capabilitySkillsDir was not reported by /api/ready, so the arm's value is unconfirmed")
+    elif declared_dir and declared_dir != observed_dir:
+        contradictions.append(f"capabilitySkillsDir declared {declared_dir!r} but the server reports {observed_dir!r}")
+    return {"contradictions": contradictions, "unconfirmed": unconfirmed}
+
+
+def verify_arm_mounted(arm: dict[str, Any], methods_loaded: Sequence[Any]) -> list[str]:
+    """Whether the run actually carried the methods the arm asked for.
+
+    Read back from the run's own ledger rather than assumed from the request
+    that set it. A trial that expired, a candidate amended between the request
+    and the launch, or a launch that reused a container would each produce a
+    cell scored under an arm that was never applied — and every one of them
+    looks exactly like a null result.
+    """
+    expected = arm["methodSnapshot"]["trialDigestById"]
+    if not expected:
+        return []
+    mounted = {
+        str(entry.get("digest")) for entry in methods_loaded
+        if isinstance(entry, dict) and entry.get("digest")
+    }
+    return [
+        f"{method_id} was declared at {digest} and the run did not load it"
+        for method_id, digest in expected.items() if digest not in mounted
+    ]
 
 
 def delivery_text(run: dict[str, Any], read_artifact: Callable[[str], dict[str, Any]]) -> str:
@@ -1350,7 +1515,10 @@ class PairedRunner:
         usage_lookup: Callable[[str], dict[str, float] | None] | None = None,
         log: Callable[[str], None] = print,
         sleep: Callable[[float], None] = time.sleep,
+        project_id: str = "",
+        cost_source: str = "usage-route",
     ):
+        self.project_id = project_id or str((config.get("project") or {}).get("id") or "")
         self.config = config
         self.briefs = briefs
         self.references = references
@@ -1358,6 +1526,7 @@ class PairedRunner:
         self.judge_call = judge_call
         self.results_dir = results_dir
         self.usage_lookup = usage_lookup or (lambda _run_id: None)
+        self.cost_source = cost_source
         self.log = log
         self.sleep = sleep
         self.skipped = 0
@@ -1382,7 +1551,7 @@ class PairedRunner:
             "compactionPolicy": arm["compactionPolicy"],
             "startedAt": now_iso(),
         }
-        snapshot = apply_method_snapshot(client, arm)
+        snapshot = apply_method_snapshot(client, arm, self.project_id)
         record["methodSnapshot"] = snapshot
         session_id = client.create_session(runtime_url)
         client.bind_session(session_id, {"mode": "open-domain"})
@@ -1441,7 +1610,7 @@ class PairedRunner:
         usage = self.usage_lookup(str(run.get("id") or ""))
         cost = usage["cost"] if usage else None
         record["usage"] = usage
-        record["cost"] = {"value": cost, "currency": "CNY", "source": "usage-export" if usage else "unavailable"}
+        record["cost"] = {"value": cost, "currency": "CNY", "source": self.cost_source if usage else "unavailable"}
         record["scores"] = score_cell(run, deterministic, judge_result, self.config["budget"], cost)
         # §6.1: a run whose transcript is partial or unavailable is not a
         # positive sample. Kept in the file with its reason so the report can
@@ -1450,6 +1619,14 @@ class PairedRunner:
         completeness = str(transcript_receipt.get("completeness") or "")
         if completeness and completeness != "complete":
             record["excluded"] = {"reason": f"transcript_{completeness}", "detail": transcript_receipt.get("path")}
+        # The arm, read back off the run rather than assumed from the request.
+        # A cell whose arm was not applied is not a null result; it is not a
+        # measurement of this arm at all, and scoring it as one is how a change
+        # that works gets reported as a change that does nothing.
+        not_mounted = verify_arm_mounted(arm, record["run"]["methodsLoaded"])
+        record["armVerified"] = {"mounted": not not_mounted, "problems": not_mounted}
+        if not_mounted and "excluded" not in record:
+            record["excluded"] = {"reason": "arm_not_applied", "detail": "; ".join(not_mounted)[:300]}
         record["finishedAt"] = now_iso()
         record["complete"] = True
         return record
@@ -1594,6 +1771,26 @@ def build_report(
         }
     regressions = regression_failures(cells, config["regressionBriefs"])
     verdict, reasons = overall_verdict(dimension_verdicts, regressions)
+    # The arms, checked rather than declared. An environment that contradicts
+    # the arm invalidates the whole report: every cell in it ran somewhere the
+    # report does not describe, so there is no smaller honest answer.
+    checked = [verify_environment(config[arm], environment) for arm in ARMS] if environment is not None else []
+    environment_problems = sorted({problem for entry in checked for problem in entry["contradictions"]})
+    environment_unconfirmed = sorted({problem for entry in checked for problem in entry["unconfirmed"]})
+    arms_verified = {
+        arm: {
+            "declaredTrial": config[arm]["methodSnapshot"]["trialMethodIds"],
+            "cellsInvalidated": sum(
+                1 for cell in cells
+                if cell.get("arm") == arm and (cell.get("excluded") or {}).get("reason") == "arm_not_applied"
+            ),
+            "cellsVerified": sum(
+                1 for cell in cells
+                if cell.get("arm") == arm and (cell.get("armVerified") or {}).get("mounted") is True
+            ),
+        }
+        for arm in ARMS
+    }
 
     def arm_block(arm: str, key: str) -> Any:
         values = [
@@ -1612,7 +1809,7 @@ def build_report(
             if cell.get("complete") and cell.get("arm") == arm and (cell.get("cost") or {}).get("value") is not None
         ]
         if not numbers:
-            return {"n": 0, "available": False, "reason": "no usage export joined (V-3: per-run cost has no HTTP surface)"}
+            return {"n": 0, "available": False, "reason": "no per-run cost was joined: neither the usage route nor an export returned settled rows"}
         return {"n": len(numbers), "available": True, "mean": statistics.fmean(numbers), "total": sum(numbers), "currency": "CNY"}
 
     def coverage_block(arm: str) -> Any:
@@ -1680,8 +1877,17 @@ def build_report(
         },
         "dimensions": dimension_block,
         "nonCompensatory": regressions,
-        "verdict": verdict,
-        "verdictReasons": reasons,
+        "verdict": verdict if not environment_problems else "invalid",
+        "verdictReasons": reasons
+            + [f"environment: {problem}" for problem in environment_problems]
+            + [f"unconfirmed: {problem}" for problem in environment_unconfirmed],
+        # Whether each arm was the arm it says it was. A cell whose declared
+        # trial never reached the container is excluded above; this is the
+        # count, so a reader can tell "the candidate changed nothing" from
+        # "the candidate was never mounted", which look identical in the means.
+        "armsVerified": {**arms_verified, "environment": {
+            "contradictions": environment_problems, "unconfirmed": environment_unconfirmed,
+        }},
         "cost": {arm: cost_block(arm) for arm in ARMS},
         "latency": {arm: arm_block(arm, "durationMs") for arm in ARMS},
         "diagnostics": {
@@ -1710,14 +1916,40 @@ def load_cells(results_dir: Path, config_id: str) -> list[dict[str, Any]]:
     return cells
 
 
-def load_usage_lookup(path: Path | None) -> Callable[[str], dict[str, float] | None]:
-    """Cost and tokens per run, joined by runId from an account export's `usage` table.
+def load_usage_lookup(path: Path | None, client: "PlatformClient | None" = None) -> Callable[[str], dict[str, float] | None]:
+    """Cost and tokens per run, joined by runId.
+
+    Preferred source is the run's own usage route, which means a report can
+    state its cost without anyone exporting an account first — the export was
+    a workaround for there being no HTTP surface, and it made "cost:
+    unavailable" the normal outcome. The export is still accepted, and wins
+    when given, because a finished evaluation must stay re-aggregatable offline.
 
     Only settled rows: a reserved row is a hold, not a charge, and adding the
     two would bill every run twice for the calls still in flight.
     """
     if path is None:
-        return lambda _run_id: None
+        if client is None:
+            return lambda _run_id: None
+
+        def from_route(run_id: str) -> dict[str, float] | None:
+            if not run_id:
+                return None
+            try:
+                usage = client.run_usage(run_id)
+            except EvalError:
+                return None
+            if not isinstance(usage, dict) or usage.get("cost") is None:
+                return None
+            return {
+                "cost": float(usage.get("cost") or 0.0),
+                "cacheHitTokens": float(usage.get("cacheHitTokens") or 0.0),
+                "cacheMissTokens": float(usage.get("cacheMissTokens") or 0.0),
+                "outputTokens": float(usage.get("outputTokens") or 0.0),
+                "calls": float(usage.get("calls") or 0.0),
+            }
+
+        return from_route
     payload = json.loads(path.read_text(encoding="utf-8"))
     rows: Any = payload
     for key in ("tables", "data"):
@@ -1775,8 +2007,8 @@ def all_secrets(references: dict[str, HiddenReference]) -> set[str]:
     return secrets
 
 
-def print_report_summary(report: dict[str, Any]) -> None:
-    print(f"verdict: {report['verdict']}  ({'; '.join(report['verdictReasons'])})")
+def print_report_summary(report: dict[str, Any], say: Callable[[str], None] = print) -> None:
+    say(f"verdict: {report['verdict']}  ({'; '.join(report['verdictReasons'])})")
     header = ("dimension", "baseline", "candidate", "diff", "ci-low", "ci-high", "verdict")
 
     def fmt(value: Any) -> str:
@@ -1796,9 +2028,9 @@ def print_report_summary(report: dict[str, Any]) -> None:
         ))
     widths = [max(len(row[index]) for row in rows) for index in range(len(header))]
     for row in rows:
-        print("  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)))
+        say("  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)))
     coverage = report["diagnostics"][TURN_COVERAGE_KEY]["byArm"]
-    print(f"turnCoverage (diagnostic only): baseline={coverage['baseline']['argRatioMean']} candidate={coverage['candidate']['argRatioMean']}")
+    say(f"turnCoverage (diagnostic only): baseline={coverage['baseline']['argRatioMean']} candidate={coverage['candidate']['argRatioMean']}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1808,18 +2040,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--results-dir", type=Path, default=RESULTS_DIR, help="one file per (brief, arm, repeat); re-runs skip what is here")
     parser.add_argument("--reports-dir", type=Path, default=REPORTS_DIR)
     parser.add_argument("--usage-export", type=Path, default=None,
-                        help="account export JSON; joins per-run cost and tokens by runId (V-3: there is no route for it)")
+                        help="account export JSON; joins per-run cost and tokens by runId. Optional: without it the "
+                             "per-run usage route is used, which is what a live evaluation should rely on.")
     parser.add_argument("--rerun", action="store_true", help="ignore the cells already on disk and measure every one again")
     parser.add_argument("--report-only", action="store_true", help="aggregate the cells already on disk; run nothing")
     parser.add_argument("--dry-run", action="store_true", help="print the cell plan and what resume would skip")
     parser.add_argument("--use-holdout", action="store_true", help="allow briefs registered in the holdout split")
     parser.add_argument("--holdout-reason", default="", help="why the holdout is being opened; recorded in the report")
+    # The form the nightly consolidation job spawns. It knows one candidate and
+    # its digests and nothing about briefs, so the brief set, budget and judge
+    # come from a template config and only the two arms are synthesised.
+    parser.add_argument("--method", default="", help="learned method id to measure; synthesises both arms from --template")
+    parser.add_argument("--candidate-digest", default="", help="content digest of the candidate, recorded in the report")
+    parser.add_argument("--baseline-digest", default="", help="content digest of the baseline the candidate is measured against")
+    parser.add_argument("--template", type=Path, default=None, help="config to synthesise the arms into (default: --config)")
+    parser.add_argument("--json", action="store_true",
+                        help="print one machine-readable verdict line on stdout; the human summary goes to stderr")
     args = parser.parse_args(argv)
 
-    if args.config is None:
+    if args.config is None and args.method and args.template is None:
+        parser.error("--method needs --template (or --config) to take the brief set, budget and judge from")
+    if args.config is None and args.template is None:
         parser.error("--config is required (use --help for the config shape)")
+    # stdout belongs to the caller in --json mode, so every human line moves to
+    # stderr rather than being suppressed: an operator watching a nightly job
+    # still sees the table, and the server still gets one parseable line.
+    say = (lambda text: print(text, file=sys.stderr)) if args.json else print
     splits = load_splits(args.splits)
-    config = load_config(args.config, splits)
+    source_config = args.config or args.template
+    config = load_config(source_config, splits, method=args.method or None,
+                         candidate_digest=args.candidate_digest or None,
+                         baseline_digest=args.baseline_digest or None)
     briefs_file = Path(config["briefsFile"])
     if not briefs_file.is_absolute():
         briefs_file = REPO_ROOT / briefs_file
@@ -1844,8 +2095,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         for plan in plan_cells(config, briefs):
             path = cell_path(args.results_dir, config["id"], plan["briefId"], plan["arm"], plan["repeat"])
             state = "skip" if read_completed_cell(path, plan["armDigest"], plan["briefDigest"]) else "run"
-            print(f"{state}  {cell_id(plan['briefId'], plan['arm'], plan['repeat'])}  family={plan['family']} ({plan['familySource']})")
-        print(f"references loaded: {len(references)} of {len(config['briefs'])} briefs")
+            say(f"{state}  {cell_id(plan['briefId'], plan['arm'], plan['repeat'])}  family={plan['family']} ({plan['familySource']})")
+        say(f"references loaded: {len(references)} of {len(config['briefs'])} briefs")
         return 0
 
     environment = None
@@ -1902,17 +2153,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             client_factory,
             judge_call=judge_call,
             results_dir=args.results_dir,
-            usage_lookup=load_usage_lookup(args.usage_export),
+            usage_lookup=load_usage_lookup(args.usage_export, primary),
+            project_id=project_id,
         )
         batch.execute(rerun=args.rerun)
-        print(f"cells: {batch.executed} executed, {batch.skipped} resumed from disk")
+        say(f"cells: {batch.executed} executed, {batch.skipped} resumed from disk")
         cells = load_cells(args.results_dir, config["id"])
 
     report = build_report(config, cells, environment=environment, holdout_reason=args.holdout_reason or None)
     report_path = args.reports_dir / f"{config['id']}.json"
     write_json_atomic(report_path, report)
-    print_report_summary(report)
-    print(f"report: {report_path}")
+    print_report_summary(report, say)
+    say(f"report: {report_path}")
+    if args.json:
+        # One line, and the only thing on stdout. The caller is a control plane
+        # that parses it; a human table printed here was the whole reason the
+        # server's `JSON.parse` could never succeed.
+        print(json.dumps({
+            "verdict": report["verdict"],
+            "report": str(report_path),
+            "baselineDigest": args.baseline_digest or config["baseline"]["digest"],
+            "candidateDigest": args.candidate_digest or config["candidate"]["digest"],
+            "armsVerified": report.get("armsVerified"),
+        }, ensure_ascii=False, separators=(",", ":")))
     return 0
 
 
