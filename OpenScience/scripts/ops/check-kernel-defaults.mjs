@@ -99,8 +99,8 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.5-rc.1",
-  sha256: "ff25cd67293b4314f4ae409ff9058f820a1866151e9021f33d947a8e44f5afc8",
-  recordedBy: "dsh@0.1.5-rc.1 --profile evimed-runtime --dump-config on an isolated profile with the image's base, web, cite and socket bundles",
+  sha256: "b0a3eb1e6378186ac7d68946a1e3c204a31ccd789e636075a4f45c45d4ce9bf0",
+  recordedBy: "dsh@0.1.5-rc.1 --profile evimed-runtime --dump-config on an isolated profile with the CLI bundle order observed in Linux CI run 34471182645 (base, web, socket, cite)",
   // Captured from the actual pinned CLI on 2026-09-10, without the local
   // recording/gateway patches. The release image must independently generate
   // and byte-diff its dump before publication.
