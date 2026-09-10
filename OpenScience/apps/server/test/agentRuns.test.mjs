@@ -1488,10 +1488,37 @@ test("enforces bounded run count and ledger bytes without partial mutation", asy
   });
 });
 
+/** Await an unref'ed background monitor without depending on unrelated I/O. */
+async function awaitBackgroundMonitor(promise) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("Background monitor did not settle within 30 seconds.")), 30_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function waitForProjection(predicate) {
+  const deadline = Date.now() + 2000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, "The expected projection was not published.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 /** A run fixture whose root history and run-side projection are both scriptable. */
 async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChildSessionActivity = async () => [] } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-projection-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  let store;
+  t.after(async () => {
+    await store?.closeAll();
+    await rm(root, { recursive: true, force: true });
+  });
   const project = {
     id: "project-1", userId: "user-1", rootDir: root,
     metaDir: path.join(root, ".openscience"), workspaceDir: root,
@@ -1499,7 +1526,7 @@ async function delegatingRunFixture(t, { stallPolls = 3, maxPolls = 40, readChil
   await mkdir(project.metaDir, { recursive: true });
   await mkdir(path.join(root, ".evimed-run"), { recursive: true });
   const frames = [];
-  const store = new AgentRunStore({ get: async () => ({ sessionId: "ses_deleg", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
+  store = new AgentRunStore({ get: async () => ({ sessionId: "ses_deleg", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null }) }, {
     model: "deepseek/deepseek-v4-pro",
     monitorIntervalMs: 1,
     monitorMaxPolls: maxPolls,
@@ -1539,8 +1566,11 @@ test("a run whose subagents are working is not judged stalled because its root s
     store.noteKernelActivity(project, run.id, { sessionId: "ses_child", seq });
     seq += 1;
   }, 2);
-  await store.monitors.get(run.id)?.promise;
-  clearInterval(ticking);
+  try {
+    await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
+  } finally {
+    clearInterval(ticking);
+  }
 
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_timeout", "it should run out the window, not be judged dead");
@@ -1563,7 +1593,7 @@ test("a running-subagent label without child activity does not keep a stalled ru
   });
   const run = await store.start(project, { sessionId: "ses_deleg" });
   store.noteKernelActivity({ ...project, id: "another-project" }, run.id, { sessionId: "ses_child", seq: 1 });
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
 
   const [finished] = await store.list(project);
   // The judgement is unchanged and still exactly this precise — a
@@ -1593,7 +1623,7 @@ test("a kernel-confirmed child sequence keeps a delegated run alive", async (t) 
     subagents: [{ deliverableId: "d1", capability: "research-brief", status: "running", childSessionId: "child-live" }],
   });
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_timeout", "changing authenticated child heads must prevent a false stall");
   assert.ok(calls.length >= 3);
@@ -1627,7 +1657,7 @@ test("a retry child's authenticated head replaces the failed child's stall signa
     subagents: [{ deliverableId: "d1", status: "running", childSessionId: "child-retry", retried: true }],
     evidence: {}, budget: { children: 2 },
   });
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
   const [finished] = await store.list(project);
   assert.equal(finished.errorCode, "runtime_monitor_timeout");
   assert.ok(seen.some((ids) => ids[0] === "child-retry"), "the monitor never switched to the retry child");
@@ -1657,7 +1687,7 @@ test("candidate and running-state churn cannot replace per-child sequence progre
   };
   await writeProjection(projection("child-a", true));
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
   const [finished] = await store.list(project);
   assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/);
   assert.equal(finished.errorCode, "runtime_monitor_timeout");
@@ -1680,9 +1710,12 @@ test("changing model-writable projection counters cannot keep a stalled run aliv
       pendingWrites.delete(pending);
     });
   }, 2);
-  await store.monitors.get(run.id)?.promise;
-  clearInterval(ticking);
-  await Promise.all(pendingWrites);
+  try {
+    await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
+  } finally {
+    clearInterval(ticking);
+    await Promise.all(pendingWrites);
+  }
   if (projectionWriteError) throw projectionWriteError;
 
   const [finished] = await store.list(project);
@@ -1696,7 +1729,7 @@ test("a run-side projection that will not parse is a named notice, never evidenc
   const { project, store, writeProjection } = await delegatingRunFixture(t, { stallPolls: 2 });
   await writeProjection("{ this is not json");
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await store.monitors.get(run.id)?.promise;
+  await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
 
   const [finished] = await store.list(project);
   assert.notEqual(finished.errorCode, "runtime_monitor_stalled", "an unreadable projection fed the stall counter");
@@ -1715,7 +1748,7 @@ test("projection frames are sent when the projection changes and not on every po
   const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
   await writeProjection({ evidence: { total: 1, byStatus: { ready: 1 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await waitForProjection(() => frames.length >= 2);
   const afterFirst = frames.length;
   assert.ok(afterFirst >= 2, `the first read must send both frames, got ${JSON.stringify(frames)}`);
   assert.deepEqual(frames.filter((frame) => frame.type === "evidence/update")[0].data, { total: 1, byStatus: { ready: 1 } });
@@ -1727,7 +1760,7 @@ test("projection frames are sent when the projection changes and not on every po
 
   // Only what changed goes out again.
   await writeProjection({ evidence: { total: 2, byStatus: { ready: 2 } }, budget: { steps: 3, tokens: 10, children: 1, limits: { maxSteps: 100 } } });
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await waitForProjection(() => frames.length > afterFirst);
   const added = frames.slice(afterFirst);
   assert.ok(added.length >= 1, "a changed projection was not published");
   assert.ok(added.every((frame) => frame.type === "evidence/update"), `the budget was unchanged and must not be resent: ${JSON.stringify(added)}`);
@@ -1744,14 +1777,14 @@ test("a deliverable's verdict reaches the browser while the run is still repairi
   // and debounced per deliverable: the index is rewritten whenever any item
   // moves, so digesting the whole list would resend every item every time one
   // of them was graded.
-  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0 });
+  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
   const plan = (items) => ({ plan: { revision: 1, items }, evidence: { total: 0, byStatus: {} }, budget: {} });
   await writeProjection(plan([
     { id: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", title: "证据综述", status: "submitted", childSessionId: "child-1", attempts: 1, lastIssues: [] },
     { id: "d2", contractKind: "research-brief", capability: "research-brief", title: "简报", status: "planned", childSessionId: null, attempts: 0, lastIssues: [] },
   ]));
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await waitForProjection(() => frames.filter((frame) => frame.type === "deliverable/update").length >= 2);
 
   const first = frames.filter((frame) => frame.type === "deliverable/update");
   assert.equal(first.length, 2, `both planned deliverables must be published once: ${JSON.stringify(first)}`);
@@ -1783,7 +1816,7 @@ test("a deliverable's verdict reaches the browser while the run is still repairi
     },
     { id: "d2", contractKind: "research-brief", capability: "research-brief", title: "简报", status: "planned", childSessionId: null, attempts: 0, lastIssues: [] },
   ]));
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await waitForProjection(() => frames.filter((frame) => frame.type === "deliverable/update").length > 2);
   const after = frames.filter((frame) => frame.type === "deliverable/update").slice(2);
   assert.equal(after.length, 1, `only the deliverable that moved must be resent: ${JSON.stringify(after)}`);
   assert.equal(after[0].data.status, "rejected");
@@ -1801,12 +1834,12 @@ test("a deliverable a run wrote under an unknown contract kind is published with
   // input. A kind `@evimed/domain` does not know travels as an empty string —
   // the browser then says 契约种类未知 rather than printing an identifier at a
   // Chinese-reading researcher.
-  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0 });
+  const { project, store, frames, writeProjection } = await delegatingRunFixture(t, { stallPolls: 0, maxPolls: 400 });
   await writeProjection({
     plan: { revision: 1, items: [{ id: "d1", contractKind: "not-a-contract-kind", status: "not-a-status", capability: "x", title: "" }] },
   });
   const run = await store.start(project, { sessionId: "ses_deleg" });
-  await new Promise((resolve) => setTimeout(resolve, 40));
+  await waitForProjection(() => frames.some((frame) => frame.type === "deliverable/update"));
   const published = frames.filter((frame) => frame.type === "deliverable/update");
   assert.equal(published.length, 1);
   assert.equal(published[0].data.contractKind, "");
@@ -1847,7 +1880,7 @@ test("a run that stops making progress is told so, and is not ended on that gues
 
     // Move once, then go quiet.
     history = [...history, { info: { id: "m2", role: "assistant" }, parts: [{ type: "tool", tool: "health" }] }];
-    await store.monitors.get(run.id)?.promise;
+    await awaitBackgroundMonitor(store.monitors.get(run.id)?.promise);
 
     const [finished] = await store.list(project);
     assert.match(finished.qualityNotices.join("\n"), /没有可观测的进展/, "the quiet stretch must still be detected and reported");
@@ -3614,7 +3647,7 @@ test("a structural rejection does not spend the content repair budget, and still
     // Awaited, not just cancelled: cancellation takes effect at the end of the
     // poll already in flight, so only the settled promise proves no further
     // reconcile can land in the middle of the rounds counted below.
-    await monitor?.promise;
+    await awaitBackgroundMonitor(monitor?.promise);
     assert.equal(repairPrompts.length, 0, "the monitor sent nothing before it was stopped");
     sessionStatus = "idle";
 
@@ -3743,7 +3776,7 @@ test("a structural rejection carrying an advisory as well is charged as an ordin
     });
     const monitor = store.monitors.get(run.id);
     monitor?.cancel();
-    await monitor?.promise;
+    await awaitBackgroundMonitor(monitor?.promise);
     sessionStatus = "idle";
 
     // The same unparseable matrix as the structural case, plus one plain-HTTP
@@ -5420,7 +5453,7 @@ test("a container that exits with nothing durable still says what the run last k
     // could poll, only the bridge can have written what the verdict carries.
     const monitor = store.monitors.get(started.id);
     monitor?.cancel();
-    await monitor?.promise?.catch(() => {});
+    await awaitBackgroundMonitor(monitor?.promise?.catch(() => {}));
     await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify({
       formatVersion: 1,
       degraded: [admitted, fresh],
@@ -6018,7 +6051,7 @@ test("a restarted control plane adopts runs a previous process left running", as
     });
     const adoption = await restarted.adoptRunningRuns([project]);
     assert.equal(adoption.adopted, 1);
-    await restarted.monitors.get(started.id)?.promise;
+    await awaitBackgroundMonitor(restarted.monitors.get(started.id)?.promise);
 
     const runs = await restarted.list(project);
     const run = runs.find((item) => item.id === started.id);

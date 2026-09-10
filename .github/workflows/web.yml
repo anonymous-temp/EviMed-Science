@@ -38,7 +38,10 @@ jobs:
       - name: Install test system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography
+          sudo apt-get install -y python3 python3-pip python3-venv postgresql-client python3-yaml python3-cryptography r-base-core
+          # Match the scientific imports exercised by deployment-smoke with
+          # the reviewed versions shipped in deploy/runtime-dsh/Dockerfile.
+          python3 -m pip install numpy==2.2.6 pandas==2.2.3 scipy==1.15.3
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
