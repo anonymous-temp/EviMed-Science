@@ -1660,7 +1660,25 @@ test("a gate run records the check that raised each issue, not only the issue", 
   assert.deepEqual(row.checks.filter((/** @type {any} */ check) => check === null), [], "an unattributed issue is recorded as null, never as a bucket");
   assert.ok(row.checks.includes("required-output"), `expected the required-output check, got ${JSON.stringify(row.checks)}`);
 
-  // And the column the projection carries has to be declared, or the row is
-  // written into a table that drops it and nothing says so.
-  assert.ok("checks" in RUN_DOMAIN_SPEC.tables.gate_runs, "the gate_runs table must declare the attribution it stores");
+  // And every column the writer carries has to be declared, or the row is
+  // written into a table that drops it and nothing says so. `rules` and
+  // `lines` were written for weeks into a schema that declared neither, and
+  // the validator stripped both on the next open -- so the two axes a
+  // false-positive distribution is computed along were silently absent.
+  for (const column of ["issues", "checks", "rules", "lines", "severities", "metrics"]) {
+    assert.ok(column in RUN_DOMAIN_SPEC.tables.gate_runs, `the gate_runs table drops ${column}, which recordGateRun writes`);
+    assert.ok(column in row, `recordGateRun did not write ${column}`);
+  }
+
+  // Severity is what separates "this rule withheld a delivery" from "this rule
+  // spoke". Without it every advisory finding reads as a required one, and the
+  // observed distribution a notice needs before it may become a block cannot
+  // be computed at all.
+  assert.equal(row.severities.length, row.issues.length, "one severity per issue, in the same order");
+  assert.deepEqual(
+    row.severities,
+    row.issues.map((/** @type {any} */ issue) => issue.severity ?? "required"),
+    "the recorded severity must be the issues' own",
+  );
+  assert.ok(row.severities.includes("required"), "the fixture was rejected, so at least one finding must be required");
 });
