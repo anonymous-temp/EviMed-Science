@@ -114,6 +114,19 @@ async function rebuildCapsules({ database, jobs, indexing, userIds }) {
       }
     }
   }
+
+  // A job still marked pending here was not claimed by this command — a server
+  // worker claims the same kind, and it does the same work. Ask the ledger what
+  // became of it rather than reporting a failure for work that succeeded
+  // somewhere else; only a job that is still queued or running is unfinished.
+  for (const [id, outcome] of outcomes) {
+    if (outcome.status !== "pending") continue;
+    const job = await jobs.get(outcome.userId, id);
+    if (job?.status === "succeeded") outcomes.set(id, { ...outcome, status: "rebuilt_elsewhere" });
+    else if (job?.status === "failed") {
+      outcomes.set(id, { ...outcome, status: "failed", code: String(job.error?.code ?? "memory_index_failed") });
+    }
+  }
   return [...outcomes.values()];
 }
 
