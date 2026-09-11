@@ -66,7 +66,7 @@
    ├─ DeepSeek（经模型网关；证书化的是实际运行的模型）
    ├─ 公共生物医学源 53 个 base URL（经 publicSourceGateway：主机白名单 + SSRF 防护）
    ├─ 六个专科 Python 引擎（Meta / MR / 审稿 / 文献计量 / 选题 / 药物安全），HMAC 适配器容器
-   ├─ MemOS 2.0 自托管（记忆底座）【设计，pin 已定】· OpenList（网盘聚合）【设计】· MinerU（文档解析）【设计】
+   ├─ MemOS 2.0 自托管（记忆底座）【设计，pin 已定；2026-09-11 已作废，见 §9.1 的注】· OpenList（网盘聚合）【设计】· MinerU（文档解析）【设计】
    └─ 私有数据 API 13 个（EVIMED_*_URL 适配器）
 ```
 
