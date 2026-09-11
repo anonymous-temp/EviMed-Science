@@ -85,6 +85,31 @@ function payload() {
   };
 }
 
+/**
+ * A memo's payload as usememos stored it: the tag list its own goldmark parse
+ * produced, plus whatever properties that parse found. protojson omits empty
+ * fields, so a memo with no tags and no properties is written as `{}`.
+ * @param {string[]} tags @param {Record<string, boolean>} property
+ */
+function memoPayload(tags, property = {}) {
+  const payload = /** @type {Record<string, any>} */ ({});
+  if (tags.length > 0) payload.tags = tags;
+  if (Object.keys(property).length > 0) payload.property = property;
+  return JSON.stringify(payload);
+}
+
+/** A note of the kind this product is full of: a claim, a DOI, a citation link,
+ *  a pasted command and one tag the researcher typed. goldmark gives the URLs
+ *  to the autolink and link parsers and the indented block to the code parser,
+ *  so none of `#section`, `#abstract` and `#outcome` is a tag — they are not in
+ *  the payload, and must not appear in the imported note either.
+ *  @param {string} tag */
+function citationNote(tag) {
+  return "二甲双胍的机制见 https://doi.org/10.1000/xyz#section 与 "
+    + `[PubMed](https://pubmed.ncbi.nlm.nih.gov/12345/#abstract) #证据\n\n`
+    + `    grep #outcome cohort.csv\n\n#evimed-user-${tag}`;
+}
+
 const sourceDdl = (name) => `
 CREATE SCHEMA "${name}";
 CREATE TABLE "${name}".memo (
@@ -192,18 +217,24 @@ before(async () => {
      '','MEMORY_ORIGIN_EXPLICIT','MEMORY_STATUS_ACTIVE',1,0.5,false,0,1,$3,$4,NULL,NULL,'{}'::jsonb)`,
   [alphaDigests.namespace, betaDigests.namespace, createdTs, updatedTs, observedTs, JSON.stringify(payload()),
     createdTs + 86_400, `evimed-science-${"f".repeat(24)}`]);
-  await database.query(`INSERT INTO "${schema}".memo (uid,creator_id,created_ts,updated_ts,row_status,content,pinned)
+  await database.query(`INSERT INTO "${schema}".memo (uid,creator_id,created_ts,updated_ts,row_status,content,pinned,payload)
     VALUES
-    ('memoalpha1',1,$1,$2,'NORMAL',$3,true),
-    ('memobeta1',1,$1,$2,'ARCHIVED',$4,false),
-    ('memoinjected',1,$1,$2,'NORMAL',$5,false),
-    ('memoforeign',1,$1,$2,'NORMAL','someone else''s note with no internal tag',false)`,
+    ('memoalpha1',1,$1,$2,'NORMAL',$3,true,$7::jsonb),
+    ('memoalpha2',1,$1,$2,'NORMAL',$4,false,$8::jsonb),
+    ('memobeta1',1,$1,$2,'ARCHIVED',$5,false,$9::jsonb),
+    ('memoinjected',1,$1,$2,'NORMAL',$6,false,$10::jsonb),
+    ('memoforeign',1,$1,$2,'NORMAL','someone else''s note with no internal tag',false,'{}'::jsonb)`,
   [createdTs, updatedTs,
     `重点核对老年人感染风险。 #药物安全\n\n#evimed-user-${alphaDigests.tag}`,
+    citationNote(alphaDigests.tag),
     `beta's archived note #循证\n\n#evimed-user-${betaDigests.tag}`,
     // The cross-tenant injection: a note of alpha's that also carries beta's
     // tag inline, which the retired list filter accepted for both accounts.
-    `looks harmless #evimed-user-${betaDigests.tag} inline\n\n#evimed-user-${alphaDigests.tag}`]);
+    `looks harmless #evimed-user-${betaDigests.tag} inline\n\n#evimed-user-${alphaDigests.tag}`,
+    memoPayload(["药物安全", `evimed-user-${alphaDigests.tag}`]),
+    memoPayload(["证据", `evimed-user-${alphaDigests.tag}`], { hasLink: true }),
+    memoPayload(["循证", `evimed-user-${betaDigests.tag}`]),
+    memoPayload([`evimed-user-${betaDigests.tag}`, `evimed-user-${alphaDigests.tag}`])]);
 });
 
 after(async () => {
@@ -231,7 +262,7 @@ test("a dry run reports what it would carry and writes nothing", options, async 
       reasons: { unknown_namespace: 1, invalid_key: 1 } },
   );
   assert.deepEqual(report.notes,
-    { total: 4, imported: 2, alreadyPresent: 0, unmapped: 1, quarantined: 1,
+    { total: 5, imported: 3, alreadyPresent: 0, unmapped: 1, quarantined: 1,
       reasons: { no_owner_tag: 1, multiple_owner_tags: 1 } });
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=ANY($1::text[])",
     [[alpha, beta]])).rows[0].count, 0, "a dry run writes nothing");
@@ -247,7 +278,7 @@ test("a dry run reports what it would carry and writes nothing", options, async 
 test("the import maps both digests, keeps identity and history, and refuses what it cannot attribute", options, async () => {
   const { report } = await importMemory(["--source", url, "--source-schema", schema]);
   assert.equal(report.records.imported, 3);
-  assert.equal(report.notes.imported, 2);
+  assert.equal(report.notes.imported, 3);
 
   const rows = (await database.query(
     "SELECT * FROM evimed_memory.records WHERE user_id=$1 ORDER BY key", [alpha])).rows;
@@ -277,13 +308,20 @@ test("the import maps both digests, keeps identity and history, and refuses what
   assert.equal(new Date(summary.expires_at).toISOString(), instant(createdTs + 86_400).replace("Z", ".000Z"));
   assert.deepEqual(preference.evidence.length, 2);
 
-  const notes = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1", [alpha])).rows;
-  assert.deepEqual(notes.map((note) => note.id), ["memoalpha1"],
+  const notes = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 ORDER BY id", [alpha])).rows;
+  assert.deepEqual(notes.map((note) => note.id), ["memoalpha1", "memoalpha2"],
     "the note carrying two accounts' tags is quarantined, not handed to either of them");
   assert.equal(notes[0].content, "重点核对老年人感染风险。 #药物安全", "the internal tag line is not stored");
   assert.deepEqual(notes[0].tags, ["药物安全"]);
   assert.equal(notes[0].pinned, true);
   assert.equal(notes[0].state, "normal");
+  // The tags are the ones usememos computed with goldmark and its UI already
+  // filters on, not a second reading of the text: re-deriving them would add a
+  // tag for a URL fragment or a word in a pasted command, and the account's
+  // project-deletion rule is decided on exactly this list.
+  assert.deepEqual(notes[1].tags, ["证据"],
+    "only the tag the researcher typed survives; the internal tag is dropped from the stored list");
+  assert.ok(notes[1].content.includes("#outcome"), "the note's own text is carried over whole");
 
   const betaNotes = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1", [beta])).rows;
   assert.deepEqual(betaNotes.map((note) => [note.id, note.state]), [["memobeta1", "archived"]]);
@@ -296,7 +334,7 @@ test("the import maps both digests, keeps identity and history, and refuses what
 test("running the import again is a no-op", options, async () => {
   const { report } = await importMemory(["--source", url, "--source-schema", schema]);
   assert.deepEqual([report.records.imported, report.records.alreadyPresent], [0, 3]);
-  assert.deepEqual([report.notes.imported, report.notes.alreadyPresent], [0, 2]);
+  assert.deepEqual([report.notes.imported, report.notes.alreadyPresent], [0, 3]);
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=ANY($1::text[])",
     [[alpha, beta]])).rows[0].count, 3);
   // A rerun after an interrupted import adds what is missing and touches
@@ -306,6 +344,26 @@ test("running the import again is a no-op", options, async () => {
   await importMemory(["--source", url, "--source-schema", schema]);
   assert.equal((await database.query("SELECT value FROM evimed_memory.records WHERE user_id=$1 AND id='recordalpha1'",
     [alpha])).rows[0].value, "edited after the import");
+});
+
+// In production the source and the target are one database, and the string that
+// reaches it carries a password. `--source same` reads the memos tables through
+// the connection the script already opens, so the command line holds no
+// credential — an argument is readable in `ps` and in `/proc/<pid>/cmdline` for
+// the length of the run, and stays in shell history afterwards.
+test("the production form needs no connection string on the command line", options, async () => {
+  for (const table of ["evimed_memory.notes", "evimed_memory.records"]) {
+    await database.query(`DELETE FROM ${table} WHERE user_id=ANY($1::text[])`, [[alpha, beta]]);
+  }
+  const argv = ["--source", "same", "--source-schema", schema];
+  assert.ok(!argv.some((argument) => argument.includes("://")), "no argument is a connection string");
+  const result = await run(process.execPath, [script, ...argv],
+    { encoding: "utf8", env: { ...process.env, OPEN_SCIENCE_DATABASE_URL: url } });
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.driver, "postgres");
+  assert.deepEqual([report.records.imported, report.notes.imported], [3, 3],
+    "the same rows arrive, read through the target's own connection");
+  assert.ok(!result.stdout.includes(url), "and the report still prints no connection string");
 });
 
 // Local development ran memos on SQLite, so the file is the other half of the
@@ -324,14 +382,20 @@ test("a SQLite source imports the same way", options, async () => {
       'Reviews systematic reviews first.','Reviews systematic reviews first.','MEMORY_ORIGIN_INFERRED',
       'MEMORY_STATUS_ACTIVE',0.6,0.5,0,2,2,?,?,NULL,NULL,?)`)
       .run("sqliterecord1", alphaDigests.namespace, createdTs, updatedTs, JSON.stringify(payload()));
-    source.prepare("INSERT INTO memo (uid,creator_id,created_ts,updated_ts,row_status,content,pinned) VALUES(?,1,?,?,'NORMAL',?,0)")
-      .run("sqlitememo1", createdTs, updatedTs, `本地开发笔记 #本地\n\n#evimed-user-${alphaDigests.tag}`);
+    const memo = source.prepare(
+      "INSERT INTO memo (uid,creator_id,created_ts,updated_ts,row_status,content,pinned,payload) VALUES(?,1,?,?,'NORMAL',?,0,?)");
+    memo.run("sqlitememo1", createdTs, updatedTs, `本地开发笔记 #本地\n\n#evimed-user-${alphaDigests.tag}`,
+      memoPayload(["本地", `evimed-user-${alphaDigests.tag}`]));
+    // A row whose payload is the column's own default says nothing about
+    // whether the parse ever ran, so that one — and only that one — is read
+    // from its text.
+    memo.run("sqlitememo2", createdTs, updatedTs, `没有 payload 的旧笔记 #旧标签\n\n#evimed-user-${alphaDigests.tag}`, "{}");
   } finally { source.close(); }
 
   const { report } = await importMemory(["--source", `sqlite:${file}`]);
   assert.equal(report.driver, "sqlite");
   assert.equal(report.records.imported, 1);
-  assert.equal(report.notes.imported, 1);
+  assert.equal(report.notes.imported, 2);
   const row = (await database.query("SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id='sqliterecord1'",
     [alpha])).rows[0];
   assert.equal(row.kind, "behavior");
@@ -342,5 +406,8 @@ test("a SQLite source imports the same way", options, async () => {
   const note = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND id='sqlitememo1'",
     [alpha])).rows[0];
   assert.deepEqual(note.tags, ["本地"]);
+  const derived = (await database.query("SELECT * FROM evimed_memory.notes WHERE user_id=$1 AND id='sqlitememo2'",
+    [alpha])).rows[0];
+  assert.deepEqual(derived.tags, ["旧标签"], "a note with no stored tag list is read from its own text");
   assert.equal((await importMemory(["--source", `sqlite:${file}`])).report.records.imported, 0, "and it is idempotent too");
 });

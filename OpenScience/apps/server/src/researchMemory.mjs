@@ -208,14 +208,35 @@ export function currentStateEqual(stored, next) {
     && (stored.expiresAt ?? null) === (next.expiresAt ?? null);
 }
 
-/** Text with the code spans and fenced blocks removed, because a tag inside
- *  code is code. Keeps line structure so the caller can still reason in lines. */
-function withoutCode(content) {
+/** A URL the GFM autolink extension consumes whole: a bare `https://…`,
+ *  `ftp://…` or `www.…`, or an angle-bracket autolink with a scheme. What
+ *  follows a `#` inside one is a fragment, not a tag. */
+const autolinkedUrl = /<[a-zA-Z][a-zA-Z0-9+.-]*:[^>\s]*>|\b(?:https?|ftp):\/\/\S+|\bwww\.\S+/gi;
+/** The destination half of `[label](destination)`, which the link parser reads
+ *  as a URL rather than handing to the inline parsers. */
+const linkDestination = /\]\([^)\n]*\)/g;
+
+/**
+ * Text with everything the inline tag parser never sees removed: code spans,
+ * fenced blocks, autolinked URLs and link destinations. A researcher's note
+ * cites DOIs and PubMed links, and `https://doi.org/10.1000/xyz#section` used
+ * to become the tag `section` here while goldmark made no tag at all.
+ *
+ * One construct is deliberately not reproduced: an indented code block (four
+ * spaces after a blank line). Telling one from a list-item continuation needs a
+ * block parser, and dropping a tag a researcher typed is worse than keeping one
+ * goldmark would not have made. Keeps line structure so the caller can still
+ * reason in lines.
+ */
+function tagScannableText(content) {
   const kept = [];
   let fenced = false;
   for (const line of String(content ?? "").split("\n")) {
     if (/^\s*(?:```|~~~)/.test(line)) { fenced = !fenced; continue; }
-    kept.push(fenced ? "" : line.replaceAll(/`[^`\n]*`/g, " "));
+    kept.push(fenced ? "" : line
+      .replaceAll(/`[^`\n]*`/g, " ")
+      .replaceAll(linkDestination, "] ")
+      .replaceAll(autolinkedUrl, " "));
   }
   return kept.join("\n");
 }
@@ -230,13 +251,18 @@ function withoutCode(content) {
  * and position. The rule is reproduced rather than simplified because these
  * strings are already in the UI's filters and in exported archives.
  *
+ * This is the rule for notes written after the move. A note carried over from
+ * the retired service keeps the tag list that service computed with goldmark
+ * itself — see the import script — because that list is what its UI already
+ * shows.
+ *
  * The per-user internal tag is never returned: it was a tenancy fence, the
  * fence is a column now, and echoing another account's digest back would be the
  * one piece of the old design worth not carrying over.
  * @param {unknown} content @returns {string[]}
  */
 export function extractTags(content) {
-  const characters = [...withoutCode(content)];
+  const characters = [...tagScannableText(content)];
   const tags = [];
   const seen = new Set();
   for (let index = 0; index < characters.length; index += 1) {
@@ -422,11 +448,18 @@ function memoryDatabaseError(error) {
   return new HttpError(503, "memory_unavailable", "The research memory store is unavailable.");
 }
 
-/** The transaction's own clock, truncated to the second everything else is
- *  stored at, read once so a revision's `changedAt` and the row's `updatedAt`
- *  cannot disagree. @param {any} client */
+/** The wall clock, truncated to the second everything else is stored at, read
+ *  once so a revision's `changedAt` and the row's `updatedAt` cannot disagree.
+ *
+ *  `clock_timestamp()`, never `now()`: `now()` is the transaction's start time,
+ *  frozen before this transaction waited for the canonical key's lock. A write
+ *  that queued behind another writer would stamp itself with the moment it
+ *  began queueing, so `updated_at` — which orders both the list and recall —
+ *  could move backwards relative to a write that started later and got the lock
+ *  first. Measured drift on a 1.5 s wait here: 1.5 s.
+ *  @param {any} client */
 async function transactionInstant(client) {
-  const result = await client.query("SELECT date_trunc('second', now()) AS now");
+  const result = await client.query("SELECT date_trunc('second', clock_timestamp()) AS now");
   return memoryInstant(result.rows[0]?.now);
 }
 
@@ -574,10 +607,12 @@ export class ResearchMemoryStore {
       // is what the retired service's process-wide mutex gave a single process
       // and could not give a web tier of several.
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [canonicalKeyLock(owner, next)]);
-      const now = await transactionInstant(client);
       const found = await client.query(`SELECT * FROM evimed_memory.records
         WHERE user_id=$1 AND scope=$2 AND scope_id=$3 AND kind=$4 AND key=$5 FOR UPDATE`,
       [owner, next.scope, next.scopeId, next.kind, next.key]);
+      // Read after both waits above, so the stamp is the moment of the write
+      // and not the moment this writer joined the queue.
+      const now = await transactionInstant(client);
 
       if (found.rowCount === 0) {
         const { evidence: created } = mergeEvidence([], proof);
@@ -670,8 +705,11 @@ export class ResearchMemoryStore {
     const owner = assertUserId(userId);
     const text = normalizeNoteContent(content);
     if (!text || text.length > MEMORY_NOTE_CONTENT_LIMIT) throw invalid("content");
+    // One read of the clock for both stamps: two evaluations of a volatile
+    // function in one statement can land either side of a second boundary.
     const result = await this.#query(`INSERT INTO evimed_memory.notes(user_id,id,content,state,pinned,tags,created_at,updated_at)
-      VALUES($1,$2,$3,'normal',false,$4::text[],date_trunc('second',now()),date_trunc('second',now())) RETURNING *`,
+      SELECT $1,$2,$3,'normal',false,$4::text[],stamp,stamp
+      FROM (SELECT date_trunc('second',clock_timestamp()) AS stamp) clock RETURNING *`,
     [owner, randomUUID(), text, extractTags(text)]);
     return publicNote(result.rows[0]);
   }
@@ -698,7 +736,7 @@ export class ResearchMemoryStore {
         return current;
       }
       const updated = await client.query(`UPDATE evimed_memory.notes
-        SET content=$3,pinned=$4,state=$5,tags=$6::text[],updated_at=date_trunc('second',now())
+        SET content=$3,pinned=$4,state=$5,tags=$6::text[],updated_at=date_trunc('second',clock_timestamp())
         WHERE user_id=$1 AND id=$2 RETURNING *`,
       [owner, noteId, next.content, next.pinned, next.state, extractTags(next.content)]);
       return publicNote(updated.rows[0]);
