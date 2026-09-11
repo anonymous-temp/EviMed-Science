@@ -30,6 +30,19 @@ import process from "node:process";
  *  command does not park the capsule for an hour. */
 const CAPSULE_LEASE_MS = 300_000;
 
+/** How long to keep asking the ledger about a job the server's own worker
+ *  claimed before calling it unfinished. The exit code of this command means
+ *  "the index is current", and a non-zero one for a capsule that another
+ *  process is in the middle of rebuilding would make that reading false in the
+ *  ordinary case of running it on a live deployment. */
+const FOREIGN_JOB_WAIT_MS = 60_000;
+const FOREIGN_JOB_POLL_MS = 500;
+
+/** @param {number} ms */
+function sleep(ms) {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
 function parseArguments(argv) {
   const users = [];
   let all = false;
@@ -58,9 +71,9 @@ function parseArguments(argv) {
  * wrong after an embedding model change, where the file names are unchanged and
  * every vector behind them is stale.
  *
- * @param {{database:any,jobs:any,indexing:any,userIds:string[]}} context
+ * @param {{database:any,jobs:any,indexing:any,userIds:string[],failurePolicy:(code:string,attempts:number)=>{retry:boolean,delayMs:number}}} context
  */
-async function rebuildCapsules({ database, jobs, indexing, userIds }) {
+async function rebuildCapsules({ database, jobs, indexing, userIds, failurePolicy }) {
   const workerId = `memory-index-rebuild-${randomUUID()}`;
   /** @type {{userId:string,id:string,capsuleId:string}[]} */
   const enqueued = [];
@@ -106,11 +119,18 @@ async function rebuildCapsules({ database, jobs, indexing, userIds }) {
       if (mine.has(job.id)) {
         outcomes.set(job.id, { userId: job.userId, capsuleId: job.payload?.capsuleId ?? "", status: "failed", code });
       }
-      // Leave the job failed rather than running: a lease that expires on its
-      // own would hold this capsule for the length of the lease and tell nobody.
+      // Leave the job failed or requeued rather than running: a lease that
+      // expires on its own would hold this capsule for the length of the lease
+      // and tell nobody. Which of the two is the worker's policy, not this
+      // command's — the claim above has no user filter, so the job in hand may
+      // belong to an account nobody named on the command line, enqueued with
+      // ten attempts by the reconcile this command never ran. Marking that one
+      // terminally failed would be this process deciding, from outside, that
+      // another account's capsule is unsearchable. This command's own jobs are
+      // enqueued with a single attempt, so the same policy settles them here.
       if (code !== "product_job_lease_lost") {
         await jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Memory index rebuild failed." },
-          { retry: false }).catch(() => {});
+          failurePolicy(code, job.attempts)).catch(() => {});
       }
     }
   }
@@ -118,14 +138,23 @@ async function rebuildCapsules({ database, jobs, indexing, userIds }) {
   // A job still marked pending here was not claimed by this command — a server
   // worker claims the same kind, and it does the same work. Ask the ledger what
   // became of it rather than reporting a failure for work that succeeded
-  // somewhere else; only a job that is still queued or running is unfinished.
-  for (const [id, outcome] of outcomes) {
-    if (outcome.status !== "pending") continue;
-    const job = await jobs.get(outcome.userId, id);
-    if (job?.status === "succeeded") outcomes.set(id, { ...outcome, status: "rebuilt_elsewhere" });
-    else if (job?.status === "failed") {
-      outcomes.set(id, { ...outcome, status: "failed", code: String(job.error?.code ?? "memory_index_failed") });
+  // somewhere else, and keep asking for a bounded while: a job the other worker
+  // is still running is not a failure, it is one this command has not seen the
+  // end of yet. Only a job still queued or running when the wait runs out is
+  // reported as unfinished.
+  const deadline = Date.now() + FOREIGN_JOB_WAIT_MS;
+  for (;;) {
+    let unfinished = 0;
+    for (const [id, outcome] of [...outcomes]) {
+      if (outcome.status !== "pending") continue;
+      const job = await jobs.get(outcome.userId, id);
+      if (job?.status === "succeeded") outcomes.set(id, { ...outcome, status: "rebuilt_elsewhere" });
+      else if (job?.status === "failed") {
+        outcomes.set(id, { ...outcome, status: "failed", code: String(job.error?.code ?? "memory_index_failed") });
+      } else unfinished += 1;
     }
+    if (unfinished === 0 || Date.now() >= deadline) break;
+    await sleep(FOREIGN_JOB_POLL_MS);
   }
   return [...outcomes.values()];
 }
@@ -133,7 +162,7 @@ async function rebuildCapsules({ database, jobs, indexing, userIds }) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const [{ loadConfig }, { createStore }, { ResearchMemoryStore }, { OpenVikingClient },
-    { MemorySubstrate }, { MemoryIndexing }, { ProductJobs }] = await Promise.all([
+    { MemorySubstrate }, { MemoryIndexing }, { ProductJobs }, { memoryIndexFailurePolicy }] = await Promise.all([
     import("../../apps/server/src/config.mjs"),
     import("../../apps/server/src/store.mjs"),
     import("../../apps/server/src/researchMemory.mjs"),
@@ -141,6 +170,7 @@ async function main() {
     import("../../apps/server/src/memorySubstrate.mjs"),
     import("../../apps/server/src/memoryIndexing.mjs"),
     import("../../apps/server/src/productJobs.mjs"),
+    import("../../apps/server/src/memoryIndexWorker.mjs"),
   ]);
 
   const config = loadConfig();
@@ -197,20 +227,28 @@ async function main() {
 
     const jobs = new ProductJobs(database);
     const indexing = new MemoryIndexing({ database, openViking, jobs });
-    const capsules = await rebuildCapsules({ database, jobs, indexing, userIds });
+    const capsules = await rebuildCapsules({
+      database, jobs, indexing, userIds, failurePolicy: memoryIndexFailurePolicy,
+    });
 
     const failed = results.filter((row) => row.error);
+    // Records the index refused one at a time. The user's rebuild continued
+    // past them, so it has no `error` of its own, and a command that reported
+    // `ok` over a user whose index is missing records would be the one report
+    // an operator acts on after a lost volume.
+    const recordsFailed = results.reduce((total, row) => total + (row.failed ?? 0), 0);
     const capsulesFailed = capsules.filter((row) => row.status === "failed" || row.status === "pending");
     const summary = {
-      ok: failed.length === 0 && capsulesFailed.length === 0,
+      ok: failed.length === 0 && recordsFailed === 0 && capsulesFailed.length === 0,
       provider: substrate.provider,
       users: results.length,
       written: results.reduce((total, row) => total + (row.written ?? 0), 0),
       skipped: results.reduce((total, row) => total + (row.skipped ?? 0), 0),
+      recordsFailed,
       failed: failed.length,
       capsules: capsules.length,
       capsulesFailed: capsulesFailed.length,
-      results: options.json ? results : failed,
+      results: options.json ? results : results.filter((row) => row.error || row.failed),
       capsuleResults: options.json ? capsules : capsulesFailed,
     };
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);

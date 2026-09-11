@@ -15,7 +15,14 @@ import http from "node:http";
  * that map implies, which is also how the real server behaves for a tree it
  * created through `write`.
  */
-export async function startOpenVikingServer({ apiKey = "test-index-key" } = {}) {
+/**
+ * @param {{apiKey?:string,refuse?:((call:{method:string,path:string,uri:string}) =>
+ *   {status:number,code:string}|null)}} [options] `refuse` answers a call with an
+ *   upstream error instead of serving it, which is how a failure confined to one
+ *   subtree — one account's writes, one capsule — is reproduced without taking
+ *   the whole index down.
+ */
+export async function startOpenVikingServer({ apiKey = "test-index-key", refuse = null } = {}) {
   /** @type {Map<string,string>} */
   const files = new Map();
   /** @type {{method:string,path:string,uri:string}[]} */
@@ -56,8 +63,10 @@ export async function startOpenVikingServer({ apiKey = "test-index-key" } = {}) 
       req.on("data", (chunk) => { raw += chunk; });
       req.on("end", () => {
         const body = JSON.parse(raw || "{}");
+        const refusal = refuse?.({ method: "POST", path: url.pathname, uri: String(body.uri ?? "") });
+        if (refusal) return failure(res, refusal.status, refusal.code, "The index refused this write.");
         files.set(String(body.uri), String(body.content ?? ""));
-        send(res, 200, { status: "ok", result: { uri: body.uri, root_uri: body.uri } });
+        return send(res, 200, { status: "ok", result: { uri: body.uri, root_uri: body.uri } });
       });
       return undefined;
     }

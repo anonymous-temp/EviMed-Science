@@ -311,7 +311,7 @@ export async function prepareResearchContext(
   project,
   session,
   config,
-  { query = "", memories = [], memoryError = null, specialists = [], routedSpecialist = null, mountableSkills = [] } = {},
+  { query = "", memories = [], specialists = [], routedSpecialist = null, mountableSkills = [] } = {},
 ) {
   const knowledge = await syncKnowledgeBase(project, config);
   const knowledgeIndex = await indexKnowledgeBase(project, config, knowledge);
@@ -340,9 +340,11 @@ export async function prepareResearchContext(
           "</evimed-memory>",
         ].join("\n")),
       ].join("\n")
-    : memoryError
-      ? `科研记忆服务暂时不可用（${memoryError}）；不要声称读取过科研记忆。`
-      : "当前问题未检索到相关科研记忆；不要声称使用过科研记忆。";
+    // No "the memory service is temporarily unavailable" branch: a recall that
+    // cannot answer now rejects the run rather than reaching the prompt, because
+    // the store is a schema of the control-plane database and an unconfigured
+    // one returns no memories instead of failing. Empty is empty.
+    : "当前问题未检索到相关科研记忆；不要声称使用过科研记忆。";
   const specialistInstruction = session.mode === "open-domain" && specialists.length > 0
     ? [
         "开放域科研问答已注册以下专项 Skill。问题与其中一个或多个范围实质匹配时，必须加载对应 Skill，并按其工具、证据边界和交付物执行；可按问题需要组合多个专项，但不得为展示能力而无关调用：",
@@ -424,7 +426,6 @@ export async function prepareResearchContext(
       scope: memo.scope ?? "user",
       updatedAt: memo.updatedAt ?? null,
     })),
-    memoryError,
     system: [
       "你是 EviMed 科研助手。使用用户所用语言回答。回答先给结论与可执行建议，再给关键证据，最后说明不确定性与证据层级。",
       "根据问题本身自主判断回答深度，以及是否需要检索、分析、调用工具或生成文件。简单事实、机制或定义类问题直接简明回答；只有用户明确要求报告、系统评价或深度研究时，才产出长篇结构化报告。",

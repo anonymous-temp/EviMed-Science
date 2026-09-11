@@ -876,11 +876,25 @@ test("readiness separates the memory store from the index that ranks it", async 
     assert.equal(body.checks.memoryIndex.provider, "builtin");
     // A reranker with no key is off, and "off" must be distinguishable from
     // "misconfigured": an unreadable key file leaves every recall in vector
-    // order with nothing anywhere saying the reranker was never asked.
-    assert.deepEqual(body.checks.memoryIndex.rerank, { configured: false, code: null });
+    // order with nothing anywhere saying the reranker was never asked. On the
+    // term matcher it is neither — nothing would ask it even with a key — and
+    // the row says that instead of either.
+    assert.deepEqual(body.checks.memoryIndex.rerank, { configured: false, code: "memory_rerank_not_reached" });
     assert.equal(Object.hasOwn(body.checks, "memoryRecall"), false,
       "the index is reported once; a second key for the other recall path could only repeat it");
   });
+});
+
+// The third state the rerank row exists to keep out. A recall reranks inside the
+// index arm and nowhere else, and on `builtin` the capsule index is not built at
+// all, so a key configured here buys nothing — and a readiness row reading
+// "configured" would be an operator's evidence that it did.
+test("a reranker key on a term-matcher deployment is reported as not reached, never as on", async () => {
+  await withApp(async ({ base }) => {
+    const body = (await (await fetch(`${base}/api/ready`)).json()).data;
+    assert.equal(body.checks.memoryIndex.provider, "builtin");
+    assert.deepEqual(body.checks.memoryIndex.rerank, { configured: false, code: "memory_rerank_not_reached" });
+  }, { dashscopeApiKey: "not-a-real-dashscope-key" });
 });
 
 test("an operator who asked for a strict index is told when it cannot be reached", async () => {

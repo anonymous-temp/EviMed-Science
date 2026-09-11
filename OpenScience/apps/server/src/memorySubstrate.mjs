@@ -216,13 +216,22 @@ export class MemorySubstrate {
    * The index holds nothing of its own, so this is always safe to run and
    * always converges. It is how a deployment adopts a provider, and how it
    * recovers from any drift without a reconciliation ledger to get wrong.
+   *
+   * Convergence is why one record's write failing does not end the rebuild.
+   * With `wait: true` a slow embedding is answered by a 504 after the content
+   * was written, so the likeliest failure here is also the least serious one —
+   * and abandoning the remaining records because of it would leave a user whose
+   * index is mostly empty where a second run would have finished the job.
    */
   async rebuild(userId) {
-    if (!this.active) return { written: 0, skipped: 0 };
+    if (!this.active) return { written: 0, skipped: 0, failed: 0 };
     const records = await this.store.listAllRecords(userId);
     const now = Date.now();
     let written = 0;
     let skipped = 0;
+    let failed = 0;
+    /** @type {string|null} */
+    let failureCode = null;
     for (const record of records) {
       const publishable = record.status === "active"
         && !record.sensitive
@@ -236,18 +245,25 @@ export class MemorySubstrate {
         skipped += 1;
         continue;
       }
-      // `wait: true`: the caller of a rebuild is an operator or a script that
-      // reports having rebuilt the index, and a write that returns before the
-      // vector exists makes that report false for a while nobody can measure.
-      await this.openViking.write(userId, memoryUri(userId, {
-        scope: record.scope,
-        scopeId: record.scopeId,
-        kind: record.kind,
-        recordId: record.id,
-      }), content, { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
-      written += 1;
+      try {
+        // `wait: true`: the caller of a rebuild is an operator or a script that
+        // reports having rebuilt the index, and a write that returns before the
+        // vector exists makes that report false for a while nobody can measure.
+        await this.openViking.write(userId, memoryUri(userId, {
+          scope: record.scope,
+          scopeId: record.scopeId,
+          kind: record.kind,
+          recordId: record.id,
+        }), content, { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+        written += 1;
+      } catch (error) {
+        failed += 1;
+        failureCode = typeof error?.code === "string" ? error.code : "memory_index_unavailable";
+      }
     }
-    return { written, skipped };
+    // The count and the last code go back to the caller rather than into state:
+    // a rebuild has exactly one caller, and it is the thing that reports.
+    return { written, skipped, failed, ...(failureCode ? { code: failureCode } : {}) };
   }
 
   /**

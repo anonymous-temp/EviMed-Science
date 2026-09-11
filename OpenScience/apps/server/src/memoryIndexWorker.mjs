@@ -1,5 +1,31 @@
 import { randomUUID } from "node:crypto";
 
+/** Retrying a job whose input the index will refuse again only burns attempts:
+ *  an unusable job payload, and a fact whose id, kind or revision cannot become
+ *  a path, are decided before any request. */
+const TERMINAL_INDEX_FAILURES = ["memory_index_job_invalid", "memory_id_invalid"];
+
+/**
+ * How a failed `memory-index` job goes back to the queue.
+ *
+ * Exported because this worker is not the only claimer. `ProductJobs.claim`
+ * selects by kind with no user filter, so the operator rebuild command claims
+ * jobs this worker enqueued for accounts nobody named on its command line — and
+ * a second policy over there would decide, on its own terms, the fate of a job
+ * it did not create. One function, so a job's retries do not depend on which
+ * process happened to pick it up.
+ *
+ * @param {string} code @param {number} attempts
+ * @returns {{retry:boolean,delayMs:number}}
+ */
+export function memoryIndexFailurePolicy(code, attempts) {
+  const terminal = TERMINAL_INDEX_FAILURES.includes(code);
+  return {
+    retry: !terminal,
+    delayMs: terminal ? 0 : Math.min(60_000, 1000 * 2 ** Math.min(Number(attempts) || 0, 6)),
+  };
+}
+
 /** Durable ProductJobs drive indexing; timers only wake the next lease claim. */
 export class MemoryIndexWorker {
   /** @param {{jobs:any,indexing:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
@@ -63,14 +89,10 @@ export class MemoryIndexWorker {
     } catch (error) {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_failed";
       if (!leaseLost && this.lastError !== "product_job_lease_lost") {
-        // Retrying a job whose input the index will refuse again only burns
-        // attempts: an unusable job payload, and a fact whose id, kind or
-        // revision cannot become a path, are decided before any request.
-        const terminal = ["memory_index_job_invalid", "memory_id_invalid"].includes(this.lastError);
         try {
           await this.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: this.lastError, message: "Memory indexing failed." },
-            { retry: !terminal, delayMs: terminal ? 0 : Math.min(60_000, 1000 * 2 ** Math.min(job.attempts, 6)) });
+            memoryIndexFailurePolicy(this.lastError, job.attempts));
         } catch (failure) {
           if (failure?.code !== "product_job_lease_lost") throw failure;
         }
