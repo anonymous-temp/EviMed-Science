@@ -190,7 +190,13 @@ jobs:
           echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/dashscope-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/dashscope.api-key" >> "$GITHUB_ENV"
+          # The recall index reads its configuration and its own key from two
+          # bind mounts Compose refuses to interpolate without a path, so both
+          # names have to exist before the first `docker compose` call, not only
+          # before `configure:production-state` writes the files they point at.
+          echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-ov.conf" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
@@ -209,7 +215,7 @@ jobs:
           # The operator supplies this key in production; nothing generates it.
           # `configure:production-state` renders it into the recall index's
           # `ov.conf`, so the file has to exist before that step runs.
-          printf '%s\n' 'ci-fake-dashscope-key-no-external-calls' > deploy/web/secrets/dashscope-api-key.txt
+          printf '%s\n' 'ci-fake-dashscope-key-no-external-calls' > deploy/web/secrets/dashscope.api-key
           printf '%s\n' 'ci-evimed-workload-signing-secret-0123456789abcdef' > deploy/web/secrets/evimed-workload-signing-key.txt
           printf '%s\n' '{}' > deploy/web/secrets/deepseek-release-receipt.json
           {
@@ -237,6 +243,8 @@ jobs:
             echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${OPEN_SCIENCE_DATABASE_URL_HOST_FILE}"
             echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}"
+            echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}"
+            echo "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE}"
             echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN}"
             echo "OPEN_SCIENCE_BACKUP_MODE=local"
             echo "OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=true"
