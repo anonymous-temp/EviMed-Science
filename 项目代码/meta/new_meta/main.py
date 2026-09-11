@@ -1098,6 +1098,21 @@ def _require_cli_method_delivery(project: Project, phase) -> None:
     raise ReleaseBlockedError(decision)
 
 
+def _require_cli_primary_selection(project, selection_result):
+    if selection_result.status.value != "succeeded":
+        _require_cli_method_delivery(project, selection_result)
+    return selection_result.data["effects"], selection_result.data["selection_audit"]
+
+
+def _require_cli_current_alignment(project, *, protocol=None, effects=None, meta_results=None):
+    from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, require_current_cached_alignment
+    try:
+        require_current_cached_alignment(project, protocol=protocol, effects=effects, meta_results=meta_results)
+    except PrimaryAlignmentRequired as exc:
+        project.save_json("primary_alignment_status.json", exc.phase, subdir="analysis")
+        _require_cli_method_delivery(project, exc.phase)
+
+
 def _can_write_manuscript_from_cached_artifacts(project: Project) -> bool:
     """Return True when cached artifacts are sufficient to write a manuscript."""
     required_files = [
@@ -2577,12 +2592,15 @@ def _parse_fulltext_source(project: Project, path: str, *, is_pdf: bool) -> tupl
 
 
 def _load_cached_study_effects(project: Project) -> list[StudyEffect]:
+    _require_cli_current_alignment(project)
     data = project.load_json("effect_sizes.json", subdir="analysis") or []
     return [StudyEffect.model_validate(item) for item in data]
 
 
 def _load_cached_meta_results(project: Project) -> MetaAnalysisResults:
-    return MetaAnalysisResults.model_validate(project.load_json("meta_results.json", subdir="analysis"))
+    results = MetaAnalysisResults.model_validate(project.load_json("meta_results.json", subdir="analysis"))
+    _require_cli_current_alignment(project, meta_results=results)
+    return results
 
 
 def _load_cached_grade_profile(project: Project) -> GRADEProfile | None:
@@ -2701,7 +2719,7 @@ def _reconcile_gate_result_with_final_effect_sizes(
 ) -> GateResult:
     """Use final selected effect-size rows as the manuscript-stage meta-eligible set."""
     final_ids = _final_effect_size_study_ids(project)
-    if not final_ids:
+    if not final_ids and not project.get_path("effect_sizes.json", subdir="analysis").exists():
         return gate_result
 
     evidence_classes = dict(gate_result.evidence_classes or {})
@@ -2780,6 +2798,8 @@ def _write_manuscript_from_artifacts(
     grade_profile: GRADEProfile | None,
 ) -> str:
     """Write references and manuscript from already-loaded analysis artifacts."""
+    if meta_results is not None:
+        _require_cli_current_alignment(project, protocol=protocol, meta_results=meta_results)
     print_step("13", "Manuscript Generation")
     ref_manager = ReferenceManager()
     for paper in included_papers:
@@ -3132,6 +3152,7 @@ def _run_meta_analysis_from_effects(
     study_effects: list[StudyEffect],
 ) -> MetaAnalysisResults:
     """Run Step 11 from cached study effects and persist meta_results.json."""
+    _require_cli_current_alignment(project, protocol=protocol, effects=study_effects)
     print_step("11", "Meta-Analysis — Pooling, Heterogeneity, Sensitivity, Advanced Methods")
     if len(study_effects) < 2:
         raise ValueError("At least two cached study effects are required for quantitative meta-analysis.")
@@ -3310,6 +3331,8 @@ def _run_meta_analysis_from_effects(
             plan=MethodPlan.model_validate(method_plan_payload),
             results=meta_results,
         )
+    from new_meta.core.primary_analysis_alignment import save_pool_binding
+    save_pool_binding(project, meta_results)
     project.save_checkpoint("meta_analysis")
     return meta_results
 
@@ -4813,8 +4836,7 @@ def main():
         rob_results=rob_results,
         included_papers=included_papers,
     )
-    study_effects = selection_result.data["effects"]
-    primary_selection_audit = selection_result.data["selection_audit"]
+    study_effects, primary_selection_audit = _require_cli_primary_selection(project, selection_result)
     for effect in study_effects:
         yi_display = meta_engine._to_original(effect.yi, protocol.effect_measure, effect.vi)
         print(f"  {effect.study_label}: {protocol.effect_measure}={yi_display:.4f}, SE={effect.se:.4f}")

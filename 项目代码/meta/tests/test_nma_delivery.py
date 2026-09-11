@@ -85,6 +85,8 @@ def _prepared_nma_project(tmp_path: Path):
         "reference": "A",
         "outcome_direction": "higher",
     }
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     phase = PipelineRunner(project).run_compiled_method_synthesis(options=transitivity)
     return project, protocol, studies, migration, plan, phase
 

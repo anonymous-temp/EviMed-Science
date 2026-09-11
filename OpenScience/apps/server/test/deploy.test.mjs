@@ -9,6 +9,26 @@ import { createCommandRegistry } from "../src/commands.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test("hosted CI produces a real PostgreSQL restore receipt before demanding readiness", async () => {
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  const start = workflow.indexOf("- name: Start production Compose stack");
+  const backup = workflow.indexOf("- name: Verify actual PostgreSQL backup and restore before readiness");
+  const ready = workflow.indexOf("- name: Wait for API and monitoring readiness");
+  assert.ok(start >= 0 && start < backup && backup < ready);
+  const producer = workflow.slice(backup, ready);
+  assert.match(producer, /curl -fsS http:\/\/127\.0\.0\.1:8787\/api\/health/);
+  assert.doesNotMatch(producer, /\/api\/ready/);
+  assert.match(producer, /python3 -B scripts\/ops\/postgres-backup\.py/);
+  assert.match(producer, /EVIMED_POSTGRES_BACKUP_DIR="\$RUNNER_TEMP\/evimed-postgres-backup"/);
+  assert.match(producer, /EVIMED_POSTGRES_PASSPHRASE_FILE="\$OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE"/);
+  assert.match(workflow, /OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR=\$RUNNER_TEMP\/evimed-postgres-backup\/status/);
+  assert.match(workflow, /echo "OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR=\$\{OPEN_SCIENCE_POSTGRES_BACKUP_STATUS_DIR\}"/);
+  const configure = workflow.indexOf("pnpm configure:backup");
+  const privateMode = workflow.indexOf('chmod 0400 "$OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE"');
+  const check = workflow.indexOf("pnpm check:backup", configure);
+  assert.ok(configure >= 0 && configure < privateMode && privateMode < check && check < start);
+});
+
 test("bundled examples resolve independently of the server working directory", () => {
   const configModule = pathToFileURL(path.join(repoRoot, "apps/server/src/config.mjs")).href;
   const source = `import { loadConfig } from ${JSON.stringify(configModule)}; process.stdout.write(loadConfig().examplesDir);`;

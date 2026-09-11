@@ -84,6 +84,8 @@ def _prepared_nrsi_project(tmp_path: Path):
         extracted_studies=studies,
     )
     plan = compile_project_method_plan(project, protocol, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     phase = PipelineRunner(project).run_compiled_method_synthesis()
     assert phase.status.value == "succeeded"
     assessments = [

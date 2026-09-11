@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import BaseModel
 from tqdm import tqdm
@@ -17,7 +19,7 @@ from new_meta.core.denominator_recovery import (
 )
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
 from new_meta.core.rct_design_reconciliation import reconcile_extracted_rct_designs
-from new_meta.schemas.study import ConflictNote, ExtractedStudy, StudyCharacteristics, OutcomeData
+from new_meta.schemas.study import ConflictNote, ExtractedStudy, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment
 from new_meta.prompts import extraction_prompts
 from new_meta.agents.pdf_parser import get_page_for_position
 from new_meta.config import LLM_MAX_TOKENS_EXTRACTION, MAX_WORKERS, MAX_CHECK_ROUNDS
@@ -28,6 +30,7 @@ class ExtractionCheckResult(BaseModel):
     score: int  # 1-10
     issues: list[str] = []
     suggestions: list[str] = []
+    primary_analysis_alignment: list[PrimaryAlignmentAssessment] = []
 
 
 class OutcomeList(BaseModel):
@@ -58,6 +61,7 @@ class DataExtractionAgent(BaseAgent):
             parsed = parsed_papers.get(paper_id, {})
             return self._extract_single(paper, parsed, protocol, project)
 
+        verification_inputs = {}
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {executor.submit(extract_one, p): p for p in included_papers}
             results = []
@@ -66,6 +70,8 @@ class DataExtractionAgent(BaseAgent):
                     result = future.result()
                     if result:
                         results.append(result)
+                        paper = futures[future]
+                        verification_inputs[id(result)] = (paper, parsed_papers.get(paper_identity(paper), {}))
                 except Exception as e:
                     paper = futures[future]
                     self.log(f"Extraction failed for {paper_identity(paper)}: {e}", level="warning")
@@ -97,6 +103,23 @@ class DataExtractionAgent(BaseAgent):
                 sid = item.characteristics.pmid or item.characteristics.study_id
                 if sid:
                     project.save_json(f"{safe_identifier(sid)}.json", item, subdir="extraction")
+
+        # The existing independent verification pass sees reconciled clinical fields.
+        # It is not a second extraction call or an extra model review layer.
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            checked = list(executor.map(
+                lambda study: self._verify_alignment(
+                    study, *verification_inputs[id(study)], protocol, project,
+                ),
+                results,
+            ))
+        results = checked
+        # Refinement may change clinical fields. Reconciliation is deterministic;
+        # changed rows/protocol will invalidate the preceding check, never rebind it.
+        reconcile_extracted_rct_designs(protocol, results, parsed_papers=parsed_papers)
+        for study in results:
+            sid = study.characteristics.pmid or study.characteristics.study_id
+            project.save_json(f"{safe_identifier(sid)}.json", study, subdir="extraction")
 
         # Save all extractions
         project.save_json("all_extractions.json", results, subdir="extraction")
@@ -219,6 +242,9 @@ class DataExtractionAgent(BaseAgent):
         # Step 2: Extract outcomes (with retry)
         secondary_str = ", ".join(protocol.pico.outcomes_secondary) if protocol.pico.outcomes_secondary else "None"
         outcome_prompt = extraction_prompts.OUTCOME_EXTRACTION_PROMPT.format(
+            population=protocol.pico.population,
+            intervention=protocol.pico.intervention,
+            comparator=protocol.pico.comparator,
             primary_outcome=protocol.pico.outcome_primary,
             secondary_outcomes=secondary_str,
             effect_measure=protocol.effect_measure,
@@ -233,19 +259,9 @@ class DataExtractionAgent(BaseAgent):
             quality_notes=outcome_data.quality_notes,
         )
 
-        # Step 3: Self-verification loop
-        for check_round in range(MAX_CHECK_ROUNDS):
-            try:
-                check_result = self._check_extraction(paper_content, extracted)
-            except Exception as e:
-                self.log(f"[{paper_id}] Extraction check failed (round {check_round + 1}): {e}", level="warning")
-                break  # keep current extraction, skip further rounds
-            if check_result.score >= 7:
-                self.log(f"[{paper_id}] Extraction verified (score: {check_result.score}/10, round {check_round + 1})")
-                break
-            else:
-                self.log(f"[{paper_id}] Extraction needs improvement (score: {check_result.score}/10, round {check_round + 1})")
-                extracted = self._refine_extraction(paper_content, extracted, check_result, protocol)
+        # Model output cannot create runtime verification provenance.
+        for outcome in extracted.outcomes:
+            outcome.primary_analysis_alignment = None
 
         # Step 4: Validate source quotes and resolve page numbers
         page_map = parsed.get("page_map", [])
@@ -353,13 +369,74 @@ class DataExtractionAgent(BaseAgent):
             self.log(f"[{pmid}] Marked as EXTRACTION_FAILED", level="warning")
             return obj
 
-    def _check_extraction(self, paper_content: str, extracted: ExtractedStudy) -> ExtractionCheckResult:
+    def _check_extraction(self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol) -> ExtractionCheckResult:
         """Verify extraction quality."""
         prompt = extraction_prompts.EXTRACTION_CHECK_PROMPT.format(
-            paper_content=paper_content[:20000],
+            paper_content=paper_content,
+            protocol=json.dumps(protocol.model_dump(), ensure_ascii=False),
             extracted_data=json.dumps(extracted.model_dump(), indent=2, ensure_ascii=False),
         )
-        return self.call_llm_structured(prompt, ExtractionCheckResult, max_tokens=4096)
+        return self.call_llm_structured(
+            prompt, ExtractionCheckResult,
+            max_tokens=min(LLM_MAX_TOKENS_EXTRACTION, max(4096, 900 * len(extracted.outcomes))),
+        )
+
+    def _verify_alignment(self, extracted, paper, parsed, protocol, project):
+        from new_meta.core.primary_analysis_alignment import _read_scoped, record_checked_alignments, row_fingerprint
+
+        content = parsed.get("full_text", "")
+        if parsed.get("tables"):
+            content += "\n\n## EXTRACTED TABLES\n\n" + "\n\n".join(parsed["tables"])
+        if len(content) > 40000:
+            content = content[:16000] + "\n[... middle sections omitted ...]\n" + content[-23950:]
+        source_path = paper.get("pdf_path") or paper.get("fulltext_path") or None
+        source_before = None
+        if source_path is not None:
+            source_path = Path(source_path)
+            try:
+                relative_source = source_path.absolute().relative_to(project.base_dir.absolute()).as_posix()
+                source_before = _read_scoped(project, relative_source)
+                if parsed.get("_source_sha256") != hashlib.sha256(source_before).hexdigest():
+                    raise ValueError("Parsed source version does not match the current document")
+            except (OSError, ValueError):
+                for outcome in extracted.outcomes:
+                    outcome.primary_analysis_alignment = None
+                return extracted
+        assessments = []
+        checked_rows = {}
+        for outcome in extracted.outcomes:
+            outcome.primary_analysis_alignment = None
+        for round_index in range(MAX_CHECK_ROUNDS):
+            snapshot = {index: row_fingerprint(extracted, index) for index in range(len(extracted.outcomes))}
+            try:
+                checked = self._check_extraction(content, extracted, protocol)
+            except Exception as exc:
+                self.log(f"Independent extraction verification unavailable: {exc}", level="warning")
+                break
+            if checked.score >= 7:
+                assessments = checked.primary_analysis_alignment
+                checked_rows = snapshot
+                break
+            if round_index + 1 < MAX_CHECK_ROUNDS:
+                extracted = self._refine_extraction(content, extracted, checked, protocol)
+                for outcome in extracted.outcomes:
+                    outcome.primary_analysis_alignment = None
+                self._validate_source_quotes(extracted, content, parsed.get("page_map", []))
+                for outcome in extracted.outcomes:
+                    recover_denominators_from_percentages(outcome)
+                self._finalize_outcome_review_fields(extracted, protocol)
+        try:
+            if source_before is not None and _read_scoped(project, relative_source) != source_before:
+                raise ValueError("Source changed during independent verification")
+            record_checked_alignments(project, protocol, extracted, assessments,
+                                      source_text=content, source_path=source_path, checked_rows=checked_rows,
+                                      expected_source_sha256=hashlib.sha256(source_before).hexdigest() if source_before is not None else None,
+                                      assessor_id=self.llm.model)
+        except (OSError, ValueError) as exc:
+            self.log(f"Alignment source cannot be verified: {exc}", level="warning")
+            for outcome in extracted.outcomes:
+                outcome.primary_analysis_alignment = None
+        return extracted
 
     def _refine_extraction(
         self, paper_content: str, current: ExtractedStudy,
@@ -649,6 +726,7 @@ class DataExtractionAgent(BaseAgent):
                     "title": c.title,
                     "outcome_name": outcome.outcome_name,
                     "outcome_type": outcome.outcome_type,
+                    "primary_analysis_alignment": outcome.primary_analysis_alignment.model_dump(mode="json") if outcome.primary_analysis_alignment else None,
                     "value_summary": cls._outcome_value_summary(outcome),
                     "source_location": outcome.source_location,
                     "source_page": outcome.source_page,

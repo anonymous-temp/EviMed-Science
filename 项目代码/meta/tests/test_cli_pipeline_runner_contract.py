@@ -48,5 +48,6 @@ def test_cli_main_has_no_inline_primary_effect_selector() -> None:
     source = inspect.getsource(main_module.main)
 
     assert "_compute_cli_primary_effect_selection(" in source
-    assert "selection_result.data[\"effects\"]" in source
+    assert "_require_cli_primary_selection(project, selection_result)" in source
+    assert "selection_result.data[\"effects\"]" not in source
     assert "primary_candidates = []" not in source

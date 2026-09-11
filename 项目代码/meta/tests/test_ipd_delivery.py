@@ -86,6 +86,9 @@ def test_ipd_has_complete_dataset_to_article_delivery(tmp_path: Path) -> None:
     assert plan.capability_status.value == "production"
     assert plan.execution_allowed is True
     assert phase.status.value == "succeeded"
+    assert phase.data["primary_alignment_scope"] == "direct_ipd_dataset_contract"
+    from new_meta.core.primary_analysis_alignment import require_current_compiled_alignment
+    require_current_compiled_alignment(project)
 
     certainty_draft = build_method_certainty_draft(project)
     assert certainty_draft.status is MethodCertaintyStatus.NEEDS_INPUT
@@ -172,3 +175,20 @@ def test_ipd_json_cli_shape_loads_studies_and_model_options(tmp_path: Path) -> N
     assert len(records) == 4
     assert outcome_type == "continuous"
     assert options == {"covariates": ["baseline"], "effect_modifier": "baseline"}
+
+
+
+def test_ipd_family_label_and_invalid_import_provenance_do_not_bypass_alignment(tmp_path, monkeypatch):
+    from new_meta.core.method_executor import MethodExecutor
+    project = Project("counterfeit IPD provenance", output_dir=tmp_path)
+    protocol = _protocol()
+    ingest_ipd_studies_to_ledger(project, protocol=protocol, records=_records())
+    compile_project_method_plan(project, protocol, enforce=True)
+    report = project.load_json("ipd_ingestion.json", subdir="evidence")
+    report["dataset_sha256"] = "0" * 64
+    project.save_json("ipd_ingestion.json", report, subdir="evidence")
+    monkeypatch.setattr(MethodExecutor, "execute_project", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Counterfeit IPD must not execute")))
+    phase = PipelineRunner(project).run_compiled_method_synthesis()
+    assert phase.status.value == "needs_input"
+    assert phase.error_code == "primary_analysis_alignment_required"
+    assert not project.get_path("synthesis_result.json", subdir="analysis").exists()

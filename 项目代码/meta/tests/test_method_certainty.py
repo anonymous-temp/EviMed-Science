@@ -62,7 +62,10 @@ def _prepared_project(tmp_path: Path):
     ]
     migration = migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     compile_project_method_plan(project, protocol, enforce=True)
-    PipelineRunner(project).run_compiled_method_synthesis()
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
+    synthesis = PipelineRunner(project).run_compiled_method_synthesis()
+    assert synthesis.status.value == "succeeded"
     assessments = [
         ResultRoBAssessment(
             assessment_id=f"rob:{result_id}:complete",

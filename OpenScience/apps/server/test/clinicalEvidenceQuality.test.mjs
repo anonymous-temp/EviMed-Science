@@ -508,6 +508,49 @@ test("matches source quotes across typographic quote styles and accepts a comple
   assert.equal(result.valid, true, result.issues.join("\n"));
 });
 
+test("source quotations preserve whole numeric and word tokens", () => {
+  const cases = [
+    ["All participants received 250 mg daily versus placebo for one year.", "50 mg daily versus placebo for one year."],
+    ["All participants received 0.5 mg daily versus placebo for one year.", "5 mg daily versus placebo for one year."],
+    ["The observed change was -5 units after one year.", "The observed change was 5 units after one year."],
+    ["The estimated ratio was 1.25 in the trial.", "The estimated ratio was 1.2"],
+    ["The observed concentration was 2.5 mg in the specimen.", "The observed concentration was 25 mg in the specimen."],
+    ["A notable response was observed in the study.", "A not able response was observed in the study."],
+    ["A biomarker increased during follow-up.", "marker increased during follow-up."],
+    ["The reduction was >50% in the cohort.", "50% in the cohort."],
+    ["The measured limit was ≤50 mg in the cohort.", "50 mg in the cohort."],
+    ["The variation was ±5 units in the cohort.", "5 units in the cohort."],
+    ["The variation was +/-5 units in the cohort.", "-5 units in the cohort."],
+    ["The proportion was 1/5 in the cohort.", "5 in the cohort."],
+    ["The interval was 1–5 units in the cohort.", "5 units in the cohort."],
+    ["The count was 10³ cells per mL in the cohort.", "The count was 103 cells per mL in the cohort."],
+    ["The count was 10^3 cells per mL in the cohort.", "3 cells per mL in the cohort."],
+    ["The count was 2 × 10^3 cells per mL in the cohort.", "3 cells per mL in the cohort."],
+    ["The count was 2 × 10^3 cells per mL in the cohort.", "10^3 cells per mL in the cohort."],
+    ["The effect was:\n- 5 units at one year.", "5 units at one year."],
+    ["The participant's height was 5'3\" in the cohort.", "The participant's height was 53 in the cohort."],
+    ["The dose was ½ mg daily for one year.", "2 mg daily for one year."],
+    ["The count was １０³ cells per mL in the cohort.", "The count was 103 cells per mL in the cohort."],
+    ["The count was 10**3 cells per mL in the cohort.", "3 cells per mL in the cohort."],
+    ["The hazard ratio was ≠1 in this cohort.", "1 in this cohort."],
+    ["The count was 10 ⁻³ cells per mL in the cohort.", "The count was 10 −3 cells per mL in the cohort."],
+    ["The measured angle was 5‴ in this experiment.", "The measured angle was 5″"],
+    ["The measured angle was 5''' in this experiment.", "The measured angle was 5''"],
+    ["The reduction was 50 % in the cohort.", "The reduction was 50"],
+    ["The measured value was 5 ± 1 units in the cohort.", "The measured value was 5"],
+    ["The measured value was 5 +/- 1 units in the cohort.", "The measured value was 5"],
+  ];
+  for (const [source, quote] of cases) {
+    const input = validPackage();
+    input.sourceArtifacts[".evimed-sources/a/page.md"] += `\n${source}`;
+    input.matrix.claims[0].supportQuote = quote;
+    const issues = validateClinicalEvidencePackage(input).issues.join("\n");
+    assert.match(issues, /supportQuote (?:was not found|joins two passages)/, `${JSON.stringify(quote)} is not a faithful quotation of ${JSON.stringify(source)}`);
+    input.matrix.claims[0].supportQuote = source;
+    assert.doesNotMatch(validateClinicalEvidencePackage(input).issues.join("\n"), /supportQuote (?:was not found|joins two passages)/, "the complete source remains a valid quotation");
+  }
+});
+
 test("extractor artefacts in the artifact do not hide a quote that is really there", () => {
   const input = validPackage();
   // A PDF extractor spaces out CJK runs and leaves soft hyphens behind; both are

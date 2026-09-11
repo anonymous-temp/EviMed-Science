@@ -310,6 +310,32 @@ def incidence_rate_ratio(events_i: int, pyears_i: float, events_c: int, pyears_c
     return log_irr, vi
 
 
+class EffectInputMismatch(ValueError):
+    """A typed source value cannot be used for the requested effect measure."""
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        super().__init__(message + " Adjudicate the source effect type and measure before pooling.")
+
+
+def _require_reported_measure(reported: str, requested: str, scale: str) -> None:
+    if not reported:
+        raise EffectInputMismatch(
+            "reported_effect_measure_required",
+            "The generic reported effect has no declared measure.",
+        )
+    if reported != requested:
+        raise EffectInputMismatch(
+            "reported_effect_measure_mismatch",
+            f"The reported effect measure {reported!r} does not match requested {requested!r}.",
+        )
+    if scale != "original":
+        raise EffectInputMismatch(
+            "reported_effect_scale_requires_adjudication",
+            f"The generic reported effect scale {scale!r} is not supported by this original-scale conversion.",
+        )
+
+
 def compute_effect_size(
     outcome_type: str,
     effect_measure: str,
@@ -334,6 +360,8 @@ def compute_effect_size(
     correlation_r: float = None, correlation_n: int = None,
     # Incidence rate
     pyears_i: float = None, pyears_c: float = None,
+    reported_effect_measure: str = "",
+    reported_effect_scale: str = "original",
 ) -> tuple[float, float]:
     """Unified interface to compute (yi, vi) for a study.
 
@@ -343,12 +371,36 @@ def compute_effect_size(
     Tries raw data first; falls back to pre-computed effect + CI/p-value.
     """
     log_measures = {"OR", "RR", "HR", "IRR"}
+    outcome_type = str(outcome_type or "").strip().lower().replace("-", "_")
+    effect_measure = str(effect_measure or "").strip().upper()
+    reported_effect_measure = str(reported_effect_measure or "").strip().upper()
+    compatible_measures = {
+        "dichotomous": {"OR", "RR", "RD", "IRR"},
+        "binary": {"OR", "RR", "RD", "IRR"},
+        "continuous": {"MD", "SMD"},
+        "time_to_event": {"HR"},
+        "proportion": {"PROP"},
+        "correlation": {"COR"},
+        "count": {"IRR"},
+        "incidence_rate": {"IRR"},
+    }
+    if outcome_type not in compatible_measures:
+        raise EffectInputMismatch(
+            "outcome_type_requires_adjudication",
+            f"Outcome type {outcome_type!r} is not a supported typed input.",
+        )
+    if effect_measure not in compatible_measures[outcome_type]:
+        raise EffectInputMismatch(
+            "outcome_type_measure_mismatch",
+            f"Outcome type {outcome_type!r} is incompatible with requested measure {effect_measure!r}.",
+        )
 
     # Time-to-event: Hazard Ratio
-    if outcome_type == "time-to-event" or effect_measure == "HR":
+    if effect_measure == "HR":
         if hr is not None:
             return hazard_ratio(hr, hr_ci_lower, hr_ci_upper, hr_se, p_value)
         if effect is not None and effect > 0:
+            _require_reported_measure(reported_effect_measure, effect_measure, reported_effect_scale)
             return hazard_ratio(effect, ci_lower, ci_upper, None, p_value)
 
     # Proportion (single-arm, Freeman-Tukey)
@@ -369,7 +421,7 @@ def compute_effect_size(
             return incidence_rate_ratio(events_i, pyears_i, events_c, pyears_c)
 
     # Try computation from raw data
-    if outcome_type == "dichotomous" and all(v is not None for v in [events_i, total_i, events_c, total_c]):
+    if outcome_type in {"dichotomous", "binary"} and all(v is not None for v in [events_i, total_i, events_c, total_c]):
         a, b = events_i, total_i - events_i
         c, d = events_c, total_c - events_c
         try:
@@ -411,6 +463,7 @@ def compute_effect_size(
 
     # Fallback: use pre-computed effect size + CI or p-value
     if effect is not None:
+        _require_reported_measure(reported_effect_measure, effect_measure, reported_effect_scale)
         is_log = effect_measure in log_measures
         if is_log and effect <= 0:
             raise ValueError(f"Effect size must be positive for {effect_measure}, got {effect}")

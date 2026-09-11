@@ -119,6 +119,8 @@ def _prepared_project(tmp_path: Path, selected_studies=None):
         studies = [studies[index] for index in selected_studies]
     migration = migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     phase = PipelineRunner(project).run_compiled_method_synthesis()
     return project, protocol, studies, migration, plan, phase
 
@@ -248,6 +250,8 @@ def test_extracted_shared_control_arms_recompile_and_execute_complex_route(tmp_p
     project.save_json("protocol.json", protocol)
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     phase = PipelineRunner(project).run_compiled_method_synthesis(auto_select_ambiguous=True)
 
     assert report["multi_arm_studies"] == ["M1"]

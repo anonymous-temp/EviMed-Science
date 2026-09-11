@@ -18,14 +18,18 @@ const tlsTargetsFile = path.join(targetsDir, "tls.json");
 
 const checkOnly = process.argv.includes("--check");
 const probeOnly = process.argv.includes("--probe");
+const prepareReaders = process.argv.includes("--prepare-container-secrets");
 const jsonOutput = process.argv.includes("--json");
 
-const files = {
-  metricsToken: path.join(outputDir, "operator-metrics-token.txt"),
-  prometheusMetricsToken: path.join(outputDir, "prometheus-operator-metrics-token.txt"),
-  grafanaPassword: path.join(outputDir, "grafana-admin-password.txt"),
-  alertmanager: path.join(outputDir, "alertmanager.json"),
-};
+function monitoringFiles(directory) {
+  return {
+    metricsToken: path.join(directory, "operator-metrics-token.txt"),
+    prometheusMetricsToken: path.join(directory, "prometheus-operator-metrics-token.txt"),
+    grafanaPassword: path.join(directory, "grafana-admin-password.txt"),
+    alertmanager: path.join(directory, "alertmanager.json"),
+  };
+}
+const files = monitoringFiles(outputDir);
 
 function fail(code, message) {
   const err = new Error(message);
@@ -73,7 +77,7 @@ function validateWebhook(value) {
 
 async function assertNoSymlinkPath(target, { allowMissingTail = false } = {}) {
   let current = path.resolve(target);
-  while (true) {
+  for (;;) {
     let stat;
     try {
       stat = await fsp.lstat(current);
@@ -87,7 +91,9 @@ async function assertNoSymlinkPath(target, { allowMissingTail = false } = {}) {
       throw err;
     }
     if (stat.isSymbolicLink()) fail("monitoring_path_symlink", "Monitoring secret paths must not contain symbolic links.");
-    return;
+    const parent = path.dirname(current);
+    if (parent === current) return;
+    current = parent;
   }
 }
 
@@ -223,11 +229,11 @@ async function writeTlsTargets() {
   await fsp.chmod(tlsTargetsFile, 0o644);
 }
 
-async function check() {
-  await assertNoSymlinkPath(outputDir);
-  const metricsToken = (await readRegularFile(files.metricsToken)).replace(/\r?\n$/, "");
-  const prometheusMetricsToken = (await readRegularFile(files.prometheusMetricsToken)).replace(/\r?\n$/, "");
-  const grafanaPassword = (await readRegularFile(files.grafanaPassword)).replace(/\r?\n$/, "");
+async function check(secretFiles = files, targetsFile = tlsTargetsFile, readFile = readRegularFile) {
+  await assertNoSymlinkPath(path.dirname(secretFiles.metricsToken));
+  const metricsToken = (await readFile(secretFiles.metricsToken)).replace(/\r?\n$/, "");
+  const prometheusMetricsToken = (await readFile(secretFiles.prometheusMetricsToken)).replace(/\r?\n$/, "");
+  const grafanaPassword = (await readFile(secretFiles.grafanaPassword)).replace(/\r?\n$/, "");
   validateSecret(metricsToken, "Metrics token", 32);
   validateSecret(prometheusMetricsToken, "Prometheus metrics token", 32);
   if (prometheusMetricsToken !== metricsToken) {
@@ -236,7 +242,7 @@ async function check() {
   validateSecret(grafanaPassword, "Grafana password", 24);
   let config;
   try {
-    config = JSON.parse(await readRegularFile(files.alertmanager));
+    config = JSON.parse(await readFile(secretFiles.alertmanager));
   } catch (err) {
     if (err?.code) throw err;
     fail("alertmanager_config_invalid", "alertmanager.json must contain valid JSON-compatible YAML.");
@@ -252,7 +258,7 @@ async function check() {
   // Prometheus reports once per refresh interval and nowhere a person looks.
   let tlsTargets;
   try {
-    tlsTargets = JSON.parse(await readRegularFile(tlsTargetsFile, 16 * 1024, false));
+    tlsTargets = JSON.parse(await readFile(targetsFile, 16 * 1024, false));
   } catch (err) {
     if (err?.code === "monitoring_file_missing" || err?.code === "ENOENT") {
       fail("tls_targets_missing", "monitoring/targets/tls.json is missing; run configure:monitoring.");
@@ -269,6 +275,80 @@ async function check() {
     }
   }
   return { receiverName: receiver.name, webhookUrl, tlsTargets: tlsTargets[0].targets.length };
+}
+
+/** Prepare existing 0600 bind-mounted files for their fixed container readers.
+ * Run explicitly as the Linux host operator after generation and before Compose.
+ * Grafana retains its existing file group: UID 472 alone is the image contract.
+ * This never rewrites credentials or changes a data directory's ownership. */
+export async function prepareContainerSecrets({
+  directory = outputDir,
+  targetsFile = tlsTargetsFile,
+  platform = process.platform,
+  uid = process.getuid?.(),
+  openFile = fsp.open,
+} = {}) {
+  if (platform !== "linux" || uid !== 0) {
+    fail("monitoring_prepare_requires_root_linux", "Preparing container secret readers requires the Linux host operator (UID 0).");
+  }
+  const secretFiles = monitoringFiles(path.resolve(directory));
+  const readers = [["metricsToken", 0, 0], ["prometheusMetricsToken", 65534, 65534],
+    ["grafanaPassword", 472, -1], ["alertmanager", 65534, 65534]];
+  const opened = new Map();
+  const assertMetadata = (stat) => {
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size <= 0 || stat.size > 16 * 1024) {
+      fail("monitoring_prepare_file_invalid", "Container secret files must be nonempty, regular, and have one link.");
+    }
+    if ((stat.mode & 0o7777) !== 0o600) {
+      fail("monitoring_file_permissions", "Container secret files must retain exact mode 0600.");
+    }
+  };
+  try {
+    for (const file of Object.values(secretFiles)) {
+      await assertNoSymlinkPath(file);
+      const handle = await openFile(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      opened.set(file, { handle });
+      const before = await handle.stat();
+      assertMetadata(before);
+      const bytes = Buffer.alloc(before.size);
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      const after = await handle.stat();
+      if (bytesRead !== bytes.length || before.dev !== after.dev || before.ino !== after.ino
+          || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+        fail("monitoring_prepare_file_changed", "A container secret changed while being validated.");
+      }
+      opened.set(file, { handle, bytes, before });
+    }
+    // Complete all content validation before assigning any reader.
+    await check(secretFiles, targetsFile, async (file, ...options) => (
+      opened.has(file) ? opened.get(file).bytes.toString("utf8") : readRegularFile(file, ...options)
+    ));
+    const prepared = [];
+    for (const [key, readerUid, readerGid] of readers) {
+      const file = secretFiles[key];
+      const { handle, bytes, before } = opened.get(file);
+      const current = await fsp.lstat(file);
+      const held = await handle.stat();
+      if (current.dev !== before.dev || current.ino !== before.ino || current.isSymbolicLink()
+          || held.mtimeMs !== before.mtimeMs || held.ctimeMs !== before.ctimeMs || held.size !== before.size) {
+        fail("monitoring_prepare_file_changed", "A container secret changed before its reader was assigned.");
+      }
+      await handle.chown(readerUid, readerGid);
+      const after = await handle.stat();
+      assertMetadata(after);
+      const preserved = Buffer.alloc(bytes.length);
+      const { bytesRead } = await handle.read(preserved, 0, preserved.length, 0);
+      if (after.uid !== readerUid || after.gid !== (readerGid === -1 ? before.gid : readerGid)
+          || bytesRead !== bytes.length || !preserved.equals(bytes)) {
+        fail("monitoring_prepare_verification_failed", "Container reader preparation did not preserve the private file contract.");
+      }
+      prepared.push({ file: path.basename(file), uid: after.uid, gid: after.gid, mode: "0600" });
+    }
+    await check(secretFiles, targetsFile);
+    return prepared;
+  } finally {
+    await Promise.allSettled([...opened.values()].map(({ handle }) => handle.close()));
+  }
 }
 
 export async function probeAlertDelivery({ webhookUrl, receiverName, fetchImpl = fetch }) {
@@ -337,7 +417,11 @@ export async function probeAlertDelivery({ webhookUrl, receiverName, fetchImpl =
 
 async function main() {
   let checked;
-  if (checkOnly || probeOnly) checked = await check();
+  let readers;
+  if (prepareReaders) {
+    if (checkOnly || probeOnly) fail("monitoring_mode_conflict", "Container secret preparation must be requested on its own.");
+    readers = await prepareContainerSecrets();
+  } else if (checkOnly || probeOnly) checked = await check();
   else {
     await generate();
     checked = await check();
@@ -345,9 +429,10 @@ async function main() {
   if (probeOnly) await probeAlertDelivery(checked);
   const result = {
     ok: true,
-    mode: probeOnly ? "probe" : checkOnly ? "check" : "generate",
+    mode: prepareReaders ? "prepare-container-secrets" : probeOnly ? "probe" : checkOnly ? "check" : "generate",
     directory: outputDir,
     files: Object.values(files).map((file) => path.basename(file)),
+    ...(readers ? { readers } : {}),
   };
   process.stdout.write(jsonOutput ? `${JSON.stringify(result)}\n` : `monitoring configuration ${result.mode} ok: ${outputDir}\n`);
 }

@@ -128,6 +128,8 @@ def _oe_project(tmp_path: Path):
 def _deliver(tmp_path: Path, *, auto: bool, lang: str = "en"):
     project, protocol, studies, assessments, migration = _oe_project(tmp_path)
     plan = compile_project_method_plan(project, protocol, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     delivery = run_method_delivery(
         project=project,
         protocol=protocol,

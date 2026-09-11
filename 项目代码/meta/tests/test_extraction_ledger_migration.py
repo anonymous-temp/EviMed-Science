@@ -211,6 +211,8 @@ def test_data_extraction_persists_legacy_and_ledger_views(
         lambda paper, parsed, protocol, project: study,
     )
 
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(score=9))
     results = agent.run(
         [{"pmid": "12345", "title": "Primary randomized trial"}],
         {"12345": {"full_text": "Mortality was 10/100 versus 20/100."}},

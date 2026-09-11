@@ -88,13 +88,16 @@ def test_method_execution_maps_to_review_family_neutral_synthesis_envelope() -> 
 def test_pipeline_runner_executes_compiled_method_from_verified_ledger(tmp_path: Path) -> None:
     project = Project("prevalence synthesis", output_dir=tmp_path / "project")
     protocol = _protocol()
+    studies = _studies()
     migration = migrate_extractions_to_ledger(
         project,
         protocol=protocol,
-        extracted_studies=_studies(),
+        extracted_studies=studies,
     )
     compile_project_method_plan(project, protocol, allow_validating=True, enforce=True)
 
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     result = PipelineRunner(project).run_compiled_method_synthesis(options={"model": "random"})
 
     assert result.phase is PhaseName.SYNTHESIS
@@ -108,7 +111,7 @@ def test_pipeline_runner_executes_compiled_method_from_verified_ledger(tmp_path:
 
     facts = build_manuscript_facts(
         protocol=protocol,
-        extracted_studies=_studies(),
+        extracted_studies=studies,
         project=project,
     )
     assert facts["report_type"] == "meta"
