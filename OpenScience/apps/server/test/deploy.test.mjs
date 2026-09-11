@@ -1474,9 +1474,8 @@ test("the entrypoint places --patch before the web app's own arguments", async (
   assert.ok(noOpenIndex >= 0);
   assert.ok(patchIndex < noOpenIndex, "--patch (a launcher flag) must precede --no-open (the web app's own flag)");
 
-  // And it is conditional: a deployment with the DeepSeek provider disabled
-  // never has `syncRuntimeDshProfile` write a patch file, so the entrypoint
-  // must not hand `dsh` a `--patch` pointed at a file that was never written.
+  // Standalone image inspection may have no control-plane patch. Managed
+  // runtimes always write one, even with the model provider disabled.
   assert.match(entrypoint, /\[ -f "\$\{patch_file\}" \]/);
 });
 

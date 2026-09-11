@@ -458,7 +458,9 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
     req.once("aborted", onAborted);
     res.once("close", onResponseClose);
     try {
-      if (!config.deepseekApiKey) {
+      // Platform tokens also authorize public-source retrieval. A live token
+      // and a loaded provider key must not override an explicit provider stop.
+      if (config.deepseekProviderEnabled === false || !config.deepseekApiKey) {
         throw gatewayError(503, "model_gateway_unavailable", "The model gateway is not configured.");
       }
       const token = bearerToken(req);

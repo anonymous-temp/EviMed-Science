@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { parse } from "yaml";
 import { loadConfig } from "../src/config.mjs";
 import { runtimeEnvironment } from "../src/dshProfilePatch.mjs";
 import {
@@ -418,13 +419,70 @@ test("syncRuntimeDshProfile places --patch's target under $DSH_HOME, matching wh
   assert.match(patch, /EVIMED_WORKLOAD_TOKEN_FILE: '\/runtime\/dsh-home\/evimed-workload\.token'/);
 });
 
-test("syncRuntimeDshProfile does nothing when the DeepSeek provider is disabled", async (t) => {
+test("a disabled provider still bootstraps authenticated EviMed sessions and platform tokens", async (t) => {
   const { rootDir, project, plan } = await dshFixture();
   t.after(() => rm(rootDir, { recursive: true, force: true }));
-  const result = await syncRuntimeDshProfile(dshFixtureConfig({ deepseekProviderEnabled: false }), project, plan);
-  assert.equal(result.configured, false);
+  const config = dshFixtureConfig({ deepseekProviderEnabled: false, deepseekApiKey: "must-never-be-written" });
+  await mkdir(plan.dshHomeDir, { recursive: true, mode: 0o755 });
+  const result = await syncRuntimeDshProfile(config, project, plan);
+  assert.equal(result.configured, true, "configured describes the common profile and MCP bootstrap");
+  assert.equal(result.providerConfigured, false);
+  assert.equal((await stat(plan.dshHomeDir)).mode & 0o777, 0o700);
+  const patchFile = path.join(plan.dshHomeDir, "control-plane-patch.yml");
+  const credentialsFile = path.join(plan.dshHomeDir, ".credentials.yaml");
+  const patchText = await readFile(patchFile, "utf8");
+  const rows = parse(patchText);
+  const row = (id) => rows.find((entry) => entry.id === id);
+  assert.equal(row("agent-presets").config.default, "evimed-universal");
+  assert.deepEqual(row("agent-presets").config.roots, [{ path: "/opt/evimed/dsh/presets", trust: "system" }]);
+  assert.equal(row("session-persistence-jsonl").config.root, "/runtime/dsh-home/sessions");
+  assert.equal(row("session-telemetry-otel").disabled, true);
+  assert.equal(row("approval").config.policy, "never");
+  assert.deepEqual(row("permission").config.presets["evimed-hosted"].sandbox, "workspace-write");
+  assert.equal(row("evimed-seam-probe").config.requiredEnforcement, "full");
+  assert.equal(row("llm-deepseek").config.baseURL, config.modelGatewayInternalUrl);
+  assert.equal(row("llm-deepseek").config.apiKeyEnv, "EVIMED_WORKLOAD_TOKEN");
+  const mcp = rows.flatMap((entry) => entry.insert ?? []).find((entry) => entry.id === "mcp-evimed");
+  assert.equal(mcp.config.failOnStartupError, true);
+  assert.equal(mcp.config.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE, "/runtime/dsh-home/model-gateway.token");
+  assert.equal(mcp.config.env.EVIMED_WORKLOAD_TOKEN_FILE, "/runtime/dsh-home/evimed-workload.token");
+  const credentialsText = await readFile(credentialsFile, "utf8");
+  const credentials = parse(credentialsText);
+  assert.equal(credentials.records["client-connection/browser-session"].payload.secret, result.browserSessionSecret);
+  assert.equal(Buffer.from(result.browserSessionSecret, "base64url").length, 32);
+  assert.equal(credentials.refs.EVIMED_WORKLOAD_TOKEN, undefined, "a disabled provider receives no LLM credential");
+  const tokenFile = path.join(plan.dshHomeDir, modelGatewayTokenFileName);
+  assert.equal((await readFile(tokenFile, "utf8")).trim(), result.token);
+  assert.equal(verifyModelGatewayRuntimeToken(result.token, { secret, userId: project.userId, projectId: project.id }).jti, result.payload.jti);
+  assert.ok(result.workloadTokenFile);
+  assert.ok(result.workloadTokenRefreshMs > 0);
+  for (const file of [patchFile, credentialsFile, tokenFile, result.workloadTokenFile]) {
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+    assert.equal((await readFile(file, "utf8")).includes("must-never-be-written"), false);
+  }
+});
+
+test("an unsigned disabled-provider bootstrap clears old credentials without advertising missing token files", async (t) => {
+  const { rootDir, project, plan } = await dshFixture();
+  t.after(() => rm(rootDir, { recursive: true, force: true }));
+  const first = await syncRuntimeDshProfile(dshFixtureConfig(), project, plan);
+  const result = await syncRuntimeDshProfile(dshFixtureConfig({
+    deepseekProviderEnabled: false, modelGatewaySigningSecret: "", evimedWorkloadSigningSecret: "",
+  }), project, plan);
+  assert.equal(result.configured, true);
+  assert.equal(result.providerConfigured, false);
+  assert.equal(result.token, null);
+  assert.equal(result.payload, null);
   assert.equal(result.workloadTokenFile, null);
-  await assert.rejects(readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml")), { code: "ENOENT" });
+  assert.equal(result.workloadTokenRefreshMs, null);
+  assert.notEqual(result.browserSessionSecret, first.browserSessionSecret);
+  const credentials = parse(await readFile(path.join(plan.dshHomeDir, ".credentials.yaml"), "utf8"));
+  assert.deepEqual(credentials.refs, {});
+  const patch = await readFile(path.join(plan.dshHomeDir, "control-plane-patch.yml"), "utf8");
+  assert.doesNotMatch(patch, /EVIMED_(?:MODEL_GATEWAY|WORKLOAD)_TOKEN_FILE:/);
+  for (const name of [modelGatewayTokenFileName, "evimed-workload.token"]) {
+    assert.equal(await readFile(path.join(plan.dshHomeDir, name), "utf8"), "", "stale signed tokens are cleared on restart");
+  }
 });
 
 test("the two runtime capability settings reach the container, and the default does not change what ships", async (t) => {

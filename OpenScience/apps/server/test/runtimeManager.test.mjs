@@ -126,21 +126,65 @@ async function fakeDockerProfileOrderBin(root) {
   const bin = path.join(root, "docker-profile-order-stub.mjs");
   await writeFile(
     bin,
-    `#!/usr/bin/env node
+    String.raw`#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import http from "node:http";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { parse } from ${JSON.stringify(import.meta.resolve("yaml"))};
 
 const args = process.argv.slice(2);
 if (args[0] === "rm") {
-  process.stderr.write("Error: No such container: " + args[2] + "\\n");
+  process.stderr.write("Error: No such container: " + args[2] + "\n");
   process.exit(1);
 }
 if (args[0] !== "run") process.exit(2);
 const mount = args.find((arg) => arg.includes(",dst=/runtime"));
 const runtimeRoot = mount.slice(mount.indexOf("src=") + 4, mount.indexOf(",dst="));
 const patch = path.join(runtimeRoot, "dsh-home", "control-plane-patch.yml");
-fs.writeFileSync(process.env.RUNTIME_ORDER_LOG, fs.existsSync(patch) ? "present" : "absent");
-process.exit(0);
+const credentials = path.join(runtimeRoot, "dsh-home", ".credentials.yaml");
+const present = fs.existsSync(patch) && fs.existsSync(credentials);
+fs.writeFileSync(process.env.RUNTIME_ORDER_LOG, present ? "present" : "absent");
+if (!present) process.exit(0);
+const rows = parse(fs.readFileSync(patch, "utf8"));
+const preset = rows.find((row) => row.id === "agent-presets").config;
+if (preset.default !== "evimed-universal" || !preset.roots.length) process.exit(3);
+if (!rows.flatMap((row) => row.insert ?? []).some((row) => row.id === "mcp-evimed")) process.exit(4);
+const store = parse(fs.readFileSync(credentials, "utf8"));
+const secret = Buffer.from(store.records["client-connection/browser-session"].payload.secret, "base64url");
+if (secret.length !== 32) process.exit(5);
+const socketPath = path.join(runtimeRoot, "control", "dsh.sock");
+const sessions = [];
+function authenticated(req) {
+  const name = "dsh-auth-" + createHash("sha256").update(req.headers.host).digest("base64url");
+  const value = String(req.headers.cookie ?? "").split("; ").find((part) => part.startsWith(name + "="))?.slice(name.length + 1);
+  if (!value) return false;
+  const [version, body, signature] = value.split(".");
+  if (version !== "v1" || !body || !signature) return false;
+  const expected = createHmac("sha256", secret).update(body).digest();
+  const actual = Buffer.from(signature, "base64url");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return false;
+  const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  return payload.authority === req.headers.host && payload.version === 1 && payload.expiresAt > Date.now();
+}
+const server = http.createServer(async (req, res) => {
+  if (!authenticated(req)) { req.resume(); res.writeHead(401); res.end(); return; }
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const envelope = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  let value;
+  if (req.url === "/api/session/create") {
+    const request = envelope.payload.args.request;
+    if (request.agentPreset !== preset.default) { res.writeHead(400); res.end(); return; }
+    value = { sessionId: "authenticated-session" };
+    sessions.push({ ...value, running: false });
+  } else if (req.url === "/api/session/list") value = { items: sessions };
+  else { res.writeHead(404); res.end(); return; }
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify({ type: "server-response", result: { ok: true, value } }));
+});
+process.on("SIGTERM", () => server.close(() => { fs.rmSync(socketPath, { force: true }); process.exit(0); }));
+server.listen(socketPath);
 `,
     { mode: 0o755 },
   );
@@ -593,6 +637,9 @@ test("RuntimeManager starts and stops a volume-backed Docker runtime over a Unix
   process.env.FAKE_VOLUME_ROOT = dataDir;
   const manager = new RuntimeManager({
     dataDir,
+    deepseekProviderEnabled: false,
+    deepseekModel: "deepseek-v4-pro",
+    modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
     production: false,
     runtimeMode: "kernel",
     runtimeSandboxMode: "docker",
@@ -1066,7 +1113,8 @@ test("RuntimeManager records cleanup failure and stops before bootstrap or spawn
   }
 });
 
-test("RuntimeManager writes the generated profile before the container is started", async () => {
+for (const providerEnabled of [true, false]) {
+test(`RuntimeManager bootstraps authenticated sessions before startup with provider enabled=${providerEnabled}`, async () => {
   // The retired kernel read its specialty packages out of a per-project config
   // tree that had to be materialized before it spawned, and this test watched
   // that ordering. Nothing is copied per project any more -- the image carries
@@ -1105,10 +1153,11 @@ test("RuntimeManager writes the generated profile before the container is starte
     runtimeMemoryLimit: "1g",
     runtimePidsLimit: 64,
     allowRuntimeHostNetwork: false,
-    runtimeProxyConnectTimeoutMs: 1_000,
-    runtimeReadyTimeoutMs: 1_000,
+    runtimeProxyConnectTimeoutMs: 3_000,
+    runtimeReadyTimeoutMs: 3_000,
+    maxJsonBytes: 1024 * 1024,
     maxLogFileBytes: 1024 * 1024,
-    deepseekProviderEnabled: true,
+    deepseekProviderEnabled: providerEnabled,
     deepseekModel: "deepseek-v4-pro",
     modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1",
     modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes",
@@ -1117,9 +1166,20 @@ test("RuntimeManager writes the generated profile before the container is starte
     runtimeSandboxEnforcement: "full",
   });
   try {
-    // The stub exits as soon as it has answered the question, so the start
-    // itself fails -- that is the container dying, not the ordering.
-    await assert.rejects(() => manager.startKernel(runtimeProject), (error) => error?.code === "runtime_exited");
+    const runtime = await manager.start(runtimeProject);
+    assert.ok(runtime.cookie, "the real startup path must mint a cookie from the credentials it wrote");
+    const unauthenticated = await requestRuntime(runtime, `${runtime.url}/api/session/list`, { method: "POST" });
+    assert.equal(unauthenticated.status, 401, "the fake kernel must refuse a probe that sends no cookie");
+    await unauthenticated.body?.cancel();
+    const wrongCookie = await requestRuntime(runtime, `${runtime.url}/api/session/list`, { method: "POST", headers: { cookie: "dsh-auth-wrong=v1.invalid.invalid" } });
+    assert.equal(wrongCookie.status, 401);
+    await wrongCookie.body?.cancel();
+    const session = await manager.createRuntimeSession(runtimeProject);
+    assert.equal(session.id, "authenticated-session");
+    assert.equal(await manager.sessionStatus(runtimeProject, session.id), "idle");
+    assert.equal(manager.assertActiveModelGatewayToken(runtime.modelGatewayToken).jti, runtime.modelGatewayTokenJti);
+    await manager.stop(runtimeProject);
+    assert.throws(() => manager.assertActiveModelGatewayToken(runtime.modelGatewayToken), (error) => error?.code === "model_gateway_token_invalid");
     assert.equal(
       await readFile(orderLog, "utf8"),
       "present",
@@ -1144,7 +1204,9 @@ test("RuntimeManager writes the generated profile before the container is starte
     assert.equal(await readFile(orderLog, "utf8"), "absent");
     const dshHome = path.join(runtimeProject.runtimeDir, "container-runtime", "dsh-home");
     assert.match(await readFile(path.join(dshHome, "control-plane-patch.yml"), "utf8"), /baseURL: /);
-    assert.match(await readFile(path.join(dshHome, ".credentials.yaml"), "utf8"), /EVIMED_WORKLOAD_TOKEN: /);
+    const credentials = await readFile(path.join(dshHome, ".credentials.yaml"), "utf8");
+    assert.match(credentials, /client-connection\/browser-session:/);
+    assert.equal(credentials.includes("EVIMED_WORKLOAD_TOKEN:"), providerEnabled);
   } finally {
     if (previousOrderLog == null) delete process.env.RUNTIME_ORDER_LOG;
     else process.env.RUNTIME_ORDER_LOG = previousOrderLog;
@@ -1152,6 +1214,7 @@ test("RuntimeManager writes the generated profile before the container is starte
     await rm(tmp, { recursive: true, force: true });
   }
 });
+}
 
 test("runtime guard stops await one terminal AgentRun transition and history monitoring never wakes a stopped runtime", async () => {
   for (const scenario of [

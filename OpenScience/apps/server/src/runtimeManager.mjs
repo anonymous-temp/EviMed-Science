@@ -1542,7 +1542,9 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // config file the MCP parsed for the same three facts; naming them separately
   // means the MCP never has to parse a kernel's configuration to learn which
   // gateway it is talking to.
-  environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE = `${runtimeDshHome}/${modelGatewayTokenFileName}`;
+  if (config.modelGatewaySigningSecret) {
+    environment.EVIMED_MODEL_GATEWAY_TOKEN_FILE = `${runtimeDshHome}/${modelGatewayTokenFileName}`;
+  }
   environment.EVIMED_MODEL_GATEWAY_URL = modelGatewayProviderUrl(config);
   environment.EVIMED_MODEL_GATEWAY_MODEL = String(config.deepseekModel ?? "");
   // Set even when empty, unlike the adapter URLs below. A container that keeps
@@ -1714,7 +1716,9 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     revisionGatewayUrl: revisionGatewayProviderUrl(config),
     publicSourceGatewayUrl: publicSourceGatewayProviderUrl(config),
     pluginConfig: plan.pluginConfig,
-    modelGatewayTokenFile: plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName),
+    modelGatewayTokenFile: config.modelGatewaySigningSecret
+      ? (plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName))
+      : "",
     workloadTokenFile: workloadTokenPath,
     bundleVersion: String(config.socketBundleVersion ?? ""),
     dshVersion: String(config.dshVersion ?? ""),
@@ -1762,11 +1766,15 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
  * functions they use are not kernel-specific, only where the result is written
  * is.
  *
+ * `configured` describes the common profile and MCP bootstrap. Model access is
+ * separate: `providerConfigured` and the LLM credential reference follow the
+ * provider switch; platform tokens follow their own signing configuration.
+ *
  * @param {any} config
  * @param {any} project
  * @param {any} plan
  * @param {{ nowSeconds?: number, jti?: string, writeFile?: typeof writeFileAtomicNoFollow, budgetScope?: Record<string, any>|null }} [options]
- * @returns {Promise<{ configured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null, browserSessionSecret?: string | null }>}
+ * @returns {Promise<{ configured: boolean, providerConfigured: boolean, workloadTokenFile: string | null, workloadTokenRefreshMs: number | null, token: string | null, payload: Record<string, any> | null, browserSessionSecret: string }>}
  */
 export async function syncRuntimeDshProfile(
   config,
@@ -1774,7 +1782,7 @@ export async function syncRuntimeDshProfile(
   plan,
   { nowSeconds = Math.floor(Date.now() / 1000), jti = randomId("mgw_"), writeFile = writeFileAtomicNoFollow, budgetScope = null } = {},
 ) {
-  if (!config.deepseekProviderEnabled) return { configured: false, workloadTokenFile: null, workloadTokenRefreshMs: null, token: null, payload: null, browserSessionSecret: null };
+  const providerConfigured = Boolean(config.deepseekProviderEnabled);
   if (!plan.dshHomeDir || !plan.proxyWorkspaceDir) {
     throw new HttpError(500, "runtime_dsh_profile_plan_invalid", "Runtime launch plan is missing its DSH bootstrap paths.");
   }
@@ -1789,24 +1797,32 @@ export async function syncRuntimeDshProfile(
   await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir, { allowMissingTail: true });
   await fs.mkdir(plan.dshHomeDir, { recursive: true, mode: 0o700 });
   await assertNoSymlinkPath(project.rootDir, plan.dshHomeDir);
+  const dshHome = await fs.open(plan.dshHomeDir, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+  try {
+    await dshHome.chmod(0o700);
+  } finally {
+    await dshHome.close();
+  }
 
-  const modelGatewayToken = issueModelGatewayRuntimeToken({
+  // Public-source retrieval authenticates with this token too. Disabling
+  // DeepSeek must not revoke the platform identity needed by those tools.
+  const modelGatewayToken = providerConfigured || config.modelGatewaySigningSecret ? issueModelGatewayRuntimeToken({
     secret: config.modelGatewaySigningSecret,
     userId: String(project.userId),
     projectId: String(project.id),
     nowSeconds,
     jti,
     budgetScope,
-  });
+  }) : null;
   // Verified here because the caller needs the payload to register the token as
   // active, and the gateway rejects any token whose jti it has not been told
   // about.
-  const modelGatewayPayload = verifyModelGatewayRuntimeToken(modelGatewayToken, {
+  const modelGatewayPayload = modelGatewayToken ? verifyModelGatewayRuntimeToken(modelGatewayToken, {
     secret: config.modelGatewaySigningSecret,
     userId: String(project.userId),
     projectId: String(project.id),
     nowSeconds,
-  });
+  }) : null;
   // No signing secret means no workload token, and therefore no row naming one.
   // Decided here rather than downstream because `environmentRows` merges the
   // row unconditionally: a path handed in without a token behind it produces a
@@ -1824,7 +1840,11 @@ export async function syncRuntimeDshProfile(
   // racing its boot. Seeding it into the credentials file this function already
   // writes lets the control plane mint the cookie before the container exists.
   const browserSessionSecret = generateBrowserSessionSecret();
-  const credentials = renderCredentialsFile({ token: modelGatewayToken, browserSessionSecret });
+  // Keep model metadata pinned to the managed gateway even while disabled:
+  // This preserves session creation, and omitting the patch would restore the
+  // upstream baseURL and DEEPSEEK_API_KEY reference. No LLM credential is
+  // installed while the provider is disabled; the gateway also denies calls.
+  const credentials = renderCredentialsFile({ token: providerConfigured ? modelGatewayToken : null, browserSessionSecret });
   await writeFile(project.rootDir, path.join(plan.dshHomeDir, ".credentials.yaml"), credentials, { encoding: "utf8", mode: 0o600 });
 
   // The same gateway token, in a file the MCP server can read.
@@ -1841,7 +1861,7 @@ export async function syncRuntimeDshProfile(
   await writeFile(
     project.rootDir,
     path.join(plan.dshHomeDir, modelGatewayTokenFileName),
-    `${modelGatewayToken}\n`,
+    modelGatewayToken ? `${modelGatewayToken}\n` : "",
     { encoding: "utf8", mode: 0o600 },
   );
 
@@ -1856,10 +1876,14 @@ export async function syncRuntimeDshProfile(
   const workloadTokenFile = signingSecret ? dshWorkloadTokenHostPath(plan) : null;
   if (workloadTokenFile) {
     await refreshEviMedWorkloadToken(config, project, workloadTokenFile, { nowSeconds, writeToken: writeFile });
+  } else {
+    // Clear a previous deployment's token without following a replaced path.
+    await writeFile(project.rootDir, dshWorkloadTokenHostPath(plan), "", { encoding: "utf8", mode: 0o600 });
   }
 
   return {
     configured: true,
+    providerConfigured,
     browserSessionSecret,
     workloadTokenFile,
     workloadTokenRefreshMs: workloadTokenFile ? evimedWorkloadRefreshIntervalMs(config) : null,
@@ -2178,8 +2202,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           revisionGatewayUrl,
           publicSourceGatewayUrl,
           pluginConfig,
-          modelGatewayTokenFile: `${runtimeDshHome}/${modelGatewayTokenFileName}`,
-          workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
+          modelGatewayTokenFile: config.modelGatewaySigningSecret ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : "",
+          workloadTokenFile: config.evimedWorkloadSigningSecret ? `${runtimeDshHome}/${evimedWorkloadTokenFileName}` : "",
           bundleVersion: String(config.socketBundleVersion ?? ""),
           // Derived once, out here, from the same definitions the preset row
           // reads inside the container. A compaction knob that is not on this
@@ -3051,7 +3075,7 @@ export class RuntimeManager {
         workloadTokenRefreshMs: dshSync.workloadTokenRefreshMs,
       };
       modelGatewaySync = {
-        configured: dshSync.configured ? 1 : 0,
+        configured: dshSync.providerConfigured ? 1 : 0,
         token: dshSync.token ?? null,
         payload: dshSync.payload ?? null,
       };
