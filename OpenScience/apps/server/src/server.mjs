@@ -572,16 +572,18 @@ class OperationalMetrics {
  * A research-memory store exists exactly when the control-plane database does,
  * so a store that is there and cannot answer is a fault rather than a
  * deployment choice: the agent would otherwise reply as if the researcher had
- * never told it anything, and nothing in the reply would say so. Definitive,
- * because a repair attempt would run the same broken recall again.
+ * never told it anything, and nothing in the reply would say so. The only other
+ * way a recall throws is a strict index that is down, which is the operator
+ * asking for exactly this. Definitive, because a repair attempt would run the
+ * same broken recall again.
  *
- * @param {any} error @param {string} code
+ * @param {any} error
  */
-function memoryRecallRejection(error, code) {
+function memoryRecallRejection(error) {
   /** @type {any} */
   const rejection = error instanceof HttpError
     ? error
-    : new HttpError(503, code, "Required research memory is unavailable.");
+    : new HttpError(503, "memory_unavailable", "Required research memory is unavailable.");
   rejection.definitivelyRejected = true;
   return rejection;
 }
@@ -1718,7 +1720,7 @@ export function createWebApiApp(overrides = {}) {
           effectiveRouteReason: VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
           const prepared = await prepareResearchContext({ ...scoped, baseDir: scoped.workspaceDir }, binding, config, {
-            query: prompt, memories: [], memoryError: null, specialists: [],
+            query: prompt, memories: [], specialists: [],
             routedSpecialist: {
               agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
               skill: selected.skill, companionSkills: selected.companionSkills,
@@ -1792,19 +1794,16 @@ export function createWebApiApp(overrides = {}) {
             }
             const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
             let memories = [];
-            let memoryError = null;
             try { memories = await memorySubstrate.recall(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
             catch (error) {
-              memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
               // The same gate the chat path applies, and for the same reason: an
               // autopilot episode that answers from an empty memory is a worse
               // outcome than an episode that did not run.
-              if (researchMemory.configured) throw memoryRecallRejection(error, memoryError);
+              throw memoryRecallRejection(error);
             }
             const prepared = await prepareResearchContext(project, binding, config, {
               query: episode.prompt,
               memories,
-              memoryError,
               specialists: [],
               routedSpecialist: {
                 agentId: selected.id,
@@ -2768,15 +2767,22 @@ export function createWebApiApp(overrides = {}) {
         }, async (session, dispatchedRun, repairText = null) => {
           const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
           let memories = [];
-          let memoryError = null;
           try {
             memories = await memorySubstrate.recall(ctx.user.id, text, {
               projectId: ctx.project.id,
               sessionId: session.sessionId,
             });
           } catch (error) {
-            memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
-            if (researchMemory.configured) throw memoryRecallRejection(error, memoryError);
+            // A recall that throws has exactly two causes, and neither is a
+            // footnote to put in the prompt. Either the authoritative store is
+            // unreachable — it is a schema of the control-plane database, so the
+            // run could not be recorded anyway — or the operator set
+            // `OPEN_SCIENCE_MEMORY_INDEX_STRICT`, which is the statement that
+            // they would rather see the index failure than an answer built on a
+            // silent fallback. A deployment with no store at all never arrives
+            // here: an unconfigured store returns no memories instead of
+            // failing, which is why there is no "answer anyway" branch left.
+            throw memoryRecallRejection(error);
           }
           const contextSpecialist = routedSpecialist
             ? registry.get(routedSpecialist.agentId)
@@ -2792,7 +2798,6 @@ export function createWebApiApp(overrides = {}) {
           const prepared = await prepareResearchContext(ctx.project, session, config, {
             query: text,
             memories,
-            memoryError,
             specialists: session.mode === "open-domain" ? routableAgents : [],
             mountableSkills: answerPackage?.skillText
               ? [{ name: answerPackage.manifest.skill, body: answerPackage.skillText }]
@@ -5008,7 +5013,19 @@ async function readinessMemoryIndex(config, substrate, worker) {
   // Reported because "off" and "misconfigured" are indistinguishable from the
   // outside — an unreadable key file leaves recall working, in vector order,
   // with nothing anywhere saying the reranker was never asked.
-  const rerank = typeof substrate?.rerank?.status === "function" ? substrate.rerank.status() : null;
+  //
+  // A reranker only ever runs behind a provider that ranks: research recall
+  // reranks inside the index arm, and on `builtin` the capsule index is not
+  // built at all. So a key configured on a term-matcher deployment is reported
+  // as not reached rather than as on, because a row that reads "configured"
+  // where nothing reranks is exactly the third state this report exists to
+  // keep out.
+  const rerankStatus = typeof substrate?.rerank?.status === "function" ? substrate.rerank.status() : null;
+  const rerank = !rerankStatus
+    ? null
+    : substrate?.active
+      ? { configured: rerankStatus.configured, code: config.dashscopeApiKeyError ?? rerankStatus.code ?? null }
+      : { configured: false, code: "memory_rerank_not_reached" };
   const details = {
     required,
     provider: status.provider,
@@ -5016,9 +5033,7 @@ async function readinessMemoryIndex(config, substrate, worker) {
     connected: Boolean(status.connected),
     ...(status.code ? { code: status.code } : {}),
     ...(worker ? { worker: worker.status() } : {}),
-    ...(rerank
-      ? { rerank: { configured: rerank.configured, code: config.dashscopeApiKeyError ?? rerank.code ?? null } }
-      : {}),
+    ...(rerank ? { rerank } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);

@@ -74,8 +74,11 @@ function fakeStore(records, { memos = [] } = {}) {
   };
 }
 
-/** An index that nominates the ids it was told to, in order. */
-function fakeIndex(nominations, { fail = null } = {}) {
+/** An index that nominates the ids it was told to, in order. `failWrite` is
+ *  given the URI and returns an error for the writes that must fail, which is
+ *  how the one failure mode a rebuild actually meets — a slow embedding answered
+ *  with 504 after the content was written — is reproduced for one record. */
+function fakeIndex(nominations, { fail = null, failWrite = null } = {}) {
   const calls = { find: [], remove: [], write: [] };
   return {
     calls,
@@ -88,8 +91,10 @@ function fakeIndex(nominations, { fail = null } = {}) {
       if (fail) throw fail;
       return nominations;
     },
-    async write(userId, uri, content) {
-      calls.write.push({ uri, content });
+    async write(userId, uri, content, options) {
+      calls.write.push({ uri, content, options });
+      const refusal = failWrite?.(uri);
+      if (refusal) throw refusal;
       return { ok: true };
     },
     async remove(userId, uri, options) {
@@ -181,7 +186,7 @@ test("a configured reranker reorders the hydrated candidates before the budget c
   assert.ok(rerank.calls[0].documents[0].includes("Empagliflozin"),
     "the reranker must score the store's text, not the index's cached copy");
   assert.deepEqual(recalled.map((row) => row.id), ["record:rec1", "record:rec2"],
-    "the vector order survived the rerank");
+    "the reranker's order must replace the vector order, which put rec2 first");
 });
 
 test("a reranker that fails leaves the vector order rather than the recall", async () => {
@@ -328,9 +333,32 @@ test("a rebuild publishes what may be recalled and skips what may not", async ()
 
   const result = await substrate.rebuild(USER);
 
-  assert.deepEqual(result, { written: 1, skipped: 3 });
+  assert.deepEqual(result, { written: 1, skipped: 3, failed: 0 });
   assert.equal(index.calls.write.length, 1);
   assert.ok(index.calls.write[0].uri.endsWith("/preference/ok1.md"));
+  // An operator's rebuild reports that the index is current. A write that
+  // returned before its vector existed would make that report false for a
+  // window nobody can measure, so the wait is part of the contract.
+  assert.deepEqual(index.calls.write[0].options, { wait: true, timeoutSeconds: 5 });
+});
+
+// `wait: true` buys that report at the price of the likeliest failure in the
+// whole command: a slow embedding is answered with 504 *after* the content was
+// written. Ending the user's rebuild there would leave an index that is mostly
+// empty where one more record would have finished it.
+test("a rebuild that one record refuses still publishes the rest, and counts the refusal", async () => {
+  const records = [record({ id: "ok1" }), record({ id: "slow" }), record({ id: "ok2" })];
+  const index = fakeIndex([], {
+    failWrite: (uri) => (uri.endsWith("/slow.md")
+      ? Object.assign(new Error("the index timed out"), { code: "memory_index_timeout" })
+      : null),
+  });
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: index });
+
+  const result = await substrate.rebuild(USER);
+
+  assert.deepEqual(result, { written: 2, skipped: 0, failed: 1, code: "memory_index_timeout" });
+  assert.equal(index.calls.write.length, 3, "the rebuild stopped at the refused record instead of continuing");
 });
 
 test("a written URI reads back as the record it was written for", () => {

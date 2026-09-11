@@ -28,6 +28,7 @@ import {
 import { runStateFileFor, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
+import { HttpError } from "../src/security.mjs";
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -185,6 +186,21 @@ test("a research memory store that cannot answer fails the dispatch and records 
     assert.equal(runs.body.data[0].status, "failed");
     assert.equal(runs.body.data[0].errorCode, "memory_unavailable");
   }, { researchMemory: memoryStoreDouble({ fail: offline }) });
+});
+
+// The third case, and the one the prompt's old "科研记忆服务暂时不可用" note used
+// to serve: a deployment with no store of its own whose recall still fails.
+// That is what a strict index asks for when the index is down, and it is a
+// rejection like any other — a run that has been told to stop is not a run to
+// decorate with an excuse and dispatch anyway.
+test("a recall that fails rejects the dispatch even where the store itself is absent", async () => {
+  const offline = new HttpError(503, "memory_index_unavailable", "The memory index is unavailable.");
+  await withApp(async ({ base }) => {
+    assert.equal((await bind(base, "ses_memory_strict", { mode: "open-domain" })).status, 200);
+    const result = await startRun(base, "ses_memory_strict");
+    assert.equal(result.response.status, 503, JSON.stringify(result.body));
+    assert.equal(result.body.code, "memory_index_unavailable");
+  }, { researchMemory: memoryStoreDouble({ configured: false, fail: offline }) });
 });
 
 test("starts immutable open-domain and specialist run identities from research-session bindings", async () => {
