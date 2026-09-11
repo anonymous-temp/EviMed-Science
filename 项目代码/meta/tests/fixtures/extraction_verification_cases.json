@@ -1,0 +1,193 @@
+{
+  "description": "Bounded exact source excerpts for independent verifier regressions; no historical run artifacts modified.",
+  "cases": {
+    "34272327": {
+      "pmid": "34272327",
+      "doi": "10.1681/ASN.2021020167",
+      "source_sha256": "74ebe409144fc865b1311b386b7b51f1e56149d27363ed8b8b542dce7b998da0",
+      "source_excerpt_spans": [
+        {
+          "name": "results_primary_ci",
+          "start_char": 18946,
+          "end_char": 18998,
+          "text": "baselineinbothgroups(HR0.73;95%CI,0.53to1.02).Figure"
+        },
+        {
+          "name": "results_renal_ci",
+          "start_char": 20360,
+          "end_char": 20400,
+          "text": "B Hazard ratio, 0.71 (95% CI, 0.49–1.02)"
+        },
+        {
+          "name": "damaged_abstract",
+          "start_char": 1499,
+          "end_char": 1541,
+          "text": "27%(95%confidenceinterval[95%\nCI]:22to47%)"
+        }
+      ],
+      "reported_hr": [
+        0.73,
+        0.71
+      ],
+      "reported_ci_lower": [
+        0.53,
+        0.49
+      ],
+      "reported_ci_upper": [
+        1.02,
+        1.02
+      ]
+    },
+    "39704168": {
+      "pmid": "39704168",
+      "doi": "10.1172/jci.insight.180637",
+      "source_sha256": "1dc32745afefe382fe719282e0ff1f1d19109c47f91cb647662f8a5640b3f713",
+      "source_excerpt_spans": [
+        {
+          "name": "endpoint_definition",
+          "start_char": 28897,
+          "end_char": 29245,
+          "text": "was end-stage kidney disease\n(dialysis for at least 30 days, kidney transplantation, or an eGFR of <15 mL/min/1.73 m2 sustained for at\nleast 30 days, doubling of serum creatinine level from baseline sustained for at least 30 days, or death from\nkidney or CV disease). Secondary outcomes included (a) a composite of end-stage kidney disease, doublin"
+        },
+        {
+          "name": "conditioning",
+          "start_char": 26369,
+          "end_char": 26563,
+          "text": "Data are presented as HR [95% CI] for the top quartile of the canagliflozin-induced substrate change (year 1 – baseline) in Cox models adjusted by baseline\nsubstrate concentration and treatment."
+        },
+        {
+          "name": "population",
+          "start_char": 5369,
+          "end_char": 5630,
+          "text": "Samples from 1,287 participants in the treatment arm and 1,256 in the placebo arm at baseline and at year\n1 were analyzed, totaling 60% of the original cohort (Reduced CREDENCE cohort). Overall, there were\n850 males and 437 females in the canagliflozin arm, and"
+        },
+        {
+          "name": "trial",
+          "start_char": 29448,
+          "end_char": 29670,
+          "text": "pants, inclusion and exclusion criteria, randomization,\ntreatment, follow-up, and outcomes have been published (4) (ClinicalTrials.gov NCT02065791). CRE-\nDENCE was stopped early after a planned interim analysis, with a fin"
+        },
+        {
+          "name": "numeric_8",
+          "start_char": 25953,
+          "end_char": 26033,
+          "text": "FFA (μmol/L) 0.68 [0.49–0.95] 0.75 [0.58–0.96] 0.67 [0.50–0.89] 0.76 [0.61–0.94]"
+        },
+        {
+          "name": "numeric_9",
+          "start_char": 26034,
+          "end_char": 26119,
+          "text": "Glycerol (μmol/L) 0.86 [0.63–1.17] 0.74 [0.57–0.96] 0.74 [0.56–0.97] 0.74 [0.59–0.93]"
+        },
+        {
+          "name": "numeric_10",
+          "start_char": 26120,
+          "end_char": 26204,
+          "text": "Lactate (mmol/L) 0.66 [0.47–0.92] 0.72 [0.55–0.94] 0.63 [0.48–0.84] 0.73 [0.59–0.92]"
+        },
+        {
+          "name": "numeric_11",
+          "start_char": 26205,
+          "end_char": 26286,
+          "text": "β-OH (μmol/L) 0.68 [0.51–0.91] 0.75 [0.58–0.98] 0.75 [0.59–0.95] 0.76 [0.61–0.95]"
+        },
+        {
+          "name": "numeric_12",
+          "start_char": 26287,
+          "end_char": 26368,
+          "text": "AcAc (μmol/L) 0.65 [0.46–0.91] 0.74 [0.57–0.97] 0.67 [0.49–0.90] 0.72 [0.57–0.91]"
+        }
+      ],
+      "rows": [
+        {
+          "outcome_index": 8,
+          "outcome_name": "Primary composite endpoint (ESKD/creatinine doubling/renal or CV death)",
+          "effect_size": 0.76,
+          "ci_lower": 0.61,
+          "ci_upper": 0.94
+        },
+        {
+          "outcome_index": 9,
+          "outcome_name": "Primary composite endpoint (ESKD/creatinine doubling/renal or CV death)",
+          "effect_size": 0.74,
+          "ci_lower": 0.59,
+          "ci_upper": 0.93
+        },
+        {
+          "outcome_index": 10,
+          "outcome_name": "Primary composite endpoint (ESKD/creatinine doubling/renal or CV death)",
+          "effect_size": 0.73,
+          "ci_lower": 0.59,
+          "ci_upper": 0.92
+        },
+        {
+          "outcome_index": 11,
+          "outcome_name": "Primary composite endpoint (ESKD/creatinine doubling/renal or CV death)",
+          "effect_size": 0.76,
+          "ci_lower": 0.61,
+          "ci_upper": 0.95
+        },
+        {
+          "outcome_index": 12,
+          "outcome_name": "Primary composite endpoint (ESKD/creatinine doubling/renal or CV death)",
+          "effect_size": 0.72,
+          "ci_lower": 0.57,
+          "ci_upper": 0.91
+        }
+      ]
+    },
+    "35861630": {
+      "pmid": "35861630",
+      "doi": "10.1111/jdi.13888",
+      "source_sha256": "60508322b475b6b85c9c460948cdd48fd8bb1d7d0c4152dabf3413699ae39af0",
+      "source_excerpt_spans": [
+        {
+          "name": "endpoint_definition",
+          "start_char": 10214,
+          "end_char": 10278,
+          "text": "a composite renal end‐point comprising ESRD, DoSC or renal death"
+        },
+        {
+          "name": "trial",
+          "start_char": 7818,
+          "end_char": 7881,
+          "text": "The study was registered at ClinicalTrials.gov ( NCT03436693 )."
+        },
+        {
+          "name": "population",
+          "start_char": 7895,
+          "end_char": 8066,
+          "text": "Japanese CKD patients with type 2 diabetes mellitus were recruited using the main inclusion and exclusion criteria, which were similar to those for the CREDENCE trial. In "
+        },
+        {
+          "name": "assignment",
+          "start_char": 8784,
+          "end_char": 9107,
+          "text": "Patients were stratified by eGFR categories (30–<45, 45–<60 and 60–<90 mL/min/1.73 m 2 ), and were randomly assigned in a double‐blind fashion (1:1) to receive either 100 mg canagliflozin or matching placebo once daily. The patients received the placebo once daily during the run‐in period and 100 mg canagliflozin or the m"
+        },
+        {
+          "name": "numeric",
+          "start_char": 21192,
+          "end_char": 21289,
+          "text": "ESRD, DoSC or renal death | 4/154 (2.6) | 10/154 (6.5) | 13.88 | 35.15 | 0.38 (0.12–1.22) | 0.103"
+        }
+      ],
+      "row": {
+        "outcome_name": "Composite renal end-point: ESRD, DoSC or renal death",
+        "effect_size": 0.38,
+        "ci_lower": 0.12,
+        "ci_upper": 1.22,
+        "p_value": 0.103,
+        "hazard_ratio": 0.38,
+        "hr_ci_lower": 0.12,
+        "hr_ci_upper": 1.22,
+        "hr_se": null,
+        "reported_effect_standard_error": null,
+        "events_intervention": 4,
+        "total_intervention": 154,
+        "events_control": 10,
+        "total_control": 154
+      }
+    }
+  }
+}

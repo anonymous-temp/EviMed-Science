@@ -6,7 +6,8 @@ import hashlib
 import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pydantic import BaseModel
+from typing import Any
+from pydantic import BaseModel, Field
 from tqdm import tqdm
 
 from new_meta.core.agent_base import BaseAgent
@@ -27,10 +28,23 @@ from new_meta.tools.utils import paper_identity, safe_identifier
 
 
 class ExtractionCheckResult(BaseModel):
-    score: int  # 1-10
+    score: int = Field(ge=1, le=10)  # Advisory only; never overrides source checks.
     issues: list[str] = []
     suggestions: list[str] = []
     primary_analysis_alignment: list[PrimaryAlignmentAssessment] = []
+
+
+class IndexedOutcomeCorrection(BaseModel):
+    outcome_index: int = Field(ge=0, strict=True)
+    outcome: OutcomeData
+
+
+class ExtractionRefinement(BaseModel):
+    outcomes: list[IndexedOutcomeCorrection]
+
+
+VERIFICATION_BATCH_SIZE = 4
+VERIFICATION_SOURCE_CHAR_LIMIT = 128_000
 
 
 class OutcomeList(BaseModel):
@@ -369,101 +383,183 @@ class DataExtractionAgent(BaseAgent):
             self.log(f"[{pmid}] Marked as EXTRACTION_FAILED", level="warning")
             return obj
 
-    def _check_extraction(self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol) -> ExtractionCheckResult:
-        """Verify extraction quality."""
+    def _check_extraction(
+        self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol,
+        outcome_indices: list[int] | None = None, feedback: list[dict[str, Any]] | None = None,
+    ) -> ExtractionCheckResult:
+        """Check original-indexed rows against the full bounded source snapshot."""
+        from new_meta.core.extraction_verification import numeric_fields
+        indices = list(range(len(extracted.outcomes))) if outcome_indices is None else outcome_indices
+        derived = {"primary_analysis_alignment", "source_quote_verified", "source_quote_match",
+                   "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication"}
+        data = {"characteristics": extracted.characteristics.model_dump(mode="json"),
+                "indexed_outcomes": [{"outcome_index": index,
+                    "outcome": extracted.outcomes[index].model_dump(mode="json", exclude=derived),
+                    "numeric_fields_to_verify": numeric_fields(extracted.outcomes[index])} for index in indices]}
         prompt = extraction_prompts.EXTRACTION_CHECK_PROMPT.format(
-            paper_content=paper_content,
-            protocol=json.dumps(protocol.model_dump(), ensure_ascii=False),
-            extracted_data=json.dumps(extracted.model_dump(), indent=2, ensure_ascii=False),
+            paper_content=paper_content, protocol=protocol.model_dump_json(),
+            extracted_data=json.dumps(data, ensure_ascii=False),
         )
-        return self.call_llm_structured(
-            prompt, ExtractionCheckResult,
-            max_tokens=min(LLM_MAX_TOKENS_EXTRACTION, max(4096, 900 * len(extracted.outcomes))),
+        prompt += "\nExpected original outcome indices: " + json.dumps(indices)
+        if feedback:
+            prompt += "\nPrevious response validation errors (repair judgments; do not alter source data):\n" + json.dumps(feedback, ensure_ascii=False)
+        return self.call_llm_structured(prompt, ExtractionCheckResult, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
+
+    def _verify_alignment(self, extracted: ExtractedStudy, paper: dict, parsed: dict,
+                          protocol: ResearchProtocol, project: Project) -> ExtractedStudy:
+        from new_meta.core.extraction_verification import validate_check_batch, verification_verdict
+        from new_meta.core.primary_analysis_alignment import (
+            _PROOF_DIR, _read_scoped, _write_scoped_once, digest, protocol_fingerprint,
+            record_checked_alignments, row_fingerprint,
         )
-
-    def _verify_alignment(self, extracted, paper, parsed, protocol, project):
-        from new_meta.core.primary_analysis_alignment import _read_scoped, record_checked_alignments, row_fingerprint
-
-        content = parsed.get("full_text", "")
+        content = str(parsed.get("full_text") or "")
         if parsed.get("tables"):
             content += "\n\n## EXTRACTED TABLES\n\n" + "\n\n".join(parsed["tables"])
-        if len(content) > 40000:
-            content = content[:16000] + "\n[... middle sections omitted ...]\n" + content[-23950:]
+        for outcome in extracted.outcomes:
+            outcome.primary_analysis_alignment = None
         source_path = paper.get("pdf_path") or paper.get("fulltext_path") or None
         source_before = None
+        source_sha = ""
+        study_id = extracted.characteristics.pmid or extracted.characteristics.study_id
+        checked_sha = hashlib.sha256(content.encode()).hexdigest()
+        protocol_sha = protocol_fingerprint(protocol)
+
+        def record_attempt(batch, attempt, status, errors, checked=None, snapshot=None):
+            payload = {"schema_version": 1, "study_id": study_id, "outcome_indices": batch,
+                "attempt": attempt, "status": status, "source_sha256": source_sha,
+                "checked_source_sha256": checked_sha, "source_characters": len(content),
+                "protocol_sha256": protocol_sha, "row_sha256": snapshot or {},
+                "response": checked.model_dump(mode="json") if checked else None,
+                "reasons": errors, "assessor": "extraction-check-v2", "assessor_id": self.llm.model}
+            if checked:
+                payload["row_verdicts"] = {str(item.outcome_index): verification_verdict(item, protocol)
+                                           for item in checked.primary_analysis_alignment}
+            encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode()
+            if len(encoded) > 1024 * 1024:
+                raise ValueError("Verification diagnostic exceeds its bounded artifact size")
+            _write_scoped_once(project, f"extraction/verification/{digest(payload)}.json", encoded)
+
+        indices = list(range(len(extracted.outcomes)))
+        if not indices:
+            return extracted
         if source_path is not None:
             source_path = Path(source_path)
             try:
                 relative_source = source_path.absolute().relative_to(project.base_dir.absolute()).as_posix()
                 source_before = _read_scoped(project, relative_source)
-                if parsed.get("_source_sha256") != hashlib.sha256(source_before).hexdigest():
-                    raise ValueError("Parsed source version does not match the current document")
-            except (OSError, ValueError):
-                for outcome in extracted.outcomes:
-                    outcome.primary_analysis_alignment = None
+                source_sha = hashlib.sha256(source_before).hexdigest()
+                if parsed.get("_source_sha256") != source_sha:
+                    raise ValueError("Parsed source version does not match current document")
+            except (OSError, ValueError) as exc:
+                record_attempt(indices, 0, "needs_input", [{"code": "verification_source_version_invalid", "error_type": type(exc).__name__}])
                 return extracted
-        assessments = []
-        checked_rows = {}
-        for outcome in extracted.outcomes:
-            outcome.primary_analysis_alignment = None
-        for round_index in range(MAX_CHECK_ROUNDS):
-            snapshot = {index: row_fingerprint(extracted, index) for index in range(len(extracted.outcomes))}
-            try:
-                checked = self._check_extraction(content, extracted, protocol)
-            except Exception as exc:
-                self.log(f"Independent extraction verification unavailable: {exc}", level="warning")
-                break
-            if checked.score >= 7:
-                assessments = checked.primary_analysis_alignment
-                checked_rows = snapshot
-                break
-            if round_index + 1 < MAX_CHECK_ROUNDS:
-                extracted = self._refine_extraction(content, extracted, checked, protocol)
-                for outcome in extracted.outcomes:
-                    outcome.primary_analysis_alignment = None
-                self._validate_source_quotes(extracted, content, parsed.get("page_map", []))
-                for outcome in extracted.outcomes:
-                    recover_denominators_from_percentages(outcome)
-                self._finalize_outcome_review_fields(extracted, protocol)
+        if not content.strip() or len(content) > VERIFICATION_SOURCE_CHAR_LIMIT:
+            record_attempt(indices, 0, "needs_input", [{"code": "verification_source_context_unavailable",
+                "source_characters": len(content), "limit": VERIFICATION_SOURCE_CHAR_LIMIT}])
+            return extracted
+        _write_scoped_once(project, f"{_PROOF_DIR}/{checked_sha}.txt", content.encode())
+        assessments, checked_rows, pending_reasons = [], {}, {}
+        for start in range(0, len(indices), VERIFICATION_BATCH_SIZE):
+            batch = indices[start:start + VERIFICATION_BATCH_SIZE]
+            feedback = []
+            for round_index in range(MAX_CHECK_ROUNDS):
+                snapshot = {index: row_fingerprint(extracted, index) for index in batch}
+                checked = None
+                try:
+                    checked = self._check_extraction(content, extracted, protocol, batch, feedback)
+                    feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol)
+                    if protocol_fingerprint(protocol) != protocol_sha:
+                        feedback.append({"code": "verification_protocol_changed_during_check"})
+                    if checked.issues:
+                        feedback.append({"code": "unresolved_extraction_issues", "issues": checked.issues})
+                    if any(row_fingerprint(extracted, index) != fingerprint for index, fingerprint in snapshot.items()):
+                        feedback.append({"code": "verification_row_changed_during_check"})
+                except Exception as exc:
+                    feedback = [{"code": "verification_response_unavailable", "error_type": type(exc).__name__}]
+                    cause = exc.__cause__
+                    if hasattr(cause, "errors"):
+                        feedback[0]["validation_errors"] = cause.errors(include_input=False, include_context=False)
+                    self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1} failed: {type(exc).__name__}", level="warning")
+                complete = not feedback
+                exhausted = round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
+                    item["code"] == "numeric_conflict_requires_adjudication" for item in feedback))
+                record_attempt(batch, round_index + 1, "complete" if complete else "needs_input" if exhausted else "retry",
+                               feedback, checked=checked, snapshot=snapshot)
+                if complete:
+                    assessments.extend(checked.primary_analysis_alignment)
+                    checked_rows.update(snapshot)
+                    break
+                for index in batch:
+                    pending_reasons[index] = list(feedback)
+                if exhausted:
+                    break
+                numeric_repair = any(item["code"] in {"numeric_value_mismatch", "numeric_value_unverified",
+                                                      "numeric_quote_not_anchored", "numeric_status_unresolved", "unresolved_extraction_issues"} for item in feedback)
+                if not exhausted and checked is not None and numeric_repair:
+                    extracted = self._refine_extraction(content, extracted, checked, protocol, batch, feedback)
+                    self._validate_source_quotes(extracted, content, parsed.get("page_map", []))
+                    for index in batch:
+                        recover_denominators_from_percentages(extracted.outcomes[index])
+                    self._finalize_outcome_review_fields(extracted, protocol)
         try:
+            if protocol_fingerprint(protocol) != protocol_sha:
+                raise ValueError("Protocol changed during independent verification")
             if source_before is not None and _read_scoped(project, relative_source) != source_before:
                 raise ValueError("Source changed during independent verification")
-            record_checked_alignments(project, protocol, extracted, assessments,
-                                      source_text=content, source_path=source_path, checked_rows=checked_rows,
-                                      expected_source_sha256=hashlib.sha256(source_before).hexdigest() if source_before is not None else None,
-                                      assessor_id=self.llm.model)
+            record_errors = record_checked_alignments(project, protocol, extracted, assessments,
+                source_text=content, source_path=source_path, checked_rows=checked_rows,
+                expected_source_sha256=source_sha or None, assessor_id=self.llm.model,
+                pending_reasons=pending_reasons)
+            if record_errors:
+                record_attempt(indices, 0, "needs_input", record_errors)
         except (OSError, ValueError) as exc:
-            self.log(f"Alignment source cannot be verified: {exc}", level="warning")
+            record_attempt(indices, 0, "needs_input", [{"code": "verification_source_changed", "error_type": type(exc).__name__}])
             for outcome in extracted.outcomes:
                 outcome.primary_analysis_alignment = None
         return extracted
 
     def _refine_extraction(
-        self, paper_content: str, current: ExtractedStudy,
-        check_result: ExtractionCheckResult, protocol: ResearchProtocol,
+        self, paper_content: str, current: ExtractedStudy, check_result: ExtractionCheckResult,
+        protocol: ResearchProtocol, outcome_indices: list[int] | None = None,
+        feedback: list[dict[str, Any]] | None = None,
     ) -> ExtractedStudy:
-        """Re-extract with feedback from the checker."""
-        feedback = "\n".join(f"- {s}" for s in check_result.suggestions)
+        """Repair reported values in explicitly indexed rows, then reverify them."""
+        from new_meta.core.extraction_verification import NUMERIC_FIELDS, NUMERIC_MAP_FIELDS
+        indices = list(range(len(current.outcomes))) if outcome_indices is None else outcome_indices
         prompt = (
-            f"The previous extraction had these issues:\n{feedback}\n\n"
-            f"Please re-extract the data more carefully, addressing each issue.\n\n"
-            f"Paper content:\n{paper_content[:30000]}\n\n"
-            f"Previous extraction:\n{json.dumps(current.model_dump(), indent=2, ensure_ascii=False)}\n\n"
-            f"Protocol — Primary outcome: {protocol.pico.outcome_primary}, "
-            f"Effect measure: {protocol.effect_measure}"
+            "Correct the inaccurate numerical extraction using the complete source below. "
+            "Return exactly the original outcome_index values requested. Do not reorder, add or drop rows. "
+            "Never change endpoint/population/contrast labels to make a result eligible. "
+            "Prefer directly reported estimates and precision over deriving them from a damaged abstract. "
+            "Do not delete an unresolved value to evade verification; retain it with a conflict note.\n"
+            f"Protocol: {protocol.model_dump_json()}\n"
+            f"Issues: {json.dumps(check_result.issues, ensure_ascii=False)}\n"
+            f"Suggestions: {json.dumps(check_result.suggestions, ensure_ascii=False)}\n"
+            f"Validation errors: {json.dumps(feedback or [], ensure_ascii=False)}\n"
+            f"Original indexed rows: {json.dumps([{'outcome_index': index, 'outcome': current.outcomes[index].model_dump(mode='json', exclude={'primary_analysis_alignment'})} for index in indices], ensure_ascii=False)}\n"
+            f"Complete source:\n{paper_content}"
         )
         try:
-            refined = self.call_llm_structured(prompt, ExtractedStudy)
-            # Preserve metadata
-            refined.characteristics.study_id = current.characteristics.study_id
-            refined.characteristics.title = current.characteristics.title
-            refined.characteristics.authors = current.characteristics.authors
-            refined.characteristics.doi = current.characteristics.doi
-            refined.characteristics.pmid = current.characteristics.pmid
-            refined.characteristics.year = current.characteristics.year
-            refined.characteristics.journal = current.characteristics.journal
-            return refined
-        except Exception:
+            refined = self.call_llm_structured(prompt, ExtractionRefinement, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
+            returned = [item.outcome_index for item in refined.outcomes]
+            if set(returned) != set(indices) or len(returned) != len(indices):
+                return current
+            result = current.model_copy(deep=True)
+            allowed = set(NUMERIC_FIELDS) | set(NUMERIC_MAP_FIELDS) | {"source_quote", "source_location", "source_page", "source_section",
+                "reported_effect_measure", "reported_effect_scale", "outcome_type", "p_value_inequality", "extraction_confidence"}
+            for item in refined.outcomes:
+                original = result.outcomes[item.outcome_index]
+                data = original.model_dump(mode="json", exclude={"primary_analysis_alignment"})
+                for field in allowed & item.outcome.model_fields_set:
+                    value = getattr(item.outcome, field)
+                    if field in NUMERIC_MAP_FIELDS:
+                        data[field] = {**data.get(field, {}), **{key: entry for key, entry in value.items() if entry is not None}}
+                    elif value is not None and value != "":
+                        data[field] = value
+                result.outcomes[item.outcome_index] = OutcomeData.model_validate(data)
+            return result
+        except Exception as exc:
+            self.log(f"Numeric refinement unavailable: {type(exc).__name__}", level="warning")
             return current
 
     def _validate_source_quotes(
@@ -656,7 +752,8 @@ class DataExtractionAgent(BaseAgent):
 
         measure = (protocol.effect_measure or "").upper()
         if (
-            measure in {"MD", "SMD"}
+            measure == "MD"
+            and outcome.reported_effect_adjusted is False
             and outcome.effect_size is not None
             and outcome.mean_intervention is not None
             and outcome.mean_control is not None

@@ -73,7 +73,7 @@ import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
-import { removeSourceCopies, sourceAttemptId } from "./sourceFiles.mjs";
+import { removeSourceCopies, sourceAttemptId, stageParserInput } from "./sourceFiles.mjs";
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
@@ -897,9 +897,7 @@ export function createWebApiApp(overrides = {}) {
       const stagingRelative = `${job.id}-${sourceAttemptId(job)}/${path.basename(localPath)}`;
       const stagingPath = resolveScopedPath(stagingRoot, stagingRelative);
       await sourceService.withIngestionLease(job, async () => {
-        await writeFileAtomicNoFollow(stagingRoot, stagingPath, bytes, { mode: 0o600 });
-        await fsp.chown(path.dirname(stagingPath), config.documentParserUid, config.documentParserGid);
-        await fsp.chown(stagingPath, config.documentParserUid, config.documentParserGid);
+        await stageParserInput({ stagingRoot, relative: stagingRelative, bytes, parserGid: config.documentParserGid });
       });
       return { localPath, stagingPath, parserPath: `/data/${stagingRelative}` };
     },

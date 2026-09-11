@@ -230,6 +230,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--probe-workspace", type=Path, required=True)
     parser.add_argument("--manuscript", default="", help="workspace-relative manuscript for peer_review")
+    parser.add_argument("--meta-topic", help="explicit Meta replication or research request; always starts a fresh job")
     parser.add_argument("--tool", action="append", default=[], help="run only these specialists")
     parser.add_argument("--max-receipt-age-days", type=float, default=14)
     parser.add_argument("--job-timeout-seconds", type=float, default=10800)
@@ -243,6 +244,11 @@ def main():
     parser.add_argument("--rscript", default="Rscript")
     parser.add_argument("--force", action="store_true", help="run even when a fresh terminal job exists")
     args = parser.parse_args()
+    if args.meta_topic is not None:
+        if not args.meta_topic.strip() or len(args.meta_topic) > 10000:
+            parser.error("--meta-topic requires a non-empty request of at most 10000 characters")
+        if args.tool and "meta_analysis" not in args.tool:
+            parser.error("--meta-topic requires meta_analysis in the selected tools")
 
     workspace = args.probe_workspace.resolve()
     try:
@@ -263,12 +269,15 @@ def main():
     for tool in tools:
         if tool not in BRIEFS:
             raise SystemExit("unknown specialist: %s" % tool)
-        existing = None if args.force else fresh_terminal_job(workspace, tool, args.max_receipt_age_days)
+        explicit_meta = tool == "meta_analysis" and args.meta_topic is not None
+        existing = None if args.force or explicit_meta else fresh_terminal_job(workspace, tool, args.max_receipt_age_days)
         if existing is not None:
             print("%s already has a fresh terminal job: %s" % (tool, existing.get("jobId")), flush=True)
             results.append({"tool": tool, "outcome": "already_fresh", "jobId": existing.get("jobId")})
             continue
         arguments = dict(mr_arguments if tool == "mendelian_randomization" else BRIEFS[tool])
+        if explicit_meta:
+            arguments["topic"] = args.meta_topic
         if tool == "peer_review":
             if not args.manuscript:
                 results.append({"tool": tool, "outcome": "skipped", "detail": "--manuscript was not supplied"})

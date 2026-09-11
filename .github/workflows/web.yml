@@ -235,6 +235,9 @@ jobs:
           echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/document-parser.token" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/document-parser-web.token" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openlist-admin-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/evimed-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
@@ -281,6 +284,9 @@ jobs:
             echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${OPEN_SCIENCE_DATABASE_URL_HOST_FILE}"
             echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${OPEN_SCIENCE_MEMOS_DSN_HOST_FILE}"
             echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE}"
+            echo "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}"
+            echo "OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=${OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE}"
+            echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_MEMOS_ADMIN_USER=evimed-memory"
             echo "OPEN_SCIENCE_MEMOS_PUBLIC_URL=https://localhost/memos"
             echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN}"
@@ -325,6 +331,25 @@ jobs:
           pnpm configure:production-state
           pnpm check:production-state
 
+      - name: Prepare private ingestion credentials
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, secrets
+          parser_file = pathlib.Path(os.environ["OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE"])
+          web_file = pathlib.Path(os.environ["OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE"])
+          token = secrets.token_urlsafe(36)
+          for file in (parser_file, web_file):
+              fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+              with os.fdopen(fd, "w") as stream:
+                  stream.write(token + "\n")
+          # The parser enforces UID 1000 ownership. The capability-free root
+          # web process needs its own owner-only copy, not wider file access.
+          os.chown(parser_file, 1000, 1000)
+          os.chmod(parser_file, 0o400)
+          assert parser_file.read_bytes() == web_file.read_bytes()
+          assert web_file.stat().st_uid == 0 and web_file.stat().st_gid == 0
+          PY
+
       - name: Reserve space on the disposable CI builder
         run: |
           # These preinstalled SDKs are unused by this Linux web/runtime build.
@@ -337,8 +362,6 @@ jobs:
         env:
           OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE: /tmp/ci-unused-memos-provider.json
           OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
-          OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE: /tmp/ci-unused-parser-token
-          OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE: /tmp/ci-unused-openlist-password
         run: |
           # This is an ephemeral CI builder, never the serving host. Stop before
           # builds or exports exhaust the filesystem; no production volume exists here.
@@ -480,6 +503,25 @@ jobs:
             "$OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE" \
             -ec 'test ! -e /data/pharmacy-reference.sqlite; mkdir -p /data/users; chmod 700 /data/users; cp /ci-fixture.sqlite /data/pharmacy-reference.sqlite; chmod 444 /data/pharmacy-reference.sqlite'
 
+      - name: Check ingestion startup capacity
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          memory = dict(line.split(":", 1) for line in pathlib.Path("/proc/meminfo").read_text().splitlines())
+          available = int(memory["MemAvailable"].split()[0]) * 1024
+          cpus = len(os.sched_getaffinity(0))
+          print(json.dumps({"availableMemoryBytes": available, "availableCpus": cpus,
+                            "parserMemoryLimitBytes": 6 * 1024 * 1024 * 1024}))
+          # Keep the parser's production cap and at least 2 GiB for the other
+          # services; do not weaken production limits to fit a smaller runner.
+          if available < 8 * 1024 * 1024 * 1024 or cpus < 4:
+              raise SystemExit("CI ingestion startup requires 8 GiB available memory and 4 CPUs")
+          PY
+          test "$(df -B1 --output=avail / | tail -1)" -ge 10737418240
+
+      - name: Verify capability-free parser file handoff on Linux
+        run: unshare --net node --test apps/server/test/sourceFiles.test.mjs
+
       - name: Start production Compose stack
         run: >-
           docker compose --env-file deploy/web/.env.ci
@@ -487,6 +529,7 @@ jobs:
           -f deploy/web/docker-compose.local-auth.yml
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
+          -f deploy/web/docker-compose.ingestion.yml
           --profile backup --profile monitoring --profile tls up -d
 
       - name: Verify actual PostgreSQL backup and restore before readiness
@@ -504,33 +547,77 @@ jobs:
           EVIMED_POSTGRES_PASSPHRASE_FILE="$OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE" \
             python3 -B scripts/ops/postgres-backup.py
 
+      - name: Verify authenticated real PDF ingestion
+        run: |
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
+          # The parser is internal-only and uses the pipeline models baked into
+          # its image. The smoke has no model download or provider fallback.
+          "${compose[@]}" exec -T evimed-document-parser python -c 'import json,os,pathlib; c=pathlib.Path.home()/"mineru.json"; p=pathlib.Path(json.loads(c.read_text())["models-dir"]["pipeline"]); assert os.environ["MINERU_MODEL_SOURCE"]=="local" and p.is_dir() and os.access(p,os.R_OK|os.X_OK)'
+          # The inner deadline owns the container process; the outer guard is
+          # only a transport/teardown margin, not extra time for the parser.
+          timeout 190 "${compose[@]}" exec -T open-science-web timeout -s TERM -k 5 180 node scripts/ops/parser-ingestion-smoke.mjs
+
       - name: Wait for API and monitoring readiness
         run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml --profile backup --profile monitoring --profile tls)
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
           for attempt in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:8787/api/ready >/dev/null \
-              && curl -kfsS https://localhost/api/ready >/dev/null \
-              && curl -fsS http://127.0.0.1:9090/-/ready >/dev/null \
-              && curl -fsS http://127.0.0.1:9093/-/ready >/dev/null \
-              && curl -fsS http://127.0.0.1:3000/api/health >/dev/null \
+            if curl -fsS http://127.0.0.1:8787/api/ready --connect-timeout 2 --max-time 5 >/dev/null \
+              && curl -kfsS https://localhost/api/ready --connect-timeout 2 --max-time 5 >/dev/null \
+              && curl -fsS http://127.0.0.1:9090/-/ready --connect-timeout 2 --max-time 5 >/dev/null \
+              && curl -fsS http://127.0.0.1:9093/-/ready --connect-timeout 2 --max-time 5 >/dev/null \
+              && curl -fsS http://127.0.0.1:3000/api/health --connect-timeout 2 --max-time 5 >/dev/null \
               && "${compose[@]}" exec -T open-science-backup node scripts/ops/backup-scheduler.mjs health >/dev/null; then
               exit 0
             fi
             sleep 2
           done
+          # Report only bounded readiness codes, never raw responses or config.
+          timeout 10 python3 - <<'PY' || echo '{"code":"readiness_diagnostic_failed"}'
+          import json, re, urllib.error, urllib.request
+          identifier = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,79}\Z")
+          def safe_id(value):
+              return value if isinstance(value, str) and identifier.fullmatch(value) else "invalid_identifier"
+          result = {"endpoint": "direct_api_ready"}
+          try:
+              try:
+                  response = urllib.request.urlopen("http://127.0.0.1:8787/api/ready", timeout=5)
+              except urllib.error.HTTPError as error:
+                  response = error
+              with response:
+                  result["status"] = getattr(response, "status", None) or getattr(response, "code", None)
+                  raw = response.read(65537)
+              if len(raw) > 65536:
+                  result["code"] = "readiness_response_too_large"
+              else:
+                  payload = json.loads(raw)
+                  checks = payload.get("data", {}).get("checks")
+                  if isinstance(checks, dict):
+                      result["checks"] = {
+                          safe_id(name): {"ok": check.get("ok") is True,
+                              **{field: safe_id(check[field]) for field in ("code", "field") if field in check}}
+                          for name, check in list(checks.items())[:32] if isinstance(check, dict)
+                      }
+                  else:
+                      result["code"] = safe_id(payload.get("error", {}).get("code", "readiness_checks_missing"))
+          except (ValueError, AttributeError, TypeError):
+              result["code"] = "readiness_response_invalid"
+          except (OSError, urllib.error.URLError):
+              result["code"] = "readiness_probe_unavailable"
+          print(json.dumps(result))
+          PY
           "${compose[@]}" ps
           exit 1
 
       - name: Trust CI Caddy root and verify public HTTPS preflight
         run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml --profile backup --profile monitoring --profile tls)
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
           "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt /tmp/open-science-caddy-root.crt
           test -s /tmp/open-science-caddy-root.crt
           NODE_EXTRA_CA_CERTS=/tmp/open-science-caddy-root.crt pnpm preflight:host --env-file deploy/web/.env.ci --online
 
       - name: Verify Docker socket privilege boundary
         run: |
-          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml --profile backup --profile monitoring --profile tls)
+          compose=(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.local-auth.yml -f deploy/web/docker-compose.backup.yml -f deploy/web/docker-compose.monitoring.yml -f deploy/web/docker-compose.ingestion.yml --profile backup --profile monitoring --profile tls)
           web_id="$("${compose[@]}" ps -q open-science-web)"
           controller_id="$("${compose[@]}" ps -q open-science-runtime-controller)"
           backup_id="$("${compose[@]}" ps -q open-science-backup)"
@@ -585,6 +672,7 @@ jobs:
           -f deploy/web/docker-compose.yml
           -f deploy/web/docker-compose.local-auth.yml
           -f deploy/web/docker-compose.backup.yml
+          -f deploy/web/docker-compose.ingestion.yml
           --profile backup exec -T open-science-backup
           node -e "const fs=require('node:fs');const names=fs.readdirSync('/backups');process.exit(names.some(n=>n.endsWith('.tar.gz.enc'))&&names.includes('.open-science-backup-state.json')?0:1)"
 
@@ -593,8 +681,6 @@ jobs:
         env:
           OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE: /tmp/ci-unused-memos-provider.json
           OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
-          OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE: /tmp/ci-unused-parser-token
-          OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE: /tmp/ci-unused-openlist-password
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/evimed-release"
@@ -659,6 +745,7 @@ jobs:
           -f deploy/web/docker-compose.local-auth.yml
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
+          -f deploy/web/docker-compose.ingestion.yml
           --profile backup --profile monitoring --profile tls logs --no-color
 
       - name: Stop Compose stack
@@ -669,6 +756,7 @@ jobs:
           -f deploy/web/docker-compose.local-auth.yml
           -f deploy/web/docker-compose.backup.yml
           -f deploy/web/docker-compose.monitoring.yml
+          -f deploy/web/docker-compose.ingestion.yml
           --profile runtime-image --profile backup --profile monitoring --profile tls down -v --remove-orphans
 
   hosted-production-e2e:

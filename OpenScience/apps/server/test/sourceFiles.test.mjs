@@ -1,11 +1,136 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { removeSourceCopies, sourceAttemptId } from "../src/sourceFiles.mjs";
+import { removeSourceCopies, sourceAttemptId, stageParserInput } from "../src/sourceFiles.mjs";
 
 const sourceId = `src_${"a".repeat(32)}`;
 const options = { skip: process.platform !== "linux" && "Descriptor-relative deletion runs in the hosted Linux environment" };
+
+test("parser staging keeps writer ownership and grants only the parser group read access", async t => {
+  const root = await fs.realpath(await fs.mkdtemp("/tmp/evimed-parser-handoff-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const parserGid = process.getgid();
+  const input = { stagingRoot: root, relative: "job-one-attempt/paper.pdf", bytes: Buffer.from("synthetic PDF bytes"), parserGid };
+  const file = await stageParserInput(input);
+  assert.equal(file, path.join(root, input.relative));
+  for (const directory of [root, path.dirname(file)]) {
+    const info = await fs.stat(directory);
+    assert.equal(info.uid, process.getuid());
+    assert.equal(info.gid, parserGid);
+    assert.equal(info.mode & 0o777, 0o710);
+  }
+  const info = await fs.stat(file);
+  assert.equal(info.uid, process.getuid());
+  assert.equal(info.gid, parserGid);
+  assert.equal(info.mode & 0o777, 0o440);
+  assert.deepEqual(await fs.readFile(file), input.bytes);
+});
+
+test("parser staging rejects unavailable groups and linked attempt paths", async t => {
+  const root = await fs.realpath(await fs.mkdtemp("/tmp/evimed-parser-handoff-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const groups = new Set([process.getgid(), ...process.getgroups()]);
+  let unavailable = 65000;
+  while (groups.has(unavailable)) unavailable--;
+  const input = { stagingRoot: root, relative: "job/paper.pdf", bytes: Buffer.from("payload"), parserGid: unavailable };
+  await assert.rejects(stageParserInput(input), { code: "document_parser_group_unavailable" });
+  assert.deepEqual(await fs.readdir(root), []);
+  const outside = await fs.realpath(await fs.mkdtemp("/tmp/evimed-parser-outside-"));
+  t.after(() => fs.rm(outside, { recursive: true, force: true }));
+  await fs.symlink(outside, path.join(root, "job"));
+  await assert.rejects(stageParserInput({ ...input, parserGid: process.getgid() }), { code: "path_forbidden" });
+  assert.deepEqual(await fs.readdir(outside), []);
+  await fs.unlink(path.join(root, "job"));
+  await fs.mkdir(path.join(root, "job"));
+  const original = path.join(outside, "original.pdf");
+  await fs.writeFile(original, "retained original");
+  await fs.link(original, path.join(root, input.relative));
+  await assert.rejects(stageParserInput({ ...input, parserGid: process.getgid() }), { code: "path_forbidden" });
+  assert.equal(await fs.readFile(original, "utf8"), "retained original");
+});
+
+for (const permission of ["file", "directory"]) test(`parser staging cleans its unpublished input when ${permission} permissions fail`, async t => {
+  const root = await fs.realpath(await fs.mkdtemp("/tmp/evimed-parser-rollback-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const open = fs.open.bind(fs);
+  let injected = false;
+  t.mock.method(fs, "open", async (...args) => {
+    const handle = await open(...args);
+    const info = await handle.stat();
+    if (!injected && (permission === "file" ? info.isFile() : info.isDirectory() && String(args[0]).endsWith("/job"))) {
+      injected = true;
+      handle.chmod = async () => { throw Object.assign(new Error("Synthetic permission failure"), { code: "EPERM" }); };
+    }
+    return handle;
+  });
+  await assert.rejects(stageParserInput({ stagingRoot: root, relative: "job/paper.pdf", bytes: Buffer.from("payload"),
+    parserGid: process.getgid() }), { code: "EPERM" });
+  assert.equal(injected, true);
+  assert.deepEqual(await fs.readdir(root), []);
+});
+
+test("parser staging never replaces or cleans another publisher's input", async t => {
+  const root = await fs.realpath(await fs.mkdtemp("/tmp/evimed-parser-collision-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const link = fs.link.bind(fs);
+  t.mock.method(fs, "link", async (from, to) => {
+    await fs.writeFile(to, "concurrent publisher", { mode: 0o600 });
+    return link(from, to);
+  });
+  await assert.rejects(stageParserInput({ stagingRoot: root, relative: "job/paper.pdf", bytes: Buffer.from("payload"),
+    parserGid: process.getgid() }), { code: "EEXIST" });
+  assert.equal(await fs.readFile(path.join(root, "job/paper.pdf"), "utf8"), "concurrent publisher");
+  assert.deepEqual(await fs.readdir(path.join(root, "job")), ["paper.pdf"]);
+});
+
+test("real Linux capability-free Web hands readable immutable bytes to the parser group", {
+  skip: (process.platform !== "linux" || process.getuid() !== 0) && "Requires an isolated Linux root test process with setpriv",
+}, async t => {
+  const root = await fs.realpath(await fs.mkdtemp("/tmp/evimed-parser-permissions-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.chmod(root, 0o755);
+  const stagingRoot = path.join(root, "staging");
+  const projectRoot = path.join(root, "project");
+  await fs.mkdir(stagingRoot, { mode: 0o700 });
+  await fs.mkdir(projectRoot, { mode: 0o700 });
+  const module = new URL("../src/sourceFiles.mjs", import.meta.url).href;
+  const attempt = "b".repeat(24);
+  const relative = `job-one-${attempt}/paper.pdf`;
+  const file = path.join(stagingRoot, relative);
+  const payload = "Owned input bytes for the read-only parser";
+  const child = (uid, gid, groupArgs, script) => execFileSync("setpriv", [
+    `--reuid=${uid}`, `--regid=${gid}`, ...groupArgs, "--bounding-set=-all", "--inh-caps=-all",
+    "--ambient-caps=-all", "--no-new-privs", process.execPath, "--input-type=module", "--eval", script,
+  ], { encoding: "utf8", timeout: 10000 });
+  const common = String.raw`import assert from 'node:assert/strict'; import fs from 'node:fs/promises';
+    const status=await fs.readFile('/proc/self/status','utf8');
+    for (const key of ['CapEff','CapPrm','CapBnd']) assert.match(status,new RegExp(key+':\\s+0+\\n'));
+    assert.match(status,/NoNewPrivs:\s+1/);`;
+  child(0, 0, ["--groups=1000"], `${common}
+    const {stageParserInput}=await import(${JSON.stringify(module)});
+    await stageParserInput({...${JSON.stringify({ stagingRoot, relative, parserGid: 1000 })},bytes:Buffer.from(${JSON.stringify(payload)})});
+    await assert.rejects(fs.chown(${JSON.stringify(file)},1000,1000),{code:'EPERM'});`);
+  const info = await fs.stat(file);
+  assert.equal(info.uid, 0);
+  assert.equal(info.gid, 1000);
+  assert.equal(info.mode & 0o777, 0o440);
+  child(1000, 1000, ["--clear-groups"], `${common}
+    assert.equal(await fs.readFile(${JSON.stringify(file)},'utf8'),${JSON.stringify(payload)});
+    await assert.rejects(fs.writeFile(${JSON.stringify(file)},'changed'),{code:'EACCES'});
+    await assert.rejects(fs.readdir(${JSON.stringify(stagingRoot)}),{code:'EACCES'});`);
+  child(1001, 1001, ["--clear-groups"], `${common}
+    await assert.rejects(fs.readFile(${JSON.stringify(file)}),{code:'EACCES'});`);
+  child(0, 0, ["--clear-groups"], `${common}
+    const {stageParserInput}=await import(${JSON.stringify(module)});
+    await assert.rejects(stageParserInput({...${JSON.stringify({ stagingRoot, relative, parserGid: 1000 })},bytes:Buffer.from('new')}),{code:'document_parser_group_unavailable'});`);
+  child(0, 0, ["--groups=1000"], `${common}
+    const {removeSourceCopies}=await import(${JSON.stringify(module)});
+    await removeSourceCopies(${JSON.stringify({ projectRoot, sourceId, jobIds: ["job-one"], generation: 1,
+      attemptId: attempt, stagingOnly: true, parserStagingRoot: stagingRoot })});`);
+  await assert.rejects(fs.stat(file), { code: "ENOENT" });
+});
 async function fixture(t) {
   const root = await fs.mkdtemp("/tmp/evimed-source-files-");
   t.after(() => fs.rm(root, { recursive: true, force: true }));

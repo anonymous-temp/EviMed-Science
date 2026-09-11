@@ -1,9 +1,12 @@
 """Offline audit protocol tests; toy bytes are not execution certification."""
 import base64
 import copy
+import contextlib
+import io
 import json
 import os
 import shutil
+import sys
 import tempfile
 import time
 import unittest
@@ -387,6 +390,35 @@ class AuditTests(unittest.TestCase):
             result["artifacts"] = [hosted.file_receipt(self.workspace, self.exposure_path)]
             with self.assertRaises(SystemExit):
                 release.verify_tools()
+
+
+class ExplicitMetaRequestTests(unittest.TestCase):
+    def test_new_request_cannot_reuse_a_terminal_job_for_the_default_topic(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary).resolve()
+            topic = "Replicate two prespecified randomized trials; do not substitute another trial."
+            before = copy.deepcopy(driver.BRIEFS)
+            argv = ["driver", "--probe-workspace", str(repo / "audit"), "--tool", "meta_analysis", "--meta-topic", topic]
+            with patch.object(sys, "argv", argv), patch.object(driver, "REPO", repo), \
+                    patch.object(driver, "load_server", return_value=object()), \
+                    patch.object(driver, "fresh_terminal_job", return_value={"jobId": "old-topic-job"}) as fresh, \
+                    patch.object(driver, "run_one", return_value={"tool": "meta_analysis", "outcome": "blocked", "jobId": "new-request-job"}) as run, \
+                    patch.dict(os.environ), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as done:
+                    driver.main()
+                self.assertEqual(done.exception.code, 0)
+                fresh.assert_not_called()
+                self.assertEqual(run.call_args.args[2], {"topic": topic, "outputLanguage": "zh"})
+                self.assertEqual(driver.BRIEFS, before)
+
+    def test_invalid_or_unselected_meta_request_stops_before_loading_a_server(self):
+        for value, tool in [(" ", "meta_analysis"), ("x" * 10001, "meta_analysis"), ("Explicit request", "peer_review")]:
+            with self.subTest(tool=tool, length=len(value)), patch.object(sys, "argv", ["driver", "--probe-workspace", "/unused", "--tool", tool, "--meta-topic", value]), \
+                    patch.object(driver, "load_server") as load, contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as stopped:
+                    driver.main()
+                self.assertEqual(stopped.exception.code, 2)
+                load.assert_not_called()
 
 
 if __name__ == "__main__":
