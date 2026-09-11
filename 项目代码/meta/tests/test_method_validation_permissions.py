@@ -17,7 +17,7 @@ def test_web_phase1_does_not_silently_enable_validating_methods() -> None:
     source = inspect.getsource(start._run_phase1_inner)
 
     assert "allow_validating=True" not in source
-    assert "compile_project_method_plan(" in source
+    assert "admit_project_protocol(" in source
 
 
 def test_repository_has_no_ordinary_entrypoint_validation_bypass() -> None:

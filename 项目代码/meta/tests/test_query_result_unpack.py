@@ -20,12 +20,11 @@ def test_broaden_protocol_for_retry_preserves_topic_terms() -> None:
         ),
     )
 
+    original = protocol.model_dump()
     comparator = _broaden_protocol_for_retry(protocol)
 
-    assert "systemic corticosteroids" in comparator
-    assert "usual care" in comparator
-    assert "metformin" not in comparator.lower()
-    assert "antihyperglycemic" not in comparator.lower()
+    assert comparator == "usual care"
+    assert protocol.model_dump() == original
 
 
 def test_apply_topic_date_range_fills_explicit_until_year() -> None:

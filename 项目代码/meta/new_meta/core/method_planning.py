@@ -4,10 +4,86 @@ from __future__ import annotations
 import re
 
 from new_meta.core.extraction_ledger import ensure_project_review_id
-from new_meta.core.method_registry import MethodRegistry, default_method_registry
+from new_meta.core.method_registry import MethodCompilationError, MethodInputError, MethodRegistry, default_method_registry
 from new_meta.core.project import Project
 from new_meta.schemas.method_policy import MethodPlan, ReviewDesignSpec, ReviewFamily
 from new_meta.schemas.protocol import ResearchProtocol
+
+
+class ProtocolInputRequired(MethodCompilationError):
+    """A preserved proposal that cannot become an executable review protocol."""
+
+    def __init__(self, message, *, code="protocol_method_input_required", context=None,
+                 protocol=None, project=None):
+        from new_meta.schemas.phase_result import ExecutionStatus, NextAction, PhaseIssue, PhaseName, PhaseResult
+        super().__init__(message)
+        self.project = project
+        self.phase = PhaseResult(
+            run_id=project.base_dir.name if project else "protocol-planning",
+            phase=PhaseName.PROTOCOL, status=ExecutionStatus.NEEDS_INPUT,
+            summary=message, error_code=code,
+            issues=[PhaseIssue(code=code, message=message, blocking=True, context=context or {})],
+            next_actions=[NextAction(action_id="restart_with_supported_protocol",
+                title="Clarify the research question and restart with supported, scope-faithful inputs.",
+                description="Preserve the original population, intervention, comparator, outcome and eligibility intent; do not silently remove unsupported requirements.")],
+            data={"proposal": protocol.model_dump(mode="json") if protocol else {}},
+        )
+        if project:
+            self.persist(project)
+
+    def persist(self, project):
+        self.project = project
+        self.phase.run_id = project.base_dir.name
+        self.phase.data["original_question_path"] = project.TOPIC_FILE
+        original_present = False
+        try:
+            import json
+            from new_meta.core.primary_analysis_alignment import _read_scoped
+            original = json.loads(_read_scoped(project, project.TOPIC_FILE, max_bytes=1024 * 1024))
+            if isinstance(original.get("topic"), str):
+                self.phase.data["original_question"] = original["topic"]
+                original_present = True
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass  # Preserve the explicit original-missing diagnostic without inventing a topic.
+        from new_meta.core.primary_analysis_alignment import _write_scoped_atomic
+        _write_scoped_atomic(project, "analysis/protocol_input_status.json", self.phase.model_dump_json(indent=2).encode())
+        _write_scoped_atomic(project, "analysis/protocol_rejected_proposal.json", json.dumps(self.phase.data, ensure_ascii=False, indent=2).encode())
+        if original_present:
+            project.clear_downstream("protocol", include_self=True)
+        return self
+
+
+def method_catalogue(registry=None) -> dict:
+    """Expose compiler-owned vocabulary; this is not a production capability promise."""
+    registry = registry or default_method_registry()
+    return {family.value: {
+        "study_designs": registry.plugin(family).supported_designs,
+        "outcome_types": registry.plugin(family).supported_outcome_types,
+        "effect_measures": registry.plugin(family).supported_effect_measures,
+    } for family in registry.families()}
+
+
+def protocol_design_spec(protocol, review_id="protocol-planning"):
+    family = infer_review_family(protocol)
+    return ReviewDesignSpec(
+        review_id=review_id, family=family,
+        study_designs=_method_designs(protocol, family),
+        outcome_type=_primary_outcome_type(protocol, family),
+        requested_effect_measure=_effect_measure(protocol),
+        requested_model=_model_preference(protocol),
+        treatment_count=(len(protocol.interventions) or None),
+        adjusted_estimates_required=family in {ReviewFamily.INTERVENTION_NRSI, ReviewFamily.PROGNOSTIC_FACTOR},
+        individual_participant_data=family is ReviewFamily.IPD_META,
+        protocol_version=str(getattr(protocol, "protocol_version", "") or ""),
+    )
+
+
+def validate_protocol_method(protocol, registry=None):
+    registry = registry or default_method_registry()
+    try:
+        return registry.compile(protocol_design_spec(protocol))
+    except MethodInputError as exc:
+        raise ProtocolInputRequired(str(exc), context=exc.context, protocol=protocol) from exc
 
 
 class MethodCapabilityBlockedError(RuntimeError):
@@ -111,7 +187,7 @@ def infer_review_family(protocol: ResearchProtocol) -> ReviewFamily:
         try:
             return ReviewFamily(explicit)
         except ValueError as exc:
-            raise ValueError(f"Unknown review_family {explicit!r}") from exc
+            raise MethodInputError(f"Unknown review_family {explicit!r}", field="review_family", requested=explicit, supported=[item.value for item in ReviewFamily]) from exc
 
     analysis_type = str(getattr(protocol, "analysis_type", "") or "").strip().lower()
     effect_measure = str(getattr(protocol, "effect_measure", "") or "").strip().upper()
@@ -169,23 +245,12 @@ def compile_project_method_plan(
 ) -> MethodPlan:
     registry = registry or default_method_registry()
     review_id = ensure_project_review_id(project)
-    family = infer_review_family(protocol)
-    design_spec = ReviewDesignSpec(
-        review_id=review_id,
-        family=family,
-        study_designs=_method_designs(protocol, family),
-        outcome_type=_primary_outcome_type(protocol, family),
-        requested_effect_measure=_effect_measure(protocol),
-        requested_model=_model_preference(protocol),
-        treatment_count=(len(protocol.interventions) or None),
-        adjusted_estimates_required=family in {
-            ReviewFamily.INTERVENTION_NRSI,
-            ReviewFamily.PROGNOSTIC_FACTOR,
-        },
-        individual_participant_data=family is ReviewFamily.IPD_META,
-        protocol_version=str(getattr(protocol, "protocol_version", "") or ""),
-    )
-    plan = registry.compile(design_spec, allow_validating=allow_validating)
+    try:
+        design_spec = protocol_design_spec(protocol, review_id)
+        plan = registry.compile(design_spec, allow_validating=allow_validating)
+    except MethodInputError as exc:
+        raise ProtocolInputRequired(str(exc), context=exc.context, protocol=protocol, project=project) from exc
+    family = design_spec.family
     plugin = registry.plugin(family, policy_version=plan.policy_version)
     project.save_json("method_plan.json", plan, subdir="analysis")
     project.save_json(
@@ -221,6 +286,30 @@ def compile_project_method_plan(
     return plan
 
 
+def admit_project_protocol(project, protocol, **kwargs):
+    """Application boundary: validate vocabulary and original scope before persistence."""
+    from new_meta.core.protocol_scope import ensure_project_protocol_scope
+    try:
+        validate_protocol_method(protocol, registry=kwargs.get("registry"))
+        ensure_project_protocol_scope(project, protocol)
+    except ProtocolInputRequired as exc:
+        raise exc.persist(project)
+    plan = compile_project_method_plan(project, protocol, **kwargs)
+    # Resolve this phase only; retain the rejected proposal and other phase issues.
+    from new_meta.core.primary_analysis_alignment import _read_scoped, _write_scoped_atomic
+    try:
+        import json
+        previous = json.loads(_read_scoped(project, "analysis/protocol_input_status.json", max_bytes=4 * 1024 * 1024))
+    except (OSError, ValueError):
+        previous = None
+    if isinstance(previous, dict) and previous.get("status") == "needs_input":
+        from new_meta.schemas.phase_result import ExecutionStatus, PhaseName, PhaseResult
+        resolved = PhaseResult(run_id=project.base_dir.name, phase=PhaseName.PROTOCOL,
+            status=ExecutionStatus.SUCCEEDED, summary="The corrected protocol passed method and original-scope admission.")
+        _write_scoped_atomic(project, "analysis/protocol_input_status.json", resolved.model_dump_json(indent=2).encode())
+    return plan
+
+
 def normalize_protocol_method_fields(protocol: ResearchProtocol) -> ResearchProtocol:
     """Canonicalize planner-authored method fields before persistence/execution."""
     family = infer_review_family(protocol)
@@ -240,47 +329,29 @@ def _method_designs(protocol: ResearchProtocol, family: ReviewFamily) -> list[st
 
 
 def _map_design(value: str, family: ReviewFamily) -> str:
+    """Normalize exact legacy aliases, never infer a design from a substring."""
     normalized = re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
-    if family is ReviewFamily.DIAGNOSTIC_ACCURACY:
-        if "cohort" in normalized:
-            return "diagnostic_cohort"
-        if "two_gate" in normalized or "case_control" in normalized:
-            return "two_gate"
-        return "diagnostic_cross_sectional"
-    if family is ReviewFamily.PREDICTION_MODEL:
-        if "validation" in normalized:
-            return "prediction_validation"
-        if "update" in normalized:
-            return "prediction_update"
-        return "prediction_development"
-    if family is ReviewFamily.PROGNOSTIC_FACTOR:
-        return "case_cohort" if "case" in normalized else "prognostic_cohort"
-    if "cluster" in normalized:
-        return "cluster_rct"
-    if "cross" in normalized and "section" not in normalized:
-        return "crossover_rct"
-    if "multi" in normalized and "arm" in normalized:
-        return "multi_arm_rct"
-    if normalized == "rct" or any(
-        marker in normalized
-        for marker in ("randomized_controlled_trial", "randomised_controlled_trial")
-    ):
-        return "parallel_rct"
-    mappings = {
-        "case_control": "case_control",
-        "cohort": "cohort",
-        "cross_sectional": "cross_sectional",
-        "registry": "registry",
-        "surveillance": "surveillance",
-        "controlled_before_after": "controlled_before_after",
-        "interrupted_time_series": "interrupted_time_series",
-        "regression_discontinuity": "regression_discontinuity",
-        "instrumental_variable": "instrumental_variable",
+    aliases = {
+        "rct": "parallel_rct", "rcts": "parallel_rct",
+        "randomized_controlled_trial": "parallel_rct", "randomized_controlled_trials": "parallel_rct",
+        "randomised_controlled_trial": "parallel_rct", "randomised_controlled_trials": "parallel_rct",
+        "randomized_controlled_trial_rct": "parallel_rct", "randomized_controlled_trials_rcts": "parallel_rct",
+        "randomised_controlled_trial_rct": "parallel_rct", "randomised_controlled_trials_rcts": "parallel_rct",
+        "parallel_group_rct": "parallel_rct", "parallel_randomized_controlled_trial": "parallel_rct",
+        "cluster_randomized_trial": "cluster_rct", "cluster_randomised_trial": "cluster_rct",
+        "cluster_randomized_controlled_trial": "cluster_rct", "cluster_randomised_controlled_trial": "cluster_rct",
+        "crossover_randomized_trial": "crossover_rct", "cross_over_rct": "crossover_rct",
+        "multiarm_rct": "multi_arm_rct", "multi_arm_randomized_trial": "multi_arm_rct",
+        "cohort_study": "cohort", "cohort_studies": "cohort",
+        "case_control_study": "case_control", "cross_sectional_study": "cross_sectional",
     }
-    for marker, mapped in mappings.items():
-        if marker in normalized:
-            return mapped
-    return normalized or _default_design(family)
+    family_aliases = {
+        ReviewFamily.DIAGNOSTIC_ACCURACY: {"cohort": "diagnostic_cohort", "cross_sectional": "diagnostic_cross_sectional", "case_control": "two_gate"},
+        ReviewFamily.PREDICTION_MODEL: {"external_validation": "prediction_validation", "validation": "prediction_validation", "development": "prediction_development", "model_update": "prediction_update"},
+        ReviewFamily.PROGNOSTIC_FACTOR: {"cohort": "prognostic_cohort"},
+    }
+    normalized = aliases.get(normalized, normalized)
+    return family_aliases.get(family, {}).get(normalized, normalized)
 
 
 def _default_design(family: ReviewFamily) -> str:

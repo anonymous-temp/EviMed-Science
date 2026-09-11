@@ -18,6 +18,14 @@ class MethodCompilationError(ValueError):
     pass
 
 
+class MethodInputError(MethodCompilationError):
+    """A known unsupported domain input, distinct from an internal compiler fault."""
+
+    def __init__(self, message: str, *, field: str, requested, supported):
+        super().__init__(message)
+        self.context = {"field": field, "requested": requested, "supported": list(supported)}
+
+
 class MethodRegistry:
     def __init__(self, plugins: Iterable[MethodPlugin] | None = None, *, validation_manifest=None):
         self._plugins: dict[tuple[ReviewFamily, str], MethodPlugin] = {}
@@ -62,21 +70,24 @@ class MethodRegistry:
             set(spec.study_designs) - set(plugin.supported_designs)
         ) if "any" not in plugin.supported_designs else []
         if unsupported_designs:
-            raise MethodCompilationError(
+            raise MethodInputError(
                 f"study design(s) not supported by {spec.family.value}: "
-                + ", ".join(unsupported_designs)
+                + ", ".join(unsupported_designs),
+                field="study_designs", requested=spec.study_designs, supported=plugin.supported_designs,
             )
         if (
             "any" not in plugin.supported_outcome_types
             and spec.outcome_type not in plugin.supported_outcome_types
         ):
-            raise MethodCompilationError(
-                f"outcome type {spec.outcome_type!r} is not supported by {spec.family.value}"
+            raise MethodInputError(
+                f"outcome type {spec.outcome_type!r} is not supported by {spec.family.value}",
+                field="primary_outcome_type", requested=spec.outcome_type, supported=plugin.supported_outcome_types,
             )
         if spec.requested_effect_measure not in plugin.supported_effect_measures:
-            raise MethodCompilationError(
+            raise MethodInputError(
                 f"effect measure {spec.requested_effect_measure!r} is not supported by "
-                f"{spec.family.value}"
+                f"{spec.family.value}",
+                field="effect_measure", requested=spec.requested_effect_measure, supported=plugin.supported_effect_measures,
             )
 
         estimator_key = spec.requested_model or spec.outcome_type

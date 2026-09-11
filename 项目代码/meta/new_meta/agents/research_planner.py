@@ -2,7 +2,14 @@
 
 import json
 from new_meta.core.agent_base import BaseAgent
-from new_meta.core.method_planning import normalize_protocol_method_fields
+from new_meta.core.method_planning import (
+    ProtocolInputRequired, method_catalogue, normalize_protocol_method_fields,
+    validate_protocol_method,
+)
+from new_meta.core.method_registry import MethodInputError
+from new_meta.core.protocol_scope import protocol_hash, scope_fields, scope_receipt
+from new_meta.schemas.protocol import ProtocolScopeAssessment
+from pydantic import ValidationError
 from new_meta.schemas.protocol import ResearchProtocol, PICO
 from new_meta.prompts import planner_prompts
 
@@ -12,40 +19,81 @@ class ResearchPlanner(BaseAgent):
         super().__init__("research_planner", planner_prompts.SYSTEM_PROMPT, model=model)
 
     def run(self, question: str) -> ResearchProtocol:
-        """Convert a research question into a structured protocol."""
-        self.log(f"Planning research protocol for: {question}")
+        """Plan and independently check scope within the existing bounded attempts."""
+        prompt = planner_prompts.PICO_EXTRACTION_PROMPT.format(
+            question=question, method_catalogue=json.dumps(method_catalogue(), ensure_ascii=False))
+        return self._plan(question, prompt)
 
-        prompt = planner_prompts.PICO_EXTRACTION_PROMPT.format(question=question)
-        last_err = None
+    def _plan(self, question, prompt):
+        original_prompt = prompt
+        last_error = None
         for attempt in range(3):
+            protocol = None
             try:
                 protocol = self.call_llm_structured(prompt, ResearchProtocol, max_tokens=4096)
                 self._normalize_supported_databases(protocol)
                 self._apply_effect_measure_rules(protocol, question)
-                self._apply_language_scope_rules(protocol, question)
                 normalize_protocol_method_fields(protocol)
+                validate_protocol_method(protocol)
+                protocol._scope_receipt = self.check_scope(question, protocol)
                 self.log(f"Protocol generated — PICO: P={protocol.pico.population}, "
                          f"I={protocol.pico.intervention}, C={protocol.pico.comparator}, "
                          f"O={protocol.pico.outcome_primary}")
-                self.log(f"Effect measure: {protocol.effect_measure}, Model: {protocol.model_preference}")
                 return protocol
-            except Exception as e:
-                last_err = e
-                self.log(f"PICO extraction attempt {attempt + 1} failed: {e}", level="warning")
-        raise RuntimeError(f"PICO extraction failed after 3 attempts: {last_err}")
+            except MethodInputError as exc:
+                last_error = ProtocolInputRequired(str(exc), context=exc.context, protocol=protocol)
+            except ProtocolInputRequired as exc:
+                last_error = exc
+            except Exception as exc:
+                # Provider/internal faults retain their failure semantics.
+                last_error = exc
+                self.log(f"PICO extraction attempt {attempt + 1} failed: {exc}", level="warning")
+                continue
+            last_error.phase.data["original_question"] = question
+            self.log(f"PICO proposal attempt {attempt + 1} requires correction: {last_error}", level="warning")
+            prompt = original_prompt + "\n\nValidation feedback (not new user intent):\n" + json.dumps(
+                last_error.phase.model_dump(mode="json"), ensure_ascii=False)
+            prompt += ("\nRepair only representation or scope drift relative to the ORIGINAL question. "
+                       "Never drop unsupported requested designs or other explicit requirements to pass validation.")
+        if isinstance(last_error, ProtocolInputRequired):
+            raise last_error
+        raise RuntimeError(f"PICO extraction failed after 3 attempts: {last_error}") from last_error
 
-    def refine(self, current_protocol: ResearchProtocol, user_input: str) -> ResearchProtocol:
-        """Refine protocol based on user feedback."""
+    def check_scope(self, question, protocol):
+        """A separate assessment call with no planner conversation or self-attestation."""
+        snapshot = ResearchProtocol.model_validate(protocol.model_dump())
+        prompt = planner_prompts.SCOPE_CHECK_PROMPT.format(
+            question=question, protocol=snapshot.model_dump_json(indent=2),
+            fields=json.dumps(scope_fields(snapshot), ensure_ascii=False))
+        try:
+            assessment = self.llm.structured_output(
+                [{"role": "system", "content": planner_prompts.SCOPE_CHECK_SYSTEM},
+                 {"role": "user", "content": prompt}],
+                ProtocolScopeAssessment, max_tokens=8192)
+        except ValueError as exc:
+            if not isinstance(exc.__cause__, (ValidationError, json.JSONDecodeError)):
+                raise
+            raise ProtocolInputRequired("Independent scope assessment was malformed; clarify and restart.",
+                code="protocol_scope_unverified", protocol=protocol) from exc
+        try:
+            if protocol_hash(protocol) != protocol_hash(snapshot):
+                raise ValueError("Protocol changed during independent scope assessment")
+            return scope_receipt(question, snapshot, assessment)
+        except ProtocolInputRequired:
+            raise
+        except (ValidationError, ValueError, TypeError) as exc:
+            raise ProtocolInputRequired(f"Independent scope assessment is incomplete or unanchored: {exc}",
+                code="protocol_scope_unverified", protocol=protocol) from exc
+
+    def refine(self, current_protocol: ResearchProtocol, user_input: str, *, original_question: str = "") -> ResearchProtocol:
+        """Refinement cannot replace the original objective; changed objectives restart."""
+        if not original_question.strip():
+            raise ProtocolInputRequired("The original question is required for refinement; restart with the intended question.",
+                                        code="protocol_scope_original_missing", protocol=current_protocol)
         prompt = planner_prompts.PICO_REFINEMENT_PROMPT.format(
-            current_protocol=json.dumps(current_protocol.model_dump(), indent=2, ensure_ascii=False),
-            user_input=user_input,
-        )
-        protocol = self.call_llm_structured(prompt, ResearchProtocol, max_tokens=4096)
-        self._normalize_supported_databases(protocol)
-        self._apply_effect_measure_rules(protocol, user_input)
-        self._apply_language_scope_rules(protocol, user_input)
-        normalize_protocol_method_fields(protocol)
-        return protocol
+            current_protocol=current_protocol.model_dump_json(indent=2), user_input=user_input,
+            question=original_question, method_catalogue=json.dumps(method_catalogue(), ensure_ascii=False))
+        return self._plan(original_question, prompt)
 
     @staticmethod
     def _normalize_supported_databases(protocol: ResearchProtocol) -> None:

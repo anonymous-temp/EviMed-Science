@@ -1663,6 +1663,14 @@ def _refresh_review_decision_artifacts(project) -> dict:
         }
 
     protocol = ResearchProtocol.model_validate(protocol_data)
+    from new_meta.core.method_planning import ProtocolInputRequired
+    from new_meta.core.protocol_scope import ensure_project_protocol_scope
+    try:
+        ensure_project_protocol_scope(project, protocol, allow_recheck=False)
+    except ProtocolInputRequired as exc:
+        return {"artifacts_refreshed": False, "execution": exc.phase.model_dump(mode="json"),
+                "refresh_warnings": [exc.phase.summary], "evidence_readiness": None}
+
     if project.get_path("synthesis_result.json", subdir="analysis").exists() and not project.get_path("meta_results.json", subdir="analysis").exists():
         from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, require_current_compiled_alignment
         try:
@@ -2036,6 +2044,14 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
 
     project_dir = _resolve_project_dir(payload.get("project_dir"), parent_id=parent_id)
     project = Project("resume project", resume_dir=project_dir)
+    from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
+    from new_meta.schemas.protocol import ResearchProtocol
+    protocol_data = project.load_json("protocol.json")
+    if protocol_data:
+        try:
+            admit_project_protocol(project, ResearchProtocol.model_validate(protocol_data), enforce=True)
+        except ProtocolInputRequired as exc:
+            return _protocol_input_payload(exc)
     completed_before = project.get_completed_steps()
     resume_step_before = project.get_resume_step()
     evidence_before = _load_evidence_readiness_payload(project, {})
@@ -2123,6 +2139,11 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
     stderr_tail = _tail_text(proc.stderr or "")
     if proc.returncode == 2:
         from new_meta.schemas.phase_result import PhaseResult
+        protocol_phase = project.load_json("protocol_input_status.json", subdir="analysis")
+        if protocol_phase and protocol_phase.get("status") == "needs_input":
+            return {"ok": False, "error": protocol_phase.get("error_code"), "input_required": True,
+                    "phase": protocol_phase, "project_dir": str(project.base_dir),
+                    "message": protocol_phase.get("summary", "Clarify the question and restart.")}
         alignment_phase = project.load_json("primary_alignment_status.json", subdir="analysis")
         if alignment_phase:
             phase = PhaseResult.model_validate(alignment_phase)
@@ -2255,10 +2276,13 @@ def _run_downstream_after_overrides_payload(payload: dict, *, parent_id: str = "
 
     # Recompile from the persisted protocol every time: a web override updates
     # input evidence, but must not silently reuse an obsolete plan/route.
-    from new_meta.core.method_planning import compile_project_method_plan
+    from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
     from new_meta.core.synthesis_routing import SynthesisRoute, load_synthesis_route
 
-    method_plan = compile_project_method_plan(project, protocol, enforce=True)
+    try:
+        method_plan = admit_project_protocol(project, protocol, enforce=True)
+    except ProtocolInputRequired as exc:
+        return _protocol_input_payload(exc)
     synthesis_route = load_synthesis_route(project)
     if synthesis_route.route is SynthesisRoute.METHOD_PLUGIN:
         # Migration is idempotent.  It is also required for legacy projects
@@ -2790,6 +2814,13 @@ def _save_evidence_gap_validation(
     return manuscript
 
 
+def _protocol_input_payload(exc):
+    return {"ok": False, "error": exc.phase.error_code, "input_required": True,
+            "project_dir": str(exc.project.base_dir) if exc.project else "",
+            "phase": exc.phase.model_dump(mode="json"),
+            "message": exc.phase.summary + " " + " ".join(action.title for action in exc.phase.next_actions)}
+
+
 def _run_phase1_sync(topic: str, output_dir: str, push=None) -> dict:
     """Run steps 0-3 (PICO → Query → Search → T/A Screening). Returns state dict for phase 2."""
     def _push(kind, payload):
@@ -2800,6 +2831,10 @@ def _run_phase1_sync(topic: str, output_dir: str, push=None) -> dict:
         _push("phase1_done", result)
         return result
     except Exception as e:
+        from new_meta.core.method_planning import ProtocolInputRequired
+        if isinstance(e, ProtocolInputRequired):
+            _push("method_decision_required", _protocol_input_payload(e))
+            return None
         _push("error", str(e))
         raise
 
@@ -2810,7 +2845,7 @@ def _run_phase1_inner(topic: str, output_dir: str, _push) -> dict:
         sys.path.insert(0, str(META_ROOT))
 
     from new_meta.core.project import Project
-    from new_meta.core.method_planning import compile_project_method_plan
+    from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
     from new_meta.core.evidence_gap_delivery import complete_zero_record_review
     from new_meta.core.pdf_intake import PDF_PARSE_CACHE_VERSION, parse_file_with_cache, parse_user_pdfs, save_pdf_intake_manifest
     from new_meta.agents.research_planner import ResearchPlanner
@@ -2823,13 +2858,12 @@ def _run_phase1_inner(topic: str, output_dir: str, _push) -> dict:
     project = Project(topic, output_dir=Path(output_dir))
 
     _push("progress", (0, META_STEPS[0]))
-    protocol = ResearchPlanner().run(topic)
+    try:
+        protocol = ResearchPlanner().run(topic)
+        admit_project_protocol(project, protocol, enforce=True)
+    except ProtocolInputRequired as exc:
+        raise exc.persist(project)
     project.save_json("protocol.json", protocol)
-    compile_project_method_plan(
-        project,
-        protocol,
-        enforce=True,
-    )
     project.save_checkpoint("protocol")
     _push("done_step", (0, META_STEPS[0], ctx))
 
@@ -2943,6 +2977,10 @@ def _run_phase2_sync(phase1_state: dict, output_dir: str, push=None, user_pdf_pa
     try:
         return _run_phase2_inner(phase1_state, output_dir, _push, user_pdf_paths or [])
     except Exception as e:
+        from new_meta.core.method_planning import ProtocolInputRequired
+        if isinstance(e, ProtocolInputRequired):
+            _push("method_decision_required", _protocol_input_payload(e))
+            return None
         if "Full text sources are required" in str(e):
             project_dir = str(phase1_state.get("project_dir") or "")
             screened_records = len(phase1_state.get("ta_included") or [])
@@ -3022,6 +3060,8 @@ def _run_phase2_inner(phase1_state: dict, output_dir: str, _push, user_pdf_paths
     if not project_dir.exists():
         raise ValueError(f"phase1 project_dir does not exist: {project_dir}")
     project = Project(phase1_state.get("topic", "unknown"), resume_dir=project_dir)
+    from new_meta.core.method_planning import admit_project_protocol
+    admit_project_protocol(project, protocol, enforce=True)
     output_lang = _requested_output_language(
         phase1_state,
         fallback_text=str(phase1_state.get("topic") or ""),
@@ -3285,6 +3325,9 @@ def _run_phase2_inner(phase1_state: dict, output_dir: str, _push, user_pdf_paths
 
     extractor = DataExtractionAgent()
     extracted_studies = extractor.run(included_papers, parsed_papers, protocol, project)
+    # Extraction may reconcile the observed RCT designs; re-admit that exact proposal.
+    admit_project_protocol(project, protocol, enforce=True)
+    project.save_json("protocol.json", protocol)
     project.save_checkpoint("extraction")
     ctx["n_extracted"] = len(extracted_studies)
     ctx["n_ft_excluded"] = len(all_ta_papers) - len(included_papers)
@@ -3626,6 +3669,10 @@ def _run_pipeline_sync(
             skip_confirm=skip_confirm,
         )
     except Exception as e:
+        from new_meta.core.method_planning import ProtocolInputRequired
+        if isinstance(e, ProtocolInputRequired):
+            _push("method_decision_required", _protocol_input_payload(e))
+            return None
         _push("error", str(e))
         raise
 
@@ -5125,7 +5172,7 @@ async def _handle_session(
                                 },
                             })
                             await push_typewriter(
-                                "当前存在需要方法学确认的选项。请选择推荐项或其他选项后继续当前任务。",
+                                str(payload.get("message") or "当前存在需要方法学确认的选项。请选择推荐项或其他选项后继续当前任务。"),
                                 message_id,
                                 finished=True,
                             )

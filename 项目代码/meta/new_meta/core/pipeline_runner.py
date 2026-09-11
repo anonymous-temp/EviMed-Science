@@ -101,7 +101,11 @@ class PipelineRunner:
             PhaseResult,
         )
 
-        route = self._ensure_synthesis_route(protocol)
+        from new_meta.core.method_planning import ProtocolInputRequired
+        try:
+            route = self._ensure_synthesis_route(protocol)
+        except ProtocolInputRequired as exc:
+            return exc.phase
         from new_meta.core.synthesis_routing import SynthesisRoute
 
         if route.route is not SynthesisRoute.PAIRWISE_AGGREGATE:

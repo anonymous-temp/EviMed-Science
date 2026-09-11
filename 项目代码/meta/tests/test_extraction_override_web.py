@@ -565,6 +565,8 @@ def test_save_extraction_review_decision_does_not_bless_unbound_cached_pool() ->
     project.save_text("draft.md", "## Results\n\nPrimary outcome OR 0.66.", subdir="manuscript")
     project.save_checkpoint("manuscript")
 
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     result = _save_extraction_review_decision_payload(
         {
             "project_dir": str(project.base_dir),
@@ -685,6 +687,8 @@ def test_save_extraction_review_decision_keeps_rerun_required_for_missing_select
     project.save_text("draft.md", "## Results\n\nPrimary outcome OR 0.66.", subdir="manuscript")
     project.save_checkpoint("manuscript")
 
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     result = _save_extraction_review_decision_payload(
         {
             "project_dir": str(project.base_dir),

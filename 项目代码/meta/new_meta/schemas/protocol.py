@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import PrivateAttr, BaseModel, Field, field_validator, model_validator
 
 
 class PICO(BaseModel):
@@ -18,6 +18,7 @@ class PICO(BaseModel):
 
 class ResearchProtocol(BaseModel):
     """Full research protocol derived from PICO and user input."""
+    _scope_receipt: dict = PrivateAttr(default_factory=dict)
     research_question: str
     pico: PICO
     study_design: str = "RCT"  # "RCT" / "observational" / "both" — kept for backward compat
@@ -36,7 +37,7 @@ class ResearchProtocol(BaseModel):
     exclusion_criteria: list[str] = []
     databases: list[str] = ["PubMed"]
     date_range: str = ""  # e.g. "2010-2025"
-    language: str = "English"
+    language: str = "No language restriction"
     effect_measure: str = "MD"  # "OR" / "RR" / "RD" / "MD" / "SMD" / "HR" / "PROP" / "COR" / "IRR"
     model_preference: str = "random"  # "fixed" / "random"
     tau_estimator: str = "DL"  # "DL" / "REML" / "HKSJ"
@@ -81,3 +82,15 @@ class ResearchProtocol(BaseModel):
     # NMA support
     interventions: list[str] = []  # Multiple interventions for network meta-analysis
     analysis_type: str = "pairwise"  # "pairwise" / "network"
+
+
+class ProtocolScopeField(BaseModel):
+    field: str
+    status: Literal["match", "mismatch", "uncertain"]
+    basis: Literal["explicit", "not_explicit"]
+    original_quote: str
+    rationale: str
+
+
+class ProtocolScopeAssessment(BaseModel):
+    fields: list[ProtocolScopeField]

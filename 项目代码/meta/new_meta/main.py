@@ -869,14 +869,7 @@ def _unpack_query_result(query_result) -> tuple[str, str, bool]:
 
 
 def _broaden_protocol_for_retry(protocol: ResearchProtocol) -> str:
-    """Relax comparator wording without injecting topic-specific assumptions."""
-    original = protocol.pico.comparator
-    intervention = protocol.pico.intervention or "the intervention"
-    protocol.pico.comparator = (
-        f"{original}; any eligible comparator arm that does not contain {intervention}, "
-        "including placebo, usual care, standard care, no treatment, or another active "
-        "non-intervention control when clinically appropriate"
-    )
+    """Keep eligibility immutable; retries may vary retrieval terms only."""
     return protocol.pico.comparator
 
 
@@ -1096,6 +1089,14 @@ def _require_cli_method_delivery(project: Project, phase) -> None:
     for action in decision["next_actions"]:
         print(f"  - {action}")
     raise ReleaseBlockedError(decision)
+
+
+def _admit_cli_protocol(project, protocol, **kwargs):
+    from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
+    try:
+        return admit_project_protocol(project, protocol, **kwargs)
+    except ProtocolInputRequired as exc:
+        _require_cli_method_delivery(project, exc.phase)
 
 
 def _require_cli_primary_selection(project, selection_result):
@@ -3985,6 +3986,12 @@ def main():
     resume_dir = Path(args.resume) if args.resume else None
     if resume_dir and resume_dir.exists():
         project = Project(args.topic, output_dir=output_dir, resume_dir=resume_dir)
+        from new_meta.core.protocol_scope import original_project_topic
+        from new_meta.core.method_planning import ProtocolInputRequired
+        try:
+            args.topic = original_project_topic(project)
+        except ProtocolInputRequired as exc:
+            _require_cli_method_delivery(project, exc.phase)
         resume_step = project.get_resume_step()
         completed = project.get_completed_steps()
         print(f"\nResuming project: {project.base_dir}")
@@ -4019,6 +4026,10 @@ def main():
         sys.exit(1)
 
     model = args.model
+    cached_protocol = project.load_json("protocol.json")
+    if cached_protocol:
+        _admit_cli_protocol(project, ResearchProtocol.model_validate(cached_protocol),
+                            allow_validating=args.allow_validating_methods, enforce=True)
     if args.rerun_manuscript_only:
         if not _can_rerun_manuscript_only(project):
             print("Error: cached protocol/extraction/analysis artifacts are incomplete; cannot rerun manuscript only.")
@@ -4057,7 +4068,13 @@ def main():
     else:
         print_step("1", "Research Planning — PICO Extraction")
         planner = ResearchPlanner(model=model)
-        protocol = planner.run(args.topic)
+        from new_meta.core.method_planning import ProtocolInputRequired
+        from new_meta.core.protocol_scope import original_project_topic
+        try:
+            protocol = planner.run(original_project_topic(project))
+        except ProtocolInputRequired as exc:
+            exc.persist(project)
+            _require_cli_method_delivery(project, exc.phase)
 
         if args.analysis_type:
             protocol.analysis_type = args.analysis_type
@@ -4066,7 +4083,6 @@ def main():
         print(ResearchPlanner.display_protocol(protocol))
 
         project.save_json("protocol.json", protocol)
-        project.save_checkpoint("protocol")
 
     ipd_records = None
     ipd_options: dict = {}
@@ -4098,12 +4114,14 @@ def main():
             }[normalized_ipd_outcome]
         project.save_json("protocol.json", protocol)
 
-    compile_project_method_plan(
+    _admit_cli_protocol(
         project,
         protocol,
         allow_validating=args.allow_validating_methods,
         enforce=True,
     )
+    project.save_json("protocol.json", protocol)
+    project.save_checkpoint("protocol")
     if ipd_records is not None:
         from new_meta.core.ipd_ingestion import ingest_ipd_studies_to_ledger
 
@@ -4185,15 +4203,7 @@ def main():
         # not a reason to interrupt a topic-to-article run.
         if not papers:
             if search_iteration == 1:
-                print("  No records found. Auto-broadening the comparator and retrying once...")
-                _broaden_protocol_for_retry(protocol)
-                project.save_json("protocol.json", protocol)
-                compile_project_method_plan(
-                    project,
-                    protocol,
-                    allow_validating=args.allow_validating_methods,
-                    enforce=True,
-                )
+                print("  No records found. Retrying retrieval terms once with unchanged eligibility...")
                 search_query, _, _ = _unpack_query_result(query_builder.run(protocol))
                 project.save_text("search_query.txt", search_query)
                 project.clear_downstream("search_query")
@@ -4238,15 +4248,7 @@ def main():
         # represented honestly in the final evidence-gap/narrative article.
         if not ta_included_papers:
             if search_iteration == 1:
-                print("  No records passed screening. Auto-broadening the comparator and retrying once...")
-                _broaden_protocol_for_retry(protocol)
-                project.save_json("protocol.json", protocol)
-                compile_project_method_plan(
-                    project,
-                    protocol,
-                    allow_validating=args.allow_validating_methods,
-                    enforce=True,
-                )
+                print("  No records passed screening. Retrying retrieval terms once with unchanged eligibility...")
                 search_query, _, _ = _unpack_query_result(query_builder.run(protocol))
                 project.save_text("search_query.txt", search_query)
                 project.clear_downstream("search_query")
@@ -4555,6 +4557,8 @@ def main():
                 extractor = DataExtractionAgent(model=model)
                 extracted_studies = extractor.run(papers_for_extraction, parsed_papers, protocol, project)
                 project.save_checkpoint("extraction")
+            _admit_cli_protocol(project, protocol, allow_validating=args.allow_validating_methods, enforce=True)
+            project.save_json("protocol.json", protocol)
             print(f"Extracted data from {len(extracted_studies)} studies")
             for s in extracted_studies:
                 c = s.characteristics
@@ -4634,6 +4638,7 @@ def main():
         parsed_papers,
         allow_validating=args.allow_validating_methods,
     )
+    _admit_cli_protocol(project, protocol, allow_validating=args.allow_validating_methods, enforce=True)
     if rct_reconciliation.get("multi_arm_studies"):
         print(
             "  Recompiled design-aware RCT route for "
@@ -5067,11 +5072,16 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        from new_meta.core.method_planning import MethodCapabilityBlockedError
+        from new_meta.core.method_planning import MethodCapabilityBlockedError, ProtocolInputRequired
         from new_meta.core.release_contract import ReleaseBlockedError
 
         if isinstance(exc, ReleaseBlockedError):
             sys.exit(2)
+        if isinstance(exc, ProtocolInputRequired) and exc.project is not None:
+            try:
+                _require_cli_method_delivery(exc.project, exc.phase)
+            except ReleaseBlockedError:
+                sys.exit(2)
         if isinstance(exc, MethodCapabilityBlockedError):
             # A scope outside the validated capability set is a decision, not a
             # crash: write it where every other terminal state is written and

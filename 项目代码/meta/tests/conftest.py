@@ -25,3 +25,21 @@ def patch_writing_helper(monkeypatch):
         return patched
 
     return patch
+
+
+@pytest.fixture(autouse=True)
+def forbid_unmocked_protocol_scope_calls(monkeypatch):
+    """A new scope precondition must never turn an offline fixture into a live call."""
+    from new_meta.agents.research_planner import ResearchPlanner
+    from new_meta.core.llm import LLMClient
+    original_check = ResearchPlanner.check_scope
+    original_structured = LLMClient.structured_output
+    original_call = LLMClient._call
+
+    def guarded(self, topic, protocol):
+        if (getattr(self.llm.structured_output, "__func__", None) is original_structured
+                and getattr(self.llm._call, "__func__", None) is original_call):
+            raise AssertionError("Provide a mocked independent scope response or a scope receipt; live scope-model calls are forbidden in unit tests")
+        return original_check(self, topic, protocol)
+
+    monkeypatch.setattr(ResearchPlanner, "check_scope", guarded)

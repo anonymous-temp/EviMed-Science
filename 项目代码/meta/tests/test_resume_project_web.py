@@ -30,6 +30,8 @@ def _protocol() -> ResearchProtocol:
 def test_resume_project_payload_uses_cli_resume_and_returns_evidence(monkeypatch) -> None:
     project = _project_under_output()
     project.save_json("protocol.json", _protocol())
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     for step in ["protocol", "search_query", "search", "ta_screening", "pdf_download"]:
         project.save_checkpoint(step)
 
@@ -78,6 +80,8 @@ def test_resume_project_payload_uses_cli_resume_and_returns_evidence(monkeypatch
 def test_resume_project_payload_records_cli_failure(monkeypatch) -> None:
     project = _project_under_output()
     project.save_json("protocol.json", _protocol())
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_checkpoint("protocol")
 
     def fake_runner(cmd: list[str], *, timeout_seconds: int):
@@ -100,6 +104,8 @@ def test_resume_project_payload_records_cli_failure(monkeypatch) -> None:
 def test_resume_project_payload_skips_when_project_is_already_complete(monkeypatch) -> None:
     project = _project_under_output()
     project.save_json("protocol.json", _protocol())
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_text("draft.md", "# Done", subdir="manuscript")
     project.save_json(
         "manuscript_facts.json",
@@ -126,6 +132,8 @@ def test_resume_project_payload_skips_when_project_is_already_complete(monkeypat
 def test_resume_project_payload_can_force_manuscript_only_rerun(monkeypatch) -> None:
     project = _project_under_output()
     project.save_json("protocol.json", _protocol())
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     for step in PIPELINE_STEPS:
         project.save_checkpoint(step)
     project.save_text("draft.md", "# Old draft", subdir="manuscript")
