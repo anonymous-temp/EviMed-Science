@@ -241,6 +241,10 @@ def _save_alignment_adjudication(project, decision, *, assessor_id):
     source_text = _read_scoped(project, proof.checked_source_path).decode()
     if assessment.outcome_index != index or not _anchored(assessment, source_text):
         raise ValueError("Alignment adjudication must quote the bound source for this exact row")
+    from new_meta.core.extraction_verification import validate_check_batch
+    errors = validate_check_batch(study, [index], [assessment], source_text, protocol)
+    if errors:
+        raise ValueError("Explicit alignment adjudication requires complete numeric and clinical source verification: " + ", ".join(item["code"] for item in errors))
     _record_proof(project, protocol, study, index, assessment, source_text=source_text,
                   source_path=project.base_dir / proof.source_path,
                   assessor="human-review-v1", assessor_id=assessor_id, expected_source_sha256=decision.alignment_source_sha256)

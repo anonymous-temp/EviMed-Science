@@ -663,22 +663,19 @@ class LLMClient:
                     LLM_JSON_REPAIR_RETRIES,
                     first_error,
                 )
-                repair_messages = [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You repair invalid JSON for a structured-output API. "
-                            "Return only syntactically valid JSON that matches the provided schema."
-                        ),
-                    },
+                # A schema repair may produce semantic judgments. Keep the full
+                # original source/protocol in every retry instead of certifying a
+                # response generated from only a truncated invalid JSON fragment.
+                repair_messages = list(augmented) + [
                     {
                         "role": "user",
                         "content": (
-                            "Repair this invalid structured-output response.\n\n"
-                            f"Schema:\n```json\n{schema_json}\n```\n\n"
+                            "The previous structured response failed validation. Repair it using "
+                            "the complete original source and instructions above. Do not invent "
+                            "data or omit required assessments to make the schema pass.\n\n"
                             f"Error:\n{last_error}\n\n"
-                            f"Invalid response:\n```text\n{raw[:12000]}\n```\n\n"
-                            "Return ONLY corrected JSON. Do not include markdown fences or explanation."
+                            f"Previous invalid response (may be truncated):\n```text\n{raw[:12000]}\n```\n\n"
+                            "Return ONLY corrected JSON matching the original schema."
                         ),
                     },
                 ]

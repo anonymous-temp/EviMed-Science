@@ -342,6 +342,14 @@ class PipelineRunner:
                 )
             if verdict["status"] != "match":
                 unresolved.append({"row_id": f"{source_row[0].characteristics.pmid or source_row[0].characteristics.study_id}:{source_row[1]}" if source_row else result_id, "result_id": result_id, "alignment": verdict})
+        if not direct_ipd and plan.family is ReviewFamily.INTERVENTION_RCT and not unresolved:
+            from new_meta.core.extraction_verification import trial_unit_issues
+            trial_candidates = []
+            for result_id in result_ids:
+                study, index = source_rows[result_id]
+                trial_candidates.append((f"{study.characteristics.pmid or study.characteristics.study_id}:{index}",
+                                         study.outcomes[index].primary_analysis_alignment.assessment))
+            unresolved.extend(trial_unit_issues(trial_candidates))
         if unresolved:
             phase = needs_input_phase(self.project, unresolved)
             self.project.save_json("primary_alignment_status.json", phase, subdir="analysis")
@@ -536,6 +544,7 @@ class PipelineRunner:
 
         source_gate_fingerprint = selection_gate_fingerprint(self.project)
         primary_candidates = []
+        verified_trial_candidates = []
         primary_selection_audit: list[dict[str, Any]] = []
         paper_source_lookup = build_paper_source_lookup(included_papers or [])
         from new_meta.core.result_rob import load_effective_rob_assessments
@@ -633,6 +642,7 @@ class PipelineRunner:
                     audit_row["effect"] = _meta_engine._to_original(effect.yi, protocol.effect_measure, effect.vi)
                     audit_row["se"] = effect.se
                     study_candidates.append((rank, study, outcome, effect, audit_row["row_id"]))
+                    verified_trial_candidates.append((audit_row["row_id"], outcome.primary_analysis_alignment.assessment))
                 else:
                     audit_row["decision"] = "needs_input" if audit_row["reason"] in {
                         "reported_effect_measure_required", "outcome_type_requires_adjudication",
@@ -667,16 +677,52 @@ class PipelineRunner:
                         row["reason"] = "explicit_primary_choice" if chosen else "unique_aligned_primary_result"
                 primary_candidates.append((selected_study, selected_outcome, selected_effect, selected_row_id))
 
+        from new_meta.core.method_planning import infer_review_family
+        from new_meta.schemas.method_policy import ReviewFamily
+        from new_meta.core.extraction_verification import trial_unit_issues
+        rct_review = infer_review_family(protocol) is ReviewFamily.INTERVENTION_RCT
+        if rct_review:
+            trial_issues = trial_unit_issues(verified_trial_candidates)
+            by_row = {}
+            for item in trial_issues:
+                by_row.setdefault(item["row_id"], []).append(item)
+            for row in primary_selection_audit:
+                if row["row_id"] in by_row:
+                    row.update({"decision": "needs_input", "reason": by_row[row["row_id"]][0]["reason"],
+                        "trial_unit_issues": by_row[row["row_id"]], "requires_adjudication": True,
+                        "in_final_primary_analysis": False,
+                        "next_action": "Clarify contributing trial units and restart with an explicit independent analysis set; a within-publication choice cannot resolve overlap."})
+            primary_candidates = [item for item in primary_candidates if item[3] not in by_row]
+
         primary_candidates = filter_benchmark_reference_primary_candidates(
             primary_candidates,
             benchmark_reference_manifest,
             primary_selection_audit,
             self.logger,
         )
-        study_effects = dedupe_primary_effect_candidates(
-            [(study, outcome, effect) for study, outcome, effect, _ in primary_candidates],
-            self.logger,
-        )
+        if rct_review:
+            # The source-backed trial gate, not totals/title/manual-reference
+            # heuristics, establishes independent RCT contributions.
+            by_row = {}
+            duplicate_conflicts = set()
+            for study, outcome, effect, row_id in primary_candidates:
+                index = int(row_id.rsplit(":", 1)[1])
+                fingerprint = (selection_input_fingerprint(study, index), outcome.primary_analysis_alignment.proof_id)
+                if row_id in by_row and by_row[row_id][0] != fingerprint:
+                    duplicate_conflicts.add(row_id)
+                else:
+                    by_row[row_id] = (fingerprint, effect)
+            for row in primary_selection_audit:
+                if row["row_id"] in duplicate_conflicts:
+                    row.update({"decision": "needs_input", "reason": "duplicate_publication_result_conflict",
+                                "requires_adjudication": True, "in_final_primary_analysis": False,
+                                "next_action": "Resolve contradictory copies of the same publication/result before synthesis."})
+            study_effects = [value[1] for row_id, value in by_row.items() if row_id not in duplicate_conflicts]
+        else:
+            study_effects = dedupe_primary_effect_candidates(
+                [(study, outcome, effect) for study, outcome, effect, _ in primary_candidates],
+                self.logger,
+            )
         final_primary_ids = {effect.study_id for effect in study_effects}
         for row in primary_selection_audit:
             if row["decision"] == "selected_within_study":

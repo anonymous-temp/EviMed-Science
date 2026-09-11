@@ -11,9 +11,16 @@ from new_meta.schemas.protocol import PICO, ResearchProtocol
 from new_meta.schemas.study import ExtractedStudy, OutcomeData, StudyCharacteristics
 
 
+NUMERIC_SOURCE = (
+    "Trial S1 was registered as NCT00000001 and reported 5/100 versus 10/100 events, "
+    "with alternative follow-up analyses reporting 6/100 and 7/100 versus 10/100. "
+    "Independent trial S2 was registered as NCT00000002 and reported 6/100 versus 10/100 events. "
+    "A separately reported HR was 0.66 (95% CI 0.42 to 1.04)."
+)
 SOURCE = (
     "Participants all had chronic kidney disease. Drug was compared with placebo. "
-    "The primary endpoint was a sustained 50% eGFR decline or kidney failure."
+    "The primary endpoint was a sustained 50% eGFR decline or kidney failure. "
+    + NUMERIC_SOURCE
 )
 
 
@@ -37,17 +44,25 @@ def alignment_fixture(tmp_path):
     return project, protocol, study, source
 
 
-def assessment_payload(**statuses):
+def assessment_payload(*, source_outcome=None, study_id="S1", **statuses):
     quotes = {
         "outcome": "The primary endpoint was a sustained 50% eGFR decline or kidney failure.",
         "population": "Participants all had chronic kidney disease.",
         "contrast": "Drug was compared with placebo.",
     }
-    return {"outcome_index": 0, **{
+    assessment = {"outcome_index": 0, **{
         name: {"status": statuses.get(name, "match"), "rationale": "The source supports the judgment.",
                "quote": quote, "source_location": "Methods and Results"}
         for name, quote in quotes.items()
     }}
+    from verification_fixture import verification_payload
+    from new_meta.core.extraction_verification import numeric_fields
+    outcome = source_outcome or OutcomeData(outcome_name="Renal composite endpoint",outcome_type="dichotomous",
+        events_intervention=5,total_intervention=100,events_control=10,total_control=100)
+    assessment["verification"] = verification_payload(outcome, assessment,
+        numeric_quotes={field: NUMERIC_SOURCE for field in numeric_fields(outcome)},
+        registry_id="NCT00000002" if study_id == "S2" else "NCT00000001", trial_quote=NUMERIC_SOURCE)
+    return assessment
 
 
 def stamp_fixture(tmp_path, **statuses):
@@ -240,7 +255,7 @@ def test_refinement_discards_previous_judgments_and_exhaustion_stays_unknown(tmp
     project, protocol, study, source = alignment_fixture(tmp_path)
     agent = DataExtractionAgent()
     monkeypatch.setattr("new_meta.agents.data_extraction_agent.MAX_CHECK_ROUNDS", 1)
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(score=4, primary_analysis_alignment=[assessment_payload()]))
+    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(score=4, primary_analysis_alignment=[]))
     checked = agent._verify_alignment(study, {"pdf_path": str(source)}, {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol, project)
     assert alignment_status(project, protocol, checked, 0)["status"] == "unknown"
 
@@ -321,7 +336,7 @@ def test_bound_selected_effects_can_be_pooled_and_reloaded(tmp_path):
     other.characteristics.study_id = "S2"
     other.characteristics.title = "Independent trial"
     other.outcomes[0].events_intervention = 6
-    record_checked_alignments(project, protocol, other, [assessment_payload()], source_text=SOURCE, source_path=source)
+    record_checked_alignments(project, protocol, other, [assessment_payload(source_outcome=other.outcomes[0], study_id="S2")], source_text=SOURCE, source_path=source)
     studies = [study, other]
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", studies, subdir="extraction")
@@ -389,10 +404,16 @@ def test_compatible_hr_is_excluded_for_verified_clinical_dimension_mismatch(tmp_
         effect_size=0.66, ci_lower=0.42, ci_upper=1.04, source_quote=source_sentence,
         source_location="Results", source_quote_verified=True,
     )]
-    assessment = assessment_payload(**{dimension: "mismatch"})
+    assessment = assessment_payload(source_outcome=study.outcomes[0], **{dimension: "mismatch"})
     previous_quote = assessment[dimension]["quote"]
     assessment[dimension]["quote"] = source_sentence
     assessment[dimension]["rationale"] = f"The source {dimension} differs from the review's prespecified PICO."
+    if dimension == "outcome":
+        assessment["verification"]["source_endpoint_definition"]["quote"] = source_sentence
+        assessment["verification"]["endpoint_relation"] = "different"
+    if dimension == "contrast":
+        assessment["verification"]["estimand_support"]["quote"] = source_sentence
+        assessment["verification"]["randomized_comparison"] = False
     current_source = SOURCE.replace(previous_quote, source_sentence)
     source.write_text(current_source)
     record_checked_alignments(project, protocol, study, [assessment], source_text=current_source, source_path=source)
@@ -536,6 +557,8 @@ def test_independent_checker_can_confirm_source_backed_single_arm_not_applicable
         "status": "match", "rationale": "The source establishes a descriptive single-arm population; an intervention comparison is not applicable to this protocol.",
         "quote": statement, "source_location": "Study design",
     } for name in ("outcome", "population", "contrast")}}
+    from verification_fixture import verification_payload
+    data["verification"] = verification_payload(study.outcomes[0], data, randomized=False)
     agent = DataExtractionAgent()
     prompts = []
     def checked(prompt, *_args, **_kwargs):
@@ -607,7 +630,7 @@ def competing_fixture(tmp_path, *, identical=False, different_timepoint=False, r
     study.outcomes.append(second)
     if reverse:
         study.outcomes.reverse()
-    assessments = [assessment_payload(), {**assessment_payload(), "outcome_index": 1}]
+    assessments = [{**assessment_payload(source_outcome=outcome), "outcome_index": index} for index, outcome in enumerate(study.outcomes)]
     record_checked_alignments(project, protocol, study, assessments, source_text=SOURCE, source_path=source)
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", [study], subdir="extraction")
@@ -686,7 +709,7 @@ def test_existing_review_surface_resolves_primary_choice_and_rejects_stale_candi
     extra.events_intervention = 7
     study.outcomes.append(extra)
     record_checked_alignments(project, protocol, study,
-        [{**assessment_payload(), "outcome_index": index} for index in range(3)], source_text=SOURCE,
+        [{**assessment_payload(source_outcome=study.outcomes[index]), "outcome_index": index} for index in range(3)], source_text=SOURCE,
         source_path=project.base_dir / "papers" / "trial.txt")
     project.save_json("all_extractions.json", [study], subdir="extraction")
     stale = runner.run_primary_effect_selection(protocol=protocol, extracted_studies=[study], rob_results=[rob])
@@ -709,7 +732,7 @@ def test_reconciled_identical_duplicates_ignore_generated_bookkeeping_ids(tmp_pa
     reconcile_extracted_rct_designs(protocol, [study])
     assert study.outcomes[0].contrast_id != study.outcomes[1].contrast_id
     record_checked_alignments(project, protocol, study,
-        [{**assessment_payload(), "outcome_index": index} for index in range(2)], source_text=SOURCE,
+        [{**assessment_payload(source_outcome=study.outcomes[index]), "outcome_index": index} for index in range(2)], source_text=SOURCE,
         source_path=project.base_dir / "papers" / "trial.txt")
     rob = StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])
     result = PipelineRunner(project).run_primary_effect_selection(protocol=protocol, extracted_studies=[study], rob_results=[rob])
@@ -725,7 +748,7 @@ def test_same_numbers_with_different_adjustment_or_contrast_need_choice(tmp_path
     project, protocol, study = competing_fixture(tmp_path, identical=True)
     setattr(study.outcomes[1], field, value)
     record_checked_alignments(project, protocol, study,
-        [{**assessment_payload(), "outcome_index": index} for index in range(2)], source_text=SOURCE,
+        [{**assessment_payload(source_outcome=study.outcomes[index]), "outcome_index": index} for index in range(2)], source_text=SOURCE,
         source_path=project.base_dir / "papers" / "trial.txt")
     rob = StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])
     result = PipelineRunner(project).run_primary_effect_selection(protocol=protocol, extracted_studies=[study], rob_results=[rob])
@@ -747,7 +770,7 @@ def test_review_cannot_choose_a_clinically_matched_but_unselectable_row(tmp_path
         study.outcomes[1].events_control = None
         study.outcomes[1].total_control = None
         record_checked_alignments(project, protocol, study,
-            [{**assessment_payload(), "outcome_index": index} for index in range(2)], source_text=SOURCE,
+            [{**assessment_payload(source_outcome=study.outcomes[index]), "outcome_index": index} for index in range(2)], source_text=SOURCE,
             source_path=project.base_dir / "papers" / "trial.txt")
     project.save_json("all_extractions.json", [study], subdir="extraction")
     rob = StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])
@@ -965,7 +988,7 @@ def test_normal_review_refresh_reaches_package_stage_for_a_genuinely_bound_pool(
     second = study.model_copy(deep=True)
     second.characteristics.study_id = "S2"
     second.outcomes[0].events_intervention = 6
-    record_checked_alignments(project, protocol, second, [assessment_payload()], source_text=SOURCE, source_path=source)
+    record_checked_alignments(project, protocol, second, [assessment_payload(source_outcome=second.outcomes[0], study_id="S2")], source_text=SOURCE, source_path=source)
     studies = [study, second]
     project.save_json("protocol.json", protocol)
     from protocol_scope_fixture import approve_synthetic_protocol_scope

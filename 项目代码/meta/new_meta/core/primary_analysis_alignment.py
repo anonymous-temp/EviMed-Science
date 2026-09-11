@@ -51,7 +51,7 @@ def protocol_fingerprint(protocol) -> str:
 def row_fingerprint(study, index: int) -> str:
     return digest({
         "study": study.characteristics.model_dump(mode="json"),
-        "outcome": study.outcomes[index].model_dump(mode="json", exclude=_ROW_METADATA),
+        "outcome": study.outcomes[index].model_dump(mode="json", exclude=_ROW_METADATA - {"conflicts"}),
         "outcome_index": index,
     })
 
@@ -233,16 +233,19 @@ def _record_proof(project, protocol, study, index, assessment, *, source_text, s
 
 
 def record_checked_alignments(project, protocol, study, assessments, *, source_text: str,
-                              source_path=None, checked_rows: dict[int, str] | None = None, expected_source_sha256=None, assessor_id=""):
+                              source_path=None, checked_rows: dict[int, str] | None = None, expected_source_sha256=None, assessor_id="",
+                              pending_reasons: dict | None = None):
     """Discard model provenance, validate unique row judgments, then stamp in code."""
     for outcome in study.outcomes:
         outcome.primary_analysis_alignment = None
     # Every row keeps a runtime-owned source/version context for explicit review,
     # including rows omitted by an incomplete or failed verification response.
     for index in range(len(study.outcomes)):
+        reasons = (pending_reasons or {}).get(index) or [{"code": "verification_not_completed"}]
+        pending_message = "Independent verification incomplete: " + "; ".join(str(item.get("code", "unknown")) for item in reasons)
         pending = PrimaryAlignmentAssessment.model_validate({
             "outcome_index": index, **{
-                name: {"status": "uncertain", "rationale": "Independent verification is incomplete."}
+                name: {"status": "uncertain", "rationale": pending_message}
                 for name in DIMENSIONS
             },
         })
@@ -261,14 +264,22 @@ def record_checked_alignments(project, protocol, study, assessments, *, source_t
             continue
         if 0 <= assessment.outcome_index < len(study.outcomes):
             parsed.append(assessment)
+    from new_meta.core.extraction_verification import validate_check_batch
+    validation_errors = validate_check_batch(study, list(range(len(study.outcomes))), parsed, source_text, protocol)
+    rejected_indices = {item["outcome_index"] for item in validation_errors if item.get("outcome_index") is not None}
     for assessment in parsed:
         index = assessment.outcome_index
+        if index in rejected_indices:
+            continue
         if counts[index] != 1 or not _anchored(assessment, source_text):
             continue
         if checked_rows is not None and checked_rows.get(index) != row_fingerprint(study, index):
+            validation_errors.append({"code": "verification_row_snapshot_changed", "outcome_index": index})
             continue
         _record_proof(project, protocol, study, index, assessment,
-                      source_text=source_text, source_path=source_path, expected_source_sha256=expected_source_sha256, assessor_id=assessor_id)
+                      source_text=source_text, source_path=source_path, expected_source_sha256=expected_source_sha256,
+                      assessor="extraction-check-v2", assessor_id=assessor_id)
+    return validation_errors
 
 
 def alignment_status(project, protocol, study, index: int) -> dict:
@@ -284,7 +295,7 @@ def alignment_status(project, protocol, study, index: int) -> dict:
         record = json.loads(_read_scoped(project, f"{_PROOF_DIR}/{proof.proof_id}.json", max_bytes=256 * 1024))
         if record != payload or digest({key: value for key, value in payload.items() if key != "proof_id"}) != proof.proof_id:
             return unknown
-        if proof.assessor not in {"extraction-check-v1", "human-review-v1", "pending-review-v1"}:
+        if proof.assessor not in {"extraction-check-v2", "human-review-v1", "pending-review-v1"}:
             return unknown
         if proof.assessor == "human-review-v1" and proof.assessor_id in {"", "unknown"}:
             return unknown
@@ -300,7 +311,17 @@ def alignment_status(project, protocol, study, index: int) -> dict:
         return unknown
     dimensions = {name: getattr(proof.assessment, name).status for name in DIMENSIONS}
     status = "mismatch" if "mismatch" in dimensions.values() else "match" if set(dimensions.values()) == {"match"} else "unknown"
-    return {"status": status, "reason": "primary_alignment_" + status,
+    reason = "primary_alignment_" + status
+    from new_meta.core.extraction_verification import validate_check_batch, verification_verdict
+    if proof.assessor == "pending-review-v1":
+        status, reason = "unknown", "verification_not_completed"
+    elif validate_check_batch(study, [index], [proof.assessment], checked.decode(), protocol):
+        status, reason = "unknown", "extraction_verification_invalid"
+    else:
+        verified = verification_verdict(proof.assessment, protocol)
+        if verified["status"] != "match":
+            status, reason = verified["status"], verified["reason"]
+    return {"status": status, "reason": reason,
             "dimensions": dimensions, "proof_id": proof.proof_id,
             "protocol_sha256": proof.protocol_sha256, "row_sha256": proof.row_sha256,
             "source_sha256": proof.source_sha256}
@@ -364,12 +385,17 @@ class PrimaryAlignmentRequired(RuntimeError):
 def needs_input_phase(project, rows, *, reason="primary_analysis_alignment_required"):
     from new_meta.schemas.phase_result import ArtifactRef, NextAction, PhaseIssue, PhaseResult
     row_ids = [str(row.get("row_id") or "") for row in rows]
+    trial_independence = any(row.get("reason") in {"overlapping_trial_units", "trial_identity_required"} for row in rows)
     primary_choice = any(row.get("reason") == "primary_result_choice_required" for row in rows)
     only_primary_choices = bool(rows) and all(row.get("reason") == "primary_result_choice_required" for row in rows)
     if only_primary_choices:
         reason = "primary_result_choice_required"
     action_title = "Choose the primary result among the current aligned candidates" if primary_choice else "Review primary-analysis alignment dimensions"
-    summary = "Multiple distinct source-approved results remain within a study; choose the primary result explicitly." if only_primary_choices else "Primary synthesis requires current source-backed outcome, population and contrast judgments."
+    summary = "Multiple distinct source-approved results remain within a study; choose the primary result explicitly." if only_primary_choices else "Primary synthesis requires complete source-backed numeric, outcome, population and estimand verification."
+    if trial_independence:
+        reason = "trial_independence_required"
+        summary = "Contributing trial units overlap or are unresolved; publication identifiers do not establish independent studies."
+        action_title = "Clarify source-backed trial contributions and restart with an explicit independent analysis set"
     return PhaseResult(
         run_id=project.base_dir.name, phase="effect_selection", status="needs_input",
         summary=summary,
@@ -456,6 +482,14 @@ def cached_alignment_is_current(project) -> bool:
             if choice["status"] not in {"none", "current"}:
                 return False
             if choice["status"] == "current" and choice["row_id"] not in binding["selected_row_ids"]:
+                return False
+        from new_meta.core.method_planning import infer_review_family
+        from new_meta.schemas.method_policy import ReviewFamily
+        from new_meta.core.extraction_verification import trial_unit_issues
+        if infer_review_family(protocol) is ReviewFamily.INTERVENTION_RCT:
+            candidates = [(row_id, current[row_id][0].outcomes[current[row_id][1]].primary_analysis_alignment.assessment)
+                          for row_id in binding["selected_row_ids"]]
+            if trial_unit_issues(candidates):
                 return False
         effects = project.load_json("effect_sizes.json", subdir="analysis")
         return isinstance(effects, list) and digest(effects) == binding["effects_sha256"]
@@ -566,6 +600,12 @@ def require_current_compiled_alignment(project):
             rows = {result_entity_id(study, index): (study, index) for study in studies for index in range(len(study.outcomes))}
             valid = valid and all(result_id in rows and alignment_status(project, protocol, *rows[result_id])["status"] == "match"
                                   for result_id in execution.input_result_ids)
+            from new_meta.schemas.method_policy import ReviewFamily
+            from new_meta.core.extraction_verification import trial_unit_issues
+            if valid and plan.family is ReviewFamily.INTERVENTION_RCT:
+                candidates = [(f"{rows[key][0].characteristics.pmid or rows[key][0].characteristics.study_id}:{rows[key][1]}",
+                    rows[key][0].outcomes[rows[key][1]].primary_analysis_alignment.assessment) for key in execution.input_result_ids]
+                valid = not trial_unit_issues(candidates)
         else:
             valid = False
         if valid:
@@ -593,7 +633,12 @@ def primary_effect_identity(outcome, effect):
     clinical = outcome.model_dump(mode="json", exclude=_ROW_METADATA | {
         "source_quote", "source_location", "source_section", "source_page", "contrast_id", "estimand_id",
     })
-    return digest({"clinical": clinical, "yi": effect.yi, "vi": effect.vi})
+    proof = getattr(outcome, "primary_analysis_alignment", None)
+    details = proof.assessment.verification if proof is not None else None
+    units = sorted({("registry:" + _normalized_quote(unit.registry_id)) if unit.registry_id.strip()
+                    else ("name:" + _normalized_quote(unit.trial_name))
+                    for unit in details.trial_units if unit.role == "contributing"}) if details else []
+    return digest({"clinical": clinical, "yi": effect.yi, "vi": effect.vi, "contributing_units": units})
 
 
 def selection_gate_fingerprint(project):

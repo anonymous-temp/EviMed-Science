@@ -1,5 +1,8 @@
 services:
   open-science-web:
+    # Shared input group only; Web retains ownership and no Linux capabilities.
+    group_add:
+      - "1000"
     environment:
       OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: "true"
       OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: "true"
@@ -20,9 +23,11 @@ services:
       OPEN_SCIENCE_REQUIRE_INBOX: "true"
     volumes:
       - type: bind
-        source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
+        source: ${OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE}
         target: /run/secrets/document-parser-token
         read_only: true
+        bind:
+          create_host_path: false
       - evimed-parser-staging:/var/lib/evimed-parser-staging
       - evimed-openlist-secrets:/run/openlist-secrets:ro
     depends_on:
@@ -43,12 +48,17 @@ services:
     environment:
       EVIMED_PARSER_DATA_ROOT: /data
       EVIMED_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
+      # The build downloads the complete pipeline into this same user's home.
+      # Production reads those immutable paths instead of refreshing a cache.
+      MINERU_MODEL_SOURCE: local
     volumes:
       - evimed-parser-staging:/data:ro
       - type: bind
         source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
         target: /run/secrets/document-parser-token
         read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD", "python", "-c", "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8090/health',timeout=3)); raise SystemExit(0 if data.get('ok') and data.get('mineruVersion')=='3.4.5' else 1)"]
       interval: 15s

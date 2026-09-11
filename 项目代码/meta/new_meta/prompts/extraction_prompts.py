@@ -112,6 +112,9 @@ For PREDICTION-MODEL PERFORMANCE outcomes:
 - If multiple adjusted models are reported, keep them as distinct rows and label the covariate set; do not silently choose one
 - For EVERY value, provide source_location, source_quote, source_page (page number from nearest [PAGE N] marker), and source_section
 - Set extraction_confidence to "high", "medium", or "low" for each outcome based on clarity of the source data
+- Use p_value only for an exactly reported p-value. For p<, p≤, p> or p≥ expressions,
+  keep p_value null and retain the original expression in p_value_inequality and its source quote.
+  Never use an inequality threshold as an exact p-value or derive precision from it.
 - If a value is NOT found, set it to null — NEVER guess"""
 
 EXTRACTION_CHECK_PROMPT = """Review the following data extraction for accuracy and completeness.
@@ -165,5 +168,36 @@ quotes, eligibility or assessor/verification metadata. Only verbatim full quotes
 present in the supplied paper content count as anchors. One sentence per rationale
 and a short but complete source sentence per quote is sufficient.
 
-Score extraction accuracy (1-10); an accurate row can be a clinical mismatch.
-Provide suggestions to correct inaccurate extraction when score < 8."""
+Required per-row verification payload (never omit it, even with a high score):
+- numeric_findings: verify EVERY supplied numeric_fields_to_verify field, naming its
+  directly reported value, exact source quote/location, match/mismatch/uncertain and
+  rationale. Check every CI endpoint, sign, unit, measure and scale. A score cannot
+  override an incorrect CI or an unresolved source/OCR conflict. Use full Results
+  and table evidence rather than converting an ambiguous abstract percentage.
+- source_endpoint_definition: quote the actual endpoint DEFINITION, not merely a
+  numeric table row. List all source and protocol components and their relation.
+  Extra cardiovascular death is not equivalent to a renal-only composite. "As
+  reported by the trial" does not authorize adding components absent from the
+  protocol. Scalar outcomes still require one explicit matched endpoint component.
+- estimand_support and conditioning_variables: quote model adjustment and cohort
+  selection. Distinguish baseline covariates from treatment-induced/postrandomization
+  changes or nonresponse. The randomized treatment coefficient conditional on year1
+  substrate change is a conditional effect, not the total randomized treatment effect.
+  Mark postrandomization_conditioning and selection_timing explicitly, regardless
+  of the original trial design; unknown timing is uncertain, never assumed baseline.
+  Measuring an outcome after randomization is normal follow-up, NOT conditioning:
+  distinguish outcome measurement time from model adjustment and cohort selection.
+  For observational or single-arm protocols, assess their specified estimand and
+  explicitly mark randomized-comparison/trial identities not applicable where justified.
+- trial_units: identify ALL underlying trials/cohorts CONTRIBUTING to THIS row,
+  using source-quoted registration IDs and/or explicit trial names. Names/IDs only
+  mentioned in a reference or comparison are not contributing units. A pooled
+  estimate carries all component trials. Do not invent an ID from PMID, DOI, author
+  or sample size. Missing identity or uncertain membership means uncertain coverage.
+
+The three legacy dimension judgments must agree with these explicit facts; do not
+call the closest available outcome a match. Numeric correctness and clinical
+eligibility are separate: a numerically accurate result may be excluded clinically.
+Score extraction accuracy (1-10) for diagnostics only. Put material numerical/data
+errors in issues and give correction suggestions; do not treat ordinary clinical
+mismatches or cosmetic wording as numerical extraction errors."""

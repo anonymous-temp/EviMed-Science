@@ -29,6 +29,9 @@ def _record_analysis_set_fixture_alignment(project, protocol, studies):
             "population": {"status": "match", "rationale": "The survey population is adults.", "quote": population, "source_location": "Methods"},
             "contrast": {"status": "match", "rationale": "A comparison is not applicable to this descriptive protocol.", "quote": contrast, "source_location": "Methods"},
         } for index, row in enumerate(study.outcomes)]
+        from verification_fixture import verification_payload
+        for index, outcome in enumerate(study.outcomes):
+            assessments[index]["verification"] = verification_payload(outcome, assessments[index], randomized=False)
         record_checked_alignments(project, protocol, study, assessments, source_text=source, assessor_id="mock-independent-checker")
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", studies, subdir="extraction")

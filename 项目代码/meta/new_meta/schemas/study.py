@@ -8,21 +8,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic.json_schema import SkipJsonSchema
 
 
+def _is_p_value_inequality(value: str) -> bool:
+    normalized = str(value).strip().lower().replace("ｐ", "p").replace("＜", "<").replace("＞", ">").replace("＝", "=")
+    return bool(re.match(r"^(?:p\s*)?(?:<=|>=|[<>≤≥])\s*[+\-−]?(?:\d|\.\d)", normalized))
+
+
 def _parse_p_value_string(val: str) -> float | None:
-    """Parse p-value strings like 'p<0.01', '<0.05', 'P = 0.03', '>.05', etc."""
-    low = val.strip().lower().replace("＜", "<").replace("＞", ">").replace("＝", "=")
+    """Parse exact p-values only; a reported inequality is not a point estimate."""
+    low = val.strip().lower().replace("ｐ", "p").replace("＜", "<").replace("＞", ">").replace("＝", "=")
     # Strip leading 'p' and whitespace: "p<0.01" → "<0.01", "p = 0.03" → "= 0.03"
     low = re.sub(r'^p\s*', '', low).strip()
-    if low.startswith(("<", "≤")):
-        try:
-            return float(low.lstrip("<≤").strip())
-        except ValueError:
-            return None
-    if low.startswith((">", "≥")):
-        try:
-            return float(low.lstrip(">≥").strip())
-        except ValueError:
-            return None
+    if low.startswith(("<", "≤", ">", "≥")):
+        return None
     if low.startswith("="):
         low = low.lstrip("=").strip()
     try:
@@ -272,12 +269,61 @@ class AlignmentDimension(BaseModel):
     source_location: str = ""
 
 
+class VerificationSource(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    quote: str = ""
+    source_location: str = ""
+
+
+class NumericFieldVerification(VerificationSource):
+    field: str = Field(min_length=1)
+    status: Literal["match", "mismatch", "uncertain"]
+    reported_value: float | None = Field(default=None, strict=True, allow_inf_nan=False)
+    rationale: str = Field(min_length=1)
+
+
+class EndpointComponentVerification(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    source_component: str = ""
+    protocol_component: str = ""
+    relation: Literal["match", "extra", "missing", "uncertain"]
+
+
+class ConditioningVariableVerification(VerificationSource):
+    name: str = Field(min_length=1)
+    timing: Literal["baseline", "postrandomization", "uncertain"]
+
+
+class ContributingTrialUnit(VerificationSource):
+    registry_id: str = ""
+    trial_name: str = ""
+    role: Literal["contributing", "mentioned_only", "uncertain"]
+
+
+class ExtractionRowVerification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    numeric_status: Literal["verified", "incorrect", "uncertain", "not_applicable"]
+    numeric_findings: list[NumericFieldVerification]
+    endpoint_relation: Literal["equivalent", "source_broader", "source_narrower", "different", "uncertain"]
+    source_endpoint_definition: VerificationSource
+    components: list[EndpointComponentVerification]
+    estimand_relation: Literal["match", "mismatch", "uncertain"]
+    randomized_comparison: bool | None
+    postrandomization_conditioning: bool | None
+    selection_timing: Literal["baseline", "postrandomization", "uncertain", "not_applicable"]
+    conditioning_variables: list[ConditioningVariableVerification]
+    estimand_support: VerificationSource
+    trial_coverage: Literal["complete", "uncertain", "not_applicable"]
+    trial_units: list[ContributingTrialUnit]
+
+
 class PrimaryAlignmentAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     outcome_index: int = Field(ge=0, strict=True)
     outcome: AlignmentDimension
     population: AlignmentDimension
     contrast: AlignmentDimension
+    verification: ExtractionRowVerification | None = None
 
 
 class PrimaryAnalysisAlignment(BaseModel):
@@ -320,13 +366,16 @@ class OutcomeData(BaseModel):
             return data
         if data.get("adjustment_covariates") is None:
             data["adjustment_covariates"] = []
+        if _is_p_value_inequality(data.get("p_value_inequality") or ""):
+            data["p_value"] = None
+
         str_fields = {
             "outcome_name", "outcome_type", "source_location", "source_quote",
             "reported_effect_measure", "reported_effect_scale",
             "prediction_model_id", "prediction_model_version",
             "prediction_validation_type", "prediction_performance_measure",
             "comparative_design", "contrast_id", "estimand_id", "precision_basis",
-            "dose_response_design", "dose_unit",
+            "dose_response_design", "dose_unit", "p_value_inequality",
         }
         for key in str_fields:
             if key in data and data[key] is None:
@@ -421,6 +470,8 @@ class OutcomeData(BaseModel):
             low = stripped.lower().replace("＜", "<").replace("＞", ">")
             # p_value: use dedicated parser for formats like "p<0.01", "<0.05", "P = 0.03"
             if key == "p_value":
+                if _is_p_value_inequality(stripped):
+                    data["p_value_inequality"] = stripped
                 parsed = _parse_p_value_string(stripped)
                 data[key] = parsed
                 continue
@@ -463,6 +514,15 @@ class OutcomeData(BaseModel):
     ci_lower: float | None = None
     ci_upper: float | None = None
     p_value: float | None = None
+    p_value_inequality: str = Field(default="", max_length=200,
+        description="Original bounded p-value expression, such as p<0.001. Keep p_value null; never use the bound as exact precision.")
+
+    @field_validator("p_value_inequality")
+    @classmethod
+    def valid_p_value_inequality(cls, value):
+        if value and not _is_p_value_inequality(value):
+            raise ValueError("p_value_inequality must retain an inequality, or be empty when absent")
+        return value
     reported_effect_measure: str = ""
     reported_effect_standard_error: float | None = None
     reported_effect_scale: str = "original"

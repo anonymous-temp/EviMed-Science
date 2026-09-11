@@ -1,8 +1,81 @@
 import { constants } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { HttpError, openScopedDirectoryNoFollow } from "./security.mjs";
+import { HttpError, openScopedDirectoryNoFollow, resolveScopedPath } from "./security.mjs";
+
+/** Give the read-only parser group access without transferring Web ownership.
+ * All permission changes use the same scoped descriptors as the file checks.
+ * @param {{stagingRoot:string,relative:string,bytes:Buffer,parserGid:number}} input */
+export async function stageParserInput({ stagingRoot, relative, bytes, parserGid }) {
+  if (!Number.isSafeInteger(parserGid) || parserGid < 0 || parserGid > 65535
+    || !new Set([process.getgid(), ...process.getgroups()]).has(parserGid)) {
+    throw new HttpError(503, "document_parser_group_unavailable", "The Web process must belong to the parser staging group.");
+  }
+  const target = resolveScopedPath(stagingRoot, relative);
+  if (path.dirname(path.dirname(target)) !== path.resolve(stagingRoot)) {
+    throw new HttpError(400, "source_path_invalid", "Parser input must be inside one attempt directory.");
+  }
+  const root = await openScopedDirectoryNoFollow(stagingRoot, stagingRoot);
+  const attemptPath = path.join(root.path, path.basename(path.dirname(target)));
+  let parent;
+  let file;
+  let createdParent = false;
+  let published = false;
+  let temporary = "";
+  let destination = "";
+  try {
+    if (root.stat.uid !== process.getuid()) throw new HttpError(403, "path_forbidden", "Parser staging must be owned by the Web process.");
+    await root.handle.chown(-1, parserGid);
+    await root.handle.chmod(0o710);
+    try { await fs.mkdir(attemptPath, { mode: 0o700 }); createdParent = true; }
+    catch (error) { if (error.code !== "EEXIST") throw error; }
+    parent = await openScopedDirectoryNoFollow(stagingRoot, path.dirname(target));
+    const namedParent = await fs.lstat(attemptPath);
+    if (parent.stat.uid !== process.getuid() || namedParent.dev !== parent.stat.dev || namedParent.ino !== parent.stat.ino) {
+      throw new HttpError(403, "path_forbidden", "Parser attempt must be owned by the Web process and remain unchanged.");
+    }
+    destination = path.join(parent.path, path.basename(target));
+    const existing = await fs.lstat(destination).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+    if (existing?.isSymbolicLink() || (existing?.isFile() && existing.nlink !== 1)) {
+      throw new HttpError(403, "path_forbidden", "Parser input must not be linked.");
+    }
+    if (existing) throw new HttpError(409, "source_changed", "Parser input already exists for this attempt.");
+    temporary = path.join(parent.path, `.parser-${randomUUID()}`);
+    file = await fs.open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    await file.writeFile(bytes);
+    await file.sync();
+    await file.chown(-1, parserGid);
+    await file.chmod(0o440);
+    await parent.handle.chown(-1, parserGid);
+    await parent.handle.chmod(0o710);
+    // Exclusive publication follows every permission change. A collision must
+    // never replace another attempt's input, including a concurrent creation.
+    await fs.link(temporary, destination);
+    published = true;
+    await fs.unlink(temporary);
+    return target;
+  } catch (error) {
+    if (file) {
+      const own = await file.stat();
+      for (const name of [temporary, ...(published ? [destination] : [])]) {
+        const current = await fs.lstat(name).catch(problem => { if (problem.code === "ENOENT") return null; throw problem; });
+        if (current && current.dev === own.dev && current.ino === own.ino) await fs.unlink(name);
+      }
+    }
+    if (createdParent && parent) {
+      const current = await fs.lstat(attemptPath).catch(problem => { if (problem.code === "ENOENT") return null; throw problem; });
+      if (current && current.dev === parent.stat.dev && current.ino === parent.stat.ino) {
+        await fs.rmdir(attemptPath).catch(problem => { if (!["ENOTEMPTY", "EEXIST", "ENOENT"].includes(problem.code)) throw problem; });
+      }
+    }
+    throw error;
+  } finally {
+    await file?.close();
+    await parent?.handle.close();
+    await root.handle.close();
+  }
+}
 
 /** An opaque copy namespace, never the lease credential itself. @param {any} job */
 export function sourceAttemptId(job) {

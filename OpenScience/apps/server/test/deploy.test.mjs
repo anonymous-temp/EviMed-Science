@@ -2,12 +2,144 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { createCommandRegistry } from "../src/commands.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+function workflowStep(workflow, name) {
+  const marker = `      - name: ${name}\n`;
+  const start = workflow.indexOf(marker);
+  assert.ok(start >= 0, `missing workflow step: ${name}`);
+  return workflow.slice(start + marker.length).split(/\n      - (?:name:|uses:)/)[0];
+}
+
+test("hosted CI starts and retains the required ingestion services through teardown", async () => {
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  for (const name of [
+    "Start production Compose stack", "Wait for API and monitoring readiness",
+    "Trust CI Caddy root and verify public HTTPS preflight", "Verify Docker socket privilege boundary",
+    "Verify scheduled encrypted backup", "Print Compose logs on failure", "Stop Compose stack",
+    "Verify authenticated real PDF ingestion",
+  ]) {
+    const step = workflowStep(workflow, name);
+    assert.match(step, /-f deploy\/web\/docker-compose\.ingestion\.yml/, name);
+  }
+  assert.doesNotMatch(workflow, /CI_INGESTION_OVERRIDE/);
+  assert.doesNotMatch(workflow, /OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER[=:]false/);
+  assert.doesNotMatch(workflow, /ci-unused-(?:parser-token|openlist-password)/);
+  const prepare = workflowStep(workflow, "Prepare private ingestion credentials");
+  assert.match(prepare, /os\.chown\(parser_file, 1000, 1000\)/);
+  assert.match(prepare, /os\.chmod\(parser_file, 0o400\)/);
+  assert.match(prepare, /0o400/);
+  assert.match(prepare, /secrets\.token_urlsafe\(36\)/);
+  const capacity = workflowStep(workflow, "Check ingestion startup capacity");
+  assert.match(capacity, /MemAvailable/);
+  assert.match(capacity, /8 \* 1024 \* 1024 \* 1024/);
+  assert.match(capacity, /10737418240/);
+});
+
+test("ingestion gives the capability-free Web and parser their own private token files", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.ingestion.yml"), "utf8");
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const web = compose.split("  open-science-web:\n")[1].split("  evimed-document-parser:\n")[0];
+  const parser = compose.split("\n  evimed-document-parser:\n")[1].split("\n  evimed-openlist-init:\n")[0];
+  assert.match(web, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE:\?[^}]+\}/);
+  assert.doesNotMatch(web, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE/);
+  assert.match(parser, /user: "1000:1000"/);
+  assert.match(parser, /source: \$\{OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:\?[^}]+\}/);
+  for (const service of [web, parser]) {
+    assert.match(service, /target: \/run\/secrets\/document-parser-token\n\s+read_only: true\n\s+bind:\n\s+create_host_path: false/);
+  }
+  assert.match(example, /OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=\.\/secrets\/document-parser-web\.token/);
+  assert.match(example, /SAME retained token/);
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  const prepare = workflowStep(workflow, "Prepare private ingestion credentials");
+  assert.match(prepare, /for file in \(parser_file, web_file\)/);
+  assert.match(prepare, /os\.O_EXCL \| os\.O_NOFOLLOW, 0o400/);
+  assert.match(prepare, /assert parser_file\.read_bytes\(\) == web_file\.read_bytes\(\)/);
+  assert.match(prepare, /assert web_file\.stat\(\)\.st_uid == 0 and web_file\.stat\(\)\.st_gid == 0/);
+  assert.match(web, /group_add:\n\s+- "1000"/);
+  assert.match(parser, /MINERU_MODEL_SOURCE: local/);
+});
+
+test("the release exercises real PDF parsing and Linux handoff with hard deadlines", async () => {
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  const linux = workflowStep(workflow, "Verify capability-free parser file handoff on Linux");
+  assert.match(linux, /unshare --net node --test apps\/server\/test\/sourceFiles\.test\.mjs/);
+  const smoke = workflowStep(workflow, "Verify authenticated real PDF ingestion");
+  assert.match(smoke, /timeout 190 "\$\{compose\[@\]\}" exec -T open-science-web timeout -s TERM -k 5 180 node scripts\/ops\/parser-ingestion-smoke\.mjs/);
+  const smokeSource = await readFile(path.join(repoRoot, "scripts/ops/parser-ingestion-smoke.mjs"), "utf8");
+  assert.match(smokeSource, /setTimeout\(\(\) => deadline\.abort\(\), 175000\)/);
+  assert.match(smokeSource, /parserSmokeFetch\(deadline\.signal\)/);
+  assert.match(smokeSource, /process\.once\("SIGTERM", terminate\)/);
+  assert.match(smokeSource, /fetchImpl: boundedFetch/);
+  assert.ok(workflow.indexOf("Verify actual PostgreSQL backup and restore before readiness")
+    < workflow.indexOf("Verify authenticated real PDF ingestion"));
+  assert.ok(workflow.indexOf("Verify authenticated real PDF ingestion") < workflow.indexOf("Wait for API and monitoring readiness"));
+  const { parserSmokePdf, PARSER_SMOKE_TEXT } = await import("../../../scripts/ops/parser-ingestion-smoke.mjs");
+  const pdf = parserSmokePdf();
+  assert.ok(pdf.length < 2048);
+  assert.deepEqual(pdf, parserSmokePdf());
+  const source = pdf.toString("ascii");
+  assert.match(source, /^%PDF-1\.4/);
+  assert.ok(source.includes(`(${PARSER_SMOKE_TEXT}) Tj`));
+  const start = Number(source.match(/startxref\n(\d+)/)[1]);
+  assert.ok(source.slice(start).startsWith("xref\n0 6\n"));
+  const entries = source.slice(start).split("\n").slice(3, 8);
+  entries.forEach((entry, index) => assert.ok(source.slice(Number(entry.slice(0, 10))).startsWith(`${index + 1} 0 obj\n`)));
+});
+
+test("parser smoke deadline aborts a response body even after successful HTTP headers", async t => {
+  const { parserSmokeFetch } = await import("../../../scripts/ops/parser-ingestion-smoke.mjs");
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.write('{"partial":');
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+  const deadline = new AbortController();
+  const caller = new AbortController();
+  const response = await parserSmokeFetch(deadline.signal)(`http://127.0.0.1:${server.address().port}/parse`, { signal: caller.signal });
+  assert.equal(response.status, 200);
+  const body = response.text();
+  deadline.abort();
+  await assert.rejects(body, { name: "AbortError" });
+  assert.equal(caller.signal.aborted, false);
+});
+
+test("hosted CI readiness diagnostics reveal check codes without response secrets", async () => {
+  const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");
+  const step = workflowStep(workflow, "Wait for API and monitoring readiness");
+  const script = step.match(/python3 - <<'PY'[^\n]*\n([\s\S]*?)\n          PY/)?.[1];
+  assert.ok(script, "the failed readiness probe must report its bounded check summary");
+  const code = script.replace(/^          /gm, "");
+  const sample = { data: { ok: false, checks: {
+    documentParser: { ok: false, code: "document_parser_unconfigured", detail: "SECRET_MARKER" },
+    memory: { ok: true, account: "SECRET_MARKER" },
+    release: { ok: false, code: "release_manifest_mismatch", field: "dshVersion", secret: "SECRET_MARKER" },
+  } } };
+  const prefix = `import io,json,urllib.request,urllib.error\n`;
+  const run = (response) => execFileSync("python3", ["-c", prefix + response + "\n" + code], {
+    encoding: "utf8", timeout: 5000,
+  });
+  const response = JSON.stringify(JSON.stringify(sample));
+  const output = run(`def fake_urlopen(*args, **kwargs):\n    raise urllib.error.HTTPError(args[0],503,'unavailable',{},io.BytesIO(${response}.encode()))\nurllib.request.urlopen=fake_urlopen`);
+  const rows = output.trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, 503);
+  assert.deepEqual(rows[0].checks.documentParser, { ok: false, code: "document_parser_unconfigured" });
+  assert.deepEqual(rows[0].checks.release, { ok: false, code: "release_manifest_mismatch", field: "dshVersion" });
+  assert.doesNotMatch(output, /SECRET_MARKER|account|detail/);
+  const malformed = run("urllib.request.urlopen=lambda *args,**kwargs: io.BytesIO(b'not JSON SECRET_MARKER')");
+  assert.match(malformed, /readiness_response_invalid/);
+  assert.doesNotMatch(malformed, /SECRET_MARKER/);
+  const oversized = run("urllib.request.urlopen=lambda *args,**kwargs: io.BytesIO(b'x'*65537)");
+  assert.match(oversized, /readiness_response_too_large/);
+});
 
 test("hosted CI produces a real PostgreSQL restore receipt before demanding readiness", async () => {
   const workflow = await readFile(path.join(repoRoot, "../.github/workflows/web.yml"), "utf8");

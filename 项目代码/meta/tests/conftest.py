@@ -43,3 +43,26 @@ def forbid_unmocked_protocol_scope_calls(monkeypatch):
         return original_check(self, topic, protocol)
 
     monkeypatch.setattr(ResearchPlanner, "check_scope", guarded)
+
+
+@pytest.fixture(autouse=True)
+def forbid_unmocked_extraction_verification_calls(monkeypatch):
+    """Missing verifier fixture evidence must fail instead of reaching a provider."""
+    from new_meta.agents.data_extraction_agent import DataExtractionAgent
+    from new_meta.core.agent_base import BaseAgent
+    from new_meta.core.llm import LLMClient
+    original_structured = LLMClient.structured_output
+    original_call = LLMClient._call
+    original_agent_call = BaseAgent.call_llm_structured
+
+    def protect(method):
+        def guarded(self, *args, **kwargs):
+            if (getattr(self.call_llm_structured, "__func__", None) is original_agent_call
+                    and getattr(self.llm.structured_output, "__func__", None) is original_structured
+                    and getattr(self.llm._call, "__func__", None) is original_call):
+                raise AssertionError("Provide a mocked independent extraction verification response; live verifier-model calls are forbidden in unit tests")
+            return method(self, *args, **kwargs)
+        return guarded
+
+    for name in ("_check_extraction", "_refine_extraction"):
+        monkeypatch.setattr(DataExtractionAgent, name, protect(getattr(DataExtractionAgent, name)))

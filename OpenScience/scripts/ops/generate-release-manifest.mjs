@@ -86,6 +86,7 @@ const inputPaths = [
   "scripts/ops/configure-local-auth.mjs",
   "scripts/ops/configure-production-state.mjs",
   "scripts/ops/provision-memos.mjs",
+  "scripts/ops/parser-ingestion-smoke.mjs",
   "scripts/ops/object-backup.mjs",
   "scripts/ops/restore-data.sh",
   "scripts/ops/restore-drill.sh",
