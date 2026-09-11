@@ -63,7 +63,10 @@ export class MemoryIndexWorker {
     } catch (error) {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_failed";
       if (!leaseLost && this.lastError !== "product_job_lease_lost") {
-        const terminal = ["memory_index_job_invalid", "mem_os_payload_invalid"].includes(this.lastError);
+        // Retrying a job whose input the index will refuse again only burns
+        // attempts: an unusable job payload, and a fact whose id, kind or
+        // revision cannot become a path, are decided before any request.
+        const terminal = ["memory_index_job_invalid", "memory_id_invalid"].includes(this.lastError);
         try {
           await this.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: this.lastError, message: "Memory indexing failed." },

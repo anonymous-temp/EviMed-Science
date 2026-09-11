@@ -9,7 +9,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HttpError } from "../src/security.mjs";
-import { OpenVikingClient, openVikingPeerId, openVikingUserId } from "../src/openVikingClient.mjs";
+import {
+  OpenVikingClient,
+  capsuleFactUri,
+  capsuleMemoryRoot,
+  capsuleSegment,
+  capsuleTreeUri,
+  openVikingPeerId,
+  openVikingUserId,
+  parseCapsuleFactUri,
+} from "../src/openVikingClient.mjs";
+
+/** The wire's error envelope, which is what a rejection has to be read from. */
+function upstreamError(code, message) {
+  return { status: "error", error: { code, message, details: {} } };
+}
 
 const config = {
   openVikingUrl: "http://openviking.internal:1933",
@@ -89,6 +103,60 @@ test("every data request carries this account and this user, and never a role", 
   assert.deepEqual(body.target_uri, ["viking://user/u-x/memories/evimed/user"]);
 });
 
+test("a search states its threshold and its level, because the server's defaults are wrong for us", async () => {
+  // Both defaults were found in the upstream source after a recall came back
+  // short: `rerank.threshold` is 0.1 and the retriever applies it with a strict
+  // `>` even when no reranker is configured, so a weak but correct hit is
+  // dropped by a server we never asked to filter; and without `level` the
+  // result slots can go to directory records, which name no memory of ours.
+  const fetchImpl = recordingFetch([{ status: 200, body: { result: { memories: [] } } }, { status: 200, body: { result: { memories: [] } } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+
+  await client.find("usr_alice", "q", { targets: ["viking://a"] });
+  const byDefault = JSON.parse(fetchImpl.calls[0].options.body);
+  assert.equal(byDefault.score_threshold, 0);
+  assert.equal(byDefault.level, 2);
+
+  await client.find("usr_alice", "q", { targets: ["viking://a"], scoreThreshold: 0.4 });
+  assert.equal(JSON.parse(fetchImpl.calls[1].options.body).score_threshold, 0.4, "a caller that wants a floor may still set one");
+});
+
+test("a directory listing reads the bare list the server answers with", async () => {
+  // The client used to read `result.entries`, a shape this server never sends,
+  // so every listing came back empty and said nothing about it. Nothing called
+  // it then; the capsule readback does now.
+  const entries = [
+    { uri: "viking://user/u-x/memories/evimed/capsule/c-1/analysis", size: 0, isDir: true, modTime: "2026-09-11T00:00:00Z", abstract: "" },
+    { uri: "viking://user/u-x/memories/evimed/capsule/c-1/decision", size: 0, isDir: true, modTime: "2026-09-11T00:00:00Z", abstract: "" },
+  ];
+  const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", result: entries } }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+
+  assert.deepEqual(await client.list("usr_alice", "viking://user/u-x/memories/evimed/capsule/c-1"), entries);
+  const url = new URL(fetchImpl.calls[0].url);
+  assert.equal(url.pathname, "/api/v1/fs/ls");
+  assert.equal(url.searchParams.get("offset"), "0");
+  assert.equal(url.searchParams.get("limit"), null, "a limit truncates silently, so a listing must never carry one");
+});
+
+test("a complete listing pages with offset until the page is short", async () => {
+  const page = (count, from) => Array.from({ length: count }, (_, index) => ({ uri: `viking://x/f${from + index}.md`, isDir: false }));
+  const fetchImpl = recordingFetch([
+    { status: 200, body: { status: "ok", result: page(1_000, 0) } },
+    { status: 200, body: { status: "ok", result: page(1_000, 1_000) } },
+    { status: 200, body: { status: "ok", result: page(7, 2_000) } },
+  ]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+
+  const entries = await client.listAll("usr_alice", "viking://x");
+
+  assert.equal(entries.length, 2_007);
+  assert.deepEqual(
+    fetchImpl.calls.map((call) => new URL(call.url).searchParams.get("offset")),
+    ["0", "1000", "2000"],
+  );
+});
+
 test("the health probe is the one call that carries no identity", async () => {
   const fetchImpl = recordingFetch([{ status: 200, body: { status: "ok", version: "0.4.19" } }]);
   const client = new OpenVikingClient(config, { fetchImpl });
@@ -143,13 +211,13 @@ test("a delete sends its target as query parameters, because a body is refused",
 });
 
 test("a delete of something already gone is a success, because the index is meant to agree", async () => {
-  const fetchImpl = recordingFetch([{ status: 404, body: { message: "not found" } }]);
+  const fetchImpl = recordingFetch([{ status: 404, body: upstreamError("NOT_FOUND", "File not found: viking://gone") }]);
   const client = new OpenVikingClient(config, { fetchImpl });
   assert.equal(await client.remove("usr_alice", "viking://gone", { recursive: true }), false);
 });
 
 test("a delete that failed for any other reason is not reported as a delete", async () => {
-  const fetchImpl = recordingFetch([{ status: 500, body: { message: "boom" } }]);
+  const fetchImpl = recordingFetch([{ status: 500, body: upstreamError("INTERNAL", "boom") }]);
   const client = new OpenVikingClient(config, { fetchImpl });
   await assert.rejects(
     () => client.remove("usr_alice", "viking://x", { recursive: true }),
@@ -157,17 +225,46 @@ test("a delete that failed for any other reason is not reported as a delete", as
   );
 });
 
-test("a rejection names the call and the upstream status, and carries no credential", async () => {
-  const fetchImpl = recordingFetch([{ status: 403, body: { message: "forbidden" } }]);
+test("a rejection names the call and the upstream reason, and carries no credential", async () => {
+  // The reason arrives as `{status, error: {code, message, details}}`. Reading a
+  // top-level `message` found nothing on that wire, so every rejection said the
+  // same generic sentence and an operator had to guess which call had failed.
+  const fetchImpl = recordingFetch([{
+    status: 403,
+    body: upstreamError("PERMISSION_DENIED", "Actor peer cannot access another peer's context."),
+  }]);
   const client = new OpenVikingClient(config, { fetchImpl });
   await assert.rejects(
     () => client.find("usr_alice", "q", {}),
     (error) => {
       assert.equal(error.code, "memory_index_auth_failed");
       assert.match(error.message, /POST \/api\/v1\/search\/find -> 403/);
+      assert.match(error.message, /PERMISSION_DENIED: Actor peer cannot access another peer's context\./);
       assert.ok(!error.message.includes("test-key"), "the key must never reach a message");
       return true;
     },
+  );
+});
+
+test("an upstream that says it is unavailable is reported as unavailable", async () => {
+  // The same code a refused connection produces, because it is the same
+  // outage as far as a recall is concerned, and both are worth retrying.
+  const fetchImpl = recordingFetch([{ status: 503, body: upstreamError("UNAVAILABLE", "vector index is not ready") }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await assert.rejects(
+    () => client.find("usr_alice", "q", {}),
+    (error) => error.code === "memory_index_unavailable" && /UNAVAILABLE: vector index is not ready/.test(error.message),
+  );
+});
+
+test("a waiting write that timed out upstream is reported as a timeout, not as a mystery", async () => {
+  // 504 means the content was written and its vector is still pending, which is
+  // a retry, not a rejection of the request.
+  const fetchImpl = recordingFetch([{ status: 504, body: upstreamError("DEADLINE_EXCEEDED", "queue processing exceeded 5.0s") }]);
+  const client = new OpenVikingClient(config, { fetchImpl });
+  await assert.rejects(
+    () => client.write("usr_alice", "viking://x/y.md", "text", { wait: true, timeoutSeconds: 5 }),
+    (error) => error.code === "memory_index_timeout" && /DEADLINE_EXCEEDED/.test(error.message),
   );
 });
 
@@ -190,4 +287,77 @@ test("a path segment that is not a safe single segment is refused before it beco
       `${JSON.stringify(recordId)} was accepted into a path`,
     );
   }
+});
+
+test("a capsule fact round-trips through its URI, including the ids that are not path segments", () => {
+  const generation = "2026-09-05 00:00:00+00";
+  // Both shapes this system actually stores: a UUID, and a runtime note whose
+  // id carries a colon. A third with a slash is included because an id that
+  // escaped its segment would be a directory traversal, not a bad name.
+  for (const factId of ["7b2f7d5c-6b1a-4a7b-9d0e-0a1b2c3d4e5f", "runtime-note:9f8e7d6c", "with/slash", "colon:and/slash"]) {
+    const uri = capsuleFactUri("usr_alice", { accountCreatedAt: generation, capsuleId: "capsule-a", factKind: "analysis", factId, revision: 12 });
+    assert.equal(uri.split("/").length, capsuleFactUri("usr_alice", {
+      accountCreatedAt: generation, capsuleId: "capsule-a", factKind: "analysis", factId: "x", revision: 1,
+    }).split("/").length, `${factId} added a path segment`);
+    assert.deepEqual(parseCapsuleFactUri(uri), {
+      capsuleSegment: capsuleSegment(generation, "capsule-a"),
+      factKind: "analysis",
+      factId,
+      revision: 12,
+    });
+    assert.ok(uri.startsWith(`${capsuleMemoryRoot("usr_alice", { accountCreatedAt: generation, capsuleId: "capsule-a" })}/analysis/`));
+  }
+});
+
+test("a capsule subtree is bound to the account generation, and sits under the user's capsule tree", () => {
+  const capsuleId = "capsule-a";
+  const first = capsuleMemoryRoot("usr_alice", { accountCreatedAt: "2026-09-05 00:00:00+00", capsuleId });
+  const replacement = capsuleMemoryRoot("usr_alice", { accountCreatedAt: "2026-09-09 00:00:00+00", capsuleId });
+  assert.notEqual(first, replacement, "a recreated account must not be able to read the previous generation's index");
+  for (const root of [first, replacement]) {
+    assert.ok(root.startsWith(`${capsuleTreeUri("usr_alice")}/`), "account deletion removes the tree, so every capsule must be inside it");
+  }
+  assert.notEqual(capsuleTreeUri("usr_alice"), capsuleTreeUri("usr_bob"));
+  // Neither the generation nor the capsule id may be read off the path.
+  assert.equal(first.includes(capsuleId), false);
+  assert.equal(first.includes("2026"), false);
+});
+
+test("a capsule path refuses what it cannot encode, and never guesses", () => {
+  const generation = "2026-09-05 00:00:00+00";
+  const base = { accountCreatedAt: generation, capsuleId: "capsule-a", factKind: "analysis", factId: "fact", revision: 1 };
+  const refused = [
+    { ...base, factKind: "not_a_kind" },
+    { ...base, factId: "" },
+    { ...base, factId: "a".repeat(200) },
+    { ...base, revision: 0 },
+    { ...base, revision: 1.5 },
+    { ...base, accountCreatedAt: "" },
+    { ...base, capsuleId: "" },
+  ];
+  for (const input of refused) {
+    assert.throws(
+      () => capsuleFactUri("usr_alice", input),
+      (error) => error instanceof HttpError && error.code === "memory_id_invalid",
+      `${JSON.stringify(input)} was accepted into a path`,
+    );
+  }
+});
+
+test("a URI this layout never wrote parses to nothing at all", () => {
+  const generation = "2026-09-05 00:00:00+00";
+  const mine = capsuleFactUri("usr_alice", { accountCreatedAt: generation, capsuleId: "capsule-a", factKind: "analysis", factId: "fact", revision: 3 });
+  const foreign = [
+    "viking://user/u-x/memories/evimed/user/analysis/d006.md",
+    "viking://user/u-x/memories/evimed/capsule/c-1/analysis/ffact.r3.md",
+    "viking://user/u-x/memories/evimed/capsule/c-0123456789abcdef01234567/not_a_kind/fZmFjdA.r3.md",
+    "viking://user/u-x/memories/evimed/capsule/c-0123456789abcdef01234567/analysis/fZmFjdA.r0.md",
+    "viking://user/u-x/memories/evimed/capsule/c-0123456789abcdef01234567/analysis/f!!!!.r3.md",
+    // Base64 that Node would decode by ignoring what it cannot use: the
+    // re-encoding check is what makes a leaf we did not write parse to null.
+    "viking://user/u-x/memories/evimed/capsule/c-0123456789abcdef01234567/analysis/fZmFjdA_.r3.md",
+    mine.replace("/capsule/", "/peers/"),
+  ];
+  for (const uri of foreign) assert.equal(parseCapsuleFactUri(uri), null, `${uri} was read as a fact of ours`);
+  assert.equal(parseCapsuleFactUri(mine)?.factId, "fact");
 });
