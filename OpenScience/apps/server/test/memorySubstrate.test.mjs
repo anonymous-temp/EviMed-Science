@@ -44,8 +44,8 @@ function record(overrides = {}) {
   };
 }
 
-/** A research-memory service that records what was asked of it. */
-function fakeMemos(records, { memos = [] } = {}) {
+/** A research-memory store that records what was asked of it. */
+function fakeStore(records, { memos = [] } = {}) {
   const byId = new Map(records.map((row) => [row.id, row]));
   const calls = { getRecord: [], relevant: 0, list: 0 };
   return {
@@ -103,20 +103,20 @@ function hit(uri, score) {
   return { uri, score, content: "whatever the index cached", level: 2 };
 }
 
-const openVikingConfig = { memoryIndexProvider: "openviking", memosContextLimit: 8, memosContextMaxChars: 20_000 };
+const openVikingConfig = { memoryIndexProvider: "openviking", memoryContextLimit: 8, memoryContextMaxChars: 20_000 };
 
 test("a deployment that selects nothing keeps the term matcher, unchanged", async () => {
-  const memos = fakeMemos([]);
-  const substrate = new MemorySubstrate({}, { memos });
+  const store = fakeStore([]);
+  const substrate = new MemorySubstrate({}, { store });
   assert.equal(substrate.provider, "builtin");
   assert.equal(substrate.active, false);
   const recalled = await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT });
-  assert.equal(memos.calls.relevant, 1, "the builtin provider must go through the research-memory client");
+  assert.equal(store.calls.relevant, 1, "the builtin provider must go through the research-memory store");
   assert.deepEqual(recalled.map((row) => row.id), ["fallback"]);
 });
 
 test("an unknown provider name falls back rather than composing a broken deployment", () => {
-  const substrate = new MemorySubstrate({ memoryIndexProvider: "not-a-provider" }, { memos: fakeMemos([]) });
+  const substrate = new MemorySubstrate({ memoryIndexProvider: "not-a-provider" }, { store: fakeStore([]) });
   assert.equal(substrate.provider, "builtin");
   assert.deepEqual([...MEMORY_INDEX_PROVIDERS], ["builtin", "openviking"]);
 });
@@ -126,31 +126,102 @@ test("the index orders the recall and the store supplies every word of it", asyn
     record({ id: "rec1", value: "Prefers tables over prose." }),
     record({ id: "rec2", kind: "analysis", value: "Empagliflozin slowed eGFR decline.", summary: "" }),
   ];
-  const memos = fakeMemos(records);
+  const store = fakeStore(records);
   const index = fakeIndex([
     hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "analysis", recordId: "rec2" }), 0.9),
     hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.4),
   ]);
-  const substrate = new MemorySubstrate(openVikingConfig, { memos, openViking: index });
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
   assert.equal(substrate.active, true);
 
   const recalled = await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: SESSION });
 
   assert.equal(index.calls.find.length, 1, "the index was never asked; this test would pass on a broken provider");
-  assert.equal(memos.calls.relevant, 0, "the term matcher must not also run when an index answered");
+  assert.equal(store.calls.relevant, 0, "the term matcher must not also run when an index answered");
   assert.deepEqual(recalled.map((row) => row.id), ["record:rec2", "record:rec1"]);
   // The content is the store's, not the index's cached copy.
   assert.equal(recalled[0].content, "Empagliflozin slowed eGFR decline.");
   assert.ok(recalled.every((row) => row.content !== "whatever the index cached"));
 });
 
+/** A reranker that answers with a fixed order of the documents it was given. */
+function fakeRerank(order, { fail = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    configured: true,
+    async order(query, documents) {
+      calls.push({ query, documents });
+      if (fail) throw new Error("rerank exploded");
+      return order;
+    },
+  };
+}
+
+// The reranker sits between hydration and the budget. Before hydration it would
+// score the index's cached copy, and after the budget it could only reorder the
+// candidates that had already survived — which is the half a reranker exists to
+// change.
+test("a configured reranker reorders the hydrated candidates before the budget cuts them", async () => {
+  const records = [
+    record({ id: "rec1", value: "Prefers tables over prose." }),
+    record({ id: "rec2", kind: "analysis", value: "Empagliflozin slowed eGFR decline.", summary: "" }),
+  ];
+  const store = fakeStore(records);
+  const index = fakeIndex([
+    hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "analysis", recordId: "rec2" }), 0.9),
+    hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.4),
+  ]);
+  const rerank = fakeRerank([1, 0]);
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index, rerank });
+
+  const recalled = await substrate.recall(USER, "kidney outcomes", { projectId: PROJECT, sessionId: SESSION });
+
+  assert.equal(rerank.calls.length, 1, "the reranker was never asked; this test would pass with no reranker at all");
+  assert.ok(rerank.calls[0].documents[0].includes("Empagliflozin"),
+    "the reranker must score the store's text, not the index's cached copy");
+  assert.deepEqual(recalled.map((row) => row.id), ["record:rec1", "record:rec2"],
+    "the vector order survived the rerank");
+});
+
+test("a reranker that fails leaves the vector order rather than the recall", async () => {
+  const records = [record({ id: "rec1" }), record({ id: "rec2", kind: "analysis", summary: "" })];
+  const store = fakeStore(records);
+  const index = fakeIndex([
+    hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "analysis", recordId: "rec2" }), 0.9),
+    hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.4),
+  ]);
+  const substrate = new MemorySubstrate(openVikingConfig,
+    { store, openViking: index, rerank: fakeRerank([1, 0], { fail: true }) });
+
+  const recalled = await substrate.recall(USER, "kidney outcomes", {});
+
+  assert.deepEqual(recalled.map((row) => row.id), ["record:rec2", "record:rec1"]);
+  assert.equal(store.calls.relevant, 0, "a failing reranker must not push the recall onto the term matcher");
+});
+
+test("an unconfigured reranker is inert, which is what a deployment without a key has", async () => {
+  const records = [record({ id: "rec1" }), record({ id: "rec2", kind: "analysis", summary: "" })];
+  const index = fakeIndex([
+    hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "analysis", recordId: "rec2" }), 0.9),
+    hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.4),
+  ]);
+  const rerank = { ...fakeRerank([1, 0]), configured: false };
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: index, rerank });
+
+  const recalled = await substrate.recall(USER, "kidney outcomes", {});
+
+  assert.equal(rerank.calls.length, 0);
+  assert.deepEqual(recalled.map((row) => row.id), ["record:rec2", "record:rec1"]);
+});
+
 test("a nomination the store no longer has is dropped, not guessed at", async () => {
-  const memos = fakeMemos([record({ id: "rec1" })]);
+  const store = fakeStore([record({ id: "rec1" })]);
   const index = fakeIndex([
     hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "analysis", recordId: "deleted" }), 0.99),
     hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: "rec1" }), 0.5),
   ]);
-  const substrate = new MemorySubstrate(openVikingConfig, { memos, openViking: index });
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
   const recalled = await substrate.recall(USER, "anything", {});
   assert.deepEqual(recalled.map((row) => row.id), ["record:rec1"]);
 });
@@ -164,10 +235,10 @@ test("a stale index cannot recall what the record itself refuses", async () => {
     record({ id: "elsewhere", scope: "project", scopeId: "prj_other" }),
     record({ id: "mine", scope: "project", scopeId: PROJECT, value: "This project's fact." }),
   ];
-  const memos = fakeMemos(records);
+  const store = fakeStore(records);
   const index = fakeIndex(records.map((row, position) =>
     hit(memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: row.id }), 1 - position / 10)));
-  const substrate = new MemorySubstrate(openVikingConfig, { memos, openViking: index });
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: index });
 
   const recalled = await substrate.recall(USER, "anything", { projectId: PROJECT });
 
@@ -175,14 +246,14 @@ test("a stale index cannot recall what the record itself refuses", async () => {
 });
 
 test("an index that is down degrades the recall instead of failing the run", async () => {
-  const memos = fakeMemos([]);
+  const store = fakeStore([]);
   const failure = Object.assign(new Error("gone"), { code: "memory_index_unavailable" });
-  const substrate = new MemorySubstrate(openVikingConfig, { memos, openViking: fakeIndex([], { fail: failure }) });
+  const substrate = new MemorySubstrate(openVikingConfig, { store, openViking: fakeIndex([], { fail: failure }) });
 
   const recalled = await substrate.recall(USER, "anything", {});
 
   assert.deepEqual(recalled.map((row) => row.id), ["fallback"]);
-  assert.equal(memos.calls.relevant, 1);
+  assert.equal(store.calls.relevant, 1);
   assert.equal(substrate.lastError, "memory_index_unavailable", "a silent fallback is an outage nobody can see");
 });
 
@@ -190,7 +261,7 @@ test("an operator who would rather see the failure gets it", async () => {
   const failure = Object.assign(new Error("gone"), { code: "memory_index_unavailable" });
   const substrate = new MemorySubstrate(
     { ...openVikingConfig, memoryIndexStrict: true },
-    { memos: fakeMemos([]), openViking: fakeIndex([], { fail: failure }) },
+    { store: fakeStore([]), openViking: fakeIndex([], { fail: failure }) },
   );
   await assert.rejects(() => substrate.recall(USER, "anything", {}), /gone/);
 });
@@ -206,12 +277,12 @@ test("the profile keeps at most half the budget, whichever provider ranked it", 
     record({ id: "d4", kind: "correction", value: "four" }),
     record({ id: "e1", kind: "analysis", value: "the answer" }),
   ];
-  const memos = fakeMemos(records);
+  const store = fakeStore(records);
   const index = fakeIndex(records.map((row, position) =>
     hit(memoryUri(USER, { scope: "user", scopeId: "", kind: row.kind, recordId: row.id }), 1 - position / 100)));
   const substrate = new MemorySubstrate(
-    { ...openVikingConfig, memosContextLimit: 4 },
-    { memos, openViking: index },
+    { ...openVikingConfig, memoryContextLimit: 4 },
+    { store, openViking: index },
   );
 
   const recalled = await substrate.recall(USER, "anything", {});
@@ -227,7 +298,7 @@ test("the profile keeps at most half the budget, whichever provider ranked it", 
 
 test("forgetting a project deletes its subtree, and says whether it did", async () => {
   const index = fakeIndex([]);
-  const substrate = new MemorySubstrate(openVikingConfig, { memos: fakeMemos([]), openViking: index });
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore([]), openViking: index });
 
   await substrate.forgetProject(USER, PROJECT);
 
@@ -240,7 +311,7 @@ test("forgetting a project deletes its subtree, and says whether it did", async 
 
 test("a deployment on the term matcher has nothing to forget and does not pretend to", async () => {
   const index = fakeIndex([]);
-  const substrate = new MemorySubstrate({}, { memos: fakeMemos([]), openViking: index });
+  const substrate = new MemorySubstrate({}, { store: fakeStore([]), openViking: index });
   assert.equal(await substrate.forgetProject(USER, PROJECT), false);
   assert.equal(index.calls.remove.length, 0);
 });
@@ -253,7 +324,7 @@ test("a rebuild publishes what may be recalled and skips what may not", async ()
     record({ id: "blank", value: "", summary: "" }),
   ];
   const index = fakeIndex([]);
-  const substrate = new MemorySubstrate(openVikingConfig, { memos: fakeMemos(records), openViking: index });
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore(records), openViking: index });
 
   const result = await substrate.rebuild(USER);
 

@@ -13,7 +13,7 @@ test("the real app exposes an account-scoped inbox decision journey", {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-inbox-app-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true,
-    databaseUrl, memOsEngineUrl: "", requireMemoryIndex: false });
+    databaseUrl });
   const username = `inbox${randomUUID().slice(0, 8)}`;
   let user;
   let listening = false;

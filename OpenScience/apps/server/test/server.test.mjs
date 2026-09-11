@@ -859,6 +859,42 @@ test("readiness reports writable data storage and static asset availability", as
   });
 });
 
+// Two checks, not three. `memory` says whether the store answers, `memoryIndex`
+// says which component ranks a recall and whether it can be reached; the third
+// key these replaced reported the same index from the other recall path, and two
+// rows that can only ever agree are one row and one distraction.
+test("readiness separates the memory store from the index that ranks it", async () => {
+  await withApp(async ({ base }) => {
+    const body = (await (await fetch(`${base}/api/ready`)).json()).data;
+    // A deployment on the file-backed state store has no research memory at
+    // all, which is a configuration rather than a fault.
+    assert.equal(body.checks.memory.ok, true);
+    assert.equal(body.checks.memory.required, false);
+    assert.equal(body.checks.memory.configured, false);
+    assert.equal(body.checks.memoryIndex.ok, true);
+    assert.equal(body.checks.memoryIndex.required, false);
+    assert.equal(body.checks.memoryIndex.provider, "builtin");
+    // A reranker with no key is off, and "off" must be distinguishable from
+    // "misconfigured": an unreadable key file leaves every recall in vector
+    // order with nothing anywhere saying the reranker was never asked.
+    assert.deepEqual(body.checks.memoryIndex.rerank, { configured: false, code: null });
+    assert.equal(Object.hasOwn(body.checks, "memoryRecall"), false,
+      "the index is reported once; a second key for the other recall path could only repeat it");
+  });
+});
+
+test("an operator who asked for a strict index is told when it cannot be reached", async () => {
+  // Report-only by default and required only here, because a recall whose index
+  // is down still answers on the term matcher: failing readiness by default
+  // would take a working product offline over a degraded one.
+  await withApp(async ({ base }) => {
+    const body = (await (await fetch(`${base}/api/ready`)).json()).data;
+    assert.equal(body.checks.memoryIndex.ok, false);
+    assert.equal(body.checks.memoryIndex.required, true);
+    assert.equal(body.checks.memoryIndex.code, "memory_index_url_missing");
+  }, { memoryIndexProvider: "openviking", memoryIndexStrict: true, openVikingUrl: "" });
+});
+
 test("readiness fails when the hosted example bundle is unavailable", async () => {
   await withApp(async ({ base }) => {
     const res = await fetch(`${base}/api/ready`);

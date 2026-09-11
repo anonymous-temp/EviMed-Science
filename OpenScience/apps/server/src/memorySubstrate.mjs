@@ -11,7 +11,7 @@ import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallP
  * The narrow port in front of whatever ranks a recall.
  *
  * Two things are deliberately not behind it. The authoritative record stays in
- * the research-memory service: an index provider that also owned the record
+ * the control-plane database: an index provider that also owned the record
  * would have to reimplement the `expectedVersion` compare-and-swap that keeps
  * two concurrent edits from silently losing one, and OpenViking's `write` has
  * no such mode. And the budget stays in `memoryRecallPolicy.mjs`: which
@@ -24,7 +24,7 @@ import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallP
  * is nominate a record that no longer exists, which is dropped.
  */
 
-/** `builtin` ranks by term overlap inside the research-memory client, which is
+/** `builtin` ranks by term overlap inside the research-memory store, which is
  *  what every deployment has done so far. `openviking` delegates ranking to the
  *  OpenViking context database's hierarchical retrieval. */
 export const MEMORY_INDEX_PROVIDERS = Object.freeze(["builtin", "openviking"]);
@@ -35,18 +35,24 @@ export const MEMORY_INDEX_PROVIDERS = Object.freeze(["builtin", "openviking"]);
  *  without the recall coming back short. */
 const CANDIDATE_OVERFETCH = 3;
 
+/** How long one rebuild write may wait for the index to finish embedding it.
+ *  The same bound the capsule index uses, for the same reason: an upstream that
+ *  has not answered in five seconds is not about to. */
+const WRITE_WAIT_SECONDS = 5;
+
 export class MemorySubstrate {
   /**
    * @param {any} config
-   * @param {{ memos?: any, openViking?: any }} clients
+   * @param {{ store?: any, openViking?: any, rerank?: any }} dependencies
    */
-  constructor(config, { memos = null, openViking = null } = {}) {
+  constructor(config, { store = null, openViking = null, rerank = null } = {}) {
     const requested = String(config.memoryIndexProvider ?? "builtin");
     this.provider = MEMORY_INDEX_PROVIDERS.includes(requested) ? requested : "builtin";
-    this.memos = memos;
+    this.store = store;
     this.openViking = openViking;
-    this.contextLimit = Math.max(0, Math.min(20, Number(config.memosContextLimit ?? 8)));
-    this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config.memosContextMaxChars ?? 20_000)));
+    this.rerank = rerank;
+    this.contextLimit = Math.max(0, Math.min(20, Number(config.memoryContextLimit ?? 8)));
+    this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config.memoryContextMaxChars ?? 20_000)));
     // A derived index is an optimisation. When it is down, a run that would
     // have recalled eight memories should recall the eight the term matcher
     // finds, not fail — the alternative is an outage in answering caused by a
@@ -75,7 +81,7 @@ export class MemorySubstrate {
    * @param {{ projectId?: string|null, sessionId?: string|null }} scope
    */
   async recall(userId, query, { projectId = null, sessionId = null } = {}) {
-    if (!this.active) return this.memos.relevant(userId, query, { projectId, sessionId });
+    if (!this.active) return this.store.relevant(userId, query, { projectId, sessionId });
     try {
       return await this.#rankedRecall(userId, query, { projectId, sessionId });
     } catch (error) {
@@ -83,7 +89,7 @@ export class MemorySubstrate {
       if (this.strict) throw error;
       // Fall back rather than fail: the term matcher needs no index and reads
       // the same authoritative records.
-      return this.memos.relevant(userId, query, { projectId, sessionId });
+      return this.store.relevant(userId, query, { projectId, sessionId });
     }
   }
 
@@ -114,7 +120,7 @@ export class MemorySubstrate {
     const records = (await Promise.all(
       nominated.map(async ({ recordId, score }) => {
         try {
-          const record = await this.memos.getRecord(userId, recordId);
+          const record = await this.store.getRecord(userId, recordId);
           return { record, score };
         } catch {
           return null;
@@ -155,17 +161,47 @@ export class MemorySubstrate {
 
     const ranked = [...structured, ...notes].sort((left, right) =>
       right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt)));
-    return selectWithinBudget(ranked, {
+    return selectWithinBudget(await this.#reranked(query, ranked), {
       contextLimit: this.contextLimit,
       contextMaxChars: this.contextMaxChars,
     });
   }
 
+  /** Reorder the hydrated candidates, if a reranker is configured.
+   *
+   * Placed after hydration and before the budget on purpose. After hydration,
+   * because the text scored here is the record as it exists now rather than the
+   * copy the index holds. Before the budget, because the budget's job is to cut
+   * the tail off an order, and cutting first would throw away exactly the
+   * candidates a reranker exists to promote.
+   *
+   * @param {string} query @param {{memo:any,score:number}[]} candidates
+   */
+  async #reranked(query, candidates) {
+    if (!this.rerank?.configured || candidates.length < 2) return candidates;
+    try {
+      const order = await this.rerank.order(query, candidates.map((row) => String(row.memo.content ?? "")));
+      if (!Array.isArray(order) || order.length !== candidates.length) return candidates;
+      const reordered = [];
+      const used = new Set();
+      for (const index of order) {
+        if (!Number.isInteger(index) || index < 0 || index >= candidates.length || used.has(index)) return candidates;
+        used.add(index);
+        reordered.push(candidates[index]);
+      }
+      return reordered;
+    } catch {
+      // The vector order is a complete answer; a reranker that throws must not
+      // turn a working recall into a failed one.
+      return candidates;
+    }
+  }
+
   async #matchingNotes(userId, query) {
     const terms = searchTokens(query);
     if (terms.length === 0) return [];
-    const memos = await this.memos.list(userId, { pageSize: 100 });
-    return memos
+    const notes = await this.store.list(userId, { pageSize: 100 });
+    return notes
       .map((memo) => {
         const haystack = memo.content.toLowerCase();
         const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
@@ -183,7 +219,7 @@ export class MemorySubstrate {
    */
   async rebuild(userId) {
     if (!this.active) return { written: 0, skipped: 0 };
-    const records = await this.memos.listAllRecords(userId);
+    const records = await this.store.listAllRecords(userId);
     const now = Date.now();
     let written = 0;
     let skipped = 0;
@@ -200,12 +236,15 @@ export class MemorySubstrate {
         skipped += 1;
         continue;
       }
+      // `wait: true`: the caller of a rebuild is an operator or a script that
+      // reports having rebuilt the index, and a write that returns before the
+      // vector exists makes that report false for a while nobody can measure.
       await this.openViking.write(userId, memoryUri(userId, {
         scope: record.scope,
         scopeId: record.scopeId,
         kind: record.kind,
         recordId: record.id,
-      }), content, { wait: false });
+      }), content, { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
       written += 1;
     }
     return { written, skipped };

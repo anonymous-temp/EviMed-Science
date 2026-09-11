@@ -22,6 +22,16 @@
  *
  *   node evals/memory-recall/run_recall_eval.mjs --arm openviking --url ... --label qwen
  *
+ * `--mode capsule` asks the same question of the other recall path: capsule
+ * facts, whose fallback is not the term matcher but the lexical PostgreSQL
+ * search `ProductDocuments.search` runs — a whole-query substring match, so it
+ * answers nothing at all to a reworded question. The arms are the two call
+ * paths, not two servers, and the index arm goes through the real capsule URI
+ * layout so that what is measured is what production would recall.
+ *
+ *   node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm openviking \
+ *     --url http://127.0.0.1:1933 --seed-index --label qwen-capsule
+ *
  * The key, if the server needs one, comes from OPEN_SCIENCE_OPENVIKING_API_KEY
  * or its _FILE form. It is never written to the results.
  */
@@ -34,16 +44,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../..");
 const serverSrc = path.join(repoRoot, "apps/server/src");
 
-const { OpenVikingClient, memoryUri } = await import(path.join(serverSrc, "openVikingClient.mjs"));
+const { OpenVikingClient, capsuleMemoryRoot, capsuleFactUri, memoryUri, parseCapsuleFactUri } =
+  await import(path.join(serverSrc, "openVikingClient.mjs"));
 const { MemorySubstrate } = await import(path.join(serverSrc, "memorySubstrate.mjs"));
 const { DURABLE_RECALL_KINDS, recallContent, searchTokens } = await import(path.join(serverSrc, "memoryRecallPolicy.mjs"));
 
 function parseArguments(argv) {
-  const options = { arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "" };
+  const options = { mode: "record", arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "" };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
-    if (flag === "--arm") { options.arm = value; index += 1; }
+    if (flag === "--mode") { options.mode = value; index += 1; }
+    else if (flag === "--arm") { options.arm = value; index += 1; }
     else if (flag === "--label") { options.label = value; index += 1; }
     else if (flag === "--url") { options.url = value; index += 1; }
     else if (flag === "--limit") { options.limit = Number(value); index += 1; }
@@ -52,6 +64,7 @@ function parseArguments(argv) {
     else if (flag === "--seed-index") options.seedIndex = true;
     else throw new Error(`unknown argument ${flag}`);
   }
+  if (!["record", "capsule"].includes(options.mode)) throw new Error(`unknown mode ${options.mode}`);
   if (!["builtin", "openviking"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
   if (options.arm === "openviking" && !options.url) throw new Error("--url is required for the openviking arm");
   // Free-form on purpose: what distinguishes two runs of one arm is whatever
@@ -68,93 +81,186 @@ async function readKey() {
 }
 
 const options = parseArguments(process.argv.slice(2));
-const corpus = JSON.parse(await readFile(path.join(here, "corpus.json"), "utf8"));
-const gold = JSON.parse(await readFile(path.join(here, "queries.json"), "utf8"));
 
-const records = corpus.records.map((row) => ({
-  ...row,
-  scope: "user",
-  scopeId: "",
-  key: row.id,
-  summary: "",
-  origin: "inferred",
-  status: "active",
-  confidence: 0.8,
-  importance: 0.6,
-  sensitive: false,
-  expiresAt: "",
-  updatedAt: "2026-09-01T00:00:00Z",
-}));
-const byId = new Map(records.map((row) => [row.id, row]));
+/**
+ * Capsule recall, over the two call paths a deployment actually has.
+ *
+ * The lexical arm is `ProductDocuments.search` as `CapsuleService` calls it: one
+ * `strpos` of the whole question against the fact's content, newest first. It is
+ * reproduced here rather than run against PostgreSQL because what is being
+ * compared is a ranking, and a ranking needs no rows of its own — the same
+ * reason the record mode scores its term matcher in process.
+ *
+ * The index arm writes each fact at the URI the capsule index uses in
+ * production and reads the hits back through the same parser, so a layout
+ * change breaks this measurement instead of quietly making it meaningless.
+ */
+async function runCapsuleMode() {
+  const corpus = JSON.parse(await readFile(path.join(here, "capsule-corpus.json"), "utf8"));
+  const gold = JSON.parse(await readFile(path.join(here, "capsule-queries.json"), "utf8"));
+  const facts = corpus.facts.map((fact, position) => ({ ...fact, revision: 1, position }));
+  const byFactId = new Map(facts.map((fact) => [fact.id, fact]));
+  // One account generation for the whole run. It binds the subtree exactly as a
+  // real account's creation time does, so a replacement account could not read
+  // this one's copies.
+  const accountCreatedAt = "2026-09-01T00:00:00.000Z";
 
-/** The shipped term matcher, scored exactly as the research-memory client does. */
-function builtinRecall(query, limit) {
-  const terms = searchTokens(query);
-  return records
-    .map((record) => {
-      const content = recallContent(record);
-      const haystack = `${record.key} ${content}`.toLowerCase();
-      const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
-      const durable = DURABLE_RECALL_KINDS.has(record.kind);
-      return {
-        id: record.id,
-        recallable: durable || matches > 0,
-        score: matches + (durable ? 0.75 : 0) + record.importance + record.confidence * 0.5,
-      };
-    })
-    .filter((row) => row.recallable)
-    .sort((left, right) => right.score - left.score)
+  const lexical = (query, limit) => facts
+    .filter((fact) => fact.status === "approved" && fact.content.toLowerCase().includes(query.toLowerCase()))
+    // `ORDER BY updated_at DESC, id DESC`: with one write per fact the corpus
+    // order is that order, reversed.
+    .sort((left, right) => right.position - left.position)
     .slice(0, limit)
-    .map((row) => row.id);
-}
+    .map((fact) => fact.id);
 
-/** A store that answers only what the substrate is allowed to ask of it. */
-const memos = {
-  async getRecord(_userId, id) {
-    const found = byId.get(id);
-    if (!found) throw Object.assign(new Error("not found"), { code: "memory_not_found" });
-    return found;
-  },
-  async listAllRecords() { return records; },
-  async list() { return []; },
-  async relevant(_userId, query) {
-    return builtinRecall(query, options.limit).map((id) => ({ id: `record:${id}`, content: recallContent(byId.get(id)), kind: byId.get(id).kind }));
-  },
-};
+  const client = options.arm === "openviking"
+    ? new OpenVikingClient({
+      openVikingUrl: options.url,
+      openVikingApiKey: await readKey(),
+      openVikingAccount: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT ?? "evimed",
+      openVikingRequestTimeoutMs: 120_000,
+    })
+    : null;
 
-const config = {
-  memoryIndexProvider: options.arm,
-  openVikingUrl: options.url,
-  openVikingApiKey: await readKey(),
-  openVikingAccount: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT ?? "evimed",
-  openVikingRequestTimeoutMs: 120_000,
-  memosContextLimit: options.limit,
-  memosContextMaxChars: 20_000,
-};
-const client = options.arm === "openviking" ? new OpenVikingClient(config) : null;
-const substrate = new MemorySubstrate(config, { memos, openViking: client });
-
-if (options.seedIndex) {
-  if (!substrate.active) throw new Error("nothing to seed: the index provider is not active");
-  const health = await client.status();
-  if (!health.connected) throw new Error(`the index is not reachable: ${health.code}`);
-  let written = 0;
-  for (const record of records) {
-    await client.write(options.user, memoryUri(options.user, {
-      scope: record.scope, scopeId: record.scopeId, kind: record.kind, recordId: record.id,
-    }), recallContent(record), { wait: true, timeoutSeconds: 120 });
-    written += 1;
-    if (written % 25 === 0) process.stderr.write(`seeded ${written}/${records.length}\n`);
+  if (options.seedIndex) {
+    if (!client?.configured) throw new Error("nothing to seed: the index client is not configured");
+    const health = await client.status();
+    if (!health.connected) throw new Error(`the index is not reachable: ${health.code}`);
+    let written = 0;
+    for (const fact of facts) {
+      if (fact.status !== "approved") continue;
+      await client.write(options.user, capsuleFactUri(options.user, {
+        accountCreatedAt, capsuleId: fact.capsuleId, factKind: fact.factKind, factId: fact.id, revision: fact.revision,
+      }), `${fact.factKind} / ${fact.layer}\n\n${fact.content}`, { wait: true, timeoutSeconds: 120 });
+      written += 1;
+      if (written % 25 === 0) process.stderr.write(`seeded ${written}/${facts.length}\n`);
+    }
+    process.stderr.write(`seeded ${written}/${facts.length}\n`);
   }
-  process.stderr.write(`seeded ${written}/${records.length}\n`);
+
+  const targets = corpus.capsules.map((capsule) =>
+    capsuleMemoryRoot(options.user, { accountCreatedAt, capsuleId: capsule.id }));
+  const recall = async (query) => {
+    if (options.arm === "builtin") return lexical(query, options.limit);
+    const hits = await client.find(options.user, query, { targets, limit: Math.min(100, options.limit * 4) });
+    const ordered = [];
+    for (const hit of hits) {
+      const parsed = parseCapsuleFactUri(hit.uri);
+      // Hydrated from the corpus, the way production hydrates from PostgreSQL:
+      // a hit that names nothing we hold is dropped rather than guessed at.
+      const fact = parsed && byFactId.get(parsed.factId);
+      if (!fact || fact.revision !== parsed.revision || ordered.includes(fact.id)) continue;
+      ordered.push(fact.id);
+      if (ordered.length === options.limit) break;
+    }
+    return ordered;
+  };
+  return { corpusSize: facts.length, queries: gold.queries, recall, provider: options.arm, active: options.arm === "openviking" };
 }
+
+/** Research-memory recall: the shipped term matcher against the index, over
+ *  the same three hundred records and the same twelve questions. */
+async function runRecordMode() {
+  const corpus = JSON.parse(await readFile(path.join(here, "corpus.json"), "utf8"));
+  const gold = JSON.parse(await readFile(path.join(here, "queries.json"), "utf8"));
+
+  const records = corpus.records.map((row) => ({
+    ...row,
+    scope: "user",
+    scopeId: "",
+    key: row.id,
+    summary: "",
+    origin: "inferred",
+    status: "active",
+    confidence: 0.8,
+    importance: 0.6,
+    sensitive: false,
+    expiresAt: "",
+    updatedAt: "2026-09-01T00:00:00Z",
+  }));
+  const byId = new Map(records.map((row) => [row.id, row]));
+
+  /** The shipped term matcher, scored exactly as the research-memory client does. */
+  function builtinRecall(query, limit) {
+    const terms = searchTokens(query);
+    return records
+      .map((record) => {
+        const content = recallContent(record);
+        const haystack = `${record.key} ${content}`.toLowerCase();
+        const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
+        const durable = DURABLE_RECALL_KINDS.has(record.kind);
+        return {
+          id: record.id,
+          recallable: durable || matches > 0,
+          score: matches + (durable ? 0.75 : 0) + record.importance + record.confidence * 0.5,
+        };
+      })
+      .filter((row) => row.recallable)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, limit)
+      .map((row) => row.id);
+  }
+
+  /** A store that answers only what the substrate is allowed to ask of it. */
+  const store = {
+    async getRecord(_userId, id) {
+      const found = byId.get(id);
+      if (!found) throw Object.assign(new Error("not found"), { code: "memory_not_found" });
+      return found;
+    },
+    async listAllRecords() { return records; },
+    async list() { return []; },
+    async relevant(_userId, query) {
+      return builtinRecall(query, options.limit).map((id) => ({ id: `record:${id}`, content: recallContent(byId.get(id)), kind: byId.get(id).kind }));
+    },
+  };
+
+  const config = {
+    memoryIndexProvider: options.arm,
+    openVikingUrl: options.url,
+    openVikingApiKey: await readKey(),
+    openVikingAccount: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT ?? "evimed",
+    openVikingRequestTimeoutMs: 120_000,
+    memoryContextLimit: options.limit,
+    memoryContextMaxChars: 20_000,
+  };
+  const client = options.arm === "openviking" ? new OpenVikingClient(config) : null;
+  const substrate = new MemorySubstrate(config, { store, openViking: client });
+
+  if (options.seedIndex) {
+    if (!substrate.active) throw new Error("nothing to seed: the index provider is not active");
+    const health = await client.status();
+    if (!health.connected) throw new Error(`the index is not reachable: ${health.code}`);
+    let written = 0;
+    for (const record of records) {
+      await client.write(options.user, memoryUri(options.user, {
+        scope: record.scope, scopeId: record.scopeId, kind: record.kind, recordId: record.id,
+      }), recallContent(record), { wait: true, timeoutSeconds: 120 });
+      written += 1;
+      if (written % 25 === 0) process.stderr.write(`seeded ${written}/${records.length}\n`);
+    }
+    process.stderr.write(`seeded ${written}/${records.length}\n`);
+  }
+
+  const recall = async (query) =>
+    (await substrate.recall(options.user, query, {})).map((row) => String(row.id).replace("record:", ""));
+  return {
+    corpusSize: records.length,
+    queries: gold.queries,
+    recall,
+    provider: substrate.provider,
+    active: substrate.active,
+    lastError: () => substrate.lastError,
+  };
+}
+
+const plan = options.mode === "capsule" ? await runCapsuleMode() : await runRecordMode();
 
 const rows = [];
-for (const { query, expected } of gold.queries) {
+for (const { query, expected } of plan.queries) {
   const started = Date.now();
-  const recalled = await substrate.recall(options.user, query, {});
+  const returned = await plan.recall(query);
   const ms = Date.now() - started;
-  const returned = recalled.map((row) => String(row.id).replace("record:", ""));
   const found = expected.filter((id) => returned.includes(id));
   // Where the first correct memory landed. A ranker that returns the right
   // record fifth has not helped: the budget may cut it, and the model reads
@@ -175,10 +281,11 @@ const expectedTotal = rows.reduce((total, row) => total + row.of, 0);
 const hitTotal = rows.reduce((total, row) => total + row.hit, 0);
 const summary = {
   label: options.label,
-  arm: substrate.provider,
-  active: substrate.active,
-  lastError: substrate.lastError,
-  corpus: records.length,
+  mode: options.mode,
+  arm: plan.provider,
+  active: plan.active,
+  lastError: plan.lastError ? plan.lastError() : null,
+  corpus: plan.corpusSize,
   queries: rows.length,
   limit: options.limit,
   recallAtLimit: Number((hitTotal / expectedTotal).toFixed(4)),

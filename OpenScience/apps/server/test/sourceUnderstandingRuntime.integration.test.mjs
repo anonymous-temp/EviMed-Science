@@ -15,8 +15,8 @@ const options = { skip: !databaseUrl, timeout: 30_000 };
 async function fixture(t) {
   const dataDir = await mkdtemp("/tmp/source-runtime-app-");
   const app = createWebApiApp({ dataDir, stateStore: "postgres", databaseUrl, runtimeMode: "mock",
-    devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "", requireMemos: false,
-    requireMemoryIndex: false, memoryExtractionEnabled: false, memOsEngineUrl: "", autopilotEnabled: false,
+    devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
+    memoryExtractionEnabled: false, autopilotEnabled: false,
     sourceIngestionEnabled: true, sourceIngestionPollMs: 60_000, sourceIngestionLeaseMs: 30_000,
     documentParserUrl: "", modelGatewaySigningSecret: "fixture-source-signing-secret-at-least-32-characters" });
   const userId = `source_runtime_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -41,7 +41,7 @@ async function fixture(t) {
   const state = { scope: null, project: null, sessionId: null };
   // Keep real ProductJobs, source transactions, registry, research sessions,
   // AgentRunStore dispatch and usage settlement. Only the external DSH kernel
-  // boundary is a fixture; no paid model or unrelated Memos service is called.
+  // boundary is a fixture; no paid model and no external service is called.
   app.runtimeManager.reserveBoundedRuntimeSession = async (scoped, scope) => {
     calls.reserve++; state.scope = scope; state.project = scoped;
     state.sessionId = `session_${randomUUID().replaceAll("-", "")}`;

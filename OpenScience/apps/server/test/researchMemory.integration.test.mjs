@@ -443,7 +443,6 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
 
   const audit = await relationalIntegrity(database);
   for (const name of ["memory_records_user", "memory_notes_user"]) {
-    assert.ok(!audit.absent.includes(name), `${name} must be a table the audit can see`);
     assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
     assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
   }
@@ -469,22 +468,17 @@ async function auditWithout(table) {
   return result;
 }
 
-// The audit tolerates exactly one thing, and it has to stay exactly one thing:
-// `evimed_memory` is migrated by the store when the server constructs it, and
-// no tool that audits a database calls that migration yet, so both tables can
-// legitimately be missing. Every other registered table is migrated by a caller
-// these tools already run — so a missing one is a dropped table, and a registry
-// that cannot fail on a dropped table is not a registry.
-test("the ownership audit tolerates an unmigrated memory table, and no other missing table", options, async () => {
+// The audit tolerates no missing table, and that has to stay true for the two
+// newest ones. While `evimed_memory` had no migration caller among the tools
+// that audit, a tolerated-absent list kept them from failing; every such caller
+// migrates it now, so the list is gone and a dropped memory table fails exactly
+// the way a dropped inbox table always has. A registry that cannot fail on a
+// dropped table is not a registry.
+test("a dropped memory table fails the ownership audit, like every other registered table", options, async () => {
   await migrateNotifications(database);
-  const withoutMemory = await auditWithout("evimed_memory.records");
-  assert.deepEqual(withoutMemory.absent, ["memory_records_user"], "the memory table is reported as absent");
-  assert.equal(withoutMemory.ok, true, "and reported, not failed, because its migration has no caller here");
-  assert.ok(!Object.hasOwn(withoutMemory.counts, "memory_records_user"), "its orphan query is skipped, not run");
-  assert.equal(withoutMemory.counts.memory_notes_user, 0, "the other memory table is still audited");
-
-  const withoutInbox = await auditWithout("evimed_inbox.notifications");
-  assert.deepEqual(withoutInbox, { failedWith: "42P01" },
-    "a dropped table outside that schema still fails the audit, the way it did before the tolerance existed");
+  assert.deepEqual(await auditWithout("evimed_memory.records"), { failedWith: "42P01" },
+    "a dropped memory table must fail the audit, not be reported as tolerable");
+  assert.deepEqual(await auditWithout("evimed_inbox.notifications"), { failedWith: "42P01" },
+    "and so must a dropped table outside that schema");
   assert.equal((await relationalIntegrity(database)).ok, true, "and both probes left the schema as they found it");
 });

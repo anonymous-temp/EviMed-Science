@@ -36,7 +36,7 @@ function tarEntries(compressed) {
 async function fixture(t) {
   const dataDir = await mkdtemp("/tmp/evimed-account-export-");
   const app = createWebApiApp({ dataDir, stateStore: "postgres", databaseUrl, runtimeMode: "mock", authMode: "local", devAuth: false,
-    bootstrapUser: "", bootstrapPassword: "", requireMemos: false, requireMemoryIndex: false, memOsEngineUrl: "" });
+    bootstrapUser: "", bootstrapPassword: "" });
   const users = [];
   t.after(async () => {
     await app.store.database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [users]);

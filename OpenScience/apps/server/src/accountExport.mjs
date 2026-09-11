@@ -81,6 +81,8 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_product.plugin_prompt_admissions": "one row recording that a project was offered a plugin prompt; it holds nothing the customer wrote",
   "evimed_product.plugin_application_state": "the runtime's view of a plugin document that is itself exported, and stale the moment it leaves this deployment",
   "evimed_product.memory_index_state": "publication bookkeeping for the ranking index over capsules that are themselves exported; derived from them and from nothing else",
+  "evimed_memory.records": "carried by the archive as memory/memory.json, written from the store's own exportUserMemory so that the evidence and revision history travel in the shape the product reads them in",
+  "evimed_memory.notes": "carried by the archive as memory/memory.json, beside the records, for the same reason",
 });
 
 function tooLarge() { return new HttpError(413, "archive_too_large", "Account export exceeds its complete customer-state row or byte limit."); }

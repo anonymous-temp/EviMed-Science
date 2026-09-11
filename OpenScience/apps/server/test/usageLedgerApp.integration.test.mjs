@@ -30,7 +30,6 @@ test("the real application wires every provider call into the durable usage ledg
     deepseekApiKey: "test-provider-key", deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}`,
     deepseekModel: "deepseek-v4-flash", modelGatewaySigningSecret: secret,
     requireDurableUsageLedger: true, modelGatewayReservationMaxOutputTokens: 4096,
-    memOsEngineUrl: "", requireMemoryIndex: false,
   });
   const username = `usage${randomUUID().slice(0, 8)}`;
   let user;
@@ -49,7 +48,19 @@ test("the real application wires every provider call into the durable usage ledg
     assert.equal(response.status, 200);
     await response.json();
     assert.ok(app.usageLedger);
-    const summary = await app.usageLedger.summary(user.id, { since: new Date("2020-01-01T00:00:00Z") });
+    // Settlement is written after the last byte by design (modelGateway.mjs:
+    // "After the body, never before"), so the client can finish reading while
+    // the row is still `reserved` and `summary()` counts only settled ones.
+    // Wait for the terminal transition, bounded, and prove the wait ended on it.
+    const since = new Date("2020-01-01T00:00:00Z");
+    const deadline = Date.now() + 5_000;
+    let summary = await app.usageLedger.summary(user.id, { since });
+    while (summary.reservedCalls > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      summary = await app.usageLedger.summary(user.id, { since });
+    }
+    assert.equal(summary.totalCalls, 1);
+    assert.equal(summary.reservedCalls, 0, "the gateway never settled the call");
     assert.equal(summary.settledCalls, 1);
     assert.equal(summary.uncertainCalls, 0);
     assert.equal(summary.cacheHitTokens, 4);
@@ -80,7 +91,6 @@ test("the running application sweeps reservations whose settlement never arrived
     deepseekApiKey: "test-provider-key", deepseekBaseUrl: `http://127.0.0.1:${upstream.address().port}`,
     deepseekModel: "deepseek-v4-flash", modelGatewaySigningSecret: secret,
     requireDurableUsageLedger: true, modelGatewayReservationMaxOutputTokens: 4096,
-    memOsEngineUrl: "", requireMemoryIndex: false,
   });
   const username = `sweep${randomUUID().slice(0, 8)}`;
   let user;

@@ -49,7 +49,6 @@ test("individual SaaS profile requires the complete hosted execution boundary", 
     {
       deploymentProfile: "individual-saas",
       production: true,
-      requireMemos: true,
       requireSharedStateStore: true,
     },
     passingChecks(),
@@ -74,6 +73,27 @@ test("individual SaaS profile requires the complete hosted execution boundary", 
   ]);
 });
 
+// The requirement used to be conditional on a flag a deployment set to say it
+// ran a memory service. There is no such service and no such flag: research
+// memory is a schema of the control-plane database this profile already
+// requires, so a hosted deployment whose memory cannot answer is missing a
+// boundary rather than exercising an option.
+test("a hosted deployment whose research memory cannot answer misses that boundary", () => {
+  const checks = passingChecks();
+  checks.memory = { ok: false, code: "memory_unavailable", required: true, connected: false };
+  assert.throws(
+    () => readinessSaasProfile(
+      { deploymentProfile: "individual-saas", production: true, requireSharedStateStore: true },
+      checks,
+    ),
+    (error) => {
+      assert.equal(error.code, "saas_profile_requirements_missing");
+      assert.deepEqual(error.details.missing, ["research-memory"]);
+      return true;
+    },
+  );
+});
+
 test("individual SaaS profile fails closed with stable missing boundary ids", () => {
   const checks = passingChecks();
   checks.auth = { ok: true, mode: "local" };
@@ -84,7 +104,6 @@ test("individual SaaS profile fails closed with stable missing boundary ids", ()
       {
         deploymentProfile: "individual-saas",
         production: true,
-        requireMemos: true,
         requireSharedStateStore: false,
       },
       checks,
@@ -144,7 +163,6 @@ function productionConfig(overrides = {}) {
     deploymentProfile: "individual-saas",
     production: true,
     requireSharedStateStore: true,
-    requireMemos: true,
     ...overrides,
   };
 }
