@@ -231,9 +231,26 @@ export class CapsuleService {
     const active = [...local.items, ...global.items].filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, 8);
     if (this.indexing && active.length) {
       try {
-        return await this.#semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt });
+        const semantic = await this.#semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt });
+        // An empty semantic answer and an unindexed capsule look the same from
+        // here, and one of them is routine: the index is built by a worker, so
+        // every capsule is unindexed between being written and being published,
+        // and the whole estate is unindexed the day the provider is turned on.
+        // The lexical path reads the same authoritative rows, so falling
+        // through costs one query and is never worse than answering nothing.
+        // An operator who set the strict switch asked for the index to be the
+        // answer, and an empty index is then an answer.
+        if (semantic.items.length || this.strictIndex) return semantic;
       } catch (error) {
-        this.lastIndexError = typeof error?.code === "string" ? error.code : "memory_index_unavailable";
+        const code = typeof error?.code === "string" ? error.code : "memory_index_unavailable";
+        // A changed account generation is not an index failure: it is the guard
+        // saying this account was deleted and recreated while the request ran,
+        // and answering it with a lexical result would hide that from the
+        // caller. A refused payload is the caller's own mistake, for the same
+        // reason. Everything else is the index being unavailable or wrong,
+        // which is exactly what the fallback exists for.
+        if (code === "memory_account_changed" || code.startsWith("capsule_")) throw error;
+        this.lastIndexError = code;
         if (this.strictIndex) throw error;
       }
     }
