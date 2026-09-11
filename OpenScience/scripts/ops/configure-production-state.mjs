@@ -149,12 +149,23 @@ async function ensureDsn(file, label, expected) {
  * over text it has already hydrated from PostgreSQL.
  *
  * Unknown keys abort startup, so this renders exactly the schema's fields.
+ *
+ * Nothing here is read from the ambient environment. `--check` compares this
+ * rendering with the stored file byte for byte, so a value taken from the shell
+ * would make the verdict depend on which shell ran it: an operator who
+ * generated the file in one environment and checked it in another would be told
+ * their credentials had drifted, about a file that was correct.
  */
 function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, pin }) {
   const dimension = pin.embedding.dimension;
   return {
-    default_account: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT || "evimed",
-    default_user: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT || "evimed",
+    // The fallback for a request that names no account. This client names one
+    // on every request — trusted mode requires the header — so these two are
+    // never what decides where a memory is stored, and
+    // `OPEN_SCIENCE_OPENVIKING_ACCOUNT` moves the client without touching this
+    // file.
+    default_account: "evimed",
+    default_user: "evimed",
     embedding: {
       dense: {
         provider: "dashscope",

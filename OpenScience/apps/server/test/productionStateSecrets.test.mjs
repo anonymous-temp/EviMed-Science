@@ -23,8 +23,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 const script = path.join(root, "scripts/ops/configure-production-state.mjs");
 const execFileAsync = promisify(execFile);
 
-/** A stand-in for the operator-supplied key: the right shape, and no value. */
-const DASHSCOPE_FIXTURE_KEY = "sk-0123456789abcdef0123456789abcdef";
+/**
+ * A stand-in for the operator-supplied key: the right shape, and no value.
+ *
+ * `example` is load-bearing, not decoration. `audit:source-secrets` reads this
+ * repository as text and flags any `sk-`-prefixed literal that does not say of
+ * itself that it is one — which is the correct rule, because a scanner that
+ * exempted key-shaped strings in test files would exempt the place a real key
+ * is most likely to be pasted.
+ */
+const DASHSCOPE_FIXTURE_KEY = "sk-example-0123456789abcdef0123";
 
 async function secretsDirectory() {
   const directory = await mkdtemp(path.join(await realpath(os.tmpdir()), "evimed-production-state-"));
@@ -101,6 +109,24 @@ test("the rendered index configuration overrides every default that is wrong her
   }
 });
 
+test("what is rendered does not depend on the shell that rendered it", async () => {
+  // `--check` compares the whole file byte for byte, so any value read from the
+  // ambient environment turns a difference between two shells into a report
+  // that two credentials disagree — and the remedy that message gives is to
+  // delete the file. The account is the one that was: it selects nothing here,
+  // because trusted mode makes the client name an account on every request.
+  const { directory, keyFile } = await secretsDirectory();
+  try {
+    await run([], environment(directory, keyFile));
+    const configuration = JSON.parse(await readFile(path.join(directory, "openviking-ov.conf"), "utf8"));
+    assert.equal(configuration.default_account, "evimed");
+    assert.equal(configuration.default_user, "evimed");
+    await run(["--check"], { ...environment(directory, keyFile), OPEN_SCIENCE_OPENVIKING_ACCOUNT: "another-tenant" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("--check passes on what it just wrote and fails when the rendering would differ", async () => {
   const { directory, keyFile } = await secretsDirectory();
   try {
@@ -110,7 +136,7 @@ test("--check passes on what it just wrote and fails when the rendering would di
     // A rotated key with a stale ov.conf is the failure this catches: the
     // index would keep embedding with a credential nobody can revoke, and
     // every probe of the deployment would still be green.
-    await writeFile(keyFile, "sk-ffffffffffffffffffffffffffffffff");
+    await writeFile(keyFile, "sk-example-fedcba9876543210fedcba");
     await chmod(keyFile, 0o600);
     const rejected = await run(["--check"], environment(directory, keyFile)).then(
       () => null,
