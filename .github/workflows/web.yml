@@ -151,7 +151,7 @@ jobs:
         run: CI=true VITE_OPEN_SCIENCE_API_URL=/api pnpm --filter @ai4s/web build
 
   docker-hosted:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: web
     timeout-minutes: 90
     permissions:
@@ -176,6 +176,15 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           bash scripts/dev/fetch-skills.sh
+
+      - name: Verify full sandbox support before building images
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import os from 'node:os';
+          import { validateSandboxPrerequisites } from './scripts/ops/host-preflight.mjs';
+          console.log(validateSandboxPrerequisites(os.release(), fs.readFileSync('/sys/kernel/security/lsm', 'utf8')));
+          JS
 
       - name: Define immutable CI release
         shell: bash
