@@ -77,6 +77,7 @@ from new_meta.agents.paper_retriever import PaperRetriever
 from new_meta.agents.pdf_parser import parse_pdf, parse_text_fulltext
 from new_meta.agents.screening_agent import ScreeningAgent
 from new_meta.agents.data_extraction_agent import DataExtractionAgent
+from new_meta.core.extraction_status import IncompletePhaseError, require_complete_extraction, require_complete_screening
 from new_meta.agents.evidence_understanding_agent import EvidenceUnderstandingAgent
 from new_meta.agents.rob_agent import RoBAgent
 from new_meta.agents.writing_agent import WritingAgent
@@ -1059,6 +1060,13 @@ def _finalize_cli_release(
         print("  Release status: ready with warnings; explicit reviewer acceptance is required.")
         print(f"  Warning gates: {', '.join(decision.get('warning_codes') or []) or 'unspecified'}")
     return decision
+
+
+def _finish_incomplete_cli_phase(exc: IncompletePhaseError) -> None:
+    """Keep system retryability distinct from a scientific/input decision."""
+    print(exc.phase.summary)
+    raise SystemExit(75 if exc.phase.status.value == "failed" and exc.phase.retryable
+                     else 1 if exc.phase.status.value == "failed" else 2)
 
 
 def _require_cli_method_delivery(project: Project, phase) -> None:
@@ -2658,6 +2666,7 @@ def _load_cached_resume_inputs(project: Project, args) -> tuple[
     dict,
     str,
 ]:
+    require_complete_extraction(project)
     protocol = ResearchProtocol.model_validate(project.load_json("protocol.json"))
     if args.analysis_type:
         protocol.analysis_type = args.analysis_type
@@ -4516,6 +4525,7 @@ def main():
 
     if project.is_step_done("ft_screening"):
         print_step("7", "Full-Text Screening [CACHED]")
+        require_complete_screening(project)
         ft_results = project.load_json("full_text_screening.json", subdir="screening") or []
         included_pmids = set(r.get("paper", {}).get("pmid", "") for r in ft_results
                             if r.get("decision") == "include")
@@ -4556,7 +4566,9 @@ def main():
                 print_step("8", "Structured Data Extraction (narrative mode)")
                 extractor = DataExtractionAgent(model=model)
                 extracted_studies = extractor.run(papers_for_extraction, parsed_papers, protocol, project)
+                require_complete_extraction(project, extracted_studies, papers_for_extraction)
                 project.save_checkpoint("extraction")
+            require_complete_extraction(project, extracted_studies, papers_for_extraction)
             _admit_cli_protocol(project, protocol, allow_validating=args.allow_validating_methods, enforce=True)
             project.save_json("protocol.json", protocol)
             print(f"Extracted data from {len(extracted_studies)} studies")
@@ -4618,6 +4630,7 @@ def main():
         print_step("8", "Structured Data Extraction (page-aware)")
         extractor = DataExtractionAgent(model=model)
         extracted_studies = extractor.run(included_papers, parsed_papers, protocol, project)
+        require_complete_extraction(project, extracted_studies, included_papers)
         print(f"Extracted data from {len(extracted_studies)} studies")
         for s in extracted_studies:
             c = s.characteristics
@@ -4625,6 +4638,7 @@ def main():
                   f"{len(s.outcomes)} outcome(s), design={c.study_design}")
         project.save_checkpoint("extraction")
 
+    require_complete_extraction(project, extracted_studies, included_papers)
     extracted_studies = _augment_with_known_source_recovery(
         protocol,
         extracted_studies,
@@ -5071,6 +5085,8 @@ if __name__ == "__main__":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     try:
         main()
+    except IncompletePhaseError as exc:
+        _finish_incomplete_cli_phase(exc)
     except Exception as exc:
         from new_meta.core.method_planning import MethodCapabilityBlockedError, ProtocolInputRequired
         from new_meta.core.release_contract import ReleaseBlockedError

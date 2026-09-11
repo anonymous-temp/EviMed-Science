@@ -1,6 +1,7 @@
 """Screening agent — title/abstract + full-text screening with PRISMA tracking."""
 from __future__ import annotations
 
+import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import BaseModel
@@ -9,10 +10,25 @@ from tqdm import tqdm
 from new_meta.core.agent_base import BaseAgent
 from new_meta.core.known_source_recovery import TRIAL_PUBLICATION_IDS, known_source_protocol_preferences
 from new_meta.core.project import Project
+from new_meta.core.extraction_status import IncompletePhaseError, persist_incomplete_phase
 from new_meta.schemas.protocol import ResearchProtocol
+from new_meta.schemas.screening import FullTextScreeningDecision
+from new_meta.schemas.phase_result import ExecutionStatus, NextAction, PhaseIssue, PhaseName, PhaseResult
 from new_meta.prompts import screening_prompts
 from new_meta.config import MAX_WORKERS, TA_BATCH_SIZE, BATCH_SCREENING_THRESHOLD
 from new_meta.tools.utils import paper_identity
+
+
+# Lexical identifiers only: these patterns do not decide whether a mention is
+# an eligibility restriction, or whether a publication is clinically eligible.
+_PMID_LABEL = r"\bPMIDs?\s*[:#]?\s*"
+_PMID_NUMBER = r"\d{1,9}(?!\w)"
+_PMID_LIST = re.compile(
+    _PMID_LABEL + r"(?P<ids>" + _PMID_NUMBER
+    + r"(?:\s*(?:[,;/&]|and\b|or\b|和|及|或)\s*(?:" + _PMID_LABEL + r")?"
+    + _PMID_NUMBER + r")*)", re.IGNORECASE,
+)
+_DOI_TOKEN = re.compile(r"(?<![a-z0-9])10\.\d{4,9}/[^\s\"，。；]+", re.IGNORECASE)
 
 
 class ScreeningDecision(BaseModel):
@@ -26,6 +42,27 @@ class ScreeningDecision(BaseModel):
 class BatchScreeningResult(BaseModel):
     """Wrapper for batch screening LLM output."""
     decisions: list[dict] = []
+
+
+class ScreeningReviewRequired(IncompletePhaseError):
+    """Unresolved full-text decisions cannot count as eligibility exclusions."""
+
+    code = "full_text_screening_review_required"
+
+    def __init__(self, records: list[dict], project: Project):
+        self.records = records
+        pending = [row for row in records if row.get("decision") == "review_required"]
+        phase = PhaseResult(
+            run_id=project.base_dir.name, phase=PhaseName.SCREENING,
+            status=ExecutionStatus.NEEDS_INPUT, error_code=self.code, retryable=True,
+            summary="Full-text screening contains unresolved source or eligibility judgments.",
+            issues=[PhaseIssue(code=self.code, message=row["reason"], blocking=True,
+                retryable=True, entity_ids=[paper_identity(row["paper"])]) for row in pending],
+            next_actions=[NextAction(action_id="resolve_full_text_screening",
+                title="Resolve the source identity or eligibility diagnostics, then resume full-text screening")],
+            data={"review_required_records": len(pending), "screening_path": "screening/full_text_screening.json"},
+        )
+        super().__init__(phase, project)
 
 
 class ScreeningAgent(BaseAgent):
@@ -232,6 +269,15 @@ class ScreeningAgent(BaseAgent):
 
         ft_results = self._screen_full_text(valid_papers, protocol, parsed_papers)
 
+        # Persist every source and attempt before blocking. Pending judgments are
+        # neither exclusions nor an apparently completed small-study review.
+        project.save_json("full_text_screening.json", ft_results, subdir="screening")
+        if any(row.get("decision") == "review_required" for row in ft_results):
+            error = ScreeningReviewRequired(ft_results, project)
+            persist_incomplete_phase(project, error.phase, step="ft_screening",
+                                     status_path="screening/full_text_screening_status.json")
+            raise error
+
         included_ft = [r for r in ft_results if r["decision"] == "include"]
         excluded_ft = [r for r in ft_results if r["decision"] == "exclude"]
 
@@ -256,6 +302,11 @@ class ScreeningAgent(BaseAgent):
 
         # Save FT screening results
         project.save_json("full_text_screening.json", ft_results, subdir="screening")
+        project.save_json("full_text_screening_status.json", PhaseResult(
+            run_id=project.base_dir.name, phase=PhaseName.SCREENING,
+            status=ExecutionStatus.SUCCEEDED, summary="Full-text screening completed for every assessed source.",
+            metrics={"assessed": len(papers), "included": len(final_included), "excluded": len(final_excluded)},
+        ), subdir="screening")
         project.save_json("prisma_flow.json", project.prisma.to_dict())
 
         return final_included, final_excluded
@@ -406,6 +457,13 @@ class ScreeningAgent(BaseAgent):
         self, papers: list[dict], protocol: ResearchProtocol, parsed_papers: dict[str, dict]
     ) -> list[dict]:
         """Screen papers by full text content."""
+        try:
+            identity_inventory = self._publication_identity_inventory(protocol)
+        except ValueError as exc:
+            return [{"paper": paper, "decision": "review_required", "reason_code": "uncertain",
+                     "reason": str(exc), "confidence": "low",
+                     "source_identity": self._screening_source_identity(paper), "screening_attempts": []}
+                    for paper in papers]
         inclusion_str = "\n".join(f"  - {c}" for c in protocol.inclusion_criteria)
         exclusion_str = "\n".join(f"  - {c}" for c in protocol.exclusion_criteria)
 
@@ -418,7 +476,10 @@ class ScreeningAgent(BaseAgent):
                 # Use abstract for screening instead of auto-including
                 abstract = paper.get("abstract", "")
                 if not abstract:
-                    return {"paper": paper, "decision": "exclude", "reason": "No full text or abstract available for screening", "confidence": "low"}
+                    return {"paper": paper, "decision": "review_required", "reason_code": "data_unavailable",
+                            "reason": "No full text or abstract available to assess eligibility",
+                            "confidence": "low", "source_identity": self._screening_source_identity(paper),
+                            "screening_attempts": []}
                 # Fall through to LLM screening with abstract as "full text"
                 full_text = f"[Title/Abstract Only]\n\nTitle: {paper.get('title', '')}\n\nAbstract: {abstract}"
 
@@ -436,27 +497,144 @@ class ScreeningAgent(BaseAgent):
                 study_design=protocol.study_design,
                 inclusion_criteria=inclusion_str,
                 exclusion_criteria=exclusion_str,
+                paper_metadata=json.dumps({key: paper.get(key) for key in (
+                    "title", "authors", "year", "journal", "pub_types", "abstract",
+                    "pmid", "doi", "pmcid", "trial_registration", "nct_id", "clinicaltrials_id",
+                    "text_availability", "fulltext_source", "retrieval_sources",
+                ) if paper.get(key) is not None}, ensure_ascii=False),
+                source_identity=json.dumps(self._screening_source_identity(paper), ensure_ascii=False),
+                publication_identity_inventory=json.dumps(identity_inventory, ensure_ascii=False),
                 full_text=full_text,
             )
-            try:
-                decision = self.call_llm_structured(prompt, ScreeningDecision)
-                d = "include" if decision.decision == "include" else "exclude"
-                result = {
-                    "paper": paper,
-                    "decision": d,
-                    "reason": decision.reason,
-                    "exclusion_criterion": decision.exclusion_criterion,
-                    "confidence": decision.confidence,
-                }
-                return self._apply_full_text_role_policy(result, paper, parsed, protocol=protocol)
-            except Exception as e:
-                self.log(f"Full-text screening error for {paper_id}: {e}", level="warning")
-                result = {"paper": paper, "decision": "exclude", "reason": f"Error, excluded conservatively: {e}", "confidence": "low"}
-                return self._apply_full_text_role_policy(result, paper, parsed, protocol=protocol)
+            attempts = []
+            current_prompt = prompt
+            for _ in range(2):
+                response = None
+                try:
+                    raw = self.call_llm_structured(current_prompt, FullTextScreeningDecision)
+                    response = raw.model_dump()
+                    decision = FullTextScreeningDecision.model_validate(response)
+                    checks = self._validate_full_text_decision(decision, paper, protocol)
+                    attempts.append({"response": response, "validation_error": None})
+                    result = {"paper": paper, **decision.model_dump(),
+                              "identity_check_results": checks, "screening_attempts": attempts}
+                    return self._apply_full_text_role_policy(result, paper, parsed, protocol=protocol)
+                except Exception as exc:
+                    attempts.append({"response": response, "validation_error": str(exc)})
+                    current_prompt = prompt + screening_prompts.FULL_TEXT_CORRECTION_PROMPT.format(
+                        previous_attempt=json.dumps(attempts[-1], ensure_ascii=False),
+                    )
+            return {"paper": paper, "decision": "review_required", "reason_code": "uncertain",
+                    "reason": "Full-text screening requires review after one corrective assessment: "
+                              + attempts[-1]["validation_error"],
+                    "confidence": "low", "source_identity": self._screening_source_identity(paper),
+                    "screening_attempts": attempts}
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             results = list(tqdm(executor.map(screen_one, papers), total=len(papers), desc="Full-text Screening", leave=False))
         return results
+
+    @staticmethod
+    def _screening_source_identity(paper: dict) -> dict[str, str]:
+        return {"record_id": paper_identity(paper),
+                "pmid": str(paper.get("pmid") or "").strip(),
+                "doi": str(paper.get("doi") or "").strip(),
+                "trial_registration": str(paper.get("trial_registration") or paper.get("nct_id")
+                                          or paper.get("clinicaltrials_id") or "").strip()}
+
+    @staticmethod
+    def _publication_identity_inventory(protocol: ResearchProtocol) -> list[dict]:
+        """Inventory complete identifier tokens in all displayed protocol fields."""
+        fields = [protocol.research_question, protocol.pico.population, protocol.pico.intervention,
+                  protocol.pico.comparator, protocol.pico.outcome_primary, protocol.study_design,
+                  *protocol.inclusion_criteria, *protocol.exclusion_criteria]
+        inventory = []
+        for criterion in dict.fromkeys(fields):
+            # Formatting is ignored only for PMID lexing. Keep the original
+            # criterion as the assessment anchor and preserve raw DOI suffixes.
+            pmid_text = re.sub(r"[*_`~]", "", criterion)
+            pmids = set()
+            for label in re.finditer(_PMID_LABEL, pmid_text, re.IGNORECASE):
+                if not re.match(r"\d", pmid_text[label.end():]):
+                    continue  # A generic reference to the identifier type is not a closed ID.
+                match = _PMID_LIST.match(pmid_text, label.start())
+                if match is None:
+                    raise ValueError("The protocol contains an incomplete or malformed PMID token; clarify the complete identifier")
+                trailing_number = re.match(
+                    r"\s*(?:[,;/&]|and\b|or\b|和|及|或)\s*(?:" + _PMID_LABEL + r")?\d",
+                    pmid_text[match.end():], re.IGNORECASE,
+                )
+                if trailing_number:
+                    raise ValueError("The protocol contains an incomplete or malformed PMID alternative; clarify the complete identifier set")
+                pmids.update(re.findall(_PMID_NUMBER, match.group("ids")))
+            pmids.update(re.findall(r"https?://pubmed\.ncbi\.nlm\.nih\.gov/(\d{1,9})(?=[/\s?#]|$)", criterion, re.IGNORECASE))
+            dois = set()
+            for match in _DOI_TOKEN.finditer(criterion):
+                value = match.group().lower().rstrip(".,;:!?'\"")
+                # Drop prose/Markdown closing wrappers, retaining DOI suffixes
+                # such as study(2022), and never accepting only a suffix prefix.
+                for opening, closing in (("(", ")"), ("[", "]"), ("{", "}"), ("<", ">")):
+                    while value.endswith(closing) and value.count(closing) > value.count(opening):
+                        value = value[:-1]
+                if value.rsplit("/", 1)[-1]:
+                    dois.add(value)
+            for identifier_type, identifiers in (("pmid", pmids), ("doi", dois)):
+                if identifiers:
+                    inventory.append({"protocol_criterion": criterion, "identifier_type": identifier_type,
+                                      "identifiers": sorted(identifiers)})
+        return inventory
+
+    @classmethod
+    def _validate_full_text_decision(
+        cls, decision: FullTextScreeningDecision, paper: dict, protocol: ResearchProtocol,
+    ) -> list[dict]:
+        """Check binding and exact IDs, never infer clinical criteria from prose."""
+        identity = cls._screening_source_identity(paper)
+        if decision.source_identity.model_dump() != identity:
+            raise ValueError("Decision source_identity differs from the authoritative paper metadata")
+        if decision.full_text_identity_status != "consistent":
+            raise ValueError("The full text cannot be verified as consistent with the source metadata")
+        if decision.decision == "review_required" or decision.reason_code == "uncertain":
+            raise ValueError("The model marked the full-text judgment as uncertain")
+        if not decision.reason.strip():
+            raise ValueError("The decision requires a substantive reason")
+        if decision.decision == "include" and decision.reason_code != "eligible":
+            raise ValueError("Inclusion must use the eligible reason code")
+        if decision.decision == "exclude" and (
+            decision.reason_code == "eligible" or not (decision.exclusion_criterion or "").strip()
+        ):
+            raise ValueError("Exclusion requires a typed exclusion reason and criterion")
+        if decision.reason_code == "publication_type" and decision.publication_role in {
+            "primary_publication", "uncertain",
+        }:
+            raise ValueError("Publication-type exclusion conflicts with the publication role; a secondary endpoint is not a secondary publication")
+
+        inventory = {(item["protocol_criterion"], item["identifier_type"]): set(item["identifiers"])
+                     for item in cls._publication_identity_inventory(protocol)}
+        keys = [(item.protocol_criterion, item.identifier_type) for item in decision.publication_identity_checks]
+        if len(keys) != len(set(keys)) or set(keys) != set(inventory):
+            raise ValueError("Publication identity assessments must cover every inventoried protocol field and identifier type exactly once")
+        checks = []
+        for check in decision.publication_identity_checks:
+            values = [value.strip().lower() for value in check.identifiers]
+            if len(values) != len(set(values)) or set(values) != inventory[(check.protocol_criterion, check.identifier_type)]:
+                raise ValueError("Publication identity assessment must preserve the complete identifier set from its protocol field")
+            source_value = identity[check.identifier_type].lower()
+            if check.requirement == "context_only":
+                if not (check.context_reason or "").strip():
+                    raise ValueError("A contextual identifier mention requires an explicit semantic rationale")
+                checks.append({**check.model_dump(), "source_value": source_value, "satisfied": None})
+                continue
+            if not source_value:
+                raise ValueError("Source lacks the identifier required to evaluate the publication constraint")
+            matches = source_value in values
+            satisfied = matches if check.requirement == "any_of" else not matches
+            checks.append({**check.model_dump(), "source_value": source_value, "satisfied": satisfied})
+        if decision.reason_code == "publication_identity" and not any(c["satisfied"] is False for c in checks):
+            raise ValueError("Publication-identity exclusion is unsupported: identifier constraints are absent or satisfied")
+        if decision.decision == "include" and any(c["satisfied"] is False for c in checks):
+            raise ValueError("Inclusion conflicts with a publication identifier constraint")
+        return checks
 
     # ------------------------------------------------------------------
     # Dual-reviewer simulation and Cohen's kappa
@@ -584,7 +762,7 @@ class ScreeningAgent(BaseAgent):
         protocol: ResearchProtocol | None = None,
     ) -> dict:
         """Annotate FT-screening records and keep secondary/design papers out of extraction."""
-        role = cls._classify_full_text_evidence_role(paper, parsed, protocol=protocol)
+        role = result.get("publication_role") or cls._classify_full_text_evidence_role(paper, parsed, protocol=protocol)
         route = "primary_extraction" if role in {"primary_publication", "uncertain"} else "related_source_only"
         paper["evidence_role"] = role
         paper["analysis_route"] = route
@@ -594,11 +772,14 @@ class ScreeningAgent(BaseAgent):
         if result.get("decision") == "include" and route == "related_source_only":
             result["original_decision"] = "include"
             result["decision"] = "exclude"
+            if "reason_code" in result:
+                result["original_reason_code"] = result["reason_code"]
+                result["reason_code"] = "publication_type"
             result["exclusion_criterion"] = f"{role}_not_independent_primary_publication"
             role_label = role.replace("_", " ")
             reason = result.get("reason") or ""
             result["reason"] = (
-                f"{reason} Deterministic role policy classified this record as {role_label}; "
+                f"{reason} The publication role assessment classified this record as {role_label}; "
                 "it is retained for audit/narrative context but is not extracted as an independent primary study."
             ).strip()
             if result.get("confidence") in {None, "", "low"}:

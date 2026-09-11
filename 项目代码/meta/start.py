@@ -1653,6 +1653,12 @@ def _refresh_review_decision_artifacts(project) -> dict:
     from new_meta.schemas.risk_of_bias import StudyRoB
     from new_meta.schemas.study import ExtractedStudy
 
+    from new_meta.core.extraction_status import IncompletePhaseError, require_complete_extraction
+    try:
+        require_complete_extraction(project)
+    except IncompletePhaseError as exc:
+        return {"artifacts_refreshed": False, "execution": exc.phase.model_dump(mode="json"),
+                "refresh_warnings": [exc.phase.summary], "evidence_readiness": None}
     warnings: list[str] = []
     protocol_data = project.load_json("protocol.json")
     if not protocol_data:
@@ -2044,6 +2050,12 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
 
     project_dir = _resolve_project_dir(payload.get("project_dir"), parent_id=parent_id)
     project = Project("resume project", resume_dir=project_dir)
+    if project.is_step_done("extraction"):
+        from new_meta.core.extraction_status import IncompletePhaseError, require_complete_extraction
+        try:
+            require_complete_extraction(project)
+        except IncompletePhaseError as exc:
+            return _incomplete_phase_payload(exc)
     from new_meta.core.method_planning import ProtocolInputRequired, admit_project_protocol
     from new_meta.schemas.protocol import ResearchProtocol
     protocol_data = project.load_json("protocol.json")
@@ -2137,8 +2149,13 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
     project = Project("resume project", resume_dir=project_dir)
     stdout_tail = _tail_text(proc.stdout or "")
     stderr_tail = _tail_text(proc.stderr or "")
-    if proc.returncode == 2:
+    if proc.returncode in {1, 2, 75}:
         from new_meta.schemas.phase_result import PhaseResult
+        from new_meta.core.extraction_status import IncompletePhaseError
+        for status_path in ("extraction/extraction_status.json", "screening/full_text_screening_status.json"):
+            incomplete = project.load_json(status_path)
+            if incomplete and incomplete.get("status") != "succeeded":
+                return _incomplete_phase_payload(IncompletePhaseError(PhaseResult.model_validate(incomplete), project))
         protocol_phase = project.load_json("protocol_input_status.json", subdir="analysis")
         if protocol_phase and protocol_phase.get("status") == "needs_input":
             return {"ok": False, "error": protocol_phase.get("error_code"), "input_required": True,
@@ -2251,6 +2268,11 @@ def _run_downstream_after_overrides_payload(payload: dict, *, parent_id: str = "
 
     project_dir = _resolve_project_dir(payload.get("project_dir"), parent_id=parent_id)
     project = Project("downstream rerun", resume_dir=project_dir)
+    from new_meta.core.extraction_status import IncompletePhaseError, require_complete_extraction
+    try:
+        require_complete_extraction(project)
+    except IncompletePhaseError as exc:
+        return _incomplete_phase_payload(exc)
     log = logging.getLogger("metaagent.downstream_rerun")
     warnings: list[str] = []
 
@@ -2821,6 +2843,13 @@ def _protocol_input_payload(exc):
             "message": exc.phase.summary + " " + " ".join(action.title for action in exc.phase.next_actions)}
 
 
+def _incomplete_phase_payload(exc):
+    return {"ok": False, "error": exc.phase.error_code,
+            "input_required": exc.phase.status.value == "needs_input",
+            "retryable": exc.phase.retryable, "phase": exc.phase.model_dump(mode="json"),
+            "project_dir": str(exc.project.base_dir), "message": exc.phase.summary}
+
+
 def _run_phase1_sync(topic: str, output_dir: str, push=None) -> dict:
     """Run steps 0-3 (PICO → Query → Search → T/A Screening). Returns state dict for phase 2."""
     def _push(kind, payload):
@@ -2977,6 +3006,10 @@ def _run_phase2_sync(phase1_state: dict, output_dir: str, push=None, user_pdf_pa
     try:
         return _run_phase2_inner(phase1_state, output_dir, _push, user_pdf_paths or [])
     except Exception as e:
+        from new_meta.core.extraction_status import IncompletePhaseError
+        if isinstance(e, IncompletePhaseError):
+            _push("phase_incomplete", _incomplete_phase_payload(e))
+            return None
         from new_meta.core.method_planning import ProtocolInputRequired
         if isinstance(e, ProtocolInputRequired):
             _push("method_decision_required", _protocol_input_payload(e))
@@ -3325,6 +3358,8 @@ def _run_phase2_inner(phase1_state: dict, output_dir: str, _push, user_pdf_paths
 
     extractor = DataExtractionAgent()
     extracted_studies = extractor.run(included_papers, parsed_papers, protocol, project)
+    from new_meta.core.extraction_status import require_complete_extraction
+    require_complete_extraction(project, extracted_studies, included_papers)
     # Extraction may reconcile the observed RCT designs; re-admit that exact proposal.
     admit_project_protocol(project, protocol, enforce=True)
     project.save_json("protocol.json", protocol)
@@ -3669,6 +3704,10 @@ def _run_pipeline_sync(
             skip_confirm=skip_confirm,
         )
     except Exception as e:
+        from new_meta.core.extraction_status import IncompletePhaseError
+        if isinstance(e, IncompletePhaseError):
+            _push("phase_incomplete", _incomplete_phase_payload(e))
+            return None
         from new_meta.core.method_planning import ProtocolInputRequired
         if isinstance(e, ProtocolInputRequired):
             _push("method_decision_required", _protocol_input_payload(e))
@@ -5159,7 +5198,7 @@ async def _handle_session(
                             )
                             return None, True
 
-                        elif kind == "method_decision_required":
+                        elif kind in {"method_decision_required", "phase_incomplete"}:
                             _doing_step = -1
                             await send_msg({
                                 "id": message_id,
@@ -5167,7 +5206,7 @@ async def _handle_session(
                                 "agentType": AGENT_TYPE,
                                 "content": {
                                     "clazz": "agent",
-                                    "type": "method_decision_required",
+                                    "type": kind,
                                     "data": payload,
                                 },
                             })

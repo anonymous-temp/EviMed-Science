@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from tqdm import tqdm
 
 from new_meta.core.agent_base import BaseAgent
+from new_meta.core.extraction_status import extraction_failure, extraction_incomplete
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.core.extraction_review import apply_extraction_overrides, load_extraction_overrides
@@ -54,6 +55,17 @@ class OutcomeList(BaseModel):
     quality_notes: str = ""
 
 
+class StudyExtractionFailed(RuntimeError):
+    """Structured extraction exhausted retries without manufacturing a record."""
+
+    def __init__(self, study_id, schema_name, attempts, *, code="structured_extraction_failed", retryable=True):
+        self.failure = extraction_failure(
+            study_id, code, retryable=retryable,
+            schema=schema_name, attempts=attempts,
+        )
+        super().__init__(f"{study_id}: {schema_name} extraction incomplete ({code})")
+
+
 class DataExtractionAgent(BaseAgent):
     def __init__(self, model: str = None):
         super().__init__("data_extraction", extraction_prompts.SYSTEM_PROMPT, model=model)
@@ -77,19 +89,57 @@ class DataExtractionAgent(BaseAgent):
             return self._extract_single(paper, parsed, protocol, project)
 
         verification_inputs = {}
+        failures = []
+        required_ids = {paper_identity(paper) for paper in included_papers}
+        previous_status = project.load_json("extraction_status.json", subdir="extraction") or {}
+        if previous_status.get("status") not in {None, "succeeded"}:
+            prior_ids = set(previous_status.get("data", {}).get("required_study_ids", []))
+            screening = project.load_json("full_text_screening.json", subdir="screening") or []
+            excluded_ids = {paper_identity(row["paper"]) for row in screening
+                            if row.get("decision") == "exclude" and isinstance(row.get("paper"), dict)}
+            missing_ids = prior_ids - required_ids - excluded_ids
+            prior_failures = {row["study_id"]: row for row in previous_status.get("data", {}).get("failures", [])}
+            failures.extend(prior_failures.get(sid) or extraction_failure(sid, "required_study_extraction_missing")
+                            for sid in sorted(missing_ids))
+            required_ids.update(missing_ids)
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {executor.submit(extract_one, p): p for p in included_papers}
             results = []
             for future in tqdm(as_completed(futures), total=len(futures), desc="Data Extraction", leave=False):
                 try:
                     result = future.result()
-                    if result:
+                    paper = futures[future]
+                    if result and result.outcomes and "EXTRACTION_FAILED" not in result.quality_notes:
                         results.append(result)
-                        paper = futures[future]
                         verification_inputs[id(result)] = (paper, parsed_papers.get(paper_identity(paper), {}))
+                    else:
+                        code = ("extraction_failed" if result and "EXTRACTION_FAILED" in result.quality_notes
+                                else "extraction_outcomes_empty" if result else "extraction_source_unavailable")
+                        failures.append(extraction_failure(
+                            paper_identity(paper), code, retryable=code == "extraction_failed",
+                        ))
                 except Exception as e:
                     paper = futures[future]
-                    self.log(f"Extraction failed for {paper_identity(paper)}: {e}", level="warning")
+                    self.log(f"Extraction failed for {paper_identity(paper)}: {type(e).__name__}", level="warning")
+                    failures.append(e.failure if isinstance(e, StudyExtractionFailed) else extraction_failure(
+                        paper_identity(paper), "study_extraction_failed", retryable=True, error_type=type(e).__name__,
+                    ))
+
+        if failures:
+            # Preserve the completed source extractions before raising. They remain
+            # unverified until the full phase can finish its independent checks.
+            project.save_json("all_extractions.json", results, subdir="extraction")
+            audit = self._build_extraction_audit(results)
+            audit["summary"].update({"status": "incomplete", "required_studies": len(required_ids),
+                                     "incomplete_studies": len(failures)})
+            audit["failures"] = failures
+            project.save_json("extraction_audit.json", audit, subdir="extraction")
+            project.save_text("extraction_audit.md", self._audit_to_markdown(audit), subdir="extraction")
+            raise extraction_incomplete(
+                project, failures,
+                completed_ids=[study.characteristics.study_id for study in results],
+                required_ids=sorted(required_ids),
+            )
 
         self.log(f"Successfully extracted data from {len(results)} papers")
 
@@ -165,6 +215,12 @@ class DataExtractionAgent(BaseAgent):
                 code="dependency_metadata_incomplete",
                 context=skipped,
             )
+        from new_meta.schemas.phase_result import PhaseResult
+        project.save_json("extraction_status.json", PhaseResult(
+            run_id=project.base_dir.name, status="succeeded", phase="extraction",
+            summary="Extraction completed for every required study.",
+            data={"required_study_ids": [paper_identity(paper) for paper in included_papers]},
+        ), subdir="extraction")
         return results
 
     def _extract_single(
@@ -236,12 +292,14 @@ class DataExtractionAgent(BaseAgent):
         if tables:
             paper_content += "\n\n## EXTRACTED TABLES\n\n" + "\n\n".join(tables)
 
-        # Truncate for token limit — keep head (context) + tail (results/tables)
-        max_chars = 40000
-        if len(paper_content) > max_chars:
-            head = int(max_chars * 0.4)
-            tail = max_chars - head - 30
-            paper_content = paper_content[:head] + "\n\n[... middle sections omitted ...]\n\n" + paper_content[-tail:]
+        # Extraction and verification must see the same complete bounded source.
+        # Silently dropping the middle removes Results while retaining discussion.
+        if len(paper_content) > VERIFICATION_SOURCE_CHAR_LIMIT:
+            error = StudyExtractionFailed(
+                paper_id, "source_context", [], code="extraction_source_context_unavailable", retryable=False,
+            )
+            error.failure.update({"source_chars": len(paper_content), "source_char_limit": VERIFICATION_SOURCE_CHAR_LIMIT})
+            raise error
 
         # Step 1: Extract characteristics (with retry)
         char_prompt = extraction_prompts.CHARACTERISTICS_EXTRACTION_PROMPT.format(
@@ -361,9 +419,7 @@ class DataExtractionAgent(BaseAgent):
             characteristics.pmid = ""
 
         characteristics.pdf_path = paper.get("pdf_path", "") or characteristics.pdf_path
-        characteristics.source_type = paper.get("source_type") or (
-            "user_upload" if str(pmid).startswith("user_pdf_") or paper.get("pdf_path") else "database"
-        )
+        characteristics.source_type = self._source_type(paper)
         if self._has_real_value(paper.get("authors")) or self._has_real_value(paper.get("year")):
             characteristics.metadata_source = "bibliographic_metadata"
         elif characteristics.authors or characteristics.year:
@@ -371,13 +427,39 @@ class DataExtractionAgent(BaseAgent):
         else:
             characteristics.metadata_source = "missing"
 
+    @staticmethod
+    def _source_type(paper: dict) -> str:
+        """Use ingestion metadata, never an LLM label or a local path, for origin."""
+        origin = str(paper.get("fulltext_source") or "").strip().lower()
+        if paper.get("user_uploaded_full_text") is True or origin == "user_upload":
+            return "user_upload"
+        source_type = str(paper.get("source_type") or "").strip()
+        if source_type:
+            return source_type
+        if str(paper.get("pmid") or "").startswith("user_pdf_"):
+            return "user_upload"
+        if origin in {"pdf", "europe_pmc_fulltext", "europe_pmc_html", "registry_seed_source_pdf", "registry_seed_source"}:
+            return "database"
+        if paper.get("retrieval_sources"):
+            return "database"
+        return "unknown"
+
     def _extract_with_retry(self, prompt: str, schema: type[BaseModel], pmid: str, max_retries: int = 2) -> BaseModel:
         """Call structured extraction with retry and simplified fallback."""
+        attempts = []
+
+        def record_failure(error, attempt):
+            # Provider bodies and source text may contain private data. Preserve
+            # stable diagnostic types/status codes, not arbitrary exception prose.
+            attempts.append({"attempt": attempt, "error_type": type(error).__name__,
+                             "status_code": getattr(error, "status_code", None)})
+
         for attempt in range(max_retries):
             try:
                 return self.call_llm_structured(prompt, schema, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
-            except (ValueError, Exception) as e:
-                self.log(f"[{pmid}] Structured extraction attempt {attempt + 1} failed: {e}", level="warning")
+            except Exception as e:
+                record_failure(e, attempt + 1)
+                self.log(f"[{pmid}] Structured extraction attempt {attempt + 1} failed: {type(e).__name__}", level="warning")
                 if attempt < max_retries - 1:
                     continue
 
@@ -389,23 +471,13 @@ class DataExtractionAgent(BaseAgent):
                 f"Just fill in what you can find. For fields you cannot find, use null or empty string.\n"
                 f"Respond ONLY with a valid JSON object.\n\n"
                 f"Schema fields needed: {', '.join(schema.model_fields.keys())}\n\n"
-                f"Text:\n{prompt[:15000]}"
+                f"Text:\n{prompt}"
             )
             return self.call_llm_structured(simple_prompt, schema, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
         except Exception as e:
-            self.log(f"[{pmid}] Simplified extraction also failed: {e}", level="warning")
-            # Last resort: return empty/default instance with extraction_failed marker
-            try:
-                obj = schema.model_construct()
-            except Exception:
-                obj = schema()
-            # Mark as failed so downstream can distinguish "no data" from "extraction failed"
-            if isinstance(obj, OutcomeList):
-                obj.quality_notes = "EXTRACTION_FAILED"
-            elif hasattr(obj, 'quality_notes'):
-                obj.quality_notes = "EXTRACTION_FAILED"
-            self.log(f"[{pmid}] Marked as EXTRACTION_FAILED", level="warning")
-            return obj
+            record_failure(e, "simplified")
+            self.log(f"[{pmid}] Simplified extraction also failed: {type(e).__name__}", level="warning")
+            raise StudyExtractionFailed(pmid, schema.__name__, attempts) from e
 
     def _check_extraction(
         self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol,
@@ -926,6 +998,8 @@ class DataExtractionAgent(BaseAgent):
         lines = [
             "# Data Extraction Audit",
             "",
+            f"- Phase status: {summary.get('status', 'complete')}",
+            f"- Incomplete studies: {summary.get('incomplete_studies', 0)}",
             f"- Studies extracted: {summary.get('studies', 0)}",
             f"- Outcomes extracted: {summary.get('outcomes', 0)}",
             f"- Source quotes verified: {summary.get('source_quotes_verified', 0)}",

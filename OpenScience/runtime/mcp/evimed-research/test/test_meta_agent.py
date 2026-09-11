@@ -118,6 +118,99 @@ class ManagedMetaAgentTests(unittest.TestCase):
         self.assertEqual(result["error"]["code"], "meta_agent_unconfigured")
         self.assertNotIn("data", result)
 
+    def failed_phase_main(self, *, retryable=True, exit_code=75, phase_status="failed"):
+        suffix = r'''
+(project / "extraction").mkdir()
+phase = {"schema_version":1,"phase":"extraction","status":PHASE_STATUS,
+         "error_code":"extraction_incomplete","retryable":RETRYABLE}
+(project / "extraction/extraction_status.json").write_text(json.dumps(phase))
+(project / "package/release_decision.json").write_text(json.dumps({"status":"blocked",
+    "phase":"extraction","phaseStatus":PHASE_STATUS,"retryable":RETRYABLE}))
+print(os.environ.get("LLM_API_KEY"), flush=True)
+raise SystemExit(EXIT_CODE)
+'''.replace("RETRYABLE", repr(retryable)).replace("EXIT_CODE", str(exit_code)).replace("PHASE_STATUS", repr(phase_status))
+        (self.meta_root / "new_meta/main.py").write_text(FAKE_MAIN + suffix)
+
+    def test_typed_model_failure_preserves_retryability_and_only_diagnostic_artifacts(self):
+        self.failed_phase_main()
+        started = self.meta_agent.call({"action": "start", "topic": "Synthetic failed extraction"})
+        result = self.wait_for_terminal(started["data"]["jobId"])
+        self.assertEqual(result["data"]["jobStatus"], "failed")
+        self.assertEqual(result["data"]["phaseStatus"], "failed")
+        self.assertEqual(result["data"]["phase"], "extraction")
+        self.assertEqual(result["error"]["code"], "meta_agent_execution_failed")
+        self.assertEqual(result["data"]["phaseErrorCode"], "extraction_incomplete")
+        self.assertTrue(result["error"]["retryable"])
+        self.assertEqual([item["kind"] for item in result["artifacts"]], ["phase_diagnostic"])
+        self.assertNotIn(self.test_api_key, json.dumps(result))
+
+    def test_phase_exit_mismatch_cannot_become_blocked_success(self):
+        self.failed_phase_main(exit_code=0)
+        started = self.meta_agent.call({"action": "start", "topic": "Synthetic inconsistent phase"})
+        result = self.wait_for_terminal(started["data"]["jobId"])
+        self.assertEqual(result["data"]["jobStatus"], "failed")
+
+    def test_typed_missing_data_remains_blocked_instead_of_service_failure(self):
+        self.failed_phase_main(retryable=False, exit_code=2, phase_status="needs_input")
+        started = self.meta_agent.call({"action": "start", "topic": "Synthetic missing study data"})
+        result = self.wait_for_terminal(started["data"]["jobId"])
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["data"]["jobStatus"], "blocked")
+        self.assertEqual(result["data"]["phaseStatus"], "needs_input")
+        self.assertFalse(result["data"]["retryable"])
+        self.assertEqual([item["kind"] for item in result["artifacts"]], ["phase_diagnostic"])
+
+    def test_nonretryable_typed_failure_stays_nonretryable(self):
+        self.failed_phase_main(retryable=False, exit_code=1)
+        started = self.meta_agent.call({"action": "start", "topic": "Synthetic nonretryable source failure"})
+        result = self.wait_for_terminal(started["data"]["jobId"])
+        self.assertEqual(result["data"]["jobStatus"], "failed")
+        self.assertFalse(result["error"]["retryable"])
+
+    def test_dead_worker_retains_failed_phase_instead_of_reclassifying_release_as_blocked(self):
+        self.failed_phase_main()
+        started = self.meta_agent.call({"action": "start", "topic": "Synthetic failure recovery"})
+        job_id = started["data"]["jobId"]
+        self.wait_for_terminal(job_id)
+        _, state_path, _ = self.meta_agent._job_paths(job_id)
+        state = self.meta_agent._read_json_no_follow(state_path)
+        state.update(status="running", workerPid=99999999)
+        self.meta_agent._atomic_json(state_path, state)
+        with mock.patch.object(self.meta_agent, "_worker_is_alive", return_value=False):
+            result = self.meta_agent.status_job({"jobId": job_id})
+        self.assertEqual(result["data"]["jobStatus"], "failed")
+        self.assertTrue(result["error"]["retryable"])
+        self.assertEqual(result["data"]["phaseStatus"], "failed")
+
+    def test_phase_parent_symlink_cannot_supply_diagnostics(self):
+        project = self.workspace / "phase-project"
+        project.mkdir()
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "extraction_status.json").write_text(json.dumps({"schema_version":1,"phase":"extraction",
+            "status":"failed","error_code":"extraction_incomplete","retryable":True}))
+        (project / "extraction").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(self.meta_agent.MetaAgentError):
+            self.meta_agent._incomplete_phase_state(self.workspace, project,
+                {"status":"blocked","phase":"extraction","phaseStatus":"failed","retryable":True}, 75)
+
+    def test_phase_failure_precedes_stale_ready_release_after_interruption(self):
+        self.failed_phase_main()
+        started = self.meta_agent.call({"action": "start", "topic": "Synthetic stale release recovery"})
+        job_id = started["data"]["jobId"]
+        self.wait_for_terminal(job_id)
+        _, state_path, _ = self.meta_agent._job_paths(job_id)
+        state = self.meta_agent._read_json_no_follow(state_path)
+        project = self.workspace / state["projectRelativePath"]
+        (project / "package/release_decision.json").write_text('{"status":"ready"}')
+        state.update(status="running", workerPid=99999999)
+        self.meta_agent._atomic_json(state_path, state)
+        with mock.patch.object(self.meta_agent, "_worker_is_alive", return_value=False):
+            result = self.meta_agent.status_job({"jobId": job_id})
+        self.assertEqual(result["data"]["jobStatus"], "failed")
+        self.assertEqual(result["data"]["phaseStatus"], "failed")
+        self.assertTrue(result["error"]["retryable"])
+
     def test_a_missing_gateway_token_file_names_the_variable_that_is_unset(self):
         """MetaAgent read all three model facts out of the retired kernel's
         `opencode.json`, and that was its only path — under the kernel that

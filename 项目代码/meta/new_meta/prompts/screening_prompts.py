@@ -76,20 +76,48 @@ FULL_TEXT_SCREENING_PROMPT = """Evaluate whether this study should be included b
 - Exclusion Criteria:
 {exclusion_criteria}
 
+## Authoritative Paper Metadata
+{paper_metadata}
+
+## Source Identity to Bind the Decision
+{source_identity}
+
+## Complete Protocol Identifier Inventory
+{publication_identity_inventory}
+
 ## Full Text Content
 {full_text}
 
 ## Decision
-Carefully evaluate against ALL inclusion and exclusion criteria.
+Carefully evaluate against ALL inclusion and exclusion criteria. Return a FullTextScreeningDecision.
+
+SOURCE AND PUBLICATION IDENTITY:
+- Copy source_identity exactly from the supplied identity object, including empty strings. Do not infer a different PMID from prose or replace it with a trial registration.
+- These identifiers identify the publication being screened. A trial registration identifies a trial, not every publication about it. Matching an allowed publication identifier does not establish clinical eligibility.
+- Compare the full text with the metadata using title, authors, DOI and trial details. Set full_text_identity_status to consistent, conflicting or uncertain. PMID absence from a PDF alone is not a conflict. Do not silently attach another report's content to the supplied identity.
+- For EVERY item in the Complete Protocol Identifier Inventory, return exactly one publication_identity_checks item, preserving the entire identifiers list, identifier_type and verbatim protocol_criterion. Do not omit a field, identifier type or alternative identifier, even if repeated in another field. The inventory recognizes identifier syntax only; interpret the requirement from the complete protocol: any_of for permitted alternatives, none_of for forbidden identifiers, or context_only for contextual citations that impose no publication restriction. context_only requires context_reason explaining that interpretation. Return [] only when the inventory is empty. If one inventoried group mixes allowed, forbidden or contextual identifiers such that these requirement types cannot faithfully represent it, return review_required rather than dropping identifiers.
+- Use reason_code=publication_identity for exclusions based on publication PMID/DOI restrictions. Such an exclusion requires an anchored check with an actual identifier mismatch; do not claim a supplied PMID differs from itself. Identifier comparisons are verified deterministically.
+- Publication type and endpoint priority are separate judgments. A primary_publication can report the review's target outcome as a secondary endpoint or exploratory endpoint. The review's primary synthesis outcome need not have been the trial's primary endpoint. Excluding secondary publications does not exclude secondary endpoints reported in an eligible main publication.
+- Set publication_role from the publication itself: primary_publication, secondary_analysis, design_or_protocol, adjacent_outcome_trial, other or uncertain. Set target_outcome_priority separately: primary, secondary, exploratory, not_reported or uncertain. Baseline-covariate adjustment alone does not make a main publication a secondary publication.
+- Use reason_code=publication_type for exclusions based on publication role; population/intervention/comparator/outcome/study_design/data_unavailable for the corresponding substantive eligibility problem. Use eligible only for inclusion. If identity or eligibility cannot be resolved, use decision=review_required and reason_code=uncertain.
 
 IMPORTANT METHODOLOGICAL GUIDANCE:
-- Multi-arm RCTs that include the specified intervention as one of several monotherapy treatment arms SHOULD BE INCLUDED, even if the study's stated primary aim focuses on a different treatment.
-- The key question is: does this study have at least one arm where the specified intervention is used as monotherapy (or as the primary treatment component) compared to another arm? If YES → include.
-- EXCLUDE only when the specified intervention is background therapy in ALL arms (every arm receives it, so no arm isolates its effect).
+- Multi-arm RCTs can meet intervention eligibility when the specified intervention is one of several monotherapy treatment arms, even if the trial's stated primary aim focuses on a different treatment.
+- Check whether at least one arm uses the specified intervention as monotherapy (or as the primary treatment component) compared to another arm. This addresses intervention eligibility only; every other protocol criterion still applies.
+- The intervention criterion fails when the specified intervention is background therapy in ALL arms (every arm receives it, so no arm isolates its effect).
 - Do not exclude a study simply because its title or stated objective focuses on a different drug — focus on the study ARMS and whether extractable data exists for the specified intervention vs a comparator.
-1. Decision: "include" or "exclude"
+1. Decision: "include", "exclude" or "review_required"
 2. If exclude, specify which exclusion criterion was met
 3. If include, briefly note how the study meets PICO criteria"""
+
+FULL_TEXT_CORRECTION_PROMPT = """
+
+## One Corrective Assessment
+The previous response could not be accepted. Reassess the same source using the unchanged metadata, protocol and full text above. Correct the precise validation problem without changing source identity or clinical scope. An identifier match is not a reason to force inclusion; retain any supported clinical exclusion. If the problem cannot be resolved, return review_required. The previous response is a fallible assessment, not source evidence.
+
+Previous attempt and validation problem:
+{previous_attempt}
+"""
 
 SCREENING_DECISION_SCHEMA = """{{
   "decision": "include or exclude",

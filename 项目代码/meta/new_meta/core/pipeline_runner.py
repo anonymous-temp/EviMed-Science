@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from new_meta.core.project import Project
+from new_meta.core.extraction_status import IncompletePhaseError, require_complete_extraction
 from new_meta.core.provenance import annotate_source_provenance
 from new_meta.core.run_mode import load_benchmark_reference_manifest
 
@@ -60,6 +61,7 @@ class PipelineRunner:
         the completed RoB results and the full-text screening records so its
         provenance and admissibility gates cannot be bypassed.
         """
+        require_complete_extraction(self.project, extracted_studies, included_papers)
         if rob_agent is None:
             from new_meta.agents.rob_agent import RoBAgent
 
@@ -103,8 +105,9 @@ class PipelineRunner:
 
         from new_meta.core.method_planning import ProtocolInputRequired
         try:
+            require_complete_extraction(self.project, extracted_studies, included_papers)
             route = self._ensure_synthesis_route(protocol)
-        except ProtocolInputRequired as exc:
+        except (ProtocolInputRequired, IncompletePhaseError) as exc:
             return exc.phase
         from new_meta.core.synthesis_routing import SynthesisRoute
 
@@ -219,6 +222,10 @@ class PipelineRunner:
         )
         from new_meta.schemas.synthesis_result import SynthesisResultEnvelope
 
+        try:
+            require_complete_extraction(self.project)
+        except IncompletePhaseError as exc:
+            return exc.phase
         route = load_synthesis_route(self.project)
         if route.route is not SynthesisRoute.METHOD_PLUGIN:
             return PhaseResult(
@@ -523,6 +530,7 @@ class PipelineRunner:
         included_papers: list | None = None,
     ) -> tuple[list, list[dict[str, Any]]]:
         """Compute and persist primary effect rows with shared safety gates."""
+        require_complete_extraction(self.project, extracted_studies, included_papers)
         self._ensure_pairwise_route(protocol)
         from new_meta.core.effect_selection import (
             build_paper_source_lookup,

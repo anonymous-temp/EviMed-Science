@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import stat
 import subprocess
@@ -57,13 +58,13 @@ def _atomic_json(path, value):
     os.replace(temporary, path)
 
 
-def _read_json_no_follow(path):
+def _read_json_no_follow(path, directory_fd=None):
     path = Path(path)
     descriptor = None
     try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0), dir_fd=directory_fd)
         before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_size <= 0 or before.st_size > MAX_STATE_BYTES:
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size <= 0 or before.st_size > MAX_STATE_BYTES:
             raise MetaAgentError("meta_job_state_invalid", "MetaAgent job state is not a valid regular file.")
         raw = os.read(descriptor, MAX_STATE_BYTES + 1)
         after = os.fstat(descriptor)
@@ -86,6 +87,76 @@ def _read_json_no_follow(path):
     finally:
         if descriptor is not None:
             os.close(descriptor)
+
+
+def _read_project_phase(project, phase, missing_ok=False):
+    """Read a fixed phase path relative to held directories, never through links."""
+    paths = {"extraction": ("extraction", "extraction_status.json"),
+             "screening": ("screening", "full_text_screening_status.json"),
+             "release": ("package", "release_decision.json")}
+    folder, name = paths[phase]
+    root = os.open(project, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        try:
+            parent = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=root)
+        except FileNotFoundError:
+            if missing_ok:
+                return None, "%s/%s" % (folder, name)
+            raise
+        try:
+            try:
+                return _read_json_no_follow(name, directory_fd=parent), "%s/%s" % (folder, name)
+            except MetaAgentError as error:
+                if missing_ok and isinstance(error.__cause__, FileNotFoundError):
+                    return None, "%s/%s" % (folder, name)
+                raise
+        finally:
+            os.close(parent)
+    finally:
+        os.close(root)
+
+
+def _incomplete_phase_state(workspace, project, release, return_code=None):
+    """Keep worker failure/retry semantics distinct from publication readiness."""
+    try:
+        active = []
+        for name in ("screening", "extraction"):
+            phase, relative = _read_project_phase(project, name, missing_ok=True)
+            if phase is None:
+                continue
+            if (phase.get("schema_version") != 1 or phase.get("phase") != name
+                    or phase.get("status") not in {"failed", "needs_input", "succeeded"}):
+                raise ValueError("phase schema invalid")
+            if phase["status"] != "succeeded":
+                active.append((phase, relative))
+        if not active:
+            if release.get("phase") in {"extraction", "screening"} and release.get("phaseStatus") in {"failed", "needs_input"}:
+                raise ValueError("incomplete phase evidence missing")
+            return None
+        phase, relative = active[0]
+        phase_status = phase.get("status")
+        retryable = phase.get("retryable")
+        if type(retryable) is not bool:
+            raise ValueError("phase mismatch")
+        if "phaseStatus" in release and (release.get("phase") != phase["phase"]
+                or release.get("phaseStatus") != phase_status or release.get("retryable") != retryable):
+            raise ValueError("phase envelope mismatch")
+        error_code = phase.get("error_code", "")
+        if not isinstance(error_code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,100}", error_code):
+            raise ValueError("phase error code invalid")
+        expected_exit = 75 if phase_status == "failed" and retryable else 1 if phase_status == "failed" else 2
+        if return_code is not None and return_code != expected_exit:
+            raise ValueError("phase exit mismatch")
+        prefix = project.relative_to(workspace).as_posix()
+        return {"status": "failed" if phase_status == "failed" else "blocked", "phase": phase["phase"],
+                "phaseStatus": phase_status, "retryable": retryable, "errorCode": error_code,
+                "error": "MetaAgent %s did not complete." % phase["phase"], "releaseStatus": "blocked",
+                "projectRelativePath": prefix, "returnCode": expected_exit,
+                "artifacts": [{"kind": "phase_diagnostic", "path": prefix + "/" + relative}],
+                "nextActions": ["Retry the managed job after the service is available." if retryable
+                                else "Review the source-processing diagnostic before starting a new job."]}
+    except (OSError, ValueError, KeyError, MetaAgentError) as error:
+        raise MetaAgentError("meta_job_state_invalid", "MetaAgent source-processing phase evidence is invalid.") from error
 
 
 def _workspace():
@@ -434,17 +505,25 @@ def _recover_orphaned_terminal_state(state_path, state):
         reverse=True,
     )
     project = projects[0].resolve() if projects else None
-    release_file = project / "package" / "release_decision.json" if project else None
     release = None
-    if release_file and release_file.is_file() and not release_file.is_symlink():
+    if project:
         try:
-            candidate = _read_json_no_follow(release_file)
+            candidate, _ = _read_project_phase(project, "release", missing_ok=True)
             if isinstance(candidate, dict):
                 release = candidate
-        except MetaAgentError:
+        except (MetaAgentError, OSError):
             release = None
     release_status = str((release or {}).get("status") or "unknown")
-    if project and release_status in {"ready", "blocked", "review_required", "warning"}:
+    phase_state = None
+    if project:
+        try:
+            phase_state = _incomplete_phase_state(workspace, project, release or {})
+        except MetaAgentError:
+            phase_state = {"status": "failed", "retryable": False, "errorCode": "meta_job_state_invalid",
+                           "error": "MetaAgent source-processing phase evidence is invalid.", "artifacts": []}
+    if phase_state:
+        state.update({**phase_state, "updatedAt": _now(), "finishedAt": _now(), "recoveredTerminalState": True})
+    elif project and release_status in {"ready", "blocked", "review_required", "warning"}:
         state.update({
             "status": "succeeded" if release_status == "ready" else "blocked",
             "updatedAt": _now(),
@@ -505,7 +584,6 @@ def status_job(arguments):
     if job_status == "failed":
         _reap_worker(job_id)
         message = str(state.get("error") or "MetaAgent execution failed.")
-        tail = _log_tail(log_path)
         return {
             "status": "error",
             "summary": message,
@@ -513,11 +591,15 @@ def status_job(arguments):
                 "jobId": job_id,
                 "jobStatus": job_status,
                 "updatedAt": state.get("updatedAt"),
+                "phase": state.get("phase"),
+                "phaseStatus": state.get("phaseStatus"),
+                "phaseErrorCode": state.get("errorCode"),
             },
-            "next_actions": ["Review the bounded job log, correct the reported input or service issue, and start a new job."],
+            "artifacts": state.get("artifacts") or [],
+            "next_actions": state.get("nextActions") or ["Review the protected job log, correct the reported input or service issue, and start a new job."],
             "error": {
                 "code": "meta_agent_execution_failed",
-                "message": message + ((" Log tail: " + tail[-2000:]) if tail else ""),
+                "message": message,
                 "retryable": bool(state.get("retryable", False)),
                 "stopReason": "Stop until the failed MetaAgent job is reviewed.",
             },
@@ -535,6 +617,9 @@ def status_job(arguments):
             "jobStatus": job_status,
             "releaseStatus": release_status,
             "projectPath": state.get("projectRelativePath"),
+            "phase": state.get("phase"),
+            "phaseStatus": state.get("phaseStatus"),
+            "retryable": bool(state.get("retryable", False)),
         },
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
@@ -676,14 +761,14 @@ def _run_job(state_path):
     project = projects[0].resolve()
     if os.path.commonpath([str(output_root), str(project)]) != str(output_root):
         raise MetaAgentError("meta_output_scope_invalid", "MetaAgent project output escaped its job directory.")
-    release_file = project / "package" / "release_decision.json"
-    release = {}
-    if release_file.is_file():
-        try:
-            release = json.loads(release_file.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            release = {}
+    release, _ = _read_project_phase(project, "release", missing_ok=True)
+    release = release or {}
     release_status = str(release.get("status") or "unknown")
+    phase_state = _incomplete_phase_state(workspace, project, release, completed.returncode)
+    if phase_state:
+        state.update({**phase_state, "updatedAt": _now(), "finishedAt": _now()})
+        _atomic_json(state_path, state)
+        return completed.returncode
     expected_release_block = (
         completed.returncode == 2
         and release_status in {"blocked", "review_required", "warning"}
