@@ -11,7 +11,8 @@ from new_meta.core.project import Project
 from new_meta.core.protocol_scope import (
     ensure_project_protocol_scope, protocol_hash, scope_fields, scope_receipt,
 )
-from tests.test_protocol_scope import TOPIC, assessment, batch_assessment, proposal
+from new_meta.core.protocol_scope_sources import source_catalogue, replay_scope_sources
+from tests.test_protocol_scope import TOPIC, assessment, batch_assessment, proposal, scope_response_mock
 
 
 def test_each_batch_sees_the_full_question_and_protocol_and_merges_every_field(monkeypatch):
@@ -21,13 +22,15 @@ def test_each_batch_sees_the_full_question_and_protocol_and_merges_every_field(m
     before = protocol.model_dump()
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         prompt = messages[1]["content"]
         assert TOPIC in prompt
         assert protocol.model_dump_json(indent=2) in prompt
         result = batch_assessment(messages, protocol)
         assert 1 <= len(result.fields) <= 8
-        assert all(row.original_quote == TOPIC for row in result.fields)
+        assert all(row.source_id == source_catalogue(TOPIC, protocol)["sources"][0]["source_id"] for row in result.fields)
+        assert kwargs["max_tokens"] == 16384
         calls.append([row.field for row in result.fields])
         return result
 
@@ -36,10 +39,11 @@ def test_each_batch_sees_the_full_question_and_protocol_and_merges_every_field(m
     assert len(calls) == math.ceil(len(scope_fields(protocol)) / 8)
     assert [row["field"] for row in receipt["assessment"]["fields"]] == list(scope_fields(protocol))
     assert protocol.model_dump() == before
-    assert receipt == scope_receipt(TOPIC, protocol, receipt["assessment"])
+    assert receipt["assessment"] == scope_receipt(TOPIC, protocol, receipt["assessment"])["assessment"]
+    assert replay_scope_sources(TOPIC, protocol, receipt["source_provenance"]).model_dump(mode="json") == receipt["assessment"]
 
 
-@pytest.mark.parametrize("damage", ["wrong_field", "wrong_index", "duplicate", "missing", "clipped_quote", "blank_rationale", "short_absence_context"])
+@pytest.mark.parametrize("damage", ["wrong_field", "wrong_index", "duplicate", "missing", "unknown_source_id", "blank_rationale", "short_absence_context"])
 def test_invalid_batch_gets_one_same_protocol_retry_without_regenerating_plan(monkeypatch, damage):
     planner = ResearchPlanner()
     protocol = proposal()
@@ -48,9 +52,11 @@ def test_invalid_batch_gets_one_same_protocol_retry_without_regenerating_plan(mo
     checker_calls = []
 
     def generate(*args, **kwargs):
+        assert kwargs["max_tokens"] == 8192
         generation_calls.append(args)
         return protocol
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         checker_calls.append(messages)
         result = batch_assessment(messages, protocol, topic=question)
@@ -60,9 +66,9 @@ def test_invalid_batch_gets_one_same_protocol_retry_without_regenerating_plan(mo
             if damage == "wrong_index": row.field = "inclusion_criteria[999]"
             if damage == "duplicate": result.fields[-1] = row.model_copy()
             if damage == "missing": result.fields.pop()
-            if damage == "clipped_quote": row.basis = "explicit"; row.original_quote = "50 mg"
+            if damage == "unknown_source_id": row.basis = "explicit"; row.source_id = "unknown-source"
             if damage == "blank_rationale": row.rationale = " "
-            if damage == "short_absence_context": row.original_quote = "SGLT2 inhibitors"
+            if damage == "short_absence_context": row.source_id = source_catalogue(question, protocol)["sources"][1]["source_id"]
         return result
 
     monkeypatch.setattr(planner, "call_llm_structured", generate)
@@ -76,7 +82,7 @@ def test_invalid_batch_gets_one_same_protocol_retry_without_regenerating_plan(mo
     assert all(question in call[1]["content"] for call in checker_calls)
 
 
-def test_repeated_bad_anchor_preserves_real_diagnostic_without_replanning(monkeypatch, tmp_path):
+def test_repeated_bad_source_id_preserves_real_diagnostic_without_replanning(monkeypatch, tmp_path):
     planner = ResearchPlanner()
     protocol = proposal()
     generated = []
@@ -86,9 +92,10 @@ def test_repeated_bad_anchor_preserves_real_diagnostic_without_replanning(monkey
         generated.append(True)
         return protocol
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
-        result.fields[0].original_quote = "Source anchor (original request): invented quote"
+        result.fields[0].source_id = "invented-source-id"
         checks.append(result.model_dump(mode="json"))
         return result
 
@@ -99,10 +106,12 @@ def test_repeated_bad_anchor_preserves_real_diagnostic_without_replanning(monkey
     assert len(generated) == 1 and len(checks) == 2
     assert caught.value.phase.data["original_question"] == TOPIC
     attempts = caught.value.phase.data["scope_check_attempts"]
-    assert [row["assessment"] for row in attempts] == checks
+    assert [row["reference_response"] for row in attempts] == checks
+    assert all("source_id" not in field for record in attempts for field in record["resolved_assessment"]["fields"])
+    assert all(checks[0]["fields"][0]["field"] not in [field["field"] for field in record["resolved_assessment"]["fields"]] for record in attempts)
     assert all(row["topic_sha256"] == digest(TOPIC) for row in attempts)
     assert all(row["protocol_sha256"] == protocol_hash(protocol) for row in attempts)
-    assert attempts[-1]["validation"]["code"] == "scope_absence_context_incomplete"
+    assert attempts[-1]["validation"]["code"] == "scope_source_id_unknown"
     caught.value.persist(Project(TOPIC, output_dir=tmp_path))
     saved = caught.value.project.load_json("protocol_rejected_proposal.json", subdir="analysis")
     assert saved["scope_check_attempts"] == attempts
@@ -114,6 +123,7 @@ def test_valid_semantic_conflict_is_not_retried_into_approval(monkeypatch, statu
     protocol = proposal()
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         calls.append(messages)
         return batch_assessment(messages, protocol, changes={"pico.comparator": {
@@ -135,6 +145,7 @@ def test_protocol_mutation_in_a_later_batch_cannot_create_a_receipt(monkeypatch)
     protocol = proposal()
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
         calls.append(messages)
@@ -154,6 +165,7 @@ def test_provider_and_internal_failures_remain_failures(monkeypatch, error):
     planner = ResearchPlanner()
     calls = []
 
+    @scope_response_mock
     def check(*args, **kwargs):
         calls.append(True)
         raise error
@@ -180,9 +192,7 @@ def test_malformed_response_diagnostic_does_not_fabricate_an_assessment(monkeypa
     with pytest.raises(ProtocolInputRequired) as caught:
         planner.check_scope(TOPIC, proposal())
     attempts = caught.value.phase.data["scope_check_attempts"]
-    assert len(calls) == 2
-    assert all("assessment" not in row for row in attempts)
-    assert all(row["validation"]["code"] == "scope_assessment_malformed" for row in attempts)
+    assert len(calls) == 1 and attempts == []
     assert "raw SDK" not in json.dumps(attempts) and "not-json-sensitive" not in json.dumps(attempts)
 
 
@@ -211,6 +221,7 @@ def test_three_semantic_replans_keep_bounded_diagnostics_and_compact_feedback(mo
         generation_prompts.append(prompt)
         return protocol
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         return batch_assessment(messages, protocol, topic=topic, changes={"pico.comparator": {
             "status": "mismatch", "rationale": "The original question restricts the comparator.",
@@ -239,9 +250,10 @@ def test_oversized_typed_assessment_is_explicitly_omitted_never_clipped_into_evi
     protocol = proposal()
     returned = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
-        result.fields[0].original_quote = "fabricated anchor " * SCOPE_ASSESSMENT_MAX_BYTES
+        result.fields[0].source_id = "fabricated-id " * SCOPE_ASSESSMENT_MAX_BYTES
         returned.append(result.model_dump(mode="json"))
         return result
 
@@ -251,10 +263,10 @@ def test_oversized_typed_assessment_is_explicitly_omitted_never_clipped_into_evi
     attempts = caught.value.phase.data["scope_check_attempts"]
     assert len(attempts) == 2
     for record, actual in zip(attempts, returned):
-        assert "assessment" not in record
-        assert record["assessment_omitted"] == "diagnostic_size_limit"
-        assert record["assessment_sha256"] == digest(actual)
-        assert record["assessment_size_bytes"] > SCOPE_ASSESSMENT_MAX_BYTES
+        assert "reference_response" not in record
+        assert record["reference_response_omitted"] == "diagnostic_size_limit"
+        assert record["reference_response_sha256"] == digest(actual)
+        assert record["reference_response_size_bytes"] > SCOPE_ASSESSMENT_MAX_BYTES
 
 
 def test_partial_original_context_is_rejected_in_a_later_batch(monkeypatch):
@@ -262,21 +274,22 @@ def test_partial_original_context_is_rejected_in_a_later_batch(monkeypatch):
     protocol = proposal()
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
         calls.append(result.fields[0].field)
         if len(calls) >= 2:
-            result.fields[0].original_quote = "chronic kidney disease progression"
+            result.fields[0].source_id = source_catalogue(TOPIC, protocol)["sources"][1]["source_id"]
         return result
 
     monkeypatch.setattr(planner.llm, "structured_output", check)
     with pytest.raises(ProtocolInputRequired) as caught:
         planner.check_scope(TOPIC, protocol)
     assert len(calls) == 3 and calls[1] == calls[2]
-    assert caught.value.phase.data["scope_check_attempts"][-1]["validation"]["code"] == "scope_absence_context_incomplete"
+    assert caught.value.phase.data["scope_check_attempts"][-1]["validation"]["code"] == "scope_absence_source_not_whole"
 
 
-def test_noncontiguous_criterion_anchor_retries_only_its_batch(monkeypatch):
+def test_unknown_criterion_reference_retries_only_its_batch(monkeypatch):
     planner = ResearchPlanner()
     protocol = proposal()
     protocol.inclusion_criteria += [f"Clinical criterion {index}" for index in range(5)]
@@ -284,6 +297,7 @@ def test_noncontiguous_criterion_anchor_retries_only_its_batch(monkeypatch):
     damaged_batches = []
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
         names = [row.field for row in result.fields]
@@ -292,10 +306,8 @@ def test_noncontiguous_criterion_anchor_retries_only_its_batch(monkeypatch):
             if row.field == "inclusion_criteria[5]":
                 damaged_batches.append(names)
                 if len(damaged_batches) == 1:
-                    # Synthetic checker response reproducing the observed failure class;
-                    # the historical run did not save its actual assessment.
                     row.basis = "explicit"
-                    row.original_quote = "SGLT2 inhibitors ... write the manuscript in English."
+                    row.source_id = "unknown-criterion-reference"
         return result
 
     monkeypatch.setattr(planner.llm, "structured_output", check)
@@ -313,6 +325,7 @@ def test_later_method_normalization_failure_retains_prior_scope_assessments(monk
     proposals = iter([initial, unsupported, unsupported])
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, initial, changes={"pico.comparator": {
             "status": "mismatch", "rationale": "Independent reviewer found comparator scope drift.",
@@ -327,7 +340,7 @@ def test_later_method_normalization_failure_retains_prior_scope_assessments(monk
     assert caught.value.phase.error_code == "protocol_method_input_required"
     assert caught.value.phase.data["proposal"]["review_family"] == "unrecognized_family"
     attempts = caught.value.phase.data["scope_check_attempts"]
-    assert [record["assessment"] for record in attempts] == calls
+    assert [record["reference_response"] for record in attempts] == calls
     assert all(record["protocol_sha256"] == protocol_hash(initial) for record in attempts)
 
 
@@ -338,16 +351,17 @@ def test_format_retry_cannot_erase_another_fields_valid_semantic_conflict(monkey
     protocol.pico.comparator = "Active treatments"
     calls = []
     conflict = {"field": "pico.comparator", "status": status, "basis": "explicit",
-                "original_quote": "placebo", "rationale": "The requested placebo comparator is not preserved."}
+                "original_quote": TOPIC, "rationale": "The requested placebo comparator is not preserved."}
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
         if not calls:
-            result.fields[0].original_quote = "fabricated unrelated anchor"
+            result.fields[0].source_id = "fabricated-unrelated-id"
             for row in result.fields:
                 if row.field == conflict["field"]:
                     for key, value in conflict.items():
-                        setattr(row, key, value)
+                        if key != "original_quote": setattr(row, key, value)
         calls.append(result.model_dump(mode="json"))
         return result
 
@@ -358,8 +372,9 @@ def test_format_retry_cannot_erase_another_fields_valid_semantic_conflict(monkey
     assert caught.value.phase.issues[0].context["scope_findings"] == [conflict]
     attempts = caught.value.phase.data["scope_check_attempts"]
     assert attempts[1]["retained_nonmatch_fields"] == ["pico.comparator"]
-    assert all(row["status"] == "match" for row in attempts[1]["assessment"]["fields"])
-    assert [record["assessment"] for record in attempts] == calls
+    assert all(row["status"] == "match" for row in attempts[1]["reference_response"]["fields"])
+    assert [record["reference_response"] for record in attempts] == calls
+    assert attempts[1]["field_origins"]["pico.comparator"] == {"batch": 1, "attempt": 1, "provider_response_ordinal": 1}
 
 
 def test_retained_conflict_uses_normal_planner_correction_on_a_new_proposal(monkeypatch):
@@ -376,16 +391,16 @@ def test_retained_conflict_uses_normal_planner_correction_on_a_new_proposal(monk
         generated.append(candidate)
         return candidate
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         candidate = generated[-1]
         result = batch_assessment(messages, candidate)
         if not check_count:
-            result.fields[0].original_quote = "fabricated unrelated anchor"
+            result.fields[0].source_id = "fabricated-unrelated-id"
             for row in result.fields:
                 if row.field == "pico.comparator":
                     row.status = "mismatch"
                     row.basis = "explicit"
-                    row.original_quote = "placebo"
         check_count.append(True)
         return result
 
@@ -396,21 +411,24 @@ def test_retained_conflict_uses_normal_planner_correction_on_a_new_proposal(monk
     assert accepted.pico.comparator == "Placebo" and accepted._scope_receipt
 
 
-@pytest.mark.parametrize("damage", ["duplicate", "unanchored", "unknown"])
+@pytest.mark.parametrize("damage", ["duplicate", "duplicate_invalid_id", "unanchored", "unknown"])
 def test_unverified_conflict_fields_cannot_be_retained_as_valid_judgments(monkeypatch, damage):
     planner = ResearchPlanner()
     protocol = proposal()
     calls = []
 
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         result = batch_assessment(messages, protocol)
         if not calls:
             row = next(row for row in result.fields if row.field == "pico.comparator")
             row.status = "mismatch"
             row.basis = "explicit"
-            row.original_quote = "placebo"
             if damage == "duplicate": result.fields.append(row.model_copy(deep=True))
-            if damage == "unanchored": row.original_quote = "fabricated comparator quote"
+            if damage == "duplicate_invalid_id":
+                sibling = row.model_copy(deep=True); sibling.source_id = "unknown-sibling-id"
+                result.fields.append(sibling)
+            if damage == "unanchored": row.source_id = "fabricated-comparator-id"
             if damage == "unknown": row.field = "unknown_comparator"
         calls.append(True)
         return result

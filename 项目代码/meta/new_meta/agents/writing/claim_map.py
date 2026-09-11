@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
+import hashlib
 import json
 import math
 import re
@@ -11,6 +13,7 @@ from new_meta.core.claim_alignment import (
     claim_alignment_payload,
     source_backed_claims_for_alignment,
 )
+from new_meta.core.llm import parse_source_json
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.schemas.meta_result import MetaAnalysisResults
@@ -26,6 +29,7 @@ from new_meta.core.manuscript_text_metrics import remove_near_duplicate_sentence
 from new_meta.tools.reference_manager import ReferenceManager
 
 from new_meta.agents.writing.contracts import (
+    ClaimSourceAlignmentItem,
     ClaimSourceAlignmentReview,
     ManuscriptClaimMap,
     PUBLICATION_CITATION_MIN_SUBSTANTIAL_PARAGRAPH_WORDS,
@@ -718,6 +722,16 @@ class ClaimMapMixin:
             return claims, audit
         compact_claims = alignment_payload.get("claims") or []
         facts_context = alignment_payload.get("facts_context") or {}
+        input_hash = hashlib.sha256(json.dumps(
+            {"claims": claims, "facts": facts, "language": self._lang},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        if not hasattr(self, "_claim_alignment_results"):
+            self._claim_alignment_results = {}
+        if input_hash in self._claim_alignment_results:
+            return deepcopy(self._claim_alignment_results[input_hash])
+        audit.update({"source_input_hash": input_hash, "raw_responses": [],
+                      "unresolved_claims": [], "issues": []})
         language_rule = "Chinese" if self._zh else "English"
         prompt = (
             "You are a clinical evidence editor checking a claim map before manuscript authoring. "
@@ -744,30 +758,80 @@ class ClaimMapMixin:
             "CLAIMS TO REVIEW:\n"
             f"{json.dumps(compact_claims, ensure_ascii=False, indent=2)[:18000]}"
         )
+        requested_counts = Counter(str(item.get("id") or "").strip() for item in compact_claims)
+        input_counts = Counter(str(item.get("id") or "").strip() for item in source_backed)
+        decisions: dict[str, ClaimSourceAlignmentItem] = {}
+
+        def observe(observation):
+            raw = dict(observation)
+            audit["raw_responses"].append(raw)
+            if raw["content"] is None or (isinstance(raw["content"], str) and not raw["content"].strip()):
+                raw["missing_response"] = True
+                return
+            data = parse_source_json(raw["content"])
+            if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+                raise ValueError("Missing claim alignment items")
+            items = data["items"]
+            counts = Counter(item["id"].strip() for item in items
+                             if isinstance(item, dict) and isinstance(item.get("id"), str))
+            if isinstance(data.get("summary"), str):
+                audit["summary"] = data["summary"]
+            for index, item in enumerate(items):
+                claim_id = item.get("id", "") if isinstance(item, dict) else ""
+                claim_id = claim_id.strip() if isinstance(claim_id, str) else ""
+                try:
+                    if (not claim_id or counts[claim_id] != 1 or requested_counts[claim_id] != 1
+                            or input_counts[claim_id] != 1):
+                        raise ValueError("Unknown, missing, or duplicate claim id")
+                    if not {"id", "decision", "reason", "unsupported_phrases"} <= item.keys():
+                        raise ValueError("Incomplete claim alignment decision")
+                    decision = ClaimSourceAlignmentItem.model_validate(item, strict=True)
+                    if decision.decision not in {"accept", "revise", "exclude"} or not decision.reason.strip():
+                        raise ValueError("Invalid claim alignment decision")
+                    if decision.decision == "revise" and not decision.revised_claim.strip():
+                        raise ValueError("Claim revision has no replacement")
+                    if decision.decision == "accept" and decision.unsupported_phrases:
+                        raise ValueError("Acceptance contradicts unsupported phrases")
+                    decisions[claim_id] = decision
+                except (TypeError, ValueError) as exc:
+                    audit["issues"].append({"index": index, "id": claim_id, "error": str(exc)[:500]})
+            if raw["finish_reason"] not in {"stop", "completed"}:
+                audit["issues"].append({"error": "Incomplete provider response"})
+            if audit["issues"]:
+                raise ValueError("Claim alignment contains invalid or incomplete decisions")
+
         try:
-            review = self.call_llm_structured(
-                prompt,
-                ClaimSourceAlignmentReview,
-                temperature=0.0,
-                max_tokens=4096,
+            self.llm.structured_output(
+                [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
+                ClaimSourceAlignmentReview, temperature=0.0, max_tokens=4096,
+                source_faithful=True, on_raw_response=observe,
             )
         except Exception as exc:
             audit.update({"status": "failed", "error": str(exc)[:500]})
-            return claims, audit
-        decisions = {str(item.id or "").strip(): item for item in review.items if str(item.id or "").strip()}
-        if not decisions:
-            audit["summary"] = review.summary
-            return claims, audit
+        if any(not claim_id or count != 1 or claim_id not in decisions
+               for claim_id, count in input_counts.items()):
+            audit["status"] = "failed"
         updated: list[dict] = []
         for claim in claims:
             if not isinstance(claim, dict):
                 continue
             claim_id = str(claim.get("id") or "").strip()
             decision = decisions.get(claim_id)
-            if not decision:
+            if claim not in source_backed:
                 updated.append(claim)
                 continue
-            mode = str(decision.decision or "accept").strip().lower()
+            # Keep valid negative rows even if a sibling is malformed. An
+            # incomplete batch cannot grant new permission to use original prose.
+            if decision is None or (audit["status"] == "failed" and decision.decision == "accept"):
+                claim = dict(claim)
+                claim["can_write_main_text"] = False
+                claim["manuscript_use"] = "exclude"
+                updated.append(claim)
+                audit["changed"] = True
+                audit["status"] = "failed"
+                audit["unresolved_claims"].append({"id": claim_id, "reason": "source_alignment_incomplete"})
+                continue
+            mode = decision.decision
             if mode == "exclude":
                 claim = dict(claim)
                 claim["can_write_main_text"] = False
@@ -784,19 +848,24 @@ class ClaimMapMixin:
                 continue
             if mode == "revise" and str(decision.revised_claim or "").strip():
                 claim = dict(claim)
-                claim["claim"] = str(decision.revised_claim).strip()
+                original_claim = claim.get("claim", "")
+                claim["claim"] = decision.revised_claim
                 if str(decision.revised_caveat or "").strip():
                     claim["caveat"] = str(decision.revised_caveat).strip()
                 updated.append(claim)
                 audit["changed"] = True
                 audit["revised_claims"].append({
                     "id": claim_id,
+                    "original_claim": original_claim,
+                    "revised_claim": decision.revised_claim,
                     "reason": decision.reason,
                     "unsupported_phrases": decision.unsupported_phrases,
                 })
                 continue
             updated.append(claim)
-        audit["summary"] = review.summary
+        audit["decisions"] = [item.model_dump() for item in decisions.values()]
+        if any(isinstance(raw["content"], str) and raw["content"].strip() for raw in audit["raw_responses"]):
+            self._claim_alignment_results[input_hash] = deepcopy((updated, audit))
         return updated, audit
 
     def _study_card_safety_note_examples(self, facts: dict, *, limit: int = 4) -> list[str]:
@@ -1511,6 +1580,9 @@ class ClaimMapMixin:
 
     @staticmethod
     def _claim_applies_to_section(claim: dict, section_key: str) -> bool:
+        if (claim.get("can_write_main_text") is False
+                or str(claim.get("manuscript_use") or "main").casefold() in {"exclude", "supplement"}):
+            return False
         raw = str(claim.get("section") or "").lower()
         if not raw:
             return False

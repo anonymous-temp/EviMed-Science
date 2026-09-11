@@ -66,3 +66,40 @@ def forbid_unmocked_extraction_verification_calls(monkeypatch):
 
     for name in ("_check_extraction", "_refine_extraction"):
         monkeypatch.setattr(DataExtractionAgent, name, protect(getattr(DataExtractionAgent, name)))
+
+
+@pytest.fixture(autouse=True)
+def forbid_external_http_transports(monkeypatch):
+    """Offline tests may use MockTransport or loopback HTTP fixtures only."""
+    import ipaddress
+    import httpx
+
+    attempts = []
+    original_sync = httpx.HTTPTransport.handle_request
+    original_async = httpx.AsyncHTTPTransport.handle_async_request
+
+    def check(request):
+        host = request.url.host.casefold().rstrip(".")
+        if host == "localhost":
+            return
+        try:
+            if ipaddress.ip_address(host).is_loopback:
+                return
+        except ValueError:
+            pass
+        # Never record credentials, request bodies, or URL query parameters.
+        attempts.append(f"{request.method} {host}")
+        raise AssertionError("Unexpected external HTTP request blocked; provide an offline transport fixture")
+
+    def handle_request(transport, request):
+        check(request)
+        return original_sync(transport, request)
+
+    async def handle_async_request(transport, request):
+        check(request)
+        return await original_async(transport, request)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handle_request)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", handle_async_request)
+    yield
+    assert not attempts, f"Unexpected external HTTP attempts occurred even if caught by production code: {attempts}"

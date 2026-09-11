@@ -234,11 +234,11 @@ def test_existing_checker_receives_full_pico_and_cannot_supply_provenance(tmp_pa
     agent = DataExtractionAgent()
     calls = []
 
-    def check_call(prompt, schema, **kwargs):
-        calls.append((prompt, schema, kwargs))
+    def check_call(messages, schema, **kwargs):
+        calls.append((messages[-1]["content"], schema, kwargs))
         return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()])
 
-    monkeypatch.setattr(agent, "call_llm_structured", check_call)
+    monkeypatch.setattr(agent.llm, "structured_output", check_call)
     checked = agent._verify_alignment(study, {"pdf_path": str(source)}, {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol, project)
     assert alignment_status(project, protocol, checked, 0)["status"] == "match"
     assert len(calls) == 1
@@ -569,10 +569,10 @@ def test_independent_checker_can_confirm_source_backed_single_arm_not_applicable
     data["verification"] = verification_payload(study.outcomes[0], data, randomized=False)
     agent = DataExtractionAgent()
     prompts = []
-    def checked(prompt, *_args, **_kwargs):
-        prompts.append(prompt)
+    def checked(messages, *_args, **_kwargs):
+        prompts.append(messages[-1]["content"])
         return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[data])
-    monkeypatch.setattr(agent, "call_llm_structured", checked)
+    monkeypatch.setattr(agent.llm, "structured_output", checked)
     verified = agent._verify_alignment(study, {"pdf_path": str(source)},
         {"full_text": statement, "_source_sha256": hashlib.sha256(statement.encode()).hexdigest()}, protocol, project)
     assert "single-arm prevalence/incidence" in prompts[0]

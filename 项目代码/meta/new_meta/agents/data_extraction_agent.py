@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
-from pydantic import BaseModel, Field
+from uuid import uuid4
+from pydantic import BaseModel, ConfigDict, Field
 from tqdm import tqdm
 
 from new_meta.core.agent_base import BaseAgent
@@ -29,6 +30,7 @@ from new_meta.tools.utils import paper_identity, safe_identifier
 
 
 class ExtractionCheckResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     score: int = Field(ge=1, le=10)  # Advisory only; never overrides source checks.
     issues: list[str] = Field(default_factory=list, description="Advisory observations only. Every actual row-data defect must be in data_issues; clinical fit belongs in primary_analysis_alignment.")
     data_issues: list[ExtractionDataIssue] = Field(max_length=128, description="Required, possibly empty list of actual defects in the supplied indexed rows only. Never include omitted other study outcomes or clinical mismatch here.")
@@ -482,6 +484,7 @@ class DataExtractionAgent(BaseAgent):
     def _check_extraction(
         self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol,
         outcome_indices: list[int] | None = None, feedback: list[dict[str, Any]] | None = None,
+        on_raw_response=None,
     ) -> ExtractionCheckResult:
         """Check original-indexed rows against the full bounded source snapshot."""
         from new_meta.core.extraction_verification import CHECKER_HIDDEN_FIELDS, numeric_fields
@@ -497,7 +500,11 @@ class DataExtractionAgent(BaseAgent):
         prompt += "\nExpected original outcome indices: " + json.dumps(indices)
         if feedback:
             prompt += "\nPrevious response validation errors (repair judgments; do not alter source data):\n" + json.dumps(feedback, ensure_ascii=False)
-        return self.call_llm_structured(prompt, ExtractionCheckResult, max_tokens=LLM_MAX_TOKENS_EXTRACTION)
+        return self.llm.structured_output(
+            [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
+            ExtractionCheckResult, max_tokens=LLM_MAX_TOKENS_EXTRACTION,
+            source_faithful=True, on_raw_response=on_raw_response,
+        )
 
     def _verify_alignment(self, extracted: ExtractedStudy, paper: dict, parsed: dict,
                           protocol: ResearchProtocol, project: Project) -> ExtractedStudy:
@@ -522,6 +529,7 @@ class DataExtractionAgent(BaseAgent):
         study_id = extracted.characteristics.pmid or extracted.characteristics.study_id
         checked_sha = hashlib.sha256(content.encode()).hexdigest()
         protocol_sha = protocol_fingerprint(protocol)
+        verification_id = uuid4().hex
 
         def persist_pending_extraction():
             # Use the existing per-study checkpoint. An interruption after an
@@ -531,13 +539,21 @@ class DataExtractionAgent(BaseAgent):
 
         persist_pending_extraction()
 
-        def record_attempt(batch, attempt, status, errors, checked=None, snapshot=None):
+        def record_attempt(batch, attempt, status, errors, checked=None, snapshot=None,
+                           raw_response=None, retained_data_issues=None, retained_clinical_judgments=None):
             payload = {"schema_version": 1, "study_id": study_id, "outcome_indices": batch,
+                "verification_id": verification_id,
                 "attempt": attempt, "status": status, "source_sha256": source_sha,
                 "checked_source_sha256": checked_sha, "source_characters": len(content),
                 "protocol_sha256": protocol_sha, "row_sha256": snapshot or {},
                 "response": checked.model_dump(mode="json") if checked else None,
                 "reasons": errors, "assessor": "extraction-check-v2", "assessor_id": self.llm.model}
+            if raw_response is not None:
+                raw_content = raw_response.get("content")
+                payload.update({"raw_response": dict(raw_response),
+                    "raw_response_sha256": hashlib.sha256(raw_content.encode()).hexdigest() if isinstance(raw_content, str) else None,
+                    "retained_data_issues": retained_data_issues or [],
+                    "retained_clinical_judgments": retained_clinical_judgments or []})
             if checked:
                 payload["row_verdicts"] = {str(item.outcome_index): verification_verdict(item, protocol)
                                            for item in checked.primary_analysis_alignment}
@@ -573,9 +589,71 @@ class DataExtractionAgent(BaseAgent):
                 snapshot = {index: row_fingerprint(extracted, index) for index in batch}
                 checked = None
                 data_errors = []
+                terminal_observation = False
+                observation_errors = []
+                observed_negative_rows = set()
+
+                def persist_observation_pending():
+                    # This attempt alone owns the temporary incomplete marker.
+                    # Keep the original history flags in memory; the normal
+                    # completion path may restore those flags, never older ones.
+                    pending = {index: (issues, False if index in batch else available)
+                               for index, (issues, available) in histories.items()}
+                    invalidate_alignment_proofs(project, protocol, extracted, pending,
+                        reason="Independent verification is awaiting durable observation completion.")
+
+                def observe(raw_response):
+                    nonlocal terminal_observation, observation_errors
+                    from new_meta.core.extraction_observations import inspect_extraction_observation
+                    try:
+                        observation = inspect_extraction_observation(raw_response["content"],
+                            ExtractionCheckResult, extracted, batch, content, protocol)
+                        observation_errors = observation["errors"]
+                        retained = [item for item in observation["data_errors"] if item["code"] in {
+                            "row_data_issue", "row_source_conflict_requires_adjudication"}]
+                        stable = (protocol_fingerprint(protocol) == protocol_sha and all(
+                            row_fingerprint(extracted, index) == fingerprint for index, fingerprint in snapshot.items()))
+                        if not stable:
+                            retained = []
+                            observation_errors.append({"code": "verification_inputs_changed_during_observation"})
+                        update_issue_history(extracted, batch, histories, retained,
+                            source_sha256=source_sha, checked_source_sha256=checked_sha, protocol_sha256=protocol_sha,
+                            checked_rows=snapshot, complete_current_check=set())
+                        negative_rows = {item["outcome_index"] for item in observation["clinical_negatives"]}
+                        observed_negative_rows.update(negative_rows)
+                        incomplete = (bool(observation_errors) or raw_response["finish_reason"] == "length"
+                                      or observation["response"] is None)
+                        if negative_rows and incomplete:
+                            terminal_observation = True
+                            for index in negative_rows:
+                                histories[index] = histories[index][0], False
+                            observation_errors.append({"code": "verification_partial_clinical_judgment_retained",
+                                                       "outcome_indices": sorted(negative_rows)})
+                        # Commit retained issues and an incomplete checkpoint first.
+                        # A crash at any later raw/proof write cannot expose the
+                        # earlier clean checkpoint as current verification history.
+                        persist_observation_pending()
+                        record_attempt(batch, round_index + 1, "observed", observation_errors,
+                            checked=observation["response"], snapshot=snapshot, raw_response=raw_response,
+                            retained_data_issues=retained,
+                            retained_clinical_judgments=observation["clinical_negatives"])
+                    except Exception:
+                        terminal_observation = True
+                        # Failure to retain an observation cannot authorize regeneration.
+                        for index in batch:
+                            histories[index] = histories[index][0], False
+                        raise
+                    if terminal_observation:
+                        raise ValueError("Incomplete independent verification retains a clinical nonmatch")
+
                 try:
-                    checked = self._check_extraction(content, extracted, protocol, batch, feedback)
+                    # Mark before the provider call so interruptions during the
+                    # first observer write, or any internal length retry, fail closed.
+                    persist_observation_pending()
+                    checked = self._check_extraction(content, extracted, protocol, batch, feedback, observe)
                     feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol)
+                    feedback.extend(item for item in observation_errors if item["code"].startswith(
+                        ("verification_duplicate", "verification_raw_")))
                     data_errors = validate_data_issues(extracted, batch, checked.data_issues, content)
                     feedback.extend(data_errors)
                     if protocol_fingerprint(protocol) != protocol_sha:
@@ -586,6 +664,7 @@ class DataExtractionAgent(BaseAgent):
                         feedback.append({"code": "verification_source_changed_during_check"})
                 except Exception as exc:
                     feedback = [{"code": "verification_response_unavailable", "error_type": type(exc).__name__}]
+                    feedback.extend(observation_errors)
                     cause = exc.__cause__
                     if hasattr(cause, "errors"):
                         feedback[0]["validation_errors"] = cause.errors(include_input=False, include_context=False)
@@ -600,6 +679,15 @@ class DataExtractionAgent(BaseAgent):
                 feedback = [item for item in feedback if item["code"] not in {
                     "row_data_issue", "row_source_conflict_requires_adjudication"}]
                 feedback.extend(unresolved_issue_errors(batch, histories))
+                if observed_negative_rows and feedback:
+                    # Even a complete negative may be followed by a transport,
+                    # usage, or final-validation failure. Regeneration cannot
+                    # replace that observed judgment with a fresh positive.
+                    terminal_observation = True
+                    for index in observed_negative_rows:
+                        histories[index] = histories[index][0], False
+                    feedback.append({"code": "verification_observed_clinical_judgment_incomplete",
+                                     "outcome_indices": sorted(observed_negative_rows)})
                 for index in batch:
                     if index in complete_rows and histories[index][1] and not histories[index][0] and checked is not None:
                         assessments[index] = next(item for item in checked.primary_analysis_alignment if item.outcome_index == index)
@@ -611,7 +699,7 @@ class DataExtractionAgent(BaseAgent):
                                             reason="Independent verification is incomplete or row-data issues remain.")
                 persist_pending_extraction()
                 complete = not feedback
-                exhausted = round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
+                exhausted = terminal_observation or round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
                     item["code"] in {"numeric_conflict_requires_adjudication", "row_source_conflict_requires_adjudication"} for item in feedback))
                 record_attempt(batch, round_index + 1, "complete" if complete else "needs_input" if exhausted else "retry",
                                feedback, checked=checked, snapshot=snapshot)

@@ -546,12 +546,14 @@ import new_meta.agents.writing_agent as writing_module
 from new_meta.tools.reference_manager import ReferenceManager
 
 ref_manager = ReferenceManager()
-for study in extracted_studies:
-    c = study.characteristics
-    ref_manager.add({
-        "title": c.title, "authors": c.authors, "year": c.year,
-        "journal": c.journal, "doi": c.doi, "pmid": c.pmid,
-    }, study_id=c.pmid)
+# Synthetic DOI fixtures must not perform metadata lookups, even at collection time.
+with patch("new_meta.tools.reference_manager._fetch_crossref_metadata", return_value={}):
+    for study in extracted_studies:
+        c = study.characteristics
+        ref_manager.add({
+            "title": c.title, "authors": c.authors, "year": c.year,
+            "journal": c.journal, "doi": c.doi, "pmid": c.pmid,
+        }, study_id=c.pmid)
 
 # Check references
 ref_list = ref_manager.to_numbered_list()
@@ -696,8 +698,17 @@ def mock_writer_call_llm_structured(self, query, response_model, **kwargs):
     return response_model()
 
 with patch.object(WritingAgent, 'call_llm', mock_writer_call_llm), \
-     patch.object(WritingAgent, 'call_llm_structured', mock_writer_call_llm_structured):
+     patch.object(WritingAgent, 'call_llm_structured', mock_writer_call_llm_structured), \
+     patch("new_meta.tools.reference_manager._fetch_crossref_metadata", return_value={}):
     writer = WritingAgent()
+
+    def mock_observed_writer_output(messages, schema, **kwargs):
+        result = mock_writer_call_llm_structured(writer, messages[-1]["content"], schema, **kwargs)
+        kwargs["on_raw_response"]({"content": result.model_dump_json(), "finish_reason": "stop",
+                                  "provider_response_ordinal": 1})
+        return result
+
+    writer.llm.structured_output = mock_observed_writer_output
     manuscript = writer.run(
         protocol=protocol,
         meta_results=meta_results,

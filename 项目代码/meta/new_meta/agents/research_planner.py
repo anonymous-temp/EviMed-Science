@@ -7,21 +7,26 @@ from new_meta.core.method_planning import (
     validate_protocol_method,
 )
 from new_meta.core.method_registry import MethodInputError
+from new_meta.core.llm import LLMOutputError, parse_source_json
 from new_meta.core.primary_analysis_alignment import digest
 from new_meta.core.protocol_scope import (
-    ScopeAssessmentValidationError, _validate_scope_fields, _validated_scope_conflicts,
     protocol_hash, scope_fields, scope_receipt,
 )
-from new_meta.schemas.protocol import ProtocolScopeAssessment
+from new_meta.core.protocol_scope_sources import (
+    SOURCE_ASSESSOR, SCOPE_BATCH_SIZE, compose_scope_batch, evaluate_scope_references,
+    source_catalogue, source_prompt_catalogue, scope_source_provenance,
+    validate_scope_source_provenance,
+)
+from new_meta.schemas.protocol import ProtocolScopeAssessment, ProtocolScopeReferenceEnvelope
 from pydantic import ValidationError
 from new_meta.schemas.protocol import ResearchProtocol, PICO
 from new_meta.prompts import planner_prompts
 
 
-SCOPE_BATCH_SIZE = 8
 SCOPE_DIAGNOSTIC_MAX_ATTEMPTS = 32
 SCOPE_DIAGNOSTIC_MAX_BYTES = 256 * 1024
 SCOPE_ASSESSMENT_MAX_BYTES = 64 * 1024
+_UNOBSERVED = object()
 
 
 class _ScopeDiagnostics:
@@ -31,16 +36,26 @@ class _ScopeDiagnostics:
         self.attempts = []
         self.omitted = 0
 
-    def add(self, record, assessment=None):
-        if assessment is not None:
-            payload = assessment.model_dump(mode="json")
+    def add(self, record, *, reference_response=_UNOBSERVED, resolved_assessment=_UNOBSERVED, raw_content=_UNOBSERVED):
+        for key, assessment in (("reference_response", reference_response), ("resolved_assessment", resolved_assessment)):
+            if assessment is _UNOBSERVED:
+                continue
+            payload = assessment.model_dump(mode="json") if hasattr(assessment, "model_dump") else assessment
             encoded = json.dumps(payload, ensure_ascii=False).encode()
-            record["assessment_sha256"] = digest(payload)
-            record["assessment_size_bytes"] = len(encoded)
+            record[key + "_sha256"] = digest(payload)
+            record[key + "_size_bytes"] = len(encoded)
             if len(encoded) <= SCOPE_ASSESSMENT_MAX_BYTES:
-                record["assessment"] = payload
+                record[key] = payload
             else:
-                record["assessment_omitted"] = "diagnostic_size_limit"
+                record[key + "_omitted"] = "diagnostic_size_limit"
+        if raw_content is not _UNOBSERVED:
+            encoded = raw_content.encode() if isinstance(raw_content, str) else b"" if raw_content is None else json.dumps(raw_content).encode()
+            record["raw_sha256"] = digest(raw_content)
+            record["raw_size_bytes"] = len(encoded)
+            if len(encoded) <= SCOPE_ASSESSMENT_MAX_BYTES:
+                record["raw_content"] = raw_content
+            else:
+                record["raw_content_omitted"] = "diagnostic_size_limit"
         self.attempts.append(record)
         while (len(self.attempts) > SCOPE_DIAGNOSTIC_MAX_ATTEMPTS
                or len(json.dumps(self.attempts, ensure_ascii=False).encode()) > SCOPE_DIAGNOSTIC_MAX_BYTES):
@@ -48,14 +63,19 @@ class _ScopeDiagnostics:
             self.omitted += 1
 
     def collect(self, error):
-        self.omitted += error.phase.data.get("scope_check_attempts_omitted", 0)
-        for record in error.phase.data.get("scope_check_attempts", []):
+        data = error.phase.data if isinstance(error, ProtocolInputRequired) else getattr(error, "scope_check_data", {})
+        self.omitted += data.get("scope_check_attempts_omitted", 0)
+        for record in data.get("scope_check_attempts", []):
             self.add(record)
 
     def attach(self, error):
-        error.phase.data["scope_check_attempts"] = list(self.attempts)
+        if isinstance(error, ProtocolInputRequired):
+            data = error.phase.data
+        else:
+            data = error.scope_check_data = {}
+        data["scope_check_attempts"] = list(self.attempts)
         if self.omitted:
-            error.phase.data["scope_check_attempts_omitted"] = self.omitted
+            data["scope_check_attempts_omitted"] = self.omitted
         return error
 
 
@@ -91,7 +111,7 @@ class ResearchPlanner(BaseAgent):
         for attempt in range(3):
             protocol = None
             try:
-                protocol = self.call_llm_structured(prompt, ResearchProtocol, max_tokens=4096)
+                protocol = self.call_llm_structured(prompt, ResearchProtocol, max_tokens=8192)
                 self._normalize_supported_databases(protocol)
                 self._apply_effect_measure_rules(protocol, question)
                 normalize_protocol_method_fields(protocol)
@@ -114,6 +134,8 @@ class ResearchPlanner(BaseAgent):
             except Exception as exc:
                 # Provider/internal faults retain their failure semantics.
                 last_error = exc
+                scope_diagnostics.collect(exc)
+                scope_diagnostics.attach(exc)
                 self.log(f"PICO extraction attempt {attempt + 1} failed: {exc}", level="warning")
                 continue
             last_error.phase.data["original_question"] = question
@@ -124,87 +146,142 @@ class ResearchPlanner(BaseAgent):
                        "Never drop unsupported requested designs or other explicit requirements to pass validation.")
         if isinstance(last_error, ProtocolInputRequired):
             raise last_error
-        raise RuntimeError(f"PICO extraction failed after 3 attempts: {last_error}") from last_error
+        raise scope_diagnostics.attach(RuntimeError(f"PICO extraction failed after 3 attempts: {last_error}")) from last_error
 
     def check_scope(self, question, protocol):
-        """Independently assess bounded batches against one immutable full proposal."""
+        """Observe every provider response before any retry can replace a judgment."""
         snapshot = ResearchProtocol.model_validate(protocol.model_dump())
         snapshot_hash = protocol_hash(snapshot)
         topic_hash = digest(question)
+        catalogue = source_catalogue(question, snapshot)
+        catalogue_hash = digest(catalogue)
         inventory = list(scope_fields(snapshot).items())
         diagnostics = _ScopeDiagnostics()
         verified = []
+        responses = []
+        field_origins = {}
+
+        def unverified(message):
+            return diagnostics.attach(ProtocolInputRequired(
+                "Independent scope assessment is incomplete or unanchored: " + message,
+                code="protocol_scope_unverified", protocol=protocol))
+
         for offset in range(0, len(inventory), SCOPE_BATCH_SIZE):
             batch = dict(inventory[offset:offset + SCOPE_BATCH_SIZE])
+            batch_number = offset // SCOPE_BATCH_SIZE + 1
             original_prompt = planner_prompts.SCOPE_CHECK_PROMPT.format(
                 question=question, protocol=snapshot.model_dump_json(indent=2),
+                sources=json.dumps(source_prompt_catalogue(question, catalogue), ensure_ascii=False),
                 fields=json.dumps(batch, ensure_ascii=False))
             prompt = original_prompt
             retained_conflicts = {}
-            for attempt in range(2):
-                assessment = None
-                reason = None
+            retained_origins = {}
+            for attempt in range(1, 3):
+                state = {"count": 0}
+
+                def observe(observation):
+                    content = observation["content"]
+                    ordinal = observation["provider_response_ordinal"]
+                    finish_reason = observation["finish_reason"]
+                    origin = {"batch": batch_number, "attempt": attempt, "provider_response_ordinal": ordinal}
+                    provider_record = {**origin, "finish_reason": finish_reason,
+                                       "raw_content": content, "raw_sha256": digest(content)}
+                    responses.append(provider_record)
+                    record = {**origin, "finish_reason": finish_reason, "expected_fields": list(batch),
+                              "topic_sha256": topic_hash, "protocol_sha256": snapshot_hash,
+                              "catalogue_version": catalogue["version"], "catalogue_sha256": catalogue_hash}
+                    payload = _UNOBSERVED
+                    evaluated = None
+                    reason = {"code": "scope_observer_failed", "message": "The provider response could not be verified."}
+                    try:
+                        if type(ordinal) is not int or ordinal != state["count"] + 1:
+                            raise LLMOutputError("Scope provider response ordinal is invalid")
+                        state["count"] += 1
+                        if content is None or (isinstance(content, str) and not content.strip()):
+                            provider_record["response_unavailable"] = "missing_content" if content is None else "empty_content"
+                            record["response_unavailable"] = provider_record["response_unavailable"]
+                            reason = {"code": "scope_response_missing_content", "message": "The provider response contained no assessment text."}
+                            state.update(reason=reason, provider_record=provider_record)
+                            return
+                        try:
+                            payload = parse_source_json(content)
+                        except (ValueError, TypeError) as exc:
+                            reason = {"code": "scope_source_json_invalid", "message": "The exact source response is not unambiguous valid JSON."}
+                            raise LLMOutputError(reason["message"]) from exc
+                        provider_record.update(response=payload, response_sha256=digest(payload))
+                        if protocol_hash(protocol) != snapshot_hash:
+                            reason = {"code": "protocol_scope_proposal_changed", "message": "Protocol changed during independent scope assessment"}
+                            raise LLMOutputError(reason["message"])
+                        evaluated = evaluate_scope_references(question, catalogue, payload, batch)
+                        for field, judgment in evaluated.conflicts.items():
+                            if field not in retained_conflicts:
+                                retained_conflicts[field] = judgment
+                                retained_origins[field] = dict(origin)
+                        reason = evaluated.reason
+                        if reason is None and finish_reason not in {"stop", "completed"}:
+                            reason = {"code": "scope_response_incomplete", "message": "A completed provider response is required."}
+                        if reason is None:
+                            composed, origins = compose_scope_batch(
+                                question, evaluated.resolved, retained_conflicts, batch, batch_number,
+                                attempt, ordinal, retained_origins)
+                            record["field_origins"] = origins
+                            retained = [field for field in retained_conflicts if retained_origins[field] != origin]
+                            if retained:
+                                record["retained_nonmatch_fields"] = retained
+                            state.update(composed=composed, origins=origins)
+                        state.update(reason=reason, provider_record=provider_record)
+                    finally:
+                        record["validation"] = reason or {"code": "scope_batch_verified"}
+                        record["source_metadata"] = evaluated.source_metadata if evaluated is not None else []
+                        diagnostics.add(record, raw_content=content, reference_response=payload,
+                                        resolved_assessment=evaluated.resolved if evaluated is not None else _UNOBSERVED)
+
                 try:
-                    assessment = self.llm.structured_output(
+                    response = self.llm.structured_output(
                         [{"role": "system", "content": planner_prompts.SCOPE_CHECK_SYSTEM},
                          {"role": "user", "content": prompt}],
-                        ProtocolScopeAssessment, max_tokens=8192)
+                        ProtocolScopeReferenceEnvelope, max_tokens=16384,
+                        source_faithful=True, on_raw_response=observe)
+                except LLMOutputError as exc:
+                    message = diagnostics.attempts[-1].get("validation", {}).get("message") if diagnostics.attempts else None
+                    raise unverified(message or "An actual provider response could not be observed or verified.") from exc
                 except ValueError as exc:
-                    if not isinstance(exc, ValidationError) and not isinstance(
-                            exc.__cause__, (ValidationError, json.JSONDecodeError)):
-                        raise  # Provider/internal failures retain their failure semantics.
-                    reason = {"code": "scope_assessment_malformed",
-                              "message": "The checker did not return a valid typed scope assessment."}
-                if protocol_hash(protocol) != snapshot_hash:
-                    reason = {"code": "protocol_scope_proposal_changed",
-                              "message": "Protocol changed during independent scope assessment"}
+                    if isinstance(exc, ValidationError) or isinstance(exc.__cause__, (ValidationError, json.JSONDecodeError)):
+                        raise unverified("The observed source response did not have the required envelope.") from exc
+                    raise diagnostics.attach(exc)
+                except Exception as exc:
+                    raise diagnostics.attach(exc)
+                if not state["count"] or "provider_record" not in state:
+                    diagnostics.add({"batch": batch_number, "attempt": attempt, "topic_sha256": topic_hash,
+                        "protocol_sha256": snapshot_hash, "validation": {"code": "scope_response_unobserved"}})
+                    raise unverified("No actual provider response was observed.")
+                payload = response.model_dump(mode="json") if hasattr(response, "model_dump") else response
+                if digest(payload) != digest(state["provider_record"].get("response")):
+                    raise unverified("The returned envelope differs from the actual observed response.")
+                reason = state["reason"]
                 if reason is None:
-                    try:
-                        assessment = ProtocolScopeAssessment.model_validate(assessment)
-                        _validate_scope_fields(question, assessment, batch)
-                    except ScopeAssessmentValidationError as exc:
-                        reason = exc.reason
-                    except (ValidationError, TypeError):
-                        reason = {"code": "scope_assessment_malformed",
-                                  "message": "The checker did not return a valid typed scope assessment."}
-                composed = assessment
-                if reason is not None and attempt == 0 and isinstance(assessment, ProtocolScopeAssessment):
-                    retained_conflicts = _validated_scope_conflicts(question, assessment, batch)
-                if reason is None and retained_conflicts:
-                    # Repairing another field's quote cannot erase an already anchored
-                    # semantic conflict against these exact immutable inputs.
-                    composed = ProtocolScopeAssessment(fields=[
-                        retained_conflicts.get(item.field, item) for item in assessment.fields])
-                    _validate_scope_fields(question, composed, batch)
-                record = {"batch": offset // SCOPE_BATCH_SIZE + 1, "attempt": attempt + 1,
-                    "expected_fields": list(batch), "topic_sha256": topic_hash,
-                    "protocol_sha256": snapshot_hash,
-                    "validation": reason or {"code": "scope_batch_verified"}}
-                if reason is None and retained_conflicts:
-                    record["retained_nonmatch_fields"] = list(retained_conflicts)
-                diagnostics.add(record,
-                    assessment if isinstance(assessment, ProtocolScopeAssessment) else None)
-                if reason is None:
-                    verified.extend(composed.fields)
+                    verified.extend(state["composed"].fields)
+                    field_origins.update(state["origins"])
                     break
-                if attempt == 1 or reason["code"] == "protocol_scope_proposal_changed":
-                    raise diagnostics.attach(ProtocolInputRequired(
-                        f"Independent scope assessment is incomplete or unanchored: {reason['message']}",
-                        code="protocol_scope_unverified", protocol=protocol))
+                if attempt == 2:
+                    raise unverified(reason["message"])
                 prompt = original_prompt + "\n\nChecker validation feedback:\n" + json.dumps(reason, ensure_ascii=False)
                 prompt += ("\nReassess only this batch using the SAME full question and protocol above. "
-                           "Correct the response format or original quotation; preserve honest mismatch or uncertain judgments. "
+                           "Correct the response format or source_id; preserve honest mismatch or uncertain judgments. "
                            "Do not change the proposed protocol or infer that validation requires a match.")
         try:
             if protocol_hash(protocol) != snapshot_hash:
                 raise ValueError("Protocol changed during independent scope assessment")
-            return scope_receipt(question, snapshot, ProtocolScopeAssessment(fields=verified))
+            merged = ProtocolScopeAssessment(fields=verified)
+            receipt = scope_receipt(question, snapshot, merged)
+            provenance = scope_source_provenance(catalogue, responses, field_origins)
+            validate_scope_source_provenance(question, snapshot, merged, provenance)
+            receipt.update(assessor=SOURCE_ASSESSOR, source_provenance=provenance)
+            return receipt
         except ProtocolInputRequired as exc:
             raise diagnostics.attach(exc)
         except (ValidationError, ValueError, TypeError) as exc:
-            raise diagnostics.attach(ProtocolInputRequired(
-                f"Independent scope assessment is incomplete or unanchored: {exc}",
-                code="protocol_scope_unverified", protocol=protocol)) from exc
+            raise unverified(str(exc)) from exc
 
     def refine(self, current_protocol: ResearchProtocol, user_input: str, *, original_question: str = "") -> ResearchProtocol:
         """Refinement cannot replace the original objective; changed objectives restart."""

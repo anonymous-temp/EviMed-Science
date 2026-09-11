@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import PrivateAttr, BaseModel, Field, field_validator, model_validator
+from pydantic import PrivateAttr, BaseModel, Field, RootModel, field_validator, model_validator
 
 
 class PICO(BaseModel):
@@ -94,3 +94,22 @@ class ProtocolScopeField(BaseModel):
 
 class ProtocolScopeAssessment(BaseModel):
     fields: list[ProtocolScopeField]
+
+
+class ProtocolScopeReferenceField(BaseModel):
+    """Internal transport; the runtime resolves source_id into the public quote."""
+    model_config = {"extra": "forbid"}
+    field: str
+    status: Literal["match", "mismatch", "uncertain"]
+    basis: Literal["explicit", "not_explicit"]
+    source_id: str
+    rationale: str
+
+
+class ProtocolScopeReferenceAssessment(BaseModel):
+    model_config = {"extra": "forbid"}
+    fields: list[ProtocolScopeReferenceField]
+
+
+class ProtocolScopeReferenceEnvelope(RootModel[dict[str, Any]]):
+    """Observe original row data before strict per-field scope validation."""

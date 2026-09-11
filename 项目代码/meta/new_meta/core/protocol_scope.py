@@ -112,23 +112,56 @@ def original_project_topic(project):
 
 def ensure_project_protocol_scope(project, protocol, *, planner=None, allow_recheck=True):
     """Use only a current runtime assessment; stale or legacy proposals are rechecked."""
+    from new_meta.core.protocol_scope_sources import SOURCE_ASSESSOR, validate_scope_source_provenance
+
     topic = original_project_topic(project)
     candidates = [protocol._scope_receipt]
+    disk_unverified = False
     try:
-        candidates.append(json.loads(_read_scoped(project, "analysis/protocol_scope.json", max_bytes=4 * 1024 * 1024)))
+        disk = json.loads(_read_scoped(project, "analysis/protocol_scope.json", max_bytes=4 * 1024 * 1024))
+        if (not isinstance(disk, dict) or type(disk.get("schema_version")) is not int or disk["schema_version"] != 1
+                or not isinstance(disk.get("assessor"), str) or disk["assessor"] not in {ASSESSOR, SOURCE_ASSESSOR}
+                or not isinstance(disk.get("assessment"), dict)
+                or any(not isinstance(disk.get(key), str) or len(disk[key]) != 64
+                       or not set(disk[key]) <= set("0123456789abcdef") for key in ("topic_sha256", "protocol_sha256"))):
+            raise ValueError("The existing scope receipt is malformed")
+        candidates.append(disk)
+    except FileNotFoundError:
+        try:
+            (project.base_dir / "analysis" / "protocol_scope.json").lstat()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            disk_unverified = True
+        else:
+            disk_unverified = True
     except (OSError, ValueError):
-        pass
+        disk_unverified = True
+    if disk_unverified:
+        candidates = []  # An existing unreadable proof cannot be erased by a memory cache hit.
+    selected = None
     for receipt in candidates:
-        if not isinstance(receipt, dict) or receipt.get("assessor") != ASSESSOR:
+        if (not isinstance(receipt, dict) or not isinstance(receipt.get("assessor"), str)
+                or receipt["assessor"] not in {ASSESSOR, SOURCE_ASSESSOR}):
             continue
         if receipt.get("topic_sha256") != digest(topic) or receipt.get("protocol_sha256") != protocol_hash(protocol):
             continue
         try:
             validated = scope_receipt(topic, protocol, receipt["assessment"])
+            if receipt["assessor"] == SOURCE_ASSESSOR or "source_provenance" in receipt:
+                validate_scope_source_provenance(topic, protocol, receipt["assessment"], receipt["source_provenance"])
+                validated.update(assessor=receipt["assessor"], source_provenance=receipt["source_provenance"])
         except (ValueError, KeyError, TypeError):
+            if receipt["assessor"] == SOURCE_ASSESSOR or "source_provenance" in receipt:
+                selected = None
+                break  # Present-invalid ID history must never downgrade to quote-only admission.
             continue
-        _write_scoped_atomic(project, "analysis/protocol_scope.json", json.dumps(validated, ensure_ascii=False, indent=2).encode())
-        return validated
+        if selected is None or ("source_provenance" in validated and "source_provenance" not in selected):
+            selected = validated
+    if selected is not None:
+        _write_scoped_atomic(project, "analysis/protocol_scope.json", json.dumps(selected, ensure_ascii=False, indent=2).encode())
+        protocol._scope_receipt = selected
+        return selected
     if not allow_recheck:
         raise ProtocolInputRequired("The current protocol lacks a matching independent original-question scope assessment; resume planning or restart before refreshing the report.",
                                     code="protocol_scope_unverified", protocol=protocol, project=project)

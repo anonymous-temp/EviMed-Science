@@ -111,7 +111,7 @@ def run_verifier(tmp_path, monkeypatch, responses, *, candidate=None, content=SO
     path = project.base_dir / "papers" / "source.txt"; path.write_text(content)
     agent = DataExtractionAgent(); calls = []
     iterator = iter(responses)
-    def check(text, extracted, current_protocol, indices, feedback):
+    def check(text, extracted, current_protocol, indices, feedback, _observe=None):
         calls.append((text, list(indices), list(feedback)))
         return next(iterator)
     monkeypatch.setattr(agent, "_check_extraction", check)

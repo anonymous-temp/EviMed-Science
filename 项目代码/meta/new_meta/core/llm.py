@@ -11,6 +11,7 @@ import contextvars
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+from types import MappingProxyType
 
 import httpx
 from openai import OpenAI
@@ -58,6 +59,22 @@ _BUILT_IN_LLM_PRICES_USD_PER_1M = {
 
 class LLMOutputError(RuntimeError):
     """Raised when the API returned a response that is not usable."""
+
+
+def parse_source_json(text: str):
+    """Parse exact JSON without repair, duplicate-key collapse, or value cleaning."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate JSON object key in source response")
+            result[key] = value
+        return result
+
+    def reject_constant(value):
+        raise ValueError("Non-finite JSON constant in source response")
+
+    return json.loads(text, object_pairs_hook=unique_object, parse_constant=reject_constant)
 
 
 def _is_dashscope_compatible_base_url(base_url: str) -> bool:
@@ -458,6 +475,7 @@ class LLMClient:
         max_tokens: int,
         finish_reason: str | None = None,
         retryable_output_issue: str = "",
+        stream: bool | None = None,
     ) -> dict:
         usage_data = _usage_dict_from_usage(usage)
         price = _model_price_usd_per_1m(model)
@@ -489,7 +507,7 @@ class LLMClient:
             "price_output_per_1m_usd": float(price.get("output") or 0),
             "price_source": price.get("source") or "unpriced",
             "search_enabled": bool(self.enable_search),
-            "stream": bool(self.stream),
+            "stream": bool(self.stream if stream is None else stream),
         }
         with self._lock:
             self.total_calls += 1
@@ -497,6 +515,15 @@ class LLMClient:
         with _LLM_USAGE_LOCK:
             _LLM_USAGE_EVENTS.append(event)
         return event
+
+    def _record_response_usage(self, *, source_faithful=False, **kwargs):
+        """Bookkeeping faults after observation must not regenerate semantic output."""
+        try:
+            return self._record_usage(**kwargs)
+        except Exception as exc:
+            if source_faithful:
+                raise LLMOutputError("Source-faithful response usage metadata could not be recorded") from exc
+            raise
 
     def _record_api_error(
         self,
@@ -600,6 +627,9 @@ class LLMClient:
         temperature: float = None,
         max_tokens: int = None,
         model: str = None,
+        *,
+        source_faithful: bool = False,
+        on_raw_response=None,
     ) -> BaseModel:
         """Get a structured output parsed into a Pydantic model.
 
@@ -617,6 +647,20 @@ class LLMClient:
         last = augmented[-1].copy()
         last["content"] = last["content"] + instruction
         augmented[-1] = last
+
+        if source_faithful:
+            if not callable(on_raw_response):
+                raise ValueError("Source-faithful structured output requires a raw response observer")
+            try:
+                raw = self._call(messages=augmented, temperature=temperature, max_tokens=max_tokens,
+                                 model=model, response_format={"type": "json_object"},
+                                 source_faithful=True, on_raw_response=on_raw_response)
+            except LLMOutputError as exc:
+                exc.source_faithful = True
+                raise
+            return schema.model_validate(parse_source_json(raw))
+        if on_raw_response is not None:
+            raise ValueError("Raw response observation requires source_faithful=True")
 
         raw = self._call(
             messages=augmented,
@@ -786,12 +830,31 @@ class LLMClient:
         model: str = None,
         response_format: dict = None,
         max_retries: int | None = None,
+        source_faithful: bool = False,
+        on_raw_response=None,
     ) -> str:
         """Internal method with retry logic."""
         model = model or self.model
         temperature = temperature if temperature is not None else LLM_TEMPERATURE
         max_tokens = max_tokens or LLM_MAX_TOKENS
         max_retries = max_retries or LLM_MAX_RETRIES
+        source_kwargs = {}
+        if source_faithful:
+            if not callable(on_raw_response):
+                raise ValueError("Source-faithful calls require a raw response observer")
+            ordinal = 0
+
+            def observe(content, finish_reason):
+                nonlocal ordinal
+                ordinal += 1
+                observation = MappingProxyType({"content": content, "finish_reason": finish_reason,
+                                               "provider_response_ordinal": ordinal})
+                try:
+                    on_raw_response(observation)
+                except Exception as exc:
+                    raise LLMOutputError("Source-faithful raw response observer failed") from exc
+
+            source_kwargs = {"source_faithful": True, "on_raw_response": observe}
         responses_disabled = (
             self._responses_api_disabled_for_session
             or _responses_api_disabled_globally(self.base_url, model)
@@ -808,6 +871,7 @@ class LLMClient:
                     max_tokens=max_tokens,
                     model=model,
                     max_retries=self._responses_max_retries(max_retries, model),
+                    **source_kwargs,
                 )
                 if text.strip():
                     return text
@@ -816,6 +880,8 @@ class LLMClient:
                     model,
                 )
             except Exception as e:
+                if source_faithful and isinstance(e, LLMOutputError):
+                    raise
                 self._responses_api_disabled_for_session = True
                 _disable_responses_api_globally(self.base_url, model)
                 logger.warning(
@@ -832,6 +898,7 @@ class LLMClient:
                 response_format=response_format,
                 max_retries=max_retries,
                 allow_search_for_responses_model=True,
+                **source_kwargs,
             )
 
         return self._call_chat_completions(
@@ -842,6 +909,7 @@ class LLMClient:
             response_format=response_format,
             max_retries=max_retries,
             allow_search_for_responses_model=responses_disabled,
+            **source_kwargs,
         )
 
     def _call_chat_completions(
@@ -854,6 +922,8 @@ class LLMClient:
         response_format: dict | None,
         max_retries: int,
         allow_search_for_responses_model: bool,
+        source_faithful: bool = False,
+        on_raw_response=None,
     ) -> str:
         """Call chat completions, optionally using DashScope search as a Responses fallback."""
 
@@ -869,7 +939,10 @@ class LLMClient:
             kwargs["reasoning_effort"] = reasoning_effort
         if response_format:
             kwargs["response_format"] = response_format
-        if self.stream:
+        streaming = self.stream and not source_faithful
+        if source_faithful:
+            kwargs["stream"] = False
+        if streaming:
             kwargs["stream"] = True
             kwargs["stream_options"] = {"include_usage": True}
         extra_body = self._chat_extra_body(
@@ -883,7 +956,7 @@ class LLMClient:
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(**kwargs)
-                if self.stream:
+                if streaming:
                     text, stream_usage, finish_reason = self._collect_streaming_chat_completion_text(response)
                     retryable_output_issue = ""
                     if finish_reason == "length":
@@ -927,21 +1000,38 @@ class LLMClient:
                             continue
                         raise LLMOutputError("LLM stream returned empty text after retries.")
                     return accumulated_content + text
+                if source_faithful and not getattr(response, "choices", None):
+                    on_raw_response(None, None)
+                    self._record_response_usage(source_faithful=True, model=model, endpoint="chat.completions", usage=getattr(response, "usage", None),
+                                                max_tokens=max_tokens, retryable_output_issue="missing_choice", stream=False)
+                    if attempt < max_retries - 1:
+                        self._sleep_before_retry(attempt, reason="Source-faithful response has no completion choice.")
+                        continue
+                    raise LLMOutputError("Source-faithful response has no completion choice after retries")
                 choice = response.choices[0]
                 finish_reason = getattr(choice, "finish_reason", None)
-                content = choice.message.content or ""
+                raw_content = getattr(getattr(choice, "message", None), "content", None) if source_faithful else choice.message.content
+                if source_faithful:
+                    on_raw_response(raw_content, finish_reason)
+                if source_faithful and raw_content is not None and not isinstance(raw_content, str):
+                    self._record_response_usage(source_faithful=True, model=model, endpoint="chat.completions", usage=getattr(response, "usage", None),
+                                                max_tokens=max_tokens, retryable_output_issue="non_text_content", stream=False)
+                    raise LLMOutputError("Source-faithful response content must be text")
+                content = raw_content or ""
                 retryable_output_issue = ""
                 if finish_reason == "length":
                     retryable_output_issue = "truncated"
                 elif not content.strip():
                     retryable_output_issue = "empty_response"
-                event = self._record_usage(
+                event = self._record_response_usage(
+                    source_faithful=source_faithful,
                     model=model,
                     endpoint="chat.completions",
                     usage=getattr(response, "usage", None),
                     max_tokens=max_tokens,
                     finish_reason=finish_reason,
                     retryable_output_issue=retryable_output_issue,
+                    **({"stream": False} if source_faithful else {}),
                 )
                 if event["near_truncation"]:
                     logger.warning(
@@ -1072,6 +1162,8 @@ class LLMClient:
         max_tokens: int,
         model: str,
         max_retries: int,
+        source_faithful: bool = False,
+        on_raw_response=None,
     ) -> str:
         input_items = [
             {
@@ -1086,7 +1178,10 @@ class LLMClient:
             "temperature": temperature,
             "max_output_tokens": max_tokens,
         }
-        if self.stream:
+        streaming = self.stream and not source_faithful
+        if source_faithful:
+            kwargs["stream"] = False
+        if streaming:
             kwargs["stream"] = True
         if self.enable_search:
             kwargs["tools"] = [{"type": "web_search"}]
@@ -1102,26 +1197,30 @@ class LLMClient:
         for attempt in range(max_retries):
             try:
                 response = self.client.responses.create(**kwargs)
-                if self.stream:
+                if streaming:
                     text, stream_usage, stream_status = self._collect_streaming_response(response)
                     usage = stream_usage
                     status = stream_status
                 else:
                     text = getattr(response, "output_text", None) or self._responses_output_to_text(response)
-                    usage = getattr(response, "usage", None)
                     status = getattr(response, "status", None)
+                    if source_faithful:
+                        on_raw_response(text, status)
+                    usage = getattr(response, "usage", None)
                 retryable_output_issue = ""
                 if not (text or "").strip():
                     retryable_output_issue = "empty_response"
                 elif str(status or "").lower() in {"incomplete", "cancelled", "failed"}:
                     retryable_output_issue = f"status:{status}"
-                self._record_usage(
+                self._record_response_usage(
+                    source_faithful=source_faithful,
                     model=model,
                     endpoint="responses",
                     usage=usage,
                     max_tokens=max_tokens,
                     finish_reason=status,
                     retryable_output_issue=retryable_output_issue,
+                    **({"stream": False} if source_faithful else {}),
                 )
                 if retryable_output_issue:
                     if retryable_output_issue == "status:incomplete" and attempt < max_retries - 1:

@@ -44,6 +44,17 @@ from new_meta.tools.reference_manager import ReferenceManager
 from new_meta.core.extraction_review import ExtractionReviewDecision, save_extraction_review_decision
 
 
+
+def _observe_writer_fixture(writer, response):
+    """Keep legacy positive fixtures at the observed structured-output seam."""
+    def structured(messages, schema, **kwargs):
+        result = response(messages[-1]["content"], schema, **kwargs)
+        kwargs["on_raw_response"]({"content": result.model_dump_json(),
+                                  "finish_reason": "stop", "provider_response_ordinal": 1})
+        return result
+    writer.llm.structured_output = structured
+
+
 def _protocol() -> ResearchProtocol:
     return ResearchProtocol(
         research_question="Do corticosteroids reduce mortality?",
@@ -2851,6 +2862,7 @@ def test_writing_agent_routes_evidence_gap_to_deterministic_report_without_llm(t
 
     writer.call_llm = fail_llm
     writer.call_llm_structured = fail_llm
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=_protocol(),
         meta_results=_meta(),
@@ -2915,6 +2927,7 @@ def test_writing_agent_falls_back_to_deterministic_meta_report_when_llm_fails(tm
 
     writer.call_llm = fail_llm
     writer.call_llm_structured = fail_llm
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=_protocol(),
         meta_results=_meta(),
@@ -2967,6 +2980,7 @@ def test_writing_agent_uses_fact_locked_meta_writer_before_llm_for_ready_runs(tm
 
     writer.call_llm = fail_if_called
     writer.call_llm_structured = fail_if_called
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=_protocol(),
         meta_results=_meta(),
@@ -3047,6 +3061,7 @@ def test_writing_agent_uses_generic_fact_locked_writer_for_non_covid_meta(tmp_pa
 
     writer.call_llm = fail_if_called
     writer.call_llm_structured = fail_if_called
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=_sglt2_protocol(),
         meta_results=_sglt2_meta(),
@@ -3267,6 +3282,7 @@ def test_writing_agent_semantic_editor_uses_llm_clinical_review_brief(tmp_path: 
         )
 
     writer.call_llm_structured = semantic_response
+    _observe_writer_fixture(writer, semantic_response)
 
     edited, audit = writer._semantic_edit_open_sections(manuscript, facts, project=project)
 
@@ -3726,6 +3742,7 @@ def test_deterministic_meta_fallback_is_full_manuscript_with_tables_and_referenc
 
     writer.call_llm = fail_llm
     writer.call_llm_structured = fail_llm
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=_protocol(),
         meta_results=_meta(),
@@ -3865,6 +3882,7 @@ def test_generic_meta_fallback_conclusion_uses_concise_pico_labels(tmp_path: Pat
     writer = WritingAgent()
     writer.call_llm = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("provider unavailable"))
     writer.call_llm_structured = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("provider unavailable"))
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=protocol,
         meta_results=_sglt2_meta(),
@@ -5615,6 +5633,7 @@ def test_claim_map_authoring_rewrites_only_open_argument_sections() -> None:
         )
 
     writer.call_llm_structured = fake_structured
+    _observe_writer_fixture(writer, fake_structured)
     repaired, audit = writer._llm_author_open_sections_from_claim_map(
         manuscript,
         {
@@ -5733,6 +5752,7 @@ def test_claim_map_authoring_judge_does_not_receive_old_template_guard_noise() -
         )
 
     writer.call_llm_structured = fake_structured
+    _observe_writer_fixture(writer, fake_structured)
     decision = writer._adjudicate_claim_map_authoring_guard(
         heading="Introduction",
         candidate_body="HFpEF is clinically complex. This review evaluates SGLT2 inhibitors versus placebo.",
@@ -6157,6 +6177,7 @@ def test_llm_claim_source_alignment_revises_unsupported_applicability_phrase() -
         )
 
     writer.call_llm_structured = fake_structured
+    _observe_writer_fixture(writer, fake_structured)
     claims, audit = writer._llm_align_claim_sources(
         [
             {
@@ -6216,6 +6237,7 @@ def test_llm_claim_source_alignment_contract_covers_examples_and_overstrength() 
         )
 
     writer.call_llm_structured = fake_structured
+    _observe_writer_fixture(writer, fake_structured)
     claims, audit = writer._llm_align_claim_sources(
         [
             {
@@ -6674,6 +6696,7 @@ def test_writing_agent_honors_legacy_report_state_evidence_gap(tmp_path: Path) -
     writer.call_llm_structured = lambda *args, **kwargs: (_ for _ in ()).throw(
         AssertionError("legacy evidence-gap report_state should not call the LLM")
     )
+    writer.llm.structured_output = writer.call_llm_structured
     manuscript = writer.run(
         protocol=_protocol(),
         meta_results=_meta(),

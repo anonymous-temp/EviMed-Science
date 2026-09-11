@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
+import stat
+import tempfile
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from new_meta.core.agent_base import BaseAgent
+from new_meta.core.llm import parse_source_json
 from new_meta.core.project import Project
 from new_meta.schemas.risk_of_bias import (
     ResultRoBAssessment,
@@ -21,6 +26,9 @@ from new_meta.schemas.study import ExtractedStudy
 from new_meta.prompts import rob_prompts
 from new_meta.config import MAX_WORKERS
 from new_meta.tools.utils import first_author_lastname as _first_author, paper_identity
+
+
+_RESULT_ROB_AUDIT_MAX_BYTES = 16 * 1024 * 1024
 
 
 class RoBQuoteRepairSelection(BaseModel):
@@ -205,6 +213,14 @@ class RoBAgent(BaseAgent):
                     target_map[rid] = (study, outcome)
 
         raw_existing = project.load_json("rob_result_assessments.json", subdir="risk_of_bias") or []
+        saved_observations = self._load_result_rob_observations(project)
+        observations = getattr(self, "_result_rob_source_observations", [])
+        if isinstance(saved_observations, list):
+            for item in saved_observations:
+                if (isinstance(item, dict) and isinstance(item.get("input_hash"), str)
+                        and isinstance(item.get("raw_responses"), list) and item not in observations):
+                    observations.append(item)
+        self._result_rob_source_observations = observations
         existing = {}
         for item in raw_existing:
             try:
@@ -224,11 +240,6 @@ class RoBAgent(BaseAgent):
 
         for result_id in required:
             current = existing.get(result_id)
-            if current and current.assessment_status in {
-                RoBAssessmentStatus.COMPLETE,
-                RoBAssessmentStatus.ADJUDICATED,
-            } and not current.requires_adjudication:
-                continue
             target = target_map.get(result_id)
             if not target:
                 continue
@@ -240,15 +251,25 @@ class RoBAgent(BaseAgent):
                 family=plan.family,
                 study_design=study.characteristics.study_design,
             )
+            request = self._result_rob_request(study=study, outcome=outcome, full_text=full_text, rob_policy=policy)
+            blocked, retained, _ = self._retained_result_rob_state(request, full_text)
+            if (current and current.assessment_status is RoBAssessmentStatus.ADJUDICATED
+                    and not current.requires_adjudication
+                    and self._has_recorded_result_rob_adjudication(project, current)):
+                continue
+            if (not blocked and retained is None and current
+                    and current.assessment_status is RoBAssessmentStatus.COMPLETE and not current.requires_adjudication):
+                continue
             base = study_rob.get(self._normalized_text(sid))
-            grounded = self._grounded_study_rob(base, full_text) if base else None
-            assessment_origin = "source_grounded_study_assessment"
-            if grounded is None and full_text:
+            grounded = None if blocked else retained or (self._grounded_study_rob(base, full_text) if base else None)
+            assessment_origin = "llm_result_specific" if retained else "source_grounded_study_assessment"
+            if grounded is None and full_text and not blocked:
                 grounded = self._assess_result_specific_rob(
                     study=study,
                     outcome=outcome,
                     full_text=full_text,
                     rob_policy=policy,
+                    project=project,
                 )
                 assessment_origin = "llm_result_specific"
             if grounded is None:
@@ -284,6 +305,7 @@ class RoBAgent(BaseAgent):
             )
 
         ordered = sorted(existing.values(), key=lambda item: item.result_id)
+        self._persist_result_rob_observations(project)
         project.save_json("rob_result_assessments.json", ordered, subdir="risk_of_bias")
         project.save_json(
             "rob_result_readiness.json",
@@ -292,7 +314,155 @@ class RoBAgent(BaseAgent):
         )
         return [item for item in ordered if item.result_id in required_set]
 
-    def _assess_result_specific_rob(self, *, study, outcome, full_text: str, rob_policy):
+    @staticmethod
+    def _has_recorded_result_rob_adjudication(project, assessment):
+        """Match the existing human-adjudication ledger, not a model-set flag."""
+        manifest = project.load_json("rob_adjudications.json", subdir="risk_of_bias")
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("history"), list):
+            return False
+        for entry in reversed(manifest["history"]):
+            if isinstance(entry, dict) and entry.get("result_id") == assessment.result_id:
+                return (entry.get("assessment") == assessment.model_dump(mode="json")
+                        and entry.get("adjudicated_by") == assessment.adjudicated_by
+                        and isinstance(entry.get("reason"), str) and bool(entry["reason"].strip()))
+        return False
+
+    @staticmethod
+    def _load_result_rob_observations(project):
+        """Only an absent audit is initial state; damaged evidence needs recovery."""
+        path = project.get_path("rob_result_source_observations.json", subdir="risk_of_bias")
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            return []
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("Risk-of-bias observation audit is not a regular file; recovery required")
+        if metadata.st_size > _RESULT_ROB_AUDIT_MAX_BYTES:
+            raise ValueError("Risk-of-bias observation audit exceeds the size limit; recovery required")
+        raw = path.read_bytes()
+        if len(raw) > _RESULT_ROB_AUDIT_MAX_BYTES:
+            raise ValueError("Risk-of-bias observation audit exceeds the size limit; recovery required")
+        try:
+            records = parse_source_json(raw.decode("utf-8"))
+            if not isinstance(records, list):
+                raise ValueError("Audit must be a list")
+            for record in records:
+                if (not isinstance(record, dict)
+                        or not isinstance(record.get("input_hash"), str)
+                        or not re.fullmatch(r"[a-f0-9]{64}", record["input_hash"])
+                        or not all(isinstance(record.get(key), str) for key in ("study_id", "target_result", "tool_version"))
+                        or record.get("status") not in {"pending", "empty", "incomplete", "complete"}
+                        or not isinstance(record.get("raw_responses"), list)
+                        or not isinstance(record.get("high_risk_domains"), list)):
+                    raise ValueError("Invalid observation record")
+                for response in record["raw_responses"]:
+                    if (not isinstance(response, dict) or "content" not in response
+                            or response["content"] is not None and not isinstance(response["content"], str)
+                            or "finish_reason" not in response
+                            or response["finish_reason"] is not None and not isinstance(response["finish_reason"], str)
+                            or type(response.get("provider_response_ordinal")) is not int
+                            or response["provider_response_ordinal"] < 1):
+                        raise ValueError("Invalid raw observation")
+                for domain in record["high_risk_domains"]:
+                    RoBDomain.model_validate(domain, strict=True)
+                if record["status"] == "complete":
+                    StudyRoB.model_validate(record.get("assessment"), strict=True)
+        except (UnicodeError, TypeError, ValueError) as exc:
+            raise ValueError("Risk-of-bias observation audit is invalid; recovery required") from exc
+        return records
+
+    def _persist_result_rob_observations(self, project):
+        """Atomically persist pending calls and observations before further work."""
+        if project is None or project.skip_disk:
+            return
+        path = project.get_path("rob_result_source_observations.json", subdir="risk_of_bias")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(getattr(self, "_result_rob_source_observations", []), ensure_ascii=False, indent=2)
+        if len(payload.encode("utf-8")) > _RESULT_ROB_AUDIT_MAX_BYTES:
+            raise ValueError("Risk-of-bias observation audit exceeds the size limit; recovery required")
+        descriptor, temporary = tempfile.mkstemp(prefix=".rob-observations-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def _observed_high_risk_domains(self, data, content, expected_domains):
+        if not isinstance(data, dict) or not isinstance(data.get("domains"), list):
+            return []
+        retained = []
+        for item in data["domains"]:
+            try:
+                domain = RoBDomain.model_validate(item, strict=True)
+            except (TypeError, ValueError):
+                continue
+            if (self._normalized_text(domain.domain) in expected_domains
+                    and self._normalized_text(domain.judgment) in {"high risk", "serious risk", "critical risk"}
+                    and domain.support.strip() and domain.source_quote.strip()
+                    and self._quote_occurs(domain.source_quote, content)):
+                row = domain.model_dump()
+                if row not in retained:
+                    retained.append(row)
+        return retained
+
+    def _retained_result_rob_state(self, request, full_text):
+        """Inspect every attempt for the input; no first-record-wins replay."""
+        matching = [record for record in getattr(self, "_result_rob_source_observations", [])
+                    if record["input_hash"] == request["input_hash"] or (not full_text
+                        and record.get("study_id") == request["study_id"]
+                        and record.get("target_result") == request["context"]
+                        and record.get("tool_version") == request["tool_version"])]
+        high_risk = []
+        blocked = False
+        completed = []
+        for record in matching:
+            for domain in self._observed_high_risk_domains(
+                {"domains": record.get("high_risk_domains", [])}, request["content"], request["expected_domains"],
+            ):
+                if domain not in high_risk:
+                    high_risk.append(domain)
+            observed = False
+            for raw in record["raw_responses"]:
+                content = raw.get("content") if isinstance(raw, dict) else None
+                if not isinstance(content, str) or not content.strip():
+                    continue
+                observed = True
+                try:
+                    data = parse_source_json(content)
+                except (TypeError, ValueError):
+                    continue
+                for domain in self._observed_high_risk_domains(data, request["content"], request["expected_domains"]):
+                    if domain not in high_risk:
+                        high_risk.append(domain)
+            if record.get("status") == "pending" or (observed and record.get("status") != "complete"):
+                blocked = True
+            if record.get("status") == "complete" and record.get("assessment"):
+                try:
+                    candidate = StudyRoB.model_validate(record["assessment"], strict=True)
+                except (TypeError, ValueError):
+                    blocked = True
+                    continue
+                grounded = self._grounded_study_rob(candidate, request["content"])
+                if grounded is not None:
+                    completed.append(grounded)
+        if blocked:
+            return True, None, high_risk
+        for candidate in completed:
+            domains = [domain.model_dump() for domain in candidate.domains]
+            if all(domain in domains for domain in high_risk):
+                return False, candidate, high_risk
+        return bool(high_risk or completed), None, high_risk
+
+    def _result_rob_request(self, *, study, outcome, full_text: str, rob_policy):
         content = full_text[:50000]
         context = (
             "\n\nTARGET RESULT (assess this exact result, not the study in general):\n"
@@ -311,42 +481,100 @@ class RoBAgent(BaseAgent):
             "copy the relevant table header and row values exactly rather than summarizing them.\n"
         )
         base_prompt = rob_policy.prompt_template.format(paper_content=content)
-        prompt = base_prompt + context
-        for attempt in range(3):
-            try:
-                candidate = self.call_llm_structured(
-                    prompt,
-                    StudyRoB,
-                    temperature=0.0,
-                    max_tokens=6000,
-                )
-            except Exception as exc:
-                self.log(
-                    f"[{self._study_sid(study)}] result-specific RoB attempt {attempt + 1} failed: {exc}",
-                    level="warning",
-                )
-                continue
-            candidate.study_id = self._study_sid(study)
-            candidate.tool_used = rob_policy.tool_name
-            grounded = self._grounded_study_rob(candidate, full_text)
-            if grounded is not None:
-                return grounded
-            repaired = self._repair_rob_quotes_from_verified_candidates(candidate, full_text)
-            if repaired is not None:
-                return repaired
-            grounding_feedback = self._rob_grounding_feedback(candidate, full_text)
-            prompt = (
-                base_prompt
-                + context
-                + "\nThe previous response contained missing or non-verbatim source_quote values. "
-                "Return the full assessment again, using short exact substrings copied from PAPER CONTENT. "
-                "Change the judgment if its rationale cannot be supported by an exact excerpt. "
-                "For every failed domain below, copy one of the deterministically verified candidate excerpts "
-                "exactly, without joining it to a paraphrase. A candidate excerpt is only a quotation aid: use it "
-                "only when it genuinely supports the domain judgment.\n\n"
-                + grounding_feedback
+        expected_domains = [self._normalized_text(name) for name in rob_policy.domain_names]
+        prompt = base_prompt + context + (
+            "\nReturn exactly one domain for each of these domain names, preserving its name:\n"
+            + json.dumps(rob_policy.domain_names)
+        )
+        input_hash = hashlib.sha256(json.dumps({
+            "study_id": self._study_sid(study), "prompt": prompt,
+            "full_text": full_text, "tool_version": rob_policy.tool_version,
+            "outcome": outcome.model_dump(mode="json") if hasattr(outcome, "model_dump") else vars(outcome),
+        }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+        return {"content": content, "context": context, "prompt": prompt, "input_hash": input_hash,
+                "expected_domains": expected_domains, "study_id": self._study_sid(study),
+                "tool_version": rob_policy.tool_version}
+
+    def _assess_result_specific_rob(self, *, study, outcome, full_text: str, rob_policy, project=None):
+        request = self._result_rob_request(study=study, outcome=outcome, full_text=full_text, rob_policy=rob_policy)
+        content, context, prompt = request["content"], request["context"], request["prompt"]
+        input_hash, expected_domains = request["input_hash"], request["expected_domains"]
+        if not hasattr(self, "_result_rob_source_observations"):
+            self._result_rob_source_observations = []
+        blocked, retained, _ = self._retained_result_rob_state(request, full_text)
+        if blocked or retained is not None:
+            return retained
+        audit = {
+            "attempt_id": uuid.uuid4().hex,
+            "input_hash": input_hash, "study_id": self._study_sid(study),
+            "target_result": context, "tool_version": rob_policy.tool_version,
+            "paper_sha256": hashlib.sha256(full_text.encode("utf-8")).hexdigest(),
+            "status": "pending", "raw_responses": [], "high_risk_domains": [],
+        }
+        self._result_rob_source_observations.append(audit)
+        # A pending receipt survives a crash or failed observation write. It
+        # prevents a later fallback from treating an interrupted call as approval.
+        self._persist_result_rob_observations(project)
+
+        def observe(observation):
+            raw = dict(observation)
+            audit["raw_responses"].append(raw)
+            self._persist_result_rob_observations(project)
+            if raw["content"] is None or (isinstance(raw["content"], str) and not raw["content"].strip()):
+                raw["missing_response"] = True
+                return
+            data = parse_source_json(raw["content"])
+            if not isinstance(data, dict) or not isinstance(data.get("domains"), list):
+                raise ValueError("Missing result-specific risk-of-bias domains")
+            # Preserve independently valid adverse evidence before validating
+            # siblings. Partial evidence is an audit observation, not a report.
+            audit["high_risk_domains"] = self._observed_high_risk_domains(data, content, expected_domains)
+            self._persist_result_rob_observations(project)
+            candidate = StudyRoB.model_validate(data, strict=True)
+            names = [self._normalized_text(domain.domain) for domain in candidate.domains]
+            if (sorted(names) != sorted(expected_domains) or not candidate.overall_judgment.strip()
+                    or candidate.is_synthetic or any(not domain.support.strip() or not domain.judgment.strip()
+                    or not domain.source_quote.strip()
+                    or (domain.source_page is None and not (domain.source_section or "").strip())
+                    for domain in candidate.domains)):
+                raise ValueError("Incomplete result-specific risk-of-bias assessment")
+            if raw["finish_reason"] not in {"stop", "completed"}:
+                raise ValueError("Incomplete provider response")
+            if (audit["high_risk_domains"]
+                    and self._normalized_text(candidate.overall_judgment) == "low risk"):
+                raise ValueError("Overall low risk contradicts an observed high-risk domain")
+
+        try:
+            candidate = self.llm.structured_output(
+                [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
+                StudyRoB, temperature=0.0, max_tokens=6000,
+                source_faithful=True, on_raw_response=observe,
             )
-        return None
+        except Exception as exc:
+            audit["error"] = str(exc)[:500]
+            audit["status"] = "incomplete" if any(
+                isinstance(raw["content"], str) and raw["content"].strip() for raw in audit["raw_responses"]
+            ) else "empty"
+            self._persist_result_rob_observations(project)
+            self.log(f"[{self._study_sid(study)}] result-specific RoB incomplete: {exc}", level="warning")
+            return None
+        if not audit["raw_responses"]:
+            audit["error"] = "Result-specific risk-of-bias response was not observed"
+            audit["status"] = "incomplete"
+            self._persist_result_rob_observations(project)
+            return None
+        candidate.study_id = self._study_sid(study)
+        candidate.tool_used = rob_policy.tool_name
+        grounded = self._grounded_study_rob(candidate, content)
+        if grounded is None:
+            audit["error"] = "Result-specific risk-of-bias source grounding incomplete"
+            audit["status"] = "incomplete"
+            self._persist_result_rob_observations(project)
+            return None
+        audit["status"] = "complete"
+        audit["assessment"] = grounded.model_dump()
+        self._persist_result_rob_observations(project)
+        return grounded
 
     def _repair_rob_quotes_from_verified_candidates(
         self,

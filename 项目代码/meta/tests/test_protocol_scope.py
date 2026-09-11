@@ -1,13 +1,15 @@
 
 import json
+from functools import wraps
 
 import pytest
 
 from new_meta.agents.research_planner import ResearchPlanner
 from new_meta.core.method_planning import ProtocolInputRequired
+from new_meta.core.llm import LLMOutputError
 from new_meta.core.project import Project
 from new_meta.core.protocol_scope import ensure_project_protocol_scope, scope_fields, scope_receipt
-from new_meta.schemas.protocol import PICO, ResearchProtocol, ProtocolScopeAssessment
+from new_meta.schemas.protocol import PICO, ResearchProtocol, ProtocolScopeAssessment, ProtocolScopeReferenceAssessment
 
 TOPIC = "SGLT2 inhibitors versus placebo for chronic kidney disease progression; write the manuscript in English."
 
@@ -33,7 +35,31 @@ def batch_assessment(messages, protocol, **kwargs):
     fields = json.loads(messages[1]["content"].split(
         "Assess only the following batch fields exactly once:\n", 1)[1].split("\n\n", 1)[0])
     reviewed = assessment(protocol, **kwargs)
-    return ProtocolScopeAssessment(fields=[row for row in reviewed.fields if row.field in fields])
+    sources = json.loads(messages[1]["content"].split(
+        "Original source catalogue (exact runtime slices):\n", 1)[1].split("\n\n", 1)[0])
+    return ProtocolScopeReferenceAssessment(fields=[{
+        **row.model_dump(exclude={"original_quote"}), "source_id": sources[0]["source_id"],
+    } for row in reviewed.fields if row.field in fields])
+
+
+def scope_response_mock(response_fn):
+    """Give isolated controller tests explicit synthetic provider observations.
+
+    The source-faithful integration suite separately mocks only SDK create calls.
+    Production code must never infer an observation from a final typed result.
+    """
+    @wraps(response_fn)
+    def respond(*args, **kwargs):
+        result = response_fn(*args, **kwargs)
+        observe = kwargs.get("on_raw_response")
+        if observe is not None:
+            raw = result.model_dump_json() if hasattr(result, "model_dump_json") else json.dumps(result)
+            try:
+                observe({"content": raw, "finish_reason": "stop", "provider_response_ordinal": 1})
+            except Exception as exc:
+                raise LLMOutputError("Synthetic provider observer failed") from exc
+        return result
+    return respond
 
 
 @pytest.mark.parametrize("field,value", [
@@ -49,6 +75,7 @@ def test_independent_scope_rejects_material_drift(field, value, monkeypatch):
     setattr(target, field.split(".")[-1], value)
     planner = ResearchPlanner()
     calls = []
+    @scope_response_mock
     def check(messages, schema, **kwargs):
         calls.append(messages)
         return batch_assessment(messages, protocol, changes={field: {"status": "mismatch", "basis": "explicit",
@@ -105,12 +132,12 @@ def test_planner_repairs_known_design_label_then_independently_checks_scope(monk
         prompts.append(prompt)
         return next(responses)
     monkeypatch.setattr(planner, "call_llm_structured", generate)
-    monkeypatch.setattr(planner.llm, "structured_output", lambda messages, *args, **kwargs: batch_assessment(messages, corrected))
+    monkeypatch.setattr(planner.llm, "structured_output", scope_response_mock(lambda messages, *args, **kwargs: batch_assessment(messages, corrected)))
     result = planner.run(TOPIC)
     assert result.study_designs == ["parallel_rct"]
     assert "secondary_analysis_of_rcts" in prompts[1]
     assert "Never drop unsupported requested designs" in prompts[1]
-    assert result._scope_receipt["assessor"] == "independent_protocol_scope_v1"
+    assert result._scope_receipt["assessor"] == "independent_protocol_scope_sources_v1"
 
 
 def test_repeated_unsupported_proposal_is_preserved_not_executable(monkeypatch):
@@ -206,6 +233,7 @@ def test_scope_inventory_covers_operational_fields_and_each_treatment():
 def test_scope_rejects_proposal_mutation_during_check(monkeypatch):
     planner = ResearchPlanner(); protocol = proposal()
     reviewed = assessment(protocol)
+    @scope_response_mock
     def response(*args, **kwargs):
         protocol.pico.comparator = "Active treatment"
         return reviewed
@@ -245,7 +273,16 @@ def test_scope_receipt_symlink_does_not_overwrite_outside_file(tmp_path):
     target = project.base_dir / "analysis" / "protocol_scope.json"
     target.symlink_to(outside)
     protocol._scope_receipt = scope_receipt(TOPIC, protocol, assessment(protocol))
-    ensure_project_protocol_scope(project, protocol)
+    with pytest.raises(ProtocolInputRequired):
+        ensure_project_protocol_scope(project, protocol, allow_recheck=False)
+    assert target.is_symlink() and outside.read_text() == "preserve outside"
+    calls = []
+    class Reviewer:
+        def check_scope(self, topic, candidate):
+            calls.append(topic)
+            return scope_receipt(topic, candidate, assessment(candidate, topic=topic))
+    ensure_project_protocol_scope(project, protocol, planner=Reviewer())
+    assert calls == [TOPIC]
     assert outside.read_text() == "preserve outside"
     assert not target.is_symlink()
 
@@ -256,8 +293,11 @@ def test_scope_writes_refuse_symlinked_analysis_parent(tmp_path, operation):
     outside = tmp_path / "outside"; outside.mkdir()
     folder = project.base_dir / "analysis"; folder.rmdir(); folder.symlink_to(outside, target_is_directory=True)
     protocol._scope_receipt = scope_receipt(TOPIC, protocol, assessment(protocol))
+    class Reviewer:
+        def check_scope(self, topic, candidate):
+            return scope_receipt(topic, candidate, assessment(candidate, topic=topic))
     with pytest.raises(OSError):
-        if operation == "receipt": ensure_project_protocol_scope(project, protocol)
+        if operation == "receipt": ensure_project_protocol_scope(project, protocol, planner=Reviewer())
         else: ProtocolInputRequired("unsupported", protocol=protocol, project=project)
     assert list(outside.iterdir()) == []
 
@@ -297,8 +337,8 @@ def test_reconciled_design_cannot_change_explicit_scope_even_without_numeric_poo
     protocol.study_designs = ["cluster_rct"]; protocol.study_design = "cluster_rct"
     checked = assessment(protocol, topic=topic, changes={"study_designs": {
         "status": "mismatch", "basis": "explicit", "rationale": "Detected cluster design is outside the original individual-randomization scope."}})
-    monkeypatch.setattr(LLMClient, "structured_output", lambda self, messages, *args, **kwargs:
-                        batch_assessment(messages, protocol, topic=topic, changes={row.field: row.model_dump() for row in checked.fields}))
+    monkeypatch.setattr(LLMClient, "structured_output", scope_response_mock(lambda self, messages, *args, **kwargs:
+                        batch_assessment(messages, protocol, topic=topic, changes={row.field: row.model_dump() for row in checked.fields})))
     with pytest.raises(ReleaseBlockedError):
         _admit_cli_protocol(project, protocol, enforce=True)
     assert not project.get_path("meta_results.json", subdir="analysis").exists()
@@ -320,6 +360,7 @@ def test_existing_planner_loop_repairs_scope_drift_against_original_not_feedback
     def generate(prompt, *args, **kwargs):
         calls.append(prompt); current["protocol"] = next(candidates)
         return current["protocol"]
+    @scope_response_mock
     def independent(messages, *args, **kwargs):
         candidate = current["protocol"]
         assert TOPIC in messages[1]["content"]
@@ -339,7 +380,7 @@ def test_explicit_publication_language_requirement_is_preserved(monkeypatch):
     protocol.inclusion_criteria = ["English-language publications only"]
     topic = "SGLT2 inhibitors versus placebo for kidney disease progression; include English-language publications only."
     monkeypatch.setattr(planner, "call_llm_structured", lambda *args, **kwargs: protocol)
-    monkeypatch.setattr(planner.llm, "structured_output", lambda messages, *args, **kwargs: batch_assessment(messages, protocol, topic=topic))
+    monkeypatch.setattr(planner.llm, "structured_output", scope_response_mock(lambda messages, *args, **kwargs: batch_assessment(messages, protocol, topic=topic)))
     result = planner.run(topic)
     assert result.language == "English only"
     assert result.inclusion_criteria == ["English-language publications only"]
