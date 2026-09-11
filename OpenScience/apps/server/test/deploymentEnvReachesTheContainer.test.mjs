@@ -76,9 +76,11 @@ const operatorLevers = {
   // so the lever is new and this is what makes it real.
   OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT: ["open-science-web"],
   // Selecting a recall index is a deployment decision, and the failure mode of
-  // a missing lever here is the quiet one: the provider stays `builtin`, every
-  // recall still returns memories, and the only evidence that the setting was
-  // ignored is that quality never changed.
+  // a missing lever here is the quiet one: the deployment keeps whichever
+  // provider the compose default names — `openviking` since 2026-09-11, so an
+  // operator who chose `builtin` keeps paying for embeddings — and every recall
+  // still returns memories, which is why nothing ever reports the setting was
+  // dropped.
   OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_INDEX_STRICT: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_URL: ["open-science-web"],

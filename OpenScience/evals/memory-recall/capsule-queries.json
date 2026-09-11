@@ -1,0 +1,105 @@
+{
+  "$comment": "Each query is worded the way a researcher would ask it in the middle of work, not the way the fact is written. A query that shares the fact's words measures nothing an index could improve, and a capsule's whole promise is that the model remembers what was meant rather than what was typed.",
+  "queries": [
+    {
+      "query": "做剂量反应那种分析，我这边一般是怎么跑的？",
+      "expected": [
+        "cf013"
+      ]
+    },
+    {
+      "query": "合并结果之间差异特别大的时候，下一步该干什么",
+      "expected": [
+        "cf020"
+      ]
+    },
+    {
+      "query": "写结果的时候要不要把 p 值单独列出来",
+      "expected": [
+        "cf032",
+        "cf034"
+      ]
+    },
+    {
+      "query": "这个人平时研究什么方向的药",
+      "expected": [
+        "cf002"
+      ]
+    },
+    {
+      "query": "钠-葡萄糖共转运蛋白抑制剂对肾功能到底有没有好处",
+      "expected": [
+        "cf046",
+        "cf047",
+        "cf086"
+      ]
+    },
+    {
+      "query": "我们对中成药的临床试验是什么看法",
+      "expected": [
+        "cf006"
+      ]
+    },
+    {
+      "query": "评价一项诊断试验的质量用哪个清单",
+      "expected": [
+        "cf023"
+      ]
+    },
+    {
+      "query": "老人吃很多种药那个课题现在进行到哪一步了",
+      "expected": [
+        "cf095",
+        "cf100"
+      ]
+    },
+    {
+      "query": "以前在哪些说法上被指出过错，别再写错",
+      "expected": [
+        "cf086"
+      ]
+    },
+    {
+      "query": "组里对观察性数据的可信程度有没有争论",
+      "expected": [
+        "cf091"
+      ]
+    },
+    {
+      "query": "稿子要投出去之前，最后还会做一件什么事",
+      "expected": [
+        "cf038"
+      ]
+    },
+    {
+      "query": "用遗传变异推因果的时候前提要怎么交代",
+      "expected": [
+        "cf028"
+      ]
+    },
+    {
+      "query": "看不良反应的苗头一般盯哪几个指标",
+      "expected": [
+        "cf030"
+      ]
+    },
+    {
+      "query": "给医生看的那版摘要写多长合适",
+      "expected": [
+        "cf036"
+      ]
+    },
+    {
+      "query": "我手上有哪些肾脏方面的指南文件",
+      "expected": [
+        "cf109"
+      ]
+    },
+    {
+      "query": "合并的时候安慰剂对照和常规治疗对照怎么处理，之前定过吗",
+      "expected": [
+        "cf104"
+      ]
+    }
+  ]
+}

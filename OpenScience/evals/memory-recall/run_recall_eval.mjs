@@ -15,6 +15,13 @@
  *   node evals/memory-recall/run_recall_eval.mjs --arm builtin
  *   node evals/memory-recall/run_recall_eval.mjs --arm openviking --url http://127.0.0.1:1933 --seed-index
  *
+ * `--label` names a run in its own results, because the arm no longer says
+ * what was measured: two `openviking` runs against servers configured with
+ * different embedders are different arms, and a comparison whose rows are both
+ * called `openviking` is one nobody can read a month later.
+ *
+ *   node evals/memory-recall/run_recall_eval.mjs --arm openviking --url ... --label qwen
+ *
  * The key, if the server needs one, comes from OPEN_SCIENCE_OPENVIKING_API_KEY
  * or its _FILE form. It is never written to the results.
  */
@@ -32,11 +39,12 @@ const { MemorySubstrate } = await import(path.join(serverSrc, "memorySubstrate.m
 const { DURABLE_RECALL_KINDS, recallContent, searchTokens } = await import(path.join(serverSrc, "memoryRecallPolicy.mjs"));
 
 function parseArguments(argv) {
-  const options = { arm: "builtin", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "" };
+  const options = { arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "" };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if (flag === "--arm") { options.arm = value; index += 1; }
+    else if (flag === "--label") { options.label = value; index += 1; }
     else if (flag === "--url") { options.url = value; index += 1; }
     else if (flag === "--limit") { options.limit = Number(value); index += 1; }
     else if (flag === "--user") { options.user = value; index += 1; }
@@ -46,6 +54,10 @@ function parseArguments(argv) {
   }
   if (!["builtin", "openviking"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
   if (options.arm === "openviking" && !options.url) throw new Error("--url is required for the openviking arm");
+  // Free-form on purpose: what distinguishes two runs of one arm is whatever
+  // the operator changed, and a closed list here would have to be edited before
+  // every measurement it was meant to record.
+  if (!options.label) options.label = options.arm;
   return options;
 }
 
@@ -162,6 +174,7 @@ for (const { query, expected } of gold.queries) {
 const expectedTotal = rows.reduce((total, row) => total + row.of, 0);
 const hitTotal = rows.reduce((total, row) => total + row.hit, 0);
 const summary = {
+  label: options.label,
   arm: substrate.provider,
   active: substrate.active,
   lastError: substrate.lastError,
