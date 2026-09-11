@@ -170,6 +170,7 @@ test("release manifest generator records exact images, tools, skills, and source
         "deploy/host",
         "scripts/ops/archive-crypto.mjs",
         "scripts/ops/backup-archive.mjs",
+        "scripts/ops/backup_integrity.py",
         "scripts/ops/backup-data.sh",
         "scripts/ops/backup-retention.mjs",
         "scripts/ops/backup-scheduler.mjs",

@@ -15,6 +15,9 @@ import tarfile
 import uuid
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from backup_integrity import IntegrityError, MANIFEST_NAME, MAX_MANIFEST_BYTES, verify_tree, write_receipt
+
 
 class RecoveryError(Exception):
     def __init__(self, code: str, *, installed: bool = False):
@@ -205,6 +208,9 @@ def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
             member_count += 1
             parts = archive_member_parts(member.name)
             normalized = "/".join(parts) if parts else "."
+            if parts and parts[0] == MANIFEST_NAME and (
+                    normalized != MANIFEST_NAME or not member.isfile() or member.size > MAX_MANIFEST_BYTES):
+                raise RecoveryError("backup_inventory_invalid")
             path_bytes = len(normalized.encode("utf-8"))
             if member_count > limits.members or len(parts) > limits.depth or path_bytes > limits.path:
                 raise RecoveryError("recovery_limit_exceeded")
@@ -259,6 +265,11 @@ def extract_archive(archive_fd: int, staging_fd: int, limits=None) -> None:
                 os.close(descriptor)
     if member_count == 0 or root_metadata is None:
         raise RecoveryError("numeric_owner_archive_invalid")
+    try:
+        receipt = verify_tree(staging_fd)
+    except IntegrityError as error:
+        raise RecoveryError(str(error)) from None
+    write_receipt(receipt, root_fd=staging_fd)
     for parts, uid, gid, mode in sorted(directory_metadata, key=lambda value: len(value[0]), reverse=True):
         descriptor = ensure_directory(staging_fd, parts)
         try:

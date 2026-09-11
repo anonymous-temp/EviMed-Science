@@ -472,11 +472,13 @@ jobs:
               assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
           PYCODE
           docker volume create "$OPEN_SCIENCE_DATA_VOLUME"
+          # Initialize the canonical empty user tree before the backup-first
+          # startup dependency; restore integrity uses the actual archive inventory.
           docker run --rm --network none --user 0 --entrypoint sh \
             -v "${OPEN_SCIENCE_DATA_VOLUME}:/data" \
             -v "$RUNNER_TEMP/ci-pharmacy-reference.sqlite:/ci-fixture.sqlite:ro" \
             "$OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE" \
-            -ec 'test ! -e /data/pharmacy-reference.sqlite; cp /ci-fixture.sqlite /data/pharmacy-reference.sqlite; chmod 444 /data/pharmacy-reference.sqlite'
+            -ec 'test ! -e /data/pharmacy-reference.sqlite; mkdir -p /data/users; chmod 700 /data/users; cp /ci-fixture.sqlite /data/pharmacy-reference.sqlite; chmod 444 /data/pharmacy-reference.sqlite'
 
       - name: Start production Compose stack
         run: >-

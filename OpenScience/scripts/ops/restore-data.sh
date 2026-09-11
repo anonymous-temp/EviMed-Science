@@ -65,30 +65,9 @@ if head -n 1 "$ARCHIVE" | grep -qx "OPEN_SCIENCE_BACKUP_ENCRYPTED_V1"; then
   archive_for_restore="$decrypted_archive"
 fi
 
-if tar -tzf "$archive_for_restore" | awk '
-  $0 == "" { next }
-  $0 ~ /^\// || $0 ~ /^(\.\.)(\/|$)/ || $0 ~ /(^|\/)\.\.(\/|$)/ {
-    print "Unsafe archive path: " $0 > "/dev/stderr"
-    bad=1
-  }
-  END { exit bad ? 1 : 0 }
-'; then
-  :
-else
-  exit 1
-fi
-
-if tar -tvzf "$archive_for_restore" | awk '
-  substr($1, 1, 1) == "l" {
-    print "Refusing to restore archive containing symbolic links: " $0 > "/dev/stderr"
-    bad=1
-  }
-  END { exit bad ? 1 : 0 }
-'; then
-  :
-else
-  exit 1
-fi
+# Inspect decoded members before tar can create links, traverse paths or
+# overwrite a duplicate entry. The extraction remains the existing tar path.
+python3 "$SCRIPT_DIR/backup_integrity.py" check-archive "$archive_for_restore"
 
 parent="$(dirname "$DATA_DIR")"
 mkdir -p "$parent"
@@ -113,6 +92,10 @@ if find "$tmp" \( -type l -o \! -type d \! -type f \) -print -quit | grep -q .; 
   echo "Refusing to restore archive that extracted unsupported entries." >&2
   exit 1
 fi
+
+# Verify the complete staged tree before installing it; the private manifest
+# is removed only after every path, type, size and content hash agrees.
+python3 "$SCRIPT_DIR/backup_integrity.py" "$tmp"
 
 if [ -e "$target" ]; then
   rm -rf "$target"

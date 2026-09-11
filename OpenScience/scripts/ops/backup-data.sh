@@ -51,6 +51,9 @@ const root = path.resolve(process.argv[2]);
 const entries = [];
 
 function collect(relative) {
+  if (relative === '.open-science-backup-manifest.json') {
+    throw new Error('Refusing a reserved backup manifest path in customer data.');
+  }
   const parts = relative.split('/');
   const managedRuntime = parts.length >= 6 && parts[0] === 'users' && parts[2] === 'projects'
     && parts[4] === 'runtime' && parts[5] === 'container-runtime';

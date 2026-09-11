@@ -15,6 +15,11 @@ const [rootArgument, manifestPath, outputPath, strictArgument = "false"] = inven
 const root = path.resolve(rootArgument);
 const strict = strictArgument === "true";
 const octalMaximum = 0o77777777777;
+// The reader in backup_integrity.py shares this bounded, versioned contract.
+const integrityManifestName = ".open-science-backup-manifest.json";
+const integrityManifestPrefix = '{"format":"open-science-backup-inventory","version":1,"entries":[';
+const maximumManifestBytes = 64 * 1024 * 1024;
+const maximumManifestEntries = 1_000_000;
 let outputCreated = false;
 
 const managedRuntimePrefix = ["users", null, "projects", null, "runtime", "container-runtime"];
@@ -65,6 +70,7 @@ async function digestHandle(handle, size) {
 async function createInventory() {
   const entries = [];
   async function collect(relative) {
+    if (relative === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
     const parts = relative ? relative.split("/") : [];
     const decision = managedRuntimeDecision(parts);
     if (!decision.included) return false;
@@ -124,6 +130,7 @@ function validateEntry(entry) {
       .every(value => typeof value === "string" && /^\d+$/.test(value))) {
     throw new Error("Invalid backup inventory entry.");
   }
+  if (parts[0] === integrityManifestName) throw new Error("Refusing a reserved backup manifest path in customer data.");
   if (strict && (!(typeof entry.ctimeNs === "string" && /^\d+$/.test(entry.ctimeNs))
     || !(typeof entry.nlink === "string" && /^\d+$/.test(entry.nlink))
     || (entry.type === "file" && !(typeof entry.sha256 === "string" && /^[a-f0-9]{64}$/.test(entry.sha256))))) {
@@ -221,6 +228,18 @@ async function createArchive() {
   const entries = JSON.parse(await readFile(manifestPath, "utf8"));
   if (!Array.isArray(entries) || !entries.length) throw new Error("Backup inventory is empty.");
   entries.forEach(validateEntry);
+  const rootEntry = entries.find(entry => entry.path === "." && entry.type === "directory");
+  if (!rootEntry || entries.length > maximumManifestEntries || new Set(entries.map(entry => entry.path)).size !== entries.length) {
+    throw new Error("Invalid or oversized backup inventory.");
+  }
+  const archivedEntries = [];
+  let manifestBytes = Buffer.byteLength(integrityManifestPrefix) + 2;
+  const recordArchived = (entry) => {
+    const serialized = JSON.stringify(entry);
+    manifestBytes += Buffer.byteLength(serialized) + (archivedEntries.length ? 1 : 0);
+    if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
+    archivedEntries.push(serialized);
+  };
   const directories = entries.filter(entry => entry.type === "directory");
   const verifyEntries = async (items) => {
     for (const entry of items) {
@@ -235,23 +254,28 @@ async function createArchive() {
       const { handle, metadata } = await openEntry(entry);
       try {
         yield* headers(entry, metadata, index);
-        if (entry.type === "directory") continue;
+        if (entry.type === "directory") {
+          recordArchived({ path: entry.path, type: "directory", size: 0 });
+          continue;
+        }
         const size = Number(metadata.size);
         let written = 0;
-        const contentDigest = strict ? createHash("sha256") : null;
+        const contentDigest = createHash("sha256");
         if (size > 0) {
           for await (const chunk of handle.createReadStream({ start: 0, end: size - 1, autoClose: false })) {
             written += chunk.length;
-            contentDigest?.update(chunk);
+            contentDigest.update(chunk);
             yield chunk;
           }
         }
         if (written !== size) throw new Error("Backup source changed during its bounded read.");
+        const sha256 = contentDigest.digest("hex");
         const after = await handle.stat({ bigint: true });
         if (after.nlink > 1n) throw new Error("Backup source became hard-linked while being read.");
         if (String(metadata.size) !== entry.size || String(metadata.mtimeNs) !== entry.mtimeNs
           || after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs || after.nlink === 0n
-          || (strict && (contentDigest.digest("hex") !== entry.sha256 || !completeIdentityMatches(after, entry)))) changed++;
+          || (strict && (sha256 !== entry.sha256 || !completeIdentityMatches(after, entry)))) changed++;
+        recordArchived({ path: entry.path, type: "file", size, sha256 });
         yield padding(size);
       } finally {
         await handle.close();
@@ -260,6 +284,13 @@ async function createArchive() {
     // No archive is accepted after a directory substitution, even if a file
     // descriptor safely retained the original bytes while its name moved.
     await verifyEntries(strict ? entries : directories);
+    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]}`, "utf8");
+    yield* headers({ path: integrityManifestName, type: "file" }, {
+      size: BigInt(integrityManifest.length), mode: 0o600n, mtimeNs: 0n,
+      uid: BigInt(rootEntry.uid), gid: BigInt(rootEntry.gid),
+    }, entries.length);
+    yield integrityManifest;
+    yield padding(integrityManifest.length);
     yield Buffer.alloc(1024);
   }
   const output = await open(outputPath, "wx", 0o600);
