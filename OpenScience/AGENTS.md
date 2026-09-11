@@ -54,7 +54,7 @@ per-project workspace + JSONL provenance.
 - `deploy/runtime-dsh/` — the runtime image: Node, the pinned kernel, the socket
   bundle, the capability manifests and a profile pre-initialized at build time.
 - `deps-version.json` — the one place a tracked upstream pin is written
-  (`dsh` / `memos` / `openlist` / `mineru`). A Dockerfile ARG, a seam manifest,
+  (`dsh` / `openlist` / `mineru` / `openviking`). A Dockerfile ARG, a seam manifest,
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
 - `runtime/` — `mcp` (the `evimed` research server, 26 tools), `kernel` (the
