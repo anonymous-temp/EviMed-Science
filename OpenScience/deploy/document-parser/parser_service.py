@@ -7,6 +7,7 @@ import secrets
 import stat
 import subprocess
 import tempfile
+import threading
 import zipfile
 from pathlib import Path
 from typing import Any, Optional
@@ -218,6 +219,9 @@ def parse_document(request: ParseRequest, *, data_root: Path, chunk_chars: int =
 
 DATA_ROOT = Path(os.environ.get("EVIMED_PARSER_DATA_ROOT", "/data"))
 TOKEN_FILE = Path(os.environ.get("EVIMED_PARSER_TOKEN_FILE", "/run/secrets/document_parser_token"))
+# The single Uvicorn worker may serve health and idle HTTP connections while
+# only one authenticated request holds the memory-intensive parser slot.
+PARSE_SLOT = threading.BoundedSemaphore(1)
 app = FastAPI(title="EviMed document parser", docs_url=None, redoc_url=None)
 
 
@@ -239,6 +243,8 @@ def health() -> dict[str, Any]:
 @app.post("/v1/parse")
 def parse(request: ParseRequest, authorization: Optional[str] = Header(default=None)) -> dict[str, Any]:
     authenticate(authorization)
+    if not PARSE_SLOT.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="Document parser is busy.", headers={"Retry-After": "1"})
     try:
         return parse_document(request, data_root=DATA_ROOT)
     except ValueError as error:
@@ -247,3 +253,5 @@ def parse(request: ParseRequest, authorization: Optional[str] = Header(default=N
         raise HTTPException(status_code=504, detail="Document parsing timed out.") from error
     except (OSError, RuntimeError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=503, detail="Document parsing failed.") from error
+    finally:
+        PARSE_SLOT.release()
