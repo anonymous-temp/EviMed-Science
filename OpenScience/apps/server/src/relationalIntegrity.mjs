@@ -8,6 +8,8 @@ const orphanChecks = Object.freeze([
   ["inbox_notifications_user", "SELECT count(*)::integer AS count FROM evimed_inbox.notifications n LEFT JOIN evimed_control.users u ON u.id=n.user_id WHERE u.id IS NULL"],
   ["inbox_notifications_project", "SELECT count(*)::integer AS count FROM evimed_inbox.notifications n LEFT JOIN evimed_control.projects p ON p.user_id=n.user_id AND p.id=n.project_id WHERE n.project_id IS NOT NULL AND p.id IS NULL"],
   ["inbox_preferences_user", "SELECT count(*)::integer AS count FROM evimed_inbox.preferences p LEFT JOIN evimed_control.users u ON u.id=p.user_id WHERE u.id IS NULL"],
+  ["memory_records_user", "SELECT count(*)::integer AS count FROM evimed_memory.records r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
+  ["memory_notes_user", "SELECT count(*)::integer AS count FROM evimed_memory.notes n LEFT JOIN evimed_control.users u ON u.id=n.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_user", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_project", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.projects p ON p.user_id=r.user_id AND p.id=r.project_id WHERE p.id IS NULL"],
 ]);
@@ -22,28 +24,60 @@ const relationships = Object.freeze([
   ["inbox_notifications_user", "evimed_inbox", "notifications", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["inbox_notifications_project", "evimed_inbox", "notifications", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
   ["inbox_preferences_user", "evimed_inbox", "preferences", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
+  ["memory_records_user", "evimed_memory", "records", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
+  ["memory_notes_user", "evimed_memory", "notes", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["usage_model_requests_user", "evimed_usage", "model_requests", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["usage_model_requests_project", "evimed_usage", "model_requests", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
 ]);
 
+const auditedSchemas = Object.freeze(["evimed_product", "evimed_inbox", "evimed_usage", "evimed_memory"]);
+
+/** The only tables an audit may find missing.
+ *
+ *  `evimed_memory` is migrated by the research-memory store when the server
+ *  constructs it, and nothing else in this repository calls that migration yet,
+ *  so the integrity script and the migration tests reach a database where the
+ *  two tables legitimately do not exist. Every other registered table is
+ *  migrated by a caller these tools already run, and a missing one there means
+ *  a dropped table — which must keep failing the audit, loudly, the way it did
+ *  before this list existed. Delete an entry the moment its migration has a
+ *  caller on every path that audits. */
+const toleratedAbsentTables = Object.freeze(["evimed_memory.records", "evimed_memory.notes"]);
+
 function identifier(value) { return `"${String(value).replaceAll('"', '""')}"`; }
 
-/** Audit existing ownership rows and the validation state of every required FK. */
+/** Audit existing ownership rows and the validation state of every required FK.
+ *
+ *  A table on the tolerated list above is reported as absent rather than
+ *  failed; any other missing table falls through to its orphan query and fails
+ *  the audit with the relation error PostgreSQL raises. */
 export async function relationalIntegrity(database, { validate = false } = {}) {
+  const present = new Set((await database.query(`SELECT n.nspname||'.'||t.relname AS name FROM pg_class t
+    JOIN pg_namespace n ON n.oid=t.relnamespace WHERE t.relkind='r' AND n.nspname=ANY($1::text[])`,
+  [auditedSchemas])).rows.map((row) => row.name));
+  const tableOf = new Map(relationships.map(([name, schema, table]) => [name, `${schema}.${table}`]));
+  const absent = relationships.map(([name]) => name).filter((name) => {
+    const table = tableOf.get(name) ?? "";
+    return toleratedAbsentTables.includes(table) && !present.has(table);
+  });
   const counts = {};
-  for (const [name, query] of orphanChecks) counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
+  for (const [name, query] of orphanChecks) {
+    if (absent.includes(name)) continue;
+    counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
+  }
   const orphanTotal = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const rows = (await database.query(`SELECT n.nspname AS schema_name,t.relname AS table_name,c.conname,c.convalidated,
     pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid
     JOIN pg_namespace n ON n.oid=t.relnamespace WHERE c.contype='f'
-    AND n.nspname IN ('evimed_product','evimed_inbox','evimed_usage')`)).rows;
+    AND n.nspname=ANY($1::text[])`, [auditedSchemas])).rows;
   const matched = new Map();
   for (const [name, schema, table, prefix] of relationships) {
     const row = rows.find((candidate) => candidate.schema_name === schema && candidate.table_name === table
       && String(candidate.definition).startsWith(prefix));
     if (row) matched.set(name, { ...row, schema, table });
   }
-  const missing = relationships.map(([name]) => name).filter((name) => !matched.has(name));
+  const missing = relationships.map(([name]) => name)
+    .filter((name) => !matched.has(name) && !absent.includes(name));
   let unvalidated = [...matched].filter(([, row]) => !row.convalidated).map(([name]) => name);
   if (validate && orphanTotal === 0 && missing.length === 0 && unvalidated.length > 0) {
     await database.transaction(async (client) => {
@@ -55,5 +89,6 @@ export async function relationalIntegrity(database, { validate = false } = {}) {
     unvalidated = [];
   }
   return { ok: orphanTotal === 0 && missing.length === 0 && unvalidated.length === 0,
-    orphanTotal, counts, missing, unvalidated, validated: validate && orphanTotal === 0 && missing.length === 0 };
+    orphanTotal, counts, missing, unvalidated, absent,
+    validated: validate && orphanTotal === 0 && missing.length === 0 };
 }
