@@ -1,6 +1,7 @@
 """Resolve immutable original-question references through the unchanged quote gate."""
 from collections import Counter
 from dataclasses import dataclass
+import json
 import re
 
 from pydantic import BaseModel, ValidationError
@@ -57,6 +58,32 @@ class ScopeReferenceEvaluation:
     source_metadata: list[dict]
 
 
+def _coverage_reason(rows, counts, expected_fields):
+    """Give bounded exact names for correction without interpreting malformed names."""
+    required = set(expected_fields)
+    categories = {
+        "missing_fields": sorted(required - set(counts)),
+        "unexpected_fields": sorted(set(counts) - required),
+        "duplicate_fields": sorted(name for name, count in counts.items() if count != 1),
+    }
+    reason = {"code": "scope_field_coverage_invalid", "expected_count": len(required),
+              "observed_count": len(rows),
+              "invalid_field_count": sum(not isinstance(row, dict) or not isinstance(row.get("field"), str) for row in rows)}
+    actions = [f"Return exactly {len(required)} rows; observed {len(rows)}."]
+    labels = {"missing_fields": "Add missing fields", "unexpected_fields": "Remove unexpected fields",
+              "duplicate_fields": "Keep exactly one row for duplicate fields"}
+    for category, names in categories.items():
+        shown = [name for name in names if len(name) <= 120][:8]
+        reason[category] = shown
+        if len(shown) != len(names):
+            reason[category + "_omitted"] = len(names) - len(shown)
+        if shown:
+            actions.append(labels[category] + ": " + ", ".join(json.dumps(name, ensure_ascii=False) for name in shown) + ".")
+    actions.append("Use only the exact batch keys; do not change semantic judgments to fix coverage.")
+    reason["message"] = " ".join(actions)
+    return reason
+
+
 def evaluate_scope_references(topic, catalogue, response, expected_fields):
     """Retain raw duplicate counts even when some references cannot be resolved."""
     if isinstance(response, BaseModel):
@@ -75,8 +102,7 @@ def evaluate_scope_references(topic, catalogue, response, expected_fields):
     if set(response) != {"fields"}:
         reason = {"code": "scope_assessment_malformed", "message": "The assessment envelope may contain only fields."}
     if set(counts) != set(expected_fields) or any(count != 1 for count in counts.values()):
-        reason = {"code": "scope_field_coverage_invalid",
-                  "message": "Scope assessment must cover every requested field exactly once."}
+        reason = _coverage_reason(rows, counts, expected_fields)
     sources = {source["source_id"]: source for source in catalogue["sources"]}
     resolved = []
     used_sources = {}

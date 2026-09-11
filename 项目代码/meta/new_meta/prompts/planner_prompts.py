@@ -92,8 +92,11 @@ Assess only the following batch fields exactly once:
 
 This is one batch of a complete protocol review. The full original question and full
 protocol above remain the context for every judgment, including cross-field consistency.
-Return exactly these field names and list indices, including both a list field and its
-individual entries when requested. Do not return fields belonging to other batches.
+Return exactly {field_count} rows, one for each literal key listed in this batch.
+A list-valued field receives one row for the entire list; do not enumerate its items.
+Return an indexed child only if that literal indexed key is listed in this batch;
+it may belong to the next batch. The full protocol is context, not an additional
+field inventory. Do not add rows for keys absent from this batch.
 
 Return a JSON object with one fields array. Each row must contain exactly the five keys
 field, status, basis, source_id, and rationale. Use status match/mismatch/uncertain and basis explicit/not_explicit,

@@ -172,6 +172,7 @@ class ResearchPlanner(BaseAgent):
             original_prompt = planner_prompts.SCOPE_CHECK_PROMPT.format(
                 question=question, protocol=snapshot.model_dump_json(indent=2),
                 sources=json.dumps(source_prompt_catalogue(question, catalogue), ensure_ascii=False),
+                field_count=len(batch),
                 fields=json.dumps(batch, ensure_ascii=False))
             prompt = original_prompt
             retained_conflicts = {}
