@@ -196,8 +196,9 @@ test("readback compares exact fact and revision pairs read from the paths", asyn
     entries: [{ id: "runtime-note:ab12", revision: 4, factKind: "analysis", layer: "knowledge", content: "text" }] };
   const indexing = new MemoryIndexing({ database: {}, openViking: fake.client, jobs: {} });
 
-  // A capsule that was never written reads as an empty index, not as an error:
-  // rebuild is what repairs it, and it calls this first.
+  // A capsule that was never written answers 404 to `ls`. That has to read as
+  // an empty index rather than as a transport failure, or rebuild — which calls
+  // this before it writes anything — could never be the thing that repairs it.
   await assert.rejects(indexing.readback(snapshot), { code: "memory_index_readback_incomplete" });
 
   indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "analysis", factId: "runtime-note:ab12", revision: 3, content: "text" });
