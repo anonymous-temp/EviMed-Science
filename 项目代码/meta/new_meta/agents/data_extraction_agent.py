@@ -20,7 +20,7 @@ from new_meta.core.denominator_recovery import (
 )
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
 from new_meta.core.rct_design_reconciliation import reconcile_extracted_rct_designs
-from new_meta.schemas.study import ConflictNote, ExtractedStudy, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment
+from new_meta.schemas.study import ConflictNote, ExtractedStudy, ExtractionDataIssue, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment
 from new_meta.prompts import extraction_prompts
 from new_meta.agents.pdf_parser import get_page_for_position
 from new_meta.config import LLM_MAX_TOKENS_EXTRACTION, MAX_WORKERS, MAX_CHECK_ROUNDS
@@ -29,7 +29,8 @@ from new_meta.tools.utils import paper_identity, safe_identifier
 
 class ExtractionCheckResult(BaseModel):
     score: int = Field(ge=1, le=10)  # Advisory only; never overrides source checks.
-    issues: list[str] = []
+    issues: list[str] = Field(default_factory=list, description="Advisory observations only. Every actual row-data defect must be in data_issues; clinical fit belongs in primary_analysis_alignment.")
+    data_issues: list[ExtractionDataIssue] = Field(max_length=128, description="Required, possibly empty list of actual defects in the supplied indexed rows only. Never include omitted other study outcomes or clinical mismatch here.")
     suggestions: list[str] = []
     primary_analysis_alignment: list[PrimaryAlignmentAssessment] = []
 
@@ -294,6 +295,29 @@ class DataExtractionAgent(BaseAgent):
 
         # Save individual extraction
         sid = extracted.characteristics.pmid or extracted.characteristics.study_id or paper_id
+        from new_meta.core.primary_analysis_alignment import (
+            _read_scoped, invalidate_alignment_proofs, recover_issue_history,
+        )
+        try:
+            previous = ExtractedStudy.model_validate(json.loads(_read_scoped(
+                project, f"extraction/{safe_identifier(sid)}.json")))
+        except FileNotFoundError:
+            previous = None
+        except (OSError, ValueError):
+            # The persisted existence check in recover_issue_history will mark
+            # unreadable or malformed prior provenance as incomplete.
+            previous = None
+        if previous is not None:
+            # A fresh extraction is not permission to forget an earlier defect.
+            # Preserve the prior row's issue origin; changed values still need
+            # fresh independent verification, and source conflicts remain blocked.
+            for index, outcome in enumerate(extracted.outcomes):
+                if index < len(previous.outcomes):
+                    outcome.primary_analysis_alignment = previous.outcomes[index].primary_analysis_alignment
+        histories = {index: recover_issue_history(project, extracted, index, allow_new=True)
+                     for index in range(len(extracted.outcomes))}
+        invalidate_alignment_proofs(project, protocol, extracted, histories,
+                                    reason="Initial extraction awaits independent verification.")
         project.save_json(f"{safe_identifier(sid)}.json", extracted, subdir="extraction")
         return extracted
 
@@ -388,13 +412,11 @@ class DataExtractionAgent(BaseAgent):
         outcome_indices: list[int] | None = None, feedback: list[dict[str, Any]] | None = None,
     ) -> ExtractionCheckResult:
         """Check original-indexed rows against the full bounded source snapshot."""
-        from new_meta.core.extraction_verification import numeric_fields
+        from new_meta.core.extraction_verification import CHECKER_HIDDEN_FIELDS, numeric_fields
         indices = list(range(len(extracted.outcomes))) if outcome_indices is None else outcome_indices
-        derived = {"primary_analysis_alignment", "source_quote_verified", "source_quote_match",
-                   "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication"}
         data = {"characteristics": extracted.characteristics.model_dump(mode="json"),
                 "indexed_outcomes": [{"outcome_index": index,
-                    "outcome": extracted.outcomes[index].model_dump(mode="json", exclude=derived),
+                    "outcome": extracted.outcomes[index].model_dump(mode="json", exclude=CHECKER_HIDDEN_FIELDS),
                     "numeric_fields_to_verify": numeric_fields(extracted.outcomes[index])} for index in indices]}
         prompt = extraction_prompts.EXTRACTION_CHECK_PROMPT.format(
             paper_content=paper_content, protocol=protocol.model_dump_json(),
@@ -407,22 +429,35 @@ class DataExtractionAgent(BaseAgent):
 
     def _verify_alignment(self, extracted: ExtractedStudy, paper: dict, parsed: dict,
                           protocol: ResearchProtocol, project: Project) -> ExtractedStudy:
-        from new_meta.core.extraction_verification import validate_check_batch, verification_verdict
+        from new_meta.core.extraction_verification import (
+            refinement_indices, unresolved_issue_errors, update_issue_history,
+            validate_check_batch, validate_data_issues, verification_verdict,
+        )
         from new_meta.core.primary_analysis_alignment import (
-            _PROOF_DIR, _read_scoped, _write_scoped_once, digest, protocol_fingerprint,
-            record_checked_alignments, row_fingerprint,
+            _PROOF_DIR, _read_scoped, _write_scoped_atomic, _write_scoped_once, digest, protocol_fingerprint,
+            invalidate_alignment_proofs, record_checked_alignments, recover_issue_history, row_fingerprint,
         )
         content = str(parsed.get("full_text") or "")
         if parsed.get("tables"):
             content += "\n\n## EXTRACTED TABLES\n\n" + "\n\n".join(parsed["tables"])
-        for outcome in extracted.outcomes:
-            outcome.primary_analysis_alignment = None
+        histories = {index: recover_issue_history(project, extracted, index, allow_new=True)
+                     for index in range(len(extracted.outcomes))}
+        invalidate_alignment_proofs(project, protocol, extracted, histories,
+                                    reason="A fresh independent verification has not completed.")
         source_path = paper.get("pdf_path") or paper.get("fulltext_path") or None
         source_before = None
-        source_sha = ""
+        source_sha = hashlib.sha256(content.encode()).hexdigest() if source_path is None else ""
         study_id = extracted.characteristics.pmid or extracted.characteristics.study_id
         checked_sha = hashlib.sha256(content.encode()).hexdigest()
         protocol_sha = protocol_fingerprint(protocol)
+
+        def persist_pending_extraction():
+            # Use the existing per-study checkpoint. An interruption after an
+            # observed defect must not resume from the earlier issue-free row.
+            _write_scoped_atomic(project, f"extraction/{safe_identifier(study_id)}.json",
+                                 extracted.model_dump_json(indent=2).encode())
+
+        persist_pending_extraction()
 
         def record_attempt(batch, attempt, status, errors, checked=None, snapshot=None):
             payload = {"schema_version": 1, "study_id": study_id, "outcome_indices": batch,
@@ -458,47 +493,67 @@ class DataExtractionAgent(BaseAgent):
                 "source_characters": len(content), "limit": VERIFICATION_SOURCE_CHAR_LIMIT}])
             return extracted
         _write_scoped_once(project, f"{_PROOF_DIR}/{checked_sha}.txt", content.encode())
-        assessments, checked_rows, pending_reasons = [], {}, {}
+        assessments, checked_rows, pending_reasons = {}, {}, {}
         for start in range(0, len(indices), VERIFICATION_BATCH_SIZE):
             batch = indices[start:start + VERIFICATION_BATCH_SIZE]
             feedback = []
             for round_index in range(MAX_CHECK_ROUNDS):
                 snapshot = {index: row_fingerprint(extracted, index) for index in batch}
                 checked = None
+                data_errors = []
                 try:
                     checked = self._check_extraction(content, extracted, protocol, batch, feedback)
                     feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol)
+                    data_errors = validate_data_issues(extracted, batch, checked.data_issues, content)
+                    feedback.extend(data_errors)
                     if protocol_fingerprint(protocol) != protocol_sha:
                         feedback.append({"code": "verification_protocol_changed_during_check"})
-                    if checked.issues:
-                        feedback.append({"code": "unresolved_extraction_issues", "issues": checked.issues})
                     if any(row_fingerprint(extracted, index) != fingerprint for index, fingerprint in snapshot.items()):
                         feedback.append({"code": "verification_row_changed_during_check"})
+                    if source_before is not None and _read_scoped(project, relative_source) != source_before:
+                        feedback.append({"code": "verification_source_changed_during_check"})
                 except Exception as exc:
                     feedback = [{"code": "verification_response_unavailable", "error_type": type(exc).__name__}]
                     cause = exc.__cause__
                     if hasattr(cause, "errors"):
                         feedback[0]["validation_errors"] = cause.errors(include_input=False, include_context=False)
                     self.log(f"Independent verification for {study_id}, rows {batch}, attempt {round_index + 1} failed: {type(exc).__name__}", level="warning")
+                stable_rows = all(row_fingerprint(extracted, index) == fingerprint for index, fingerprint in snapshot.items())
+                complete_rows = {index for index in batch if not any(
+                    item.get("outcome_index") in {None, index} or item["code"].startswith("verification_")
+                    for item in feedback)}
+                update_issue_history(extracted, batch, histories, data_errors if stable_rows else [],
+                    source_sha256=source_sha, checked_source_sha256=checked_sha, protocol_sha256=protocol_sha,
+                    checked_rows=snapshot, complete_current_check=complete_rows)
+                feedback = [item for item in feedback if item["code"] not in {
+                    "row_data_issue", "row_source_conflict_requires_adjudication"}]
+                feedback.extend(unresolved_issue_errors(batch, histories))
+                for index in batch:
+                    if index in complete_rows and histories[index][1] and not histories[index][0] and checked is not None:
+                        assessments[index] = next(item for item in checked.primary_analysis_alignment if item.outcome_index == index)
+                        checked_rows[index] = snapshot[index]
+                    else:
+                        assessments.pop(index, None)
+                        checked_rows.pop(index, None)
+                invalidate_alignment_proofs(project, protocol, extracted, histories,
+                                            reason="Independent verification is incomplete or row-data issues remain.")
+                persist_pending_extraction()
                 complete = not feedback
                 exhausted = round_index + 1 == MAX_CHECK_ROUNDS or (bool(feedback) and all(
-                    item["code"] == "numeric_conflict_requires_adjudication" for item in feedback))
+                    item["code"] in {"numeric_conflict_requires_adjudication", "row_source_conflict_requires_adjudication"} for item in feedback))
                 record_attempt(batch, round_index + 1, "complete" if complete else "needs_input" if exhausted else "retry",
                                feedback, checked=checked, snapshot=snapshot)
                 if complete:
-                    assessments.extend(checked.primary_analysis_alignment)
-                    checked_rows.update(snapshot)
                     break
                 for index in batch:
                     pending_reasons[index] = list(feedback)
                 if exhausted:
                     break
-                numeric_repair = any(item["code"] in {"numeric_value_mismatch", "numeric_value_unverified",
-                                                      "numeric_quote_not_anchored", "numeric_status_unresolved", "unresolved_extraction_issues"} for item in feedback)
-                if not exhausted and checked is not None and numeric_repair:
-                    extracted = self._refine_extraction(content, extracted, checked, protocol, batch, feedback)
+                repair_rows = refinement_indices(feedback)
+                if not exhausted and checked is not None and repair_rows:
+                    extracted = self._refine_extraction(content, extracted, checked, protocol, repair_rows, feedback)
                     self._validate_source_quotes(extracted, content, parsed.get("page_map", []))
-                    for index in batch:
+                    for index in repair_rows:
                         recover_denominators_from_percentages(extracted.outcomes[index])
                     self._finalize_outcome_review_fields(extracted, protocol)
         try:
@@ -506,16 +561,17 @@ class DataExtractionAgent(BaseAgent):
                 raise ValueError("Protocol changed during independent verification")
             if source_before is not None and _read_scoped(project, relative_source) != source_before:
                 raise ValueError("Source changed during independent verification")
-            record_errors = record_checked_alignments(project, protocol, extracted, assessments,
+            record_errors = record_checked_alignments(project, protocol, extracted, list(assessments.values()),
                 source_text=content, source_path=source_path, checked_rows=checked_rows,
                 expected_source_sha256=source_sha or None, assessor_id=self.llm.model,
-                pending_reasons=pending_reasons)
+                pending_reasons=pending_reasons, issue_histories=histories)
             if record_errors:
                 record_attempt(indices, 0, "needs_input", record_errors)
         except (OSError, ValueError) as exc:
             record_attempt(indices, 0, "needs_input", [{"code": "verification_source_changed", "error_type": type(exc).__name__}])
-            for outcome in extracted.outcomes:
-                outcome.primary_analysis_alignment = None
+            invalidate_alignment_proofs(project, protocol, extracted, histories,
+                                        reason="Source or protocol changed during independent verification.")
+        persist_pending_extraction()
         return extracted
 
     def _refine_extraction(
@@ -524,7 +580,7 @@ class DataExtractionAgent(BaseAgent):
         feedback: list[dict[str, Any]] | None = None,
     ) -> ExtractedStudy:
         """Repair reported values in explicitly indexed rows, then reverify them."""
-        from new_meta.core.extraction_verification import NUMERIC_FIELDS, NUMERIC_MAP_FIELDS
+        from new_meta.core.extraction_verification import NUMERIC_MAP_FIELDS, REFINABLE_FIELDS
         indices = list(range(len(current.outcomes))) if outcome_indices is None else outcome_indices
         prompt = (
             "Correct the inaccurate numerical extraction using the complete source below. "
@@ -533,9 +589,8 @@ class DataExtractionAgent(BaseAgent):
             "Prefer directly reported estimates and precision over deriving them from a damaged abstract. "
             "Do not delete an unresolved value to evade verification; retain it with a conflict note.\n"
             f"Protocol: {protocol.model_dump_json()}\n"
-            f"Issues: {json.dumps(check_result.issues, ensure_ascii=False)}\n"
-            f"Suggestions: {json.dumps(check_result.suggestions, ensure_ascii=False)}\n"
-            f"Validation errors: {json.dumps(feedback or [], ensure_ascii=False)}\n"
+            f"Row data defects: {json.dumps([item.model_dump(mode='json') for item in check_result.data_issues if item.outcome_index in indices], ensure_ascii=False)}\n"
+            f"Validation errors: {json.dumps([item for item in feedback or [] if item.get('outcome_index') in indices], ensure_ascii=False)}\n"
             f"Original indexed rows: {json.dumps([{'outcome_index': index, 'outcome': current.outcomes[index].model_dump(mode='json', exclude={'primary_analysis_alignment'})} for index in indices], ensure_ascii=False)}\n"
             f"Complete source:\n{paper_content}"
         )
@@ -545,8 +600,7 @@ class DataExtractionAgent(BaseAgent):
             if set(returned) != set(indices) or len(returned) != len(indices):
                 return current
             result = current.model_copy(deep=True)
-            allowed = set(NUMERIC_FIELDS) | set(NUMERIC_MAP_FIELDS) | {"source_quote", "source_location", "source_page", "source_section",
-                "reported_effect_measure", "reported_effect_scale", "outcome_type", "p_value_inequality", "extraction_confidence"}
+            allowed = REFINABLE_FIELDS
             for item in refined.outcomes:
                 original = result.outcomes[item.outcome_index]
                 data = original.model_dump(mode="json", exclude={"primary_analysis_alignment"})
@@ -557,6 +611,7 @@ class DataExtractionAgent(BaseAgent):
                     elif value is not None and value != "":
                         data[field] = value
                 result.outcomes[item.outcome_index] = OutcomeData.model_validate(data)
+                result.outcomes[item.outcome_index].primary_analysis_alignment = original.primary_analysis_alignment
             return result
         except Exception as exc:
             self.log(f"Numeric refinement unavailable: {type(exc).__name__}", level="warning")

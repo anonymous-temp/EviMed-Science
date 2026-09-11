@@ -134,6 +134,8 @@ def test_method_executor_materializes_verified_records_from_evidence_ledger(tmp_
         extracted_studies=studies,
     )
     plan = compile_project_method_plan(project, protocol, allow_validating=True, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
 
     result = MethodExecutor().execute_project(
         plan,

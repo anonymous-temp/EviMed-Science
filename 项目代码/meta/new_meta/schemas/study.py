@@ -282,6 +282,25 @@ class NumericFieldVerification(VerificationSource):
     rationale: str = Field(min_length=1)
 
 
+class ExtractionDataIssue(VerificationSource):
+    """A source-backed defect in one supplied row, not a clinical-fit verdict."""
+    outcome_index: int = Field(ge=0, strict=True)
+    field: str = Field(min_length=1, max_length=128)
+    kind: Literal["incorrect_value", "missing_value", "source_conflict", "incorrect_metadata"]
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+class ExtractionDataIssueEvidence(BaseModel):
+    """Runtime-owned unresolved issue, bound to the versions where it arose."""
+    model_config = ConfigDict(extra="forbid")
+    issue: ExtractionDataIssue
+    field_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    row_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    protocol_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    checked_source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class EndpointComponentVerification(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     source_component: str = ""
@@ -339,6 +358,9 @@ class PrimaryAnalysisAlignment(BaseModel):
     source_sha256: str
     checked_source_path: str
     checked_source_sha256: str
+    unresolved_data_issues: list[ExtractionDataIssueEvidence] = Field(default_factory=list)
+    issue_history_complete: bool = False
+    current_checkpoint_path: str = ""
     proof_id: str
 
 

@@ -155,6 +155,8 @@ def test_nrsi_method_executor_materializes_adjusted_ledger_estimates(tmp_path: P
     ]
     migration = migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, allow_validating=True, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
 
     result = MethodExecutor().execute_project(
         plan,

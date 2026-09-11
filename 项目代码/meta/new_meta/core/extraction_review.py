@@ -237,6 +237,8 @@ def _save_alignment_adjudication(project, decision, *, assessor_id):
     if any(not value or value != status.get(key) for key, value in expected.items()):
         raise OverrideConflictError("Alignment adjudication uses stale protocol, row or source versions")
     proof = study.outcomes[index].primary_analysis_alignment
+    if proof is None or not proof.issue_history_complete or proof.unresolved_data_issues:
+        raise ValueError("Unresolved row-data issues or unavailable issue provenance require correcting the implicated fields and fresh independent verification before alignment review")
     assessment = decision.alignment_assessment
     source_text = _read_scoped(project, proof.checked_source_path).decode()
     if assessment.outcome_index != index or not _anchored(assessment, source_text):

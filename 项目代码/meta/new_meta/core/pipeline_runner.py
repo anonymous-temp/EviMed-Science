@@ -321,7 +321,7 @@ class PipelineRunner:
                 ],
                 error_code="verified_method_inputs_required",
             )
-        from new_meta.core.primary_analysis_alignment import alignment_status, is_verified_direct_ipd, needs_input_phase
+        from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, alignment_status, is_verified_direct_ipd, needs_input_phase
         from new_meta.core.extraction_ledger import result_entity_id
         from new_meta.schemas.study import ExtractedStudy
 
@@ -362,6 +362,8 @@ class PipelineRunner:
                 options=options,
                 auto_select_ambiguous=auto_select_ambiguous,
             )
+        except PrimaryAlignmentRequired as exc:
+            return exc.phase
         except MethodExecutionNeedsInput as exc:
             return PhaseResult(
                 run_id=self.project.base_dir.name,

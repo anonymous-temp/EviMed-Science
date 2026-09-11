@@ -35,6 +35,11 @@ def approve_synthetic_method_fixture(project, protocol, studies):
             assessments[index]["verification"] = verification_payload(outcome, assessments[index], numeric_quotes=numeric_quotes,
                 registry_id=registry_id, trial_quote=trial_quote, randomized=randomized)
         record_checked_alignments(project, protocol, study, assessments,
-                                  source_text="\n".join(source_rows), assessor_id="mock-independent-checker")
+                                  source_text="\n".join(source_rows), assessor_id="mock-independent-checker",
+                                  issue_histories={index: ([], True) for index in range(len(study.outcomes))})
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", studies, subdir="extraction")
+    # The real producer runs this existing migration after independent checking.
+    # Bind the synthetic ledger inputs to those explicit verifier oracles too.
+    from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
+    migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)

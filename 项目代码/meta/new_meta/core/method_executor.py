@@ -268,6 +268,8 @@ class MethodExecutor:
             raise MethodExecutionBlocked(
                 "released prognostic synthesis requires one explicitly recorded time horizon"
             )
+        from new_meta.core.primary_analysis_alignment import require_method_source_alignment
+        require_method_source_alignment(project, plan, requested, entities=entities)
 
         records: list[dict[str, Any]] = []
         for entity in entities:
@@ -407,6 +409,11 @@ class MethodExecutor:
                     f"ledger materializer is not implemented for {plan.family.value}"
                 )
         result = self.execute(plan, records=records, options=options)
+        # A long computation may overlap a verification update. Recheck before
+        # persisting or returning any synthesized result to its caller.
+        require_method_source_alignment(project, plan, requested, entities=entities)
+        if ledger.assert_valid().head_hash != verification.head_hash:
+            raise MethodExecutionBlocked("Evidence ledger changed during method execution; rerun with its current inputs")
         result = result.model_copy(update={
             "input_result_ids": requested,
             "input_ledger_head_hash": verification.head_hash,
