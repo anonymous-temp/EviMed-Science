@@ -1,3 +1,8 @@
+import json
+
+import pytest
+from pydantic import ValidationError
+
 from new_meta.agents.research_planner import ResearchPlanner
 from new_meta.schemas.protocol import PICO, ResearchProtocol
 
@@ -66,3 +71,81 @@ def test_research_planner_forces_hr_for_explicit_survival_endpoint() -> None:
     ResearchPlanner._apply_effect_measure_rules(protocol)
 
     assert protocol.effect_measure == "HR"
+
+
+
+def _typed_protocol_payload(outcome_type):
+    return {
+        "research_question": "SGLT2 inhibitors versus placebo for chronic kidney disease progression",
+        "pico": {"population": "Adults with CKD", "intervention": "SGLT2 inhibitors", "comparator": "Placebo", "outcome_primary": "Composite kidney disease progression"},
+        "review_family": "intervention_rct", "effect_measure": "RR", "primary_outcome_type": outcome_type,
+    }
+
+
+@pytest.mark.parametrize("outcome_type", ["dichotomous_composite_renal_outcome", "continuous_kidney_function", "unknown", "binary_or_survival", "???", None, 2])
+def test_protocol_rejects_invented_outcome_type_tags(outcome_type):
+    with pytest.raises(ValidationError, match="primary_outcome_type"):
+        ResearchProtocol.model_validate(_typed_protocol_payload(outcome_type))
+
+
+@pytest.mark.parametrize("alias, canonical", [
+    ("binary", "dichotomous"), ("categorical", "dichotomous"),
+    ("survival", "time_to_event"), ("time-event", "time_to_event"),
+    (" TIME-TO-EVENT ", "time_to_event"), ("incidence", "incidence_rate"),
+    ("overall", "overall_performance"), ("  ", ""),
+])
+def test_protocol_preserves_existing_exact_outcome_type_aliases(alias, canonical):
+    protocol = ResearchProtocol.model_validate(_typed_protocol_payload(alias))
+    assert protocol.primary_outcome_type == canonical
+
+
+def test_protocol_schema_covers_all_registered_method_outcome_types():
+    from new_meta.core.method_registry import default_method_registry
+
+    registry = default_method_registry()
+    expected = {value for family in registry.families() for value in registry.plugin(family).supported_outcome_types}
+    expected.discard("binary")  # Existing exact alias for dichotomous.
+    enum = ResearchProtocol.model_json_schema()["properties"]["primary_outcome_type"]["enum"]
+    assert set(enum) == expected | {""}
+    for outcome_type in enum:
+        assert ResearchProtocol.model_validate(_typed_protocol_payload(outcome_type)).primary_outcome_type == outcome_type
+
+
+def test_actual_invalid_protocol_type_uses_existing_structured_model_repair(monkeypatch, tmp_path):
+    import new_meta.core.llm as llm_module
+    from new_meta.core.method_planning import compile_project_method_plan
+    from new_meta.core.project import Project
+
+    monkeypatch.setattr(llm_module, "LLM_JSON_REPAIR_RETRIES", 1)
+    planner = ResearchPlanner()
+    invalid = _typed_protocol_payload("dichotomous_composite_renal_outcome")
+    corrected = _typed_protocol_payload("dichotomous")
+    responses = iter([json.dumps(invalid), json.dumps(corrected)])
+    calls = []
+
+    def fake_call(**kwargs):
+        calls.append(kwargs)
+        return next(responses)
+
+    monkeypatch.setattr(planner.llm, "_call", fake_call)
+    protocol = planner.run(invalid["research_question"])
+    assert len(calls) == 2
+    repair_prompt = calls[1]["messages"][-1]["content"]
+    assert "primary_outcome_type" in repair_prompt
+    assert "dichotomous_composite_renal_outcome" in repair_prompt
+    assert "literal_error" in repair_prompt
+    assert protocol.primary_outcome_type == "dichotomous"
+    assert protocol.pico.outcome_primary == invalid["pico"]["outcome_primary"]
+    plan = compile_project_method_plan(Project("protocol repair", output_dir=tmp_path), protocol)
+    assert plan.outcome_type == "dichotomous"
+
+
+
+def test_valid_type_for_wrong_review_family_still_fails_method_compilation(tmp_path):
+    from new_meta.core.method_planning import compile_project_method_plan
+    from new_meta.core.method_registry import MethodCompilationError
+    from new_meta.core.project import Project
+
+    protocol = ResearchProtocol.model_validate(_typed_protocol_payload("diagnostic_accuracy"))
+    with pytest.raises(MethodCompilationError, match="not supported by intervention_rct"):
+        compile_project_method_plan(Project("wrong family", output_dir=tmp_path), protocol)

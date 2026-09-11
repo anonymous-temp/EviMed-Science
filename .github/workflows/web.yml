@@ -342,7 +342,13 @@ jobs:
           wait "$build_pid"
           # Images were loaded into the daemon; discard only this job's owned
           # BuildKit cache before pulling dependencies or creating an archive.
-          docker buildx rm evimed-ci
+          # Buildx's short API deadline expired deleting the full-build cache
+          # after all twelve images had loaded. Remove that exact volume with
+          # the Docker CLI under a separate bounded cleanup deadline.
+          docker buildx rm --keep-state evimed-ci
+          timeout 300 docker volume rm buildx_buildkit_evimed-ci0_state
+          remaining_cache_volume="$(docker volume ls -q --filter name='^buildx_buildkit_evimed-ci0_state$')"
+          test -z "$remaining_cache_volume"
 
       # The kernel is installed as an npm global, not as a fetched binary, so
       # what is checked is that the launcher resolves, that its version is the

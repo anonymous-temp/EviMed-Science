@@ -1,7 +1,10 @@
 """Research protocol and PICO data models."""
 from __future__ import annotations
 
-from pydantic import BaseModel, model_validator
+import re
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PICO(BaseModel):
@@ -41,7 +44,39 @@ class ResearchProtocol(BaseModel):
     # Versioned method-planning fields. Empty review_family retains deterministic
     # backward-compatible inference for legacy protocols.
     review_family: str = ""
-    primary_outcome_type: str = ""
+    primary_outcome_type: Literal[
+        "", "dichotomous", "continuous", "time_to_event", "count", "proportion",
+        "incidence_rate", "diagnostic_accuracy", "discrimination", "calibration",
+        "overall_performance", "any",
+    ] = Field(
+        default="",
+        description=(
+            "Statistical outcome type: choose exactly one canonical enum value. "
+            "Keep disease names, composite endpoint components and time horizons in "
+            "pico.outcome_primary, never append them to this type. Empty is reserved "
+            "for legacy protocols whose type is inferred from the method fields."
+        ),
+    )
+
+    @field_validator("primary_outcome_type", mode="before")
+    @classmethod
+    def _normalize_primary_outcome_type(cls, value):
+        """Preserve the method normalizer's exact aliases; never infer from prose."""
+        if not isinstance(value, str):
+            return value
+        if not value.strip():
+            return ""
+        normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+        aliases = {
+            "binary": "dichotomous",
+            "categorical": "dichotomous",
+            "survival": "time_to_event",
+            "time_event": "time_to_event",
+            "incidence": "incidence_rate",
+            "overall": "overall_performance",
+        }
+        return aliases.get(normalized, normalized) if normalized else value
+
     protocol_version: str = "1.0"
     # NMA support
     interventions: list[str] = []  # Multiple interventions for network meta-analysis
