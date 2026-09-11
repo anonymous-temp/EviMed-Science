@@ -236,8 +236,11 @@ export function MemoryPage() {
   };
 
   const connected = status?.connected === true;
+  // The pill is the positive mirror of the sentence an unnamed failure gets, so
+  // the two halves of one state read as one pair; 库 stays inside the store's
+  // own four sentences above, where it names the thing that failed.
   const statusText = connected
-    ? "科研记忆库已连接"
+    ? "科研记忆服务已连接"
     : statusMessages[status?.code ?? ""] ?? "科研记忆服务未连接";
 
   return (
