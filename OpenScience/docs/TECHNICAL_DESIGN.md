@@ -509,7 +509,7 @@ ai4s-workbench/
   packages/{domain,harness-port,socket,contracts,shared,ui}/
   capabilities/  capability-skills/
   runtime/{mcp,kernel,skills}/
-  deploy/{web,runtime-dsh,specialist-adapter,memos,tooluniverse}/
+  deploy/{web,runtime-dsh,specialist-adapter,tooluniverse}/
   deps-version.json                # the one place an upstream pin is written
   docs/{PRD.md,TECHNICAL_DESIGN.md}
   examples/bci-trends/
