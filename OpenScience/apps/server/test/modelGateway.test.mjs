@@ -31,6 +31,7 @@ async function close(server) {
 
 function config(baseUrl, overrides = {}) {
   return {
+    deepseekProviderEnabled: true,
     deepseekApiKey: "server-only-test-secret",
     deepseekBaseUrl: baseUrl,
     deepseekModel: "deepseek-v4-pro",
@@ -40,6 +41,30 @@ function config(baseUrl, overrides = {}) {
     ...overrides,
   };
 }
+
+test("an explicitly disabled model provider never dispatches with a loaded upstream key", async (t) => {
+  let upstreamCalls = 0;
+  const gateway = createServer(createModelGatewayHandler(config("https://provider.invalid", {
+    deepseekProviderEnabled: false,
+  }), runtimeManager(), {
+    fetchImpl: async () => {
+      upstreamCalls += 1;
+      return new Response(JSON.stringify({ choices: [] }), { headers: { "content-type": "application/json" } });
+    },
+  }));
+  const gatewayBase = await listen(gateway);
+  t.after(() => close(gateway));
+  const response = await fetch(`${gatewayBase}/internal/model/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }] }),
+  });
+  assert.equal(response.status, 503);
+  const body = await response.text();
+  assert.match(body, /model_gateway_unavailable/);
+  assert.doesNotMatch(body, /server-only-test-secret/);
+  assert.equal(upstreamCalls, 0);
+});
 
 test("model gateway caps declared upstream response bodies without leaking provider data", async (t) => {
   const upstream = createServer(async (req, res) => {
