@@ -1,0 +1,205 @@
+{
+  "origin": {
+    "run_id": "meta-20260912055409-b90abae81254",
+    "artifact": "analysis/protocol_input_status.json"
+  },
+  "topic": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+  "proposal": {
+    "research_question": "In randomized adults with type 2 diabetes and albuminuric chronic kidney disease (excluding maintenance dialysis or transplantation at baseline), what is the effect of canagliflozin 100 mg daily versus matching placebo on the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (excluding cardiovascular death), using only the main reports PMID 30990260 and PMID 35861630?",
+    "pico": {
+      "population": "Randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.",
+      "intervention": "Canagliflozin 100 mg daily.",
+      "comparator": "Matching placebo.",
+      "outcome_primary": "Reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; excludes cardiovascular death. Extract exactly one overall randomized-cohort hazard ratio (HR) with directly reported 95% CI per trial.",
+      "outcomes_secondary": []
+    },
+    "study_design": "parallel_rct",
+    "study_designs": [
+      "parallel_rct"
+    ],
+    "inclusion_criteria": [
+      "Main report identified by PMID 30990260 or PMID 35861630.",
+      "Randomized controlled trial in adults with type 2 diabetes and albuminuric chronic kidney disease, as defined by the trial eligibility criteria.",
+      "Randomized to canagliflozin 100 mg daily versus matching placebo.",
+      "Reports the prespecified renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death, with cardiovascular death excluded.",
+      "Provides exactly one overall randomized-cohort hazard ratio (HR) for the primary renal composite with a directly reported 95% confidence interval.",
+      "Sufficient data are reported to compute log(HR) and its standard error from the 95% CI.",
+      "Effect estimate is bound to the source main report and trial registration identifier as reported.",
+      "Adjusted analyses are eligible only if adjustment uses legitimate baseline covariates specified a priori.",
+      "Bounded P values are retained as inequalities; no exact P value is invented for precision calculation."
+    ],
+    "exclusion_criteria": [
+      "Baseline maintenance dialysis or kidney transplantation.",
+      "Cardiovascular death included in the renal composite outcome.",
+      "Secondary publications, post-hoc reports, or reports other than the two specified main reports.",
+      "Mediator-adjusted analyses or analyses with covariates selected based on postrandomization variables.",
+      "Subgroup, per-protocol, or non-overall randomized-cohort effect estimates.",
+      "Active comparator, canagliflozin dose other than 100 mg daily, or other SGLT2 inhibitors.",
+      "Type 1 diabetes or non-albuminuric chronic kidney disease.",
+      "Unverifiable source or estimand; report the precise limitation without inventing or substituting an effect."
+    ],
+    "databases": [
+      "Internal literature database",
+      "PubMed"
+    ],
+    "date_range": "Not restricted (bounded to specified PMIDs 30990260 and 35861630)",
+    "language": "No language restriction",
+    "effect_measure": "HR",
+    "model_preference": "fixed",
+    "tau_estimator": "not applicable",
+    "subgroup_variables": [],
+    "review_family": "intervention_rct",
+    "primary_outcome_type": "time_to_event",
+    "protocol_version": "1.0",
+    "interventions": [
+      "canagliflozin 100 mg daily"
+    ],
+    "analysis_type": "pairwise"
+  },
+  "expected_fields": [
+    "research_question",
+    "pico.population",
+    "pico.intervention",
+    "pico.comparator",
+    "pico.outcome_primary",
+    "pico.outcomes_secondary",
+    "study_design",
+    "study_designs"
+  ],
+  "actual_responses": [
+    {
+      "fields": [
+        {
+          "field": "research_question",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The generated question preserves the bounded scope, randomized adult population, canagliflozin 100 mg daily versus matching placebo comparison, renal-specific primary composite excluding cardiovascular death, and restriction to the two named main reports. No explicit request is omitted or narrowed."
+        },
+        {
+          "field": "pico.population",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "Population matches the original specification of randomized adults with type 2 diabetes and albuminuric chronic kidney disease, with baseline maintenance dialysis or transplantation excluded."
+        },
+        {
+          "field": "pico.intervention",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "Intervention matches the original comparison arm of canagliflozin 100 mg daily."
+        },
+        {
+          "field": "pico.comparator",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "Comparator matches matching placebo and does not broaden to active treatment or no-treatment comparators."
+        },
+        {
+          "field": "pico.outcome_primary",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "Primary outcome preserves the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death, excludes cardiovascular death, and retains the requirement for exactly one overall randomized-cohort hazard ratio with directly reported confidence interval per trial."
+        },
+        {
+          "field": "pico.outcomes_secondary",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The original question does not request secondary outcomes. Keeping the secondary outcome list empty is a reasonable bounded-replication choice that adds no unrequested analyses and does not change the objective."
+        },
+        {
+          "field": "study_design",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The original specifies a randomized comparison of canagliflozin with matching placebo. Describing the design as a parallel RCT is a reasonable specification for these placebo-controlled trials and does not introduce an extra exclusion or alter the intended scope."
+        },
+        {
+          "field": "study_designs",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The list contains only the parallel RCT design descriptor consistent with the randomized placebo-controlled comparison. No additional design restrictions are introduced."
+        },
+        {
+          "field": "study_designs[0]",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The sole list entry is the same reasonable parallel RCT descriptor and is consistent with the original randomized design."
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "field": "research_question",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The proposed research question preserves the bounded replication to the two named main reports, the specified population, intervention, comparator, renal-specific primary composite with cardiovascular death excluded, and the per-trial extraction of one overall randomized-cohort hazard ratio with reported confidence interval. No explicit element is omitted, narrowed, widened, or invented."
+        },
+        {
+          "field": "pico.population",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "The protocol population matches the original population of randomized adults with type 2 diabetes and albuminuric chronic kidney disease, and it preserves the baseline exclusion of maintenance dialysis or transplantation."
+        },
+        {
+          "field": "pico.intervention",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "The protocol intervention is canagliflozin 100 mg daily, exactly as specified in the original comparison."
+        },
+        {
+          "field": "pico.comparator",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "The protocol comparator is matching placebo, exactly as specified in the original comparison."
+        },
+        {
+          "field": "pico.outcome_primary",
+          "status": "match",
+          "basis": "explicit",
+          "source_id": "src_12f7278603df97e3b89ddd33bf64f5ff700a75f9a1cb52a770a26b3deada60e9",
+          "rationale": "The renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death with cardiovascular death excluded matches the original primary outcome. The additional specification to extract exactly one overall randomized-cohort hazard ratio with directly reported 95% CI per trial is also explicitly required in the original and does not broaden or alter the objective."
+        },
+        {
+          "field": "pico.outcomes_secondary",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The original request does not ask for secondary outcomes. Leaving this list empty is a reasonable unspecified choice that is consistent with the bounded primary-outcome replication and does not add unrequested analyses."
+        },
+        {
+          "field": "study_design",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The original specifies randomized adults and overall randomized-cohort hazard ratios but does not name a design label. Classifying the design as a parallel randomized controlled trial is a reasonable representation of the two named randomized trials and does not materially change the objective."
+        },
+        {
+          "field": "study_designs",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The design list contains only the parallel randomized controlled trial classification, repeating the reasonable unspecified design choice without introducing additional designs."
+        },
+        {
+          "field": "study_designs[0]",
+          "status": "match",
+          "basis": "not_explicit",
+          "source_id": "src_b8d07c66ec3eaaf7b73b8c18e53540fd57eb3c8d3d0a8f1d730eaa00990b2cba",
+          "rationale": "The single listed design entry is parallel randomized controlled trial, which is the same reasonable classification of the two named randomized trials and does not expand or narrow the original scope."
+        }
+      ]
+    }
+  ]
+}
