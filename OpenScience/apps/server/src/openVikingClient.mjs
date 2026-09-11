@@ -75,8 +75,8 @@ export function projectMemoryUri(userId, projectId) {
   return `viking://user/${openVikingUserId(userId)}/memories/evimed/project/${openVikingPeerId(projectId)}`;
 }
 
-/** The server's own default page for `ls`, and the level a leaf file carries. */
-const LIST_PAGE_SIZE = 1_000;
+/** How large a directory this client will read before it refuses, and the level
+ *  a leaf file carries. */
 const LIST_MAX_ENTRIES = 100_000;
 const LEAF_LEVEL = 2;
 
@@ -294,20 +294,40 @@ export class OpenVikingClient {
 
   /** Every entry of a directory, as one list.
    *
-   * A short page ends the walk, which is the only completion signal the route
-   * offers. The page bound is the server's default `node_limit`; the total
-   * bound exists so that a server which ignored `offset` would fail loudly
-   * instead of paging forever.
+   * The walk advances by what the last page actually held and ends on an empty
+   * page, so the server's page size is never assumed. It cannot be: the route
+   * sends no cursor and no total, `node_limit` is a server-side default this
+   * client cannot observe, and both directions of a wrong guess are silent
+   * corruption — a smaller page than assumed ends the walk early and reports a
+   * full directory as a partial one, a larger one re-reads entries already
+   * held. The total bound exists so that a server which ignored `offset` would
+   * fail loudly instead of paging forever.
+   *
+   * A 404 after the first page ends the walk with what was read rather than
+   * discarding it: the directory existed when the walk began, so either it is
+   * being removed underneath us or the offset ran past its end, and in both
+   * cases the pages already read are a true part of it. A 404 on the first page
+   * still says "no such directory" and is raised, because only the caller knows
+   * whether a missing directory is an error or an empty index.
    */
   async listAll(userId, uri) {
     const entries = [];
-    for (let offset = 0; ; offset += LIST_PAGE_SIZE) {
-      const page = await this.list(userId, uri, { offset });
+    let offset = 0;
+    for (;;) {
+      /** @type {any[]} */
+      let page;
+      try {
+        page = await this.list(userId, uri, { offset });
+      } catch (error) {
+        if (offset > 0 && error instanceof HttpError && error.code === "memory_index_not_found") return entries;
+        throw error;
+      }
+      if (!page.length) return entries;
       entries.push(...page);
-      if (page.length < LIST_PAGE_SIZE) return entries;
       if (entries.length >= LIST_MAX_ENTRIES) {
         throw new HttpError(502, "memory_index_listing_too_large", `A memory index directory exceeded ${LIST_MAX_ENTRIES} entries.`);
       }
+      offset += page.length;
     }
   }
 

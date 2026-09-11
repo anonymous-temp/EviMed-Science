@@ -133,7 +133,8 @@ test("reconciliation repairs missing and stale index files despite an unchanged 
     assert.equal(result?.status, "succeeded");
     assert.equal(result.result.status, "published", "a matching old SQL fingerprint cannot suppress index recovery");
     const restored = await f.indexing.readback(await f.indexing.snapshot(owner, "capsule"));
-    assert.deepEqual(restored.map(row => [row.factId, row.revision]), [["fact", 1]]);
+    assert.deepEqual(restored.found.map(row => [row.factId, row.revision]), [["fact", 1]]);
+    assert.equal(restored.foreign, 0, "the repair must leave nothing this layout did not write");
     assert.equal((await f.indexing.snapshot(owner, "capsule")).fingerprint, fingerprint);
     assert.ok(f.index.files.has(untouched), "one user's repair must not touch another user's subtree");
     assert.equal((await f.indexing.reconcile()).enqueued, 0, "successful repair must stop recurring reconciliation");
@@ -195,5 +196,5 @@ test("lease expiry during final row locking rolls back index publication before 
     previous, "a rejected completion must roll back its index-state side effect");
   assert.equal((await f.jobs.get(owner, queued.id)).status, "running");
   assert.equal((await f.worker.tick()).status, "succeeded");
-  assert.equal((await f.indexing.readback(await f.indexing.snapshot(owner, "capsule"))).length, 1);
+  assert.equal((await f.indexing.readback(await f.indexing.snapshot(owner, "capsule"))).found.length, 1);
 });
