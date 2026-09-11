@@ -84,6 +84,8 @@ def test_full_auto_incidence_delivery_produces_fact_locked_article(tmp_path: Pat
     project, protocol, studies, migration = _incidence_project(tmp_path)
     compile_project_method_plan(project, protocol, enforce=True)
 
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     delivery = run_method_delivery(
         project=project,
         protocol=protocol,
@@ -100,6 +102,8 @@ def test_full_auto_incidence_delivery_produces_fact_locked_article(tmp_path: Pat
     )
 
     assert delivery.phase.status is ExecutionStatus.SUCCEEDED
+    from new_meta.core.primary_analysis_alignment import require_current_compiled_alignment
+    require_current_compiled_alignment(project)
     assert delivery.decisions == []
     assert "Incidence of Bloodstream infection" in delivery.manuscript
     assert "Poisson-normal generalized linear mixed model" in delivery.manuscript
@@ -122,6 +126,8 @@ def test_incidence_normal_mode_returns_concise_certainty_options(tmp_path: Path)
     project, protocol, studies, _ = _incidence_project(tmp_path)
     compile_project_method_plan(project, protocol, enforce=True)
 
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     delivery = run_method_delivery(
         project=project,
         protocol=protocol,

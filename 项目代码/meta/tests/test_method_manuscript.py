@@ -55,6 +55,8 @@ def test_prevalence_method_manuscript_is_family_specific_and_fact_locked(tmp_pat
     ]
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     compile_project_method_plan(project, protocol, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     synthesis = PipelineRunner(project).run_compiled_method_synthesis()
     assert synthesis.status.value == "succeeded"
 

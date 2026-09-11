@@ -1373,18 +1373,29 @@ read -rsp "Grafana admin password: " OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD; echo
 export OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD
 read -rsp "HTTPS Alertmanager webhook URL: " OPEN_SCIENCE_ALERT_WEBHOOK_URL; echo
 export OPEN_SCIENCE_ALERT_WEBHOOK_URL
-pnpm configure:monitoring
+(
+  cd deploy/web
+  sudo -E env "PATH=$PATH" "$(command -v node)" --env-file=.env ../../scripts/ops/configure-monitoring.mjs
+)
 unset OPEN_SCIENCE_OPERATOR_METRICS_TOKEN \
   OPEN_SCIENCE_GRAFANA_ADMIN_PASSWORD OPEN_SCIENCE_ALERT_WEBHOOK_URL
-pnpm check:monitoring
+(
+  cd deploy/web
+  sudo "$(command -v node)" --env-file=.env ../../scripts/ops/configure-monitoring.mjs --prepare-container-secrets
+  sudo "$(command -v node)" --env-file=.env ../../scripts/ops/configure-monitoring.mjs --check
+)
 ```
 
 The generator creates only owner-readable files under
 `OPEN_SCIENCE_MONITORING_SECRETS_DIR` (default
 `deploy/web/secrets`, ignored by version control). It refuses symbolic-link
 directories/files, weak or placeholder secrets, non-HTTPS/local webhooks, and
-group/world-readable files during validation. Start the base and monitoring
-stacks together:
+group/world-readable files during validation. On a Linux Docker host, the
+explicit preparation step preserves 0600 permissions and assigns each file to
+its container reader (Web UID 0, Prometheus/Alertmanager UID 65534, Grafana UID
+472). Generate the other UID 0 service secrets from the same root operator
+context so the capability-restricted services can read them. Start the base
+and monitoring stacks together:
 
 ```bash
 docker compose --env-file deploy/web/.env \

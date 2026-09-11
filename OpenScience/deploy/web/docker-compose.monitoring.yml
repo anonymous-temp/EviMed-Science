@@ -8,6 +8,7 @@ services:
 
   prometheus:
     image: prom/prometheus:${OPEN_SCIENCE_PROMETHEUS_VERSION:-v3.13.0}
+    user: "65534:65534"
     profiles: ["monitoring"]
     command:
       - --config.file=/etc/prometheus/prometheus.json
@@ -67,6 +68,7 @@ services:
 
   alertmanager:
     image: prom/alertmanager:${OPEN_SCIENCE_ALERTMANAGER_VERSION:-v0.33.1}
+    user: "65534:65534"
     profiles: ["monitoring"]
     command:
       - --config.file=/run/secrets/alertmanager_config
@@ -81,6 +83,7 @@ services:
 
   grafana:
     image: grafana/grafana:${OPEN_SCIENCE_GRAFANA_VERSION:-13.1.0}
+    user: "472"
     profiles: ["monitoring"]
     environment:
       GF_SECURITY_ADMIN_USER: ${OPEN_SCIENCE_GRAFANA_ADMIN_USER:-admin}

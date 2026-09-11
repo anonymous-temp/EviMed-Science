@@ -16,6 +16,24 @@ from new_meta.schemas.protocol import PICO, ResearchProtocol
 from new_meta.schemas.study import ExtractedStudy, OutcomeData, StudyCharacteristics
 
 
+def _record_analysis_set_fixture_alignment(project, protocol, studies):
+    from new_meta.core.primary_analysis_alignment import record_checked_alignments
+    for study in studies:
+        population = "Each cross-sectional survey enrolled adults."
+        contrast = "This descriptive prevalence survey had no intervention comparison."
+        source = "\n".join([population, contrast, *(row.source_quote for row in study.outcomes)])
+        assessments = [{"outcome_index": index,
+            "outcome": {"status": "match" if row.outcome_name == protocol.pico.outcome_primary else "mismatch",
+                        "rationale": "This source row reports the primary disease." if row.outcome_name == protocol.pico.outcome_primary else "This is a distinct secondary obesity outcome.",
+                        "quote": row.source_quote, "source_location": "Results table"},
+            "population": {"status": "match", "rationale": "The survey population is adults.", "quote": population, "source_location": "Methods"},
+            "contrast": {"status": "match", "rationale": "A comparison is not applicable to this descriptive protocol.", "quote": contrast, "source_location": "Methods"},
+        } for index, row in enumerate(study.outcomes)]
+        record_checked_alignments(project, protocol, study, assessments, source_text=source, assessor_id="mock-independent-checker")
+    project.save_json("protocol.json", protocol)
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+
+
 def _multiple_outcome_project(tmp_path: Path):
     project = Project("analysis set", output_dir=tmp_path / "project")
     protocol = ResearchProtocol(
@@ -70,6 +88,7 @@ def _multiple_outcome_project(tmp_path: Path):
     project.save_json("protocol.json", protocol)
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, enforce=True)
+    _record_analysis_set_fixture_alignment(project, protocol, studies)
     return project, plan
 
 
@@ -190,6 +209,7 @@ def test_one_unambiguous_stratum_is_locked_automatically(tmp_path: Path) -> None
     ]
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     compile_project_method_plan(project, protocol, enforce=True)
+    _record_analysis_set_fixture_alignment(project, protocol, studies)
 
     phase = PipelineRunner(project).run_compiled_method_synthesis()
 

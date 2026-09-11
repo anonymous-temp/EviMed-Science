@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 
 def _parse_p_value_string(val: str) -> float | None:
@@ -262,7 +263,52 @@ class ConflictNote(BaseModel):
     sources: list[str] = []
 
 
+class AlignmentDimension(BaseModel):
+    """Independent source-based judgment, not permission or runtime provenance."""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    status: Literal["match", "mismatch", "uncertain"]
+    rationale: str = Field(min_length=1)
+    quote: str = ""
+    source_location: str = ""
+
+
+class PrimaryAlignmentAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome_index: int = Field(ge=0, strict=True)
+    outcome: AlignmentDimension
+    population: AlignmentDimension
+    contrast: AlignmentDimension
+
+
+class PrimaryAnalysisAlignment(BaseModel):
+    """Runtime-created proof; model-facing schemas omit this field entirely."""
+    model_config = ConfigDict(extra="forbid")
+    schema_version: Literal[1] = 1
+    assessment: PrimaryAlignmentAssessment
+    assessor: str
+    assessor_id: str = ""
+    protocol_sha256: str
+    row_sha256: str
+    source_path: str
+    source_sha256: str
+    checked_source_path: str
+    checked_source_sha256: str
+    proof_id: str
+
+
 class OutcomeData(BaseModel):
+    primary_analysis_alignment: SkipJsonSchema[PrimaryAnalysisAlignment | None] = None
+
+    @field_validator("primary_analysis_alignment", mode="before")
+    @classmethod
+    def _read_alignment_proof(cls, value):
+        if value is None or isinstance(value, PrimaryAnalysisAlignment):
+            return value
+        try:
+            return PrimaryAnalysisAlignment.model_validate(value)
+        except (ValueError, TypeError):
+            return None
+
     """Outcome data extracted from a study, supporting multiple outcome types."""
     outcome_name: str = ""
     outcome_type: str = ""  # "continuous" / "dichotomous" / "time-to-event" / "proportion" / "correlation"

@@ -63,6 +63,9 @@ def test_downstream_rerun_uses_compiled_method_route_not_pairwise_selector(monke
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     compile_project_method_plan(project, protocol, enforce=True)
 
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
+
     def pairwise_selector_must_not_run(*args, **kwargs):
         raise AssertionError("method-plugin reruns must not call the pairwise effect selector")
 

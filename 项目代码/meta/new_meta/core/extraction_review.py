@@ -6,13 +6,14 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from new_meta.core.known_source_recovery import DEFAULT_KNOWN_SOURCE_PATH
 from new_meta.core.project import Project
-from new_meta.schemas.study import ExtractedStudy, OutcomeData
+from new_meta.schemas.study import ExtractedStudy, OutcomeData, PrimaryAlignmentAssessment
 
 
 class OverrideConflictError(RuntimeError):
@@ -51,6 +52,13 @@ class ExtractionReviewDecision(BaseModel):
     updated_by: str = "unknown"
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     revision: int = 0
+    alignment_assessment: PrimaryAlignmentAssessment | None = None
+    alignment_protocol_sha256: str = ""
+    alignment_row_sha256: str = ""
+    alignment_source_sha256: str = ""
+    primary_analysis_choice: Literal["include"] | None = None
+    primary_choice_candidates_sha256: str = ""
+    primary_choice_proof_id: SkipJsonSchema[str] = ""
 
 
 class ExtractionReviewDecisionsFile(BaseModel):
@@ -130,6 +138,7 @@ def save_extraction_review_decision(
     project: Project,
     decision: ExtractionReviewDecision,
     expected_revision: int | None = None,
+    *, alignment_assessor_id: str = "",
 ) -> ExtractionReviewDecisionsFile:
     """Append or replace a user review decision using revision checks."""
     manifest = load_extraction_review_decisions(project)
@@ -143,6 +152,11 @@ def save_extraction_review_decision(
         raise ValueError("Extraction review decision requires row_id or study_id + outcome_index")
     if not decision.row_id:
         decision.row_id = key
+
+    if decision.alignment_assessment is not None:
+        _save_alignment_adjudication(project, decision, assessor_id=alignment_assessor_id)
+    if decision.primary_analysis_choice is not None:
+        _save_primary_choice(project, decision, manifest, assessor_id=alignment_assessor_id)
 
     next_revision = manifest.current_revision + 1
     decision.revision = next_revision
@@ -160,6 +174,80 @@ def save_extraction_review_decision(
     manifest.current_revision = next_revision
     project.save_json("extraction_review_decisions.json", manifest, subdir="extraction")
     return manifest
+
+
+def _save_primary_choice(project, decision, manifest, *, assessor_id):
+    from new_meta.core.primary_analysis_alignment import (
+        _PROOF_DIR, _write_scoped_once, alignment_status, digest, primary_choice_fingerprint, selectable_primary_rows,
+    )
+    from new_meta.schemas.protocol import ResearchProtocol
+    if not assessor_id or assessor_id.strip().lower() in {"unknown", "web_user"} or not decision.note.strip():
+        raise ValueError("Primary-result choice requires an authenticated reviewer and rationale")
+    protocol = ResearchProtocol.model_validate(project.load_json("protocol.json"))
+    studies = [ExtractedStudy.model_validate(item) for item in project.load_json("all_extractions.json", subdir="extraction") or []]
+    row_id = _decision_key(decision)
+    target = next(((study, index) for study in studies for index in range(len(study.outcomes))
+                   if f"{_study_id(study)}:{index}" == row_id), None)
+    if target is None:
+        raise ValueError("Primary-result choice row is unavailable")
+    study, index = target
+    status = alignment_status(project, protocol, study, index)
+    if status["status"] != "match":
+        raise ValueError("Primary-result choice requires current matching clinical dimensions")
+    expected = {"protocol_sha256": decision.alignment_protocol_sha256,
+                "row_sha256": decision.alignment_row_sha256, "source_sha256": decision.alignment_source_sha256}
+    context = primary_choice_fingerprint(protocol, study)
+    if decision.primary_choice_candidates_sha256 != context or any(not value or status.get(key) != value for key, value in expected.items()):
+        raise OverrideConflictError("Primary-result choice uses stale candidate, protocol, row or source versions")
+    if row_id not in {row["row_id"] for row in selectable_primary_rows(project, protocol, study)}:
+        raise ValueError("Primary-result choice is not currently selectable; rerun selection and resolve its source/RoB/data gates")
+    receipt = {"schema_version": 1, "selected_row_id": row_id, "context_sha256": context,
+               "assessor": "human-review-v1", "assessor_id": assessor_id,
+               "reason": decision.note.strip(), "revision": manifest.current_revision + 1}
+    proof_id = digest(receipt)
+    _write_scoped_once(project, f"{_PROOF_DIR}/primary-choice-{proof_id}.json",
+                       json.dumps(receipt, ensure_ascii=False, indent=2).encode())
+    decision.primary_choice_proof_id = proof_id
+    for previous in manifest.decisions:
+        if _decision_key(previous).startswith(f"{_study_id(study)}:"):
+            previous.primary_analysis_choice = None
+            previous.primary_choice_proof_id = ""
+    project.clear_downstream("effect_sizes", include_self=True)
+
+
+def _save_alignment_adjudication(project, decision, *, assessor_id):
+    from new_meta.core.primary_analysis_alignment import _anchored, _read_scoped, _record_proof, alignment_status
+    from new_meta.schemas.protocol import ResearchProtocol
+
+    if not assessor_id or assessor_id.strip().lower() in {"unknown", "web_user"}:
+        raise ValueError("Alignment adjudication requires an authenticated reviewer identity")
+    if decision.decision.strip().lower() not in {"accepted", "approved", "resolved", "verified"}:
+        raise ValueError("Alignment adjudication must explicitly record a review decision")
+    protocol = ResearchProtocol.model_validate(project.load_json("protocol.json"))
+    studies = [ExtractedStudy.model_validate(row) for row in project.load_json("all_extractions.json", subdir="extraction") or []]
+    row_id = _decision_key(decision)
+    target = next(((study, index) for study in studies for index in range(len(study.outcomes))
+                   if f"{_study_id(study)}:{index}" == row_id), None)
+    if target is None:
+        raise ValueError("Alignment adjudication row is unavailable")
+    study, index = target
+    status = alignment_status(project, protocol, study, index)
+    expected = {"protocol_sha256": decision.alignment_protocol_sha256,
+                "row_sha256": decision.alignment_row_sha256, "source_sha256": decision.alignment_source_sha256}
+    if any(not value or value != status.get(key) for key, value in expected.items()):
+        raise OverrideConflictError("Alignment adjudication uses stale protocol, row or source versions")
+    proof = study.outcomes[index].primary_analysis_alignment
+    assessment = decision.alignment_assessment
+    source_text = _read_scoped(project, proof.checked_source_path).decode()
+    if assessment.outcome_index != index or not _anchored(assessment, source_text):
+        raise ValueError("Alignment adjudication must quote the bound source for this exact row")
+    _record_proof(project, protocol, study, index, assessment, source_text=source_text,
+                  source_path=project.base_dir / proof.source_path,
+                  assessor="human-review-v1", assessor_id=assessor_id, expected_source_sha256=decision.alignment_source_sha256)
+    project.save_json("all_extractions.json", studies, subdir="extraction")
+    from new_meta.tools.utils import safe_identifier
+    project.save_json(f"{safe_identifier(_study_id(study))}.json", study, subdir="extraction")
+    project.clear_downstream("effect_sizes", include_self=True)
 
 
 def _accepted_review_decisions(decisions: ExtractionReviewDecisionsFile) -> dict[str, ExtractionReviewDecision]:
@@ -1019,6 +1107,25 @@ def build_extraction_source_cards(project: Project, rows: list[dict] | None = No
     if not isinstance(rows, list):
         return []
 
+    alignment_contexts = {}
+    selectable_by_study = {}
+    from new_meta.core.primary_analysis_alignment import ensure_review_context
+    from new_meta.schemas.protocol import ResearchProtocol
+    protocol_data = project.load_json("protocol.json")
+    if protocol_data:
+        protocol = ResearchProtocol.model_validate(protocol_data)
+        studies = [ExtractedStudy.model_validate(item) for item in project.load_json("all_extractions.json", subdir="extraction") or []]
+        before_proofs = [outcome.primary_analysis_alignment for study in studies for outcome in study.outcomes]
+        for study in studies:
+            for index in range(len(study.outcomes)):
+                alignment_contexts[f"{_study_id(study)}:{index}"] = ensure_review_context(project, protocol, study, index)
+            from new_meta.core.primary_analysis_alignment import primary_choice_fingerprint, selectable_primary_rows
+            candidate_version = primary_choice_fingerprint(protocol, study)
+            selectable_by_study[_study_id(study)] = selectable_primary_rows(project, protocol, study)
+            for index in range(len(study.outcomes)):
+                alignment_contexts[f"{_study_id(study)}:{index}"]["primary_choice_candidates_sha256"] = candidate_version
+        if before_proofs != [outcome.primary_analysis_alignment for study in studies for outcome in study.outcomes]:
+            project.save_json("all_extractions.json", studies, subdir="extraction")
     outcome_by_row = load_extraction_outcome_rows(project)
     current_revision = load_extraction_overrides(project).current_revision
     review_revision = review_decisions.current_revision
@@ -1054,6 +1161,31 @@ def build_extraction_source_cards(project: Project, rows: list[dict] | None = No
             review_revision=review_revision,
         )
         card["source_context"] = build_source_context(project, card)
+        context = alignment_contexts.get(str(row.get("row_id") or "")) or {}
+        card["primary_analysis_alignment"] = context
+        if context.get("status") == "unknown":
+            card["requires_review"] = True
+            card.setdefault("review_reasons", []).append("Primary-analysis outcome, population and contrast require current source-backed review.")
+        card["review_action"]["alignment_expected_versions"] = {
+            "alignment_protocol_sha256": context.get("protocol_sha256"),
+            "alignment_row_sha256": context.get("row_sha256"),
+            "alignment_source_sha256": context.get("source_sha256"),
+            "primary_choice_candidates_sha256": context.get("primary_choice_candidates_sha256"),
+        }
+        candidates = selectable_by_study.get(card.get("study_id")) or []
+        if candidates and (len(candidates) > 1 or any(item.get("reason") == "primary_result_choice_required" for item in candidates)):
+            card["primary_result_candidates"] = [{key: item.get(key) for key in
+                ("row_id", "outcome_name", "timepoint", "subgroup", "effect", "se", "source_quote", "source_location")}
+                for item in candidates]
+            if card.get("row_id") in {item["row_id"] for item in candidates}:
+                card["review_action"]["primary_choice_action"] = {
+                    "primary_analysis_choice": "include", "requires_explicit_selection": True,
+                    "candidate_row_ids": [item["row_id"] for item in candidates],
+                    "expected_versions": card["review_action"]["alignment_expected_versions"],
+                }
+            if any(item.get("reason") == "primary_result_choice_required" for item in candidates):
+                card["requires_review"] = True
+                card["review_reasons"].append("Choose one primary result among the current source-approved candidates.")
         cards.append(card)
     return cards
 

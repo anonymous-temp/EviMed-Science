@@ -289,6 +289,8 @@ def test_downstream_rerun_uses_shared_meta_helper(monkeypatch) -> None:
     monkeypatch.setattr(WritingAgent, "run", fake_write)
     monkeypatch.setattr(main_module, "MANUSCRIPT_POLISH_USE_LLM", False)
 
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     result = _run_downstream_after_overrides_payload({
         "project_dir": str(project.base_dir),
         "output_language": "中文",
@@ -352,6 +354,8 @@ def test_primary_effect_selection_keeps_audit_id_aligned_with_effect_id_for_pmid
         )
     ]
 
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     effects, audit = _compute_primary_effect_selection(
         project,
         protocol,

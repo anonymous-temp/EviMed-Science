@@ -560,11 +560,20 @@ def primary_candidate_rank(
     )
 
 
-def compute_study_effect(study, outcome, protocol, logger) -> StudyEffect | None:
+def compute_study_effect(study, outcome, protocol, logger, *, audit_row: dict | None = None) -> StudyEffect | None:
+    if audit_row is not None:
+        audit_row.update({
+            "outcome_type": outcome.outcome_type,
+            "reported_effect_measure": outcome.reported_effect_measure,
+            "reported_effect_scale": outcome.reported_effect_scale,
+            "requested_effect_measure": protocol.effect_measure,
+        })
     try:
         yi, vi = es_engine.compute_effect_size(
             outcome_type=outcome.outcome_type,
             effect_measure=protocol.effect_measure,
+            reported_effect_measure=outcome.reported_effect_measure,
+            reported_effect_scale=outcome.reported_effect_scale,
             mean_i=outcome.mean_intervention, sd_i=outcome.sd_intervention, n_i=outcome.n_intervention,
             mean_c=outcome.mean_control, sd_c=outcome.sd_control, n_c=outcome.n_control,
             median_i=outcome.median_intervention, q1_i=outcome.q1_intervention,
@@ -590,6 +599,12 @@ def compute_study_effect(study, outcome, protocol, logger) -> StudyEffect | None
             subgroup=outcome.subgroup,
         )
     except Exception as exc:
+        if isinstance(exc, es_engine.EffectInputMismatch) and audit_row is not None:
+            audit_row.update({
+                "reason": exc.code,
+                "requires_adjudication": True,
+                "next_action": str(exc),
+            })
         logger.warning(
             "Cannot compute effect size for %s: %s",
             study.characteristics.study_id,

@@ -1663,8 +1663,23 @@ def _refresh_review_decision_artifacts(project) -> dict:
         }
 
     protocol = ResearchProtocol.model_validate(protocol_data)
+    if project.get_path("synthesis_result.json", subdir="analysis").exists() and not project.get_path("meta_results.json", subdir="analysis").exists():
+        from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, require_current_compiled_alignment
+        try:
+            require_current_compiled_alignment(project)
+        except PrimaryAlignmentRequired as exc:
+            return {"artifacts_refreshed": False, "execution": exc.phase.model_dump(mode="json"),
+                    "refresh_warnings": [exc.phase.summary], "evidence_readiness": None}
     meta_results = None
     meta_data = project.load_json("meta_results.json", subdir="analysis")
+    if meta_data:
+        from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, require_current_cached_alignment
+        try:
+            require_current_cached_alignment(project, protocol=protocol,
+                                             meta_results=MetaAnalysisResults.model_validate(meta_data))
+        except PrimaryAlignmentRequired as exc:
+            return {"artifacts_refreshed": False, "execution": exc.phase.model_dump(mode="json"),
+                    "refresh_warnings": [exc.phase.summary], "evidence_readiness": None}
     if meta_data:
         try:
             meta_results = MetaAnalysisResults.model_validate(meta_data)
@@ -1767,9 +1782,16 @@ def _save_extraction_review_decision_payload(payload: dict, *, parent_id: str = 
                 note=str(item.get("note") or item.get("reason") or ""),
                 resolves_review=bool(item.get("resolves_review", True)),
                 resolves_conflicts=bool(item.get("resolves_conflicts", True)),
-                updated_by=str(item.get("updated_by") or user_id or "web_user"),
+                updated_by=str(user_id if item.get("alignment_assessment") is not None or item.get("primary_analysis_choice") is not None else item.get("updated_by") or user_id or "web_user"),
+                alignment_assessment=item.get("alignment_assessment"),
+                alignment_protocol_sha256=str(item.get("alignment_protocol_sha256") or ""),
+                alignment_row_sha256=str(item.get("alignment_row_sha256") or ""),
+                alignment_source_sha256=str(item.get("alignment_source_sha256") or ""),
+                primary_analysis_choice=item.get("primary_analysis_choice"),
+                primary_choice_candidates_sha256=str(item.get("primary_choice_candidates_sha256") or ""),
             )
-            saved = save_extraction_review_decision(project, decision, expected_revision=expected_revision)
+            saved = save_extraction_review_decision(project, decision, expected_revision=expected_revision,
+                                                    alignment_assessor_id=user_id)
             expected_revision = saved.current_revision
     except OverrideConflictError as exc:
         manifest = load_extraction_review_decisions(project)
@@ -2020,6 +2042,20 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
     rerun_manuscript_only = bool(payload.get("rerun_manuscript_only") or payload.get("force_manuscript_rerun"))
 
     if resume_step_before is None and not rerun_manuscript_only:
+        if project.get_path("synthesis_result.json", subdir="analysis").exists() and not project.get_path("meta_results.json", subdir="analysis").exists():
+            from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, require_current_compiled_alignment
+            try:
+                require_current_compiled_alignment(project)
+            except PrimaryAlignmentRequired as exc:
+                return _alignment_decision_payload(project, exc.phase)
+        meta_data = project.load_json("meta_results.json", subdir="analysis")
+        if meta_data:
+            from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, require_current_cached_alignment
+            from new_meta.schemas.meta_result import MetaAnalysisResults
+            try:
+                require_current_cached_alignment(project, meta_results=MetaAnalysisResults.model_validate(meta_data))
+            except PrimaryAlignmentRequired as exc:
+                return _alignment_decision_payload(project, exc.phase)
         package_path = project.get_path("metaagent_export.zip", subdir="package")
         if not package_path.exists():
             write_llm_usage_manifest(project)
@@ -2085,6 +2121,13 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
     project = Project("resume project", resume_dir=project_dir)
     stdout_tail = _tail_text(proc.stdout or "")
     stderr_tail = _tail_text(proc.stderr or "")
+    if proc.returncode == 2:
+        from new_meta.schemas.phase_result import PhaseResult
+        alignment_phase = project.load_json("primary_alignment_status.json", subdir="analysis")
+        if alignment_phase:
+            phase = PhaseResult.model_validate(alignment_phase)
+            if phase.status.value == "needs_input":
+                return _alignment_decision_payload(project, phase)
     if proc.returncode != 0:
         project.add_warning(
             "resume_project",
@@ -2131,6 +2174,14 @@ def _resume_project_payload(payload: dict, *, parent_id: str = "", user_id: str 
         "stdout_tail": stdout_tail,
         "stderr_tail": stderr_tail,
         "message": "Project resumed through the canonical checkpoint pipeline.",
+    }
+
+
+def _alignment_decision_payload(project, phase):
+    return {
+        "ok": False, "error": phase.error_code, "project_dir": str(project.base_dir),
+        "execution": phase.model_dump(mode="json"), "decisions": [phase.data],
+        "message": phase.summary,
     }
 
 
@@ -2311,14 +2362,14 @@ def _run_downstream_after_overrides_payload(payload: dict, *, parent_id: str = "
         }
 
     included_rows = project.load_json("full_text_screening.json", subdir="screening") or []
-    study_effects, selection_audit = _compute_primary_effect_selection(
-        project,
-        protocol,
-        extracted_studies,
-        log,
-        rob_results=rob_results,
-        included_papers=included_rows,
-    )
+    from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired
+    try:
+        study_effects, selection_audit = _compute_primary_effect_selection(
+            project, protocol, extracted_studies, log,
+            rob_results=rob_results, included_papers=included_rows,
+        )
+    except PrimaryAlignmentRequired as exc:
+        return _alignment_decision_payload(project, exc.phase)
     meta_results = None
     grade_profile = None
     figures_b64: dict[str, str] = {}
@@ -3399,16 +3450,18 @@ def _run_phase2_inner(phase1_state: dict, output_dir: str, _push, user_pdf_paths
     _push("progress", (5, META_STEPS[5]))
     from new_meta.core.pipeline_runner import PipelineRunner
 
-    rob_results, study_effects, _selection_audit = (
-        PipelineRunner(project, logger=pl).assess_risk_and_select_primary_effects(
-            protocol=protocol,
-            extracted_studies=extracted_studies,
-            parsed_papers=parsed_papers,
-            included_papers=included_papers,
-            required_study_ids=report_state.direct_eligible_ids,
-            rob_agent=RoBAgent(),
+    from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired
+    try:
+        rob_results, study_effects, _selection_audit = (
+            PipelineRunner(project, logger=pl).assess_risk_and_select_primary_effects(
+                protocol=protocol, extracted_studies=extracted_studies,
+                parsed_papers=parsed_papers, included_papers=included_papers,
+                required_study_ids=report_state.direct_eligible_ids, rob_agent=RoBAgent(),
+            )
         )
-    )
+    except PrimaryAlignmentRequired as exc:
+        _push("method_decision_required", _alignment_decision_payload(project, exc.phase))
+        return ""
     _push("done_step", (5, META_STEPS[5], ctx))
     _push("progress", (6, META_STEPS[6]))
 
@@ -3511,6 +3564,10 @@ def _run_phase2_inner(phase1_state: dict, output_dir: str, _push, user_pdf_paths
         include_publication_bias=meta_results is not None,
     )
 
+    from new_meta.main import _evaluate_evidence_gate_for_report
+    gate_result, report_state = _evaluate_evidence_gate_for_report(
+        project, protocol, extracted_studies, project.prisma.to_dict(),
+    )
     writer = WritingAgent(lang=output_lang, topic=phase1_state.get("topic", ""))
     from datetime import date
     _search_date = date.today().strftime("%Y年%m月%d日")

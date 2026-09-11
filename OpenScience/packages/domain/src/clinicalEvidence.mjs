@@ -1866,11 +1866,19 @@ function sourceDomain(value) {
 /** @param {unknown} value @returns {string} */
 function normalizedPassage(value) {
   return String(value ?? "")
+    // NFKC alone turns 10³ into 103, changing the scientific value. Preserve
+    // exponent notation before normalizing compatible typography.
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻]+/gu, (exponent) => `^${exponent.normalize("NFKC").replace(/−/g, "-")}`)
     .normalize("NFKC")
     // Soft hyphens and zero-width joiners survive NFKC and are invisible in the
     // artifact, so a faithfully retyped quote silently fails to match.
     .replace(/\u00AD|\u200B|\u200C|\u200D|\uFEFF/g, "")
+    // Quotes after numbers can denote measurement units (5'3"). Retain those
+    // boundaries, including NFKC's double-prime decomposition, before stripping
+    // ordinary typographic quotation marks.
+    .replace(/(?<=\d)[‘’'′“”"″]+/gu, (marks) => marks.replace(/[“”"″]/gu, "′′").replace(/[‘’']/gu, "′"))
     .replace(/[‘’“”"'＂＇]/g, "")
+    .replace(/[⁄∕]/gu, "/")
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     // PDF extraction routinely spaces out CJK runs ("速 效 救 心 丸"). The
@@ -1899,10 +1907,9 @@ function normalizedSearchQuery(value) {
     .toLowerCase();
 }
 
-// What survives when every separator is dropped: the letters, the digits, and
-// the symbols that change what a figure means. Two passages with the same
-// skeleton say the same thing. Comparison operators stay in — ">50%" and "50%"
-// are different findings and must not compare equal.
+// A coarse projection used only to diagnose an unmarked gap after quotation
+// validation fails. It must never authorize a quote: removing separators can
+// turn a decimal into an integer or join words with different meanings.
 /** @param {unknown} value @returns {string} */
 function passageSkeleton(value) {
   return normalizedPassage(value).replace(/[^\p{L}\p{N}<>=≥≤±%]+/gu, "");
@@ -1919,14 +1926,64 @@ const quoteElision = /\s*(?:\.{3,}|…)+\s*/;
 // character must not be a digit, or the 25 of "0.25" would be read as a marker.
 const inlineReferenceMarker = /(?<=[^\d\s][.。!?])\d{1,3}(?=\s|$)/gu;
 
+const passageNumberAtom = "(?:(?:[<>]=?|!=|[≤≥≠≈≃≅~])\\s*)?(?:(?:\\+\\s*/\\s*[-−]|[+\\-−±])\\s*)?(?:\\d+(?:[.,]\\d+)*|[.,]\\d+)(?:e[+\\-−]?\\d+)?(?:\\s*(?:\\^|\\*\\*)\\s*[+\\-−]?\\d+)?(?:\\s*[%‰])?(?:[′″]+(?:\\s*\\d+(?:[.,]\\d+)?[′″]+)?)?";
+const passageNumberToken = new RegExp(`${passageNumberAtom}(?:\\s*(?:\\+\\s*/\\s*[-−]|[/–—−:×·*±-]|x(?=\\s*\\d))\\s*${passageNumberAtom})*`, "gu");
+const passageWordCharacter = /[\p{L}\p{M}\p{N}_]/u;
+const continuousWritingCharacter = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/** CJK quotations do not use spaces as word separators; numeric edges below
+ * remain checked regardless of script. @param {string} character */
+function joinedWordCharacter(character) {
+  return passageWordCharacter.test(character) && !continuousWritingCharacter.test(character);
+}
+
+/** @param {string} source @param {string} needle @param {number} start @param {number[][]} numericSpans */
+function completePassageMatch(source, needle, start, numericSpans) {
+  const end = start + needle.length;
+  if (start > 0 && joinedWordCharacter(needle[0]) && (
+    joinedWordCharacter(source[start - 1])
+    || (start > 1 && source[start - 1] === "-" && joinedWordCharacter(source[start - 2]))
+  )) return false;
+  if (end < source.length && joinedWordCharacter(needle.at(-1) ?? "") && (
+    joinedWordCharacter(source[end])
+    || (end + 1 < source.length && source[end] === "-" && joinedWordCharacter(source[end + 1]))
+  )) return false;
+  for (const boundary of [start, end]) {
+    let low = 0;
+    let high = numericSpans.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (numericSpans[middle][0] <= boundary) low = middle + 1;
+      else high = middle;
+    }
+    if (low > 0 && numericSpans[low - 1][0] < boundary && boundary < numericSpans[low - 1][1]) return false;
+  }
+  return true;
+}
+
+/** Repair recognized extraction layout while retaining word boundaries and
+ * numeric punctuation. @param {unknown} value @returns {string} */
+function normalizedExtractionPassage(value) {
+  return normalizedPassage(String(value ?? "")
+    .replace(/(?<=\p{L})-\r?\n\s*(?=\p{L})/gu, "")
+    .replace(/(?<=\p{L})[ \t]+-[ \t]+(?=\p{L})/gu, "")
+    // A marker before a number can be its sign; only remove a textual bullet.
+    .replace(/(^|\r?\n)[ \t]*[-*+][ \t]+(?=\p{L})/gu, "$1"))
+    .replace(/\s+([.,;:!?。！？])/gu, "$1");
+}
+
 /** @param {string} haystack @param {readonly string[]} segments @param {(segment: string) => string} project @returns {boolean} */
 function segmentsPresentInOrder(haystack, segments, project) {
   if (!haystack) return false;
+  const numericSpans = [...haystack.matchAll(passageNumberToken)].map((match) => [match.index, match.index + match[0].length]);
   let from = 0;
   for (const segment of segments) {
     const needle = project(segment);
     if (!needle) return false;
-    const at = haystack.indexOf(needle, from);
+    let at = haystack.indexOf(needle, from);
+    while (at >= 0 && !completePassageMatch(haystack, needle, at, numericSpans)) {
+      at = haystack.indexOf(needle, at + 1);
+    }
     if (at < 0) return false;
     from = at + needle.length;
   }
@@ -1937,11 +1994,9 @@ function segmentsPresentInOrder(haystack, segments, project) {
 // line break splits a word ("coronary artery dis - ease"), a markdown list
 // marker lands mid-sentence ("call 999 if: - you get sudden pain"), an
 // extractor leaves a space before punctuation ("activity 37 ."). A quote copied
-// the way a human reads the sentence then fails literal containment even though
-// every word of it is there. Falling back to the skeleton accepts the
-// formatting difference and nothing else: the words, figures and comparison
-// operators must still appear in order, so a quote the source does not contain
-// still fails.
+// the way a human reads the sentence can then fail literal containment. The
+// bounded layout normalization above repairs those forms without deleting
+// ordinary word separators, decimal points, signs or comparison operators.
 //
 // A quote may also elide — mark a skipped passage with … — the way any scholarly
 // quotation does. Each segment is then verified on its own, in order and without
@@ -2064,7 +2119,7 @@ function quoteIsPresent(artifact, quote) {
   // The artifact as preserved, then with inline citation markers taken out.
   for (const text of [source, source.replace(inlineReferenceMarker, "")]) {
     if (segmentsPresentInOrder(normalizedPassage(text), segments, normalizedPassage)) return true;
-    if (segmentsPresentInOrder(passageSkeleton(text), segments, passageSkeleton)) return true;
+    if (segmentsPresentInOrder(normalizedExtractionPassage(text), segments, normalizedExtractionPassage)) return true;
   }
   return false;
 }

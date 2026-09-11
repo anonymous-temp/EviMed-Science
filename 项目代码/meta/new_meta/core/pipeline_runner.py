@@ -21,6 +21,10 @@ class PipelineRunner:
         self.project = project
         self.logger = logger or logging.getLogger("metaagent.pipeline_runner")
 
+    def project_protocol(self):
+        from new_meta.schemas.protocol import ResearchProtocol
+        return ResearchProtocol.model_validate(self.project.load_json("protocol.json"))
+
     def _ensure_synthesis_route(self, protocol):
         from new_meta.core.method_planning import compile_project_method_plan
         from new_meta.core.synthesis_routing import load_synthesis_route
@@ -142,12 +146,16 @@ class PipelineRunner:
                 error_code="wrong_synthesis_route",
             )
 
-        effects, selection_audit = self.compute_primary_effect_selection(
-            protocol=protocol,
-            extracted_studies=extracted_studies,
-            rob_results=rob_results,
-            included_papers=included_papers,
-        )
+        from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired
+        try:
+            effects, selection_audit = self.compute_primary_effect_selection(
+                protocol=protocol,
+                extracted_studies=extracted_studies,
+                rob_results=rob_results,
+                included_papers=included_papers,
+            )
+        except PrimaryAlignmentRequired as exc:
+            return exc.phase
         excluded_rows = sum(
             1 for row in selection_audit if str(row.get("decision") or "") == "excluded"
         )
@@ -309,6 +317,31 @@ class PipelineRunner:
                 ],
                 error_code="verified_method_inputs_required",
             )
+        from new_meta.core.primary_analysis_alignment import alignment_status, is_verified_direct_ipd, needs_input_phase
+        from new_meta.core.extraction_ledger import result_entity_id
+        from new_meta.schemas.study import ExtractedStudy
+
+        source_studies = [ExtractedStudy.model_validate(item) for item in
+                          self.project.load_json("all_extractions.json", subdir="extraction") or []]
+        source_rows = {result_entity_id(study, index): (study, index)
+                       for study in source_studies for index in range(len(study.outcomes))}
+        unresolved = []
+        direct_ipd = is_verified_direct_ipd(self.project, plan, result_ids)
+        alignment_protocol = self.project_protocol() if source_rows else None
+        for result_id in ([] if direct_ipd else result_ids):
+            source_row = source_rows.get(result_id)
+            verdict = alignment_status(self.project, alignment_protocol, *source_row) if source_row else {"status": "unknown"}
+            if verdict["status"] == "mismatch":
+                return self._method_synthesis_blocked(
+                    f"Selected result {result_id} does not match the review outcome, population or contrast.",
+                    code="primary_alignment_mismatch",
+                )
+            if verdict["status"] != "match":
+                unresolved.append({"row_id": f"{source_row[0].characteristics.pmid or source_row[0].characteristics.study_id}:{source_row[1]}" if source_row else result_id, "result_id": result_id, "alignment": verdict})
+        if unresolved:
+            phase = needs_input_phase(self.project, unresolved)
+            self.project.save_json("primary_alignment_status.json", phase, subdir="analysis")
+            return phase
         try:
             execution = executor.execute_project(
                 plan,
@@ -347,6 +380,8 @@ class PipelineRunner:
             return self._method_synthesis_blocked(str(exc), code="method_execution_blocked")
         envelope = SynthesisResultEnvelope.from_method_execution(execution)
         self.project.save_json("synthesis_result.json", envelope, subdir="analysis")
+        from new_meta.core.primary_analysis_alignment import save_method_pool_binding
+        save_method_pool_binding(self.project, plan, execution, envelope, source_studies, direct_ipd=direct_ipd)
         self.project.save_checkpoint("meta_analysis")
         return PhaseResult(
             run_id=self.project.base_dir.name,
@@ -375,7 +410,8 @@ class PipelineRunner:
                     media_type="application/json",
                 ),
             ],
-            data={"synthesis": envelope, "method_execution": execution},
+            data={"synthesis": envelope, "method_execution": execution,
+                  "primary_alignment_scope": "direct_ipd_dataset_contract" if direct_ipd else "source_verified_literature"},
         )
 
     def _ipd_data_required(self):
@@ -487,10 +523,14 @@ class PipelineRunner:
             rob_for_study,
             source_record_for_study,
         )
-        from new_meta.core.evidence_gate import outcome_matches
+        from new_meta.core.primary_analysis_alignment import (
+            PrimaryAlignmentRequired, alignment_status, current_primary_choice, needs_input_phase,
+            primary_effect_identity, save_selection_binding, selection_gate_fingerprint, selection_input_fingerprint,
+        )
         from new_meta.engines import meta_engine as _meta_engine
         from new_meta.tools.utils import first_author_lastname as _first_author
 
+        source_gate_fingerprint = selection_gate_fingerprint(self.project)
         primary_candidates = []
         primary_selection_audit: list[dict[str, Any]] = []
         paper_source_lookup = build_paper_source_lookup(included_papers or [])
@@ -510,8 +550,6 @@ class PipelineRunner:
             study_id = c.pmid or c.study_id or c.doi
             source_record = source_record_for_study(study, paper_source_lookup)
             for outcome_index, outcome in enumerate(study.outcomes):
-                if not outcome_matches(outcome.outcome_name, protocol.pico.outcome_primary):
-                    continue
                 audit_row = {
                     "row_id": f"{study_id}:{outcome_index}",
                     "result_id": result_entity_id(study, outcome_index),
@@ -547,17 +585,26 @@ class PipelineRunner:
                     "effect": None,
                     "se": None,
                     "in_final_primary_analysis": False,
+                    "selection_input_sha256": selection_input_fingerprint(study, outcome_index),
+                    "selection_gate_sha256": source_gate_fingerprint,
                 }
                 annotate_source_provenance(audit_row)
-                population_rank = primary_population_rank(outcome, study, protocol)
-                audit_row["population_rank"] = population_rank
-                if not population_rank:
+                alignment = alignment_status(self.project, protocol, study, outcome_index)
+                audit_row["alignment"] = alignment
+                if alignment["status"] == "mismatch":
                     audit_row["decision"] = "excluded"
-                    audit_row["reason"] = "population_mismatch_or_nonprotocol_subgroup"
+                    audit_row["reason"] = "primary_alignment_mismatch"
                     primary_selection_audit.append(audit_row)
                     continue
-                effect = compute_study_effect(study, outcome, protocol, self.logger)
+                effect = compute_study_effect(study, outcome, protocol, self.logger, audit_row=audit_row)
                 if effect:
+                    if alignment["status"] != "match":
+                        audit_row.update({"decision": "needs_input", "reason": "primary_analysis_alignment_required",
+                                          "requires_adjudication": True,
+                                          "next_action": "Adjudicate outcome, population and contrast against current source evidence."})
+                        primary_selection_audit.append(audit_row)
+                        continue
+                    audit_row["population_rank"] = 1
                     rob = rob_for_study(study, effect, rob_lookup, outcome=outcome)
                     audit_row["risk_of_bias_judgment"] = getattr(rob, "overall_judgment", "") if rob else ""
                     audit_row["risk_of_bias_is_synthetic"] = bool(getattr(rob, "is_synthetic", False)) if rob else False
@@ -576,17 +623,32 @@ class PipelineRunner:
                         audit_row["reason"] = block_reason
                         primary_selection_audit.append(audit_row)
                         continue
-                    rank = primary_candidate_rank(outcome, study, protocol)
+                    # All candidates have explicit clinical alignment; lexical similarity is not authority.
+                    rank = ()
                     audit_row["outcome_rank"] = list(rank)
                     audit_row["effect"] = _meta_engine._to_original(effect.yi, protocol.effect_measure, effect.vi)
                     audit_row["se"] = effect.se
                     study_candidates.append((rank, study, outcome, effect, audit_row["row_id"]))
                 else:
-                    audit_row["decision"] = "excluded"
-                    audit_row["reason"] = "insufficient_data_to_compute_effect_size"
+                    audit_row["decision"] = "needs_input" if audit_row["reason"] in {
+                        "reported_effect_measure_required", "outcome_type_requires_adjudication",
+                        "reported_effect_scale_requires_adjudication",
+                    } else "excluded"
+                    audit_row["reason"] = audit_row["reason"] or "insufficient_data_to_compute_effect_size"
                 primary_selection_audit.append(audit_row)
             if study_candidates:
-                study_candidates.sort(key=lambda item: item[0], reverse=True)
+                candidate_ids = {item[4] for item in study_candidates}
+                identities = {primary_effect_identity(item[2], item[3]) for item in study_candidates}
+                choice = current_primary_choice(self.project, protocol, study, candidate_ids)
+                chosen = choice["row_id"] if choice["status"] == "current" else None
+                if (len(identities) > 1 and chosen is None) or choice["status"] in {"stale", "unavailable"}:
+                    for row in primary_selection_audit:
+                        if row["row_id"] in candidate_ids:
+                            row.update({"decision": "needs_input", "reason": "primary_result_choice_required",
+                                        "requires_adjudication": True,
+                                        "next_action": "Choose the primary result through the version-bound extraction review decision."})
+                    continue
+                study_candidates.sort(key=lambda item: (item[4] != chosen, item[4]))
                 _, selected_study, selected_outcome, selected_effect, selected_row_id = study_candidates[0]
                 if len(study_candidates) > 1:
                     selected_ids = {selected_row_id}
@@ -594,11 +656,11 @@ class PipelineRunner:
                     for row in primary_selection_audit:
                         if row["row_id"] in candidate_ids and row["row_id"] not in selected_ids:
                             row["decision"] = "excluded"
-                            row["reason"] = "lower_ranked_duplicate_primary_outcome_row"
+                            row["reason"] = "explicit_primary_choice_excluded" if chosen else "duplicate_equivalent_primary_result"
                 for row in primary_selection_audit:
                     if row["row_id"] == selected_row_id:
                         row["decision"] = "selected_within_study"
-                        row["reason"] = "best_ranked_primary_outcome_row_for_study"
+                        row["reason"] = "explicit_primary_choice" if chosen else "unique_aligned_primary_result"
                 primary_candidates.append((selected_study, selected_outcome, selected_effect, selected_row_id))
 
         primary_candidates = filter_benchmark_reference_primary_candidates(
@@ -634,7 +696,14 @@ class PipelineRunner:
                     row["decision"] = "excluded"
                     row["reason"] = invalid_effect_reasons[row.get("study_id")]
                     row["in_final_primary_analysis"] = False
+        unresolved = [row for row in primary_selection_audit if row.get("decision") == "needs_input"]
         self.project.save_json("effect_selection_audit.json", primary_selection_audit, subdir="analysis")
+        if unresolved:
+            self.project.clear_downstream("effect_sizes", include_self=True)
+            phase = needs_input_phase(self.project, unresolved)
+            self.project.save_json("primary_alignment_status.json", phase, subdir="analysis")
+            raise PrimaryAlignmentRequired(phase)
+        save_selection_binding(self.project, protocol, extracted_studies, primary_selection_audit, valid_effects)
         self.project.save_json("effect_sizes.json", [item.model_dump() for item in valid_effects], subdir="analysis")
         self.project.save_checkpoint("effect_sizes")
         return valid_effects, primary_selection_audit

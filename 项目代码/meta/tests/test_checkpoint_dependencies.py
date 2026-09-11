@@ -325,6 +325,8 @@ def test_project_rejects_existing_project_root_as_output_dir(tmp_path) -> None:
 
 
 def test_direct_manuscript_resume_uses_cached_analysis(monkeypatch, tmp_path) -> None:
+    # Alignment admission is tested separately; isolate downstream orchestration here.
+    monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached manuscript resume", output_dir=tmp_path / uuid4().hex)
     protocol = ResearchProtocol(
         research_question="Does treatment reduce mortality?",
@@ -409,6 +411,8 @@ def test_direct_manuscript_resume_uses_cached_analysis(monkeypatch, tmp_path) ->
 
 
 def test_direct_manuscript_resume_passes_evidence_gate_state_to_writer(monkeypatch, tmp_path) -> None:
+    # Alignment admission is tested separately; isolate downstream orchestration here.
+    monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached manuscript evidence gate", output_dir=tmp_path / uuid4().hex)
     protocol = ResearchProtocol(
         research_question="Does treatment reduce mortality?",
@@ -717,6 +721,8 @@ def test_can_rerun_manuscript_only_uses_cached_files_even_if_checkpoint_is_missi
 
 
 def test_cached_meta_resume_skips_pooling_and_runs_missing_late_steps(monkeypatch, tmp_path) -> None:
+    # Alignment admission is tested separately; isolate downstream orchestration here.
+    monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached meta resume", output_dir=tmp_path / uuid4().hex)
     protocol = ResearchProtocol(
         research_question="Does treatment reduce mortality?",
@@ -829,6 +835,8 @@ def test_cached_meta_resume_skips_pooling_and_runs_missing_late_steps(monkeypatc
 
 
 def test_cached_effect_size_resume_skips_effect_recomputation(monkeypatch, tmp_path) -> None:
+    # Alignment admission is tested separately; isolate downstream orchestration here.
+    monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached effect resume", output_dir=tmp_path / uuid4().hex)
     protocol = ResearchProtocol(
         research_question="Does treatment reduce mortality?",
@@ -924,7 +932,9 @@ def test_cached_effect_size_resume_skips_effect_recomputation(monkeypatch, tmp_p
     assert project.load_json("meta_results.json", subdir="analysis")["primary_outcome"]["n_studies"] == 2
 
 
-def test_run_meta_analysis_from_effects_persists_result_and_checkpoint(tmp_path) -> None:
+def test_run_meta_analysis_from_effects_persists_result_and_checkpoint(tmp_path, monkeypatch) -> None:
+    # Alignment admission is tested separately; isolate downstream orchestration here.
+    monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("shared meta helper", output_dir=tmp_path / uuid4().hex)
     protocol = ResearchProtocol(
         research_question="Does treatment reduce mortality?",

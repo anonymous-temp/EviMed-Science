@@ -400,7 +400,7 @@ def test_load_extraction_review_payload_lists_missing_source_context_cards() -> 
     ]
 
 
-def test_save_extraction_review_decision_payload_refreshes_readiness_facts_and_package() -> None:
+def test_save_extraction_review_decision_does_not_bless_unbound_cached_pool() -> None:
     project = _project_under_output()
     quote_1 = "28-day mortality: 10/100 deaths in intervention and 18/100 deaths in control."
     quote_2 = "28-day mortality: 20/150 deaths in intervention and 28/150 deaths in control."
@@ -580,24 +580,19 @@ def test_save_extraction_review_decision_payload_refreshes_readiness_facts_and_p
         user_id="tester",
     )
     facts = project.load_json("manuscript_facts.json", subdir="manuscript")
-    package_path = Path(result["package_path"])
 
-    assert result["ok"] is True
-    assert result["artifacts_refreshed"] is True
-    assert result["requires_rerun"] is False
-    assert project.is_step_done("manuscript") is True
-    assert result["evidence_readiness"]["extraction_audit_summary"]["rows_requiring_review"] == 0
-    assert facts["evidence_readiness"]["extraction_audit_summary"]["rows_requiring_review"] == 0
-    assert facts["evidence_readiness"]["extraction_audit_summary"]["conflict_rows"] == 0
-    assert package_path.exists()
-    with zipfile.ZipFile(package_path) as zf:
-        review = json.loads(zf.read("review/evidence_readiness_review.json"))
-        html = zf.read("review/extraction_review.html").decode("utf-8")
-    assert review["summary"]["extraction_review_cards"] == 0
-    assert "Trust status" in html
+    assert result["ok"] is True  # The review decision is saved, not a release approval.
+    assert result["artifacts_refreshed"] is False
+    assert result["requires_rerun"] is True
+    assert result["execution"]["status"] == "needs_input"
+    assert result["execution"]["error_code"] == "cached_primary_alignment_stale"
+    assert project.is_step_done("manuscript") is False
+    assert facts["evidence_readiness"]["extraction_audit_summary"]["rows_requiring_review"] == 1
+    assert not project.get_path("metaagent_export.zip", subdir="package").exists()
+    assert project.load_json("meta_results.json", subdir="analysis") == meta_results.model_dump(mode="json")
 
 
-def test_save_extraction_review_decision_payload_keeps_rerun_required_when_refreshed_draft_still_blocked() -> None:
+def test_save_extraction_review_decision_keeps_rerun_required_for_missing_selection_sources() -> None:
     project = _project_under_output()
     project.save_json(
         "protocol.json",
@@ -706,7 +701,8 @@ def test_save_extraction_review_decision_payload_keeps_rerun_required_when_refre
     )
 
     assert result["ok"] is True
-    assert result["artifacts_refreshed"] is True
-    assert result["manuscript_validation"]["passed"] is False
+    assert result["artifacts_refreshed"] is False
+    assert result["execution"]["status"] == "needs_input"
+    assert result["execution"]["error_code"] == "cached_primary_alignment_stale"
     assert result["requires_rerun"] is True
     assert project.is_step_done("manuscript") is False

@@ -82,6 +82,8 @@ def _prepared_dose_project(tmp_path: Path):
         )
     migration = migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, enforce=True)
+    from primary_alignment_fixture import approve_synthetic_method_fixture
+    approve_synthetic_method_fixture(project, protocol, studies)
     phase = PipelineRunner(project).run_compiled_method_synthesis()
     return project, protocol, studies, migration, plan, phase
 
