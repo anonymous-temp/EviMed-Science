@@ -33,7 +33,7 @@ from new_meta.core.evidence_gate import GateDecision, GateResult
 from new_meta.schemas.meta_result import MetaAnalysisResults, PooledEffect, StudyEffect
 from new_meta.schemas.protocol import PICO, ResearchProtocol
 from new_meta.schemas.risk_of_bias import StudyRoB
-from new_meta.schemas.study import ExtractedStudy, StudyCharacteristics
+from new_meta.schemas.study import ExtractedStudy, OutcomeData, StudyCharacteristics
 
 
 def _fake_plot_write(*args, **kwargs) -> None:
@@ -359,7 +359,8 @@ def test_direct_manuscript_resume_uses_cached_analysis(monkeypatch, tmp_path) ->
             title="Trial one",
             authors=["Smith John"],
             year=2020,
-        )
+        ),
+        outcomes=[OutcomeData(outcome_name="mortality", outcome_type="binary", events_intervention=8, total_intervention=50, events_control=10, total_control=50)],
     )
     project.save_json("protocol.json", protocol)
     project.save_text("search_query.txt", "mortality AND treatment")
@@ -447,7 +448,8 @@ def test_direct_manuscript_resume_passes_evidence_gate_state_to_writer(monkeypat
             authors=["Smith John"],
             year=2020,
             total_sample_size=120,
-        )
+        ),
+        outcomes=[OutcomeData(outcome_name="mortality", outcome_type="binary", events_intervention=8, total_intervention=50, events_control=10, total_control=50)],
     )
     project.prisma.records_identified = 5
     project.prisma.records_after_dedup = 4
@@ -759,7 +761,8 @@ def test_cached_meta_resume_skips_pooling_and_runs_missing_late_steps(monkeypatc
                 title="Trial one",
                 authors=["Smith John"],
                 year=2020,
-            )
+            ),
+            outcomes=[OutcomeData(outcome_name="mortality", outcome_type="binary", events_intervention=8, total_intervention=50, events_control=10, total_control=50)],
         )
     ]
     project.save_json("protocol.json", protocol)
@@ -861,7 +864,8 @@ def test_cached_effect_size_resume_skips_effect_recomputation(monkeypatch, tmp_p
                 title="Trial one",
                 authors=["Smith John"],
                 year=2020,
-            )
+            ),
+            outcomes=[OutcomeData(outcome_name="mortality", outcome_type="binary", events_intervention=8, total_intervention=50, events_control=10, total_control=50)],
         )
     ]
     project.save_json("protocol.json", protocol)

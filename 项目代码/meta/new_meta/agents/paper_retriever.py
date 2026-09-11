@@ -1752,6 +1752,8 @@ class PaperRetriever(BaseAgent):
 
             if best_match and not best_match.get("pdf_path"):
                 best_match["pdf_path"] = pdf_path_str
+                best_match["user_uploaded_full_text"] = True
+                best_match["fulltext_source"] = "user_upload"
                 best_match["source_type"] = best_match.get("source_type") or "database"
                 best_match["pdf_match_score"] = round(best_score, 3)
                 pmid = best_match.get("pmid", "")

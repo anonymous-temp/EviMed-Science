@@ -187,6 +187,8 @@ class MethodExecutor:
         options: dict[str, Any] | None = None,
         auto_select_ambiguous: bool = False,
     ) -> MethodExecutionResult:
+        from new_meta.core.extraction_status import require_complete_extraction
+        require_complete_extraction(project)
         from new_meta.core.evidence_ledger import EvidenceLedger
         from new_meta.schemas.evidence_ledger import (
             DiagnosticAccuracyData,

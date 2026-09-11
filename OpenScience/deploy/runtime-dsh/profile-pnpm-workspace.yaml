@@ -1,6 +1,9 @@
 packages:
   - .
 
+# profile-kernel-pins.mjs appends exact overrides from the verified CLI closure
+# at image build time; peer providers live in the profile's devDependencies.
+
 # pnpm 10+ refuses to run a dependency's install script until it is reviewed
 # here, and an unlisted script is a hard install error. The policy is DSH's own,
 # because DSH is the one that knows which of its dependencies must build: deny

@@ -41,8 +41,8 @@ def test_web_progress_stream_forwards_fulltext_and_method_options() -> None:
 
     assert 'elif kind == "fulltext_retrieval"' in source
     assert 'elif kind == "fulltext_required"' in source
-    assert 'elif kind == "method_decision_required"' in source
-    assert '"type": "method_decision_required"' in source
+    assert 'elif kind in {"method_decision_required", "phase_incomplete"}' in source
+    assert '"type": kind' in source
 
 
 def test_cli_does_not_pause_for_protocol_or_sparse_evidence_confirmation() -> None:

@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from new_meta.core.project import Project
+from new_meta.core.extraction_status import IncompletePhaseError, require_complete_extraction
 from new_meta.core.release_contract import ReleaseStatus, load_release_decision
 from new_meta.schemas.phase_result import (
     ArtifactRef,
@@ -171,7 +172,7 @@ def create_api_router(output_root: str | Path) -> APIRouter:
                 result_ids=request.result_ids,
                 options=request.options,
             )
-        except PrimaryAlignmentRequired as exc:
+        except (PrimaryAlignmentRequired, IncompletePhaseError) as exc:
             raise HTTPException(status_code=409, detail=exc.phase.model_dump(mode="json")) from exc
         except MethodExecutionBlocked as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -258,6 +259,10 @@ def _resolve_project_path(project_dir: str, output_root: Path) -> Path:
 
 
 def _release_phase_result(project: Project) -> PhaseResult:
+    try:
+        require_complete_extraction(project)
+    except IncompletePhaseError as exc:
+        return exc.phase
     decision = load_release_decision(project)
     if not decision:
         return PhaseResult(

@@ -15,6 +15,7 @@ from new_meta.schemas.phase_result import (
     PhaseResult,
 )
 from new_meta.schemas.protocol import PICO, ResearchProtocol
+from new_meta.schemas.study import ExtractedStudy, OutcomeData, StudyCharacteristics
 
 
 def test_blocked_phase_result_requires_an_actionable_blocker() -> None:
@@ -85,9 +86,10 @@ def test_runner_exposes_typed_primary_effect_selection_result(
     )
     result = runner.run_primary_effect_selection(
         protocol=protocol,
-        extracted_studies=[object()],
+        extracted_studies=[ExtractedStudy(characteristics=StudyCharacteristics(study_id="S1"),
+                                         outcomes=[OutcomeData(outcome_name="mortality", effect_size=0.8)])],
         rob_results=[object()],
-        included_papers=[{}],
+        included_papers=[{"pmid": "S1"}],
     )
 
     assert isinstance(result, PhaseResult)

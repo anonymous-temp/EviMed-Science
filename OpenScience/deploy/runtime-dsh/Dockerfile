@@ -395,6 +395,7 @@ ENV DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 # Dockerfile makes the decision reviewable on its own.
 COPY deploy/runtime-dsh/profile-pnpm-workspace.yaml /opt/evimed/profile-pnpm-workspace.yaml
 COPY deploy/runtime-dsh/profile-seed.mjs /usr/local/bin/evimed-profile-seed.mjs
+COPY deploy/runtime-dsh/profile-kernel-pins.mjs /usr/local/bin/evimed-profile-kernel-pins.mjs
 
 # The committed composition snapshot, brought in so the build can compare it to
 # the one this image actually produces.
@@ -424,10 +425,18 @@ COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-con
 # `build-smoke.sh` BOOTS the relocated copy, which is the only one of the four
 # that imports a plugin. The first three all passed on an image whose bundle
 # could not be imported at all — see that script's header.
+#
+# Initialize through DSH before seeding exact peer providers from the verified
+# CLI closure. pnpm resolves this profile independently of npm's --before; an
+# exact top-level bundle alone does not pin transitive prereleases. Keeping the
+# peer providers in devDependencies avoids activating extra bundle layers.
+# --save-prod then promotes only the intended bundles into runtime dependencies.
 RUN set -eux; \
   install -d -m 0755 "${DSH_HOME_SEED}/profiles/evimed-runtime"; \
   cp /opt/evimed/profile-pnpm-workspace.yaml "${DSH_HOME_SEED}/profiles/evimed-runtime/pnpm-workspace.yaml"; \
-  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "dsh-cite@0.3.2" file:/opt/evimed/socket; \
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime list --depth 0; \
+  node /usr/local/bin/evimed-profile-kernel-pins.mjs /usr/local/lib/node_modules/@deepseek-ai/dsh/package.json "${DSH_HOME_SEED}/profiles/evimed-runtime" /opt/evimed/profile-pnpm-workspace.yaml "${DSH_VERSION}" "${DSH_CORDIS_VERSION}"; \
+  DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "dsh-cite@0.3.2" file:/opt/evimed/socket; \
   node -e 'const fs=require("node:fs"),path=require("node:path"); const [root,want]=process.argv.slice(1),seen=new Set(); for(const entry of fs.readdirSync(root,{recursive:true})){const match=entry.match(/(?:^|\/)@deepseek-ai\/(dsh(?:-[^/]+)?)\/package\.json$/); if(!match)continue; const pkg=JSON.parse(fs.readFileSync(path.join(root,entry),"utf8")); if(pkg.name!=="@deepseek-ai/"+match[1]||pkg.version!==want)throw Error("Profile kernel package differs from the pinned CLI: "+pkg.name); seen.add(pkg.name);} if(seen.size<100)throw Error("Profile kernel inventory is incomplete"); console.log("Verified profile kernel packages:",seen.size,want);' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" "${DSH_VERSION}"; \
   pty_platform="$(node -p 'process.platform + "-" + process.arch')"; \
   pty_binding="$(find "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules" -path "*/node-pty/prebuilds/${pty_platform}/pty.node" -print -quit)"; \

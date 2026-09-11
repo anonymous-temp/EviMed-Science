@@ -1,8 +1,10 @@
+import json
 from pathlib import Path
 
 from new_meta.agents.screening_agent import ScreeningAgent, ScreeningDecision
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import PICO, ResearchProtocol
+from new_meta.schemas.screening import FullTextScreeningDecision
 
 
 def _protocol() -> ResearchProtocol:
@@ -111,11 +113,23 @@ def test_full_text_role_policy_routes_secondary_and_design_records_to_audit_only
         for paper in papers
     }
 
-    def always_include(*args, **kwargs):
-        return ScreeningDecision(
+    roles = {"36027570": "primary_publication", "34449189": "primary_publication",
+             "36029467": "secondary_analysis", "34051124": "design_or_protocol",
+             "37534453": "adjacent_outcome_trial"}
+
+    def always_include(prompt, schema, **kwargs):
+        identity = json.loads(prompt.split("## Source Identity to Bind the Decision\n", 1)[1].split("\n\n", 1)[0])
+        return FullTextScreeningDecision(
             decision="include",
+            reason_code="eligible",
             reason="LLM included for possible relevance.",
+            exclusion_criterion=None,
             confidence="high",
+            source_identity=identity,
+            publication_role=roles[identity["pmid"]],
+            target_outcome_priority="primary",
+            full_text_identity_status="consistent",
+            publication_identity_checks=[],
         )
 
     agent.call_llm_structured = always_include
