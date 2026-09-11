@@ -36,8 +36,19 @@ function activationKey(projectId) {
 
 /** Capsules supply explicit user context. They never confer tools, permissions or evidence verdicts. */
 export class CapsuleService {
-  /** @param {import('./productStore.mjs').ProductDocuments} documents @param {{indexing?:any}} [options] */
-  constructor(documents, { indexing = null } = {}) { this.documents = documents; this.indexing = indexing; }
+  /** @param {import('./productStore.mjs').ProductDocuments} documents
+   *  @param {{indexing?:any,strictIndex?:boolean}} [options] */
+  constructor(documents, { indexing = null, strictIndex = false } = {}) {
+    this.documents = documents;
+    this.indexing = indexing;
+    // A derived index is an optimisation, and the facts it ranks are all in
+    // PostgreSQL anyway. When it is down, a recall should return what the
+    // lexical search finds rather than fail — the same choice `memorySubstrate`
+    // makes for research memory. An operator who would rather see the failure
+    // sets the strict switch.
+    this.strictIndex = Boolean(strictIndex);
+    this.lastIndexError = null;
+  }
 
   /** @param {string} userId @param {Record<string,any>} input */
   async create(userId, input) {
@@ -219,24 +230,29 @@ export class CapsuleService {
     const global = projectId ? await this.active(userId, null) : { items: [] };
     const active = [...local.items, ...global.items].filter((x, i, all) => all.findIndex((y) => y.capsuleId === x.capsuleId) === i).slice(0, 8);
     if (this.indexing && active.length) {
-      const generation = accountCreatedAt ?? await this.indexing.accountGeneration(userId);
-      if (!generation) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
-      const ranked = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4), projectId);
-      const items = [];
-      for (const match of ranked) {
-        const payload = match.row.payload;
-        if (factKinds.length && !factKinds.includes(payload.factKind)) continue;
-        if (since && new Date(match.row.created_at).getTime() < new Date(since).getTime()) continue;
-        const capsule = await this.documents.get(userId, "capsule", match.selection.capsuleId);
-        if (!capsule) continue;
-        items.push({
-          id: match.row.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: match.selection.mode,
-          factKind: payload.factKind, layer: payload.layer, content: payload.content,
-          origin: payload.origin, provenance: payload.provenance, revision: match.row.revision, contextOnly: true,
-        });
-        if (items.length === limit) break;
+      try {
+        const semantic = await this.#semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt });
+        // An empty semantic answer and an unindexed capsule look the same from
+        // here, and one of them is routine: the index is built by a worker, so
+        // every capsule is unindexed between being written and being published,
+        // and the whole estate is unindexed the day the provider is turned on.
+        // The lexical path reads the same authoritative rows, so falling
+        // through costs one query and is never worse than answering nothing.
+        // An operator who set the strict switch asked for the index to be the
+        // answer, and an empty index is then an answer.
+        if (semantic.items.length || this.strictIndex) return semantic;
+      } catch (error) {
+        const code = typeof error?.code === "string" ? error.code : "memory_index_unavailable";
+        // A changed account generation is not an index failure: it is the guard
+        // saying this account was deleted and recreated while the request ran,
+        // and answering it with a lexical result would hide that from the
+        // caller. A refused payload is the caller's own mistake, for the same
+        // reason. Everything else is the index being unavailable or wrong,
+        // which is exactly what the fallback exists for.
+        if (code === "memory_account_changed" || code.startsWith("capsule_")) throw error;
+        this.lastIndexError = code;
+        if (this.strictIndex) throw error;
       }
-      return { items, mode: "semantic", contextOnly: true };
     }
     const matches = [];
     for (const selection of active) {
@@ -250,5 +266,28 @@ export class CapsuleService {
       });
     }
     return { items: matches.slice(0, limit), mode: "lexical", contextOnly: true };
+  }
+
+  /** @param {string} userId @param {Record<string,any>} input */
+  async #semanticRecall(userId, { needle, active, limit, factKinds, since, projectId, accountCreatedAt }) {
+    const generation = accountCreatedAt ?? await this.indexing.accountGeneration(userId);
+    if (!generation) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
+    const ranked = await this.indexing.recall(userId, generation, active, needle, Math.min(100, limit * 4), projectId);
+    const items = [];
+    for (const match of ranked) {
+      const payload = match.row.payload;
+      if (factKinds.length && !factKinds.includes(payload.factKind)) continue;
+      if (since && new Date(match.row.created_at).getTime() < new Date(since).getTime()) continue;
+      const capsule = await this.documents.get(userId, "capsule", match.selection.capsuleId);
+      if (!capsule) continue;
+      items.push({
+        id: match.row.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: match.selection.mode,
+        factKind: payload.factKind, layer: payload.layer, content: payload.content,
+        origin: payload.origin, provenance: payload.provenance, revision: match.row.revision, contextOnly: true,
+      });
+      if (items.length === limit) break;
+    }
+    this.lastIndexError = null;
+    return { items, mode: "semantic", contextOnly: true };
   }
 }

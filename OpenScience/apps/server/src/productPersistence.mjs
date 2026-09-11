@@ -198,7 +198,6 @@ CREATE TABLE IF NOT EXISTS evimed_product.memory_index_state (
   fingerprint text NOT NULL,
   entry_count integer NOT NULL CHECK (entry_count >= 0),
   status text NOT NULL CONSTRAINT memory_index_state_status_check CHECK (status IN ('published','retired')),
-  engine_memory_ids jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(engine_memory_ids)='array'),
   last_job_id text NOT NULL,
   published_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   verified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
@@ -273,6 +272,12 @@ CREATE INDEX IF NOT EXISTS feedback_events_owner_idx ON evimed_product.feedback_
 CREATE INDEX IF NOT EXISTS feedback_events_project_fk_idx ON evimed_product.feedback_events(user_id,project_id);
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-feedback-events-v1') ON CONFLICT DO NOTHING;
 ALTER TABLE evimed_product.memory_index_state ADD COLUMN IF NOT EXISTS verified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp();
+-- The engine's own record ids were a MemOS-era receipt; the index is addressed
+-- by path now, and a readback reads those paths. CREATE TABLE IF NOT EXISTS
+-- leaves an existing table alone, so removing the column from the definition
+-- above is only half the migration — this is the other half.
+ALTER TABLE evimed_product.memory_index_state DROP COLUMN IF EXISTS engine_memory_ids;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-11-memory-index-openviking-v1') ON CONFLICT DO NOTHING;
 CREATE OR REPLACE FUNCTION evimed_product.enqueue_memory_index_job() RETURNS trigger
 LANGUAGE plpgsql AS $function$
 DECLARE capsule text;
