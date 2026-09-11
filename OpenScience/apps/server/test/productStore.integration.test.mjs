@@ -213,6 +213,19 @@ test("capsule and fact revisions atomically enqueue generation-bound memory inde
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_product.schema_migrations WHERE name='2026-09-05-memory-index-outbox-v1'")).rows[0].count, 1);
 });
 
+test("the index ledger carries no engine record ids, on a database that already had the column", options, async () => {
+  // `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so removing
+  // the column from the definition is only half the migration. This asserts the
+  // other half ran: the database this test runs against was created by the
+  // MemOS-era schema and still had the column a moment ago.
+  const columns = await database.query(`SELECT column_name FROM information_schema.columns
+    WHERE table_schema='evimed_product' AND table_name='memory_index_state'`);
+  const names = columns.rows.map((row) => row.column_name);
+  assert.ok(names.includes("fingerprint"), "the ledger itself must still be there");
+  assert.equal(names.includes("engine_memory_ids"), false, "the index is addressed by path now, and the readback reads those paths");
+  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_product.schema_migrations WHERE name='2026-09-11-memory-index-openviking-v1'")).rows[0].count, 1);
+});
+
 test("an exhausted reconciliation job can be rearmed without creating a duplicate", options, async () => {
   const key = `memory-index:reconcile:${randomUUID()}`;
   const first = await jobs.enqueue(owner, "memory-index", { capsuleId: "retry", accountCreatedAt: "generation" },
