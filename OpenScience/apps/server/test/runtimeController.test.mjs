@@ -7,7 +7,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, requestRuntime } from "../src/runtimeManager.mjs";
+import { RUNTIME_SOCKET_FILE_NAME, RuntimeManager, buildRuntimeLaunchPlan, requestRuntime, verifyEviMedWorkloadToken } from "../src/runtimeManager.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION } from "../src/runtimeControllerClient.mjs";
 import { RuntimeControllerClient } from "../src/runtimeControllerClient.mjs";
@@ -220,6 +220,23 @@ const runtimeRoot = fields.type === "volume"
   ? path.join(volumeRoot, fields["volume-subpath"])
   : fields.src;
 const socketPath = path.join(runtimeRoot, ${JSON.stringify(RUNTIME_SOCKET_FILE_NAME)});
+if (process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES === "1") {
+  const dataMount = args.find((arg) => arg.split(",").includes("dst=/runtime"));
+  const dataFields = Object.fromEntries(dataMount.split(",").map((part) => {
+    const index = part.indexOf("=");
+    return index === -1 ? [part, ""] : [part.slice(0, index), part.slice(index + 1)];
+  }));
+  const runtimeData = path.join(volumeRoot, dataFields["volume-subpath"]);
+  for (const [envName, filename] of [
+    ["EVIMED_MODEL_GATEWAY_TOKEN_FILE", "model-gateway.token"],
+    ["EVIMED_WORKLOAD_TOKEN_FILE", "evimed-workload.token"],
+  ]) {
+    if (!args.includes(envName + "=/runtime/dsh-home/" + filename)) process.exit(4);
+    // The issuer has already written each file, including explicit empty
+    // files when signing is absent. The controller only carries fixed paths.
+    if (!fs.statSync(path.join(runtimeData, "dsh-home", filename)).isFile()) process.exit(5);
+  }
+}
 fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 fs.rmSync(socketPath, { force: true });
 writeState(name, { pid: process.pid, state: "running", runtime: true, containerName: name, userId: owner });
@@ -297,6 +314,10 @@ function controllerConfig({ dataDir, socketPath, dockerBin, enableKernel = true 
     runtimeSandboxMode: "docker",
     runtimeControllerMode: "direct",
     runtimeControllerSocket: socketPath,
+    deepseekProviderEnabled: false,
+    deepseekApiKey: "",
+    modelGatewaySigningSecret: "",
+    evimedWorkloadSigningSecret: "",
     runtimeContainerBin: dockerBin,
     runtimeDataVolume: "controller-test-data",
     runtimeTransport: "unix",
@@ -346,8 +367,10 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   }
   const previousState = process.env.FAKE_DOCKER_STATE;
   const previousVolume = process.env.FAKE_VOLUME_ROOT;
+  const previousVerifyTokens = process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES;
   process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
   process.env.FAKE_VOLUME_ROOT = dataDir;
+  process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES = "1";
   const controller = createRuntimeController(controllerConfig({ dataDir, socketPath, dockerBin }));
   // Declared outside the try so the finally can reach it. A manager closed only
   // on the success path leaves its runtimes, its timers and its connection to
@@ -358,7 +381,7 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
   let manager = null;
   try {
     await controller.listen();
-    manager = new RuntimeManager({
+    manager = new RuntimeManager(loadConfig({
       ...controllerConfig({ dataDir, socketPath, dockerBin }),
       runtimeControllerMode: "socket",
       runtimeControllerTimeoutMs: 2_000,
@@ -371,10 +394,17 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
       runtimeIdleTimeoutMs: 0,
       runtimeQuotaCheckIntervalMs: 0,
       maxLogFileBytes: 1024 * 1024,
-    });
+    }));
     const runtime = await manager.start(project);
     assert.equal(runtime.sandboxMode, "docker");
     assert.equal(runtime.pid, null);
+    assert.ok(runtime.cookie, "a disabled, unsigned provider still needs runtime authentication");
+    const dshHome = path.join(project.runtimeDir, "container-runtime", "dsh-home");
+    for (const filename of ["model-gateway.token", "evimed-workload.token"]) {
+      assert.equal(await readFile(path.join(dshHome, filename), "utf8"), "");
+    }
+    assert.equal(runtime.modelGatewayToken, null);
+    assert.equal(runtime.workloadTokenFile, null);
     // The round trip that proves the isolated control socket carries the wire
     // rather than merely existing: the same call the readiness probe makes,
     // with its body handed back intact.
@@ -407,6 +437,8 @@ test("isolated runtime controller starts, probes, and stops a project runtime", 
     else process.env.FAKE_DOCKER_STATE = previousState;
     if (previousVolume == null) delete process.env.FAKE_VOLUME_ROOT;
     else process.env.FAKE_VOLUME_ROOT = previousVolume;
+    if (previousVerifyTokens == null) delete process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES;
+    else process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES = previousVerifyTokens;
     await removeTree(tmp);
   }
 });
@@ -416,7 +448,9 @@ test("capsule, revision and citation settings survive the manager to isolated co
     { name: "enabled", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "1" },
     { name: "custom gateway", stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "https://trusted-gateway.example:9443/custom/model/v1/", active: "1" },
     { name: "local state", stateStore: "local", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "0" },
-    { name: "no signing secret", stateStore: "postgres", signingSecret: "", gateway: "http://open-science-web:8787/internal/model/v1", active: "0" },
+    { name: "no workload signing secret", stateStore: "postgres", signingSecret: "", gateway: "http://open-science-web:8787/internal/model/v1", active: "0" },
+    { name: "disabled provider", providerEnabled: false, stateStore: "postgres", signingSecret: "capsule-test-workload-signing-secret-32-bytes", gateway: "http://open-science-web:8787/internal/model/v1", active: "1" },
+    { name: "no platform signing secrets", providerEnabled: false, stateStore: "postgres", signingSecret: "", modelSigningSecret: "", gateway: "http://open-science-web:8787/internal/model/v1", active: "0" },
   ]) {
     await t.test(scenario.name, async () => {
       const tmp = await shortTempDir("oscap-");
@@ -429,6 +463,7 @@ test("capsule, revision and citation settings survive the manager to isolated co
       process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
       process.env.FAKE_VOLUME_ROOT = dataDir;
       process.env.FAKE_DOCKER_LOG = dockerLog;
+      process.env.FAKE_RUNTIME_VERIFY_TOKEN_FILES = "1";
       const base = controllerConfig({ dataDir, socketPath, dockerBin });
       // The privileged controller has no database or workload signing key.
       const controller = createRuntimeController({
@@ -442,10 +477,10 @@ test("capsule, revision and citation settings survive the manager to isolated co
         ...base,
         stateStore: scenario.stateStore,
         evimedWorkloadSigningSecret: scenario.signingSecret,
-        modelGatewaySigningSecret: "capsule-test-model-signing-secret-with-32-bytes",
+        modelGatewaySigningSecret: scenario.modelSigningSecret ?? "capsule-test-model-signing-secret-with-32-bytes",
         modelGatewayInternalUrl: scenario.gateway,
         publicSourceGatewayInternalUrl: "https://sources.example:9443/internal/sources/v1/fetch",
-        deepseekProviderEnabled: true,
+        deepseekProviderEnabled: scenario.providerEnabled ?? true,
         deepseekModel: "deepseek-v4-pro",
         runtimeControllerMode: "socket",
         runtimeControllerTimeoutMs: 2_000,
@@ -461,7 +496,7 @@ test("capsule, revision and citation settings survive the manager to isolated co
       manager.pluginOverrides.set(manager.key(project), pluginConfig);
       try {
         await controller.listen();
-        await manager.start(project);
+        const runtime = await manager.start(project);
         const invocations = (await readFile(dockerLog, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
         const args = invocations.find((argv) => argv[0] === "run" && argv.includes("open-science.web.runtime=true"));
         assert.ok(args, "the assertion must inspect the controller's actual Docker spawn");
@@ -475,6 +510,21 @@ test("capsule, revision and citation settings survive the manager to isolated co
         assert.ok(args.includes("EVIMED_CITE_CONFIG_REVISION=3"));
         assert.ok(args.includes("EVIMED_PUBLIC_SOURCE_GATEWAY_URL=https://sources.example:9443/internal/sources/v1/fetch"), "the citation plugin must receive the managed source endpoint");
         assert.ok(args.includes("EVIMED_MODEL_GATEWAY_TOKEN_FILE=/runtime/dsh-home/model-gateway.token"), "citation must use the model token, not the workload token");
+        assert.ok(args.includes("EVIMED_WORKLOAD_TOKEN_FILE=/runtime/dsh-home/evimed-workload.token"), "capsule and revision must receive the API-issued workload token path");
+        const tokenEnvironment = (argv) => argv.filter((arg) => /^EVIMED_(MODEL_GATEWAY|WORKLOAD)_TOKEN_FILE=/.test(arg)).sort();
+        assert.deepEqual(tokenEnvironment(args), tokenEnvironment(buildRuntimeLaunchPlan(webConfig, project, 49152).args), "API and credential-free controller must describe the same files");
+        const dshHome = path.join(project.runtimeDir, "container-runtime", "dsh-home");
+        const modelToken = (await readFile(path.join(dshHome, "model-gateway.token"), "utf8")).trim();
+        assert.equal(modelToken, runtime.modelGatewayToken ?? "", "the file must hold exactly the registered platform token");
+        if (modelToken) assert.equal(manager.assertActiveModelGatewayToken(modelToken).projectId, project.id);
+        const workloadToken = (await readFile(path.join(dshHome, "evimed-workload.token"), "utf8")).trim();
+        if (scenario.signingSecret) {
+          assert.equal(runtime.workloadTokenFile, path.join(dshHome, "evimed-workload.token"));
+          assert.equal(verifyEviMedWorkloadToken(workloadToken, { secret: scenario.signingSecret, userId: project.userId, projectId: project.id }).projectId, project.id);
+        } else {
+          assert.equal(workloadToken, "");
+          assert.equal(runtime.workloadTokenFile, null);
+        }
         assert.ok(args.includes(`EVIMED_CAPSULE_ACTIVE=${scenario.active}`), "the plugin flag must agree with the endpoint");
         assert.deepEqual(capsuleEnv(args), capsuleEnv(buildRuntimeLaunchPlan(webConfig, project, 49152).args));
         const patch = await readFile(path.join(project.runtimeDir, "container-runtime", "dsh-home", "control-plane-patch.yml"), "utf8");
@@ -483,7 +533,7 @@ test("capsule, revision and citation settings survive the manager to isolated co
       } finally {
         await manager.closeAll().catch(() => {});
         await controller.close().catch(() => {});
-        for (const key of ["FAKE_DOCKER_STATE", "FAKE_VOLUME_ROOT", "FAKE_DOCKER_LOG"]) {
+        for (const key of ["FAKE_DOCKER_STATE", "FAKE_VOLUME_ROOT", "FAKE_DOCKER_LOG", "FAKE_RUNTIME_VERIFY_TOKEN_FILES"]) {
           if (savedEnv[key] == null) delete process.env[key];
           else process.env[key] = savedEnv[key];
         }
