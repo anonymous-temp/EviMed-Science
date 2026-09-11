@@ -1,0 +1,80 @@
+name: parser-diagnostic
+
+on:
+  push:
+    branches: ["codex/diagnostic-parser-*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parser-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify the isolated dependency repair and disposable host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          base=16396a18dd3f1565215abe5db68fb67f628f8c29
+          test "$(git rev-parse HEAD^)" = "$base"
+          for source in \
+            OpenScience/deploy/document-parser/parser_service.py \
+            OpenScience/scripts/ops/parser-ingestion-smoke.mjs; do
+            test "$(git rev-parse "HEAD:$source")" = "$(git rev-parse "$base:$source")"
+          done
+          test "$(git rev-parse HEAD:OpenScience/deploy/document-parser/requirements.txt)" = 6266cd230406bb0dda5042423ac267810d889887
+          test "$(git rev-parse HEAD:OpenScience/deploy/document-parser/Dockerfile)" = 7b1a2cbb1b680a5c1cafb2f0f9c31e7ea3b57ab7
+          python3 OpenScience/scripts/ops/parser-diagnostic.py \
+            --write-fixture "$RUNNER_TEMP/parser-diagnostic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.pdf"
+
+      - name: Build only the actual parser image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --file OpenScience/deploy/document-parser/Dockerfile \
+            --tag "evimed-parser-diagnostic:${GITHUB_SHA}" OpenScience
+          docker image inspect --format '{{.Id}}' "evimed-parser-diagnostic:${GITHUB_SHA}"
+
+      - name: Diagnose the synthetic PDF under production resource limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="evimed-parser-diagnostic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() { timeout 2s docker rm --force "$name" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker create --name "$name" --network none --user 1000:1000 --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --memory 6g --cpus 4 --pids-limit 512 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=2g \
+            --env MINERU_MODEL_SOURCE=local --env CUDA_VISIBLE_DEVICES= \
+            --mount "type=bind,source=$RUNNER_TEMP/parser-diagnostic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.pdf,target=/data/fixture.pdf,readonly" \
+            --mount "type=bind,source=$GITHUB_WORKSPACE/OpenScience/scripts/ops/parser-diagnostic.py,target=/diagnostic/runner.py,readonly" \
+            --workdir /app --entrypoint python \
+            "evimed-parser-diagnostic:${GITHUB_SHA}" /diagnostic/runner.py
+          set +e
+          # 165s child / 170s Python wall / <=180s including inspect and teardown.
+          timeout --signal=TERM --kill-after=1s 175s docker start --attach "$name"
+          result=$?
+          set -e
+          timeout 2s docker inspect --format \
+            '{"stage":"container_finish","exitCode":{{.State.ExitCode}},"oomKilled":{{.State.OOMKilled}},"running":{{.State.Running}}}' "$name" || true
+          printf '{"stage":"docker_attach_finish","exitCode":%s}\n' "$result"
+          exit "$result"
+
+      - name: Remove only this diagnostic container after cancellation
+        if: always()
+        shell: bash
+        run: |
+          timeout 5s docker rm --force \
+            "evimed-parser-diagnostic-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >/dev/null 2>&1 || true
