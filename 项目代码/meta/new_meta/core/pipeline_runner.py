@@ -654,7 +654,11 @@ class PipelineRunner:
                     study_candidates.append((rank, study, outcome, effect, audit_row["row_id"]))
                     verified_trial_candidates.append((audit_row["row_id"], outcome.primary_analysis_alignment.assessment))
                 else:
-                    audit_row["decision"] = "needs_input" if audit_row["reason"] in {
+                    unresolved_reported_precision = (
+                        alignment["status"] == "match"
+                        and audit_row["reason"] == "reported_effect_precision_requires_adjudication"
+                    )
+                    audit_row["decision"] = "needs_input" if unresolved_reported_precision or audit_row["reason"] in {
                         "reported_effect_measure_required", "outcome_type_requires_adjudication",
                         "reported_effect_scale_requires_adjudication",
                     } else "excluded"

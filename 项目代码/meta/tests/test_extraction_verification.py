@@ -103,11 +103,15 @@ def test_publications_do_not_establish_trial_independence(case):
     assert errors and errors[0]["reason"] == ("trial_identity_required" if case == "unknown" else "overlapping_trial_units")
 
 
-def run_verifier(tmp_path, monkeypatch, responses, *, candidate=None, content=SOURCE, repair=None):
+def run_verifier(tmp_path, monkeypatch, responses, *, candidate=None, content=SOURCE, repair=None, batch_size=4):
     import hashlib
     from new_meta.agents.data_extraction_agent import DataExtractionAgent
     from new_meta.core.project import Project
     project = Project("verifier regression", output_dir=tmp_path)
+    # Existing mixed-batch fixtures continue exercising batch isolation, even
+    # when production sends one outcome per independently observed response.
+    if batch_size is not None:
+        monkeypatch.setattr("new_meta.agents.data_extraction_agent.VERIFICATION_BATCH_SIZE", batch_size)
     path = project.base_dir / "papers" / "source.txt"; path.write_text(content)
     agent = DataExtractionAgent(); calls = []
     iterator = iter(responses)
@@ -232,12 +236,36 @@ def test_source_middle_is_preserved_and_batch_indices_are_original(tmp_path, mon
     from new_meta.core.primary_analysis_alignment import alignment_status
     content = "Retained introduction. " * 900 + SOURCE + "Retained appendix. " * 1600
     candidate = study(); candidate.outcomes = [candidate.outcomes[0].model_copy(deep=True) for _ in range(5)]
-    responses = [ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row(i) for i in range(4)]),
-                 ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row(4)])]
-    project, result, calls = run_verifier(tmp_path, monkeypatch, responses, candidate=candidate, content=content)
+    responses = [ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row(i)])
+                 for i in range(5)]
+    project, result, calls = run_verifier(tmp_path, monkeypatch, responses, candidate=candidate,
+                                        content=content, batch_size=None)
     assert all(item[0] == content for item in calls)
-    assert [item[1] for item in calls] == [[0, 1, 2, 3], [4]]
+    assert [item[1] for item in calls] == [[0], [1], [2], [3], [4]]
     assert all(alignment_status(project, protocol(), result, i)["status"] == "match" for i in range(5))
+
+
+@pytest.mark.parametrize("subgroups,secondary", [([], []), (["baseline kidney stage"], ["all-cause mortality"])])
+def test_extraction_prompt_receives_exact_prespecified_result_scope(tmp_path, monkeypatch, subgroups, secondary):
+    import json
+    from new_meta.agents.data_extraction_agent import DataExtractionAgent, OutcomeList
+    from new_meta.core.project import Project
+    current = protocol()
+    current.subgroup_variables = subgroups
+    current.pico.outcomes_secondary = secondary
+    fixture = study()
+    agent = DataExtractionAgent()
+    prompts = []
+    def extract(prompt, schema, _identity):
+        prompts.append(prompt)
+        return OutcomeList(outcomes=fixture.outcomes) if schema is OutcomeList else fixture.characteristics
+    monkeypatch.setattr(agent, "_extract_with_retry", extract)
+    agent._extract_single({"pmid": "trial-paper"}, {"full_text": SOURCE}, current,
+                          Project("scope extraction", output_dir=tmp_path))
+    assert "- Prespecified Subgroup Analyses: " + json.dumps(subgroups) in prompts[1]
+    assert "- Secondary Outcomes: " + json.dumps(secondary) in prompts[1]
+    assert "extract overall and per-subgroup data" not in prompts[1]
+    assert "only if the paper explicitly reports that SE" in prompts[1]
 
 
 def test_exhausted_incomplete_verification_has_precise_runtime_reasons(tmp_path, monkeypatch):

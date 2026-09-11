@@ -17,10 +17,12 @@ from typing import Any
 from new_meta.core.evidence_gate import outcome_matches
 from new_meta.engines import effect_size as effect_size_engine
 from new_meta.schemas.protocol import ResearchProtocol
-from new_meta.schemas.study import ExtractedStudy, OutcomeData
+from new_meta.schemas.study import ConflictNote, ExtractedStudy, OutcomeData
 
 
 _RATIO_MEASURES = {"OR", "RR"}
+_COUNT_MEASURES = {"OR", "RR", "RD"}
+_REPORTED_RATIO_MEASURES = {"OR", "RR", "HR", "IRR"}
 _Z_975 = 1.959963984540054
 
 
@@ -45,6 +47,7 @@ def reconcile_extracted_rct_designs(
             "multi_arm_studies": [],
             "comparative_rows": 0,
             "reported_effects_recovered": 0,
+            "retired_count_covariances": [],
         }
 
     parsed_lookup = _parsed_source_lookup(parsed_papers or {})
@@ -104,12 +107,14 @@ def reconcile_extracted_rct_designs(
         detected_designs.add(design)
         if is_multi_arm:
             multi_arm_studies.append(study_id)
+            retired = _retire_legacy_count_covariances(eligible_rows, protocol)
+            changed = changed or bool(retired)
             if "multi" not in str(characteristics.study_design or "").lower():
                 characteristics.study_design = "multi-arm RCT"
                 changed = True
 
         estimand_id = _estimand_id(protocol)
-        prepared: list[tuple[OutcomeData, str, float]] = []
+        prepared: list[tuple[OutcomeData, str]] = []
         for index, outcome in eligible_rows:
             treatment = str(outcome.treatment_arm or characteristics.intervention_description or "Intervention").strip()
             comparator = str(outcome.reference_arm or characteristics.control_description or "Comparator").strip()
@@ -121,12 +126,14 @@ def reconcile_extracted_rct_designs(
                 "contrast_id": contrast_id,
                 "estimand_id": estimand_id,
             }
-            if design in {"parallel_rct", "multi_arm_rct"} and _has_complete_2x2(outcome):
-                updates["precision_basis"] = (
-                    "source_reported_effect"
-                    if _has_protocol_reported_effect(outcome, protocol)
-                    else "computed_from_source_verified_2x2"
-                )
+            if design in {"parallel_rct", "multi_arm_rct"}:
+                if _has_protocol_reported_effect(outcome, protocol):
+                    updates["precision_basis"] = "source_reported_effect"
+                elif _can_compute_from_counts(outcome, protocol):
+                    updates["precision_basis"] = "computed_from_source_verified_2x2"
+                elif outcome.precision_basis == "computed_from_source_verified_2x2":
+                    # A prior migration may have incorrectly labelled HR counts.
+                    updates["precision_basis"] = ""
             for field, value in updates.items():
                 if getattr(outcome, field) != value:
                     setattr(outcome, field, value)
@@ -147,12 +154,11 @@ def reconcile_extracted_rct_designs(
                 changed = True
             comparative_rows += 1
             if is_multi_arm:
-                _, variance = _computed_protocol_effect(outcome, protocol)
-                prepared.append((outcome, contrast_id, variance))
+                prepared.append((outcome, contrast_id))
 
         if is_multi_arm:
-            for left_index, (left, left_id, _) in enumerate(prepared):
-                for right, right_id, _ in prepared[left_index + 1:]:
+            for left_index, (left, left_id) in enumerate(prepared):
+                for right, right_id in prepared[left_index + 1:]:
                     covariance = _shared_control_covariance(left, right, protocol.effect_measure)
                     if covariance is None:
                         # Leave the dependency unresolved. The complex engine will
@@ -185,6 +191,7 @@ def reconcile_extracted_rct_designs(
         "multi_arm_studies": sorted(set(multi_arm_studies)),
         "comparative_rows": comparative_rows,
         "reported_effects_recovered": recovered_effects,
+        "retired_count_covariances": _retained_covariance_retirements(studies),
     }
 
 
@@ -201,16 +208,11 @@ def comparative_effect_from_outcome(
 ) -> dict[str, float | str | None]:
     """Materialize one typed comparative estimate without relabeling a report."""
     measure = str(protocol.effect_measure or outcome.reported_effect_measure or "").upper()
-    if _has_protocol_reported_effect(outcome, protocol):
-        return {
-            "measure": measure,
-            "estimate": float(outcome.effect_size),
-            "standard_error": outcome.reported_effect_standard_error,
-            "variance": None,
-            "ci_lower": float(outcome.ci_lower) if outcome.ci_lower is not None else None,
-            "ci_upper": float(outcome.ci_upper) if outcome.ci_upper is not None else None,
-            "scale": str(outcome.reported_effect_scale or "original"),
-        }
+    if _reports_hazard_ratio(outcome) and measure != "HR":
+        raise ValueError("reported HR does not match the protocol effect measure")
+    reported = _protocol_reported_effect(outcome, protocol)
+    if reported is not None:
+        return reported
     yi, variance = _computed_protocol_effect(outcome, protocol)
     se = math.sqrt(variance)
     if measure in _RATIO_MEASURES:
@@ -279,7 +281,12 @@ def _recover_protocol_effect_from_source(
     protocol: ResearchProtocol,
 ) -> bool:
     measure = str(protocol.effect_measure or "").upper()
-    if measure not in {"RR", "OR"} or _has_protocol_reported_effect(outcome, protocol):
+    if (
+        measure not in {"RR", "OR"}
+        or outcome.reported_effect_adjusted
+        or _reports_hazard_ratio(outcome)
+        or _has_protocol_reported_effect(outcome, protocol)
+    ):
         return False
     aliases = r"RR|risk\s+ratio|relative\s+risk" if measure == "RR" else r"OR|odds\s+ratio"
     pattern = re.compile(
@@ -339,7 +346,7 @@ def _is_source_backed_primary_contrast(outcome: OutcomeData, protocol: ResearchP
     return (
         _matches_primary_outcome(outcome.outcome_name, protocol.pico.outcome_primary)
         and outcome.source_quote_verified is True
-        and _has_complete_2x2(outcome)
+        and (_has_complete_2x2(outcome) or _has_protocol_reported_effect(outcome, protocol))
     )
 
 
@@ -351,31 +358,119 @@ def _has_complete_2x2(outcome: OutcomeData) -> bool:
 
 
 def _has_protocol_reported_effect(outcome: OutcomeData, protocol: ResearchProtocol) -> bool:
-    basic = (
-        str(outcome.reported_effect_measure or "").upper() == str(protocol.effect_measure or "").upper()
-        and outcome.effect_size is not None
-        and (
-            outcome.reported_effect_standard_error is not None
-            or (outcome.ci_lower is not None and outcome.ci_upper is not None)
-        )
-        and outcome.source_quote_verified is True
+    return _protocol_reported_effect(outcome, protocol) is not None
+
+
+def _protocol_reported_effect(
+    outcome: OutcomeData, protocol: ResearchProtocol,
+) -> dict[str, float | str | None] | None:
+    """Select a reported estimate without confusing its estimand with crude counts.
+
+    Ancillary event counts do not reproduce hazard ratios or adjusted effects.
+    Only an unadjusted RR, OR, or RD has a compatible 2x2 cross-check. SEs use
+    the analysis scale, as required by the existing comparative-effect engine.
+    """
+    measure = str(protocol.effect_measure or "").upper()
+    if outcome.source_quote_verified is not True:
+        return None
+    if measure == "HR" and not _hr_representations_agree(outcome):
+        return None
+    if str(outcome.reported_effect_measure or "").upper() == measure and outcome.effect_size is not None:
+        estimate, lower, upper = outcome.effect_size, outcome.ci_lower, outcome.ci_upper
+        se = outcome.reported_effect_standard_error
+        scale = str(outcome.reported_effect_scale or "original").strip().lower()
+    elif (
+        measure == "HR" and outcome.hazard_ratio is not None
+        and str(outcome.reported_effect_measure or "").upper() in {"", "HR"}
+        and outcome.effect_size is None
+    ):
+        estimate, lower, upper = outcome.hazard_ratio, outcome.hr_ci_lower, outcome.hr_ci_upper
+        se, scale = outcome.hr_se, "original"
+    else:
+        return None
+    if scale not in {"original", "log"} or not math.isfinite(estimate):
+        return None
+    if scale == "log" and measure not in _REPORTED_RATIO_MEASURES:
+        return None
+    if scale == "original" and measure in _REPORTED_RATIO_MEASURES and estimate <= 0:
+        return None
+    if se is not None and (not math.isfinite(se) or se <= 0):
+        return None
+    if lower is not None and upper is not None:
+        if not (math.isfinite(lower) and math.isfinite(upper) and lower < upper):
+            return None
+        if not lower <= estimate <= upper:
+            return None
+        if scale == "original" and measure in _REPORTED_RATIO_MEASURES and lower <= 0:
+            return None
+    elif se is None:
+        return None
+    if _can_compute_from_counts(outcome, protocol):
+        try:
+            yi, _ = _computed_protocol_effect(outcome, protocol)
+            computed = math.exp(yi) if measure in _RATIO_MEASURES else yi
+            reported = math.exp(estimate) if scale == "log" else estimate
+        except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+            return None
+        if abs(reported - computed) > max(0.02, 0.05 * abs(computed)):
+            return None
+    return {
+        "measure": measure, "estimate": float(estimate), "standard_error": se,
+        "variance": None, "ci_lower": lower, "ci_upper": upper, "scale": scale,
+    }
+
+
+def _hr_representations_agree(outcome: OutcomeData) -> bool:
+    """Reject conflicting duplicate HR fields instead of choosing either copy."""
+    scale = str(outcome.reported_effect_scale or "original").strip().lower()
+    pairs = (
+        (outcome.effect_size, outcome.hazard_ratio),
+        (outcome.ci_lower, outcome.hr_ci_lower),
+        (outcome.ci_upper, outcome.hr_ci_upper),
     )
-    if not basic:
-        return False
-    if not _has_complete_2x2(outcome):
-        return True
     try:
-        yi, _ = _computed_protocol_effect(outcome, protocol)
-        computed = math.exp(yi) if str(protocol.effect_measure or "").upper() in _RATIO_MEASURES else yi
-        reported = float(outcome.effect_size)
-    except (TypeError, ValueError, ZeroDivisionError):
+        for generic, legacy in pairs:
+            if generic is None or legacy is None:
+                continue
+            if scale not in {"original", "log"}:
+                return False
+            value = math.exp(generic) if scale == "log" else generic
+            if not (math.isfinite(value) and math.isfinite(legacy)):
+                return False
+            if not math.isclose(value, legacy, rel_tol=1e-8, abs_tol=1e-12):
+                return False
+    except (ValueError, OverflowError):
         return False
-    return abs(reported - computed) <= max(0.02, 0.05 * abs(computed))
+    if outcome.reported_effect_standard_error is not None and outcome.hr_se is not None:
+        return math.isclose(
+            outcome.reported_effect_standard_error, outcome.hr_se,
+            rel_tol=1e-8, abs_tol=1e-12,
+        )
+    return True
+
+
+def _can_compute_from_counts(outcome: OutcomeData, protocol: ResearchProtocol) -> bool:
+    return (
+        str(protocol.effect_measure or "").upper() in _COUNT_MEASURES
+        and not _reports_hazard_ratio(outcome)
+        and not outcome.reported_effect_adjusted
+        and _has_complete_2x2(outcome)
+    )
+
+
+def _reports_hazard_ratio(outcome: OutcomeData) -> bool:
+    return (
+        str(outcome.reported_effect_measure or "").upper() == "HR"
+        or outcome.hazard_ratio is not None
+    )
 
 
 def _computed_protocol_effect(outcome: OutcomeData, protocol: ResearchProtocol) -> tuple[float, float]:
-    if not _has_complete_2x2(outcome):
-        raise ValueError("source-verified 2x2 counts are required for a derived RCT effect")
+    if not _can_compute_from_counts(outcome, protocol):
+        raise ValueError(
+            "a crude RR, OR, or RD requires source-verified 2x2 counts; "
+            "HR and adjusted effects require reported precision"
+        )
     return effect_size_engine.compute_effect_size(
         outcome_type="dichotomous",
         effect_measure=str(protocol.effect_measure or "").upper(),
@@ -390,6 +485,93 @@ def _shared_control_covariance(
     left: OutcomeData,
     right: OutcomeData,
     measure: str,
+) -> float | None:
+    if (
+        left.reported_effect_adjusted or right.reported_effect_adjusted
+        or _reports_hazard_ratio(left) or _reports_hazard_ratio(right)
+    ):
+        return None
+    return _count_shared_control_covariance(left, right, measure)
+
+
+def _retire_legacy_count_covariances(
+    rows: list[tuple[int, OutcomeData]], protocol: ResearchProtocol,
+) -> list[dict[str, Any]]:
+    """Retire unverified covariance compatible with the old count-only generator.
+
+    This reconciler cannot authenticate a historical source-verification proof.
+    Equal values cannot prove derivation, so retain originals in outcome notes,
+    while leaving the current adjusted dependency unresolved. A distinct supplied
+    covariance is preserved; conflicting reciprocal values remain fail-closed in
+    the complex engine instead of being resolved here.
+    """
+    retired = []
+    for position, (_, left) in enumerate(rows):
+        for _, right in rows[position + 1:]:
+            if not (left.reported_effect_adjusted or right.reported_effect_adjusted):
+                continue
+            expected = _count_shared_control_covariance(left, right, protocol.effect_measure)
+            if expected is None or not left.contrast_id or not right.contrast_id:
+                continue
+            forward = left.covariance_with.get(right.contrast_id)
+            reverse = right.covariance_with.get(left.contrast_id)
+            existing = [value for value in (forward, reverse) if value is not None]
+            if not existing or not all(
+                math.isclose(value, expected, rel_tol=1e-8, abs_tol=1e-12)
+                for value in existing
+            ):
+                continue
+            retirement = {
+                "left_contrast_id": left.contrast_id,
+                "right_contrast_id": right.contrast_id,
+                "covariance": expected,
+                "left_covariance": forward,
+                "right_covariance": reverse,
+                "left_precision_basis": left.precision_basis,
+                "right_precision_basis": right.precision_basis,
+                "reason": "unverified_legacy_compatible_covariance_requires_source_review",
+            }
+            retired.append(retirement)
+            for outcome in (left, right):
+                if any(
+                    note.observed_values.get("legacy_covariance_retirement") == retirement
+                    for note in outcome.conflicts
+                ):
+                    continue
+                outcome.conflicts.append(ConflictNote(
+                    field="covariance_with",
+                    severity="warning",
+                    message=(
+                        "Historical covariance matches the former count-based generator, "
+                        "but its source provenance is unresolved for this adjusted effect. "
+                        "The original values are retained here pending source review."
+                    ),
+                    observed_values={"legacy_covariance_retirement": retirement},
+                ))
+            left.covariance_with.pop(right.contrast_id, None)
+            right.covariance_with.pop(left.contrast_id, None)
+    return retired
+
+
+def _retained_covariance_retirements(studies: list[ExtractedStudy]) -> list[dict[str, Any]]:
+    """Rebuild the replaceable summary from checkpoint-persistent review notes."""
+    retained = []
+    for study in studies:
+        c = study.characteristics
+        study_id = str(c.pmid or c.doi or c.study_id or c.title).strip()
+        for outcome in study.outcomes:
+            for note in outcome.conflicts:
+                retirement = note.observed_values.get("legacy_covariance_retirement")
+                if note.field != "covariance_with" or not isinstance(retirement, dict):
+                    continue
+                item = {"study_id": study_id, **retirement}
+                if item not in retained:
+                    retained.append(item)
+    return retained
+
+
+def _count_shared_control_covariance(
+    left: OutcomeData, right: OutcomeData, measure: str,
 ) -> float | None:
     if not (_has_complete_2x2(left) and _has_complete_2x2(right)):
         return None

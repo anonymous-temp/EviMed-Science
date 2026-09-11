@@ -47,7 +47,9 @@ class ExtractionRefinement(BaseModel):
     outcomes: list[IndexedOutcomeCorrection]
 
 
-VERIFICATION_BATCH_SIZE = 4
+# One result has its own numeric, endpoint, population, estimand and trial proof.
+# Combining results made long responses truncate and coupled unrelated judgments.
+VERIFICATION_BATCH_SIZE = 1
 VERIFICATION_SOURCE_CHAR_LIMIT = 128_000
 
 
@@ -315,13 +317,14 @@ class DataExtractionAgent(BaseAgent):
         self._apply_paper_metadata(characteristics, paper, paper_id)
 
         # Step 2: Extract outcomes (with retry)
-        secondary_str = ", ".join(protocol.pico.outcomes_secondary) if protocol.pico.outcomes_secondary else "None"
+        secondary_str = json.dumps(protocol.pico.outcomes_secondary or [], ensure_ascii=False)
         outcome_prompt = extraction_prompts.OUTCOME_EXTRACTION_PROMPT.format(
             population=protocol.pico.population,
             intervention=protocol.pico.intervention,
             comparator=protocol.pico.comparator,
             primary_outcome=protocol.pico.outcome_primary,
             secondary_outcomes=secondary_str,
+            planned_subgroups=json.dumps(protocol.subgroup_variables or [], ensure_ascii=False),
             effect_measure=protocol.effect_measure,
             paper_content=paper_content,
         )

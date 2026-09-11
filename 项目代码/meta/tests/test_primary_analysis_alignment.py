@@ -761,7 +761,21 @@ def test_same_numbers_with_different_adjustment_or_contrast_need_choice(tmp_path
         source_path=project.base_dir / "papers" / "trial.txt")
     rob = StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])
     result = PipelineRunner(project).run_primary_effect_selection(protocol=protocol, extracted_studies=[study], rob_results=[rob])
-    assert result.error_code == "primary_result_choice_required"
+    assert result.status.value == "needs_input"
+    assert result.data["effects"] == []
+    if field == "reported_effect_adjusted":
+        assert not project.get_path("effect_sizes.json", subdir="analysis").exists()
+        assert not project.is_step_done("effect_sizes")
+        # This competing source-aligned row lacks a reported adjusted effect/SE.
+        # Its precision must be resolved before choosing a primary estimate;
+        # silently discarding it would select the convenient crude-count row.
+        assert result.error_code == "primary_analysis_alignment_required"
+        pending = next(row for row in result.data["selection_audit"] if row["row_id"] == "S1:1")
+        assert pending["decision"] == "needs_input"
+        assert pending["reason"] == "reported_effect_precision_requires_adjudication"
+        assert pending["effect"] is None
+    else:
+        assert result.error_code == "primary_result_choice_required"
 
 
 @pytest.mark.parametrize("excluded_reason", ["source", "data"])

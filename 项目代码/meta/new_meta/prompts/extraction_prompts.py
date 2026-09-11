@@ -45,7 +45,16 @@ component, threshold, subgroup or observational association as the review endpoi
 ## Research Protocol
 - Primary Outcome: {primary_outcome}
 - Secondary Outcomes: {secondary_outcomes}
+- Prespecified Subgroup Analyses: {planned_subgroups}
 - Effect Measure: {effect_measure}
+
+Extract the source results needed for these prespecified outcomes and subgroups.
+An empty secondary-outcome list requests no additional outcomes. An empty subgroup
+list requests the overall eligible population only, not every subgroup in a paper.
+Do not expand a renal composite into its individual components or add alternative
+composites unless the protocol requests them. Preserve an eligible secondary
+endpoint of the paper when it is the review's requested primary endpoint.
+Keep genuine ambiguity explicit; never relabel a source result to fit this scope.
 
 ## Paper Content
 The paper text contains [PAGE N] markers indicating page boundaries.
@@ -78,11 +87,16 @@ For DICHOTOMOUS outcomes (events, proportions):
 
 For TIME-TO-EVENT or REPORTED ASSOCIATION outcomes:
 - Extract the reported point estimate into effect_size and its interval into ci_lower/ci_upper
+- Use these canonical fields once; leave duplicate legacy hazard_ratio/hr_ci_lower/hr_ci_upper fields null
 - Set reported_effect_measure (for example HR, OR, RR, MD, or SMD)
 - Set reported_effect_scale to "original" unless the paper explicitly reports a log-scale coefficient
 - Set reported_effect_adjusted=true only when the paper explicitly calls the estimate adjusted
 - For an adjusted estimate, extract every reported adjustment variable into adjustment_covariates
 - Never pool or relabel an unadjusted estimate as adjusted
+- Set reported_effect_standard_error only if the paper explicitly reports that SE.
+  Leave hr_se and every other unreported precision field null. Do not calculate
+  SE from a CI, infer precision from a p-value, or estimate HR from event counts;
+  deterministic statistical engines derive precision after source verification.
 
 For SINGLE-ARM PREVALENCE or INCIDENCE outcomes:
 - Prevalence: events and total_n
@@ -108,7 +122,7 @@ For PREDICTION-MODEL PERFORMANCE outcomes:
 - Look in Tables first (most reliable), then Results text
 - If median/IQR reported instead of mean/SD, extract median, Q1, Q3, and N into the schema fields above; do not put them only in quality_notes
 - If multiple time points, extract the primary endpoint
-- If multiple subgroups, extract overall and per-subgroup data
+- Extract subgroup results only for the prespecified subgroup analyses above
 - If multiple adjusted models are reported, keep them as distinct rows and label the covariate set; do not silently choose one
 - For EVERY value, provide source_location, source_quote, source_page (page number from nearest [PAGE N] marker), and source_section
 - Set extraction_confidence to "high", "medium", or "low" for each outcome based on clarity of the source data
@@ -188,6 +202,11 @@ Use uncertain when the supplied source cannot support the judgment; do not inven
 quotes, eligibility or assessor/verification metadata. Only verbatim full quotes
 present in the supplied paper content count as anchors. One sentence per rationale
 and a short but complete source sentence per quote is sufficient.
+The text may contain PDF line breaks, split words, separate columns or rotated
+tables. Copy a contiguous source passage exactly, preserving intervening words
+and numeric tokens; do not reconstruct a smoother sentence or invent an events/N
+pair absent from the text. Different fields may cite different short passages.
+Keep each rationale to one concise sentence; never repeat the full article.
 
 Required per-row verification payload (never omit it, even with a high score):
 - numeric_findings: verify EVERY supplied numeric_fields_to_verify field, naming its
@@ -197,6 +216,10 @@ Required per-row verification payload (never omit it, even with a high score):
   and table evidence rather than converting an ambiguous abstract percentage.
 - source_endpoint_definition: quote the actual endpoint DEFINITION, not merely a
   numeric table row. List all source and protocol components and their relation.
+  A component explicitly excluded from BOTH the protocol and the source endpoint
+  is not a missing component. 'missing' means required by the protocol but absent
+  from this source endpoint; 'extra' means present in the source but outside the
+  protocol. Ensure the overall endpoint_relation agrees with that mapping.
   Extra cardiovascular death is not equivalent to a renal-only composite. "As
   reported by the trial" does not authorize adding components absent from the
   protocol. Scalar outcomes still require one explicit matched endpoint component.
@@ -215,6 +238,8 @@ Required per-row verification payload (never omit it, even with a high score):
   mentioned in a reference or comparison are not contributing units. A pooled
   estimate carries all component trials. Do not invent an ID from PMID, DOI, author
   or sample size. Missing identity or uncertain membership means uncertain coverage.
+  An anchored registry_id is sufficient when no explicit trial name is reported;
+  leave trial_name empty rather than invent a descriptive name or expand an acronym.
 
 The three legacy dimension judgments must agree with these explicit facts; do not
 call the closest available outcome a match. Numeric correctness and clinical

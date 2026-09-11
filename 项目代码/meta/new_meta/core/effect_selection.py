@@ -9,6 +9,7 @@ from new_meta.core.provenance import (
     PRIMARY_ALLOWED_TIERS,
     annotate_source_provenance,
 )
+from new_meta.core.rct_design_reconciliation import comparative_effect_from_outcome
 from new_meta.engines import effect_size as es_engine
 from new_meta.schemas.meta_result import StudyEffect
 from new_meta.schemas.protocol import ResearchProtocol
@@ -569,7 +570,8 @@ def compute_study_effect(study, outcome, protocol, logger, *, audit_row: dict | 
             "requested_effect_measure": protocol.effect_measure,
         })
     try:
-        yi, vi = es_engine.compute_effect_size(
+        reported = _reported_effect_analysis(outcome, protocol)
+        yi, vi = reported if reported is not None else es_engine.compute_effect_size(
             outcome_type=outcome.outcome_type,
             effect_measure=protocol.effect_measure,
             reported_effect_measure=outcome.reported_effect_measure,
@@ -611,3 +613,45 @@ def compute_study_effect(study, outcome, protocol, logger, *, audit_row: dict | 
             exc,
         )
         return None
+
+
+def _reported_effect_analysis(outcome, protocol) -> tuple[float, float] | None:
+    """Use the same reported representation as ledger migration on the pairwise route.
+
+    Raw count/continuous estimates retain the existing engine path. Unsupported
+    outcome types also reach that path so its typed input errors remain intact.
+    """
+    measure = str(protocol.effect_measure or "").strip().upper()
+    if not (
+        measure == "HR" or outcome.reported_effect_adjusted
+        or str(outcome.reported_effect_measure or "").upper() == "HR"
+        or outcome.hazard_ratio is not None
+    ):
+        return None
+    outcome_type = str(outcome.outcome_type or "").strip().lower().replace("-", "_")
+    supported = {
+        "HR": {"time_to_event"},
+        "RR": {"dichotomous", "binary"}, "OR": {"dichotomous", "binary"},
+        "RD": {"dichotomous", "binary"},
+        "MD": {"continuous"}, "SMD": {"continuous"},
+        "IRR": {"count", "incidence_rate", "dichotomous", "binary"},
+    }
+    if outcome_type not in supported.get(measure, set()):
+        return None
+    try:
+        effect = comparative_effect_from_outcome(outcome, protocol)
+    except ValueError as exc:
+        raise es_engine.EffectInputMismatch(
+            "reported_effect_precision_requires_adjudication",
+            f"The source-reported effect has unresolved representation or precision: {exc}",
+        ) from exc
+    original_ratio = measure in {"HR", "RR", "OR", "IRR"} and effect["scale"] == "original"
+    estimate = float(effect["estimate"])
+    yi = math.log(estimate) if original_ratio else estimate
+    if effect["ci_lower"] is not None and effect["ci_upper"] is not None:
+        se = es_engine.ci_to_se(
+            float(effect["ci_lower"]), float(effect["ci_upper"]), log_scale=original_ratio,
+        )
+    else:
+        se = float(effect["standard_error"])
+    return yi, se ** 2
