@@ -379,6 +379,19 @@ test("production compose holds every memory in PostgreSQL and ranks it with the 
   // own DSN pointing back at this same PostgreSQL, is what this replaced — and
   // the negative is asserted because "it still works" is how a retired service
   // survives a migration.
+  //
+  // What the stack configures, not what the file mentions: the volumes block
+  // carries a comment naming the volumes and tables the migration leaves on a
+  // host that ran the previous stack, because a volume this file stops
+  // declaring is a volume `compose down -v` stops removing. A commented-out
+  // service configures nothing, so comment lines are not part of the scan.
+  // `.env.example` is scanned whole, where a commented key is still an
+  // instruction to an operator.
+  const configured = compose
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+  assert.ok(configured.includes("evimed-postgres:"), "the comment filter removed the configuration it was meant to keep");
   for (const retired of [
     /evimed-memos\b/,
     /MEMOS_DRIVER/,
@@ -386,7 +399,7 @@ test("production compose holds every memory in PostgreSQL and ranks it with the 
     /provision-memos\.mjs/,
     /docker-compose\.memos-engine\.yml/,
   ]) {
-    assert.doesNotMatch(compose, retired, `the base stack still names ${retired}`);
+    assert.doesNotMatch(configured, retired, `the base stack still names ${retired}`);
     assert.doesNotMatch(envExample, retired, `.env.example still documents ${retired}`);
   }
   for (const name of [

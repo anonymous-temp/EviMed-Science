@@ -84,7 +84,17 @@ services:
       - memory-recall-internal
       - memory-index-egress
     healthcheck:
-      test: ["CMD", "openviking-entrypoint", "--healthcheck"]
+      # `/health` is answered by the process itself and needs no credential.
+      # `/ready` is the other candidate and probes the embedder: it would make
+      # this container's health a report on DashScope's availability, so an
+      # unpaid or rate-limited account would read here as a broken index.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1933/health', timeout=3).read()",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -101,8 +111,8 @@ services:
     restart: unless-stopped
 
   # One root one-shot with no network: it copies the two secrets into the
-  # secrets volume at 0600, and prepares the data directory the server would
-  # otherwise have to be root to create.
+  # secrets volume at 0600, owned by the uid that reads each, and prepares the
+  # data directory the server would otherwise have to be root to create.
   evimed-openviking-init:
     image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.19@sha256:49e20c09ec7ea2f16c116d9ddb2ea90b4c24bf3f5a83078609e52399487dbec1}
     user: "0:0"
@@ -110,9 +120,18 @@ services:
     command:
       - |
         import json, os, pathlib
+        # Every mode here is set once, while this process still owns the path.
+        # It holds CAP_CHOWN and nothing else, so a path it has given away can
+        # no longer be chmod'ed by it — not on this run, and not on the next
+        # one, when the file already belongs to the uid that reads it.
+        os.umask(0o077)
         output = pathlib.Path('/output')
         output.mkdir(parents=True, exist_ok=True)
-        for source, name in (('/input/ov.conf', 'ov.conf'), ('/input/api-key', 'api-key')):
+        # One owner per file, and it is the uid of the container that reads it.
+        # Both readers drop every capability, so neither holds DAC_OVERRIDE and
+        # a 0600 file owned by anyone else is unreadable to them: the index
+        # reads ov.conf as 10001, the control plane reads api-key as root.
+        for source, name, owner in (('/input/ov.conf', 'ov.conf', 10001), ('/input/api-key', 'api-key', 0)):
             target = output / name
             temporary = output / (name + '.tmp')
             with open(source, 'rb') as stream:
@@ -129,15 +148,16 @@ services:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.chmod(temporary, 0o600)
+            os.chown(temporary, owner, owner)
             os.replace(temporary, target)
         # `storage.workspace` in the rendered configuration. The server mkdirs it
         # while loading that file, as uid 10001, and an empty volume arrives
         # owned by root — so the directory is created and given away here, where
-        # root still exists.
+        # root still exists. Its mode comes from `mkdir` rather than a later
+        # chmod, for the reason above.
         data = pathlib.Path('/data/data')
-        data.mkdir(parents=True, exist_ok=True)
+        data.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chown(data, 10001, 10001)
-        os.chmod(data, 0o700)
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}
@@ -518,7 +538,12 @@ services:
       evimed-postgres:
         condition: service_healthy
       evimed-openviking:
-        condition: service_healthy
+        # Started, not healthy. Recall degrades to the term matcher when the
+        # index cannot answer — that is what `OPEN_SCIENCE_MEMORY_INDEX_STRICT`
+        # being false by default means — so waiting for the index to be healthy
+        # would turn a ranking outage into a control-plane outage, and would
+        # make starting the product depend on a third party's API.
+        condition: service_started
       open-science-runtime-controller:
         condition: service_healthy
       evimed-meta-agent:
@@ -1140,6 +1165,19 @@ services:
       - open-science-web
     restart: unless-stopped
 
+# A volume this file stops declaring is a volume `compose down -v` stops
+# removing, so the memory migration leaves two kinds of retired data behind on
+# a host that ran the previous stack, and both are an operator decision rather
+# than something a compose file can do:
+#
+#   volumes  `web_evimed-memos-data`, `web_evimed-memos-integration` and the six
+#            `web_evimed-memos-{engine,neo4j,qdrant,redis,ollama}-*` volumes are
+#            now orphans; `docker volume rm` is the only thing that removes them
+#   tables   `public.memo` and `public.memory_record` stay in the `evimed`
+#            database, where `scripts/ops/postgres-backup.py` keeps dumping them
+#            into every backup, until they are dropped
+#
+# Both wait on `pnpm migrate:research-memory` having verified its copy.
 volumes:
   evimed-postgres-data:
   evimed-openviking-data:
