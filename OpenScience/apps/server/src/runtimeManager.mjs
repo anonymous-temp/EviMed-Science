@@ -2202,8 +2202,11 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           revisionGatewayUrl,
           publicSourceGatewayUrl,
           pluginConfig,
-          modelGatewayTokenFile: config.modelGatewaySigningSecret ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : "",
-          workloadTokenFile: config.evimedWorkloadSigningSecret ? `${runtimeDshHome}/${evimedWorkloadTokenFileName}` : "",
+          // The API owns issuance; the isolated controller owns this argv and
+          // deliberately has no signing keys. Both processes name the same
+          // fixed files. Bootstrap writes them empty when signing is absent.
+          modelGatewayTokenFile: `${runtimeDshHome}/${modelGatewayTokenFileName}`,
+          workloadTokenFile: `${runtimeDshHome}/${evimedWorkloadTokenFileName}`,
           bundleVersion: String(config.socketBundleVersion ?? ""),
           // Derived once, out here, from the same definitions the preset row
           // reads inside the container. A compaction knob that is not on this
