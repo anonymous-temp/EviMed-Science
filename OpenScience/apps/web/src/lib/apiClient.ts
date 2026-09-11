@@ -479,11 +479,18 @@ export interface WebResearchSession {
   updatedAt: string;
 }
 
+/**
+ * The research-memory store is part of the control plane, not a service with
+ * its own account: there is no identity to show and the only codes it reports
+ * are `memory_unconfigured`, `memory_schema_unavailable`, `memory_unavailable`
+ * and `memory_timeout`. `structured` is absent on a status the page fabricates
+ * for itself (no backend, or a failed load), so the capability is optional here
+ * while the store always states it.
+ */
 export interface WebMemoryStatus {
   configured: boolean;
   connected: boolean;
   code: string | null;
-  account?: string | null;
   structured?: boolean;
 }
 
@@ -1212,6 +1219,11 @@ export async function fetchMemoryStatus(): Promise<WebMemoryStatus> {
   return parseApiResponse<WebMemoryStatus>(res);
 }
 
+/**
+ * `/memory/memos` is the free-text note route. The segment is a route name the
+ * control plane keeps for its clients, not the service the notes used to live
+ * in: the notes are rows of the control plane's own database.
+ */
 export async function listResearchMemories(state: "normal" | "archived" = "normal"): Promise<WebResearchMemory[]> {
   if (!hasWebApi) throw new BackendUnavailableError("memory.list");
   const res = await fetchWithWebAuth(apiUrl(`/memory/memos?state=${encodeURIComponent(state)}`));
