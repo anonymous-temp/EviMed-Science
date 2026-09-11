@@ -2171,7 +2171,9 @@ async function uiSurfaceFixture(t, overrides = {}) {
   const address = await app.listen(0, "127.0.0.1");
   t.after(async () => {
     await app.close();
-    await rm(dataDir, { recursive: true, force: true });
+    // A mock runtime can finish its last workspace write during the recursive
+    // walk. Retry that bounded race rather than leave an ENOTEMPTY hook failure.
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
   const seeded = await fetch(`http://127.0.0.1:${address.port}/api/projects`);
   const cookie = (seeded.headers.getSetCookie?.() ?? []).map((item) => item.split(";")[0]).join("; ");
@@ -2373,18 +2375,24 @@ test("scoped native requests preserve raw combo queries exactly once, rewrite re
     res.end("window.nativeAsset = true;");
   });
   await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => upstream.close(resolve)));
-  f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
-  for (const suffix of ["/plugins/??@deepseek-ai/client,@evimed/socket&rev=a%2Fb&x=1&x=2", "/api/session/page?cursor=%2B%2F&limit=20", "/assets/index.js"]) {
-    const response = await fetch(`${f.uiBase}${suffix}`, { headers: { cookie: f.cookie } });
-    assert.equal(response.status, 200);
-    assert.equal(await response.text(), "window.nativeAsset = true;");
-    assert.equal(response.headers.get("cache-control"), "private, no-store");
-    assert.equal(response.headers.get("etag"), null);
-    assert.equal(seen.at(-1), suffix);
+  try {
+    f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
+    for (const suffix of ["/plugins/??@deepseek-ai/client,@evimed/socket&rev=a%2Fb&x=1&x=2", "/api/session/page?cursor=%2B%2F&limit=20", "/assets/index.js"]) {
+      const response = await fetch(`${f.uiBase}${suffix}`, { headers: { cookie: f.cookie } });
+      assert.equal(response.status, 200);
+      assert.equal(await response.text(), "window.nativeAsset = true;");
+      assert.equal(response.headers.get("cache-control"), "private, no-store");
+      assert.equal(response.headers.get("etag"), null);
+      assert.equal(seen.at(-1), suffix);
+    }
+    const redirect = await fetch(`${f.uiBase}/redirect`, { headers: { cookie: f.cookie }, redirect: "manual" });
+    assert.equal(redirect.headers.get("location"), `${new URL(f.frame.frameUrl).pathname}?native=yes`);
+  } finally {
+    // Release listeners before after-hooks: a failed temp-tree cleanup must not
+    // skip the upstream closer and keep the entire test worker alive.
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
   }
-  const redirect = await fetch(`${f.uiBase}/redirect`, { headers: { cookie: f.cookie }, redirect: "manual" });
-  assert.equal(redirect.headers.get("location"), `${new URL(f.frame.frameUrl).pathname}?native=yes`);
 });
 
 test("HTTP frame authentication is revalidated after runtime startup before sending native requests", async (t) => {
@@ -2392,14 +2400,18 @@ test("HTTP frame authentication is revalidated after runtime startup before send
   let requests = 0;
   const upstream = createServer((_req, res) => { requests++; res.end("should not reach"); });
   await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise((resolve) => upstream.close(resolve)));
-  f.app.runtimeManager.start = async () => {
-    await f.app.store.logout({ headers: { cookie: f.loginCookie } });
-    return { url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} };
-  };
-  const response = await fetch(`${f.uiBase}/assets/index.js`, { headers: { cookie: f.cookie } });
-  assert.equal(response.status, 401);
-  assert.equal(requests, 0);
+  try {
+    f.app.runtimeManager.start = async () => {
+      await f.app.store.logout({ headers: { cookie: f.loginCookie } });
+      return { url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} };
+    };
+    const response = await fetch(`${f.uiBase}/assets/index.js`, { headers: { cookie: f.cookie } });
+    assert.equal(response.status, 401);
+    assert.equal(requests, 0);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise((resolve) => upstream.close(resolve));
+  }
 });
 
 test("frame policy inspection preserves the exact native workspace request body through the real proxy", async (t) => {
@@ -2410,13 +2422,17 @@ test("frame policy inspection preserves the exact native workspace request body 
     req.on("end", () => { res.writeHead(200, { "content-type": "application/json" }); res.end('{"ok":true}'); });
   });
   await new Promise(resolve => upstream.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise(resolve => upstream.close(resolve)));
-  f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
-  f.app.runtimeManager.runtimeWorkspaceRoot = () => "/workspace";
-  const body = JSON.stringify({ type: "client-request", rpcId: "bind", method: "workspace/create", payload: { args: { request: { path: "/workspace" } } } });
-  const response = await fetch(`${f.uiBase}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: "https://science.example:8443", "content-type": "application/json" }, body });
-  assert.equal(response.status, 200);
-  assert.equal(received, body);
+  try {
+    f.app.runtimeManager.start = async () => ({ url: `http://127.0.0.1:${upstream.address().port}`, cookie: "native=internal", close: async () => {} });
+    f.app.runtimeManager.runtimeWorkspaceRoot = () => "/workspace";
+    const body = JSON.stringify({ type: "client-request", rpcId: "bind", method: "workspace/create", payload: { args: { request: { path: "/workspace" } } } });
+    const response = await fetch(`${f.uiBase}/api/workspace/create`, { method: "POST", headers: { cookie: f.cookie, Origin: "https://science.example:8443", "content-type": "application/json" }, body });
+    assert.equal(response.status, 200);
+    assert.equal(received, body);
+  } finally {
+    upstream.closeAllConnections();
+    await new Promise(resolve => upstream.close(resolve));
+  }
 });
 
 /** Records the full `docker run` argv, which is where the container's
