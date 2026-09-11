@@ -144,6 +144,22 @@ test("semantic recall preserves index order but reloads approved current facts f
   ]);
 });
 
+test("a deployment may ask the index for a relevance floor, and gets none by default", async () => {
+  const fake = openVikingFake();
+  const database = {
+    async query(sql) {
+      if (sql.includes("evimed_control.users")) return { rows: [{ generation }] };
+      return { rows: [] };
+    },
+  };
+  const selections = [{ capsuleId: "capsule-a", mode: "own" }];
+  for (const [scoreThreshold, sent] of [[undefined, 0], [0.25, 0.25]]) {
+    await new MemoryIndexing({ database, openViking: fake.client, jobs: {}, scoreThreshold })
+      .recall("owner", generation, selections, "kidney", 10);
+    assert.equal(fake.calls.filter((call) => call.path === "/api/v1/search/find").at(-1).body.score_threshold, sent);
+  }
+});
+
 test("a recall from another account generation reaches nothing, because the path is bound to it", async () => {
   const fake = openVikingFake();
   indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "analysis", factId: "fact", revision: 1, content: "kidney outcomes" });
@@ -214,29 +230,59 @@ test("readback compares exact fact and revision pairs read from the paths", asyn
   await assert.rejects(indexing.readback(snapshot), { code: "memory_index_readback_mismatch" });
 
   fake.files.delete(capsuleFactUri("owner", { accountCreatedAt: generation, capsuleId: "capsule-a", factKind: "analysis", factId: "unknown", revision: 1 }));
-  const found = await indexing.readback(snapshot);
+  const { found, foreign } = await indexing.readback(snapshot);
   assert.deepEqual(found.map((entry) => [entry.factId, entry.revision]), [["runtime-note:ab12", 4]]);
+  assert.equal(foreign, 0);
 
   fake.files.clear();
-  assert.deepEqual(await indexing.readback({ ...snapshot, entries: [] }), [], "an empty capsule has an empty index, not a missing one");
+  assert.deepEqual(await indexing.readback({ ...snapshot, entries: [] }), { found: [], foreign: 0 },
+    "an empty capsule has an empty index, not a missing one");
 });
 
-test("readback pages a directory with offset instead of trusting one response", async () => {
-  // One more fact than the server's own page holds. A reader that trusted the
-  // first response would call this capsule incomplete forever, and the worker
-  // would rebuild it on every reconciliation.
+test("readback counts what this layout never wrote instead of rebuilding the capsule over it", async () => {
+  // The server materializes artifacts of its own beside the files it is given,
+  // and a rewrite cannot remove what it did not write. Raising on one would
+  // fail the readback after every rebuild, which re-arms the job, which
+  // rebuilds again — a capsule that can never publish. None of it can be
+  // delivered either way: a hit is only ever delivered by hydrating the
+  // canonical row its path names.
   const fake = openVikingFake();
-  const entries = [];
-  for (let index = 0; index <= 1_000; index++) {
-    entries.push({ id: `fact-${index}`, revision: 1, factKind: "analysis", layer: "knowledge", content: "text" });
-    indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "analysis", factId: `fact-${index}`, revision: 1, content: "text" });
+  const root = capsuleMemoryRoot("owner", { accountCreatedAt: generation, capsuleId: "capsule-a" });
+  const snapshot = { userId: "owner", generation, capsuleId: "capsule-a",
+    entries: [{ id: "fact-a", revision: 1, factKind: "analysis", layer: "knowledge", content: "text" }] };
+  indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "analysis", factId: "fact-a", revision: 1, content: "text" });
+  fake.files.set(`${root}/overview.md`, "a directory abstract the server wrote for itself");
+  fake.files.set(`${root}/analysis/abstract.md`, "and one inside a kind directory");
+
+  const readback = await new MemoryIndexing({ database: {}, openViking: fake.client, jobs: {} }).readback(snapshot);
+
+  assert.deepEqual(readback.found.map((entry) => entry.factId), ["fact-a"]);
+  assert.equal(readback.foreign, 2, "what we did not write is reported, not enforced");
+});
+
+test("readback pages a directory with offset, whatever page the server happens to serve", async () => {
+  // More facts than one page holds, against two servers whose pages differ.
+  // The page size is the server's business and is announced nowhere, so a
+  // reader that assumed one would call this capsule incomplete forever against
+  // the smaller page, and see duplicate leaves against the larger — and the
+  // worker would rebuild it on every reconciliation either way.
+  for (const pageSize of [1_000, 400]) {
+    const fake = openVikingFake({ pageSize });
+    const entries = [];
+    for (let index = 0; index <= 1_000; index++) {
+      entries.push({ id: `fact-${index}`, revision: 1, factKind: "analysis", layer: "knowledge", content: "text" });
+      indexFact(fake, "owner", { capsuleId: "capsule-a", factKind: "analysis", factId: `fact-${index}`, revision: 1, content: "text" });
+    }
+    const indexing = new MemoryIndexing({ database: {}, openViking: fake.client, jobs: {} });
+    const { found } = await indexing.readback({ userId: "owner", generation, capsuleId: "capsule-a", entries });
+    assert.equal(found.length, 1_001, `a server paging by ${pageSize} must still read the whole capsule`);
+    const listings = fake.calls.filter((call) => call.path === "/api/v1/fs/ls");
+    const leafPages = listings.filter((call) => call.params.get("uri").endsWith("/analysis"));
+    assert.deepEqual(leafPages.map((call) => Number(call.params.get("offset"))),
+      Array.from({ length: Math.ceil(1_001 / pageSize) + 1 }, (_, page) => Math.min(1_001, page * pageSize)),
+      "each request must start where the last page ended, and the walk ends on an empty page");
+    assert.ok(listings.every((call) => call.params.get("limit") === null), "a limit truncates silently and hides what it dropped");
   }
-  const indexing = new MemoryIndexing({ database: {}, openViking: fake.client, jobs: {} });
-  assert.equal((await indexing.readback({ userId: "owner", generation, capsuleId: "capsule-a", entries })).length, 1_001);
-  const listings = fake.calls.filter((call) => call.path === "/api/v1/fs/ls");
-  const leafPages = listings.filter((call) => call.params.get("uri").endsWith("/analysis"));
-  assert.deepEqual(leafPages.map((call) => call.params.get("offset")), ["0", "1000"]);
-  assert.ok(listings.every((call) => call.params.get("limit") === null), "a limit truncates silently and hides what it dropped");
 });
 
 test("rebuild rewrites the capsule subtree, waits for each write and publishes the fingerprint", async () => {
@@ -281,6 +327,40 @@ test("rebuild rewrites the capsule subtree, waits for each write and publishes t
   const insert = published.find(([sql]) => sql.includes("INSERT INTO evimed_product.memory_index_state"));
   assert.ok(insert, "a rebuild that published nothing would be rebuilt forever");
   assert.doesNotMatch(insert[0], /engine_memory_ids/);
+});
+
+test("a fact that cannot become a path is skipped and counted, not left to empty its capsule", async () => {
+  // Nothing stops a fact row being written without a `factKind` — the index is
+  // the first thing that needs one, and rows predating it have none. Failing
+  // the capsule on one of them is not a safe answer: the rebuild removed the
+  // subtree before it discovered the bad row, the worker treats a refused path
+  // as terminal, and reconcile re-arms the job, so the capsule would stay empty
+  // with nothing said to the researcher.
+  const fake = openVikingFake();
+  const facts = [
+    { id: "fact-a", revision: 1, payload: { capsuleId: "capsule-a", status: "approved", factKind: "analysis", layer: "knowledge", content: "publishable" } },
+    { id: "fact-legacy", revision: 1, payload: { capsuleId: "capsule-a", status: "approved", layer: "knowledge", content: "no kind at all" } },
+    { id: "fact-alien", revision: 1, payload: { capsuleId: "capsule-a", status: "approved", factKind: "unknown_kind", layer: "knowledge", content: "a kind this system never records" } },
+  ];
+  const rows = (sql) => {
+    if (sql.includes("evimed_control.users")) return { rows: [{ generation }] };
+    if (sql.includes("kind='capsule'")) return { rows: [{ id: "capsule-a", revision: 1, payload: {}, deleted_at: null }] };
+    if (sql.includes("kind='fact'")) return { rows: facts };
+    return { rows: [] };
+  };
+  const database = {
+    async query(sql) { return rows(sql); },
+    pool: { async connect() { return { async query() { return { rows: [] }; }, release() {} }; } },
+  };
+  const jobs = { async finishWithLease(userId, id, leaseToken, result, operation) { await operation({ async query(sql) { return rows(sql); } }); return { result }; } };
+  const indexing = new MemoryIndexing({ database, openViking: fake.client, jobs });
+
+  const outcome = await indexing.rebuild({ userId: "owner", id: "job", leaseToken: "lease", payload: { capsuleId: "capsule-a", accountCreatedAt: generation } });
+
+  assert.equal(outcome.result.status, "published");
+  assert.equal(outcome.result.entries, 1);
+  assert.equal(outcome.result.unpublishable, 2, "what was skipped is reported on the job, where an operator can see it");
+  assert.deepEqual([...fake.files.keys()].map((uri) => parseCapsuleFactUri(uri).factId), ["fact-a"]);
 });
 
 test("a rebuild whose writes fail leaves no publication and reports the upstream reason", async () => {

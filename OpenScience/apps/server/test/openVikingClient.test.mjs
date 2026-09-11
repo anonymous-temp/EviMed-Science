@@ -139,22 +139,51 @@ test("a directory listing reads the bare list the server answers with", async ()
   assert.equal(url.searchParams.get("limit"), null, "a limit truncates silently, so a listing must never carry one");
 });
 
-test("a complete listing pages with offset until the page is short", async () => {
-  const page = (count, from) => Array.from({ length: count }, (_, index) => ({ uri: `viking://x/f${from + index}.md`, isDir: false }));
-  const fetchImpl = recordingFetch([
-    { status: 200, body: { status: "ok", result: page(1_000, 0) } },
-    { status: 200, body: { status: "ok", result: page(1_000, 1_000) } },
-    { status: 200, body: { status: "ok", result: page(7, 2_000) } },
+/** A directory of `total` files behind a server that pages by `pageSize`. */
+function directoryFetch(total, pageSize) {
+  const impl = async (url) => {
+    const offset = Number(new URL(url).searchParams.get("offset") ?? 0);
+    const result = Array.from({ length: Math.max(0, Math.min(pageSize, total - offset)) },
+      (_, index) => ({ uri: `viking://x/f${offset + index}.md`, isDir: false }));
+    impl.calls.push({ offset, returned: result.length });
+    return { ok: true, status: 200, async text() { return JSON.stringify({ status: "ok", result }); } };
+  };
+  impl.calls = [];
+  return impl;
+}
+
+test("a complete listing pages by what it received, whatever the server's page holds", async () => {
+  // The page size is the server's, it is sent nowhere in the response, and a
+  // client that assumed one would read 500 of 1200 entries against a smaller
+  // page and re-read 200 against a larger one. Both look like a healthy
+  // listing, and the capsule readback turns either into a rebuild that fails
+  // the same way forever.
+  for (const pageSize of [500, 1_000, 1_500]) {
+    const fetchImpl = directoryFetch(1_200, pageSize);
+    const entries = await new OpenVikingClient(config, { fetchImpl }).listAll("usr_alice", "viking://x");
+
+    assert.equal(entries.length, 1_200, `a server paging by ${pageSize} must still yield the whole directory`);
+    assert.equal(new Set(entries.map((entry) => entry.uri)).size, 1_200, "and must yield each entry once");
+    assert.deepEqual(fetchImpl.calls.map((call) => call.offset),
+      fetchImpl.calls.map((call, index) => fetchImpl.calls.slice(0, index).reduce((sum, previous) => sum + previous.returned, 0)),
+      "each request must start where the last page ended");
+  }
+});
+
+test("a listing that breaks after its first page keeps what it already read", async () => {
+  // "The directory is not there" and "the walk broke halfway" must not look the
+  // same: discarding the pages already read reports an intact subtree as empty,
+  // which the readback then repairs by rewriting all of it.
+  const page = Array.from({ length: 1_000 }, (_, index) => ({ uri: `viking://x/f${index}.md`, isDir: false }));
+  const broken = recordingFetch([
+    { status: 200, body: { status: "ok", result: page } },
+    { status: 404, body: upstreamError("NOT_FOUND", "No such file or directory: viking://x") },
   ]);
-  const client = new OpenVikingClient(config, { fetchImpl });
+  assert.equal((await new OpenVikingClient(config, { fetchImpl: broken }).listAll("usr_alice", "viking://x")).length, 1_000);
 
-  const entries = await client.listAll("usr_alice", "viking://x");
-
-  assert.equal(entries.length, 2_007);
-  assert.deepEqual(
-    fetchImpl.calls.map((call) => new URL(call.url).searchParams.get("offset")),
-    ["0", "1000", "2000"],
-  );
+  const missing = recordingFetch([{ status: 404, body: upstreamError("NOT_FOUND", "No such file or directory: viking://x") }]);
+  await assert.rejects(new OpenVikingClient(config, { fetchImpl: missing }).listAll("usr_alice", "viking://x"),
+    { code: "memory_index_not_found" }, "a directory that was never there is the caller's decision, not the client's");
 });
 
 test("the health probe is the one call that carries no identity", async () => {
