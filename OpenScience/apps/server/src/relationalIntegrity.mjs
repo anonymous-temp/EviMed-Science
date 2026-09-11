@@ -32,22 +32,34 @@ const relationships = Object.freeze([
 
 const auditedSchemas = Object.freeze(["evimed_product", "evimed_inbox", "evimed_usage", "evimed_memory"]);
 
+/** The only tables an audit may find missing.
+ *
+ *  `evimed_memory` is migrated by the research-memory store when the server
+ *  constructs it, and nothing else in this repository calls that migration yet,
+ *  so the integrity script and the migration tests reach a database where the
+ *  two tables legitimately do not exist. Every other registered table is
+ *  migrated by a caller these tools already run, and a missing one there means
+ *  a dropped table — which must keep failing the audit, loudly, the way it did
+ *  before this list existed. Delete an entry the moment its migration has a
+ *  caller on every path that audits. */
+const toleratedAbsentTables = Object.freeze(["evimed_memory.records", "evimed_memory.notes"]);
+
 function identifier(value) { return `"${String(value).replaceAll('"', '""')}"`; }
 
 /** Audit existing ownership rows and the validation state of every required FK.
  *
- *  A subsystem whose schema has not been migrated in this database is reported,
- *  not failed: its migration runs when its service is constructed, so a tool
- *  that audits a database before that happens — the integrity check script, a
- *  migration test — would otherwise fail on a table nothing has written to yet.
- *  Reporting keeps the registry honest without turning "not deployed here" into
- *  "corrupt". */
+ *  A table on the tolerated list above is reported as absent rather than
+ *  failed; any other missing table falls through to its orphan query and fails
+ *  the audit with the relation error PostgreSQL raises. */
 export async function relationalIntegrity(database, { validate = false } = {}) {
   const present = new Set((await database.query(`SELECT n.nspname||'.'||t.relname AS name FROM pg_class t
     JOIN pg_namespace n ON n.oid=t.relnamespace WHERE t.relkind='r' AND n.nspname=ANY($1::text[])`,
   [auditedSchemas])).rows.map((row) => row.name));
   const tableOf = new Map(relationships.map(([name, schema, table]) => [name, `${schema}.${table}`]));
-  const absent = relationships.map(([name]) => name).filter((name) => !present.has(tableOf.get(name)));
+  const absent = relationships.map(([name]) => name).filter((name) => {
+    const table = tableOf.get(name) ?? "";
+    return toleratedAbsentTables.includes(table) && !present.has(table);
+  });
   const counts = {};
   for (const [name, query] of orphanChecks) {
     if (absent.includes(name)) continue;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 
@@ -192,6 +193,13 @@ test("a stale version is a conflict, and a real change writes a revision", optio
   await assert.rejects(() => store.upsertRecord(alpha, record({ value: "something else" }), null,
     { expectedVersion: first.version }),
   (error) => error?.status === 409 && error?.code === "memory_conflict");
+  // A new canonical key carrying an id that already names another of this
+  // user's memories is refused, never resurrected into the other row: the id is
+  // in a feedback ledger and in a recall index, so handing it to a second
+  // memory would silently rewrite the first one's provenance.
+  await assert.rejects(() => store.upsertRecord(alpha, record({ key: "response.other_depth", id: first.id })),
+    (error) => error?.status === 409 && error?.code === "memory_conflict");
+  assert.equal((await store.getRecord(alpha, first.id)).key, record().key, "and the memory that owns the id is untouched");
   // Version zero means an unconditional write, which is what the extractor
   // sends when it has never seen the record before.
   const unconditional = await store.upsertRecord(alpha, record({ value: "rewritten without a version" }));
@@ -215,6 +223,33 @@ test("a write that changes nothing moves neither the version nor the timestamp",
   const moved = await store.upsertRecord(alpha, record({ importance: 0.5 }));
   assert.equal(moved.version, 2);
   assert.notEqual(moved.updatedAt, "2026-01-01T00:00:00Z");
+  await store.purgeUserMemory(alpha);
+});
+
+// `now()` is the transaction's start time, and this transaction starts before
+// it queues for the row it is about to write. A write that waited would then
+// stamp itself with the moment it began waiting, and `updated_at` — which
+// orders the list and, through it, recall — could move backwards against a
+// write that started later and got the lock first.
+test("a write that waited for a lock is stamped when it happened, not when it queued", options, async () => {
+  const first = await store.upsertRecord(alpha, record({ key: "clock.stamp" }));
+  /** @type {() => void} */ let held = () => {};
+  const locked = new Promise((resolve) => { held = () => resolve(null); });
+  const holder = database.transaction(async (/** @type {any} */ client) => {
+    await client.query("SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id=$2 FOR UPDATE", [alpha, first.id]);
+    held();
+    await client.query("SELECT pg_sleep(2)");
+  });
+  await locked;
+  const queuedAt = Date.now();
+  const updated = await store.upsertRecord(alpha, record({ key: "clock.stamp", value: "written after the wait" }));
+  await holder;
+
+  assert.ok(Date.now() - queuedAt >= 1_000, "the write really did queue behind the row lock");
+  assert.ok(Date.parse(updated.updatedAt) >= queuedAt + 1_000,
+    `the stamp ${updated.updatedAt} must be the moment of the write, not of its transaction's start`);
+  assert.equal(updated.revisions.at(-1).changedAt, updated.updatedAt,
+    "and the clock is read once, so the revision and the row cannot disagree");
   await store.purgeUserMemory(alpha);
 });
 
@@ -412,4 +447,44 @@ test("deleting an account deletes its memory, and the integrity audit knows the 
     assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
     assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
   }
+});
+
+/** Run an audit against a database with one table dropped, and put the table
+ *  back: the drop lives and dies inside one rolled-back transaction, which the
+ *  audit sees because it is handed that transaction's own client.
+ *  @param {string} table */
+async function auditWithout(table) {
+  /** @type {any} */ let result = null;
+  await database.transaction(async (/** @type {any} */ client) => {
+    const inside = {
+      query: (/** @type {string} */ text, /** @type {any[]} */ values) => client.query(text, values),
+      transaction: (/** @type {(client: any) => Promise<any>} */ run) => run(client),
+    };
+    await client.query(`DROP TABLE ${table} CASCADE`);
+    result = await relationalIntegrity(inside).catch((error) => ({ failedWith: String(error?.code ?? error?.message) }));
+    throw new Error("rollback");
+  }).catch((/** @type {any} */ error) => {
+    if (error?.message !== "rollback") throw error;
+  });
+  return result;
+}
+
+// The audit tolerates exactly one thing, and it has to stay exactly one thing:
+// `evimed_memory` is migrated by the store when the server constructs it, and
+// no tool that audits a database calls that migration yet, so both tables can
+// legitimately be missing. Every other registered table is migrated by a caller
+// these tools already run — so a missing one is a dropped table, and a registry
+// that cannot fail on a dropped table is not a registry.
+test("the ownership audit tolerates an unmigrated memory table, and no other missing table", options, async () => {
+  await migrateNotifications(database);
+  const withoutMemory = await auditWithout("evimed_memory.records");
+  assert.deepEqual(withoutMemory.absent, ["memory_records_user"], "the memory table is reported as absent");
+  assert.equal(withoutMemory.ok, true, "and reported, not failed, because its migration has no caller here");
+  assert.ok(!Object.hasOwn(withoutMemory.counts, "memory_records_user"), "its orphan query is skipped, not run");
+  assert.equal(withoutMemory.counts.memory_notes_user, 0, "the other memory table is still audited");
+
+  const withoutInbox = await auditWithout("evimed_inbox.notifications");
+  assert.deepEqual(withoutInbox, { failedWith: "42P01" },
+    "a dropped table outside that schema still fails the audit, the way it did before the tolerance existed");
+  assert.equal((await relationalIntegrity(database)).ok, true, "and both probes left the schema as they found it");
 });

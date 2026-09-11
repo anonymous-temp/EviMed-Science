@@ -3,6 +3,7 @@
  * Move research memory out of the retired usememos database and into the
  * control-plane schema `evimed_memory`.
  *
+ *   node scripts/ops/migrate-research-memory.mjs --source same [--source-schema public]
  *   node scripts/ops/migrate-research-memory.mjs --source postgres://... [--source-schema public]
  *   node scripts/ops/migrate-research-memory.mjs --source sqlite:/path/to/memos_prod.db
  *   ... [--target postgres://...] [--dry-run]
@@ -10,7 +11,12 @@
  * In production the source and the target are the same PostgreSQL database:
  * memos ran with `MEMOS_DRIVER: postgres` against a DSN identical to the
  * control plane's, so its tables sit in the `public` schema of the same
- * database. Local development ran memos on SQLite, hence the second driver.
+ * database. `--source same` is therefore the production form — it reads the
+ * memos tables through the target connection, so the operator never types a
+ * credentialed DSN into a command line, where it would sit in `ps`, in
+ * `/proc/<pid>/cmdline` and in shell history for the length of the run. An
+ * explicit `postgres://` source stays for the cross-host case. Local
+ * development ran memos on SQLite, hence the third driver.
  *
  * Ownership is the whole of the work. The retired service gave every EviMed
  * user one namespace (`evimed-science-<24 hex>`) for records and one hidden tag
@@ -54,6 +60,7 @@ const identifierPattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const memoryIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 const internalTag = /#evimed-user-([a-f0-9]{24})/g;
 const internalTagLine = /^#evimed-user-[a-f0-9]{24}$/;
+const internalTagName = /^evimed-user-[a-f0-9]{24}$/;
 /** The fields a record's validation can name. A refusal is reported by field,
  *  never by the text that was refused. */
 const recordFields = Object.freeze(["memory", "scope", "scopeId", "kind", "key", "value", "summary",
@@ -74,7 +81,7 @@ function parseArguments(argv) {
       index += 1;
     } else throw new Error(`unknown argument ${argument}`);
   }
-  if (!options.source) throw new Error("give --source postgres://... or --source sqlite:<path>");
+  if (!options.source) throw new Error("give --source same, --source postgres://... or --source sqlite:<path>");
   if (!identifierPattern.test(options.sourceSchema)) throw new Error("--source-schema must be a plain identifier");
   return options;
 }
@@ -104,11 +111,45 @@ function unixInstant(value) {
   return memoryInstant(new Date(seconds * 1_000));
 }
 
-/** @param {unknown} payload */
+/** The protojson object a payload column holds, or null when the row has none
+ *  and nothing can be read from it. PostgreSQL hands back a parsed jsonb;
+ *  SQLite hands back the text.
+ *  @param {unknown} payload @returns {Record<string, any>|null} */
 function parsePayload(payload) {
-  if (payload == null) return {};
-  if (typeof payload === "object") return payload;
-  try { return JSON.parse(String(payload)); } catch { return {}; }
+  if (payload == null) return null;
+  if (typeof payload === "object") return Array.isArray(payload) ? null : /** @type {any} */ (payload);
+  try {
+    const parsed = JSON.parse(String(payload));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+/**
+ * A note's tags, as the retired service computed them.
+ *
+ * usememos parsed every memo with goldmark on create and on update and stored
+ * the result in `memo.payload.tags`, so that list — not a second reading of the
+ * text — is what its UI filtered on. Re-deriving them here would change them:
+ * goldmark hands a bare URL to the autolink extension and a link destination to
+ * the link parser, so `https://doi.org/10.1000/xyz#section` carries no tag,
+ * while a scanner that only knows about code spans reads `#section` as one.
+ *
+ * A payload that holds any field was computed by goldmark, so the absence of
+ * `tags` in it is an answer — protojson omits an empty list. A payload that is
+ * wholly empty is the column's own default and says nothing about whether it
+ * ever ran, so that row, and only that row, is read from its text.
+ * @param {unknown} payload @param {string} content
+ */
+function noteTags(payload, content) {
+  const parsed = parsePayload(payload);
+  if (!parsed || Object.keys(parsed).length === 0) return extractTags(content);
+  const tags = [];
+  for (const value of Array.isArray(parsed.tags) ? parsed.tags : []) {
+    const tag = String(value ?? "").trim();
+    if (!tag || internalTagName.test(tag) || tags.includes(tag)) continue;
+    tags.push(tag);
+  }
+  return tags;
 }
 
 /**
@@ -119,7 +160,7 @@ function parsePayload(payload) {
  * @param {unknown} payload
  */
 function convertPayload(payload) {
-  const parsed = parsePayload(payload);
+  const parsed = parsePayload(payload) ?? {};
   const evidence = (Array.isArray(parsed.evidence) ? parsed.evidence : []).map((item) => {
     const sourceType = String(item?.sourceType ?? "").trim();
     const sourceRef = String(item?.sourceRef ?? "").trim();
@@ -155,32 +196,39 @@ function count(counts, outcome, reason = "") {
   if (reason) counts.reasons[reason] = (counts.reasons[reason] ?? 0) + 1;
 }
 
-/** @param {string} source @param {string} schema */
-async function readSource(source, schema) {
+/** @param {{source: string, sourceSchema: string}} options @param {any} database */
+async function readSource({ source, sourceSchema: schema }, database) {
   const recordColumns = "uid, namespace, scope_type, scope_id, kind, memory_key, value, summary, origin, status,"
     + " confidence, importance, sensitive, version, created_ts, updated_ts, last_confirmed_ts, expires_ts, payload";
-  const memoColumns = "uid, created_ts, updated_ts, row_status, content, pinned";
+  const memoColumns = "uid, created_ts, updated_ts, row_status, content, pinned, payload";
+  const recordQuery = `SELECT ${recordColumns} FROM "${schema}".memory_record ORDER BY id`;
+  const memoQuery = `SELECT ${memoColumns} FROM "${schema}".memo ORDER BY id`;
+  if (source === "same") {
+    // The production form: the memos tables sit in another schema of the target
+    // database, so they are read through the connection already open.
+    return {
+      driver: "postgres",
+      records: (await database.query(recordQuery)).rows,
+      memos: (await database.query(memoQuery)).rows,
+    };
+  }
   if (source.startsWith("sqlite:")) {
     // Loaded only on the path that needs it: `node:sqlite` is newer than this
     // package's engine floor, and the production import is the PostgreSQL one.
     const { DatabaseSync } = await import("node:sqlite");
     const file = path.resolve(source.slice("sqlite:".length));
-    const database = new DatabaseSync(file, { readOnly: true });
+    const sqlite = new DatabaseSync(file, { readOnly: true });
     try {
       return {
         driver: "sqlite",
-        records: database.prepare(`SELECT ${recordColumns} FROM memory_record ORDER BY id`).all(),
-        memos: database.prepare(`SELECT ${memoColumns} FROM memo ORDER BY id`).all(),
+        records: sqlite.prepare(`SELECT ${recordColumns} FROM memory_record ORDER BY id`).all(),
+        memos: sqlite.prepare(`SELECT ${memoColumns} FROM memo ORDER BY id`).all(),
       };
-    } finally { database.close(); }
+    } finally { sqlite.close(); }
   }
   const pool = new pg.Pool({ connectionString: source, max: 2, application_name: "evimed-research-memory-import" });
   try {
-    return {
-      driver: "postgres",
-      records: (await pool.query(`SELECT ${recordColumns} FROM "${schema}".memory_record ORDER BY id`)).rows,
-      memos: (await pool.query(`SELECT ${memoColumns} FROM "${schema}".memo ORDER BY id`)).rows,
-    };
+    return { driver: "postgres", records: (await pool.query(recordQuery)).rows, memos: (await pool.query(memoQuery)).rows };
   } finally { await pool.end(); }
 }
 
@@ -271,7 +319,7 @@ async function importNotes(database, dryRun, owners, rows) {
     const updatedAt = unixInstant(row.updated_ts);
     if (!createdAt || !updatedAt) { count(counts, "quarantined", "invalid_timestamps"); continue; }
     const state = String(row.row_status ?? "") === "ARCHIVED" ? "archived" : "normal";
-    const values = [userId, id, content, state, Boolean(row.pinned), extractTags(content), createdAt, updatedAt];
+    const values = [userId, id, content, state, Boolean(row.pinned), noteTags(row.payload, content), createdAt, updatedAt];
     if (dryRun) {
       const existing = await database.query("SELECT 1 FROM evimed_memory.notes WHERE user_id=$1 AND id=$2", [userId, id]);
       count(counts, existing.rowCount ? "alreadyPresent" : "imported");
@@ -311,7 +359,7 @@ async function main() {
       namespaceOwners.set(digests.namespace, userId);
       tagOwners.set(digests.tag, userId);
     }
-    const source = await readSource(options.source, options.sourceSchema);
+    const source = await readSource(options, database);
     const records = await importRecords(database, options.dryRun, namespaceOwners, source.records);
     const notes = await importNotes(database, options.dryRun, tagOwners, source.memos);
     process.stdout.write(`${JSON.stringify({

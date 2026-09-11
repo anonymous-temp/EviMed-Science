@@ -207,6 +207,20 @@ test("note tags follow the usememos rule", () => {
   assert.deepEqual(extractTags("# "), []);
 });
 
+// A research note cites sources, and a citation is a URL with a fragment. The
+// GFM autolink extension consumes the whole URL and the link parser consumes a
+// destination, so neither reaches the inline tag parser: goldmark makes no tag
+// out of either, and a scanner that only skipped code used to make two.
+test("a URL fragment in a citation is not a tag", () => {
+  assert.deepEqual(extractTags("见 https://doi.org/10.1000/xyz#section 的第二段 #证据"), ["证据"]);
+  assert.deepEqual(extractTags("[来源](https://pubmed.ncbi.nlm.nih.gov/12345/#abstract) #药物安全"), ["药物安全"]);
+  assert.deepEqual(extractTags("<https://example.org/a#fragment> #kept"), ["kept"]);
+  assert.deepEqual(extractTags("www.example.org/guide#part-2 #kept"), ["kept"]);
+  assert.deepEqual(extractTags("[ref]: https://example.org/a#frag"), [], "a link definition is a destination too");
+  assert.deepEqual(extractTags("![图](/img/a.png#anchor) #图表"), ["图表"], "an image destination reads the same way");
+  assert.deepEqual(extractTags("the label keeps its tag: [#标签](https://example.org/a#frag)"), ["标签"]);
+});
+
 // The tenancy fence that used to live inside the text. Ownership is a column
 // now, so the tag is neither stored nor returned: echoing another account's
 // digest back is the one piece of the old design worth not carrying over.
@@ -248,4 +262,31 @@ test("without a database the store is unconfigured, and says so rather than fail
   // Recall is the one exception, and deliberately so: a question must still be
   // answered when there is no memory to answer it with.
   assert.deepEqual(await store.relevant("alpha", "anything"), []);
+});
+
+// A database that is merely unreachable must never look like a rejected
+// payload: chat and autopilot read this code to decide between degrading and
+// refusing, and a run that is told its memory was invalid stops asking.
+test("a database that cannot be reached is 503 memory_unavailable, not a rejected payload", async () => {
+  const refused = () => Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5432"), { code: "ECONNREFUSED" });
+  const unreachable = { query: async () => { throw refused(); }, transaction: async () => { throw refused(); } };
+  const store = new ResearchMemoryStore({}, { database: unreachable });
+  assert.equal(store.configured, true, "a configured store whose database is down is still configured");
+  assert.deepEqual(await store.status(), {
+    configured: true,
+    connected: false,
+    code: "memory_unavailable",
+    structured: false,
+  });
+  for (const call of [
+    () => store.listRecords("alpha"),
+    () => store.upsertRecord("alpha", candidate()),
+    () => store.list("alpha"),
+    () => store.create("alpha", "content"),
+    () => store.deleteProjectMemory("alpha", "project-1"),
+  ]) {
+    await assert.rejects(call, (error) => error?.status === 503 && error?.code === "memory_unavailable");
+  }
+  await assert.rejects(() => store.relevant("alpha", "anything"), { status: 503, code: "memory_unavailable" },
+    "recall reports the outage rather than pretending the account has no memory");
 });
