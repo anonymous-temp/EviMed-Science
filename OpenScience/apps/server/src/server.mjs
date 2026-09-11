@@ -622,8 +622,17 @@ export function createWebApiApp(overrides = {}) {
   const memOsEngine = config.memOsEngineUrl
     ? overrides.memOsEngineClient ?? new MemOsClient({ memOsBaseUrl: config.memOsEngineUrl, memOsWriteMode: "sync-fast" })
     : null;
-  const memoryIndexing = productDatabase && productJobs && memOsEngine
-    ? new MemoryIndexing({ database: productDatabase, engine: memOsEngine, jobs: productJobs }) : null;
+  const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
+  const openVikingClient = overrides.openVikingClient
+    ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
+  // Which component ranks a recall. The records themselves stay in the
+  // research-memory service whichever provider is selected.
+  const memorySubstrate = new MemorySubstrate(config, { memos: memosClient, openViking: openVikingClient });
+  // One switch governs both recall paths: the capsule index is the same
+  // OpenViking the research recall uses, so it exists exactly when that
+  // provider is selected and reachable — never as a second thing to configure.
+  const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
+    ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs }) : null;
   const memoryIndexWorker = memoryIndexing
     ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, pollMs: config.memoryIndexPollMs,
       leaseMs: config.memoryIndexLeaseMs, reconcileMs: config.memoryIndexReconcileMs }) : null;
@@ -963,12 +972,6 @@ export function createWebApiApp(overrides = {}) {
   };
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
-  const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
-  const openVikingClient = overrides.openVikingClient
-    ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
-  // Which component ranks a recall. The records themselves stay in the
-  // research-memory service whichever provider is selected.
-  const memorySubstrate = new MemorySubstrate(config, { memos: memosClient, openViking: openVikingClient });
   const memoryIntelligence = new MemoryIntelligence(config, memosClient, {
     // A conversation that changes a memory the researcher confirmed is worth
     // telling them about, and the inbox is where that is told. It never holds
