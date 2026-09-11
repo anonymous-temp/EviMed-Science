@@ -27,4 +27,5 @@ USER evimed
 RUN mineru-models-download -s modelscope -m pipeline
 
 EXPOSE 8090
-CMD ["uvicorn", "parser_service:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1", "--limit-concurrency", "2"]
+# Uvicorn counts idle keep-alive connections; parser_service admits one parse.
+CMD ["uvicorn", "parser_service:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1", "--limit-concurrency", "32"]

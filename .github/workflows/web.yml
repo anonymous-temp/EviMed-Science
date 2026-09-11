@@ -407,6 +407,19 @@ jobs:
           -v "$GITHUB_WORKSPACE/记忆模块/scripts:/entrypoint-tests:ro"
           evimed-memos:0.31.1-evimed /entrypoint-tests/entrypoint_test.sh
 
+      - name: Test parser admission inside the built image
+        run: |
+          parser_image="$(docker compose --env-file deploy/web/.env.ci -f deploy/web/docker-compose.yml -f deploy/web/docker-compose.ingestion.yml config --format json | node -e 'let text="";process.stdin.on("data",chunk=>text+=chunk);process.stdin.on("end",()=>console.log(JSON.parse(text).services["evimed-document-parser"].image))')"
+          # Mount tests only: imports must resolve to the service baked into /app.
+          docker run --rm --network none --user 1000:1000 --read-only \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --memory 512m --cpus 1 --pids-limit 128 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=64m,mode=1777 \
+            --workdir /app -e PYTHONPATH=/app --entrypoint python \
+            -v "$GITHUB_WORKSPACE/OpenScience/deploy/document-parser/test_parser_service.py:/parser-tests/test_parser_service.py:ro" \
+            -v "$GITHUB_WORKSPACE/OpenScience/deploy/document-parser/Dockerfile:/parser-tests/Dockerfile:ro" \
+            "$parser_image" -m unittest discover -s /parser-tests -v
+
       # The kernel is installed as an npm global, not as a fetched binary, so
       # what is checked is that the launcher resolves, that its version is the
       # pinned one, and that the composed profile the image pre-initialized is

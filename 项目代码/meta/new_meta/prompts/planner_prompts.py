@@ -30,6 +30,9 @@ Manuscript output language is separate from publication eligibility. "Write in E
 does not mean "include English-language publications only". With no source-language
 restriction requested, use "No language restriction" and consistent inclusion/exclusion
 criteria. Do not impose arbitrary full-text language exclusions.
+Keep each protocol value a concise clinical criterion. Do not append generated
+"Source anchor (original request)" prose or fabricate quote strings inside values;
+quotation evidence belongs in the separate independent scope assessment.
 Secondary/post-hoc reports are report roles, not new independent study-design labels.
 Retain requested report eligibility in prose; do not convert a postrandomization
 observational contrast into a randomized assigned-arm comparison. If requested designs
@@ -69,8 +72,13 @@ SCOPE_CHECK_PROMPT = """Original user question (the sole authority):
 Proposed protocol:
 {protocol}
 
-Assess every field below exactly once:
+Assess only the following batch fields exactly once:
 {fields}
+
+This is one batch of a complete protocol review. The full original question and full
+protocol above remain the context for every judgment, including cross-field consistency.
+Return exactly these field names and list indices, including both a list field and its
+individual entries when requested. Do not return fields belonging to other batches.
 
 For each field return status match/mismatch/uncertain, basis explicit/not_explicit,
 an exact intact quote from the ORIGINAL QUESTION, and a nonblank rationale explaining

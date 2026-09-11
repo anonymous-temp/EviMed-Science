@@ -66,10 +66,15 @@ async function main() {
     assert.equal(createHash("sha256").update(await fs.readFile(file)).digest("hex"), sha256);
     const request = { path: `/data/${relative}`, mimeType: "application/pdf", sha256, sourceId };
     const endpoint = `${config.documentParserUrl}/v1/parse`;
-    for (const [token, hash, expected] of [["", sha256, 401], [config.documentParserToken, "0".repeat(64), 400]]) {
+    for (const [stage, token, hash, expected] of [
+      ["unauthenticated_parse_refusal", "", sha256, 401],
+      ["source_hash_refusal", config.documentParserToken, "0".repeat(64), 400],
+    ]) {
+      console.log(JSON.stringify({ stage }));
       const response = await boundedFetch(endpoint, { method: "POST", signal: AbortSignal.timeout(5000),
         headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ ...request, sha256: hash }) });
+      console.log(JSON.stringify({ stage, httpStatus: response.status, expectedStatus: expected }));
       await response.body?.cancel();
       assert.equal(response.status, expected, "Parser authentication/source-hash refusal failed.");
     }

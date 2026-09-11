@@ -1,4 +1,6 @@
 
+import json
+
 import pytest
 
 from new_meta.agents.research_planner import ResearchPlanner
@@ -27,6 +29,13 @@ def assessment(protocol, *, topic=TOPIC, changes=None):
     return ProtocolScopeAssessment.model_validate({"fields": rows})
 
 
+def batch_assessment(messages, protocol, **kwargs):
+    fields = json.loads(messages[1]["content"].split(
+        "Assess only the following batch fields exactly once:\n", 1)[1].split("\n\n", 1)[0])
+    reviewed = assessment(protocol, **kwargs)
+    return ProtocolScopeAssessment(fields=[row for row in reviewed.fields if row.field in fields])
+
+
 @pytest.mark.parametrize("field,value", [
     ("pico.comparator", "Placebo or active treatments"),
     ("pico.population", "All adults including those without kidney disease"),
@@ -42,7 +51,7 @@ def test_independent_scope_rejects_material_drift(field, value, monkeypatch):
     calls = []
     def check(messages, schema, **kwargs):
         calls.append(messages)
-        return assessment(protocol, changes={field: {"status": "mismatch", "basis": "explicit",
+        return batch_assessment(messages, protocol, changes={field: {"status": "mismatch", "basis": "explicit",
             "rationale": "The candidate broadens or invents an explicit eligibility constraint."}})
     monkeypatch.setattr(planner.llm, "structured_output", check)
     with pytest.raises(ProtocolInputRequired, match="preserve"):
@@ -96,7 +105,7 @@ def test_planner_repairs_known_design_label_then_independently_checks_scope(monk
         prompts.append(prompt)
         return next(responses)
     monkeypatch.setattr(planner, "call_llm_structured", generate)
-    monkeypatch.setattr(planner.llm, "structured_output", lambda *args, **kwargs: assessment(corrected))
+    monkeypatch.setattr(planner.llm, "structured_output", lambda messages, *args, **kwargs: batch_assessment(messages, corrected))
     result = planner.run(TOPIC)
     assert result.study_designs == ["parallel_rct"]
     assert "secondary_analysis_of_rcts" in prompts[1]
@@ -288,7 +297,8 @@ def test_reconciled_design_cannot_change_explicit_scope_even_without_numeric_poo
     protocol.study_designs = ["cluster_rct"]; protocol.study_design = "cluster_rct"
     checked = assessment(protocol, topic=topic, changes={"study_designs": {
         "status": "mismatch", "basis": "explicit", "rationale": "Detected cluster design is outside the original individual-randomization scope."}})
-    monkeypatch.setattr(LLMClient, "structured_output", lambda *args, **kwargs: checked)
+    monkeypatch.setattr(LLMClient, "structured_output", lambda self, messages, *args, **kwargs:
+                        batch_assessment(messages, protocol, topic=topic, changes={row.field: row.model_dump() for row in checked.fields}))
     with pytest.raises(ReleaseBlockedError):
         _admit_cli_protocol(project, protocol, enforce=True)
     assert not project.get_path("meta_results.json", subdir="analysis").exists()
@@ -315,7 +325,7 @@ def test_existing_planner_loop_repairs_scope_drift_against_original_not_feedback
         assert TOPIC in messages[1]["content"]
         changes = {"pico.comparator": {"status": "mismatch", "basis": "explicit",
                    "rationale": "The original question specifies placebo, not active comparators."}} if candidate is broad else {}
-        return assessment(candidate, changes=changes)
+        return batch_assessment(messages, candidate, changes=changes)
     monkeypatch.setattr(planner, "call_llm_structured", generate)
     monkeypatch.setattr(planner.llm, "structured_output", independent)
     result = planner.run(TOPIC)
@@ -329,7 +339,7 @@ def test_explicit_publication_language_requirement_is_preserved(monkeypatch):
     protocol.inclusion_criteria = ["English-language publications only"]
     topic = "SGLT2 inhibitors versus placebo for kidney disease progression; include English-language publications only."
     monkeypatch.setattr(planner, "call_llm_structured", lambda *args, **kwargs: protocol)
-    monkeypatch.setattr(planner.llm, "structured_output", lambda *args, **kwargs: assessment(protocol, topic=topic))
+    monkeypatch.setattr(planner.llm, "structured_output", lambda messages, *args, **kwargs: batch_assessment(messages, protocol, topic=topic))
     result = planner.run(topic)
     assert result.language == "English only"
     assert result.inclusion_criteria == ["English-language publications only"]

@@ -7,11 +7,71 @@ from new_meta.core.method_planning import (
     validate_protocol_method,
 )
 from new_meta.core.method_registry import MethodInputError
-from new_meta.core.protocol_scope import protocol_hash, scope_fields, scope_receipt
+from new_meta.core.primary_analysis_alignment import digest
+from new_meta.core.protocol_scope import (
+    ScopeAssessmentValidationError, _validate_scope_fields, _validated_scope_conflicts,
+    protocol_hash, scope_fields, scope_receipt,
+)
 from new_meta.schemas.protocol import ProtocolScopeAssessment
 from pydantic import ValidationError
 from new_meta.schemas.protocol import ResearchProtocol, PICO
 from new_meta.prompts import planner_prompts
+
+
+SCOPE_BATCH_SIZE = 8
+SCOPE_DIAGNOSTIC_MAX_ATTEMPTS = 32
+SCOPE_DIAGNOSTIC_MAX_BYTES = 256 * 1024
+SCOPE_ASSESSMENT_MAX_BYTES = 64 * 1024
+
+
+class _ScopeDiagnostics:
+    """Bound typed checker evidence, without retaining provider response objects."""
+
+    def __init__(self):
+        self.attempts = []
+        self.omitted = 0
+
+    def add(self, record, assessment=None):
+        if assessment is not None:
+            payload = assessment.model_dump(mode="json")
+            encoded = json.dumps(payload, ensure_ascii=False).encode()
+            record["assessment_sha256"] = digest(payload)
+            record["assessment_size_bytes"] = len(encoded)
+            if len(encoded) <= SCOPE_ASSESSMENT_MAX_BYTES:
+                record["assessment"] = payload
+            else:
+                record["assessment_omitted"] = "diagnostic_size_limit"
+        self.attempts.append(record)
+        while (len(self.attempts) > SCOPE_DIAGNOSTIC_MAX_ATTEMPTS
+               or len(json.dumps(self.attempts, ensure_ascii=False).encode()) > SCOPE_DIAGNOSTIC_MAX_BYTES):
+            self.attempts.pop(0)
+            self.omitted += 1
+
+    def collect(self, error):
+        self.omitted += error.phase.data.get("scope_check_attempts_omitted", 0)
+        for record in error.phase.data.get("scope_check_attempts", []):
+            self.add(record)
+
+    def attach(self, error):
+        error.phase.data["scope_check_attempts"] = list(self.attempts)
+        if self.omitted:
+            error.phase.data["scope_check_attempts_omitted"] = self.omitted
+        return error
+
+
+def _correction_feedback(error):
+    """Replanning needs actionable conflicts, not accumulated checker quotations."""
+    feedback = {"error_code": error.phase.error_code, "summary": error.phase.summary[:1600]}
+    findings = [finding for issue in error.phase.issues
+                for finding in issue.context.get("scope_findings", [])]
+    if findings:
+        feedback["scope_findings"] = [
+            {key: str(finding.get(key, ""))[:1000] for key in ("field", "status", "basis", "rationale")}
+            for finding in findings[:16]
+        ]
+        if len(findings) > 16:
+            feedback["additional_findings"] = len(findings) - 16
+    return json.dumps(feedback, ensure_ascii=False)
 
 
 class ResearchPlanner(BaseAgent):
@@ -27,6 +87,7 @@ class ResearchPlanner(BaseAgent):
     def _plan(self, question, prompt):
         original_prompt = prompt
         last_error = None
+        scope_diagnostics = _ScopeDiagnostics()
         for attempt in range(3):
             protocol = None
             try:
@@ -44,15 +105,21 @@ class ResearchPlanner(BaseAgent):
                 last_error = ProtocolInputRequired(str(exc), context=exc.context, protocol=protocol)
             except ProtocolInputRequired as exc:
                 last_error = exc
+                exc.phase.data["original_question"] = question
+                scope_diagnostics.collect(exc)
+                scope_diagnostics.attach(exc)
+                if exc.phase.error_code == "protocol_scope_unverified":
+                    # An invalid checker response is not evidence of proposal drift.
+                    raise
             except Exception as exc:
                 # Provider/internal faults retain their failure semantics.
                 last_error = exc
                 self.log(f"PICO extraction attempt {attempt + 1} failed: {exc}", level="warning")
                 continue
             last_error.phase.data["original_question"] = question
+            scope_diagnostics.attach(last_error)
             self.log(f"PICO proposal attempt {attempt + 1} requires correction: {last_error}", level="warning")
-            prompt = original_prompt + "\n\nValidation feedback (not new user intent):\n" + json.dumps(
-                last_error.phase.model_dump(mode="json"), ensure_ascii=False)
+            prompt = original_prompt + "\n\nValidation feedback (not new user intent):\n" + _correction_feedback(last_error)
             prompt += ("\nRepair only representation or scope drift relative to the ORIGINAL question. "
                        "Never drop unsupported requested designs or other explicit requirements to pass validation.")
         if isinstance(last_error, ProtocolInputRequired):
@@ -60,30 +127,84 @@ class ResearchPlanner(BaseAgent):
         raise RuntimeError(f"PICO extraction failed after 3 attempts: {last_error}") from last_error
 
     def check_scope(self, question, protocol):
-        """A separate assessment call with no planner conversation or self-attestation."""
+        """Independently assess bounded batches against one immutable full proposal."""
         snapshot = ResearchProtocol.model_validate(protocol.model_dump())
-        prompt = planner_prompts.SCOPE_CHECK_PROMPT.format(
-            question=question, protocol=snapshot.model_dump_json(indent=2),
-            fields=json.dumps(scope_fields(snapshot), ensure_ascii=False))
+        snapshot_hash = protocol_hash(snapshot)
+        topic_hash = digest(question)
+        inventory = list(scope_fields(snapshot).items())
+        diagnostics = _ScopeDiagnostics()
+        verified = []
+        for offset in range(0, len(inventory), SCOPE_BATCH_SIZE):
+            batch = dict(inventory[offset:offset + SCOPE_BATCH_SIZE])
+            original_prompt = planner_prompts.SCOPE_CHECK_PROMPT.format(
+                question=question, protocol=snapshot.model_dump_json(indent=2),
+                fields=json.dumps(batch, ensure_ascii=False))
+            prompt = original_prompt
+            retained_conflicts = {}
+            for attempt in range(2):
+                assessment = None
+                reason = None
+                try:
+                    assessment = self.llm.structured_output(
+                        [{"role": "system", "content": planner_prompts.SCOPE_CHECK_SYSTEM},
+                         {"role": "user", "content": prompt}],
+                        ProtocolScopeAssessment, max_tokens=8192)
+                except ValueError as exc:
+                    if not isinstance(exc, ValidationError) and not isinstance(
+                            exc.__cause__, (ValidationError, json.JSONDecodeError)):
+                        raise  # Provider/internal failures retain their failure semantics.
+                    reason = {"code": "scope_assessment_malformed",
+                              "message": "The checker did not return a valid typed scope assessment."}
+                if protocol_hash(protocol) != snapshot_hash:
+                    reason = {"code": "protocol_scope_proposal_changed",
+                              "message": "Protocol changed during independent scope assessment"}
+                if reason is None:
+                    try:
+                        assessment = ProtocolScopeAssessment.model_validate(assessment)
+                        _validate_scope_fields(question, assessment, batch)
+                    except ScopeAssessmentValidationError as exc:
+                        reason = exc.reason
+                    except (ValidationError, TypeError):
+                        reason = {"code": "scope_assessment_malformed",
+                                  "message": "The checker did not return a valid typed scope assessment."}
+                composed = assessment
+                if reason is not None and attempt == 0 and isinstance(assessment, ProtocolScopeAssessment):
+                    retained_conflicts = _validated_scope_conflicts(question, assessment, batch)
+                if reason is None and retained_conflicts:
+                    # Repairing another field's quote cannot erase an already anchored
+                    # semantic conflict against these exact immutable inputs.
+                    composed = ProtocolScopeAssessment(fields=[
+                        retained_conflicts.get(item.field, item) for item in assessment.fields])
+                    _validate_scope_fields(question, composed, batch)
+                record = {"batch": offset // SCOPE_BATCH_SIZE + 1, "attempt": attempt + 1,
+                    "expected_fields": list(batch), "topic_sha256": topic_hash,
+                    "protocol_sha256": snapshot_hash,
+                    "validation": reason or {"code": "scope_batch_verified"}}
+                if reason is None and retained_conflicts:
+                    record["retained_nonmatch_fields"] = list(retained_conflicts)
+                diagnostics.add(record,
+                    assessment if isinstance(assessment, ProtocolScopeAssessment) else None)
+                if reason is None:
+                    verified.extend(composed.fields)
+                    break
+                if attempt == 1 or reason["code"] == "protocol_scope_proposal_changed":
+                    raise diagnostics.attach(ProtocolInputRequired(
+                        f"Independent scope assessment is incomplete or unanchored: {reason['message']}",
+                        code="protocol_scope_unverified", protocol=protocol))
+                prompt = original_prompt + "\n\nChecker validation feedback:\n" + json.dumps(reason, ensure_ascii=False)
+                prompt += ("\nReassess only this batch using the SAME full question and protocol above. "
+                           "Correct the response format or original quotation; preserve honest mismatch or uncertain judgments. "
+                           "Do not change the proposed protocol or infer that validation requires a match.")
         try:
-            assessment = self.llm.structured_output(
-                [{"role": "system", "content": planner_prompts.SCOPE_CHECK_SYSTEM},
-                 {"role": "user", "content": prompt}],
-                ProtocolScopeAssessment, max_tokens=8192)
-        except ValueError as exc:
-            if not isinstance(exc.__cause__, (ValidationError, json.JSONDecodeError)):
-                raise
-            raise ProtocolInputRequired("Independent scope assessment was malformed; clarify and restart.",
-                code="protocol_scope_unverified", protocol=protocol) from exc
-        try:
-            if protocol_hash(protocol) != protocol_hash(snapshot):
+            if protocol_hash(protocol) != snapshot_hash:
                 raise ValueError("Protocol changed during independent scope assessment")
-            return scope_receipt(question, snapshot, assessment)
-        except ProtocolInputRequired:
-            raise
+            return scope_receipt(question, snapshot, ProtocolScopeAssessment(fields=verified))
+        except ProtocolInputRequired as exc:
+            raise diagnostics.attach(exc)
         except (ValidationError, ValueError, TypeError) as exc:
-            raise ProtocolInputRequired(f"Independent scope assessment is incomplete or unanchored: {exc}",
-                code="protocol_scope_unverified", protocol=protocol) from exc
+            raise diagnostics.attach(ProtocolInputRequired(
+                f"Independent scope assessment is incomplete or unanchored: {exc}",
+                code="protocol_scope_unverified", protocol=protocol)) from exc
 
     def refine(self, current_protocol: ResearchProtocol, user_input: str, *, original_question: str = "") -> ResearchProtocol:
         """Refinement cannot replace the original objective; changed objectives restart."""
