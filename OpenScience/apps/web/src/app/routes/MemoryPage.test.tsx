@@ -47,7 +47,7 @@ describe("MemoryPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.hasWebApi = true;
-    api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: true, code: null, account: "evimed" });
+    api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: true, code: null, structured: true });
     api.listResearchMemories.mockResolvedValue([existing]);
     api.fetchMemoryProfile.mockResolvedValue({
       records: [],
@@ -68,9 +68,11 @@ describe("MemoryPage", () => {
     api.updateResearchMemory.mockImplementation(async (_id: string, update: object) => ({ ...existing, ...update }));
   });
 
-  it("shows connected Memos records and creates a new research memory", async () => {
+  it("shows connected memory records and creates a new research memory", async () => {
     render(<MemoryPage />);
-    expect(await screen.findByText(/记忆服务已连接 · evimed/)).toBeInTheDocument();
+    // Exact text: the store is part of the control plane and has no account of
+    // its own, so the pill states the connection and nothing else.
+    expect(await screen.findByText("科研记忆库已连接")).toBeInTheDocument();
     expect(await screen.findByText(/长期关注利妥昔单抗的感染风险/)).toBeInTheDocument();
     expect(screen.getByText("EviMed 对你的持续理解")).toBeInTheDocument();
     expect(screen.getByText("#药物安全")).toBeInTheDocument();
@@ -82,11 +84,29 @@ describe("MemoryPage", () => {
   });
 
   it("keeps disconnected state explicit instead of rendering an empty connected dashboard", async () => {
-    api.fetchMemoryStatus.mockResolvedValue({ configured: false, connected: false, code: "memory_token_missing" });
+    api.fetchMemoryStatus.mockResolvedValue({ configured: true, connected: false, code: "memory_schema_unavailable" });
     render(<MemoryPage />);
     expect(await screen.findByText("科研记忆尚未就绪")).toBeInTheDocument();
-    expect(screen.getAllByText(/尚未配置 Memos 访问令牌/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/科研记忆库结构未就绪/).length).toBeGreaterThan(0);
     expect(api.listResearchMemories).not.toHaveBeenCalled();
+  });
+
+  // Every code the store can report, and one it cannot: an unnamed failure
+  // still has to read as a memory problem rather than as a bare pill.
+  it.each([
+    ["memory_unconfigured", "科研记忆库未配置"],
+    ["memory_schema_unavailable", "科研记忆库结构未就绪"],
+    ["memory_unavailable", "科研记忆库暂时不可用"],
+    ["memory_timeout", "科研记忆库响应超时"],
+    ["memory_code_from_a_later_release", "科研记忆服务未连接"],
+  ])("explains status code %s without naming a retired service", async (code, message) => {
+    api.fetchMemoryStatus.mockResolvedValue({
+      configured: code !== "memory_unconfigured",
+      connected: false,
+      code,
+    });
+    render(<MemoryPage />);
+    expect(await screen.findByText(message)).toBeInTheDocument();
   });
 
   it("points desktop users to the hosted workspace (no backend, no reconnect loop)", async () => {

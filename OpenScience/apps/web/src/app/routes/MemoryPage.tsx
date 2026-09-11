@@ -27,15 +27,14 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 
 type MemoryState = "normal" | "archived";
 
+// The memory store is a schema of the control plane's own database, so there is
+// no address, token or session to get wrong: these four are every code it can
+// report. An unknown code keeps the generic sentence below.
 const statusMessages: Record<string, string> = {
-  memory_url_missing: "尚未配置 Memos 服务地址",
-  memory_token_missing: "尚未配置 Memos 访问令牌",
-  memos_access_token_file_unavailable: "Memos 令牌文件不可用",
-  memos_access_token_file_permissions: "Memos 令牌文件权限不安全",
-  memory_auth_failed: "Memos 身份验证失败",
-  memory_schema_unavailable: "Memos 结构化记忆版本尚未部署",
-  memory_timeout: "Memos 响应超时",
-  memory_unavailable: "Memos 服务暂时不可用",
+  memory_unconfigured: "科研记忆库未配置",
+  memory_schema_unavailable: "科研记忆库结构未就绪",
+  memory_unavailable: "科研记忆库暂时不可用",
+  memory_timeout: "科研记忆库响应超时",
 };
 
 function formatTime(value: string | null) {
@@ -96,7 +95,7 @@ export function MemoryPage() {
     setLoading(true);
     try {
       if (!hasWebApi) {
-        setStatus({ configured: false, connected: false, code: "memory_url_missing" });
+        setStatus({ configured: false, connected: false, code: "memory_unconfigured" });
         setItems([]);
         setProfile(null);
         return;
@@ -238,7 +237,7 @@ export function MemoryPage() {
 
   const connected = status?.connected === true;
   const statusText = connected
-    ? `记忆服务已连接${status.account ? ` · ${status.account}` : ""}`
+    ? "科研记忆库已连接"
     : statusMessages[status?.code ?? ""] ?? "科研记忆服务未连接";
 
   return (
