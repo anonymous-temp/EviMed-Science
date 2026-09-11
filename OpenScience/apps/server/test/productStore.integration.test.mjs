@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
+import { migrateProductStore } from "../src/productPersistence.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -213,14 +214,28 @@ test("capsule and fact revisions atomically enqueue generation-bound memory inde
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_product.schema_migrations WHERE name='2026-09-05-memory-index-outbox-v1'")).rows[0].count, 1);
 });
 
-test("the index ledger carries no engine record ids, on a database that already had the column", options, async () => {
+test("the index ledger loses its engine record ids on a database that has them", options, async () => {
   // `CREATE TABLE IF NOT EXISTS` leaves an existing table alone, so removing
-  // the column from the definition is only half the migration. This asserts the
-  // other half ran: the database this test runs against was created by the
-  // MemOS-era schema and still had the column a moment ago.
-  const columns = await database.query(`SELECT column_name FROM information_schema.columns
-    WHERE table_schema='evimed_product' AND table_name='memory_index_state'`);
-  const names = columns.rows.map((row) => row.column_name);
+  // the column from the definition is only half the migration — and on a
+  // database created by the definition, the missing half looks exactly like the
+  // present one. The column is put back and the migration run against it, which
+  // is the only shape of this test that can fail when the `DROP COLUMN` is
+  // deleted. A fresh handle is what re-runs the DDL: the migration is memoized
+  // per database instance.
+  const columnNames = async () => (await database.query(`SELECT column_name FROM information_schema.columns
+    WHERE table_schema='evimed_product' AND table_name='memory_index_state'`)).rows.map((row) => row.column_name);
+  await database.query(`ALTER TABLE evimed_product.memory_index_state
+    ADD COLUMN IF NOT EXISTS engine_memory_ids jsonb NOT NULL DEFAULT '[]'::jsonb`);
+  assert.ok((await columnNames()).includes("engine_memory_ids"), "the MemOS-era column must be there for this to prove anything");
+
+  const migrating = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2000 });
+  try {
+    await migrateProductStore(migrating);
+  } finally {
+    await migrating.close();
+  }
+
+  const names = await columnNames();
   assert.ok(names.includes("fingerprint"), "the ledger itself must still be there");
   assert.equal(names.includes("engine_memory_ids"), false, "the index is addressed by path now, and the readback reads those paths");
   assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_product.schema_migrations WHERE name='2026-09-11-memory-index-openviking-v1'")).rows[0].count, 1);
