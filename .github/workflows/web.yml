@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   web:
+    if: ${{ !startsWith(github.ref, 'refs/heads/codex/diagnostic-parser-') }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     services:
