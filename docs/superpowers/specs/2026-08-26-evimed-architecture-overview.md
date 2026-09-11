@@ -247,6 +247,8 @@ MCP 26 工具六个子类（spec §21.2）：检索（`literature_search`、`gui
 
 ### 9.1 三级栈（spec §19.16、§19.21）
 
+> **【2026-09-11：本节的底座列已作废】** MemOS 不再采用：L1 研究记忆落在控制面 Postgres 的 `evimed_memory`，L2 胶囊仍在 `evimed_product`，两者共用基础栈里的**同一个 OpenViking 派生召回索引**（索引不持有记录，可重建），重排在控制面做。以下为原文。
+
 | 级 | 是什么 | 在哪 | 状态 |
 |---|---|---|---|
 | L0 工作记忆 | 一次运行内的上下文：题面注入、compaction、`session-query` FTS、`storageDomain`、技能 | DSH 原语 | 【已落地】 |

@@ -1614,6 +1614,8 @@ capsule_activations (user_id, own_capsule_id, guest_version_id?, mode: own|guest
 
 ### 19.16 记忆底座：MemOS（MemTensor）+ 两层分工
 
+> **【2026-09-11：本节的底座定版已作废】** MemOS 不再采用：研究记忆（笔记与结构化记录）落在控制面 Postgres 的 `evimed_memory`，记忆胶囊仍在 `evimed_product`，两者共用基础栈里的**同一个 OpenViking 派生召回索引**（索引不持有记录，可重建），重排在控制面做。以下为原文。
+
 > 术语澄清：本文此前出现的 Memos 指仓库里 vendored 的 usememos 笔记应用（`记忆模块/`）；用户所指的是 **MemTensor/MemOS**（记忆操作系统，MemOS 2.0「星尘」）。两者无关。定版：**usememos 退役；MemOS 自托管成为记忆底座**。
 
 **核实的事实**（GitHub README、docs、Releases；vendor 数据以 vendor 标注）：
@@ -1725,6 +1727,8 @@ capsule_activations (user_id, own_capsule_id, guest_version_id?, mode: own|guest
 | R9 | 记忆底座年轻（MemOS 2.0）、后端较重（Neo4j + Qdrant） | `memorySubstrate` 窄端口隔离；Mem0 作为同端口第二 provider 留作退路；C0 实测后确认 |
 
 ### 19.21 记忆底座的三个选项与定案：MemOS 自托管跟版；DSH 没有「记忆层」只有原语
+
+> **【2026-09-11：本节的定案已作废】** MemOS 不再采用：研究记忆（笔记与结构化记录）落在控制面 Postgres 的 `evimed_memory`，记忆胶囊仍在 `evimed_product`，两者共用基础栈里的**同一个 OpenViking 派生召回索引**（索引不持有记录，可重建），重排在控制面做。以下为原文。
 
 **问题**：(a) MemOS 部署在我们自己的服务器上、每次 MemOS 更新我们同步更新，行不行？(b) 不用 MemOS、只用 DSH 自己的记忆层，行不行？
 
