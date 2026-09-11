@@ -18,6 +18,10 @@ def test_web_phase1_persists_canonical_project_for_resume(tmp_path: Path, monkey
         effect_measure="RR",
     )
 
+    from new_meta.core.protocol_scope import scope_receipt
+    from tests.test_protocol_scope import assessment
+    protocol._scope_receipt = scope_receipt("Treatment for mortality", protocol,
+                                          assessment(protocol, topic="Treatment for mortality"))
     monkeypatch.setattr(
         "new_meta.agents.research_planner.ResearchPlanner.run",
         lambda self, topic: protocol,

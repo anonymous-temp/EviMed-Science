@@ -196,3 +196,44 @@ def test_natural_language_method_fields_are_canonicalized(tmp_path: Path) -> Non
     assert plan.effect_measure == "HR"
     assert plan.outcome_type == "time_to_event"
     assert plan.primary_estimator == "REML"
+
+
+@pytest.mark.parametrize("design", [
+    "secondary_analysis_of_rcts", "secondary analysis of randomized controlled trials",
+    "non randomized controlled trial", "nonrandomized controlled trial",
+    "post hoc randomized controlled trial", "unknown cluster study",
+])
+def test_unsupported_design_is_typed_input_required_without_executable_plan(tmp_path, design):
+    from new_meta.core.method_planning import ProtocolInputRequired
+    project = Project("unsupported design", output_dir=tmp_path)
+    protocol = _protocol(review_family="intervention_rct", study_designs=["RCT", design])
+    with pytest.raises(ProtocolInputRequired) as caught:
+        compile_project_method_plan(project, protocol, enforce=True)
+    assert caught.value.phase.status.value == "needs_input"
+    assert caught.value.phase.issues[0].context["field"] == "study_designs"
+    assert design in caught.value.phase.data["proposal"]["study_designs"]
+    assert not project.load_json("method_plan.json", subdir="analysis")
+    assert not project.is_step_done("protocol")
+
+
+@pytest.mark.parametrize("family,design,outcome,measure", [
+    ("diagnostic_accuracy", "unknown study", "diagnostic_accuracy", "SENS_SPEC"),
+    ("prediction_model", "unvalidated guess", "discrimination", "C_STATISTIC"),
+    ("prognostic_factor", "case series", "time_to_event", "HR"),
+])
+def test_family_specific_unknown_design_does_not_default(tmp_path, family, design, outcome, measure):
+    from new_meta.core.method_planning import ProtocolInputRequired
+    with pytest.raises(ProtocolInputRequired):
+        compile_project_method_plan(Project("unknown", output_dir=tmp_path), _protocol(
+            review_family=family, study_designs=[design], primary_outcome_type=outcome,
+            effect_measure=measure))
+
+
+def test_internal_registry_fault_is_not_input_required(tmp_path, monkeypatch):
+    from new_meta.core.method_registry import default_method_registry
+    registry = default_method_registry()
+    def fail(*args, **kwargs):
+        raise RuntimeError("registry storage fault")
+    monkeypatch.setattr(registry, "compile", fail)
+    with pytest.raises(RuntimeError, match="registry storage fault"):
+        compile_project_method_plan(Project("fault", output_dir=tmp_path), _protocol(), registry=registry)

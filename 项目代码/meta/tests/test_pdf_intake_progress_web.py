@@ -94,7 +94,8 @@ def test_phase2_pushes_pdf_intake_progress_events_before_screening(tmp_path: Pat
         "parent_id": "session-1",
         "topic": "SGLT2 inhibitors for HFpEF",
     }
-
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project, phase1_state["protocol"])
     with pytest.raises(StopAfterPdfIntake):
         _run_phase2_inner(
             phase1_state,
@@ -151,6 +152,8 @@ def test_phase2_blocks_without_any_fulltext_before_fulltext_screening(tmp_path: 
         "parent_id": "session-no-fulltext",
         "topic": "SGLT2 inhibitors for HFpEF",
     }
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project, phase1_state["protocol"])
 
     with pytest.raises(RuntimeError, match="Full text sources are required"):
         _run_phase2_inner(
@@ -211,6 +214,8 @@ def test_phase2_attempts_automatic_fulltext_before_requesting_upload(tmp_path: P
         "parent_id": "session-auto-fulltext",
         "topic": "SGLT2 inhibitors for HFpEF",
     }
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project, phase1_state["protocol"])
 
     with pytest.raises(StopAfterAutomaticFulltext):
         _run_phase2_inner(
@@ -286,6 +291,8 @@ def test_phase2_sync_pushes_structured_fulltext_required_event(tmp_path: Path, m
         "parent_id": "session-no-fulltext-sync",
         "topic": "SGLT2 inhibitors for HFpEF",
     }
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project, phase1_state["protocol"])
 
     with pytest.raises(RuntimeError, match="Full text sources are required"):
         _run_phase2_sync(

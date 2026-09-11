@@ -633,6 +633,8 @@ def test_main_allows_rerun_manuscript_only_without_llm_key(monkeypatch, tmp_path
         effect_measure="RR",
     )
     project.save_json("protocol.json", protocol)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_text("search_query.txt", "mortality AND treatment")
     project.save_json("all_extractions.json", [], subdir="extraction")
     project.save_json("rob_results.json", [], subdir="risk_of_bias")

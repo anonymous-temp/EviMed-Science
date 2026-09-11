@@ -54,6 +54,8 @@ def test_downstream_rerun_zero_primary_effects_stays_evidence_gap(monkeypatch) -
         ],
     )
     project.save_json("protocol.json", protocol)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_json("all_extractions.json", [study], subdir="extraction")
     project.save_json(
         "extraction_audit.json",
@@ -214,6 +216,8 @@ def test_downstream_rerun_uses_shared_meta_helper(monkeypatch) -> None:
         ),
     ]
     project.save_json("protocol.json", protocol)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_text("search_query.txt", "mortality drug usual care")
     project.save_json("all_extractions.json", studies, subdir="extraction")
     project.save_json(

@@ -75,6 +75,7 @@ class Project:
                  skip_disk: bool = False):
         self.topic = topic
         self.skip_disk = skip_disk
+        is_resume = bool(resume_dir and resume_dir.exists())
         if resume_dir and resume_dir.exists():
             self.base_dir = resume_dir
         else:
@@ -88,7 +89,8 @@ class Project:
             self.base_dir = (output_dir or OUTPUT_DIR) / f"{ts}_{safe_topic}"
         if not skip_disk:
             self._init_dirs()
-            self._record_topic()
+            if not is_resume:
+                self._record_topic()
         self.prisma = PRISMAFlow()
         if not skip_disk:
             prisma_data = self.load_json("prisma_flow.json")

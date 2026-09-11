@@ -464,6 +464,8 @@ def test_web_downstream_returns_typed_alignment_need_without_pool_or_writer(tmp_
     monkeypatch.setattr(main_module, "_run_meta_analysis_from_effects", forbidden)
     monkeypatch.setattr(main_module, "_run_grade_from_cached_meta", forbidden)
     monkeypatch.setattr(WritingAgent, "run", forbidden)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     response = start._run_downstream_after_overrides_payload({"project_dir": str(project.base_dir)})
     assert response["ok"] is False
     assert response["error"] == "primary_analysis_alignment_required"
@@ -558,6 +560,8 @@ def test_completed_web_compiled_cache_requires_current_pool_and_source_binding(t
     package = project.get_path("metaagent_export.zip", subdir="package")
     package.write_bytes(b"existing package")
     monkeypatch.setattr(start, "_resolve_project_dir", lambda *_args, **_kwargs: project.base_dir)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     ready = start._resume_project_payload({"project_dir": str(project.base_dir)})
     assert ready["ok"] is True and ready["skipped"] is True
     if mutation == "synthesis":
@@ -568,6 +572,10 @@ def test_completed_web_compiled_cache_requires_current_pool_and_source_binding(t
         data = project.load_json("protocol.json")
         data["pico"]["population"] = "A different population"
         project.save_json("protocol.json", data)
+        from new_meta.core.method_planning import ProtocolInputRequired
+        def scope_refusal(self, topic, protocol):
+            raise ProtocolInputRequired("Changed population requires clarification", code="protocol_scope_input_required", protocol=protocol)
+        monkeypatch.setattr("new_meta.agents.research_planner.ResearchPlanner.check_scope", scope_refusal)
     elif mutation == "source_rows":
         data = project.load_json("all_extractions.json", subdir="extraction")
         data[0]["outcomes"][0]["effect_size"] = 7.0
@@ -580,10 +588,10 @@ def test_completed_web_compiled_cache_requires_current_pool_and_source_binding(t
         project.get_path("primary_alignment_method_pool.json", subdir="analysis").unlink()
     refused = start._resume_project_payload({"project_dir": str(project.base_dir)})
     assert refused["ok"] is False
-    assert refused["error"] == "cached_compiled_alignment_stale"
+    assert refused["error"] == ("protocol_scope_input_required" if mutation == "protocol" else "cached_compiled_alignment_stale")
     refresh = start._refresh_review_decision_artifacts(project)
     assert refresh["artifacts_refreshed"] is False
-    assert refresh["execution"]["error_code"] == "cached_compiled_alignment_stale"
+    assert refresh["execution"]["error_code"] == ("protocol_scope_unverified" if mutation == "protocol" else "cached_compiled_alignment_stale")
     assert package.read_bytes() == b"existing package"
 
 
@@ -960,6 +968,8 @@ def test_normal_review_refresh_reaches_package_stage_for_a_genuinely_bound_pool(
     record_checked_alignments(project, protocol, second, [assessment_payload()], source_text=SOURCE, source_path=source)
     studies = [study, second]
     project.save_json("protocol.json", protocol)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_json("all_extractions.json", studies, subdir="extraction")
     rob = [StudyRoB(study_id=key, overall_judgment="Low risk", tool_used="RoB 2", domains=[]) for key in ["S1", "S2"]]
     project.save_json("rob_results.json", rob, subdir="risk_of_bias")

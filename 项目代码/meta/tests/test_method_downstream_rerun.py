@@ -59,6 +59,8 @@ def test_downstream_rerun_uses_compiled_method_route_not_pairwise_selector(monke
         )
     ]
     project.save_json("protocol.json", protocol)
+    from protocol_scope_fixture import approve_synthetic_protocol_scope
+    approve_synthetic_protocol_scope(project)
     project.save_json("all_extractions.json", studies, subdir="extraction")
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     compile_project_method_plan(project, protocol, enforce=True)

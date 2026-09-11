@@ -66,7 +66,15 @@ def _word_character(character: str) -> bool:
     return character.isalnum() or character == "_" or unicodedata.category(character).startswith("M")
 
 
-def _complete_quote_occurs(source, quote, numeric_spans, numeric_starts):
+def _complete_quote_occurs(source, quote, numeric_spans, numeric_starts, *, continuous_scripts=False):
+    def word_character(character):
+        # These scripts do not require spaces between lexical phrases.
+        code = ord(character)
+        if continuous_scripts and (0x3400 <= code <= 0x9FFF or 0x20000 <= code <= 0x323AF
+                                   or 0x3040 <= code <= 0x30FF or 0xAC00 <= code <= 0xD7AF):
+            return False
+        return _word_character(character)
+
     def inside_number(position):
         index = bisect_right(numeric_starts, position) - 1
         return index >= 0 and numeric_spans[index][0] < position < numeric_spans[index][1]
@@ -77,14 +85,14 @@ def _complete_quote_occurs(source, quote, numeric_spans, numeric_starts):
         if start < 0:
             return False
         end = start + len(quote)
-        left_clipped = start > 0 and _word_character(quote[0]) and (
-            _word_character(source[start - 1]) or (
-                start > 1 and source[start - 1] in _WORD_JOINERS and _word_character(source[start - 2])
+        left_clipped = start > 0 and word_character(quote[0]) and (
+            word_character(source[start - 1]) or (
+                start > 1 and source[start - 1] in _WORD_JOINERS and word_character(source[start - 2])
             )
         )
-        right_clipped = end < len(source) and _word_character(quote[-1]) and (
-            _word_character(source[end]) or (
-                end + 1 < len(source) and source[end] in _WORD_JOINERS and _word_character(source[end + 1])
+        right_clipped = end < len(source) and word_character(quote[-1]) and (
+            word_character(source[end]) or (
+                end + 1 < len(source) and source[end] in _WORD_JOINERS and word_character(source[end + 1])
             )
         )
         if not left_clipped and not right_clipped and not inside_number(start) and not inside_number(end):
@@ -169,6 +177,31 @@ def _write_scoped_once(project, relative: str, payload: bytes):
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
+
+
+def _write_scoped_atomic(project, relative: str, payload: bytes):
+    """Atomically replace a derived record without following leaf/parent symlinks."""
+    import uuid
+    with _parent_descriptor(project, relative, create=True) as (parent, name):
+        temporary = f".{name}.{uuid.uuid4().hex}.tmp"
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                             0o600, dir_fd=parent)
+        try:
+            offset = 0
+            while offset < len(payload):
+                written = os.write(descriptor, payload[offset:])
+                if written <= 0:
+                    raise OSError("Scoped artifact write made no progress")
+                offset += written
+            os.fsync(descriptor)
+            os.replace(temporary, name, src_dir_fd=parent, dst_dir_fd=parent)
+            os.fsync(parent)
+        finally:
+            os.close(descriptor)
+            try:
+                os.unlink(temporary, dir_fd=parent)
+            except FileNotFoundError:
+                pass
 
 
 def _record_proof(project, protocol, study, index, assessment, *, source_text, source_path, expected_source_sha256=None,
