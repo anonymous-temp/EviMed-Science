@@ -68,9 +68,6 @@ const inputPaths = [
   "examples/climate-trends",
   "deploy/web/Dockerfile",
   "deploy/web/postgres-backup-status",
-  "deploy/memos/Dockerfile",
-  "deploy/memos-engine",
-  "deploy/memos-ollama",
   "deploy/document-parser",
   "deploy/openlist",
   "deploy/specialist-adapter",
@@ -84,7 +81,6 @@ const inputPaths = [
   "scripts/ops/configure-backup.mjs",
   "scripts/ops/configure-local-auth.mjs",
   "scripts/ops/configure-production-state.mjs",
-  "scripts/ops/provision-memos.mjs",
   "scripts/ops/object-backup.mjs",
   "scripts/ops/restore-data.sh",
   "scripts/ops/restore-drill.sh",
@@ -98,8 +94,6 @@ const inputPaths = [
   "deploy/web/docker-compose.oidc.yml",
   "deploy/web/docker-compose.saas.yml",
   "deploy/web/docker-compose.monitoring.yml",
-  "deploy/web/docker-compose.memos-engine.yml",
-  "deploy/web/docker-compose.openviking.yml",
   "deploy/web/docker-compose.ingestion.yml",
   "deploy/web/saas-capability-contract.json",
   "deploy/web/Caddyfile",
@@ -250,19 +244,16 @@ async function currentServiceImages() {
       envName: "OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID",
     },
     {
-      name: "memos-engine",
-      image: process.env.OPEN_SCIENCE_MEMOS_ENGINE_IMAGE ?? `evimed-memos-engine:${deps.memos.version}`,
-      envName: "OPEN_SCIENCE_MEMOS_ENGINE_IMAGE_ID",
-    },
-    {
-      name: "ollama",
-      image: `${deps.ollama.image}:${deps.ollama.version}@${deps.ollama.imageDigest}`,
-      envName: "OPEN_SCIENCE_OLLAMA_IMAGE_ID",
-    },
-    {
       name: "openlist",
       image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`,
       envName: "OPEN_SCIENCE_OPENLIST_IMAGE_ID",
+    },
+    {
+      name: "openviking",
+      image:
+        process.env.OPEN_SCIENCE_OPENVIKING_IMAGE ??
+        `${deps.openviking.image}:${deps.openviking.imageTag}@${deps.openviking.imageDigest}`,
+      envName: "OPEN_SCIENCE_OPENVIKING_IMAGE_ID",
     },
   ];
 }
