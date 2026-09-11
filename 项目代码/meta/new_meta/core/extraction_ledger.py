@@ -591,6 +591,35 @@ def _result_data(
             correlation=outcome.correlation_r,
             total=outcome.correlation_n,
         ), None
+
+    # Counts accompanying a survival/adjusted analysis describe the participants;
+    # they cannot supply that analysis's effect or precision. Keep the source
+    # estimate (including an SE-only report) ahead of the aggregate-count branch.
+    if (
+        str(protocol.effect_measure or "").upper() == "HR"
+        or str(outcome.reported_effect_measure or "").upper() == "HR"
+        or outcome.hazard_ratio is not None
+        or outcome.reported_effect_adjusted
+    ):
+        try:
+            effect = comparative_effect_from_outcome(outcome, protocol)
+        except ValueError as exc:
+            if warnings is not None:
+                warnings.append(
+                    f"{result_id} retains its source fields without a pooled estimate: {exc}."
+                )
+            return _unstructured_result(outcome), None
+        return None, EffectEstimate(
+            measure=str(effect["measure"]),
+            estimate=float(effect["estimate"]),
+            standard_error=effect["standard_error"],
+            variance=effect["variance"],
+            ci_lower=effect["ci_lower"],
+            ci_upper=effect["ci_upper"],
+            scale=str(effect["scale"]),
+            adjusted=outcome.reported_effect_adjusted,
+            adjusted_covariates=outcome.adjustment_covariates,
+        )
     dichotomous = (
         outcome.events_intervention,
         outcome.total_intervention,
@@ -623,15 +652,6 @@ def _result_data(
             total_control=outcome.n_control,
         ), None
 
-    if outcome.hazard_ratio is not None and outcome.hr_ci_lower is not None and outcome.hr_ci_upper is not None:
-        return None, EffectEstimate(
-            measure="HR",
-            estimate=outcome.hazard_ratio,
-            standard_error=outcome.hr_se,
-            ci_lower=outcome.hr_ci_lower,
-            ci_upper=outcome.hr_ci_upper,
-            scale="original",
-        )
     if outcome.effect_size is not None and outcome.ci_lower is not None and outcome.ci_upper is not None:
         return None, EffectEstimate(
             measure=str(
@@ -646,9 +666,13 @@ def _result_data(
             adjusted_covariates=outcome.adjustment_covariates,
         )
 
+    return _unstructured_result(outcome), None
+
+
+def _unstructured_result(outcome: OutcomeData) -> UnstructuredResultData:
     legacy_fields: dict[str, Any] = {
         key: value
         for key, value in outcome.model_dump(mode="json").items()
         if value not in (None, "", [], {})
     }
-    return UnstructuredResultData(fields=legacy_fields or {"outcome_name": outcome.outcome_name}), None
+    return UnstructuredResultData(fields=legacy_fields or {"outcome_name": outcome.outcome_name})

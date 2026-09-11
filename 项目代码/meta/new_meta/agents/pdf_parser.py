@@ -119,6 +119,48 @@ def get_page_for_position(char_offset: int, page_map: list[dict]) -> int | None:
     return None
 
 
+def _rotated_direction(char: dict) -> str:
+    """Read vertical glyphs in the direction encoded by their PDF matrix."""
+    return "btt" if char["matrix"][1] > 0 else "ttb"
+
+
+def _page_reading_text(page, page_number: int) -> tuple[str, list[dict]]:
+    """Keep content-stream prose and rotated text separate without rebuilding cells."""
+    upright = page.filter(
+        lambda obj: obj.get("object_type") == "char" and obj.get("upright", True)
+    )
+    parts = [upright.extract_text(use_text_flow=True) or ""]
+    warnings = []
+    directions = {_rotated_direction(char) for char in page.chars if not char["upright"]}
+    for direction in sorted(directions):
+        rotated = page.filter(
+            lambda obj: obj.get("object_type") == "char"
+            and not obj.get("upright", True)
+            and _rotated_direction(obj) == direction
+        )
+        # Geometric ordering inside an orientation preserves decimal/fraction
+        # literals. Content-stream ordering breaks vertical words into letters.
+        text = rotated.extract_text(char_dir_rotated=direction, line_dir_rotated="ltr") or ""
+        if text:
+            parts.append("[ROTATED TEXT: cell relationships are not inferred]\n" + text)
+            warnings.append({
+                "page_number": page_number,
+                "code": "rotated_text_unstructured",
+                "direction": direction,
+            })
+    return "\n\n".join(part for part in parts if part), warnings
+
+
+def _table_has_rotated_text(table, chars: list[dict]) -> bool:
+    left, top, right, bottom = table.bbox
+    return any(
+        not char["upright"]
+        and char["x0"] < right and char["x1"] > left
+        and char["top"] < bottom and char["bottom"] > top
+        for char in chars
+    )
+
+
 def _parse_with_pdfplumber(pdf_path: str) -> dict:
     """Parse PDF using pdfplumber (local, no API needed)."""
     import pdfplumber
@@ -126,6 +168,7 @@ def _parse_with_pdfplumber(pdf_path: str) -> dict:
     full_text_parts = []
     tables_md = []
     page_map = []
+    parse_warnings = []
     current_char = 0
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -138,7 +181,8 @@ def _parse_with_pdfplumber(pdf_path: str) -> dict:
             page_start = current_char
 
             # Extract text
-            text = page.extract_text()
+            text, warnings = _page_reading_text(page, page_idx)
+            parse_warnings.extend(warnings)
             if text:
                 full_text_parts.append(text)
                 current_char += len(text)
@@ -156,7 +200,15 @@ def _parse_with_pdfplumber(pdf_path: str) -> dict:
             current_char += 2
 
             # Extract tables
-            for table_idx, table in enumerate(page.extract_tables(), start=1):
+            for table_idx, detected_table in enumerate(page.find_tables(), start=1):
+                if _table_has_rotated_text(detected_table, page.chars):
+                    parse_warnings.append({
+                        "page_number": page_idx,
+                        "table_number": table_idx,
+                        "code": "rotated_table_unstructured",
+                    })
+                    continue
+                table = detected_table.extract()
                 if table:
                     md = _table_to_markdown(table)
                     if md:
@@ -178,6 +230,7 @@ def _parse_with_pdfplumber(pdf_path: str) -> dict:
         "tables": tables_md,
         "abstract": abstract,
         "page_map": page_map,
+        "parse_warnings": parse_warnings,
     }
 
 

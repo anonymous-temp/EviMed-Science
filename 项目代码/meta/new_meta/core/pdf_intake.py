@@ -15,7 +15,7 @@ from typing import Callable
 from pydantic import BaseModel, Field
 
 
-PDF_PARSE_CACHE_VERSION = "pdf_parse_cache_v1"
+PDF_PARSE_CACHE_VERSION = "pdf_parse_cache_v2"
 
 
 class PDFIntakeRecord(BaseModel):

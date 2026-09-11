@@ -18,7 +18,11 @@ def payload(count=2, *, issues=()):
             "primary_analysis_alignment": [checked_row(index) for index in range(count)]}
 
 
-def run_provider(tmp_path, monkeypatch, responses, *, candidate=None, project=None):
+def run_provider(tmp_path, monkeypatch, responses, *, candidate=None, project=None, batch_size=4):
+    # Explicitly exercise legacy mixed-batch observations in these fixtures.
+    # Separate default-batch tests cover production's isolated outcome calls.
+    if batch_size is not None:
+        monkeypatch.setattr("new_meta.agents.data_extraction_agent.VERIFICATION_BATCH_SIZE", batch_size)
     project = project or Project("raw observation regression", output_dir=tmp_path)
     source = project.base_dir / "papers/source.txt"
     source.write_text(SOURCE)
@@ -76,6 +80,26 @@ def test_healthy_provider_check_still_certifies_complete_rows(tmp_path, monkeypa
     assert all(alignment_status(project, protocol(), result, index)["status"] == "match"
                for index in range(2))
     assert any(item.get("raw_response", {}).get("content") == raw for item in observations)
+
+
+@pytest.mark.parametrize("incomplete_first", [False, True])
+def test_default_outcome_calls_preserve_unrelated_complete_proof(tmp_path, monkeypatch, incomplete_first):
+    first = {"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row(0)]}
+    second = {"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row(1)]}
+    if incomplete_first:
+        first["primary_analysis_alignment"][0]["contrast"]["status"] = "mismatch"
+        del first["primary_analysis_alignment"][0]["population"]["rationale"]
+    project, result, calls, observations = run_provider(tmp_path, monkeypatch,
+        [json.dumps(first), json.dumps(second)], batch_size=None)
+    assert len(calls) == 2
+    assert alignment_status(project, protocol(), result, 0)["status"] == (
+        "unknown" if incomplete_first else "match")
+    assert alignment_status(project, protocol(), result, 1)["status"] == "match"
+    raw_records = [item for item in observations if "raw_response" in item]
+    assert {tuple(item["outcome_indices"]) for item in raw_records} == {(0,), (1,)}
+    if incomplete_first:
+        assert recover_issue_history(project, result, 0) == ([], False)
+        assert any(item.get("retained_clinical_judgments") for item in raw_records)
 
 
 @pytest.mark.parametrize("damage", ["malformed_row", "extra_row_key", "extra_envelope_key", "missing_required",
