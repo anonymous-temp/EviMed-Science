@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 
 /**
@@ -9,10 +10,10 @@ import { HttpError } from "./security.mjs";
  * descends. That is what we want it for. What it deliberately is *not* used
  * for is holding the authoritative record: its `write` offers `replace`,
  * `append` and `create` and no compare-and-swap, so the `expectedVersion` the
- * research-memory service enforces server-side has no equivalent here. Two
- * concurrent edits of one record would silently keep the later writer's copy.
- * The typed store stays authoritative; everything written through this client
- * is derived and can be rebuilt from it.
+ * control-plane store enforces has no equivalent here. Two concurrent edits of
+ * one record would silently keep the later writer's copy. The typed store stays
+ * authoritative; everything written through this client is derived and can be
+ * rebuilt from it.
  *
  * Identity is asserted, not held. The server runs in `trusted` auth mode behind
  * this control plane, which is the only caller: the account and user travel in
@@ -74,6 +75,11 @@ export function projectMemoryUri(userId, projectId) {
   return `viking://user/${openVikingUserId(userId)}/memories/evimed/project/${openVikingPeerId(projectId)}`;
 }
 
+/** The server's own default page for `ls`, and the level a leaf file carries. */
+const LIST_PAGE_SIZE = 1_000;
+const LIST_MAX_ENTRIES = 100_000;
+const LEAF_LEVEL = 2;
+
 const segmentPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 function safeSegment(value) {
@@ -96,6 +102,88 @@ export function parseMemoryUri(uri) {
   if (scope === "user" && scopeId !== undefined) return null;
   if (scope !== "user" && !scopeId) return null;
   return { scope, scopeId: scope === "user" ? "" : scopeId, kind, recordId };
+}
+
+/** Every capsule subtree of one user. This is what account deletion removes. */
+export function capsuleTreeUri(userId) {
+  return `viking://user/${openVikingUserId(userId)}/memories/evimed/capsule`;
+}
+
+/** The single path segment one capsule occupies.
+ *
+ * The account generation is hashed together with the capsule id, joined by a
+ * NUL separator, for the reason the MemOS namespace did the same: an account
+ * deleted and recreated under the same public id is a different account, and
+ * must not be able to read what the previous generation published. The
+ * separator is a byte no identifier may contain, so no two (generation,
+ * capsule) pairs can meet by concatenation.
+ */
+export function capsuleSegment(accountCreatedAt, capsuleId) {
+  const generation = String(accountCreatedAt ?? "");
+  const capsule = String(capsuleId ?? "");
+  if (!generation || !capsule) {
+    throw new HttpError(400, "memory_id_invalid", "A capsule index path needs an account generation and a capsule id.");
+  }
+  return scopedId("c", `${generation}\u0000${capsule}`, "capsule");
+}
+
+/** The subtree one capsule's facts occupy, for recall targeting and deletion. */
+export function capsuleMemoryRoot(userId, { accountCreatedAt, capsuleId }) {
+  return `${capsuleTreeUri(userId)}/${capsuleSegment(accountCreatedAt, capsuleId)}`;
+}
+
+/** Where one fact of a capsule lives.
+ *
+ * The fact id is base64url-encoded behind an `f` prefix because our ids are not
+ * all safe path segments — a runtime note's id is `runtime-note:<sha256>` — and
+ * encoding is reversible where escaping a colon would not be. The revision
+ * rides in the name so that a readback is exact without reading any file: a
+ * leaf either names the revision the snapshot published or it does not belong.
+ */
+export function capsuleFactUri(userId, { accountCreatedAt, capsuleId, factKind, factId, revision }) {
+  if (!CAPSULE_FACT_KINDS.includes(String(factKind))) {
+    throw new HttpError(400, "memory_id_invalid", "A capsule fact kind is not one this system records.");
+  }
+  const encoded = Buffer.from(String(factId ?? ""), "utf8").toString("base64url");
+  if (!encoded || encoded.length > 128) {
+    throw new HttpError(400, "memory_id_invalid", "A capsule fact id does not fit one path segment.");
+  }
+  if (!Number.isSafeInteger(revision) || revision < 1) {
+    throw new HttpError(400, "memory_id_invalid", "A capsule fact revision must be a positive integer.");
+  }
+  return `${capsuleMemoryRoot(userId, { accountCreatedAt, capsuleId })}/${factKind}/f${encoded}.r${revision}.md`;
+}
+
+/** Parse a capsule leaf back into the fact it was written from, or null for a
+ *  path this layout never produced. */
+export function parseCapsuleFactUri(uri) {
+  const match = String(uri ?? "").match(
+    /\/memories\/evimed\/capsule\/(c-[0-9a-f]{24})\/([a-z_]+)\/f([A-Za-z0-9_-]+)\.r([1-9][0-9]*)\.md$/,
+  );
+  if (!match) return null;
+  const [, segment, factKind, encoded, revision] = match;
+  if (!CAPSULE_FACT_KINDS.includes(factKind)) return null;
+  const factId = Buffer.from(encoded, "base64url").toString("utf8");
+  // Node's base64url decoder ignores what it cannot use, so a foreign name
+  // decodes into some string rather than failing. Re-encoding is what makes the
+  // round trip exact, and it is the check that keeps a leaf we did not write
+  // from being reported as a fact of ours.
+  if (!factId || Buffer.from(factId, "utf8").toString("base64url") !== encoded) return null;
+  return { capsuleSegment: segment, factKind, factId, revision: Number(revision) };
+}
+
+/** What the server said went wrong, as one line and without any request data.
+ *  @param {any} parsed */
+function upstreamReason(parsed) {
+  const error = parsed?.error;
+  const message = typeof error?.message === "string" && error.message
+    ? error.message
+    : typeof error === "string" && error
+      ? error
+      : typeof parsed?.message === "string" && parsed.message ? parsed.message : "";
+  const code = typeof error?.code === "string" && error.code ? error.code : "";
+  if (code && message) return `${code}: ${message}`;
+  return code || message || "The memory index rejected the request.";
 }
 
 export class OpenVikingClient {
@@ -185,15 +273,42 @@ export class OpenVikingClient {
     }
   }
 
-  async list(userId, uri) {
+  /** One page of a directory listing.
+   *
+   * `result` is a bare list — there is no envelope object, no cursor and no
+   * total. Reading `result.entries` returned nothing at all against the real
+   * server, which is why this is asserted against a recorded response rather
+   * than assumed from the shape of the other routes.
+   *
+   * A `limit` is deliberately never sent: the server truncates to it silently,
+   * so a caller who cannot prove the directory is smaller than its limit would
+   * read a short listing as a complete one. Paging happens through `offset`
+   * over the server's own 1000-entry page.
+   */
+  async list(userId, uri, { offset = 0 } = {}) {
     this.#assertConfigured();
-    const body = await this.#request(`/api/v1/fs/ls?uri=${encodeURIComponent(uri)}`, { userId });
-    const entries = Array.isArray(body?.result?.entries)
-      ? body.result.entries
-      : Array.isArray(body?.entries)
-        ? body.entries
-        : [];
-    return entries;
+    const query = new URLSearchParams({ uri, offset: String(Math.max(0, Number(offset) || 0)) });
+    const body = await this.#request(`/api/v1/fs/ls?${query.toString()}`, { userId });
+    return Array.isArray(body?.result) ? body.result : [];
+  }
+
+  /** Every entry of a directory, as one list.
+   *
+   * A short page ends the walk, which is the only completion signal the route
+   * offers. The page bound is the server's default `node_limit`; the total
+   * bound exists so that a server which ignored `offset` would fail loudly
+   * instead of paging forever.
+   */
+  async listAll(userId, uri) {
+    const entries = [];
+    for (let offset = 0; ; offset += LIST_PAGE_SIZE) {
+      const page = await this.list(userId, uri, { offset });
+      entries.push(...page);
+      if (page.length < LIST_PAGE_SIZE) return entries;
+      if (entries.length >= LIST_MAX_ENTRIES) {
+        throw new HttpError(502, "memory_index_listing_too_large", `A memory index directory exceeded ${LIST_MAX_ENTRIES} entries.`);
+      }
+    }
   }
 
   /** Hierarchical semantic retrieval over the given subtrees.
@@ -201,11 +316,17 @@ export class OpenVikingClient {
    * `read_content` inlines each hit's file, which is what makes one round trip
    * enough: without it a recall of eight memories is one search plus eight
    * reads, and the budget that decides which of them reach the prompt cannot
-   * run until their lengths are known. */
+   * run until their lengths are known.
+   *
+   * Two parameters are sent on every call rather than left to the server. Its
+   * `rerank.threshold` defaults to 0.1 and the retriever applies it even with
+   * no reranker configured, so a weak but correct hit disappears unless a
+   * threshold is stated; and without `level` the result slots can be spent on
+   * directory records, which name no memory of ours. */
   async find(userId, query, {
     targets = [],
     limit = 8,
-    scoreThreshold = null,
+    scoreThreshold = 0,
     peerId = null,
   } = {}) {
     this.#assertConfigured();
@@ -218,7 +339,8 @@ export class OpenVikingClient {
         ...(targets.length ? { target_uri: targets } : {}),
         context_type: "memory",
         node_limit: Math.max(1, Math.min(100, Number(limit) || 8)),
-        ...(scoreThreshold == null ? {} : { score_threshold: Number(scoreThreshold) }),
+        score_threshold: Number(scoreThreshold) || 0,
+        level: LEAF_LEVEL,
         read_content: true,
       },
     });
@@ -289,17 +411,21 @@ export class OpenVikingClient {
           ? "memory_index_not_found"
           : response.status === 409
             ? "memory_index_conflict"
-            : "memory_index_upstream_error";
+            : response.status === 503
+              ? "memory_index_unavailable"
+              : response.status === 504
+                ? "memory_index_timeout"
+                : "memory_index_upstream_error";
       const status = response.status === 404 ? 404 : 502;
       // The path and the upstream status, never the key: the same reasoning as
       // the research-memory client, where a single opaque code cost an hour of
       // probing endpoints by hand to find which of six calls had failed.
-      const detail = typeof parsed?.message === "string" && parsed.message
-        ? parsed.message
-        : typeof parsed?.error === "string" && parsed.error
-          ? parsed.error
-          : "The memory index rejected the request.";
-      throw new HttpError(status, code, `${method} ${relative} -> ${response.status}: ${detail}`);
+      //
+      // The reason arrives as `{"status":"error","error":{code,message,details}}`.
+      // Reading a top-level `message` found nothing on that wire, so every
+      // upstream explanation was replaced by the generic sentence below — which
+      // is the same outage as having no reason at all.
+      throw new HttpError(status, code, `${method} ${relative} -> ${response.status}: ${upstreamReason(parsed)}`);
     }
     return parsed;
   }
