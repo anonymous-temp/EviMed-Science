@@ -83,6 +83,33 @@ facts' vocabulary exactly as the record corpus does — several of them are true
 statements about the same drugs, the same trials and the same appraisal tools,
 answering a question nobody asked.
 
-Data only for now. The harness compares the lexical PostgreSQL fallback against
-the index through the real capsule URI layout, and both of those live in the
-capsule-index rewrite rather than here; it lands with that work.
+`--mode capsule` runs it. The `builtin` arm is the lexical PostgreSQL fallback
+`CapsuleService` falls back to — `ProductDocuments.search`, one `strpos` of the
+whole question against the fact's content, newest first — reproduced in process
+because what is compared is a ranking and a ranking needs no rows of its own.
+The `openviking` arm writes each fact at the URI the capsule index uses in
+production and reads the hits back through the same parser, so a layout change
+breaks the measurement instead of quietly making it meaningless.
+
+```bash
+node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm builtin --label lexical
+OPEN_SCIENCE_OPENVIKING_API_KEY_FILE=/path/to/key \
+node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm openviking --label qwen-capsule \
+  --url http://127.0.0.1:1933 --seed-index
+```
+
+### 2026-09-11, 172 capsule facts, 16 queries, top 5
+
+| | lexical PostgreSQL | OpenViking |
+|---|---|---|
+| recall@5 | 0.000 | not yet measured |
+| queries returning nothing relevant | 16 of 16 | not yet measured |
+
+The lexical baseline is the whole finding: sixteen out of sixteen reworded
+questions get nothing at all. A substring match cannot answer a question the
+researcher phrased differently from the fact, which is what a capsule is for —
+and until the index answers these, capsule recall works only for someone who
+already knows the words the distiller used. The index arm needs a
+DashScope-configured server and has not been run; the row stays visible and
+empty rather than absent, because an unmeasured arm is a fact about this
+comparison.

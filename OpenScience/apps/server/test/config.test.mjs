@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -152,13 +152,13 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
       writeFile(path.join(secretsDir, "evimed.api-key"), "test-evimed-key\n", { mode: 0o600 }),
       writeFile(path.join(secretsDir, "model-gateway.signing"), "model-signing-secret-with-at-least-32-bytes\n", { mode: 0o600 }),
       writeFile(path.join(secretsDir, "evimed-workload.signing"), "workload-signing-secret-with-at-least-32-bytes\n", { mode: 0o600 }),
-      writeFile(path.join(secretsDir, "memos.pat"), "test-memos-token\n", { mode: 0o600 }),
+      writeFile(path.join(secretsDir, "dashscope.api-key"), "test-dashscope-key\n", { mode: 0o600 }),
       writeFile(path.join(secretsDir, "bootstrap-password"), "local-password-with-at-least-16-bytes\n", { mode: 0o600 }),
     ]);
 
     const disabled = loadConfig({ rootDir, localAutoConfig: false });
     assert.equal(disabled.deepseekProviderEnabled, false);
-    assert.equal(disabled.memosUrl, "");
+    assert.equal(disabled.dashscopeApiKey, "");
 
     const enabled = loadConfig({ rootDir, localAutoConfig: true });
     assert.equal(enabled.deepseekProviderEnabled, true);
@@ -166,8 +166,7 @@ test("opt-in local auto configuration loads mode-600 EviMed service secrets", as
     assert.equal(enabled.publicSourceCredentialSources.evimedEvidence, "file");
     assert.equal(enabled.modelGatewaySigningSecretSource, "file");
     assert.equal(enabled.evimedWorkloadSigningSecretSource, "file");
-    assert.equal(enabled.memosAccessTokenSource, "file");
-    assert.equal(enabled.memosUrl, "http://127.0.0.1:8081");
+    assert.equal(enabled.dashscopeApiKeySource, "file");
     assert.equal(enabled.bootstrapPasswordSource, "file");
   } finally {
     await rm(parent, { recursive: true, force: true });
@@ -219,6 +218,51 @@ test("the kernel is not selectable, and the variable that used to select it is r
     if (saved == null) delete process.env.OPEN_SCIENCE_RUNTIME_KERNEL;
     else process.env.OPEN_SCIENCE_RUNTIME_KERNEL = saved;
   }
+});
+
+// The same property, for the memory service that was retired into a schema of
+// the control-plane database. A renamed budget is the dangerous half: an
+// operator who had raised OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT would otherwise go
+// back to eight memories per prompt and be told nothing at all.
+test("the retired memory variables are refused by name, and the budget keeps its meaning under the new one", () => {
+  const retired = {
+    OPEN_SCIENCE_MEMOS_URL: "http://memos.internal",
+    OPEN_SCIENCE_MEMOS_ACCESS_TOKEN: "pat",
+    OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE: "/run/secrets/memos-pat",
+    OPEN_SCIENCE_MEMOS_REQUEST_TIMEOUT_MS: "8000",
+    OPEN_SCIENCE_REQUIRE_MEMOS: "true",
+    OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT: "12",
+    OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS: "40000",
+    OPEN_SCIENCE_MEMOS_ENGINE_URL: "http://memos-engine:8001",
+    OPEN_SCIENCE_REQUIRE_MEMORY_INDEX: "true",
+  };
+  for (const [name, value] of Object.entries(retired)) {
+    const saved = process.env[name];
+    process.env[name] = value;
+    try {
+      assert.throws(() => loadConfig({ dataDir: "/tmp/os-config-memory" }), new RegExp(name),
+        `${name} is still read, or is ignored in silence`);
+    } finally {
+      if (saved == null) delete process.env[name];
+      else process.env[name] = saved;
+    }
+  }
+
+  const config = loadConfig({ dataDir: "/tmp/os-config-memory" });
+  assert.equal(config.memoryContextLimit, 8);
+  assert.equal(config.memoryContextMaxChars, 20_000);
+  assert.equal(config.requireMemos, undefined, "the requirement flag is gone: the store exists with the database");
+  const raised = loadConfig({ dataDir: "/tmp/os-config-memory", memoryContextLimit: 12, memoryContextMaxChars: 40_000 });
+  assert.equal(raised.memoryContextLimit, 12);
+  assert.equal(raised.memoryContextMaxChars, 40_000);
+});
+
+test("the reranker defaults to the pins the index's own compatibility is recorded under", async () => {
+  const pins = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
+  const config = loadConfig({ dataDir: "/tmp/os-config-rerank" });
+  assert.equal(config.memoryRerankModel, pins.openviking.rerank.model);
+  assert.equal(config.memoryRerankApiBase, pins.openviking.rerank.apiBase);
+  assert.equal(config.memoryRerankTimeoutMs, pins.openviking.rerank.timeoutMs);
 });
 
 test("the thinking effort is a closed vocabulary, refused at load rather than upstream", () => {

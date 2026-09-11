@@ -4,6 +4,7 @@ import test from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
+import { migrateResearchMemory } from "../src/researchMemoryPersistence.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 
@@ -43,6 +44,10 @@ test("legacy orphan rows do not block startup while every new foreign write is r
     await migrateProductStore(second);
     await migrateNotifications(second);
     await migrateUsageLedger(second);
+    // The upgraded server migrates research memory too, and the audit registers
+    // its tables: without this the audit would meet a missing table, which it
+    // refuses to tolerate on purpose.
+    await migrateResearchMemory(second);
     const constraints = await second.query(`SELECT c.conname,c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid
       JOIN pg_namespace n ON n.oid=t.relnamespace WHERE c.contype='f' AND n.nspname IN ('evimed_product','evimed_inbox','evimed_usage')
       AND c.conname IN ('product_documents_user_fk','product_jobs_user_fk','inbox_preferences_user_fk','usage_model_requests_user_fk') ORDER BY c.conname`);

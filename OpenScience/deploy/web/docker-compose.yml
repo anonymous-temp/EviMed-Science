@@ -266,6 +266,16 @@ services:
       # navigates by directory abstracts that no language model generates for
       # this layout, and returns nothing at all for it.
       OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE: /run/secrets/dashscope-api-key
+      # The reranker's model and endpoint default to the pins the image was
+      # built with; passed here so a model deprecation can be followed from
+      # `.env` rather than from a rebuild. Value-less on purpose: unset, they are
+      # absent from the container and the pinned defaults apply, while `${KEY:-}`
+      # would deliver an empty string and turn the reranker off in silence.
+      OPEN_SCIENCE_MEMORY_RERANK_MODEL:
+      OPEN_SCIENCE_MEMORY_RERANK_API_BASE:
+      OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS:
+      OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ${OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT:-8}
+      OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ${OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS:-20000}
       # Autopilot's levers belong to the base stack, not to an overlay. Compose
       # passes environment item by item, and these were listed only in
       # `docker-compose.ingestion.yml` — so on a deployment without that overlay

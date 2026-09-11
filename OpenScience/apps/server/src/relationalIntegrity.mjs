@@ -32,37 +32,18 @@ const relationships = Object.freeze([
 
 const auditedSchemas = Object.freeze(["evimed_product", "evimed_inbox", "evimed_usage", "evimed_memory"]);
 
-/** The only tables an audit may find missing.
- *
- *  `evimed_memory` is migrated by the research-memory store when the server
- *  constructs it, and nothing else in this repository calls that migration yet,
- *  so the integrity script and the migration tests reach a database where the
- *  two tables legitimately do not exist. Every other registered table is
- *  migrated by a caller these tools already run, and a missing one there means
- *  a dropped table — which must keep failing the audit, loudly, the way it did
- *  before this list existed. Delete an entry the moment its migration has a
- *  caller on every path that audits. */
-const toleratedAbsentTables = Object.freeze(["evimed_memory.records", "evimed_memory.notes"]);
-
 function identifier(value) { return `"${String(value).replaceAll('"', '""')}"`; }
 
 /** Audit existing ownership rows and the validation state of every required FK.
  *
- *  A table on the tolerated list above is reported as absent rather than
- *  failed; any other missing table falls through to its orphan query and fails
- *  the audit with the relation error PostgreSQL raises. */
+ *  Every registered table is migrated by a caller each auditing tool already
+ *  runs, so a missing one is a dropped table and fails the audit with the
+ *  relation error PostgreSQL raises. There is deliberately no tolerated-absent
+ *  list: one existed while `evimed_memory` had no migration caller here, and a
+ *  registry that cannot fail on a dropped table is not a registry. */
 export async function relationalIntegrity(database, { validate = false } = {}) {
-  const present = new Set((await database.query(`SELECT n.nspname||'.'||t.relname AS name FROM pg_class t
-    JOIN pg_namespace n ON n.oid=t.relnamespace WHERE t.relkind='r' AND n.nspname=ANY($1::text[])`,
-  [auditedSchemas])).rows.map((row) => row.name));
-  const tableOf = new Map(relationships.map(([name, schema, table]) => [name, `${schema}.${table}`]));
-  const absent = relationships.map(([name]) => name).filter((name) => {
-    const table = tableOf.get(name) ?? "";
-    return toleratedAbsentTables.includes(table) && !present.has(table);
-  });
   const counts = {};
   for (const [name, query] of orphanChecks) {
-    if (absent.includes(name)) continue;
     counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
   }
   const orphanTotal = Object.values(counts).reduce((sum, count) => sum + count, 0);
@@ -76,8 +57,7 @@ export async function relationalIntegrity(database, { validate = false } = {}) {
       && String(candidate.definition).startsWith(prefix));
     if (row) matched.set(name, { ...row, schema, table });
   }
-  const missing = relationships.map(([name]) => name)
-    .filter((name) => !matched.has(name) && !absent.includes(name));
+  const missing = relationships.map(([name]) => name).filter((name) => !matched.has(name));
   let unvalidated = [...matched].filter(([, row]) => !row.convalidated).map(([name]) => name);
   if (validate && orphanTotal === 0 && missing.length === 0 && unvalidated.length > 0) {
     await database.transaction(async (client) => {
@@ -89,6 +69,6 @@ export async function relationalIntegrity(database, { validate = false } = {}) {
     unvalidated = [];
   }
   return { ok: orphanTotal === 0 && missing.length === 0 && unvalidated.length === 0,
-    orphanTotal, counts, missing, unvalidated, absent,
+    orphanTotal, counts, missing, unvalidated,
     validated: validate && orphanTotal === 0 && missing.length === 0 };
 }

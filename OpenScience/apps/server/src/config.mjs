@@ -199,6 +199,19 @@ export function loadConfig(overrides = {}) {
     ["OPEN_SCIENCE_RUNTIME_KERNEL", "DSH is the only kernel; remove this variable"],
     ["OPEN_SCIENCE_OPENCODE_BIN", "set OPEN_SCIENCE_DSH_BIN instead"],
     ["OPEN_SCIENCE_OPENCODE_VERSION", "set OPEN_SCIENCE_DSH_VERSION instead"],
+    // Research memory is a schema of the control-plane database now, not a
+    // service to address and authenticate against. A deployment still setting
+    // these is pointing at something that is not there, and the failure it
+    // would otherwise get is silence.
+    ["OPEN_SCIENCE_MEMOS_URL", "research memory lives in the control-plane database; remove this variable"],
+    ["OPEN_SCIENCE_MEMOS_ACCESS_TOKEN", "research memory needs no credential of its own; remove this variable"],
+    ["OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE", "research memory needs no credential of its own; remove this variable"],
+    ["OPEN_SCIENCE_MEMOS_REQUEST_TIMEOUT_MS", "research memory is an in-process store; remove this variable"],
+    ["OPEN_SCIENCE_REQUIRE_MEMOS", "research memory exists exactly when the control-plane database does; remove this variable"],
+    ["OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT", "set OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT instead"],
+    ["OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS", "set OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS instead"],
+    ["OPEN_SCIENCE_MEMOS_ENGINE_URL", "the recall index is OpenViking; set OPEN_SCIENCE_OPENVIKING_URL instead"],
+    ["OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", "set OPEN_SCIENCE_MEMORY_INDEX_STRICT instead"],
   ]) {
     if (process.env[oldName]) throw new Error(`${oldName} is not read any more: ${remedy}.`);
   }
@@ -399,13 +412,18 @@ export function loadConfig(overrides = {}) {
       }),
     ]),
   );
-  const memosSecret = preferredFileSecret(overrides, {
-    overrideValue: "memosAccessToken",
-    overrideFile: "memosAccessTokenFile",
-    valueEnv: "OPEN_SCIENCE_MEMOS_ACCESS_TOKEN",
-    fileEnv: "OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE",
-    codePrefix: "memos_access_token",
-    defaultFile: localSecretFile("memos.pat"),
+  // The reranker's credential. It is the same host file the recall index's own
+  // configuration is rendered from: the control plane already holds every
+  // server-side credential, and the reranker runs here because the index's
+  // reranked endpoint cannot reach our memory leaves. The runtime container
+  // never receives it.
+  const dashscopeSecret = preferredFileSecret(overrides, {
+    overrideValue: "dashscopeApiKey",
+    overrideFile: "dashscopeApiKeyFile",
+    valueEnv: "OPEN_SCIENCE_DASHSCOPE_API_KEY",
+    fileEnv: "OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE",
+    codePrefix: "dashscope_api_key",
+    defaultFile: localSecretFile("dashscope.api-key"),
   });
   const openVikingSecret = preferredFileSecret(overrides, {
     overrideValue: "openVikingApiKey",
@@ -1084,26 +1102,20 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS ??
       24 * 60 * 60 * 1000,
     ),
-    memosUrl: String(
-      overrides.memosUrl ?? process.env.OPEN_SCIENCE_MEMOS_URL ?? (memosSecret.value ? "http://127.0.0.1:8081" : ""),
-    ).replace(/\/+$/, ""),
-    memosAccessToken: memosSecret.value,
-    memosAccessTokenSource: memosSecret.source,
-    memosAccessTokenError: memosSecret.error,
-    memosRequestTimeoutMs: Number(
-      overrides.memosRequestTimeoutMs ?? process.env.OPEN_SCIENCE_MEMOS_REQUEST_TIMEOUT_MS ?? 8_000,
+    // How much of a recall reaches the prompt: how many memories, and how many
+    // characters they may spend between them. The budget is product policy, so
+    // it is the same number whichever component ranked the candidates.
+    memoryContextLimit: Number(
+      overrides.memoryContextLimit ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT ?? 8,
     ),
-    memosContextLimit: Number(
-      overrides.memosContextLimit ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_LIMIT ?? 8,
-    ),
-    memosContextMaxChars: Number(
-      overrides.memosContextMaxChars ?? process.env.OPEN_SCIENCE_MEMOS_CONTEXT_MAX_CHARS ?? 20_000,
+    memoryContextMaxChars: Number(
+      overrides.memoryContextMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS ?? 20_000,
     ),
     // Which component decides *which* memories a question sees. `builtin` is
-    // the term matcher inside the research-memory client and needs nothing
+    // the term matcher inside the research-memory store and needs nothing
     // deployed; `openviking` delegates the ranking to a context database. The
-    // record itself is authoritative in the research-memory service either way,
-    // so this switch changes recall quality and nothing else.
+    // record itself stays authoritative in the control-plane database either
+    // way, so this switch changes recall quality and nothing else.
     memoryIndexProvider: String(
       overrides.memoryIndexProvider ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_PROVIDER ?? "builtin",
     ),
@@ -1121,9 +1133,26 @@ export function loadConfig(overrides = {}) {
     openVikingRequestTimeoutMs: Number(
       overrides.openVikingRequestTimeoutMs ?? process.env.OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS ?? 8_000,
     ),
-    memOsEngineUrl: String(overrides.memOsEngineUrl ?? process.env.OPEN_SCIENCE_MEMOS_ENGINE_URL ?? ""),
-    requireMemoryIndex:
-      overrides.requireMemoryIndex ?? boolEnv("OPEN_SCIENCE_REQUIRE_MEMORY_INDEX", false),
+    // The reranker that orders what a recall has already hydrated. The model,
+    // the endpoint and the timeout default to the pins the index's own
+    // compatibility is recorded under, because a reranker trained against one
+    // embedding family and pointed at another is a silent quality regression.
+    // With no key the reranker is inert and the vector order stands.
+    dashscopeApiKey: dashscopeSecret.value,
+    dashscopeApiKeySource: dashscopeSecret.source,
+    dashscopeApiKeyError: dashscopeSecret.error,
+    memoryRerankModel: String(
+      overrides.memoryRerankModel ?? process.env.OPEN_SCIENCE_MEMORY_RERANK_MODEL
+      ?? depsVersions.openviking?.rerank?.model ?? "",
+    ),
+    memoryRerankApiBase: String(
+      overrides.memoryRerankApiBase ?? process.env.OPEN_SCIENCE_MEMORY_RERANK_API_BASE
+      ?? depsVersions.openviking?.rerank?.apiBase ?? "",
+    ),
+    memoryRerankTimeoutMs: Number(
+      overrides.memoryRerankTimeoutMs ?? process.env.OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS
+      ?? depsVersions.openviking?.rerank?.timeoutMs ?? 3_000,
+    ),
     memoryIndexPollMs: Number(
       overrides.memoryIndexPollMs ?? process.env.OPEN_SCIENCE_MEMORY_INDEX_POLL_MS ?? 1_000,
     ),
@@ -1296,8 +1325,6 @@ export function loadConfig(overrides = {}) {
     memoryRunSummaryTtlDays: Number(
       overrides.memoryRunSummaryTtlDays ?? process.env.OPEN_SCIENCE_MEMORY_RUN_SUMMARY_TTL_DAYS ?? 90,
     ),
-    requireMemos:
-      overrides.requireMemos ?? boolEnv("OPEN_SCIENCE_REQUIRE_MEMOS", false),
     knowledgeChunkChars: Number(
       overrides.knowledgeChunkChars ?? process.env.OPEN_SCIENCE_KNOWLEDGE_CHUNK_CHARS ?? 1_600,
     ),
