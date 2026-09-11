@@ -137,6 +137,10 @@ exec "$EVIMED_TEST_REAL_NODE" "$@"
   const legacy = await execute("bash", [path.join(ops, "backup-data.sh"), data, path.join(root, "legacy")], { env });
   assert.match(legacy.stderr, /backup note: 1 file\(s\) changed while being read/);
   assert.ok(legacy.stdout.trim().endsWith(".tar.gz"));
+  const restored = path.join(root, "live-restored");
+  await execute("bash", [path.join(ops, "restore-data.sh"), legacy.stdout.trim(), restored], { env: cleanEnvironment });
+  assert.equal(await readFile(path.join(restored, "payload.txt"), "utf8"), "synthetic changed member!\n",
+    "the integrity manifest must describe streamed live bytes rather than stale inventory bytes");
 
   await writeFile(payload, "synthetic recovery member\n");
   await assert.rejects(
