@@ -28,10 +28,8 @@ const releaseEnv = {
   OPEN_SCIENCE_CADDY_IMAGE_ID: `sha256:${"3".repeat(64)}`,
   OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE: "evimed-document-parser:test-release",
   OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID: `sha256:${"4".repeat(64)}`,
-  OPEN_SCIENCE_MEMOS_ENGINE_IMAGE: "evimed-memos-engine:test-release",
-  OPEN_SCIENCE_MEMOS_ENGINE_IMAGE_ID: `sha256:${"5".repeat(64)}`,
-  OPEN_SCIENCE_OLLAMA_IMAGE_ID: `sha256:${"6".repeat(64)}`,
   OPEN_SCIENCE_OPENLIST_IMAGE_ID: `sha256:${"7".repeat(64)}`,
+  OPEN_SCIENCE_OPENVIKING_IMAGE_ID: `sha256:${"8".repeat(64)}`,
 };
 
 function runManifest(output, args = [], env = {}) {
@@ -90,9 +88,11 @@ test("release manifest generator records exact images, tools, skills, and source
     });
     assert.deepEqual(manifest.services, [
       { name: "document-parser", image: releaseEnv.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE, imageId: releaseEnv.OPEN_SCIENCE_DOCUMENT_PARSER_IMAGE_ID },
-      { name: "memos-engine", image: releaseEnv.OPEN_SCIENCE_MEMOS_ENGINE_IMAGE, imageId: releaseEnv.OPEN_SCIENCE_MEMOS_ENGINE_IMAGE_ID },
-      { name: "ollama", image: `${deps.ollama.image}:${deps.ollama.version}@${deps.ollama.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OLLAMA_IMAGE_ID },
       { name: "openlist", image: `${deps.openlist.image}:v${deps.openlist.version}@${deps.openlist.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OPENLIST_IMAGE_ID },
+      // The recall index joined the base stack on 2026-09-11, so a release now
+      // records which index image served it: the vectors are derived, but which
+      // build produced them is not recoverable from the data.
+      { name: "openviking", image: `${deps.openviking.image}:${deps.openviking.imageTag}@${deps.openviking.imageDigest}`, imageId: releaseEnv.OPEN_SCIENCE_OPENVIKING_IMAGE_ID },
     ]);
     // Every entry is digest-bound, not just whichever one sorts first — that
     // was the shape of the defect this list grew to close.
@@ -161,9 +161,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "examples/climate-trends",
         "deploy/web/Dockerfile",
         "deploy/web/postgres-backup-status",
-        "deploy/memos/Dockerfile",
-        "deploy/memos-engine",
-        "deploy/memos-ollama",
         "deploy/document-parser",
         "deploy/openlist",
         "deploy/specialist-adapter",
@@ -177,7 +174,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/configure-backup.mjs",
         "scripts/ops/configure-local-auth.mjs",
         "scripts/ops/configure-production-state.mjs",
-        "scripts/ops/provision-memos.mjs",
         "scripts/ops/object-backup.mjs",
         "scripts/ops/restore-data.sh",
         "scripts/ops/restore-drill.sh",
@@ -191,8 +187,6 @@ test("release manifest generator records exact images, tools, skills, and source
         "deploy/web/docker-compose.oidc.yml",
         "deploy/web/docker-compose.saas.yml",
         "deploy/web/docker-compose.monitoring.yml",
-        "deploy/web/docker-compose.memos-engine.yml",
-        "deploy/web/docker-compose.openviking.yml",
         "deploy/web/docker-compose.ingestion.yml",
         "deploy/web/saas-capability-contract.json",
         "deploy/web/Caddyfile",

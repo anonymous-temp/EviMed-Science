@@ -11,27 +11,6 @@
     "releaseTagPattern": "^dsh-v\\d+\\.\\d+",
     "citeVersion": "0.3.2"
   },
-  "memos": {
-    "version": "2.0.30",
-    "image": "memtensor/memos",
-    "contractDir": "packages/contracts/memos",
-    "notes": "MemTensor/MemOS 2.0 Stardust, self-hosted. Not the vendored usememos-derived service under 记忆模块/, which still serves the user-facing memory records; MemOS is the opt-in semantic index behind capsule recall (docker-compose.memos-engine.yml overlay) until the memory base actually moves.",
-    "githubRepo": "MemTensor/MemOS",
-    "sourceRevision": "b41c8996a8dcb9df81998cced68d11457ce950c3",
-    "tokenizer": "gpt2",
-    "tokenizerRevision": "607a30d783dfa663caf39e06633721c8d4cfcd7e"
-  },
-  "ollama": {
-    "version": "0.33.3",
-    "image": "ollama/ollama",
-    "imageDigest": "sha256:32931b46719f673c05fdbaa81ccb26da18ea4a1c57590a754874ab28ba269eb2",
-    "linuxAmd64Digest": "sha256:57a73f11f75b32b97b59b003f351445c9c2a8af4b9d586ecdc928dee6150ef26",
-    "model": "bge-m3:latest",
-    "modelManifestDigest": "sha256:7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
-    "contractDir": "packages/contracts/ollama",
-    "notes": "Private CPU embedding runtime for MemOS. The OCI index, linux/amd64 child and bge-m3 registry manifest are independently pinned; only the one-shot initializer has egress.",
-    "githubRepo": "ollama/ollama"
-  },
   "openlist": {
     "version": "4.2.6",
     "image": "openlistteam/openlist",
@@ -50,10 +29,22 @@
   "openviking": {
     "version": "0.4.19",
     "image": "ghcr.io/volcengine/openviking",
+    "imageTag": "v0.4.19",
+    "imageDigest": "sha256:49e20c09ec7ea2f16c116d9ddb2ea90b4c24bf3f5a83078609e52399487dbec1",
+    "linuxAmd64Digest": "sha256:a15941cd35b19dbceeeda06b181402dc9b682616f8f46a075b7d8bacba0f07fb",
     "npmPackage": "@openviking/dsh-memory-plugin",
     "contractDir": "packages/contracts/openviking",
     "githubRepo": "volcengine/OpenViking",
-    "notes": "Context database evaluated as the recall index behind `memorySubstrate` (`OPEN_SCIENCE_MEMORY_INDEX_PROVIDER=openviking`), not as a record store: its `write` offers replace/append/create and no compare-and-swap, so the `expectedVersion` the research-memory service enforces has no equivalent and two concurrent edits of one record would silently lose one. The server is AGPL-3.0 and runs unmodified as its own service; the CLI, plugins and examples are Apache-2.0. The container tag carries a `v` prefix (`ghcr.io/volcengine/openviking:v0.4.19`) while the PyPI version does not; the unprefixed tag simply does not exist and a compose file that names it fails at pull. Releases land every few days and have moved data layouts before (0.3.x needed a staged migration through 0.4.5; 0.4.18 changed ACL fields from boolean to string), so the pin moves only through the matrix. `@openviking/dsh-memory-plugin` is listed for the local `evimed-web` profile only: like the MemOS plugins it spawns an MCP proxy that talks to the server directly, which the hosted runtime may not do.",
-    "imageTag": "v0.4.19"
+    "embedding": {
+      "apiBase": "https://dashscope.aliyuncs.com",
+      "model": "qwen3.7-text-embedding",
+      "dimension": 1024
+    },
+    "rerank": {
+      "apiBase": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
+      "model": "qwen3-rerank",
+      "timeoutMs": 3000
+    },
+    "notes": "The one recall index of the base stack: it ranks both the research-memory records and the capsule facts, whose authoritative rows stay in the control-plane PostgreSQL. Never a record store — its `write` offers replace/append/create and no compare-and-swap, so the `expectedVersion` the record store enforces has no equivalent and two concurrent edits of one record would silently lose one. `embedding` is what `scripts/ops/configure-production-state.mjs` renders into the server's ov.conf (provider `dashscope` with `input: \"text\"`, which appends `/compatible-mode/v1` to `apiBase` itself and is the only provider that sends `dimensions`); changing the model or the dimension invalidates every stored vector, so it takes a `pnpm rebuild:memory-index --all`. `rerank` is read by the control plane, not by the server: `/search/find` never reranks and `/search/search`, which does, navigates by directory abstracts no VLM generates here and returns nothing for this layout, so the reranker runs where the hydrated text already is and the ov.conf carries no rerank section. Both model ids are configuration until a live DashScope check settles them; no key existed when they were written. The server is AGPL-3.0 and runs unmodified as its own service; the CLI, plugins and examples are Apache-2.0. The container tag carries a `v` prefix (`ghcr.io/volcengine/openviking:v0.4.19`) while the PyPI version does not; the unprefixed tag simply does not exist and a compose file that names it fails at pull. Releases land every few days and have moved data layouts before (0.3.x needed a staged migration through 0.4.5; 0.4.18 changed ACL fields from boolean to string), so the pin moves only through the matrix. `@openviking/dsh-memory-plugin` is listed for the local `evimed-web` profile only: it spawns an MCP proxy that talks to the server directly, which the hosted runtime may not do."
   }
 }
