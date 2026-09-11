@@ -216,7 +216,7 @@ def test_interrupted_check_resumes_with_the_observed_issue_checkpoint(tmp_path, 
     resumed = ExtractedStudy.model_validate(project.load_json("trial-paper.json", subdir="extraction"))
     assert resumed.outcomes[0].primary_analysis_alignment.unresolved_data_issues
     result = reverify(project, resumed, monkeypatch)
-    assert alignment_status(project, protocol(), result, 0)["reason"] == "verification_data_issues_unresolved"
+    assert alignment_status(project, protocol(), result, 0)["reason"] == "verification_issue_history_required"
 
 
 def test_reextraction_preserves_prior_source_conflict_origin(tmp_path, monkeypatch):

@@ -1,0 +1,203 @@
+{
+  "origin": {
+    "run_id": "meta-20260912033139-5aeb692968b3",
+    "artifact": "analysis/protocol_input_status.json",
+    "assessment_indices": [
+      11,
+      12
+    ]
+  },
+  "topic": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+  "proposal": {
+    "research_question": "Prespecified bounded replication (not an exhaustive systematic review of SGLT2 inhibitors): in adults with type 2 diabetes and albuminuric chronic kidney disease, does canagliflozin 100 mg daily versus matching placebo reduce the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (cardiovascular death excluded)? Restricted to the two prespecified main reports (PMID 30990260, PMID 35861630): extract exactly one overall randomized-cohort hazard ratio with its directly reported 95% CI per trial, retain legitimate baseline-covariate adjustment, bind each effect to its source and trial registration, derive log(HR) and SE from the reported CI, and pool the two studies in a forest plot. Bounded P values are preserved as inequalities and no exact P value is invented for precision calculation. Small study count and population/follow-up limitations are explained, and any unverifiable source or estimand is reported as a precise limitation without substituting an effect.",
+    "pico": {
+      "population": "Randomized adults with type 2 diabetes mellitus and albuminuric chronic kidney disease; excludes patients receiving maintenance dialysis or with kidney transplantation at baseline.",
+      "intervention": "Canagliflozin 100 mg once daily (oral, added to background standard care).",
+      "comparator": "Matching placebo.",
+      "outcome_primary": "Renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; cardiovascular death is excluded from the composite.",
+      "outcomes_secondary": [
+        "End-stage kidney disease alone (initiation of chronic dialysis, kidney transplantation, or sustained estimated glomerular filtration rate <15 mL/min/1.73 m2)",
+        "Doubling of serum creatinine alone",
+        "Renal death alone",
+        "All-cause mortality",
+        "Hospitalization for heart failure",
+        "Annualized rate of decline in estimated glomerular filtration rate",
+        "Change in urinary albumin-to-creatinine ratio from baseline"
+      ]
+    },
+    "study_design": "parallel_rct",
+    "study_designs": [
+      "parallel_rct"
+    ],
+    "inclusion_criteria": [
+      "Parallel-group randomized controlled trial in adults with type 2 diabetes and albuminuric chronic kidney disease.",
+      "Randomized comparison of canagliflozin 100 mg daily versus matching placebo.",
+      "Trial population excludes patients on maintenance dialysis and patients with kidney transplantation at baseline.",
+      "Prespecified main report of the trial, identified by PMID 30990260 or PMID 35861630 (no other records are eligible).",
+      "Reports an overall randomized-cohort hazard ratio for the prespecified renal-specific composite with a directly reported 95% confidence interval.",
+      "Each extracted effect is bound to its source citation and trial registration record, with exactly one overall hazard ratio retained per trial.",
+      "Baseline-covariate-adjusted hazard ratios are retained as legitimate effect estimates.",
+      "Bounded P values reported as inequalities (e.g., P < 0.001) are preserved as reported.",
+      "No language restriction on the eligible prespecified reports."
+    ],
+    "exclusion_criteria": [
+      "Maintenance dialysis or kidney transplantation at baseline.",
+      "Composite outcome definitions that include cardiovascular death.",
+      "Mediator-adjusted analyses (e.g., adjustment for postrandomization on-treatment estimated glomerular filtration rate or albuminuria change).",
+      "Analyses restricted by postrandomization selection or landmark selection.",
+      "Secondary publications, subgroup-only reports, post hoc analyses, registry linkage reports, and conference abstracts other than the two prespecified main reports.",
+      "Non-randomized designs, single-arm studies, pooled analyses, meta-analyses, and narrative reviews.",
+      "Any record not identified by PMID 30990260 or PMID 35861630.",
+      "More than one overall hazard ratio per trial for the primary composite (only a single overall randomized-cohort estimate per trial is extracted).",
+      "Estimates derived from postrandomization observational contrasts rather than randomized assigned-arm comparisons.",
+      "Where the source or the estimand cannot be verified from the prespecified report, the precise limitation is documented explicitly and no effect is invented, substituted, or carried over from another report."
+    ],
+    "databases": [
+      "Internal literature database",
+      "PubMed"
+    ],
+    "date_range": "Not applicable (no date-limited search; bounded replication restricted to two prespecified main reports)",
+    "language": "No language restriction",
+    "effect_measure": "HR",
+    "model_preference": "random",
+    "tau_estimator": "DL (assumption: between-study variance estimator not specified by the original question; DL is used as a conventional default with the explicit caveat that tau is poorly estimated with only two studies, and a fixed-effect sensitivity analysis is reported alongside)",
+    "subgroup_variables": [
+      "Baseline estimated glomerular filtration rate strata (e.g., 30 to <45, 45 to <60, >=60 mL/min/1.73 m2)",
+      "Baseline urinary albumin-to-creatinine ratio strata (e.g., <300 vs >=300 mg/g)",
+      "Geographic region of randomization",
+      "History of cardiovascular disease at baseline",
+      "Baseline glycated hemoglobin or duration of diabetes",
+      "Age group (e.g., <65 vs >=65 years)",
+      "Sex"
+    ],
+    "review_family": "intervention_rct",
+    "primary_outcome_type": "time_to_event",
+    "protocol_version": "1.0",
+    "interventions": [
+      "Canagliflozin 100 mg once daily"
+    ],
+    "analysis_type": "pairwise"
+  },
+  "verified_assessments": [
+    {
+      "fields": [
+        {
+          "field": "research_question",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.",
+          "rationale": "The generated research_question preserves every explicit element of the original: the bounded replication framing (explicitly not an exhaustive SGLT2 inhibitor review), the two named main reports (PMID 30990260, PMID 35861630), the population (randomized adults with type 2 diabetes and albuminuric CKD), the comparison (canagliflozin 100 mg daily vs matching placebo), the renal-specific composite (ESKD, doubling of serum creatinine, renal death) with cardiovascular death excluded, extraction of exactly one overall randomized-cohort HR with directly reported 95% CI per trial, retention of legitimate baseline-covariate adjustment, binding of each effect to source and trial registration, derivation of log(HR) and SE from the reported CI, two-study pooling with a forest plot, preservation of bounded P values as inequalities without inventing exact P values for precision calculations, explanation of small study count and population/follow-up limitations, and reporting of any unverifiable source or estimand as a precise limitation without substituting an effect. The only added detail is 'does canagliflozin ... reduce ...?' phrasing, which is a faithful rendering of the original comparison and outcome intent rather than a new constraint. No explicit request is omitted or narrowed, and no new eligibility requirement is introduced."
+        },
+        {
+          "field": "pico.population",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Population: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.",
+          "rationale": "The protocol population matches the original population verbatim in substance: randomized adults with type 2 diabetes mellitus and albuminuric chronic kidney disease, excluding maintenance dialysis or kidney transplantation at baseline. The qualifiers 'type 2 diabetes mellitus' and 'renal/kidney' are standard expansions of the original wording and do not narrow or widen eligibility. No additional population restriction (e.g., eGFR threshold beyond those inherent to the two named trials, age limit, or region) is invented."
+        },
+        {
+          "field": "pico.intervention",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Comparison: canagliflozin 100 mg daily versus matching placebo.",
+          "rationale": "The protocol intervention is canagliflozin 100 mg once daily, exactly the dose and agent specified in the original comparison. The parenthetical additions '(oral, added to background standard care)' describe the route and background therapy without restricting or expanding the randomized intervention; the original trial contrast remains canagliflozin 100 mg daily versus matching placebo. No higher or lower dose (e.g., 300 mg) is substituted and no alternative SGLT2 inhibitor is introduced."
+        },
+        {
+          "field": "pico.comparator",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Comparison: canagliflozin 100 mg daily versus matching placebo.",
+          "rationale": "The comparator 'matching placebo' is preserved exactly as stated in the original. Because the original explicitly names placebo, the protocol correctly excludes broader active or no-treatment comparators; this is a faithful restriction, not an invented one."
+        },
+        {
+          "field": "pico.outcome_primary",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Primary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.",
+          "rationale": "The protocol primary outcome reproduces the original renal-specific composite exactly: end-stage kidney disease, doubling of serum creatinine, or renal death, with cardiovascular death explicitly excluded from the composite. The word 'reported' is captured by the protocol's requirement that the composite be the reported renal-specific one. No component is dropped or added, and no substitution of a broader composite (e.g., one including cardiovascular death) occurs."
+        },
+        {
+          "field": "pico.outcomes_secondary",
+          "status": "uncertain",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "The original question specifies exactly one outcome — the renal-specific composite — and directs extraction of exactly one HR per trial for that composite. It does not request or forbid any secondary outcome. The protocol's secondary list (ESKD alone, doubling of serum creatinine alone, renal death alone, all-cause mortality, hospitalization for heart failure, eGFR decline slope, and UACR change) is therefore an unspecified addition rather than a preserved explicit constraint; basis is not_explicit, and the full original question is quoted as context because no explicit secondary-outcome constraint exists to quote. Whether these additions materially change the bounded-replication objective is genuinely ambiguous: the stated primary analysis and pooling remain confined to the two trials and the prespecified composite, so the bounded estimand is not altered, yet committing the review to extract multiple additional outcomes goes beyond what the user requested and could broaden the reported scope. This unresolved ambiguity is recorded as uncertain rather than assumed to be a match."
+        },
+        {
+          "field": "pico.outcomes_secondary[0]",
+          "status": "uncertain",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "The original question mentions end-stage kidney disease only as one component of the renal-specific composite; it does not request ESKD as a separate outcome, nor does it define component definitions such as 'sustained eGFR <15 mL/min/1.73 m2'. The protocol's separate ESKD outcome with that added operational definition is an unspecified choice. Because no explicit constraint exists for this field, the full original question is quoted as context. Extracting a component-level outcome alongside the composite is a plausible descriptive addition that does not alter the prespecified pooled composite estimand, but it is not a preserved explicit request, so the judgment is uncertain (not_explicit) rather than an assumed match."
+        },
+        {
+          "field": "pico.outcomes_secondary[1]",
+          "status": "uncertain",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "Doubling of serum creatinine appears in the original solely as a component of the renal-specific composite; the user never requests it as a standalone outcome. Listing it separately is an unspecified addition, so basis is not_explicit and the full original question is quoted as the honest context for the absence of any explicit constraint. It does not change the prespecified composite HR estimand or the two-trial pooling, but it does extend the review's reported scope beyond what was asked; this unresolved status is recorded as uncertain rather than assumed to match."
+        }
+      ]
+    },
+    {
+      "fields": [
+        {
+          "field": "pico.outcomes_secondary[2]",
+          "status": "mismatch",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "The original question specifies only a composite primary outcome that includes renal death; it does not request a separate 'renal death alone' secondary outcome. Adding this secondary outcome widens the bounded replication beyond the one prespecified composite effect estimate per trial."
+        },
+        {
+          "field": "pico.outcomes_secondary[3]",
+          "status": "mismatch",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "All-cause mortality is not mentioned in the original question, which focuses on a renal-specific composite and explicitly excludes cardiovascular death from that composite. Adding all-cause mortality as a secondary outcome expands the review beyond the requested estimand."
+        },
+        {
+          "field": "pico.outcomes_secondary[4]",
+          "status": "mismatch",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "Hospitalization for heart failure is not specified in the original question and is not part of the requested renal-specific composite. Including it as a secondary outcome widens the scope beyond the bounded primary replication."
+        },
+        {
+          "field": "pico.outcomes_secondary[5]",
+          "status": "mismatch",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "The annualized eGFR decline rate is not specified in the original question, which defines only the renal composite of ESKD, doubling of serum creatinine, or renal death. This surrogate secondary outcome is an added scope element."
+        },
+        {
+          "field": "pico.outcomes_secondary[6]",
+          "status": "mismatch",
+          "basis": "not_explicit",
+          "original_quote": "Prespecified bounded replication: use only the main reports PMID 30990260 and PMID 35861630. This is not an exhaustive systematic review of SGLT2 inhibitors.\n\nPopulation: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.\nComparison: canagliflozin 100 mg daily versus matching placebo.\nPrimary outcome: the reported renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.\n\nExtract exactly one overall randomized-cohort HR and its directly reported 95% CI per trial. Retain legitimate baseline-covariate adjustment. Exclude mediator-adjusted or postrandomization-selected analyses and secondary publications. Bind each effect to its source and trial registration.\n\nCalculate log(HR) and SE from the reported confidence intervals, then a two-study synthesis and forest plot. Preserve bounded P values as inequalities; never invent an exact P value for precision calculation.\n\nExplain the small study count, population and follow-up limitations. If either source or estimand cannot be verified, report the precise limitation; never invent or substitute an effect.",
+          "rationale": "Change in urinary albumin-to-creatinine ratio is not mentioned in the original question and is not the requested renal composite. Adding it as a secondary outcome expands the protocol beyond the bounded primary estimand."
+        },
+        {
+          "field": "study_design",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Population: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.",
+          "rationale": "The original explicitly requires randomized adults and a randomized-cohort HR, so randomized trial design is explicit. The 'parallel' component is a reasonable, non-narrowing specification consistent with the prespecified canagliflozin CKD outcome trials and does not materially change the objective."
+        },
+        {
+          "field": "study_designs",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Population: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.",
+          "rationale": "The original explicitly requires randomized adults and randomized-cohort HRs. Listing parallel_rct is a reasonable specification of that randomized design and does not omit, narrow, or widen the requested evidence base."
+        },
+        {
+          "field": "study_designs[0]",
+          "status": "match",
+          "basis": "explicit",
+          "original_quote": "Population: randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or transplantation at baseline.",
+          "rationale": "The original explicitly requires randomized adults and a randomized-cohort HR, supporting parallel_rct. The parallel aspect is a reasonable default for the two prespecified trials and does not conflict with any explicit constraint."
+        }
+      ]
+    }
+  ]
+}

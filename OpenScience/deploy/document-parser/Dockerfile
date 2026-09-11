@@ -20,7 +20,8 @@ COPY deploy/document-parser/requirements.txt ./requirements.txt
 ARG PYTORCH_CPU_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir torch==2.8.0 torchvision==0.23.0 --index-url "${PYTORCH_CPU_INDEX_URL}" \
     && pip install --no-cache-dir --requirement requirements.txt \
-    && python -c "import torch,torchvision; assert torch.__version__.startswith('2.8.0'); assert torchvision.__version__.startswith('0.23.0'); assert torch.version.cuda is None"
+    && python -c "import torch,torchvision; assert torch.__version__.startswith('2.8.0'); assert torchvision.__version__.startswith('0.23.0'); assert torch.version.cuda is None" \
+    && python -c "from mineru.backend.pipeline.pipeline_analyze import doc_analyze_streaming; assert callable(doc_analyze_streaming)"
 COPY --chown=evimed:evimed deploy/document-parser/parser_service.py ./parser_service.py
 
 USER evimed

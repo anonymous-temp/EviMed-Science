@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from datetime import date
+import hashlib
 import json
 import re
 
+from new_meta.core.llm import parse_source_json
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import ResearchProtocol
 from new_meta.core.manuscript_polish import preservation_guard_issues
@@ -33,9 +35,16 @@ from new_meta.agents.writing.contracts import (
 class SemanticReviewMixin:
     """LLM section authoring, semantic patching and final readiness review."""
 
+    @staticmethod
+    def _main_text_claims(facts: dict) -> list[dict]:
+        claims = facts.get("claim_map") if isinstance(facts.get("claim_map"), list) else []
+        return [item for item in claims if isinstance(item, dict)
+                and item.get("can_write_main_text") is not False
+                and str(item.get("manuscript_use") or "main").casefold() not in {"exclude", "supplement"}]
+
     def _llm_author_open_sections_from_claim_map(self, manuscript: str, facts: dict) -> tuple[str, dict]:
         """Let the LLM author open argument sections from the claim map."""
-        claim_map = facts.get("claim_map") if isinstance(facts.get("claim_map"), list) else []
+        claim_map = self._main_text_claims(facts)
         study_cards = facts.get("study_cards") if isinstance(facts.get("study_cards"), list) else []
         evidence_understanding = facts.get("evidence_understanding") if isinstance(facts.get("evidence_understanding"), dict) else {}
         background_evidence = facts.get("background_evidence") if isinstance(facts.get("background_evidence"), dict) else {}
@@ -51,6 +60,7 @@ class SemanticReviewMixin:
         )
         has_background_authoring_material = bool(background_evidence.get("references")) or bool(controversy_candidates)
         audit = {
+            "semantic_guard_observations": self._semantic_guard_audit_records(),
             "schema_version": 1,
             "enabled": True,
             "status": "ok",
@@ -464,7 +474,7 @@ class SemanticReviewMixin:
         adjudication_reason: str = "",
     ) -> ClaimMapSectionDraft | None:
         """Ask the LLM to revise a rejected claim-map section against reviewer feedback."""
-        claim_map = facts.get("claim_map") if isinstance(facts.get("claim_map"), list) else []
+        claim_map = self._main_text_claims(facts)
         if not claim_map:
             return None
         claims_used_set = {str(item).strip() for item in (claims_used or []) if str(item).strip()}
@@ -584,6 +594,7 @@ class SemanticReviewMixin:
                 "issues": [],
             }
         audit = {
+            "semantic_guard_observations": self._semantic_guard_audit_records(),
             "schema_version": 1,
             "enabled": True,
             "status": "ok",
@@ -871,7 +882,7 @@ class SemanticReviewMixin:
                 "domains": grade.get("domains"),
             },
             "study_cards": (facts.get("study_cards") or [])[:8] if isinstance(facts.get("study_cards"), list) else [],
-            "claim_map": (facts.get("claim_map") or [])[:24] if isinstance(facts.get("claim_map"), list) else [],
+            "claim_map": self._main_text_claims(facts)[:24],
             "evidence_warnings": (facts.get("evidence_readiness") or {}).get("warnings", []),
         }
         section_text, _ = self._semantic_sections_prompt_text(sections, max_chars_per_section=4500)
@@ -1090,6 +1101,7 @@ class SemanticReviewMixin:
         for target in targets:
             target.pop("_priority", None)
         audit = {
+            "semantic_guard_observations": self._semantic_guard_audit_records(),
             "schema_version": 1,
             "status": "skipped",
             "round": round_index,
@@ -1431,15 +1443,11 @@ class SemanticReviewMixin:
             "CANDIDATE BODY:\n"
             f"{candidate_body[:10000]}"
         )
-        try:
-            return self.call_llm_structured(
-                prompt,
-                SemanticGuardAdjudication,
-                temperature=0.0,
-                max_tokens=2048,
-            )
-        except Exception:
-            return None
+        return self._source_faithful_semantic_judgment(prompt, {
+            "judge": "semantic_guard", "heading": heading,
+            "original_body": original_body, "candidate_body": candidate_body,
+            "facts": facts,
+        })
 
     def _adjudicate_claim_map_authoring_guard(
         self,
@@ -1459,7 +1467,7 @@ class SemanticReviewMixin:
         preservation guard is retained in audits for debugging, but it is not
         evidence for accepting or rejecting a claim-map-authored section.
         """
-        claim_map = facts.get("claim_map") if isinstance(facts.get("claim_map"), list) else []
+        claim_map = self._main_text_claims(facts)
         if not claim_map:
             return None
         primary = facts.get("primary_effect") if isinstance(facts.get("primary_effect"), dict) else {}
@@ -1520,15 +1528,69 @@ class SemanticReviewMixin:
             "CANDIDATE BODY:\n"
             f"{candidate_body[:12000]}"
         )
+        return self._source_faithful_semantic_judgment(prompt, {
+            "judge": "claim_map_authoring_guard", "heading": heading,
+            "candidate_body": candidate_body, "facts": facts,
+            "citation_contract": getattr(self, "_claim_map_citation_contract", {}),
+        })
+
+    def _semantic_guard_audit_records(self) -> list[dict]:
+        if not hasattr(self, "_semantic_guard_observations"):
+            self._semantic_guard_observations = []
+        return self._semantic_guard_observations
+
+    def _source_faithful_semantic_judgment(
+        self, prompt: str, inputs: dict,
+    ) -> SemanticGuardAdjudication | None:
+        """Keep a judgment bound to its exact candidate and evidence inputs."""
+        input_hash = hashlib.sha256(json.dumps(
+            inputs, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        records = self._semantic_guard_audit_records()
+        for record in records:
+            if record["input_hash"] == input_hash and any(
+                isinstance(raw["content"], str) and raw["content"].strip() for raw in record["raw_responses"]
+            ):
+                decision = record.get("decision")
+                return SemanticGuardAdjudication.model_validate(decision, strict=True) if decision else None
+        record = {
+            "input_hash": input_hash, "judge": inputs["judge"], "heading": inputs["heading"],
+            "candidate_sha256": hashlib.sha256(inputs["candidate_body"].encode("utf-8")).hexdigest(),
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            "status": "incomplete", "raw_responses": [],
+        }
+        records.append(record)
+
+        def observe(observation):
+            raw = dict(observation)
+            record["raw_responses"].append(raw)
+            if raw["content"] is None or (isinstance(raw["content"], str) and not raw["content"].strip()):
+                raw["missing_response"] = True
+                return
+            data = parse_source_json(raw["content"])
+            if isinstance(data, dict) and data.get("accept") is False:
+                raw["observed_rejection"] = True
+            if not isinstance(data, dict) or not {"accept", "reason"} <= data.keys():
+                raise ValueError("Incomplete semantic judgment")
+            decision = SemanticGuardAdjudication.model_validate(data, strict=True)
+            if not decision.reason.strip() or raw["finish_reason"] not in {"stop", "completed"}:
+                raise ValueError("Incomplete semantic judgment")
+            record["decision"] = decision.model_dump()
+            record["status"] = "accepted" if decision.accept else "rejected"
+
         try:
-            return self.call_llm_structured(
-                prompt,
-                SemanticGuardAdjudication,
-                temperature=0.0,
-                max_tokens=2048,
+            self.llm.structured_output(
+                [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
+                SemanticGuardAdjudication, temperature=0.0, max_tokens=2048,
+                source_faithful=True, on_raw_response=observe,
             )
-        except Exception:
+        except Exception as exc:
+            record.pop("decision", None)
+            record["status"] = "incomplete"
+            record["error"] = str(exc)[:500]
             return None
+        decision = record.get("decision")
+        return SemanticGuardAdjudication.model_validate(decision, strict=True) if decision else None
 
     @staticmethod
     def _semantic_guard_issue_summary(guard_issues: list[dict]) -> list[dict]:
@@ -2213,6 +2275,7 @@ class SemanticReviewMixin:
     ) -> tuple[str, dict]:
         """Apply one bounded LLM minor-revision pass from the final review."""
         audit = {
+            "semantic_guard_observations": self._semantic_guard_audit_records(),
             "schema_version": 1,
             "enabled": True,
             "status": "skipped",
