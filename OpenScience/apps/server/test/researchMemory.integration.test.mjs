@@ -3,15 +3,16 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
+import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 
 /**
  * The research-memory store against a real PostgreSQL.
  *
  * These are the behavioural assertions the retired REST adapter's test held —
  * isolation, compare-and-swap, evidence bounds, export, purge, project deletion
- * and recall — carried over to the store that replaced it, plus the thing only
- * a database can settle: that two writers racing on one canonical key still
- * leave one row.
+ * and recall — carried over to the store that replaced it, plus the two things
+ * only a database can settle: that two writers racing on one canonical key
+ * still leave one row, and that deleting an account deletes its memory.
  */
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -387,4 +388,28 @@ test("project deletion removes project memory and legacy run notes, and nothing 
   await assert.rejects(() => store.deleteProjectMemory(alpha, "  "),
     (error) => error?.status === 400 && error?.code === "memory_payload_invalid");
   await store.purgeUserMemory(alpha);
+});
+
+// The purge above runs first so the deletion audit can report what there was.
+// Completeness is the foreign key's job, and this is the assertion that it is
+// doing it: an account deleted without a purge still leaves nothing behind.
+test("deleting an account deletes its memory, and the integrity audit knows the tables", options, async () => {
+  const doomed = `memory_doomed_${randomUUID()}`;
+  await createUsers([doomed]);
+  await store.create(doomed, "a note that must not outlive its account");
+  await store.upsertRecord(doomed, record({ key: "profile.role", kind: "profile", status: "active" }));
+  assert.equal((await store.listAllRecords(doomed)).length, 1);
+
+  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [doomed]);
+  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=$1",
+    [doomed])).rows[0].count, 0);
+  assert.equal((await database.query("SELECT count(*)::integer AS count FROM evimed_memory.notes WHERE user_id=$1",
+    [doomed])).rows[0].count, 0);
+
+  const audit = await relationalIntegrity(database);
+  for (const name of ["memory_records_user", "memory_notes_user"]) {
+    assert.ok(!audit.absent.includes(name), `${name} must be a table the audit can see`);
+    assert.ok(!audit.missing.includes(name), `${name} must be a declared foreign key`);
+    assert.equal(audit.counts[name], 0, `${name} must hold no orphans`);
+  }
 });
