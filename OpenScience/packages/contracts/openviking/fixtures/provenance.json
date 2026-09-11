@@ -10,7 +10,7 @@
   "configuration": {
     "auth_mode": "trusted",
     "root_api_key": "set (value never leaves the host)",
-    "embedding": "ollama / bge-m3, dimension 1024 — the model the MemOS overlay already runs, so a comparison between them is not a comparison of embedders",
+    "embedding": "ollama / bge-m3, dimension 1024, on the evaluation instance of that date. Production configures DashScope `qwen3.7-text-embedding` at the same dimension instead; this capture predates that change and is not re-recorded until a live server runs it.",
     "vlm": "not configured",
     "memory.extraction_enabled": false
   },

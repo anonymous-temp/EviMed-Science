@@ -104,7 +104,7 @@ async function waitForRun(base, runId, headers) {
  *
  * `recordRun` writes a run-summary record before it extracts anything, so this
  * record existing proves the pipeline executed, built sources from the
- * transcript, and that the memory service accepted a write. That is a property
+ * transcript, and that the research-memory store accepted a write. That is a property
  * of this deployment and stays blocking — without it, "the extractor produced
  * nothing" and "the extractor never ran" arrive as the same silence, which is
  * the shape this whole gate exists to refuse.
@@ -121,7 +121,7 @@ async function waitForRunSummary(base, headers, projectId, runId) {
   }
   throw failure(
     "hosted_e2e_memory_pipeline_missing",
-    `No run-summary memory record for ${runId}: the memory pipeline did not run, or the memory service refused its write.`,
+    `No run-summary memory record for ${runId}: the memory pipeline did not run, or the research-memory store refused its write.`,
   );
 }
 
@@ -182,7 +182,7 @@ function assertReady(ready) {
     throw failure("hosted_e2e_state_not_shared", "Hosted E2E requires the PostgreSQL state store.");
   }
   if (checks.memory?.required !== true || checks.memory?.connected !== true) {
-    throw failure("hosted_e2e_memory_not_connected", "Hosted E2E requires a connected Memos service.");
+    throw failure("hosted_e2e_memory_not_connected", "Hosted E2E requires a connected research-memory store.");
   }
   // Which certified model serves is a deployment decision — the pilot runs
   // `deepseek-v4-flash` — and the receipt certifies whichever one actually
@@ -238,7 +238,7 @@ async function main() {
       body: JSON.stringify({ content: `Production memory evidence marker ${memoryMarker}` }),
     });
     memoId = memo.body?.data?.id ?? null;
-    if (!memoId) throw failure("hosted_e2e_memory_create_failed", "Memos did not return a persisted memo id.");
+    if (!memoId) throw failure("hosted_e2e_memory_create_failed", "The research-memory store did not return a persisted note id.");
 
     await jsonFetch(`${base}/api/files/upload`, {
       method: "POST",
@@ -304,7 +304,7 @@ async function main() {
           "Call drug_safety_analysis with action=capabilities, then action=start, then poll status with waitSeconds=45 until terminal.",
           "Use the managed specialist data and artifacts; do not synthesize signal values or substitute model knowledge for FAERS statistics.",
           "Write the required safety-report.md and signals.csv files. Preserve source scope, analysis period, suspect binding, counts, and signal metrics, and state spontaneous-reporting limitations.",
-          `Use the automatically retrieved knowledge marker ${knowledgeMarker} and Memos memory marker ${memoryMarker}.`,
+          `Use the automatically retrieved knowledge marker ${knowledgeMarker} and memory marker ${memoryMarker}.`,
           `请记住：我的长期回答偏好是先呈现证据确定性，再给建议；偏好校验码是 ${preferenceMarker}。`,
           `Use the write tool to create exactly ${artifactPath} as valid JSON with keys marker, knowledge, memory, agent, and model.`,
           `The values must be exactly ${marker}, ${knowledgeMarker}, ${memoryMarker}, evimed-adr-analysis, and ${certifiedModel}.`,
@@ -389,7 +389,7 @@ async function main() {
       throw failure("hosted_e2e_signals_invalid", "The production signal table does not expose a disproportionality metric.");
     }
 
-    // Mechanical first, and blocking: the pipeline ran and the memory service
+    // Mechanical first, and blocking: the pipeline ran and the research-memory store
     // took its write.
     await waitForRunSummary(base, scoped, projectId, run.id);
 
@@ -426,7 +426,7 @@ async function main() {
       ].filter(Boolean);
       if (memoryFaults.length) {
         // Still blocking, and deliberately so: since the client now applies the
-        // memory service's own bounds before sending, no model output should be
+        // research-memory store's own bounds before sending, no model output should be
         // able to produce an invalid record. If this fires it is our defect —
         // which is exactly what it caught last time.
         throw failure(

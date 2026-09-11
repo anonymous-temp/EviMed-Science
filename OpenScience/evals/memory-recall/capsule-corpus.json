@@ -1,0 +1,1397 @@
+{
+  "$comment": "Capsule facts as the distiller writes them: one short Chinese statement each, carrying a fact kind and the capsule layer it belongs to. The distractors share the gold facts' vocabulary on purpose — a corpus of unrelated noise would flatter every ranker equally and decide nothing. Two capsules, because a recall must rank across the ones a project has active.",
+  "generated": {
+    "at": "2026-09-11",
+    "from": "hand-written evidence-based-medicine content covering every kind in CAPSULE_FACT_KINDS and every layer in CAPSULE_LAYERS, so a re-run measures the same corpus"
+  },
+  "capsules": [
+    {
+      "id": "cap-evidence-pharmacist",
+      "mode": "own",
+      "title": "循证药师的工作胶囊"
+    },
+    {
+      "id": "cap-shared-methods",
+      "mode": "guest",
+      "title": "同课题组共享的方法胶囊"
+    }
+  ],
+  "facts": [
+    {
+      "id": "cf001",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "profile",
+      "layer": "profile",
+      "status": "approved",
+      "content": "临床药师，在三甲医院药学部负责循证评价与处方点评。"
+    },
+    {
+      "id": "cf002",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "expertise",
+      "layer": "profile",
+      "status": "approved",
+      "content": "专长是心血管与肾脏领域的药物评价，尤其是降糖药的器官保护结局。"
+    },
+    {
+      "id": "cf003",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "expertise",
+      "layer": "profile",
+      "status": "approved",
+      "content": "熟悉医保谈判药品的经济学评价流程，但不做建模本身。"
+    },
+    {
+      "id": "cf004",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "expertise",
+      "layer": "profile",
+      "status": "approved",
+      "content": "带教两名药学研究生，负责他们的文献筛选培训。"
+    },
+    {
+      "id": "cf005",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "profile",
+      "layer": "profile",
+      "status": "approved",
+      "content": "常用工作语言是中文，投稿时写英文，初稿先写中文提纲。"
+    },
+    {
+      "id": "cf006",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "stance",
+      "layer": "profile",
+      "status": "approved",
+      "content": "对中成药的随机对照试验证据保持谨慎：多数样本量小、盲法描述含糊，不作为推荐依据。"
+    },
+    {
+      "id": "cf007",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "stance",
+      "layer": "profile",
+      "status": "approved",
+      "content": "认为真实世界数据能回答随机试验回答不了的问题，但不能替代随机化。"
+    },
+    {
+      "id": "cf008",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "stance",
+      "layer": "profile",
+      "status": "approved",
+      "content": "不接受把替代终点的改善直接说成临床获益。"
+    },
+    {
+      "id": "cf009",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "stance",
+      "layer": "profile",
+      "status": "approved",
+      "content": "对厂商资助研究不一律排除，但要求在结论里写明资助来源。"
+    },
+    {
+      "id": "cf010",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "stance",
+      "layer": "profile",
+      "status": "approved",
+      "content": "对预印本证据只在正文里作为背景引用，不进入证据表。"
+    },
+    {
+      "id": "cf011",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "profile",
+      "layer": "profile",
+      "status": "approved",
+      "content": "参与医院抗菌药物管理小组，每季度出一次用药点评报告。"
+    },
+    {
+      "id": "cf012",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "expertise",
+      "layer": "profile",
+      "status": "approved",
+      "content": "会用 R 做统计，不写 Python；统计部分不外包。"
+    },
+    {
+      "id": "cf013",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "剂量反应 meta 分析固定用 R 的 dosresmeta 包，限制性立方样条取三个节点。"
+    },
+    {
+      "id": "cf014",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "常规 meta 分析用 R 的 meta 与 metafor 包，不用 RevMan 出图。"
+    },
+    {
+      "id": "cf015",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "文献管理用 Zotero，团队共享库按项目分组。"
+    },
+    {
+      "id": "cf016",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "网络 meta 分析用 netmeta，一致性检验用节点劈分。"
+    },
+    {
+      "id": "cf017",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "文献计量图谱用 CiteSpace 复现，参数写进方法学附录。"
+    },
+    {
+      "id": "cf018",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "孟德尔随机化的暴露数据固定从 OpenGWAS 取，令牌每两周失效一次要重新申请。"
+    },
+    {
+      "id": "cf019",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "R 版本锁定在 4.4，升级前先把上一篇稿子的结果跑一遍对照。"
+    },
+    {
+      "id": "cf020",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "异质性 I² 超过百分之五十时先做亚组和敏感性分析找来源，不直接改用随机效应模型交差。"
+    },
+    {
+      "id": "cf021",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "随机效应模型统一用 REML 估计 tau 平方，报告预测区间。"
+    },
+    {
+      "id": "cf022",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "亚组分析的分组必须在方案里预先写明，事后分组只作为探索。"
+    },
+    {
+      "id": "cf023",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "诊断准确性研究的偏倚评价用 QUADAS-2，四个领域逐条写判断理由。"
+    },
+    {
+      "id": "cf024",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "随机对照试验的偏倚评价用 Cochrane RoB 2，观察性研究用 ROBINS-I。"
+    },
+    {
+      "id": "cf025",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "证据体的确定性统一按 GRADE 分级，降级理由要具体到条目。"
+    },
+    {
+      "id": "cf026",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "漏斗图只在纳入研究达到十项时才画，少于十项改报检索充分性。"
+    },
+    {
+      "id": "cf027",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "双人独立筛选，分歧由第三人裁定，一致性用 kappa 报告。"
+    },
+    {
+      "id": "cf028",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "孟德尔随机化必须逐条交代三个核心假设，弱工具变量用 F 统计量大于十作门槛。"
+    },
+    {
+      "id": "cf029",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "孟德尔随机化的主分析用逆方差加权，敏感性分析加 MR-Egger 与加权中位数。"
+    },
+    {
+      "id": "cf030",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "自发呈报数据的不良反应信号用报告比值比与比例报告比值比一起看，再用信息成分交叉验证。"
+    },
+    {
+      "id": "cf031",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "信号检测的阳性阈值写在方法里，不按结果反推阈值。"
+    },
+    {
+      "id": "cf032",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "结果段不单独给 p 值，给效应量和置信区间，必要时补绝对风险差。"
+    },
+    {
+      "id": "cf033",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "不用“显著”描述临床重要性，统计学差异和临床意义分开写。"
+    },
+    {
+      "id": "cf034",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "证据强度用表格呈现，一行一个结局，不写成大段散文。"
+    },
+    {
+      "id": "cf035",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "讨论部分第一段先写本研究的局限，再写与既往证据的比较。"
+    },
+    {
+      "id": "cf036",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "给临床医生的摘要控制在三百字以内，第一句就写推荐意见和证据等级。"
+    },
+    {
+      "id": "cf037",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "面向药师的版本可以长一些，但必须保留剂量调整的具体阈值。"
+    },
+    {
+      "id": "cf038",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "投稿前最后一步是把正文里每个数字和引用回到原文逐条核对一遍。"
+    },
+    {
+      "id": "cf039",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "先看方法学质量再看效应量，方法不过关就不往下读。"
+    },
+    {
+      "id": "cf040",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "每周五把本周读过的文献整理成一段结构化笔记。"
+    },
+    {
+      "id": "cf041",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "检索策略先在 PubMed 上跑通，再翻译到其他数据库。"
+    },
+    {
+      "id": "cf042",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "报告里的每个数字都要给可核对的来源，不接受约数。"
+    },
+    {
+      "id": "cf043",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "图表标题写成一句完整结论，不写“某某的比较”。"
+    },
+    {
+      "id": "cf044",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "参考文献风格统一用温哥华格式。"
+    },
+    {
+      "id": "cf045",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "共享方法包里的模板不改结构，只改内容。"
+    },
+    {
+      "id": "cf046",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "恩格列净在 EMPA-KIDNEY 中减缓了估算肾小球滤过率的下降速度。"
+    },
+    {
+      "id": "cf047",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "达格列净在 DAPA-CKD 中降低了终末期肾病的复合终点风险。"
+    },
+    {
+      "id": "cf048",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "卡格列净在糖尿病肾病人群中同样显示了肾脏复合终点的获益。"
+    },
+    {
+      "id": "cf049",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "列净类药物的生殖泌尿道感染风险高于安慰剂，多为轻中度。"
+    },
+    {
+      "id": "cf050",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "列净类药物在估算肾小球滤过率很低的人群中降糖作用减弱，但器官保护仍在。"
+    },
+    {
+      "id": "cf051",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "司美格鲁肽在心血管高危的超重人群中降低了主要心血管不良事件。"
+    },
+    {
+      "id": "cf052",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "利拉鲁肽的胃肠道不良反应在起始剂量阶段最集中。"
+    },
+    {
+      "id": "cf053",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "二甲双胍在估算肾小球滤过率低于三十的人群中禁用，三十到四十五之间减量。"
+    },
+    {
+      "id": "cf054",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "沙库巴曲缬沙坦在射血分数降低的心衰中优于依那普利。"
+    },
+    {
+      "id": "cf055",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "非奈利酮在糖尿病合并慢性肾脏病人群中降低了肾脏复合终点，高钾血症需监测。"
+    },
+    {
+      "id": "cf056",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "利伐沙班与华法林相比颅内出血更少，胃肠道出血不少。"
+    },
+    {
+      "id": "cf057",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "达比加群在肾功能不全人群中需要按肌酐清除率调整剂量。"
+    },
+    {
+      "id": "cf058",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "阿司匹林一级预防在低危人群中获益与出血风险接近抵消。"
+    },
+    {
+      "id": "cf059",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "他汀相关肌痛在随机对照试验中的发生率远低于观察性研究。"
+    },
+    {
+      "id": "cf060",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "依折麦布联合他汀的降脂幅度不等于心血管获益幅度。"
+    },
+    {
+      "id": "cf061",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "PCSK9 抑制剂的绝对风险下降取决于基线风险，在低危人群里很小。"
+    },
+    {
+      "id": "cf062",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "质子泵抑制剂长期使用与骨折的关联多来自观察性研究，混杂难以排除。"
+    },
+    {
+      "id": "cf063",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "万古霉素的谷浓度目标已被曲线下面积与最低抑菌浓度比值取代。"
+    },
+    {
+      "id": "cf064",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "碳青霉烯类在产超广谱酶菌株感染中的疗效证据强于哌拉西林他唑巴坦。"
+    },
+    {
+      "id": "cf065",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "氟喹诺酮类的肌腱与主动脉不良事件信号在老年人群中更明显。"
+    },
+    {
+      "id": "cf066",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "免疫检查点抑制剂的免疫相关不良事件谱与传统化疗完全不同。"
+    },
+    {
+      "id": "cf067",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "抗抑郁药在老年人群中的低钠血症风险常被低估。"
+    },
+    {
+      "id": "cf068",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "苯二氮卓类在老年人群中的跌倒风险证据一致，且与剂量相关。"
+    },
+    {
+      "id": "cf069",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "抗精神病药在痴呆行为症状中的死亡风险增加已有黑框警告。"
+    },
+    {
+      "id": "cf070",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "中成药注射剂的不良反应报告以过敏样反应为主，批号信息常缺失。"
+    },
+    {
+      "id": "cf071",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "复方丹参滴丸治疗稳定性心绞痛的试验多数未做双盲，结局指标不统一。"
+    },
+    {
+      "id": "cf072",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "中西医结合方案的对照设置常不可比，基础治疗差异未被控制。"
+    },
+    {
+      "id": "cf073",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "针刺试验的假针刺对照方式不同，效应量差异很大。"
+    },
+    {
+      "id": "cf074",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "维生素 D 补充在非缺乏人群中的骨折预防获益未被大型试验证实。"
+    },
+    {
+      "id": "cf075",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "鱼油在高甘油三酯人群中的心血管结局取决于赋形剂的选择。"
+    },
+    {
+      "id": "cf076",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "益生菌在抗生素相关腹泻中的证据受菌株与剂量异质性影响很大。"
+    },
+    {
+      "id": "cf077",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "口服补液盐在儿童轻中度脱水中的证据一致且稳健。"
+    },
+    {
+      "id": "cf078",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "吸入糖皮质激素在慢阻肺中的肺炎风险随剂量升高。"
+    },
+    {
+      "id": "cf079",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "三联吸入方案在频繁急性加重的患者中获益最明显。"
+    },
+    {
+      "id": "cf080",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "长效抗胆碱能药物在慢阻肺中降低急性加重的证据强于短效药物。"
+    },
+    {
+      "id": "cf081",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "妊娠期用药的证据主要来自登记研究，随机证据极少。"
+    },
+    {
+      "id": "cf082",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "儿童剂量外推自成人的做法在药代动力学差异大的药物上不成立。"
+    },
+    {
+      "id": "cf083",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "肾功能不全人群的剂量推荐多来自小样本药代研究，外推需谨慎。"
+    },
+    {
+      "id": "cf084",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "肝功能分级对药物清除的影响在不同药物之间差别很大。"
+    },
+    {
+      "id": "cf085",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "药物相互作用的临床意义要看治疗窗，不是所有代谢酶抑制都需要干预。"
+    },
+    {
+      "id": "cf086",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "correction",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不要再把列净类药物的肾脏获益写成降糖作用的推论，两条通路的证据是分开的。"
+    },
+    {
+      "id": "cf087",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "correction",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不要把风险比直接当成风险倍数向临床解释，基线风险必须一起给。"
+    },
+    {
+      "id": "cf088",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "correction",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不要把“无统计学差异”写成“两者等效”，等效需要预设界值。"
+    },
+    {
+      "id": "cf089",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "correction",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不要在证据表里混用相对危险度与比值比，表头必须标明效应指标。"
+    },
+    {
+      "id": "cf090",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "correction",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "上次把注册号写成了另一项试验的编号，之后每条引用都要回查注册库。"
+    },
+    {
+      "id": "cf091",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tension",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "组里对真实世界证据的分级没有共识：一方主张按 GRADE 观察性起点降级，一方主张按目标试验模拟单独评价。"
+    },
+    {
+      "id": "cf092",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tension",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "对是否纳入会议摘要存在分歧，目前的折中是纳入但单独做敏感性分析。"
+    },
+    {
+      "id": "cf093",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tension",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "临床科室希望给出明确推荐，证据等级只支持有条件推荐，这个矛盾每次都要谈。"
+    },
+    {
+      "id": "cf094",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "tension",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "共享方法包里对最小临床重要差值的取值与本院口径不一致。"
+    },
+    {
+      "id": "cf095",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "老年人多重用药安全评价项目当前卡在处方数据的脱敏审批上，统计方案已经定稿。"
+    },
+    {
+      "id": "cf096",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "老年人多重用药项目的纳入窗口是二零二四年一月到二零二五年十二月。"
+    },
+    {
+      "id": "cf097",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "老年人多重用药项目的主要结局是一年内非计划再入院。"
+    },
+    {
+      "id": "cf098",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "降糖药器官保护的伞形综述已完成检索，正在做重叠度校正。"
+    },
+    {
+      "id": "cf099",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "抗菌药物点评项目每季度一期,当前在第七期。"
+    },
+    {
+      "id": "cf100",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "follow_up",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "等脱敏审批通过后要先跑一次数据质量核查再启动主分析。"
+    },
+    {
+      "id": "cf101",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "follow_up",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "下周要把伞形综述的重叠度矩阵发给合作单位复核。"
+    },
+    {
+      "id": "cf102",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "follow_up",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "需要联系作者索取两项试验的亚组数据，超过两周未回则标记为不可得。"
+    },
+    {
+      "id": "cf103",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "follow_up",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "投稿前要补一份利益冲突声明的中英文对照。"
+    },
+    {
+      "id": "cf104",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定把安慰剂对照与常规治疗对照的试验分开合并，不再放进同一个模型。"
+    },
+    {
+      "id": "cf105",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定把随访不足十二周的研究排除在主分析之外，只在敏感性分析里保留。"
+    },
+    {
+      "id": "cf106",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定这一篇不做网络 meta 分析，直接比较的证据已经足够。"
+    },
+    {
+      "id": "cf107",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定用目标试验模拟的框架写真实世界那一章。"
+    },
+    {
+      "id": "cf108",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定把经济学评价拆成独立的一篇，不塞进本文讨论。"
+    },
+    {
+      "id": "cf109",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "手头有二零二五版的慢性肾脏病管理指南全文和它的证据表附件。"
+    },
+    {
+      "id": "cf110",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "手头有心衰指南的中文版，但附录的证据分级表缺页。"
+    },
+    {
+      "id": "cf111",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "保存了三份列净类药物的临床试验方案原文，含统计分析计划。"
+    },
+    {
+      "id": "cf112",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "保存了两份药品说明书的历史版本，用于比较适应症变更。"
+    },
+    {
+      "id": "cf113",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "保存了本院近三年的抗菌药物使用强度月报。"
+    },
+    {
+      "id": "cf114",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "剂量换算表用本院的标准表格，不自己算。"
+    },
+    {
+      "id": "cf115",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "剂量反应关系的非线性检验结果不显著时，仍然报告线性趋势的估计。"
+    },
+    {
+      "id": "cf116",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "样条节点位置一旦定下，不同结局之间保持一致。"
+    },
+    {
+      "id": "cf117",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "异质性来源优先从人群与干预强度找起，其次才是研究质量。"
+    },
+    {
+      "id": "cf118",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "异质性很大的证据体即使合并出显著结果，也要在结论里写明不稳定。"
+    },
+    {
+      "id": "cf119",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "置信区间统一写成方括号，不与四分位距混用。"
+    },
+    {
+      "id": "cf120",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "效应量在摘要里最多出现三个，其余放正文。"
+    },
+    {
+      "id": "cf121",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "偏倚评价的判断理由写在补充材料，正文只给汇总图。"
+    },
+    {
+      "id": "cf122",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "预后模型研究的评价用 PROBAST，不套用诊断研究的工具。"
+    },
+    {
+      "id": "cf123",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "质性研究的评价用 COREQ 清单，与定量部分分开报告。"
+    },
+    {
+      "id": "cf124",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "肾小球滤过率的估算公式不同版本之间结果差别可达百分之十。"
+    },
+    {
+      "id": "cf125",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "终末期肾病的定义在不同试验里并不一致，合并前要核对。"
+    },
+    {
+      "id": "cf126",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "复合终点的解释要看各成分的方向是否一致。"
+    },
+    {
+      "id": "cf127",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "心血管复合终点里若死亡权重最低，整体结论要谨慎。"
+    },
+    {
+      "id": "cf128",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不良反应的报告比值比只能提示信号，不能估计发生率。"
+    },
+    {
+      "id": "cf129",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "自发呈报系统的分母不可得，这是所有信号指标的共同局限。"
+    },
+    {
+      "id": "cf130",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "openFDA 的数据更新有滞后，季度末的信号要复核。"
+    },
+    {
+      "id": "cf131",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "工具变量分析在药物流行病学里对处方偏好的依赖很强。"
+    },
+    {
+      "id": "cf132",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "遗传变异与暴露的关联强度决定了孟德尔随机化的统计效能。"
+    },
+    {
+      "id": "cf133",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "水平多效性会让孟德尔随机化的因果估计偏离真值。"
+    },
+    {
+      "id": "cf134",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "stance",
+      "layer": "profile",
+      "status": "approved",
+      "content": "对中药注射剂的上市后再评价持支持态度，但要求主动监测而不是自发呈报。"
+    },
+    {
+      "id": "cf135",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "中成药的成分复杂，不良反应归因到具体成分往往做不到。"
+    },
+    {
+      "id": "cf136",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "针刺与中成药的研究在盲法实施上的困难并不相同，不能一概而论。"
+    },
+    {
+      "id": "cf137",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "profile",
+      "layer": "profile",
+      "status": "approved",
+      "content": "共享方法包来自同一课题组的另一位研究者，侧重感染性疾病。"
+    },
+    {
+      "id": "cf138",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "expertise",
+      "layer": "profile",
+      "status": "approved",
+      "content": "该同事的专长是抗菌药物药代动力学与药效学建模。"
+    },
+    {
+      "id": "cf139",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "该同事习惯先写结果表再写正文，与本人的顺序相反。"
+    },
+    {
+      "id": "cf140",
+      "capsuleId": "cap-shared-methods",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "共享方法包主张所有合并都先做留一法，本人只在结果不稳时做。"
+    },
+    {
+      "id": "cf141",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "读到关键试验时先看统计分析计划的版本日期。"
+    },
+    {
+      "id": "cf142",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "对没有预注册的试验，结论里降一个等级表述。"
+    },
+    {
+      "id": "cf143",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "不接受把厂商提供的图直接放进报告，图要自己重画。"
+    },
+    {
+      "id": "cf144",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "摘要里不出现缩写，第一次出现的术语在正文里给全称。"
+    },
+    {
+      "id": "cf145",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定把老年人群的亚组分析放在正文，其余亚组放补充材料。"
+    },
+    {
+      "id": "cf146",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "处方数据的脱敏方案由信息科起草，药学部只提字段需求。"
+    },
+    {
+      "id": "cf147",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "follow_up",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "数据质量核查的脚本还没写完，缺重复处方的判定规则。"
+    },
+    {
+      "id": "cf148",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tension",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "对是否把药品说明书作为证据来源有分歧，目前只作为剂量依据不作为疗效依据。"
+    },
+    {
+      "id": "cf149",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "correction",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不要把说明书里的适应症当作疗效证据引用。"
+    },
+    {
+      "id": "cf150",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "说明书的不良反应条目来自上市前试验，罕见事件不在其中。"
+    },
+    {
+      "id": "cf151",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "手头有两份指南的方法学附录，其中一份没有给检索式。"
+    },
+    {
+      "id": "cf152",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "project_fact",
+      "layer": "sources",
+      "status": "approved",
+      "content": "保存了慢性肾脏病指南的上一版，用于比较推荐变化。"
+    },
+    {
+      "id": "cf153",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "指南推荐强度与证据等级不是一回事，弱证据也可能有强推荐。"
+    },
+    {
+      "id": "cf154",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "不同指南对同一证据的分级差异往往来自价值取向而非数据。"
+    },
+    {
+      "id": "cf155",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "引用指南时标注版本年份与推荐编号，不只写指南名。"
+    },
+    {
+      "id": "cf156",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "推荐意见与证据等级在同一行呈现，不分开写在两段。"
+    },
+    {
+      "id": "cf157",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "每次检索都保存检索式与命中数，写进方法学附录。"
+    },
+    {
+      "id": "cf158",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "检索式用 PubMed 的高级检索界面保存，不只留截图。"
+    },
+    {
+      "id": "cf159",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "灰色文献的检索深度直接影响发表偏倚的判断。"
+    },
+    {
+      "id": "cf160",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "试验注册库与发表结果的结局不一致是选择性报告的直接证据。"
+    },
+    {
+      "id": "cf161",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "证据表里每一行都要能点回到原文的具体段落。"
+    },
+    {
+      "id": "cf162",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "behavior",
+      "layer": "methods",
+      "status": "approved",
+      "content": "把每条结论对应的原文引文先摘出来，再写句子。"
+    },
+    {
+      "id": "cf163",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "绝对风险差比相对指标更适合与临床医生沟通。"
+    },
+    {
+      "id": "cf164",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "writing_style",
+      "layer": "methods",
+      "status": "approved",
+      "content": "需要治疗人数只在基线风险明确时给出。"
+    },
+    {
+      "id": "cf165",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "老年人的多重用药与跌倒的关联在校正共病后明显减弱。"
+    },
+    {
+      "id": "cf166",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "多重用药的定义按同时使用五种及以上药物，这是本项目的口径。"
+    },
+    {
+      "id": "cf167",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "非计划再入院的判定需要排除计划内的化疗与透析。"
+    },
+    {
+      "id": "cf168",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "tooling",
+      "layer": "methods",
+      "status": "approved",
+      "content": "处方数据的清洗脚本用 R 写，输出中间表供核查。"
+    },
+    {
+      "id": "cf169",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "缺失数据优先报告缺失比例与机制判断，再谈插补。"
+    },
+    {
+      "id": "cf170",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "method_preference",
+      "layer": "methods",
+      "status": "approved",
+      "content": "多重插补的插补次数按缺失比例定，不用固定值五。"
+    },
+    {
+      "id": "cf171",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "analysis",
+      "layer": "knowledge",
+      "status": "approved",
+      "content": "竞争风险在老年人群的结局分析里不能忽略。"
+    },
+    {
+      "id": "cf172",
+      "capsuleId": "cap-evidence-pharmacist",
+      "factKind": "decision",
+      "layer": "episodes",
+      "status": "approved",
+      "content": "决定主分析用竞争风险模型，Cox 模型作为敏感性分析。"
+    }
+  ]
+}

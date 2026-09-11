@@ -16,20 +16,19 @@ const postgresPasswordFile = path.resolve(
 const databaseUrlFile = path.resolve(
   process.env.OPEN_SCIENCE_DATABASE_URL_HOST_FILE ?? path.join(secretsDir, "database-url.txt"),
 );
-const memosDsnFile = path.resolve(
-  process.env.OPEN_SCIENCE_MEMOS_DSN_HOST_FILE ?? path.join(secretsDir, "memos-dsn.txt"),
-);
-const memosAdminPasswordFile = path.resolve(
-  process.env.OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE ?? path.join(secretsDir, "memos-admin-password.txt"),
-);
-const memosEngineProviderConfigFile = path.resolve(
-  process.env.OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE ?? path.join(secretsDir, "memos-engine-providers.json"),
-);
-const memosNeo4jAuthFile = path.resolve(
-  process.env.OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE ?? path.join(secretsDir, "memos-neo4j-auth.txt"),
-);
 const openListAdminPasswordFile = path.resolve(
   process.env.OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE ?? path.join(secretsDir, "openlist-admin-password.txt"),
+);
+const openVikingApiKeyFile = path.resolve(
+  process.env.OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE ?? path.join(secretsDir, "openviking-api-key.txt"),
+);
+const openVikingConfFile = path.resolve(
+  process.env.OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE ?? path.join(secretsDir, "openviking-ov.conf"),
+);
+// The one secret here nobody generates: it is bought, not minted. Everything
+// else in this directory is random bytes this script can produce again.
+const dashScopeApiKeyFile = path.resolve(
+  process.env.OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE ?? path.join(secretsDir, "dashscope.api-key"),
 );
 
 function failure(code, message) {
@@ -55,12 +54,12 @@ async function assertNoSymlinkPath(target, { allowMissingTail = false } = {}) {
   }
 }
 
-function validateSecretValue(value, label) {
-  if (value !== value.trim() || /[\r\n\0]/.test(value)) {
+function validateSecretValue(value, label, { minBytes = 24 } = {}) {
+  if (value !== value.trim() || /[\r\n\u0000]/.test(value)) {
     throw failure("production_state_secret_invalid", `${label} contains invalid whitespace or NUL bytes.`);
   }
-  if (Buffer.byteLength(value, "utf8") < 24 || Buffer.byteLength(value, "utf8") > 512) {
-    throw failure("production_state_secret_size", `${label} must contain between 24 and 512 UTF-8 bytes.`);
+  if (Buffer.byteLength(value, "utf8") < minBytes || Buffer.byteLength(value, "utf8") > 512) {
+    throw failure("production_state_secret_size", `${label} must contain between ${minBytes} and 512 UTF-8 bytes.`);
   }
 }
 
@@ -132,91 +131,115 @@ async function ensureDsn(file, label, expected) {
   return value;
 }
 
-function expectedMemosProviderConfig(password) {
+/**
+ * The recall index's whole configuration, rendered rather than hand-written.
+ *
+ * Every value here was settled against a running v0.4.19 or its source, and
+ * each one is a default that is wrong for this deployment:
+ *
+ *   storage.workspace   defaults to `./data` = /app/data, outside the volume
+ *   server.auth_mode    unset with a root key silently selects `api_key` mode
+ *   embedding.dense     unset installs a local embedder the image cannot load
+ *   provider            `openai` never sends `dimensions`, so a model whose
+ *                       native vector is shorter than the index fails at write
+ *   memory.extraction   on; the server would write its own memories beside ours
+ *
+ * There is no `rerank` section on purpose: `/search/find`, the only endpoint
+ * our layout can use, never reranks. The reranker runs in the control plane,
+ * over text it has already hydrated from PostgreSQL.
+ *
+ * Unknown keys abort startup, so this renders exactly the schema's fields.
+ */
+function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, pin }) {
+  const dimension = pin.embedding.dimension;
   return {
-    OPENAI_API_KEY: "local-only",
-    OPENAI_API_BASE: "http://evimed-memos-ollama:11434/v1",
-    MOS_CHAT_MODEL: "unused-in-sync-fast",
-    MEMRADER_API_KEY: "local-only",
-    MEMRADER_API_BASE: "http://evimed-memos-ollama:11434/v1",
-    MEMRADER_MODEL: "unused-in-sync-fast",
-    MOS_EMBEDDER_BACKEND: "ollama",
-    MOS_EMBEDDER_MODEL: "bge-m3:latest",
-    EMBEDDING_DIMENSION: "1024",
-    NEO4J_PASSWORD: password,
+    default_account: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT || "evimed",
+    default_user: process.env.OPEN_SCIENCE_OPENVIKING_ACCOUNT || "evimed",
+    embedding: {
+      dense: {
+        provider: "dashscope",
+        // The text path; the provider's own default is the multimodal endpoint,
+        // which a text embedding model does not answer.
+        input: "text",
+        // The host only: this provider appends `/compatible-mode/v1` itself.
+        api_base: pin.embedding.apiBase,
+        api_key: embeddingApiKey,
+        model: pin.embedding.model,
+        dimension,
+      },
+    },
+    storage: {
+      workspace: "/app/.openviking/data",
+      agfs: { backend: "local" },
+      vectordb: { backend: "local", dimension },
+    },
+    memory: { extraction_enabled: false, session_skill_extraction_enabled: false },
+    server: {
+      host: "0.0.0.0",
+      port: 1933,
+      cors_origins: [],
+      auth_mode: "trusted",
+      root_api_key: rootApiKey,
+    },
+    output_language_override: "zh",
+    // The embedder is a public HTTPS endpoint; nothing on this host's private
+    // ranges is a legitimate target for this server.
+    allow_private_networks: false,
   };
 }
 
-async function exists(file) {
-  return fsp.lstat(file).then(() => true).catch((error) => {
-    if (error?.code === "ENOENT") return false;
+async function ensureOpenVikingConfiguration(rootApiKey, embeddingApiKey) {
+  const pin = JSON.parse(await fsp.readFile(path.join(repoRoot, "deps-version.json"), "utf8")).openviking;
+  const expected = JSON.stringify(expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, pin }), null, 2);
+  const existing = await fsp.lstat(openVikingConfFile).catch((error) => {
+    if (error?.code === "ENOENT") return null;
     throw error;
   });
+  if (!existing) {
+    if (checkOnly) throw failure("production_state_secret_missing", "OpenViking configuration is missing.");
+    await createOwnerOnly(openVikingConfFile, expected);
+  }
+  const value = await readOwnerOnly(openVikingConfFile, "OpenViking configuration", { maxBytes: 16_384 });
+  if (value !== expected) {
+    // Named without its content: this file carries two credentials, and the
+    // difference between the rendered and the stored one would show them both.
+    throw failure(
+      "production_state_openviking_conf_mismatch",
+      "OpenViking configuration does not match what this deployment renders; delete it and re-run to regenerate.",
+    );
+  }
 }
 
-async function readMemosProviderPassword() {
-  if (!(await exists(memosEngineProviderConfigFile))) return null;
-  const raw = await readOwnerOnly(memosEngineProviderConfigFile, "MemOS provider configuration", { maxBytes: 16_384 });
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw failure("production_state_memos_provider_invalid", "MemOS provider configuration is not valid JSON.");
+/** The one secret an operator supplies. Never generated, never printed. */
+async function readDashScopeApiKey() {
+  const existing = await fsp.lstat(dashScopeApiKeyFile).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!existing) {
+    throw failure(
+      "production_state_dashscope_key_missing",
+      `The DashScope API key is not at ${dashScopeApiKeyFile}. Place the key there (chmod 0600); this script never creates one.`,
+    );
   }
-  const password = parsed?.NEO4J_PASSWORD;
-  if (typeof password !== "string") {
-    throw failure("production_state_memos_provider_invalid", "MemOS provider configuration has no Neo4j password.");
-  }
-  validateSecretValue(password, "MemOS Neo4j password");
-  const expected = expectedMemosProviderConfig(password);
-  if (Object.keys(parsed).length !== Object.keys(expected).length ||
-      Object.entries(expected).some(([key, value]) => parsed[key] !== value)) {
-    throw failure("production_state_memos_provider_mismatch", "MemOS provider configuration does not match the private local-provider profile.");
-  }
-  return password;
-}
-
-async function readMemosNeo4jPassword() {
-  if (!(await exists(memosNeo4jAuthFile))) return null;
-  const value = await readOwnerOnly(memosNeo4jAuthFile, "MemOS Neo4j authentication");
-  if (!value.startsWith("neo4j/")) {
-    throw failure("production_state_memos_neo4j_auth_invalid", "MemOS Neo4j authentication must use the neo4j account.");
-  }
-  const password = value.slice("neo4j/".length);
-  validateSecretValue(password, "MemOS Neo4j password");
-  return password;
-}
-
-async function ensureMemosEngineSecrets() {
-  const providerPassword = await readMemosProviderPassword();
-  const authPassword = await readMemosNeo4jPassword();
-  if (providerPassword && authPassword && providerPassword !== authPassword) {
-    throw failure("production_state_memos_password_mismatch", "MemOS provider and Neo4j credentials disagree.");
-  }
-  const password = providerPassword ?? authPassword ?? randomBytes(36).toString("base64url");
-  if (!providerPassword) {
-    if (checkOnly) throw failure("production_state_secret_missing", "MemOS provider configuration is missing.");
-    await createOwnerOnly(memosEngineProviderConfigFile, JSON.stringify(expectedMemosProviderConfig(password)));
-  }
-  if (!authPassword) {
-    if (checkOnly) throw failure("production_state_secret_missing", "MemOS Neo4j authentication is missing.");
-    await createOwnerOnly(memosNeo4jAuthFile, `neo4j/${password}`);
-  }
-  const verifiedProviderPassword = await readMemosProviderPassword();
-  const verifiedAuthPassword = await readMemosNeo4jPassword();
-  if (verifiedProviderPassword !== verifiedAuthPassword) {
-    throw failure("production_state_memos_password_mismatch", "MemOS provider and Neo4j credentials disagree.");
-  }
+  const value = await readOwnerOnly(dashScopeApiKeyFile, "DashScope API key");
+  // A shorter floor than the generated secrets': this length is the vendor's
+  // to choose, and refusing a key the vendor issued would be our defect.
+  validateSecretValue(value, "DashScope API key", { minBytes: 16 });
+  return value;
 }
 
 async function main() {
+  // First, because it is the one thing this script cannot produce: a run that
+  // generated half the directory and then asked for a key looks like a failure
+  // of the generation rather than a missing purchase.
+  const dashScopeApiKey = await readDashScopeApiKey();
   const postgresPassword = await ensureSecret(postgresPasswordFile, "PostgreSQL password");
-  await ensureSecret(memosAdminPasswordFile, "Memos administrator password");
   await ensureSecret(openListAdminPasswordFile, "OpenList administrator password");
-  await ensureMemosEngineSecrets();
+  const openVikingApiKey = await ensureSecret(openVikingApiKeyFile, "OpenViking API key");
+  await ensureOpenVikingConfiguration(openVikingApiKey, dashScopeApiKey);
   const dsn = expectedDatabaseUrl(postgresPassword);
   await ensureDsn(databaseUrlFile, "EviMed database URL", dsn);
-  await ensureDsn(memosDsnFile, "Memos database DSN", dsn);
   process.stdout.write(`production state ${checkOnly ? "check" : "configuration"} ok: ${secretsDir}\n`);
 }
 
