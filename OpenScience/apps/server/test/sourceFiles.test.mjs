@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import { removeSourceCopies, sourceAttemptId, stageParserInput } from "../src/sourceFiles.mjs";
 
 const sourceId = `src_${"a".repeat(32)}`;
@@ -95,7 +96,23 @@ test("real Linux capability-free Web hands readable immutable bytes to the parse
   const projectRoot = path.join(root, "project");
   await fs.mkdir(stagingRoot, { mode: 0o700 });
   await fs.mkdir(projectRoot, { mode: 0o700 });
-  const module = new URL("../src/sourceFiles.mjs", import.meta.url).href;
+  // CI's checkout can be private to the runner account. A root process without
+  // DAC capabilities cannot traverse that account's directories. Copy the exact
+  // production module closure into this test's owned directory before dropping
+  // privileges; do not widen checkout permissions or replace code with a stub.
+  const code = path.join(root, "code");
+  await fs.mkdir(code, { mode: 0o700 });
+  for (const name of ["sourceFiles.mjs", "security.mjs"]) {
+    const bytes = await fs.readFile(new URL(`../src/${name}`, import.meta.url));
+    await fs.writeFile(path.join(code, name), bytes, { mode: 0o600 });
+    assert.deepEqual(await fs.readFile(path.join(code, name)), bytes);
+  }
+  const domain = path.join(code, "node_modules/@evimed/domain");
+  await fs.mkdir(domain, { recursive: true, mode: 0o700 });
+  for (const name of ["package.json", "index.mjs", "src"]) {
+    await fs.cp(new URL(`../../../packages/domain/${name}`, import.meta.url), path.join(domain, name), { recursive: true });
+  }
+  const module = pathToFileURL(path.join(code, "sourceFiles.mjs")).href;
   const attempt = "b".repeat(24);
   const relative = `job-one-${attempt}/paper.pdf`;
   const file = path.join(stagingRoot, relative);

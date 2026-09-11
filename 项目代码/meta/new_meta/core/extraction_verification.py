@@ -6,7 +6,7 @@ import math
 import re
 from typing import Any, Literal, TypedDict
 
-from new_meta.schemas.study import ExtractedStudy, OutcomeData, PrimaryAlignmentAssessment
+from new_meta.schemas.study import ExtractedStudy, ExtractionDataIssue, ExtractionDataIssueEvidence, OutcomeData, PrimaryAlignmentAssessment
 from new_meta.schemas.protocol import ResearchProtocol
 
 
@@ -31,6 +31,12 @@ NUMERIC_FIELDS = tuple(name for name, schema in _PROPERTIES.items()
 NUMERIC_MAP_FIELDS = tuple(name for name, schema in _PROPERTIES.items()
                            if schema.get("type") == "object" and _numeric_schema(schema.get("additionalProperties", {})))
 
+CHECKER_HIDDEN_FIELDS = frozenset({"primary_analysis_alignment", "source_quote_verified", "source_quote_match",
+    "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication", "override_revision"})
+REFINABLE_FIELDS = frozenset(NUMERIC_FIELDS) | frozenset(NUMERIC_MAP_FIELDS) | {
+    "source_quote", "source_location", "source_page", "source_section", "reported_effect_measure",
+    "reported_effect_scale", "outcome_type", "p_value_inequality", "extraction_confidence"}
+
 
 def numeric_fields(outcome: OutcomeData) -> dict[str, int | float]:
     values = {name: getattr(outcome, name) for name in NUMERIC_FIELDS
@@ -38,6 +44,100 @@ def numeric_fields(outcome: OutcomeData) -> dict[str, int | float]:
     for name in NUMERIC_MAP_FIELDS:
         values.update({f"{name}[{key}]": value for key, value in sorted(getattr(outcome, name, {}).items())})
     return values
+
+
+def validate_data_issues(study: ExtractedStudy, indices: list[int], issues: list[ExtractionDataIssue],
+                         source_text: str) -> list[VerificationIssue]:
+    """Keep bad checker contracts separate from unresolved source-row defects."""
+    errors = []
+    for item in issues:
+        index, field = item.outcome_index, item.field
+        context = {"outcome_index": index, "field": field, "kind": item.kind}
+        if index not in indices or not 0 <= index < len(study.outcomes):
+            errors.append({"code": "verification_data_issue_index_invalid", **context})
+            continue
+        values = numeric_fields(study.outcomes[index])
+        if field not in (set(_PROPERTIES) - CHECKER_HIDDEN_FIELDS) | set(values):
+            errors.append({"code": "verification_data_issue_field_invalid", **context})
+            continue
+        if not quote_is_anchored(item.quote, item.source_location, source_text):
+            errors.append({"code": "verification_data_issue_quote_not_anchored", **context})
+            continue
+        repairable = item.kind != "source_conflict" and (field in REFINABLE_FIELDS or field in values)
+        errors.append({"code": "row_source_conflict_requires_adjudication" if item.kind == "source_conflict" else "row_data_issue",
+            **context, "repairable": repairable, "rationale": item.rationale,
+            "quote": item.quote, "source_location": item.source_location})
+    return errors
+
+
+def issue_field_value(outcome: OutcomeData, field: str):
+    """Read the implicated field, including one member of a numeric map."""
+    if field in _PROPERTIES:
+        return getattr(outcome, field)
+    return numeric_fields(outcome).get(field)
+
+
+def update_issue_history(study, indices, histories, errors, *, source_sha256,
+                         checked_source_sha256, protocol_sha256, checked_rows,
+                         complete_current_check):
+    """A later silent checker response is not evidence that a defect was fixed."""
+    from new_meta.core.primary_analysis_alignment import digest
+    for index in indices:
+        previous, available = histories[index]
+        unresolved = list(previous)
+        known = {digest(item.model_dump(mode="json")) for item in unresolved}
+        for error in errors:
+            if error.get("outcome_index") != index or error["code"] not in {
+                    "row_data_issue", "row_source_conflict_requires_adjudication"}:
+                continue
+            issue = ExtractionDataIssue.model_validate({name: error[name] for name in (
+                "outcome_index", "field", "kind", "rationale", "quote", "source_location")})
+            evidence = ExtractionDataIssueEvidence(issue=issue,
+                field_sha256=digest(issue_field_value(study.outcomes[index], issue.field)),
+                row_sha256=checked_rows[index], protocol_sha256=protocol_sha256,
+                source_sha256=source_sha256, checked_source_sha256=checked_source_sha256)
+            key = digest(evidence.model_dump(mode="json"))
+            if key not in known:
+                unresolved.append(evidence)
+                known.add(key)
+        if index in complete_current_check:
+            unresolved = [item for item in unresolved if (
+                item.issue.kind == "source_conflict"
+                or digest(issue_field_value(study.outcomes[index], item.issue.field)) == item.field_sha256
+                or issue_field_value(study.outcomes[index], item.issue.field) in (None, "", [], {}))]
+        histories[index] = unresolved, available
+
+
+def unresolved_issue_errors(indices, histories):
+    errors = []
+    for index in indices:
+        issues, available = histories[index]
+        if not available:
+            errors.append({"code": "verification_issue_history_required", "outcome_index": index})
+        for item in issues:
+            issue = item.issue
+            repairable = issue.kind != "source_conflict" and (
+                issue.field in REFINABLE_FIELDS or any(issue.field.startswith(name + "[") for name in NUMERIC_MAP_FIELDS))
+            errors.append({"code": "row_source_conflict_requires_adjudication" if issue.kind == "source_conflict" else "row_data_issue",
+                **issue.model_dump(mode="json"), "repairable": repairable,
+                "origin_field_sha256": item.field_sha256,
+                "origin_source_sha256": item.source_sha256,
+                "origin_checked_source_sha256": item.checked_source_sha256})
+    return errors
+
+
+def refinement_indices(errors: list[VerificationIssue]) -> list[int]:
+    """Only a complete, anchored checker response may suggest source-row repair."""
+    contract_errors = {"clinical_quote_not_anchored", "numeric_quote_not_anchored", "numeric_field_coverage",
+                       "endpoint_component_mapping_incomplete"}
+    if any(item["code"].startswith("verification_") or item["code"] in contract_errors for item in errors):
+        return []
+    conflicts = {item.get("outcome_index") for item in errors if item["code"] in {
+        "numeric_conflict_requires_adjudication", "row_source_conflict_requires_adjudication"}}
+    return sorted({item["outcome_index"] for item in errors if type(item.get("outcome_index")) is int
+        and item["outcome_index"] not in conflicts and (item["code"] in {
+            "numeric_value_mismatch", "numeric_value_unverified", "numeric_status_unresolved"}
+            or item["code"] == "row_data_issue" and item.get("repairable") is True)})
 
 
 def numeric_conflicts(outcome: OutcomeData) -> list[dict[str, Any]]:

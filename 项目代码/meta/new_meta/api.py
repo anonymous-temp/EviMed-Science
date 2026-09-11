@@ -156,6 +156,7 @@ def create_api_router(output_root: str | Path) -> APIRouter:
         identity: str = Security(require_api_token),
     ) -> dict:
         from new_meta.core.method_executor import MethodExecutionBlocked, MethodExecutor
+        from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired
         from new_meta.schemas.method_policy import MethodPlan
 
         project_path = _resolve_project_path(request.project_dir, root)
@@ -170,6 +171,8 @@ def create_api_router(output_root: str | Path) -> APIRouter:
                 result_ids=request.result_ids,
                 options=request.options,
             )
+        except PrimaryAlignmentRequired as exc:
+            raise HTTPException(status_code=409, detail=exc.phase.model_dump(mode="json")) from exc
         except MethodExecutionBlocked as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return result.model_dump(mode="json")

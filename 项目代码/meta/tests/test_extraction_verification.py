@@ -125,7 +125,7 @@ def test_checker_repairs_missing_coverage_before_stamping(tmp_path, monkeypatch)
     from new_meta.agents.data_extraction_agent import ExtractionCheckResult
     from new_meta.core.primary_analysis_alignment import alignment_status
     project, result, calls = run_verifier(tmp_path, monkeypatch,
-        [ExtractionCheckResult(score=10), ExtractionCheckResult(score=9, primary_analysis_alignment=[checked_row()])])
+        [ExtractionCheckResult(data_issues=[], score=10), ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row()])])
     assert len(calls) == 2 and calls[1][2][0]["code"] == "verification_index_coverage"
     assert alignment_status(project, protocol(), result, 0)["status"] == "match"
     assert len(list((project.base_dir / "extraction/verification").glob("*.json"))) == 2
@@ -135,8 +135,8 @@ def test_high_score_with_numeric_error_requires_fresh_corrected_verification(tmp
     from new_meta.agents.data_extraction_agent import ExtractionCheckResult
     from new_meta.core.primary_analysis_alignment import alignment_status
     wrong = study(); wrong.outcomes[0].hr_ci_upper = .78
-    checked = ExtractionCheckResult(score=10, issues=["Incorrect upper CI; use the full Results value."], primary_analysis_alignment=[checked_row()])
-    good = ExtractionCheckResult(score=10, primary_analysis_alignment=[checked_row()])
+    checked = ExtractionCheckResult(data_issues=[], score=10, issues=["Incorrect upper CI; use the full Results value."], primary_analysis_alignment=[checked_row()])
+    good = ExtractionCheckResult(data_issues=[], score=10, primary_analysis_alignment=[checked_row()])
     repairs = []
     def repair(content, candidate, response, current_protocol, indices, feedback):
         repairs.append(feedback)
@@ -148,13 +148,92 @@ def test_high_score_with_numeric_error_requires_fresh_corrected_verification(tmp
     assert alignment_status(project, protocol(), result, 0)["status"] == "match"
 
 
+def test_complete_clinical_mismatch_is_retained_despite_out_of_batch_advisories(tmp_path, monkeypatch):
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    from new_meta.core.primary_analysis_alignment import alignment_status
+    payload = checked_row()
+    payload["outcome"]["status"] = "mismatch"
+    payload["verification"]["endpoint_relation"] = "source_narrower"
+    payload["verification"]["components"].append({
+        "source_component": "", "protocol_component": "sustained eGFR decline", "relation": "missing"})
+    checked = ExtractionCheckResult(score=6, data_issues=[],
+        issues=["The selected renal endpoint is narrower than the protocol outcome.",
+                "Only one outcome row was extracted; the other study outcomes were not extracted."],
+        primary_analysis_alignment=[payload])
+    def forbidden_repair(*_args):
+        pytest.fail("A complete clinical mismatch must not invoke numeric refinement")
+    project, result, calls = run_verifier(tmp_path, monkeypatch, [checked], repair=forbidden_repair)
+    assert len(calls) == 1
+    assert alignment_status(project, protocol(), result, 0)["status"] == "mismatch"
+    assert result.outcomes[0].hazard_ratio == .38
+
+
+@pytest.mark.parametrize("index, field", [(1, "hr_ci_upper"), (0, "unregistered_numeric_operand")])
+def test_invalid_row_data_issue_cannot_be_silently_ignored(tmp_path, monkeypatch, index, field):
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    from new_meta.core.primary_analysis_alignment import alignment_status
+    checked = ExtractionCheckResult(score=10, primary_analysis_alignment=[checked_row()], data_issues=[{
+        "outcome_index": index, "field": field, "kind": "incorrect_value", "rationale": "An actual row value needs checking.",
+        "quote": "The renal endpoint HR was 0.38 (95% CI 0.12 to 1.22).", "source_location": "Table 3"}])
+    def forbidden_repair(*_args):
+        pytest.fail("Malformed checker issues must retry verification, not mutate extracted values")
+    project, result, calls = run_verifier(tmp_path, monkeypatch, [checked] * 3, repair=forbidden_repair)
+    assert len(calls) == 3
+    assert alignment_status(project, protocol(), result, 0)["status"] == "unknown"
+
+
+def test_checker_must_explicitly_supply_typed_data_issues():
+    from pydantic import ValidationError
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    with pytest.raises(ValidationError):
+        ExtractionCheckResult.model_validate({"score": 10, "primary_analysis_alignment": [checked_row()]})
+
+
+def test_typed_data_defect_repairs_only_its_named_row_then_reverifies(tmp_path, monkeypatch):
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    from new_meta.core.primary_analysis_alignment import alignment_status
+    candidate = study()
+    candidate.outcomes.append(candidate.outcomes[0].model_copy(deep=True))
+    candidate.outcomes[1].reported_effect_scale = "log"
+    defect = {"outcome_index": 1, "field": "reported_effect_scale", "kind": "incorrect_metadata",
+        "rationale": "The reported HR is on the original ratio scale, not log scale.",
+        "quote": "The renal endpoint HR was 0.38 (95% CI 0.12 to 1.22).", "source_location": "Table 3"}
+    first = ExtractionCheckResult(score=9, data_issues=[defect],
+        primary_analysis_alignment=[checked_row(0), checked_row(1)])
+    second = ExtractionCheckResult(score=10, data_issues=[],
+        primary_analysis_alignment=[checked_row(0), checked_row(1)])
+    repaired = []
+    def repair(_content, current, _response, _protocol, indices, _feedback):
+        repaired.append(indices)
+        fixed = current.model_copy(deep=True)
+        fixed.outcomes[1].reported_effect_scale = "original"
+        return fixed
+    project, result, calls = run_verifier(tmp_path, monkeypatch, [first, second], candidate=candidate, repair=repair)
+    assert repaired == [[1]] and len(calls) == 2
+    assert all(alignment_status(project, protocol(), result, index)["status"] == "match" for index in [0, 1])
+
+
+def test_typed_source_conflict_never_triggers_numeric_refinement(tmp_path, monkeypatch):
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    from new_meta.core.primary_analysis_alignment import alignment_status
+    checked = ExtractionCheckResult(score=10, primary_analysis_alignment=[checked_row()], data_issues=[{
+        "outcome_index": 0, "field": "hr_ci_upper", "kind": "source_conflict",
+        "rationale": "This source value conflicts with another reported value and requires adjudication.",
+        "quote": "The renal endpoint HR was 0.38 (95% CI 0.12 to 1.22).", "source_location": "Table 3"}])
+    def forbidden_repair(*_args):
+        pytest.fail("A source conflict must not be erased by automatic refinement")
+    project, result, calls = run_verifier(tmp_path, monkeypatch, [checked], repair=forbidden_repair)
+    assert len(calls) == 1
+    assert alignment_status(project, protocol(), result, 0)["status"] == "unknown"
+
+
 def test_source_middle_is_preserved_and_batch_indices_are_original(tmp_path, monkeypatch):
     from new_meta.agents.data_extraction_agent import ExtractionCheckResult
     from new_meta.core.primary_analysis_alignment import alignment_status
     content = "Retained introduction. " * 900 + SOURCE + "Retained appendix. " * 1600
     candidate = study(); candidate.outcomes = [candidate.outcomes[0].model_copy(deep=True) for _ in range(5)]
-    responses = [ExtractionCheckResult(score=9, primary_analysis_alignment=[checked_row(i) for i in range(4)]),
-                 ExtractionCheckResult(score=9, primary_analysis_alignment=[checked_row(4)])]
+    responses = [ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row(i) for i in range(4)]),
+                 ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row(4)])]
     project, result, calls = run_verifier(tmp_path, monkeypatch, responses, candidate=candidate, content=content)
     assert all(item[0] == content for item in calls)
     assert [item[1] for item in calls] == [[0, 1, 2, 3], [4]]
@@ -165,7 +244,7 @@ def test_exhausted_incomplete_verification_has_precise_runtime_reasons(tmp_path,
     import json
     from new_meta.agents.data_extraction_agent import ExtractionCheckResult
     from new_meta.core.primary_analysis_alignment import alignment_status
-    project, result, calls = run_verifier(tmp_path, monkeypatch, [ExtractionCheckResult(score=10) for _ in range(3)])
+    project, result, calls = run_verifier(tmp_path, monkeypatch, [ExtractionCheckResult(data_issues=[], score=10) for _ in range(3)])
     assert len(calls) == 3
     assert alignment_status(project, protocol(), result, 0)["status"] == "unknown"
     assert "verification_index_coverage" in result.outcomes[0].primary_analysis_alignment.assessment.outcome.rationale
@@ -232,8 +311,8 @@ def test_schema_retries_keep_the_complete_source_in_every_verifier_request(tmp_p
     project = Project("source preserving schema repair", output_dir=tmp_path)
     path = project.base_dir / "papers/source.txt"; path.write_text(SOURCE)
     invalid = checked_row(); del invalid["verification"]["numeric_status"]
-    responses = iter([json.dumps({"score": 9, "primary_analysis_alignment": [invalid]}),
-                      json.dumps({"score": 9, "primary_analysis_alignment": [checked_row()]})])
+    responses = iter([json.dumps({"score": 9, "data_issues": [], "primary_analysis_alignment": [invalid]}),
+                      json.dumps({"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row()]})])
     calls = []; agent = DataExtractionAgent()
     def fake_call(**kwargs):
         calls.append(kwargs["messages"])
@@ -386,7 +465,7 @@ def test_actual_ci_error_is_not_overridden_by_a_high_checker_score(tmp_path, mon
         conditioning_variables=[], estimand_support={"quote":"", "source_location":""}, trial_coverage="uncertain", trial_units=[])
     details["numeric_findings"]=[{"field":field,"status":"match","reported_value":value,"quote":source_piece(case,"results_primary_ci"),"source_location":"Results page 5","rationale":"Direct Results CI, rather than a conversion of damaged abstract text."}
         for field,value in [("hazard_ratio",.73),("hr_ci_lower",.53),("hr_ci_upper",1.02)]]
-    response=ExtractionCheckResult(score=10, primary_analysis_alignment=[item])
+    response=ExtractionCheckResult(data_issues=[], score=10, primary_analysis_alignment=[item])
     project, result, calls=run_verifier(tmp_path,monkeypatch,[response,response,response],candidate=candidate,content=text,repair=lambda content,current,*_:current)
     assert len(calls)==3 and all(source_piece(case,"results_primary_ci") in call[0] for call in calls)
     assert result.outcomes[0].primary_analysis_alignment.assessor == "pending-review-v1"
@@ -511,7 +590,7 @@ def test_numeric_refinement_cannot_erase_preserved_conflict_notes(monkeypatch):
     correction=candidate.outcomes[0].model_copy(deep=True); correction.conflicts=[]; correction.hr_ci_upper=1.02
     agent=DataExtractionAgent()
     monkeypatch.setattr(agent,"call_llm_structured",lambda *args,**kwargs:ExtractionRefinement(outcomes=[{"outcome_index":0,"outcome":correction}]))
-    refined=agent._refine_extraction(SOURCE,candidate,ExtractionCheckResult(score=9),protocol(),[0],[])
+    refined=agent._refine_extraction(SOURCE,candidate,ExtractionCheckResult(data_issues=[], score=9),protocol(),[0],[])
     assert refined.outcomes[0].hr_ci_upper==1.02 and refined.outcomes[0].conflicts==candidate.outcomes[0].conflicts
 
 

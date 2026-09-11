@@ -35,6 +35,7 @@ def _record_analysis_set_fixture_alignment(project, protocol, studies):
         record_checked_alignments(project, protocol, study, assessments, source_text=source, assessor_id="mock-independent-checker")
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", studies, subdir="extraction")
+    migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
 
 
 def _multiple_outcome_project(tmp_path: Path):

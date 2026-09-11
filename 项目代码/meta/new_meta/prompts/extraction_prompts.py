@@ -117,7 +117,7 @@ For PREDICTION-MODEL PERFORMANCE outcomes:
   Never use an inequality threshold as an exact p-value or derive precision from it.
 - If a value is NOT found, set it to null — NEVER guess"""
 
-EXTRACTION_CHECK_PROMPT = """Review the following data extraction for accuracy and completeness.
+EXTRACTION_CHECK_PROMPT = """Verify the supplied indexed outcome batch against its original source.
 
 ## Review Protocol and Full PICO
 {protocol}
@@ -135,9 +135,28 @@ actual source outcome, analyzed source population and source treatment/comparato
 a derived label cannot override its quoted source. Never emit runtime or human
 verification provenance.
 
-## Check:
+## Batch scope and response contract
+indexed_outcomes is an intentionally PARTIAL batch. Other outcomes from the same
+study may already be extracted in other batches. Assess only the supplied original
+outcome indices and numeric_fields_to_verify. Never infer whole-study completeness,
+claim that omitted rows were not extracted, propose additional outcomes, or penalize
+this batch for missing other primary, secondary or safety endpoints.
+
+Always return data_issues, using [] when no actual supplied-row data defect remains.
+Each data issue must name a supplied outcome_index, an actual outcome field,
+kind (incorrect_value, missing_value, source_conflict or incorrect_metadata),
+rationale and an exact source quote/location supporting that specific defect.
+Missing_value means a missing field of a supplied row that the source actually
+reports; it never means another outcome row should have been extracted.
+Clinical match/mismatch/uncertain belongs ONLY in primary_analysis_alignment.
+A correctly extracted result that does not fit the protocol is a successfully
+verified MISMATCH, not an extraction error; never rewrite it to fit the protocol.
+The issues and suggestions lists are optional advisory observations, not validation
+errors or requests for numerical refinement. Put all real data defects in data_issues.
+
+## Check each supplied row:
 1. Are all extracted values accurate and match the source paper?
-2. Are any values missing that should have been extracted?
+2. Are any source-reported fields missing from THIS supplied row?
 3. Are source_location and source_quote correct for each value?
 4. Are the outcome types (continuous/dichotomous) correctly classified?
 5. Are units consistent?
@@ -150,7 +169,9 @@ not lexical similarity. A paper's primary result is not necessarily this review'
 primary result. Do not change extracted values, names or labels to make them match.
 - Outcome: assess component versus composite, thresholds (30% is not 50%), units,
   time horizon and estimand. Equivalent clinical paraphrases can match; shared
-  disease words alone cannot. Treat a distinct secondary endpoint as mismatch.
+  disease words alone cannot. A secondary endpoint is a mismatch only when its
+  actual definition differs from the review outcome. A trial's secondary endpoint
+  may be this review's prespecified primary synthesis outcome.
 - Population: assess the participants contributing this precise result, including
   analyzed subgroups. Overall or null subgroup does not establish eligibility for the protocol population.
 - Contrast: assess the actual intervention and comparator for this result, not

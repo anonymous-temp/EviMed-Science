@@ -236,7 +236,7 @@ def test_existing_checker_receives_full_pico_and_cannot_supply_provenance(tmp_pa
 
     def check_call(prompt, schema, **kwargs):
         calls.append((prompt, schema, kwargs))
-        return ExtractionCheckResult(score=9, primary_analysis_alignment=[assessment_payload()])
+        return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()])
 
     monkeypatch.setattr(agent, "call_llm_structured", check_call)
     checked = agent._verify_alignment(study, {"pdf_path": str(source)}, {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol, project)
@@ -255,7 +255,7 @@ def test_refinement_discards_previous_judgments_and_exhaustion_stays_unknown(tmp
     project, protocol, study, source = alignment_fixture(tmp_path)
     agent = DataExtractionAgent()
     monkeypatch.setattr("new_meta.agents.data_extraction_agent.MAX_CHECK_ROUNDS", 1)
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(score=4, primary_analysis_alignment=[]))
+    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(data_issues=[], score=4, primary_analysis_alignment=[]))
     checked = agent._verify_alignment(study, {"pdf_path": str(source)}, {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol, project)
     assert alignment_status(project, protocol, checked, 0)["status"] == "unknown"
 
@@ -268,7 +268,7 @@ def test_new_extraction_reconciliation_and_selection_preserve_a_current_proof(tm
     project, protocol, study, source = alignment_fixture(tmp_path)
     agent = DataExtractionAgent()
     monkeypatch.setattr(agent, "_extract_single", lambda *_: study)
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(score=9, primary_analysis_alignment=[assessment_payload()]))
+    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()]))
     rows = agent.run([{"pmid": "S1", "pdf_path": str(source)}], {"S1": {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}}, protocol, project)
     assert alignment_status(project, protocol, rows[0], 0)["status"] == "match"
     rob = StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])
@@ -320,7 +320,7 @@ def test_source_change_during_existing_checker_does_not_create_current_proof(tmp
     agent = DataExtractionAgent()
     def changed_source(*_args):
         source.write_text(SOURCE.replace("50%", "30%"))
-        return ExtractionCheckResult(score=9, primary_analysis_alignment=[assessment_payload()])
+        return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()])
     monkeypatch.setattr(agent, "_check_extraction", changed_source)
     checked = agent._verify_alignment(study, {"pdf_path": str(source)}, {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol, project)
     assert alignment_status(project, protocol, checked, 0)["status"] == "unknown"
@@ -336,6 +336,7 @@ def test_bound_selected_effects_can_be_pooled_and_reloaded(tmp_path):
     other.characteristics.study_id = "S2"
     other.characteristics.title = "Independent trial"
     other.outcomes[0].events_intervention = 6
+    other.outcomes[0].primary_analysis_alignment = None
     record_checked_alignments(project, protocol, other, [assessment_payload(source_outcome=other.outcomes[0], study_id="S2")], source_text=SOURCE, source_path=source)
     studies = [study, other]
     project.save_json("protocol.json", protocol)
@@ -366,11 +367,17 @@ def test_missing_or_stale_proof_has_a_current_human_review_context(tmp_path, cha
     assert version["protocol_sha256"]
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", [study], subdir="extraction")
-    save_extraction_review_decision(project, ExtractionReviewDecision(
+    decision = ExtractionReviewDecision(
         row_id="S1:0", alignment_assessment=assessment_payload(),
         alignment_protocol_sha256=version["protocol_sha256"], alignment_row_sha256=version["row_sha256"],
         alignment_source_sha256=version["source_sha256"],
-    ), alignment_assessor_id="reviewer-a")
+    )
+    if change == "missing":
+        with pytest.raises(ValueError, match="issue provenance"):
+            save_extraction_review_decision(project, decision, alignment_assessor_id="reviewer-a")
+        assert alignment_status(project, protocol, study, 0)["reason"] == "verification_issue_history_required"
+        return
+    save_extraction_review_decision(project, decision, alignment_assessor_id="reviewer-a")
     updated = ExtractedStudy.model_validate(project.load_json("all_extractions.json", subdir="extraction")[0])
     assert alignment_status(project, protocol, updated, 0)["status"] == "match"
 
@@ -442,7 +449,7 @@ def test_source_verification_change_invalidates_cached_admission(tmp_path):
     assert not cached_alignment_is_current(project)
 
 
-def test_normal_review_cards_expose_versions_for_missing_proof_adjudication(tmp_path):
+def test_review_cards_do_not_authorize_adjudication_without_issue_provenance(tmp_path):
     from new_meta.core.extraction_review import build_extraction_source_cards, ExtractionReviewDecision, save_extraction_review_decision
     from new_meta.core.primary_analysis_alignment import alignment_status
     project, protocol, study, source = alignment_fixture(tmp_path)
@@ -454,9 +461,10 @@ def test_normal_review_cards_expose_versions_for_missing_proof_adjudication(tmp_
     cards = build_extraction_source_cards(project)
     versions = cards[0]["review_action"]["alignment_expected_versions"]
     assert all(versions.values())
-    save_extraction_review_decision(project, ExtractionReviewDecision(row_id="S1:0", alignment_assessment=assessment_payload(), **versions), alignment_assessor_id="reviewer-a")
+    with pytest.raises(ValueError, match="issue provenance"):
+        save_extraction_review_decision(project, ExtractionReviewDecision(row_id="S1:0", alignment_assessment=assessment_payload(), **versions), alignment_assessor_id="reviewer-a")
     updated = ExtractedStudy.model_validate(project.load_json("all_extractions.json", subdir="extraction")[0])
-    assert alignment_status(project, protocol, updated, 0)["status"] == "match"
+    assert alignment_status(project, protocol, updated, 0)["reason"] == "verification_issue_history_required"
 
 
 def test_cli_primary_selection_stops_on_needs_input_before_reading_effects(tmp_path):
@@ -563,7 +571,7 @@ def test_independent_checker_can_confirm_source_backed_single_arm_not_applicable
     prompts = []
     def checked(prompt, *_args, **_kwargs):
         prompts.append(prompt)
-        return ExtractionCheckResult(score=9, primary_analysis_alignment=[data])
+        return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[data])
     monkeypatch.setattr(agent, "call_llm_structured", checked)
     verified = agent._verify_alignment(study, {"pdf_path": str(source)},
         {"full_text": statement, "_source_sha256": hashlib.sha256(statement.encode()).hexdigest()}, protocol, project)
@@ -710,7 +718,8 @@ def test_existing_review_surface_resolves_primary_choice_and_rejects_stale_candi
     study.outcomes.append(extra)
     record_checked_alignments(project, protocol, study,
         [{**assessment_payload(source_outcome=study.outcomes[index]), "outcome_index": index} for index in range(3)], source_text=SOURCE,
-        source_path=project.base_dir / "papers" / "trial.txt")
+        source_path=project.base_dir / "papers" / "trial.txt",
+        issue_histories={index: ([], True) for index in range(3)})
     project.save_json("all_extractions.json", [study], subdir="extraction")
     stale = runner.run_primary_effect_selection(protocol=protocol, extracted_studies=[study], rob_results=[rob])
     assert stale.error_code == "primary_result_choice_required"
@@ -988,6 +997,7 @@ def test_normal_review_refresh_reaches_package_stage_for_a_genuinely_bound_pool(
     second = study.model_copy(deep=True)
     second.characteristics.study_id = "S2"
     second.outcomes[0].events_intervention = 6
+    second.outcomes[0].primary_analysis_alignment = None
     record_checked_alignments(project, protocol, second, [assessment_payload(source_outcome=second.outcomes[0], study_id="S2")], source_text=SOURCE, source_path=source)
     studies = [study, second]
     project.save_json("protocol.json", protocol)

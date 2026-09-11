@@ -265,12 +265,38 @@ def migrate_extractions_to_ledger(
                     "override_revision": outcome.override_revision,
                 },
             )
+            result_entity.derivation["extraction_binding"] = extraction_result_binding(
+                study, outcome_index, protocol, result_entity)
             _upsert(ledger, result_entity, actor, report, change_reason=change_reason)
             report.result_ids.append(result_id)
 
     ledger.assert_valid()
     project.save_json("ledger_migration.json", report, subdir="evidence")
     return report
+
+
+def extraction_result_binding(study, index, protocol, entity):
+    """Bind the actual materialized inputs to their exact extraction/source versions."""
+    from new_meta.core.primary_analysis_alignment import digest, protocol_fingerprint, row_fingerprint
+    proof = study.outcomes[index].primary_analysis_alignment
+    return {"schema_version": 1, "row_sha256": row_fingerprint(study, index),
+            "protocol_sha256": protocol_fingerprint(protocol),
+            "source_sha256": proof.source_sha256 if proof else "",
+            "checked_source_sha256": proof.checked_source_sha256 if proof else "",
+            "inputs_sha256": digest(entity.model_dump(mode="json", exclude={"derivation", "evidence_state", "tags"}))}
+
+
+def current_extraction_matches_result(study, index, protocol, entity):
+    """Use the migration's own typed materializer, never infer from a result ID."""
+    try:
+        if entity.derivation.get("extraction_binding") != extraction_result_binding(study, index, protocol, entity):
+            return False
+        raw_data, estimate = _result_data(study.outcomes[index], protocol, result_id=entity.entity_id)
+        return (raw_data == entity.raw_data and estimate == entity.estimate
+                and _effect_measure(study.outcomes[index], protocol) == entity.effect_measure
+                and entity.entity_id == result_entity_id(study, index))
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 def _upsert(
