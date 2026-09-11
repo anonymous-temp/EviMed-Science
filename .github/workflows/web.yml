@@ -100,9 +100,6 @@ jobs:
           pnpm check:community-skills
           pnpm audit:saas-alignment
 
-      - name: Test private memory engine logging boundary
-        run: python3 -m unittest discover -s deploy/memos-engine -p 'test_*.py'
-
       - name: Test Hosted Web API
         run: |
           CI=true pnpm test:mcp
@@ -193,8 +190,7 @@ jobs:
           echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/dashscope-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
@@ -210,6 +206,10 @@ jobs:
           printf '%s\n' 'ci-fake-deepseek-key-no-external-calls' > deploy/web/secrets/deepseek-api-key.txt
           printf '%s\n' 'ci-model-gateway-signing-secret-0123456789abcdef' > deploy/web/secrets/model-gateway-signing-key.txt
           printf '%s\n' 'ci-fake-materials-project-key-no-external-calls' > deploy/web/secrets/materials-project-api-key.txt
+          # The operator supplies this key in production; nothing generates it.
+          # `configure:production-state` renders it into the recall index's
+          # `ov.conf`, so the file has to exist before that step runs.
+          printf '%s\n' 'ci-fake-dashscope-key-no-external-calls' > deploy/web/secrets/dashscope-api-key.txt
           printf '%s\n' 'ci-evimed-workload-signing-secret-0123456789abcdef' > deploy/web/secrets/evimed-workload-signing-key.txt
           printf '%s\n' '{}' > deploy/web/secrets/deepseek-release-receipt.json
           {
@@ -236,10 +236,7 @@ jobs:
             echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR}"
             echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${OPEN_SCIENCE_DATABASE_URL_HOST_FILE}"
-            echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${OPEN_SCIENCE_MEMOS_DSN_HOST_FILE}"
-            echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE}"
-            echo "OPEN_SCIENCE_MEMOS_ADMIN_USER=evimed-memory"
-            echo "OPEN_SCIENCE_MEMOS_PUBLIC_URL=https://localhost/memos"
+            echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}"
             echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN}"
             echo "OPEN_SCIENCE_BACKUP_MODE=local"
             echo "OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=true"
@@ -277,7 +274,7 @@ jobs:
           pnpm configure:local-auth
           pnpm check:local-auth
 
-      - name: Generate and validate PostgreSQL and Memos secrets
+      - name: Generate and validate PostgreSQL and recall-index secrets
         run: |
           pnpm configure:production-state
           pnpm check:production-state
@@ -465,7 +462,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test real deployed agent runtime, DeepSeek, specialist, Memos, RAG, and kernels
+      - name: Test real deployed agent runtime, DeepSeek, specialist, research memory, RAG, and kernels
         env:
           OPEN_SCIENCE_E2E_BASE_URL: ${{ secrets.OPEN_SCIENCE_E2E_BASE_URL }}
           OPEN_SCIENCE_E2E_USERNAME: ${{ secrets.OPEN_SCIENCE_E2E_USERNAME }}
