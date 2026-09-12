@@ -696,6 +696,7 @@ jobs:
           OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s scripts/ops/test -p 'test_image_archive_inventory.py'
           mkdir -p "$RUNNER_TEMP/evimed-release"
           docker compose --env-file deploy/web/.env.ci \
             -f deploy/web/docker-compose.yml \
@@ -710,6 +711,8 @@ jobs:
           export EVIMED_IMAGE_LIST="$RUNNER_TEMP/evimed-release/images.txt"
           export EVIMED_IMAGE_ARCHIVE="$RUNNER_TEMP/evimed-release/images.tar.gz"
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
+          package_phase_started=$SECONDS
+          printf '[package] image export started\n'
           setsid bash -euo pipefail -c 'mapfile -t images < "$EVIMED_IMAGE_LIST"; docker save "${images[@]}" | gzip -1 > "$EVIMED_IMAGE_ARCHIVE"' &
           export_pid=$!
           while kill -0 "$export_pid" 2>/dev/null; do
@@ -722,24 +725,17 @@ jobs:
             sleep 5
           done
           wait "$export_pid"
+          printf '[package] image export complete: elapsed=%ss\n' "$((SECONDS - package_phase_started))"
+          package_phase_started=$SECONDS
+          printf '[package] gzip verification started\n'
           gzip -t "$EVIMED_IMAGE_ARCHIVE"
+          printf '[package] gzip verification complete: elapsed=%ss\n' "$((SECONDS - package_phase_started))"
+          package_phase_started=$SECONDS
+          printf '[package] archive checksum started\n'
           (cd "$RUNNER_TEMP/evimed-release" && sha256sum images.tar.gz > images.tar.gz.sha256)
-          python3 - <<'PY'
-          import hashlib, json, os, pathlib, tarfile
-          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "evimed-release"
-          with tarfile.open(root / "images.tar.gz", "r:gz") as archive:
-              manifest = json.load(archive.extractfile("manifest.json"))
-              images = []
-              for entry in manifest:
-                  content = archive.extractfile(entry["Config"]).read()
-                  config = json.loads(content)
-                  images.append({"references": entry["RepoTags"], "configDigest": "sha256:" + hashlib.sha256(content).hexdigest(),
-                                 "platform": config.get("os", "") + "/" + config.get("architecture", ""),
-                                 "rootfs": config.get("rootfs"), "labels": config.get("config", {}).get("Labels", {})})
-          report = {"sourceRevision": os.environ["GITHUB_SHA"], "releaseId": os.environ["OPEN_SCIENCE_RELEASE_ID"],
-                    "workflowRun": os.environ["GITHUB_RUN_ID"], "workflowAttempt": os.environ["GITHUB_RUN_ATTEMPT"], "images": images}
-          (root / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")
-          PY
+          printf '[package] archive checksum complete: elapsed=%ss\n' "$((SECONDS - package_phase_started))"
+          printf '[package] streaming image inventory started\n'
+          python3 scripts/ops/image-archive-inventory.py
 
       - name: Upload verified full-release images
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
