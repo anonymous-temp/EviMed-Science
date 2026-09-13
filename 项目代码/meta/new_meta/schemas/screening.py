@@ -37,3 +37,24 @@ class FullTextScreeningDecision(BaseModel):
     target_outcome_priority: Literal["primary", "secondary", "exploratory", "not_reported", "uncertain"]
     full_text_identity_status: Literal["consistent", "conflicting", "uncertain"]
     publication_identity_checks: list[PublicationIdentityCheck]
+
+
+class TitleAbstractScreeningDecision(BaseModel):
+    """Source-bound triage; forwarding a record is not full-text eligibility."""
+
+    decision: Literal["include", "exclude", "review_required"]
+    priority_tier: Literal["direct", "uncertain", "indirect"]
+    reason_code: Literal[
+        "eligible", "publication_identity", "population", "intervention", "comparator",
+        "outcome", "study_design", "publication_type", "data_unavailable", "other", "uncertain",
+    ]
+    reason: str = Field(min_length=1)
+    exclusion_criterion: str | None
+    confidence: Literal["high", "medium", "low"]
+    source_identity: ScreeningSourceIdentity
+    publication_role: Literal[
+        "primary_publication", "secondary_analysis", "design_or_protocol", "adjacent_outcome_trial", "other", "uncertain",
+    ]
+    target_outcome_evidence: Literal["reported", "not_mentioned", "explicitly_not_measured", "uncertain"]
+    outcome_evidence_quote: str | None
+    publication_identity_checks: list[PublicationIdentityCheck]
