@@ -15,6 +15,7 @@ def wire_payload(payload, text, catalogue=None):
             continue
         quote = support.pop("quote", "")
         support.pop("source_location", None)
+        support.pop("source_range", None)
         start = text.find(quote) if quote else -1
         begin = next((item for item in catalogue["sources"] if item["start"] == start), None)
         end = next((item for item in catalogue["sources"] if item["end"] == start + len(quote)), None)

@@ -34,6 +34,8 @@ def approve_synthetic_method_fixture(project, protocol, studies):
             source_rows.extend(numeric_quotes.values())
             assessments[index]["verification"] = verification_payload(outcome, assessments[index], numeric_quotes=numeric_quotes,
                 registry_id=registry_id, trial_quote=trial_quote, randomized=randomized)
+        from endpoint_binding_fixture import bind_components
+        assessments = [bind_components(item, "\n".join(source_rows)) for item in assessments]
         record_checked_alignments(project, protocol, study, assessments,
                                   source_text="\n".join(source_rows), assessor_id="mock-independent-checker",
                                   issue_histories={index: ([], True) for index in range(len(study.outcomes))})

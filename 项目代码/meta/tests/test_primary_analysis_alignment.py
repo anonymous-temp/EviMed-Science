@@ -62,7 +62,8 @@ def assessment_payload(*, source_outcome=None, study_id="S1", **statuses):
     assessment["verification"] = verification_payload(outcome, assessment,
         numeric_quotes={field: NUMERIC_SOURCE for field in numeric_fields(outcome)},
         registry_id="NCT00000002" if study_id == "S2" else "NCT00000001", trial_quote=NUMERIC_SOURCE)
-    return assessment
+    from endpoint_binding_fixture import bind_components
+    return bind_components(assessment, SOURCE)
 
 
 def stamp_fixture(tmp_path, **statuses):
@@ -428,6 +429,10 @@ def test_compatible_hr_is_excluded_for_verified_clinical_dimension_mismatch(tmp_
         assessment["verification"]["randomized_comparison"] = False
     current_source = SOURCE.replace(previous_quote, source_sentence)
     source.write_text(current_source)
+    from endpoint_binding_fixture import bind_components
+    if dimension == "outcome":
+        assessment["verification"]["components"][0]["source_component"] = source_sentence
+    assessment = bind_components(assessment, current_source)
     record_checked_alignments(project, protocol, study, [assessment], source_text=current_source, source_path=source)
     result = PipelineRunner(project).run_primary_effect_selection(protocol=protocol, extracted_studies=[study])
     assert result.status.value == "succeeded"
@@ -572,6 +577,8 @@ def test_independent_checker_can_confirm_source_backed_single_arm_not_applicable
     } for name in ("outcome", "population", "contrast")}}
     from verification_fixture import verification_payload
     data["verification"] = verification_payload(study.outcomes[0], data, randomized=False)
+    from endpoint_binding_fixture import bind_components
+    data = bind_components(data, statement)
     agent = DataExtractionAgent()
     prompts = []
     def checked(messages, *_args, **_kwargs):

@@ -5,8 +5,13 @@ from collections import Counter
 import math
 import re
 from typing import Any, Literal, TypedDict
+import hashlib
 
-from new_meta.schemas.study import ExtractedStudy, ExtractionDataIssue, ExtractionDataIssueEvidence, OutcomeData, PrimaryAlignmentAssessment
+from pydantic import ValidationError
+
+from new_meta.schemas.study import (ExtractedStudy, ExtractionDataIssue, ExtractionDataIssueEvidence,
+    OutcomeData, PrimaryAlignmentAssessment, EndpointResultSource, EndpointComponentBinding,
+    EndpointComponentVerification, ExtractionRowVerificationV3)
 from new_meta.schemas.protocol import ResearchProtocol
 
 
@@ -225,6 +230,80 @@ def numeric_value_in_quote(value: float | int | None, quote: str, field: str = "
     return False
 
 
+def _valid_endpoint_result(value, source_text):
+    """Authenticate a resolved contiguous slice without interpreting its clinical text."""
+    try:
+        result = EndpointResultSource.model_validate(value, strict=True)
+    except (ValidationError, TypeError):
+        return None
+    span = result.source_range
+    if (span is None or not 0 <= span.start < span.end <= len(source_text)
+            or span.end - span.start > 8192
+            or span.checked_source_sha256 != hashlib.sha256(source_text.encode()).hexdigest()
+            or source_text[span.start:span.end] != result.quote
+            or span.text_sha256 != hashlib.sha256(result.quote.encode()).hexdigest()
+            or span.start_byte != len(source_text[:span.start].encode())
+            or span.end_byte != len(source_text[:span.end].encode())
+            or not result.source_location.strip()):
+        return None
+    return result
+
+
+def endpoint_binding_errors(details, source_text, component_index=None):
+    """Validate one judgment's own endpoint binding, independent of sibling leaves.
+
+    Called for complete responses, raw partial negatives, and receipt replay.
+    Membership is the model's explicit semantic judgment, not a text classifier.
+    """
+    raw = details.model_dump(mode="json") if hasattr(details, "model_dump") else details
+    if not isinstance(raw, dict) or type(raw.get("schema_version")) is not int or raw["schema_version"] != 3:
+        return [{"code": "verification_endpoint_membership_required"}]
+    selected = _valid_endpoint_result(raw.get("selected_endpoint_result"), source_text)
+    if selected is None:
+        return [{"code": "verification_endpoint_result_invalid"}]
+    if raw.get("definition_scope") != "selected_endpoint":
+        return [{"code": "verification_endpoint_definition_not_selected"}]
+    try:
+        from new_meta.schemas.study import VerificationSource
+        definition = VerificationSource.model_validate(raw.get("source_endpoint_definition"), strict=True)
+    except (ValidationError, TypeError):
+        return [{"code": "verification_endpoint_definition_invalid"}]
+    if not quote_is_anchored(definition.quote, definition.source_location, source_text):
+        return [{"code": "verification_endpoint_definition_invalid"}]
+    if component_index is None:
+        return []
+    context = {"component_index": component_index}
+    def error(code):
+        return [{"code": code, **context}]
+    components, bindings = raw.get("components"), raw.get("component_bindings")
+    if not isinstance(components, list) or not 0 <= component_index < len(components) or not isinstance(bindings, list):
+        return error("verification_component_binding_required")
+    matches = [item for item in bindings if isinstance(item, dict)
+        and type(item.get("component_index")) is int and item["component_index"] == component_index]
+    if len(matches) != 1:
+        return error("verification_component_binding_coverage")
+    try:
+        component = EndpointComponentVerification.model_validate(components[component_index], strict=True)
+        binding = EndpointComponentBinding.model_validate(matches[0], strict=True)
+    except (ValidationError, TypeError):
+        return error("verification_component_binding_invalid")
+    target = _valid_endpoint_result(binding.target_result, source_text)
+    if target is None or target.source_range != selected.source_range or target.quote != selected.quote:
+        return error("verification_component_target_mismatch")
+    if not quote_is_anchored(binding.support.quote, binding.support.source_location, source_text):
+        return error("verification_component_support_not_anchored")
+    required = {"match": "included_in_selected_endpoint", "extra": "included_in_selected_endpoint",
+                "missing": "absent_from_selected_endpoint"}.get(component.relation)
+    if required is not None and binding.source_membership != required:
+        return error("verification_component_membership_inconsistent")
+    if component.relation in {"match", "extra"} and not quote_is_anchored(
+            component.source_component, binding.support.source_location, binding.support.quote):
+        return error("verification_component_label_not_anchored")
+    if component.relation in {"match", "missing"} and not component.protocol_component:
+        return error("verification_component_mapping_incomplete")
+    return []
+
+
 def verification_verdict(assessment: PrimaryAlignmentAssessment, protocol: ResearchProtocol) -> VerificationVerdict:
     details = assessment.verification
     unknown = {"status": "unknown", "reason": "extraction_verification_required"}
@@ -256,7 +335,7 @@ def verification_verdict(assessment: PrimaryAlignmentAssessment, protocol: Resea
 
 def validate_check_batch(
     study: ExtractedStudy, indices: list[int], assessments: list[PrimaryAlignmentAssessment],
-    source_text: str, protocol: ResearchProtocol,
+    source_text: str, protocol: ResearchProtocol, *, allow_legacy=False,
 ) -> list[VerificationIssue]:
     """Return actionable schema/coverage/anchor/numeric errors before stamping."""
     from new_meta.core.primary_analysis_alignment import _anchored
@@ -279,6 +358,18 @@ def validate_check_batch(
         if details is None:
             issue("verification_details_missing", index)
             continue
+        if isinstance(details, ExtractionRowVerificationV3):
+            for error in endpoint_binding_errors(details, source_text):
+                issue(error.pop("code"), index, **error)
+            binding_indices = [binding.component_index for binding in details.component_bindings]
+            if sorted(binding_indices) != list(range(len(details.components))):
+                issue("verification_component_binding_coverage", index,
+                      expected=list(range(len(details.components))), received=binding_indices)
+            for component_index in range(len(details.components)):
+                for error in endpoint_binding_errors(details, source_text, component_index):
+                    issue(error.pop("code"), index, **error)
+        elif not allow_legacy:
+            issue("verification_endpoint_membership_required", index)
         for name, support, required in (
                 ("source_endpoint_definition", details.source_endpoint_definition, details.endpoint_relation != "uncertain"),
                 ("estimand_support", details.estimand_support, details.estimand_relation != "uncertain")):

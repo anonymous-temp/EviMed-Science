@@ -4,7 +4,7 @@ from collections import Counter
 from pydantic import TypeAdapter, ValidationError
 
 from new_meta.core.extraction_verification import (
-    quote_is_anchored, validate_check_batch, validate_data_issues,
+    quote_is_anchored, validate_check_batch, validate_data_issues, endpoint_binding_errors,
 )
 from new_meta.core.llm import parse_source_json
 from new_meta.schemas.study import (
@@ -46,8 +46,12 @@ def _verification_negatives(details, source_text, protocol):
             value = TypeAdapter(ExtractionRowVerification.model_fields[field].annotation).validate_python(details.get(field), strict=True)
         except ValidationError:
             continue
-        if support is not None and value in negative_values:
+        if (support is not None and value in negative_values
+                and (field != "endpoint_relation" or not endpoint_binding_errors(details, source_text))):
             retain(field, value, support_field, support, reason)
+            if field == "endpoint_relation":
+                negatives[-1]["judgment"].update(schema_version=3,
+                    selected_endpoint_result=details["selected_endpoint_result"], definition_scope=details["definition_scope"])
     components = details.get("components")
     if endpoint is not None and isinstance(components, list):
         for component_index, raw_component in enumerate(components):
@@ -55,10 +59,17 @@ def _verification_negatives(details, source_text, protocol):
                 component = EndpointComponentVerification.model_validate(raw_component, strict=True)
             except (ValidationError, TypeError):
                 continue
-            if ((component.relation == "extra" and component.source_component)
-                    or (component.relation == "missing" and component.protocol_component)):
+            if (((component.relation == "extra" and component.source_component)
+                    or (component.relation == "missing" and component.protocol_component))
+                    and not endpoint_binding_errors(details, source_text, component_index)):
                 retain("components", [component.model_dump(mode="json")], "source_endpoint_definition", endpoint,
                        "endpoint_components_incompatible", component_index=component_index)
+                binding = next(item for item in details["component_bindings"]
+                    if isinstance(item, dict) and type(item.get("component_index")) is int
+                    and item["component_index"] == component_index)
+                negatives[-1]["judgment"].update(schema_version=3,
+                    selected_endpoint_result=details["selected_endpoint_result"], definition_scope=details["definition_scope"],
+                    component_bindings=[binding])
     from new_meta.core.method_planning import infer_review_family
     from new_meta.schemas.method_policy import ReviewFamily
     if infer_review_family(protocol) is not ReviewFamily.INTERVENTION_RCT:

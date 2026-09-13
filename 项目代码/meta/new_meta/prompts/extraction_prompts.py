@@ -209,6 +209,22 @@ is unavailable, with the same honest uncertain judgment. Keep rationales to one
 concise sentence. Reuse IDs instead of repeating source text.
 
 Required per-row verification payload (never omit it, even with a high score):
+- schema_version: 3. Select selected_endpoint_result source IDs for THIS extracted
+  result's original row or result passage. source_endpoint_definition supplies its
+  definition, which may be elsewhere in the paper. Set definition_scope explicitly:
+  selected_endpoint, other_endpoint, or uncertain. A paragraph listing several
+  endpoints does not make every listed component part of the selected result.
+- component_bindings: exactly one per components index, with component_index,
+  target_result (the SAME source ID range as selected_endpoint_result), support
+  (source IDs proving this component's membership), and a concise rationale.
+  source_membership is included_in_selected_endpoint, absent_from_selected_endpoint,
+  belongs_to_other_endpoint, or uncertain. match and extra require inclusion in
+  THIS endpoint; missing requires absence from THIS endpoint. A component present
+  only in another endpoint is not extra in this result. Do not put explanatory
+  prose in source_component: copy the actual source label from its support passage;
+  put interpretation in rationale. For a missing component, quote the complete
+  relevant definition rather than inventing an absent phrase. Source range identity
+  is assigned by the runtime; supply only source_id and optional end_source_id.
 - numeric_findings: verify EVERY supplied numeric_fields_to_verify field, naming its
   directly reported value, source_id, match/mismatch/uncertain and
   rationale. Check every CI endpoint, sign, unit, measure and scale. A score cannot

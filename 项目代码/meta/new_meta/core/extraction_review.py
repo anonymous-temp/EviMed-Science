@@ -247,9 +247,11 @@ def _save_alignment_adjudication(project, decision, *, assessor_id):
     errors = validate_check_batch(study, [index], [assessment], source_text, protocol)
     if errors:
         raise ValueError("Explicit alignment adjudication requires complete numeric and clinical source verification: " + ", ".join(item["code"] for item in errors))
+    from new_meta.core.extraction_sources import validate_review_endpoint_sources
+    validate_review_endpoint_sources(project, proof, assessment, source_text)
     _record_proof(project, protocol, study, index, assessment, source_text=source_text,
                   source_path=project.base_dir / proof.source_path,
-                  assessor="human-review-v1", assessor_id=assessor_id, expected_source_sha256=decision.alignment_source_sha256)
+                  assessor="human-review-v2", assessor_id=assessor_id, expected_source_sha256=decision.alignment_source_sha256)
     project.save_json("all_extractions.json", studies, subdir="extraction")
     from new_meta.tools.utils import safe_identifier
     project.save_json(f"{safe_identifier(_study_id(study))}.json", study, subdir="extraction")
