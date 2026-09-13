@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -12,10 +12,10 @@ from new_meta.core.known_source_recovery import TRIAL_PUBLICATION_IDS, known_sou
 from new_meta.core.project import Project
 from new_meta.core.extraction_status import IncompletePhaseError, persist_incomplete_phase
 from new_meta.schemas.protocol import ResearchProtocol
-from new_meta.schemas.screening import FullTextScreeningDecision
+from new_meta.schemas.screening import FullTextScreeningDecision, TitleAbstractScreeningDecision
 from new_meta.schemas.phase_result import ExecutionStatus, NextAction, PhaseIssue, PhaseName, PhaseResult
 from new_meta.prompts import screening_prompts
-from new_meta.config import MAX_WORKERS, TA_BATCH_SIZE, BATCH_SCREENING_THRESHOLD
+from new_meta.config import MAX_WORKERS, BATCH_SCREENING_THRESHOLD
 from new_meta.tools.utils import paper_identity
 
 
@@ -315,143 +315,144 @@ class ScreeningAgent(BaseAgent):
     # Internal screening implementations
     # ------------------------------------------------------------------
 
-    def _screen_title_abstract(self, papers: list[dict], protocol: ResearchProtocol) -> list[dict]:
-        """Screen papers by title and abstract (individual, one LLM call per paper)."""
-        inclusion_str = "\n".join(f"  - {c}" for c in protocol.inclusion_criteria)
-        exclusion_str = "\n".join(f"  - {c}" for c in protocol.exclusion_criteria)
+    def _ta_prompt_values(self, protocol: ResearchProtocol) -> dict:
+        """Use one protocol and identity contract in every title/abstract path."""
+        return {
+            "research_question": protocol.research_question,
+            "population": protocol.pico.population,
+            "intervention": protocol.pico.intervention,
+            "comparator": protocol.pico.comparator,
+            "outcome": protocol.pico.outcome_primary,
+            "study_design": protocol.study_design,
+            "inclusion_criteria": "\n".join(f"  - {c}" for c in protocol.inclusion_criteria),
+            "exclusion_criteria": "\n".join(f"  - {c}" for c in protocol.exclusion_criteria),
+            "publication_identity_inventory": json.dumps(self._publication_identity_inventory(protocol), ensure_ascii=False),
+        }
 
+    @classmethod
+    def _ta_forward_to_full_text(cls, paper: dict, attempts: list[dict], problem: str) -> dict:
+        """Keep incomplete triage visible without treating it as clinical exclusion."""
+        return {
+            "paper": paper, "decision": "include", "priority_tier": "uncertain",
+            "reason_code": "uncertain", "reason": f"Full-text review required: {problem}",
+            "exclusion_criterion": None, "confidence": "low",
+            "source_identity": cls._screening_source_identity(paper),
+            "full_text_review_required": True, "screening_attempts": attempts,
+        }
+
+    @classmethod
+    def _title_abstract_result(cls, raw: dict, paper: dict, protocol: ResearchProtocol) -> dict:
+        attempt = {"response": raw}
+        try:
+            decision = TitleAbstractScreeningDecision.model_validate(raw)
+            checks = cls._validate_publication_identity(decision, paper, protocol)
+            if decision.decision == "review_required" or decision.reason_code == "uncertain":
+                raise ValueError("The title/abstract assessment is uncertain")
+            if not decision.reason.strip():
+                raise ValueError("The decision requires a substantive reason")
+            if decision.decision == "include" and decision.reason_code != "eligible":
+                raise ValueError("Inclusion must use the eligible reason code")
+            if decision.decision == "exclude":
+                if decision.reason_code == "eligible" or not (decision.exclusion_criterion or "").strip():
+                    raise ValueError("Exclusion requires a typed exclusion reason and criterion")
+                if decision.reason_code == "publication_type" and decision.publication_role in {
+                    "primary_publication", "uncertain",
+                }:
+                    raise ValueError("A secondary endpoint is not a secondary publication")
+                if decision.reason_code in {"outcome", "data_unavailable"}:
+                    quote = (decision.outcome_evidence_quote or "").strip()
+                    abstract = str(paper.get("abstract") or "")
+                    if (decision.target_outcome_evidence != "explicitly_not_measured"
+                            or not quote or quote not in abstract):
+                        raise ValueError("Outcome absence from the abstract does not prove absence from the full text")
+            return {"paper": paper, **decision.model_dump(),
+                    "publication_identity_checks_verified": checks, "screening_attempts": [attempt]}
+        except (ValueError, TypeError) as exc:
+            attempt["validation_error"] = str(exc)
+            return cls._ta_forward_to_full_text(paper, [attempt], str(exc))
+
+    def _screen_ta_pass(
+        self, papers: list[dict], protocol: ResearchProtocol, temperature: float | None = None,
+    ) -> list[dict]:
         def screen_one(paper):
-            prompt = screening_prompts.TITLE_ABSTRACT_SCREENING_PROMPT.format(
-                research_question=protocol.research_question,
-                population=protocol.pico.population,
-                intervention=protocol.pico.intervention,
-                comparator=protocol.pico.comparator,
-                outcome=protocol.pico.outcome_primary,
-                study_design=protocol.study_design,
-                inclusion_criteria=inclusion_str,
-                exclusion_criteria=exclusion_str,
-                title=paper.get("title", ""),
-                abstract=paper.get("abstract", ""),
-            )
             try:
-                decision = self.call_llm_structured(prompt, ScreeningDecision)
-                # Validate decision value
-                d = "include" if decision.decision == "include" else "exclude"
-                tier = decision.priority_tier if decision.priority_tier in ("direct", "uncertain", "indirect") else "uncertain"
-                return {
-                    "paper": paper,
-                    "decision": d,
-                    "priority_tier": tier,
-                    "reason": decision.reason,
-                    "exclusion_criterion": decision.exclusion_criterion,
-                    "confidence": decision.confidence,
-                }
-            except Exception as e:
-                self.log(f"Screening error for {paper.get('pmid')}: {e}", level="warning")
-                return {
-                    "paper": paper, "decision": "exclude",
-                    "priority_tier": "uncertain",
-                    "reason": f"LLM failed, excluded conservatively: {e}",
-                    "confidence": "low",
-                }
+                prompt = screening_prompts.TITLE_ABSTRACT_SCREENING_PROMPT.format(
+                    **self._ta_prompt_values(protocol),
+                    source_identity=json.dumps(self._screening_source_identity(paper), ensure_ascii=False),
+                    title=paper.get("title", ""), abstract=paper.get("abstract", ""),
+                )
+                if temperature is None:
+                    decision = self.call_llm_structured(prompt, TitleAbstractScreeningDecision)
+                else:
+                    messages = [{"role": "system", "content": self.system_prompt},
+                                {"role": "user", "content": prompt}]
+                    decision = self.llm.structured_output(
+                        messages, TitleAbstractScreeningDecision, temperature=temperature,
+                    )
+                return self._title_abstract_result(decision.model_dump(), paper, protocol)
+            except Exception as exc:
+                problem = f"Title/abstract assessment unavailable ({type(exc).__name__})"
+                self.log(problem, level="warning")
+                return self._ta_forward_to_full_text(paper, [{"error": problem}], problem)
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            results = list(tqdm(executor.map(screen_one, papers), total=len(papers), desc="T/A Screening", leave=False))
-        return results
+            return list(tqdm(executor.map(screen_one, papers), total=len(papers), desc="T/A Screening", leave=False))
+
+    def _screen_title_abstract(self, papers: list[dict], protocol: ResearchProtocol) -> list[dict]:
+        """Screen individual records using their canonical publication identity."""
+        return self._screen_ta_pass(papers, protocol)
 
     def _screen_title_abstract_batched(
-        self, papers: list[dict], protocol: ResearchProtocol, batch_size: int = 5
+        self, papers: list[dict], protocol: ResearchProtocol, batch_size: int = 5,
     ) -> list[dict]:
-        """Screen papers in small concurrent batches (5 papers per LLM call, all batches in parallel)."""
-        inclusion_str = "\n".join(f"  - {c}" for c in protocol.inclusion_criteria)
-        exclusion_str = "\n".join(f"  - {c}" for c in protocol.exclusion_criteria)
+        """Bind each batch observation by exact record ID, including DOI-only papers."""
+        batches = [papers[i:i + batch_size] for i in range(0, len(papers), batch_size)]
 
-        # Split into batches of 5
-        batches = []
-        for i in range(0, len(papers), batch_size):
-            batches.append(papers[i : i + batch_size])
-
-        def screen_batch(batch_idx: int, batch: list[dict]) -> list[dict]:
-            papers_block_parts = []
-            for j, paper in enumerate(batch, 1):
-                pmid = paper.get("pmid", f"unknown_{j}")
-                title = paper.get("title", "")
-                abstract = paper.get("abstract", "")
-                papers_block_parts.append(
-                    f"### Paper {j} (PMID: {pmid})\n- Title: {title}\n- Abstract: {abstract}\n"
-                )
-            papers_block = "\n".join(papers_block_parts)
-
-            prompt = screening_prompts.BATCH_TITLE_ABSTRACT_SCREENING_PROMPT.format(
-                research_question=protocol.research_question,
-                population=protocol.pico.population,
-                intervention=protocol.pico.intervention,
-                comparator=protocol.pico.comparator,
-                outcome=protocol.pico.outcome_primary,
-                study_design=protocol.study_design,
-                inclusion_criteria=inclusion_str,
-                exclusion_criteria=exclusion_str,
-                papers_block=papers_block,
-            )
-
-            batch_results = []
+        def screen_batch(batch: list[dict]) -> list[dict]:
             try:
+                blocks = []
+                for index, paper in enumerate(batch, 1):
+                    identity = json.dumps(self._screening_source_identity(paper), ensure_ascii=False)
+                    blocks.append(f"### Paper {index}\nSource Identity: {identity}\n"
+                                  f"- Title: {paper.get('title', '')}\n- Abstract: {paper.get('abstract', '')}\n")
+                prompt = screening_prompts.BATCH_TITLE_ABSTRACT_SCREENING_PROMPT.format(
+                    **self._ta_prompt_values(protocol), papers_block="\n".join(blocks),
+                )
                 batch_result = self.call_llm_structured(prompt, BatchScreeningResult, max_tokens=8192)
                 decisions = batch_result.decisions
-                pmid_to_paper = {p.get("pmid", ""): p for p in batch}
-                responded_pmids: set[str] = set()
+                grouped: dict[str, list[dict]] = {}
+                for raw in decisions:
+                    identity = raw.get("source_identity")
+                    record_id = identity.get("record_id") if isinstance(identity, dict) else raw.get("pmid")
+                    if isinstance(record_id, str):
+                        grouped.setdefault(record_id, []).append(raw)
+            except Exception as exc:
+                problem = f"Batch title/abstract assessment unavailable ({type(exc).__name__})"
+                self.log(problem, level="warning")
+                return [self._ta_forward_to_full_text(p, [{"error": problem}], problem) for p in batch]
 
-                for decision_dict in decisions:
-                    pmid = decision_dict.get("pmid", "")
-                    paper = pmid_to_paper.get(pmid)
-                    if not paper:
-                        # Strict: ignore results for unknown pmids (no title fuzzy match)
-                        continue
-                    responded_pmids.add(pmid)
-                    # Validate decision value
-                    raw_decision = decision_dict.get("decision", "exclude")
-                    decision = "include" if raw_decision == "include" else "exclude"
-                    # Validate priority_tier
-                    raw_tier = decision_dict.get("priority_tier", "uncertain")
-                    tier = raw_tier if raw_tier in ("direct", "uncertain", "indirect") else "uncertain"
-                    batch_results.append({
-                        "paper": paper,
-                        "decision": decision,
-                        "priority_tier": tier,
-                        "reason": decision_dict.get("reason", ""),
-                        "exclusion_criterion": decision_dict.get("exclusion_criterion"),
-                        "confidence": decision_dict.get("confidence", "medium"),
-                    })
+            results = []
+            for paper in batch:
+                observations = grouped.get(paper_identity(paper), [])
+                if len(observations) == 1:
+                    row = self._title_abstract_result(observations[0], paper, protocol)
+                elif observations:
+                    row = self._ta_forward_to_full_text(
+                        paper, [{"response": raw} for raw in observations],
+                        "The batch returned duplicate assessments for this source identity",
+                    )
+                else:
+                    # A missing or unknown ID is not an exclusion. Reassess once,
+                    # retaining the original batch observation for source audit.
+                    row = self._screen_title_abstract([paper], protocol)[0]
+                row["batch_screening_observations"] = decisions
+                results.append(row)
+            return results
 
-                # Papers not in LLM response get individual re-screening (strict paper_id only)
-                missed_papers = [p for p in batch if p.get("pmid", "") not in responded_pmids]
-                if missed_papers:
-                    self.log(f"Batch {batch_idx}: {len(missed_papers)} papers missed by LLM, re-screening individually", level="warning")
-                    missed_results = self._screen_title_abstract(missed_papers, protocol)
-                    batch_results.extend(missed_results)
-
-            except Exception as e:
-                self.log(f"Batch screening failed for batch {batch_idx}: {e}", level="warning")
-                for paper in batch:
-                    batch_results.append({
-                        "paper": paper,
-                        "decision": "exclude",
-                        "priority_tier": "uncertain",
-                        "reason": f"Batch error, excluded conservatively: {e}",
-                        "confidence": "low",
-                    })
-            return batch_results
-
-        all_results = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = {executor.submit(screen_batch, idx, batch): idx for idx, batch in enumerate(batches)}
-            for future in tqdm(as_completed(futures), total=len(futures), desc="T/A Batch Screening", leave=False):
-                try:
-                    all_results.extend(future.result())
-                except Exception as e:
-                    self.log(f"Batch screening future error: {e}", level="warning")
-
-        return all_results
+            batches_results = list(tqdm(executor.map(screen_batch, batches), total=len(batches),
+                                       desc="T/A Batch Screening", leave=False))
+        return [row for rows in batches_results for row in rows]
 
     def _screen_full_text(
         self, papers: list[dict], protocol: ResearchProtocol, parsed_papers: dict[str, dict]
@@ -609,6 +610,17 @@ class ScreeningAgent(BaseAgent):
         }:
             raise ValueError("Publication-type exclusion conflicts with the publication role; a secondary endpoint is not a secondary publication")
 
+        return cls._validate_publication_identity(decision, paper, protocol)
+
+    @classmethod
+    def _validate_publication_identity(
+        cls, decision: FullTextScreeningDecision | TitleAbstractScreeningDecision,
+        paper: dict, protocol: ResearchProtocol,
+    ) -> list[dict]:
+        """Validate complete model-interpreted constraints by exact identifier equality."""
+        identity = cls._screening_source_identity(paper)
+        if decision.source_identity.model_dump() != identity:
+            raise ValueError("Decision source_identity differs from the authoritative paper metadata")
         inventory = {(item["protocol_criterion"], item["identifier_type"]): set(item["identifiers"])
                      for item in cls._publication_identity_inventory(protocol)}
         keys = [(item.protocol_criterion, item.identifier_type) for item in decision.publication_identity_checks]
@@ -666,7 +678,9 @@ class ScreeningAgent(BaseAgent):
         conflicts = 0
         for r1, r2 in zip(results_r1, results_r2):
             if r1["decision"] == r2["decision"]:
-                merged.append(r1)
+                merged.append({**r1, "reviewer_decisions": [
+                    {k: v for k, v in row.items() if k != "paper"} for row in (r1, r2)
+                ]})
             else:
                 conflicts += 1
                 # Conservative: include on disagreement (favor recall)
@@ -677,55 +691,17 @@ class ScreeningAgent(BaseAgent):
                     "reason": f"Dual-reviewer conflict (R1={r1['decision']}, R2={r2['decision']}); included for safety",
                     "confidence": "low",
                     "kappa_note": f"Disagreement resolved by inclusion. kappa={kappa:.3f}",
+                    "full_text_review_required": True,
+                    "source_identity": self._screening_source_identity(r1["paper"]),
+                    "reviewer_decisions": [{k: v for k, v in row.items() if k != "paper"} for row in (r1, r2)],
                 })
 
         self.log(f"Dual screening: {conflicts} conflicts out of {len(papers)} papers (kappa={kappa:.3f})")
         return merged
 
     def _screen_ta_with_temp(self, papers: list[dict], protocol: ResearchProtocol, temperature: float) -> list[dict]:
-        """Screen papers with a specific temperature (for second reviewer simulation)."""
-        inclusion_str = "\n".join(f"  - {c}" for c in protocol.inclusion_criteria)
-        exclusion_str = "\n".join(f"  - {c}" for c in protocol.exclusion_criteria)
-
-        def screen_one(paper):
-            prompt = screening_prompts.TITLE_ABSTRACT_SCREENING_PROMPT.format(
-                research_question=protocol.research_question,
-                population=protocol.pico.population,
-                intervention=protocol.pico.intervention,
-                comparator=protocol.pico.comparator,
-                outcome=protocol.pico.outcome_primary,
-                study_design=protocol.study_design,
-                inclusion_criteria=inclusion_str,
-                exclusion_criteria=exclusion_str,
-                title=paper.get("title", ""),
-                abstract=paper.get("abstract", ""),
-            )
-            try:
-                messages = [
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": prompt},
-                ]
-                decision = self.llm.structured_output(
-                    messages, ScreeningDecision, temperature=temperature
-                )
-                return {
-                    "paper": paper,
-                    "decision": decision.decision,
-                    "priority_tier": decision.priority_tier,
-                    "reason": decision.reason,
-                    "exclusion_criterion": decision.exclusion_criterion,
-                    "confidence": decision.confidence,
-                }
-            except Exception as e:
-                return {
-                    "paper": paper, "decision": "exclude",
-                    "priority_tier": "uncertain",
-                    "reason": f"Error: {e}", "confidence": "low",
-                }
-
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            results = list(tqdm(executor.map(screen_one, papers), total=len(papers), desc="T/A Screen R2", leave=False))
-        return results
+        """Use the same source-bound contract for the independent second pass."""
+        return self._screen_ta_pass(papers, protocol, temperature=temperature)
 
     @staticmethod
     def _cohens_kappa(decisions_a: list[str], decisions_b: list[str]) -> float:

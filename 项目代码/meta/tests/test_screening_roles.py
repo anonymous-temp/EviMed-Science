@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from new_meta.agents.screening_agent import ScreeningAgent, ScreeningDecision
+from new_meta.agents.screening_agent import ScreeningAgent
 from new_meta.core.project import Project
 from new_meta.schemas.protocol import PICO, ResearchProtocol
-from new_meta.schemas.screening import FullTextScreeningDecision
+from new_meta.schemas.screening import FullTextScreeningDecision, TitleAbstractScreeningDecision
 
 
 def _protocol() -> ResearchProtocol:
@@ -52,12 +52,18 @@ def test_title_abstract_retains_known_source_protocol_publications_for_source_au
     }
 
     def exclude_protocol(*args, **kwargs):
-        return ScreeningDecision(
+        return TitleAbstractScreeningDecision(
             decision="exclude",
             priority_tier="indirect",
+            reason_code="publication_type",
             reason="Protocol without outcome data.",
             exclusion_criterion="Protocols without outcome data",
             confidence="high",
+            source_identity=agent._screening_source_identity(paper),
+            publication_role="design_or_protocol",
+            target_outcome_evidence="not_mentioned",
+            outcome_evidence_quote=None,
+            publication_identity_checks=[],
         )
 
     agent.call_llm_structured = exclude_protocol

@@ -20,6 +20,19 @@ Mandatory exclusions (always "exclude"):
 
 These study types provide no extractable primary data and must be excluded at T/A screening."""
 
+TITLE_ABSTRACT_IDENTITY_RULES = """
+
+## Source-bound Triage Contract
+- Copy source_identity exactly from the supplied object, including empty strings. record_id binds this assessment to this record; do not substitute another publication or a trial registration. PMID/DOI identify publications, while trial_registration identifies a trial that may have several publications.
+- For EVERY item in the Complete Protocol Identifier Inventory, return exactly one publication_identity_checks item with the entire identifiers list, identifier_type and verbatim protocol_criterion. Use any_of for permitted alternatives, none_of for forbidden identifiers, or context_only for citations that impose no publication restriction. A context_only check requires context_reason. Do not omit an alternative, reinterpret a negated restriction as permission, or turn a contextual citation into a whitelist. If a mixed group cannot be faithfully represented, return review_required. Return [] only when the inventory is empty.
+- A publication-identity exclusion must use reason_code=publication_identity and an actual mismatch with a complete applicable identifier constraint. Do not say a supplied PMID is different from itself. Exact identifier equality is checked independently. A matching publication identifier alone does not establish clinical eligibility.
+- Set publication_role from the publication itself: primary_publication, secondary_analysis, design_or_protocol, adjacent_outcome_trial, other or uncertain. A secondary endpoint is not a secondary publication. An eligible main report may report the review's target outcome as secondary or exploratory even when its abstract emphasizes another primary endpoint.
+- Set target_outcome_evidence to reported, not_mentioned, explicitly_not_measured or uncertain, based only on this title/abstract. Outcome absence from the abstract does not prove absence from the full text. A missing abstract or an abstract listing another primary outcome cannot establish that the requested secondary outcome is unavailable. Forward these cases as decision=include, priority_tier=uncertain for full-text review. This is triage, not final clinical inclusion.
+- Use explicitly_not_measured only when the abstract explicitly establishes that the target outcome was not measured; copy the supporting verbatim abstract text into outcome_evidence_quote. Set outcome_evidence_quote=null if there is no such quote. Do not label silence, an abstract's endpoint list or different primary endpoint as explicit non-measurement.
+- Use reason_code=eligible for inclusion; publication_identity/publication_type/population/intervention/comparator/outcome/study_design/data_unavailable/other for the corresponding substantive exclusion. Use uncertain for unresolved judgments. An exclusion requires exclusion_criterion. If metadata, identifiers, publication role or outcome availability conflict or are incomplete, return include/uncertain or review_required rather than exclude. Supported clinical exclusions still apply when a publication identifier matches.
+- Return decision, priority_tier, reason_code, reason, exclusion_criterion, confidence, source_identity, publication_role, target_outcome_evidence, outcome_evidence_quote and publication_identity_checks for each paper.
+"""
+
 TITLE_ABSTRACT_SCREENING_PROMPT = """Evaluate whether this study should be included in our meta-analysis based on its title and abstract.
 
 ## Research Protocol
@@ -33,6 +46,12 @@ TITLE_ABSTRACT_SCREENING_PROMPT = """Evaluate whether this study should be inclu
 {inclusion_criteria}
 - Exclusion Criteria:
 {exclusion_criteria}
+
+## Source Identity to Bind the Decision
+{source_identity}
+
+## Complete Protocol Identifier Inventory
+{publication_identity_inventory}
 
 ## Paper to Screen
 - Title: {title}
@@ -60,7 +79,7 @@ IMPORTANT: The intervention ARM must contain the specified intervention. Multi-a
 ### Step 3 — If uncertain between include/exclude:
 - Include, but set priority_tier="uncertain"
 
-Provide your decision, priority_tier, and a brief reason."""
+Provide your source-bound decision and a brief reason.""" + TITLE_ABSTRACT_IDENTITY_RULES
 
 FULL_TEXT_SCREENING_PROMPT = """Evaluate whether this study should be included based on full-text review.
 
@@ -141,6 +160,9 @@ BATCH_TITLE_ABSTRACT_SCREENING_PROMPT = """Evaluate whether EACH of the followin
 - Exclusion Criteria:
 {exclusion_criteria}
 
+## Complete Protocol Identifier Inventory
+{publication_identity_inventory}
+
 ## Papers to Screen
 {papers_block}
 
@@ -164,7 +186,7 @@ IMPORTANT: The intervention ARM must contain the specified intervention. Apply t
 3. EXCLUDE only when the specified intervention appears solely as background therapy in ALL arms — i.e., every arm receives the intervention plus different add-on drugs, with no arm that isolates the intervention's effect.
 
 For EACH paper, return a JSON object with:
-- "pmid": the paper's PMID
+- "source_identity": the exact identity object supplied for this paper
 - "decision": "include" or "exclude"
 - "priority_tier": "direct" / "uncertain" / "indirect"
 - "reason": brief explanation
@@ -173,4 +195,4 @@ For EACH paper, return a JSON object with:
 
 Return a JSON array of decisions, one per paper, in the same order.
 
-CRITICAL: You MUST return exactly one decision object for EVERY paper listed above. Do not skip or omit any paper. If unsure about a paper, set decision="exclude" rather than omitting it."""
+CRITICAL: You MUST return exactly one decision object for EVERY paper listed above. Do not skip or omit any paper. If unsure about a paper, set decision="include", priority_tier="uncertain" for full-text review rather than excluding or omitting it.""" + TITLE_ABSTRACT_IDENTITY_RULES
