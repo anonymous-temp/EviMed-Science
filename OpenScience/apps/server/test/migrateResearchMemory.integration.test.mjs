@@ -411,3 +411,88 @@ test("a SQLite source imports the same way", options, async () => {
   assert.deepEqual(derived.tags, ["旧标签"], "a note with no stored tag list is read from its own text");
   assert.equal((await importMemory(["--source", `sqlite:${file}`])).report.records.imported, 0, "and it is idempotent too");
 });
+
+// The two ways a row can already be there are not the same news, and the report
+// is the only place anyone finds out which happened. `ON CONFLICT DO NOTHING`
+// over *any* constraint counted both as "already present": a memory that never
+// arrived, because a different memory holds its canonical key, was reported as
+// one that had.
+test("a canonical key held by another memory is quarantined, not reported as carried over", options, async () => {
+  const alphaDigests = digests(alpha);
+  // A different creator id, so the retired service's own uniqueness lets the
+  // row exist; the same namespace and canonical key, so it lands on a place
+  // `recordalpha1` already holds.
+  await database.query(`INSERT INTO "${schema}".memory_record
+    (uid,creator_id,namespace,scope_type,scope_id,kind,memory_key,value,summary,origin,status,confidence,importance,
+     sensitive,evidence_count,version,created_ts,updated_ts,last_confirmed_ts,expires_ts,payload)
+    VALUES ('recordalphadup',2,$1,'MEMORY_SCOPE_USER','','MEMORY_KIND_PREFERENCE','response.evidence_depth',
+     'A different memory under the same key.','','MEMORY_ORIGIN_EXPLICIT','MEMORY_STATUS_ACTIVE',1,0.5,false,0,1,
+     $2,$3,NULL,NULL,'{}'::jsonb)`, [alphaDigests.namespace, createdTs, updatedTs]);
+  try {
+    const rehearsal = await importMemory(["--source", url, "--source-schema", schema, "--dry-run"]);
+    assert.equal(rehearsal.report.records.reasons.canonical_key_taken, 1,
+      "the rehearsal must name it, or the operator repairs nothing before the real run");
+
+    const { report } = await importMemory(["--source", url, "--source-schema", schema]);
+    assert.equal(report.records.reasons.canonical_key_taken, 1);
+    assert.equal((await database.query(
+      "SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=$1 AND id=$2",
+      [alpha, "recordalphadup"])).rows[0].count, 0, "and it must not have overwritten the memory that was there");
+    const held = (await database.query(
+      "SELECT value FROM evimed_memory.records WHERE user_id=$1 AND key=$2", [alpha, "response.evidence_depth"])).rows[0];
+    assert.match(held.value, /^Prefer primary evidence/, "the memory that held the key must be untouched");
+  } finally {
+    await database.query(`DELETE FROM "${schema}".memory_record WHERE uid='recordalphadup'`);
+  }
+});
+
+// Until this runs, every memory exists twice in one database and only one of
+// the two copies can be forgotten: the retired tables key ownership by that
+// service's own user ids and reference nothing in `evimed_control`, so neither
+// "forget this memory" nor the cascade that deletes an account reaches them.
+test("the retired copy is emptied only once nothing was left behind", options, async () => {
+  const refusal = await run(process.execPath,
+    [script, "--target", url, "--source", "same", "--source-schema", schema, "--purge-source"],
+    { encoding: "utf8" }).catch((/** @type {any} */ error) => error);
+  assert.ok(refusal.stderr?.includes("refusing to empty the retired tables"),
+    `a source with unattributed rows must be refused, got: ${refusal.stderr ?? refusal.stdout}`);
+  assert.ok((await database.query(`SELECT count(*)::integer AS count FROM "${schema}".memo`)).rows[0].count > 0,
+    "and the refusal must have emptied nothing");
+
+  const clean = `memos_clean_${randomUUID().replaceAll("-", "")}`;
+  await database.query(sourceDdl(clean));
+  try {
+    const alphaDigests = digests(alpha);
+    await database.query(`INSERT INTO "${clean}".memory_record
+      (uid,creator_id,namespace,scope_type,scope_id,kind,memory_key,value,summary,origin,status,confidence,importance,
+       sensitive,evidence_count,version,created_ts,updated_ts,last_confirmed_ts,expires_ts,payload)
+      VALUES ('recordclean1',1,$1,'MEMORY_SCOPE_USER','','MEMORY_KIND_PROFILE','profile.clean','A carried memory.','',
+       'MEMORY_ORIGIN_EXPLICIT','MEMORY_STATUS_ACTIVE',1,0.5,false,0,1,$2,$3,NULL,NULL,'{}'::jsonb)`,
+    [alphaDigests.namespace, createdTs, updatedTs]);
+    await database.query(`INSERT INTO "${clean}".memo (uid,creator_id,created_ts,updated_ts,row_status,content,pinned,payload)
+      VALUES ('memoclean1',1,$1,$2,'NORMAL',$3,false,$4::jsonb)`,
+    [createdTs, updatedTs, `a carried note\n\n#evimed-user-${alphaDigests.tag}`,
+      memoPayload([`evimed-user-${alphaDigests.tag}`])]);
+
+    const { report } = await importMemory(["--source", "same", "--source-schema", clean, "--purge-source"]);
+    assert.deepEqual(report.purged, { memory_record: 1, memo: 1 });
+    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM "${clean}".memory_record`)).rows[0].count, 0);
+    assert.equal((await database.query(`SELECT count(*)::integer AS count FROM "${clean}".memo`)).rows[0].count, 0);
+    assert.equal((await database.query(
+      "SELECT count(*)::integer AS count FROM evimed_memory.records WHERE user_id=$1 AND id=$2",
+      [alpha, "recordclean1"])).rows[0].count, 1, "and what it emptied must be the copy, not the memory");
+  } finally {
+    await database.query(`DROP SCHEMA IF EXISTS "${clean}" CASCADE`);
+  }
+});
+
+test("--purge-source refuses the shapes that could empty the wrong database", options, async () => {
+  for (const args of [
+    ["--source", "same", "--purge-source", "--dry-run"],
+    ["--source", url, "--purge-source"],
+  ]) {
+    const refused = await run(process.execPath, [script, "--target", url, ...args], { encoding: "utf8" })
+      .catch((/** @type {any} */ error) => error);
+    assert.ok(refused.stderr?.includes("research_memory_import_failed"), `${args.join(" ")} was not refused`);
+  }
+});

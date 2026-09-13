@@ -132,7 +132,13 @@ test("the server runs unprivileged, which takes a data directory made for it fir
   const prepared = `${initMount}${workspace.slice(serverMount.length)}`;
   const script = init.command.join("\n");
   assert.ok(script.includes(`'${prepared}'`), `the init prepares no ${prepared}, which is where the server will write`);
-  assert.match(script, /os\.chown\(data, 10001, 10001\)/);
+  // The directory *and* what is already inside it. An upgrade from a release
+  // that ran this image as root arrives with a volume of root-owned index
+  // files; giving away only the directory leaves every one of them unreadable
+  // to the uid that has to read them, and the index then starts, stays healthy
+  // and answers nothing.
+  assert.match(script, /for path in \(data, \*data\.rglob\('\*'\)\)/);
+  assert.match(script, /os\.lchown\(path, 10001, 10001\)/);
   assert.deepEqual(init.cap_drop, ["ALL"]);
   assert.deepEqual(init.cap_add, ["CHOWN"], "root without CAP_CHOWN cannot give the directory away");
 });
