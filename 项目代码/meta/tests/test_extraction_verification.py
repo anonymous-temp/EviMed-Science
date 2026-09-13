@@ -115,9 +115,10 @@ def run_verifier(tmp_path, monkeypatch, responses, *, candidate=None, content=SO
     path = project.base_dir / "papers" / "source.txt"; path.write_text(content)
     agent = DataExtractionAgent(); calls = []
     iterator = iter(responses)
-    def check(text, extracted, current_protocol, indices, feedback, _observe=None):
+    def check(text, extracted, current_protocol, indices, feedback, observe=None, catalogue=None):
+        from extraction_source_fixture import observed_check
         calls.append((text, list(indices), list(feedback)))
-        return next(iterator)
+        return observed_check(next(iterator), text, observe, catalogue)
     monkeypatch.setattr(agent, "_check_extraction", check)
     if repair is not None: monkeypatch.setattr(agent, "_refine_extraction", repair)
     result = agent._verify_alignment(candidate or study(), {"fulltext_path": str(path)},
@@ -132,7 +133,8 @@ def test_checker_repairs_missing_coverage_before_stamping(tmp_path, monkeypatch)
         [ExtractionCheckResult(data_issues=[], score=10), ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[checked_row()])])
     assert len(calls) == 2 and calls[1][2][0]["code"] == "verification_index_coverage"
     assert alignment_status(project, protocol(), result, 0)["status"] == "match"
-    assert len(list((project.base_dir / "extraction/verification").glob("*.json"))) == 2
+    assert len([item for item in (project.base_dir / "extraction/verification").glob("*.json")
+                if '"status": "observed"' not in item.read_text()]) == 2
 
 
 def test_high_score_with_numeric_error_requires_fresh_corrected_verification(tmp_path, monkeypatch):
@@ -339,17 +341,22 @@ def test_schema_retries_keep_the_complete_source_in_every_verifier_request(tmp_p
     project = Project("source preserving schema repair", output_dir=tmp_path)
     path = project.base_dir / "papers/source.txt"; path.write_text(SOURCE)
     invalid = checked_row(); del invalid["verification"]["numeric_status"]
-    responses = iter([json.dumps({"score": 9, "data_issues": [], "primary_analysis_alignment": [invalid]}),
-                      json.dumps({"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row()]})])
+    from extraction_source_fixture import wire_payload
+    responses = iter([json.dumps(wire_payload({"score": 9, "data_issues": [], "primary_analysis_alignment": [invalid]}, SOURCE)),
+                      json.dumps(wire_payload({"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row()]}, SOURCE))])
     calls = []; agent = DataExtractionAgent()
     def fake_call(**kwargs):
         calls.append(kwargs["messages"])
-        return next(responses)
+        raw = next(responses)
+        kwargs["on_raw_response"]({"content": raw, "finish_reason": "stop", "provider_response_ordinal": 1})
+        return raw
     monkeypatch.setattr(agent.llm, "_call", fake_call)
     result = agent._verify_alignment(study(), {"fulltext_path": str(path)},
         {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol(), project)
     assert len(calls) == 2
-    assert all(any(SOURCE in message["content"] for message in messages) for messages in calls)
+    from new_meta.core.extraction_sources import source_catalogue, source_prompt
+    rendered_source = source_prompt(SOURCE, source_catalogue(SOURCE, hashlib.sha256(SOURCE.encode()).hexdigest()))
+    assert all(any(rendered_source in message["content"] for message in messages) for messages in calls)
     assert "numeric_status" in calls[1][-1]["content"]
     assert alignment_status(project, protocol(), result, 0)["status"] == "match"
 

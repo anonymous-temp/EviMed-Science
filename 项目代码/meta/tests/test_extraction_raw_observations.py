@@ -11,11 +11,12 @@ from new_meta.core.project import Project
 from new_meta.schemas.study import ExtractedStudy
 from test_extraction_issue_persistence import issue
 from test_extraction_verification import SOURCE, checked_row, protocol, study
+from extraction_source_fixture import wire_payload
 
 
 def payload(count=2, *, issues=()):
-    return {"score": 9, "data_issues": list(issues),
-            "primary_analysis_alignment": [checked_row(index) for index in range(count)]}
+    return wire_payload({"score": 9, "data_issues": list(issues),
+            "primary_analysis_alignment": [checked_row(index) for index in range(count)]}, SOURCE)
 
 
 def run_provider(tmp_path, monkeypatch, responses, *, candidate=None, project=None, batch_size=4):
@@ -84,8 +85,8 @@ def test_healthy_provider_check_still_certifies_complete_rows(tmp_path, monkeypa
 
 @pytest.mark.parametrize("incomplete_first", [False, True])
 def test_default_outcome_calls_preserve_unrelated_complete_proof(tmp_path, monkeypatch, incomplete_first):
-    first = {"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row(0)]}
-    second = {"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row(1)]}
+    first = wire_payload({"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row(0)]}, SOURCE)
+    second = wire_payload({"score": 9, "data_issues": [], "primary_analysis_alignment": [checked_row(1)]}, SOURCE)
     if incomplete_first:
         first["primary_analysis_alignment"][0]["contrast"]["status"] = "mismatch"
         del first["primary_analysis_alignment"][0]["population"]["rationale"]
@@ -250,7 +251,7 @@ def test_observation_persistence_failure_never_regenerates_or_approves(tmp_path,
     attempts = []
 
     def fail_observation(project, relative, data):
-        if relative.startswith("extraction/verification/"):
+        if relative.startswith("extraction/verification/raw/") or (relative.startswith("extraction/verification/") and relative.count("/") == 2):
             attempts.append(relative)
             raise OSError("synthetic observation write failure")
         return write_once(project, relative, data)
@@ -261,7 +262,7 @@ def test_observation_persistence_failure_never_regenerates_or_approves(tmp_path,
             [(json.dumps(payload(issues=[issue(conflict=True)])), "length"), json.dumps(payload())], project=project)
     restored = ExtractedStudy.model_validate(project.load_json("trial-paper.json", subdir="extraction"))
     history, complete = recover_issue_history(project, restored, 0)
-    assert len(history) == 1 and not complete
+    assert history == [] and not complete  # Raw persistence failed before parsing any judgment.
     assert len(attempts) == 2  # The observation and its terminal attempt diagnostic.
     assert alignment_status(project, protocol(), restored, 0)["status"] == "unknown"
 
@@ -349,7 +350,7 @@ def test_observation_write_interruption_cannot_restore_an_earlier_clean_checkpoi
 
     def intercept_once(project, relative, data):
         nonlocal once_interrupted
-        is_raw = relative.startswith("extraction/verification/")
+        is_raw = relative.startswith("extraction/verification/raw/")
         selected = ((boundary in {"before_retained_proof", "after_retained_proof"} and retained_proof(relative, data))
                     or (boundary in {"before_raw", "after_raw"} and is_raw))
         if selected and not once_interrupted and boundary.startswith("before"):
@@ -404,11 +405,11 @@ def test_negative_requires_its_own_valid_source_support(tmp_path, monkeypatch, n
         details[field] = {"estimand": "mismatch", "randomized_comparison": False,
             "postrandomization_conditioning": True, "selection_timing": "postrandomization"}[negative]
     if support_damage == "missing":
-        del support["quote"]
+        del support["source_id"]
     elif support_damage == "malformed":
-        support["quote"] = {"text": SOURCE}
+        support["source_id"] = {"text": SOURCE}
     else:
-        support["quote"] = "An unsupported invented quotation."
+        support["source_id"] = "unknown-source"
     del row["contrast"]["rationale"]
     project, result, calls, observations = run_provider(tmp_path, monkeypatch,
         [json.dumps(first), json.dumps(payload())])

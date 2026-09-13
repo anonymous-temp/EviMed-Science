@@ -1,5 +1,6 @@
 """Current per-study verification controls every synthesis entry point."""
 import hashlib
+import json
 
 import pytest
 from fastapi import FastAPI
@@ -13,6 +14,7 @@ from new_meta.core.primary_analysis_alignment import (
 )
 from new_meta.schemas.study import ExtractedStudy
 from test_primary_analysis_alignment import stamp_fixture
+from extraction_source_fixture import observed_check
 
 
 def observe_conflict(project, protocol, candidate, monkeypatch, *, interrupt=False):
@@ -25,14 +27,16 @@ def observe_conflict(project, protocol, candidate, monkeypatch, *, interrupt=Fal
               "rationale": "The current source contains unresolved conflicting values.",
               "quote": finding.quote, "source_location": finding.source_location}
     agent = DataExtractionAgent()
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_args: ExtractionCheckResult(
-        score=10, data_issues=[defect], primary_analysis_alignment=[assessment]))
+    monkeypatch.setattr(agent, "_check_extraction", lambda *args: observed_check(ExtractionCheckResult(
+        score=10, data_issues=[defect], primary_analysis_alignment=[assessment]), args[0], args[5], args[6]))
     if interrupt:
         import new_meta.core.primary_analysis_alignment as alignment
         original = alignment._write_scoped_once
 
         def interrupted(project_arg, path, payload):
-            if path.startswith("extraction/verification/"):
+            # Interrupt after the observed conflict is durably in the current
+            # checkpoint, not while writing the new pre-call source catalogue.
+            if path.startswith("extraction/verification/") and json.loads(payload).get("status") == "needs_input":
                 raise KeyboardInterrupt
             return original(project_arg, path, payload)
 
@@ -179,8 +183,8 @@ def test_freshly_verified_correction_requires_explicit_ledger_refresh(tmp_path, 
         if finding.field == field:
             finding.reported_value = value
     agent = DataExtractionAgent()
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_args: ExtractionCheckResult(
-        score=10, data_issues=[], primary_analysis_alignment=[assessment]))
+    monkeypatch.setattr(agent, "_check_extraction", lambda *args: observed_check(ExtractionCheckResult(
+        score=10, data_issues=[], primary_analysis_alignment=[assessment]), args[0], args[5], args[6]))
     studies[0] = agent._verify_alignment(candidate, {"fulltext_path": str(corrected_source)}, {
         "full_text": content, "_source_sha256": hashlib.sha256(content.encode()).hexdigest()}, protocol, project)
     assert alignment_status(project, protocol, studies[0], 0)["status"] == "match"

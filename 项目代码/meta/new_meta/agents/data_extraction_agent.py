@@ -22,7 +22,7 @@ from new_meta.core.denominator_recovery import (
 )
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
 from new_meta.core.rct_design_reconciliation import reconcile_extracted_rct_designs
-from new_meta.schemas.study import ConflictNote, ExtractedStudy, ExtractionDataIssue, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment
+from new_meta.schemas.study import ConflictNote, ExtractedStudy, ExtractionDataIssue, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment, ExtractionReferenceEnvelope
 from new_meta.prompts import extraction_prompts
 from new_meta.agents.pdf_parser import get_page_for_position
 from new_meta.config import LLM_MAX_TOKENS_EXTRACTION, MAX_WORKERS, MAX_CHECK_ROUNDS
@@ -487,8 +487,8 @@ class DataExtractionAgent(BaseAgent):
     def _check_extraction(
         self, paper_content: str, extracted: ExtractedStudy, protocol: ResearchProtocol,
         outcome_indices: list[int] | None = None, feedback: list[dict[str, Any]] | None = None,
-        on_raw_response=None,
-    ) -> ExtractionCheckResult:
+        on_raw_response=None, catalogue=None,
+    ) -> ExtractionReferenceEnvelope:
         """Check original-indexed rows against the full bounded source snapshot."""
         from new_meta.core.extraction_verification import CHECKER_HIDDEN_FIELDS, numeric_fields
         indices = list(range(len(extracted.outcomes))) if outcome_indices is None else outcome_indices
@@ -496,16 +496,19 @@ class DataExtractionAgent(BaseAgent):
                 "indexed_outcomes": [{"outcome_index": index,
                     "outcome": extracted.outcomes[index].model_dump(mode="json", exclude=CHECKER_HIDDEN_FIELDS),
                     "numeric_fields_to_verify": numeric_fields(extracted.outcomes[index])} for index in indices]}
+        from new_meta.core.extraction_sources import reference_schema, source_prompt
         prompt = extraction_prompts.EXTRACTION_CHECK_PROMPT.format(
-            paper_content=paper_content, protocol=protocol.model_dump_json(),
+            paper_content=source_prompt(paper_content, catalogue), protocol=protocol.model_dump_json(),
             extracted_data=json.dumps(data, ensure_ascii=False),
         )
+        prompt += "\nRequired source-reference response schema:\n" + json.dumps(
+            reference_schema(ExtractionCheckResult.model_json_schema()), ensure_ascii=False)
         prompt += "\nExpected original outcome indices: " + json.dumps(indices)
         if feedback:
             prompt += "\nPrevious response validation errors (repair judgments; do not alter source data):\n" + json.dumps(feedback, ensure_ascii=False)
         return self.llm.structured_output(
             [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": prompt}],
-            ExtractionCheckResult, max_tokens=LLM_MAX_TOKENS_EXTRACTION,
+            ExtractionReferenceEnvelope, max_tokens=LLM_MAX_TOKENS_EXTRACTION,
             source_faithful=True, on_raw_response=on_raw_response,
         )
 
@@ -584,7 +587,22 @@ class DataExtractionAgent(BaseAgent):
                 "source_characters": len(content), "limit": VERIFICATION_SOURCE_CHAR_LIMIT}])
             return extracted
         _write_scoped_once(project, f"{_PROOF_DIR}/{checked_sha}.txt", content.encode())
-        assessments, checked_rows, pending_reasons = {}, {}, {}
+        from new_meta.core.extraction_sources import VERSION, source_catalogue, resolve_reference_payload
+        from new_meta.core.llm import parse_source_json
+
+        def write_source_record(kind, payload):
+            encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+            if len(encoded) > 4 * 1024 * 1024:
+                raise ValueError("Extraction source observation exceeds its artifact size limit")
+            checksum = hashlib.sha256(encoded).hexdigest()
+            relative = f"extraction/verification/{kind}/{checksum}.json"
+            _write_scoped_once(project, relative, encoded)
+            return {"path": relative, "sha256": checksum}
+
+        catalogue = source_catalogue(content, source_sha, body_end=len(str(parsed.get("full_text") or "")),
+                                     page_map=parsed.get("page_map", []))
+        catalogue_record = write_source_record("sources", catalogue)
+        assessments, checked_rows, pending_reasons, source_references = {}, {}, {}, {}
         for start in range(0, len(indices), VERIFICATION_BATCH_SIZE):
             batch = indices[start:start + VERIFICATION_BATCH_SIZE]
             feedback = []
@@ -595,6 +613,8 @@ class DataExtractionAgent(BaseAgent):
                 terminal_observation = False
                 observation_errors = []
                 observed_negative_rows = set()
+                latest_payload = None
+                latest_resolution = None
 
                 def persist_observation_pending():
                     # This attempt alone owns the temporary incomplete marker.
@@ -606,18 +626,33 @@ class DataExtractionAgent(BaseAgent):
                         reason="Independent verification is awaiting durable observation completion.")
 
                 def observe(raw_response):
-                    nonlocal terminal_observation, observation_errors
-                    from new_meta.core.extraction_observations import inspect_extraction_observation
+                    nonlocal terminal_observation, observation_errors, checked, latest_payload, latest_resolution
+                    from new_meta.core.extraction_observations import inspect_extraction_payload
                     try:
-                        observation = inspect_extraction_observation(raw_response["content"],
-                            ExtractionCheckResult, extracted, batch, content, protocol)
-                        observation_errors = observation["errors"]
+                        # Commit the actual provider observation before parsing,
+                        # resolution, history processing, or any internal retry.
+                        raw_record = write_source_record("raw", {"version": VERSION,
+                            "verification_id": verification_id, "outcome_indices": batch, "attempt": round_index + 1,
+                            "source_sha256": source_sha, "checked_source_sha256": checked_sha,
+                            "protocol_sha256": protocol_sha, "row_sha256": {str(key): value for key, value in snapshot.items()},
+                            "catalogue": catalogue_record, "raw_response": dict(raw_response)})
+                        resolution_errors, metadata, resolved = [], [], None
+                        latest_payload = None
+                        try:
+                            latest_payload = parse_source_json(raw_response["content"])
+                            resolved, resolution_errors, metadata = resolve_reference_payload(content, catalogue, latest_payload)
+                        except (ValueError, TypeError) as exc:
+                            resolution_errors = [{"code": "verification_raw_json_invalid", "error_type": type(exc).__name__}]
+                        observation = inspect_extraction_payload(resolved, ExtractionCheckResult, extracted, batch, content, protocol)
+                        observation_errors = resolution_errors + observation["errors"]
+                        checked = observation["response"]
                         retained = [item for item in observation["data_errors"] if item["code"] in {
                             "row_data_issue", "row_source_conflict_requires_adjudication"}]
                         stable = (protocol_fingerprint(protocol) == protocol_sha and all(
                             row_fingerprint(extracted, index) == fingerprint for index, fingerprint in snapshot.items()))
                         if not stable:
                             retained = []
+                            observation["clinical_negatives"] = []
                             observation_errors.append({"code": "verification_inputs_changed_during_observation"})
                         update_issue_history(extracted, batch, histories, retained,
                             source_sha256=source_sha, checked_source_sha256=checked_sha, protocol_sha256=protocol_sha,
@@ -636,6 +671,10 @@ class DataExtractionAgent(BaseAgent):
                         # A crash at any later raw/proof write cannot expose the
                         # earlier clean checkpoint as current verification history.
                         persist_observation_pending()
+                        latest_resolution = write_source_record("resolved", {"version": VERSION,
+                            "raw_record": raw_record, "resolved_response": resolved, "resolution": metadata,
+                            "errors": observation_errors, "retained_data_issues": retained,
+                            "retained_clinical_judgments": observation["clinical_negatives"]})
                         record_attempt(batch, round_index + 1, "observed", observation_errors,
                             checked=observation["response"], snapshot=snapshot, raw_response=raw_response,
                             retained_data_issues=retained,
@@ -653,10 +692,11 @@ class DataExtractionAgent(BaseAgent):
                     # Mark before the provider call so interruptions during the
                     # first observer write, or any internal length retry, fail closed.
                     persist_observation_pending()
-                    checked = self._check_extraction(content, extracted, protocol, batch, feedback, observe)
+                    returned = self._check_extraction(content, extracted, protocol, batch, feedback, observe, catalogue)
+                    if latest_resolution is None or checked is None or digest(returned.model_dump(mode="json")) != digest(latest_payload):
+                        raise ValueError("Independent verification did not return its durably observed source response")
                     feedback = validate_check_batch(extracted, batch, checked.primary_analysis_alignment, content, protocol)
-                    feedback.extend(item for item in observation_errors if item["code"].startswith(
-                        ("verification_duplicate", "verification_raw_")))
+                    feedback.extend(observation_errors)
                     data_errors = validate_data_issues(extracted, batch, checked.data_issues, content)
                     feedback.extend(data_errors)
                     if protocol_fingerprint(protocol) != protocol_sha:
@@ -695,9 +735,11 @@ class DataExtractionAgent(BaseAgent):
                     if index in complete_rows and histories[index][1] and not histories[index][0] and checked is not None:
                         assessments[index] = next(item for item in checked.primary_analysis_alignment if item.outcome_index == index)
                         checked_rows[index] = snapshot[index]
+                        source_references[index] = latest_resolution
                     else:
                         assessments.pop(index, None)
                         checked_rows.pop(index, None)
+                        source_references.pop(index, None)
                 invalidate_alignment_proofs(project, protocol, extracted, histories,
                                             reason="Independent verification is incomplete or row-data issues remain.")
                 persist_pending_extraction()
@@ -727,7 +769,7 @@ class DataExtractionAgent(BaseAgent):
             record_errors = record_checked_alignments(project, protocol, extracted, list(assessments.values()),
                 source_text=content, source_path=source_path, checked_rows=checked_rows,
                 expected_source_sha256=source_sha or None, assessor_id=self.llm.model,
-                pending_reasons=pending_reasons, issue_histories=histories)
+                pending_reasons=pending_reasons, issue_histories=histories, source_references=source_references)
             if record_errors:
                 record_attempt(indices, 0, "needs_input", record_errors)
         except (OSError, ValueError) as exc:
