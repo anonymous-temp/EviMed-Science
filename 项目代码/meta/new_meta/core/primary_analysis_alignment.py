@@ -422,7 +422,7 @@ def record_checked_alignments(project, protocol, study, assessments, *, source_t
                                  protocol_fingerprint(protocol), row_fingerprint(study, index), index, assessment)
         _record_proof(project, protocol, study, index, assessment,
                       source_text=source_text, source_path=source_path, expected_source_sha256=expected_source_sha256,
-                      assessor="extraction-check-sources-v1" if source_references is not None else "extraction-check-v2",
+                      assessor="extraction-check-sources-v2" if source_references is not None else "extraction-check-v3",
                       assessor_id=assessor_id, issue_history=histories[index], publish_checkpoint=False,
                       source_reference=source_reference)
     _persist_alignment_checkpoint(project, study)
@@ -446,11 +446,12 @@ def alignment_status(project, protocol, study, index: int) -> dict:
     except (OSError, ValueError, TypeError, AttributeError):
         return {**unknown, "reason": "current_extraction_checkpoint_required"}
     try:
-        if proof.assessor not in {"extraction-check-v2", "extraction-check-sources-v1", "human-review-v1", "pending-review-v1"}:
+        if proof.assessor not in {"extraction-check-v2", "extraction-check-v3", "extraction-check-sources-v1",
+                                  "extraction-check-sources-v2", "human-review-v1", "human-review-v2", "pending-review-v1"}:
             return unknown
-        if proof.source_reference is not None and proof.assessor != "extraction-check-sources-v1":
+        if proof.source_reference is not None and proof.assessor not in {"extraction-check-sources-v1", "extraction-check-sources-v2"}:
             return unknown
-        if proof.assessor == "human-review-v1" and proof.assessor_id in {"", "unknown"}:
+        if proof.assessor in {"human-review-v1", "human-review-v2"} and proof.assessor_id in {"", "unknown"}:
             return unknown
         if proof.protocol_sha256 != protocol_fingerprint(protocol) or proof.row_sha256 != row_fingerprint(study, index):
             return unknown
@@ -460,10 +461,21 @@ def alignment_status(project, protocol, study, index: int) -> dict:
             return unknown
         if proof.assessment.outcome_index != index or not _anchored(proof.assessment, checked.decode()):
             return unknown
-        if proof.assessor == "extraction-check-sources-v1":
+        from new_meta.schemas.study import ExtractionRowVerificationV3
+        current_contract = isinstance(proof.assessment.verification, ExtractionRowVerificationV3)
+        legacy_assessor = proof.assessor in {"extraction-check-v2", "extraction-check-sources-v1", "human-review-v1"}
+        if proof.assessor != "pending-review-v1" and current_contract == legacy_assessor:
+            return unknown
+        if proof.assessor in {"extraction-check-sources-v1", "extraction-check-sources-v2"}:
             from new_meta.core.extraction_sources import replay_source_receipt
             replay_source_receipt(project, proof.source_reference.model_dump(mode="json") if proof.source_reference else None,
-                checked.decode(), proof.source_sha256, proof.protocol_sha256, proof.row_sha256, index, proof.assessment)
+                checked.decode(), proof.source_sha256, proof.protocol_sha256, proof.row_sha256, index, proof.assessment,
+                expected_version=1 if legacy_assessor else 2)
+        elif proof.assessor in {"human-review-v2", "extraction-check-v3"}:
+            # Direct quoted proofs also need real catalogue identities. Their
+            # identical self-supplied target IDs alone cannot certify a result.
+            from new_meta.core.extraction_sources import validate_review_endpoint_sources
+            validate_review_endpoint_sources(project, proof, proof.assessment, checked.decode())
     except (OSError, ValueError, TypeError, UnicodeDecodeError, AttributeError):
         return unknown
     dimensions = {name: getattr(proof.assessment, name).status for name in DIMENSIONS}
@@ -476,12 +488,14 @@ def alignment_status(project, protocol, study, index: int) -> dict:
         status, reason = "unknown", "verification_data_issues_unresolved"
     elif proof.assessor == "pending-review-v1":
         status, reason = "unknown", "verification_not_completed"
-    elif validate_check_batch(study, [index], [proof.assessment], checked.decode(), protocol):
+    elif validate_check_batch(study, [index], [proof.assessment], checked.decode(), protocol, allow_legacy=legacy_assessor):
         status, reason = "unknown", "extraction_verification_invalid"
     else:
         verified = verification_verdict(proof.assessment, protocol)
         if verified["status"] != "match":
             status, reason = verified["status"], verified["reason"]
+        if legacy_assessor and status == "match":
+            status, reason = "unknown", "endpoint_membership_recheck_required"
     return {"status": status, "reason": reason,
             "dimensions": dimensions, "proof_id": proof.proof_id,
             "protocol_sha256": proof.protocol_sha256, "row_sha256": proof.row_sha256,

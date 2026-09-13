@@ -26,7 +26,7 @@ SOURCE = ("Adults with CKD were randomized to Drug or placebo in trial NCT034366
 
 
 def checked_row(index=0):
-    return {"outcome_index": index,
+    row = {"outcome_index": index,
         **{name: {"status": "match", "rationale": "The source supports this judgment.", "quote": SOURCE, "source_location": "Methods/Table 3"} for name in ["outcome", "population", "contrast"]},
         "verification": {
             "numeric_status": "verified", "numeric_findings": [
@@ -39,6 +39,9 @@ def checked_row(index=0):
             "estimand_support": {"quote": "The treatment model adjusted only for baseline eGFR and included the randomized cohort.", "source_location": "Methods"},
             "trial_coverage": "complete", "trial_units": [{"registry_id": "NCT03436693", "trial_name": "", "role": "contributing", "quote": "Adults with CKD were randomized to Drug or placebo in trial NCT03436693.", "source_location": "Methods"}],
         }}
+
+    from endpoint_binding_fixture import bind_components
+    return bind_components(row, SOURCE)
 
 
 def test_healthy_direct_renal_effect_has_complete_verification():
@@ -162,6 +165,8 @@ def test_complete_clinical_mismatch_is_retained_despite_out_of_batch_advisories(
     payload["verification"]["endpoint_relation"] = "source_narrower"
     payload["verification"]["components"].append({
         "source_component": "", "protocol_component": "sustained eGFR decline", "relation": "missing"})
+    from endpoint_binding_fixture import bind_components
+    payload = bind_components(payload, SOURCE)
     checked = ExtractionCheckResult(score=6, data_issues=[],
         issues=["The selected renal endpoint is narrower than the protocol outcome.",
                 "Only one outcome row was extracted; the other study outcomes were not extracted."],
@@ -422,7 +427,12 @@ def case_assessment(case, candidate, index, numeric_name, *, incompatible=False)
     if incompatible:
         details["endpoint_relation"] = "source_broader"
         details["components"].append({"source_component": "cardiovascular death", "protocol_component": "", "relation": "extra"})
-    return item
+    source_labels = (["end-stage kidney disease", "doubling of serum creatinine level", "kidney", "CV disease"]
+                     if incompatible else ["ESRD", "DoSC", "renal death"])
+    for component, label in zip(details["components"], source_labels):
+        component["source_component"] = label
+    from endpoint_binding_fixture import bind_components
+    return bind_components(item, case_source(case))
 
 
 def select_stamped(tmp_path, candidates):
@@ -435,6 +445,8 @@ def select_stamped(tmp_path, candidates):
     for candidate, assessments, text in candidates:
         path = project.base_dir / "papers" / (candidate.characteristics.study_id + ".txt")
         path.write_text(text)
+        from endpoint_binding_fixture import bind_components
+        assessments = [bind_components(item, text) for item in assessments]
         record_checked_alignments(project, protocol(), candidate, assessments, source_text=text, source_path=path)
         studies.append(candidate)
     project.save_json("protocol.json", protocol())
@@ -500,6 +512,8 @@ def test_actual_ci_error_is_not_overridden_by_a_high_checker_score(tmp_path, mon
         conditioning_variables=[], estimand_support={"quote":"", "source_location":""}, trial_coverage="uncertain", trial_units=[])
     details["numeric_findings"]=[{"field":field,"status":"match","reported_value":value,"quote":source_piece(case,"results_primary_ci"),"source_location":"Results page 5","rationale":"Direct Results CI, rather than a conversion of damaged abstract text."}
         for field,value in [("hazard_ratio",.73),("hr_ci_lower",.53),("hr_ci_upper",1.02)]]
+    from endpoint_binding_fixture import bind_components
+    item = bind_components(item, text)
     response=ExtractionCheckResult(data_issues=[], score=10, primary_analysis_alignment=[item])
     project, result, calls=run_verifier(tmp_path,monkeypatch,[response,response,response],candidate=candidate,content=text,repair=lambda content,current,*_:current)
     assert len(calls)==3 and all(source_piece(case,"results_primary_ci") in call[0] for call in calls)
@@ -568,6 +582,8 @@ def test_postrandomization_outcome_measurement_does_not_mean_conditioning():
     from new_meta.schemas.study import PrimaryAlignmentAssessment
     text=SOURCE + " Outcomes were measured at year 1 after randomization."
     item=checked_row(); item["outcome"]["quote"]=text
+    from endpoint_binding_fixture import bind_components
+    item = bind_components(item, text)
     assessment=PrimaryAlignmentAssessment.model_validate(item)
     assert validate_check_batch(study(),[0],[assessment],text,protocol())==[]
     assert verification_verdict(assessment,protocol())["status"]=="match"
@@ -601,6 +617,8 @@ def test_nonrandomized_method_applicability_is_not_a_randomized_contrast_failure
     details.update(randomized_comparison=None,postrandomization_conditioning=None,selection_timing="not_applicable",conditioning_variables=[],trial_coverage="not_applicable",trial_units=[],
         source_endpoint_definition={"quote":text,"source_location":"Methods"},estimand_support={"quote":text,"source_location":"Methods"})
     details["numeric_findings"]=[{"field":field,"status":"match","reported_value":value,"quote":text,"source_location":"Results","rationale":"Direct cohort result."} for field,value in numeric_fields(candidate.outcomes[0]).items()]
+    from endpoint_binding_fixture import bind_components
+    item = bind_components(item, text)
     assessment=PrimaryAlignmentAssessment.model_validate(item)
     assert validate_check_batch(candidate,[0],[assessment],text,current)==[]
     assert verification_verdict(assessment,current)["status"]=="match"
@@ -661,6 +679,8 @@ def test_baseline_adjusted_md_is_not_an_unadjusted_arithmetic_conflict():
     details["estimand_support"]={"quote":text,"source_location":"Methods"}
     details["conditioning_variables"]=[{"name":"baseline blood pressure","timing":"baseline","quote":text,"source_location":"Methods"}]
     details["trial_units"][0]["quote"]=text
+    from endpoint_binding_fixture import bind_components
+    item = bind_components(item, text)
     assessment=PrimaryAlignmentAssessment.model_validate(item)
     assert validate_check_batch(candidate,[0],[assessment],text,current)==[]
     assert verification_verdict(assessment,current)["status"]=="match"

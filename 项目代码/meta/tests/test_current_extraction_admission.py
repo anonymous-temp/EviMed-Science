@@ -28,7 +28,7 @@ def observe_conflict(project, protocol, candidate, monkeypatch, *, interrupt=Fal
               "quote": finding.quote, "source_location": finding.source_location}
     agent = DataExtractionAgent()
     monkeypatch.setattr(agent, "_check_extraction", lambda *args: observed_check(ExtractionCheckResult(
-        score=10, data_issues=[defect], primary_analysis_alignment=[assessment]), args[0], args[5], args[6]))
+        score=10, data_issues=[defect], primary_analysis_alignment=[assessment.model_dump(mode="json")]), args[0], args[5], args[6]))
     if interrupt:
         import new_meta.core.primary_analysis_alignment as alignment
         original = alignment._write_scoped_once
@@ -182,9 +182,12 @@ def test_freshly_verified_correction_requires_explicit_ledger_refresh(tmp_path, 
         finding.quote = finding.quote.replace(str(old_value), str(value))
         if finding.field == field:
             finding.reported_value = value
+    from endpoint_binding_fixture import bind_components
+    from new_meta.schemas.study import PrimaryAlignmentAssessment
+    assessment = PrimaryAlignmentAssessment.model_validate(bind_components(assessment.model_dump(mode="json"), content))
     agent = DataExtractionAgent()
     monkeypatch.setattr(agent, "_check_extraction", lambda *args: observed_check(ExtractionCheckResult(
-        score=10, data_issues=[], primary_analysis_alignment=[assessment]), args[0], args[5], args[6]))
+        score=10, data_issues=[], primary_analysis_alignment=[assessment.model_dump(mode="json")]), args[0], args[5], args[6]))
     studies[0] = agent._verify_alignment(candidate, {"fulltext_path": str(corrected_source)}, {
         "full_text": content, "_source_sha256": hashlib.sha256(content.encode()).hexdigest()}, protocol, project)
     assert alignment_status(project, protocol, studies[0], 0)["status"] == "match"

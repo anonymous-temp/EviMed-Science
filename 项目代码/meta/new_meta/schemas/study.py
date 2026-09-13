@@ -336,13 +336,60 @@ class ExtractionRowVerification(BaseModel):
     trial_units: list[ContributingTrialUnit]
 
 
+class EndpointSourceRange(BaseModel):
+    """Runtime-owned identity of an unchanged catalogue range, never model text."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    catalogue_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    checked_source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    source_id: str = Field(min_length=1, max_length=128)
+    end_source_id: str = Field(min_length=1, max_length=128)
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    start_byte: int = Field(ge=0)
+    end_byte: int = Field(gt=0)
+    text_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class EndpointResultSource(VerificationSource):
+    source_range: EndpointSourceRange | None
+
+
+class EndpointComponentBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    component_index: int = Field(ge=0, strict=True)
+    source_membership: Literal["included_in_selected_endpoint", "absent_from_selected_endpoint",
+                               "belongs_to_other_endpoint", "uncertain"]
+    target_result: EndpointResultSource
+    support: VerificationSource
+    rationale: str = Field(min_length=1, max_length=2000)
+
+
+class ExtractionRowVerificationV3(ExtractionRowVerification):
+    """Explicit endpoint membership; legacy field sets remain byte-compatible."""
+    schema_version: Literal[3]
+    selected_endpoint_result: EndpointResultSource
+    definition_scope: Literal["selected_endpoint", "other_endpoint", "uncertain"]
+    component_bindings: list[EndpointComponentBinding] = Field(max_length=128)
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def strict_schema_version(cls, value):
+        if type(value) is not int:
+            raise ValueError("Endpoint verification schema_version must be an integer")
+        return value
+
+
 class PrimaryAlignmentAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     outcome_index: int = Field(ge=0, strict=True)
     outcome: AlignmentDimension
     population: AlignmentDimension
     contrast: AlignmentDimension
-    verification: ExtractionRowVerification | None = None
+    verification: ExtractionRowVerificationV3 | ExtractionRowVerification | None = None
+
+
+class PrimaryAlignmentAssessmentV3(PrimaryAlignmentAssessment):
+    verification: ExtractionRowVerificationV3
 
 
 class ExtractionReferenceEnvelope(RootModel[dict[str, Any]]):

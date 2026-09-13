@@ -32,6 +32,8 @@ def _record_analysis_set_fixture_alignment(project, protocol, studies):
         from verification_fixture import verification_payload
         for index, outcome in enumerate(study.outcomes):
             assessments[index]["verification"] = verification_payload(outcome, assessments[index], randomized=False)
+        from endpoint_binding_fixture import bind_components
+        assessments = [bind_components(item, source) for item in assessments]
         record_checked_alignments(project, protocol, study, assessments, source_text=source, assessor_id="mock-independent-checker")
     project.save_json("protocol.json", protocol)
     project.save_json("all_extractions.json", studies, subdir="extraction")

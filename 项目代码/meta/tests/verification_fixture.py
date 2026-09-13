@@ -12,7 +12,7 @@ def verification_payload(outcome, assessment, *, numeric_quotes=None, registry_i
         } for field,value in values.items()],
         "endpoint_relation":"equivalent", "source_endpoint_definition":{
             "quote":assessment["outcome"]["quote"],"source_location":assessment["outcome"]["source_location"]},
-        "components":[{"source_component":outcome.outcome_name or "Prespecified endpoint", "protocol_component":"Prespecified endpoint", "relation":"match"}],
+        "components":[{"source_component":assessment["outcome"]["quote"], "protocol_component":"Prespecified endpoint", "relation":"match"}],
         "estimand_relation":"match", "randomized_comparison":True if randomized else None,
         "postrandomization_conditioning":False if randomized else None,"selection_timing":"baseline" if randomized else "not_applicable",
         "conditioning_variables":[],"estimand_support":{

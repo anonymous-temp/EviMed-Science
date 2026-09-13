@@ -5,7 +5,8 @@ import json
 import re
 
 VERSION = 1
-ASSESSOR = "extraction-check-sources-v1"
+OBSERVATION_VERSION = 2
+ASSESSOR = "extraction-check-sources-v2"
 MAX_SPAN_CHARS = 8192
 MAX_SOURCE_CHARS = 128_000
 
@@ -103,10 +104,11 @@ def reference_schema(canonical_schema):
         properties = definition.get("properties", {})
         if "quote" not in properties or "source_location" not in properties: continue
         properties.pop("quote"); properties.pop("source_location")
+        properties.pop("source_range", None)
         properties["source_id"] = {"anyOf": [{"type": "string"}, {"type": "null"}]}
         properties["end_source_id"] = {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}
         definition["required"] = [name for name in definition.get("required", [])
-                                  if name not in {"quote", "source_location"}] + ["source_id"]
+                                  if name not in {"quote", "source_location", "source_range"}] + ["source_id"]
     return schema
 
 
@@ -124,11 +126,17 @@ def _supports(payload):
             if name in row: yield f"{prefix}/{name}", row[name]
         details = row.get("verification")
         if not isinstance(details, dict): continue
-        for name in ("source_endpoint_definition", "estimand_support"):
+        for name in ("source_endpoint_definition", "estimand_support", "selected_endpoint_result"):
             if name in details: yield f"{prefix}/verification/{name}", details[name]
         for name in ("numeric_findings", "conditioning_variables", "trial_units"):
             if isinstance(details.get(name), list):
                 for child, item in enumerate(details[name]): yield f"{prefix}/verification/{name}/{child}", item
+        if isinstance(details.get("component_bindings"), list):
+            for child, binding in enumerate(details["component_bindings"]):
+                if isinstance(binding, dict):
+                    for name in ("target_result", "support"):
+                        if name in binding:
+                            yield f"{prefix}/verification/component_bindings/{child}/{name}", binding[name]
 
 
 def resolve_reference_payload(text, catalogue, payload):
@@ -141,13 +149,15 @@ def resolve_reference_payload(text, catalogue, payload):
     for location, support in _supports(resolved):
         if not isinstance(support, dict): continue
         first, last = support.get("source_id"), support.get("end_source_id")
-        if "source_id" not in support or "quote" in support or "source_location" in support:
+        result_support = location.endswith(("/selected_endpoint_result", "/target_result"))
+        if "source_id" not in support or any(name in support for name in ("quote", "source_location", "source_range")):
             support["source_reference_invalid"] = True
             errors.append({"code": "verification_source_reference_invalid", "path": location})
             continue
         if first is None and last is None:
             support.pop("source_id"); support.pop("end_source_id", None)
             support.update(quote="", source_location="")
+            if result_support: support["source_range"] = None
             continue
         if not isinstance(first, str) or (last is not None and not isinstance(last, str)):
             errors.append({"code": "verification_source_reference_invalid", "path": location}); continue
@@ -163,35 +173,101 @@ def resolve_reference_payload(text, catalogue, payload):
         source_location = begin["source_location"] if first == last else (
             f"{begin['source_location']} through characters {end}")
         support.update(quote=quote, source_location=source_location)
+        if result_support:
+            support["source_range"] = {"catalogue_sha256": _digest(catalogue),
+                "checked_source_sha256": catalogue["checked_source_sha256"],
+                "source_id": first, "end_source_id": last, "start": start, "end": end,
+                "start_byte": begin["start_byte"], "end_byte": finish["end_byte"], "text_sha256": _hash(quote)}
         metadata.append({"path": location, "source_id": first, "end_source_id": last,
             "start": start, "end": end, "start_byte": begin["start_byte"], "end_byte": finish["end_byte"],
             "text_sha256": _hash(quote), "source_location": source_location})
     return resolved, errors, metadata
 
 
-def replay_source_receipt(project, reference, source_text, source_sha, protocol_sha, row_sha, index, assessment):
-    """New proofs require the exact durable provider response and its resolution."""
-    from new_meta.core.primary_analysis_alignment import _read_scoped, digest
+def _read_source_record(project, record):
+    from new_meta.core.primary_analysis_alignment import _read_scoped
     from new_meta.core.llm import parse_source_json
-    from new_meta.agents.data_extraction_agent import ExtractionCheckResult
+    if not isinstance(record, dict) or set(record) != {"path", "sha256"}:
+        raise ValueError("Extraction source record reference is invalid")
+    if (not isinstance(record["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", record["sha256"])
+            or record["path"] not in {f"extraction/verification/{kind}/{record['sha256']}.json"
+                                     for kind in ("raw", "sources", "resolved")}):
+        raise ValueError("Extraction source record path is invalid")
+    data = _read_scoped(project, record["path"], max_bytes=4 * 1024 * 1024)
+    if hashlib.sha256(data).hexdigest() != record["sha256"]:
+        raise ValueError("Extraction source record was changed")
+    return parse_source_json(data.decode("utf-8"))
+
+
+def validate_review_endpoint_sources(project, proof, assessment, source_text):
+    """Human review selects real current ranges too; matching invented IDs is insufficient."""
+    if proof.source_reference is None:
+        from new_meta.schemas.study import ExtractionRowVerificationV3
+        previous = proof.assessment.verification
+        previous_span = previous.selected_endpoint_result.source_range if isinstance(previous, ExtractionRowVerificationV3) else None
+        if previous_span is not None:
+            try:
+                catalogue = _read_source_record(project, {"path":
+                    f"extraction/verification/sources/{previous_span.catalogue_sha256}.json",
+                    "sha256": previous_span.catalogue_sha256})
+            except FileNotFoundError:
+                # Direct quoted contexts predate saved source catalogues. Only
+                # their exactly reproducible default catalogue is compatible.
+                catalogue = source_catalogue(source_text, proof.source_sha256)
+                if _digest(catalogue) != previous_span.catalogue_sha256:
+                    raise ValueError("Review requires the original endpoint source catalogue")
+        else:
+            catalogue = source_catalogue(source_text, proof.source_sha256)
+    else:
+        record = _read_source_record(project, proof.source_reference.model_dump(mode="json"))
+        raw = _read_source_record(project, record["raw_record"])
+        if (raw.get("source_sha256") != proof.source_sha256
+                or raw.get("checked_source_sha256") != proof.checked_source_sha256
+                or raw.get("protocol_sha256") != proof.protocol_sha256
+                or raw.get("row_sha256", {}).get(str(proof.assessment.outcome_index)) != proof.row_sha256):
+            raise ValueError("Review source catalogue belongs to different verified inputs")
+        catalogue = _read_source_record(project, raw["catalogue"])
+    validate_catalogue(source_text, catalogue)
+    if catalogue["source_sha256"] != proof.source_sha256:
+        raise ValueError("Review source catalogue belongs to a different document")
+    details = assessment.verification
+    supports = [details.selected_endpoint_result, *(item.target_result for item in details.component_bindings)]
+    def reference(support):
+        span = support.source_range
+        if span is None:
+            raise ValueError("Review endpoint result has no source identity")
+        return {"source_id": span.source_id, "end_source_id": span.end_source_id}
+    wire = {"primary_analysis_alignment": [{"verification": {
+        "selected_endpoint_result": reference(supports[0]),
+        "component_bindings": [{"target_result": reference(support)} for support in supports[1:]],
+    }}]}
+    resolved, errors, _ = resolve_reference_payload(source_text, catalogue, wire)
+    if errors:
+        raise ValueError("Review endpoint source references are invalid")
+    resolved_details = resolved["primary_analysis_alignment"][0]["verification"]
+    expected = [resolved_details["selected_endpoint_result"],
+                *(item["target_result"] for item in resolved_details["component_bindings"])]
+    if expected != [support.model_dump(mode="json") for support in supports]:
+        raise ValueError("Review endpoint source identity does not match the original catalogue")
+
+
+def replay_source_receipt(project, reference, source_text, source_sha, protocol_sha, row_sha, index, assessment,
+                          *, expected_version=OBSERVATION_VERSION):
+    """New proofs require the exact durable provider response and its resolution."""
+    from new_meta.core.primary_analysis_alignment import digest
+    from new_meta.core.llm import parse_source_json
+    from new_meta.agents.data_extraction_agent import ExtractionCheckResult, LegacyExtractionCheckResult
+    from new_meta.schemas.study import ExtractionRowVerificationV3
     def read(record):
-        if not isinstance(record, dict) or set(record) != {"path", "sha256"}:
-            raise ValueError("Extraction source record reference is invalid")
-        if (not isinstance(record["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", record["sha256"])
-                or record["path"] not in {f"extraction/verification/{kind}/{record['sha256']}.json"
-                                         for kind in ("raw", "sources", "resolved")}):
-            raise ValueError("Extraction source record path is invalid")
-        data = _read_scoped(project, record["path"], max_bytes=4 * 1024 * 1024)
-        if hashlib.sha256(data).hexdigest() != record["sha256"]:
-            raise ValueError("Extraction source record was changed")
-        return parse_source_json(data.decode("utf-8"))
+        return _read_source_record(project, record)
     record = read(reference)
-    if (not isinstance(record, dict) or type(record.get("version")) is not int or record.get("version") != VERSION
+    if (expected_version not in {1, OBSERVATION_VERSION}
+            or not isinstance(record, dict) or type(record.get("version")) is not int or record.get("version") != expected_version
             or "raw_record" not in record or any(error.get("outcome_index") in {None, index}
                 or error.get("code", "").startswith("verification_") for error in record.get("errors", []))):
         raise ValueError("Extraction source resolution is incomplete")
     raw = read(record["raw_record"])
-    if (not isinstance(raw, dict) or type(raw.get("version")) is not int or raw.get("version") != VERSION
+    if (not isinstance(raw, dict) or type(raw.get("version")) is not int or raw.get("version") != expected_version
             or not isinstance(raw.get("raw_response"), dict) or "catalogue" not in raw
             or type(raw["raw_response"].get("provider_response_ordinal")) is not int
             or raw["raw_response"]["provider_response_ordinal"] < 1
@@ -206,8 +282,20 @@ def replay_source_receipt(project, reference, source_text, source_sha, protocol_
     resolved, errors, metadata = resolve_reference_payload(source_text, catalogue, payload)
     if errors or record.get("resolution") != metadata or record.get("resolved_response") != resolved:
         raise ValueError("Extraction source resolution cannot be replayed")
-    checked = ExtractionCheckResult.model_validate(resolved, strict=True)
+    schema = ExtractionCheckResult if expected_version == OBSERVATION_VERSION else LegacyExtractionCheckResult
+    checked = schema.model_validate(resolved, strict=True)
+    if expected_version == 1 and any(isinstance(item.verification, ExtractionRowVerificationV3)
+                                   for item in checked.primary_analysis_alignment):
+        raise ValueError("A current endpoint judgment cannot use a legacy source receipt")
     matches = [item for item in checked.primary_analysis_alignment if item.outcome_index == index]
     if len(matches) != 1 or digest(matches[0].model_dump(mode="json")) != digest(assessment.model_dump(mode="json")):
         raise ValueError("Extraction source response does not reproduce the stored judgment")
+    if expected_version == OBSERVATION_VERSION:
+        from new_meta.core.extraction_verification import endpoint_binding_errors
+        details = matches[0].verification
+        if endpoint_binding_errors(details, source_text) or any(endpoint_binding_errors(details, source_text, component)
+                for component in range(len(details.components))):
+            raise ValueError("Extraction component membership cannot be replayed")
+        if sorted(binding.component_index for binding in details.component_bindings) != list(range(len(details.components))):
+            raise ValueError("Extraction component membership coverage cannot be replayed")
     return record

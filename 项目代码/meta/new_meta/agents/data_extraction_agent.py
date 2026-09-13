@@ -22,20 +22,24 @@ from new_meta.core.denominator_recovery import (
 )
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
 from new_meta.core.rct_design_reconciliation import reconcile_extracted_rct_designs
-from new_meta.schemas.study import ConflictNote, ExtractedStudy, ExtractionDataIssue, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment, ExtractionReferenceEnvelope
+from new_meta.schemas.study import ConflictNote, ExtractedStudy, ExtractionDataIssue, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment, PrimaryAlignmentAssessmentV3, ExtractionReferenceEnvelope
 from new_meta.prompts import extraction_prompts
 from new_meta.agents.pdf_parser import get_page_for_position
 from new_meta.config import LLM_MAX_TOKENS_EXTRACTION, MAX_WORKERS, MAX_CHECK_ROUNDS
 from new_meta.tools.utils import paper_identity, safe_identifier
 
 
-class ExtractionCheckResult(BaseModel):
+class LegacyExtractionCheckResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     score: int = Field(ge=1, le=10)  # Advisory only; never overrides source checks.
     issues: list[str] = Field(default_factory=list, description="Advisory observations only. Every actual row-data defect must be in data_issues; clinical fit belongs in primary_analysis_alignment.")
     data_issues: list[ExtractionDataIssue] = Field(max_length=128, description="Required, possibly empty list of actual defects in the supplied indexed rows only. Never include omitted other study outcomes or clinical mismatch here.")
     suggestions: list[str] = []
     primary_analysis_alignment: list[PrimaryAlignmentAssessment] = []
+
+
+class ExtractionCheckResult(LegacyExtractionCheckResult):
+    primary_analysis_alignment: list[PrimaryAlignmentAssessmentV3] = []
 
 
 class IndexedOutcomeCorrection(BaseModel):
@@ -587,7 +591,7 @@ class DataExtractionAgent(BaseAgent):
                 "source_characters": len(content), "limit": VERIFICATION_SOURCE_CHAR_LIMIT}])
             return extracted
         _write_scoped_once(project, f"{_PROOF_DIR}/{checked_sha}.txt", content.encode())
-        from new_meta.core.extraction_sources import VERSION, source_catalogue, resolve_reference_payload
+        from new_meta.core.extraction_sources import OBSERVATION_VERSION, source_catalogue, resolve_reference_payload
         from new_meta.core.llm import parse_source_json
 
         def write_source_record(kind, payload):
@@ -631,7 +635,7 @@ class DataExtractionAgent(BaseAgent):
                     try:
                         # Commit the actual provider observation before parsing,
                         # resolution, history processing, or any internal retry.
-                        raw_record = write_source_record("raw", {"version": VERSION,
+                        raw_record = write_source_record("raw", {"version": OBSERVATION_VERSION,
                             "verification_id": verification_id, "outcome_indices": batch, "attempt": round_index + 1,
                             "source_sha256": source_sha, "checked_source_sha256": checked_sha,
                             "protocol_sha256": protocol_sha, "row_sha256": {str(key): value for key, value in snapshot.items()},
@@ -671,7 +675,7 @@ class DataExtractionAgent(BaseAgent):
                         # A crash at any later raw/proof write cannot expose the
                         # earlier clean checkpoint as current verification history.
                         persist_observation_pending()
-                        latest_resolution = write_source_record("resolved", {"version": VERSION,
+                        latest_resolution = write_source_record("resolved", {"version": OBSERVATION_VERSION,
                             "raw_record": raw_record, "resolved_response": resolved, "resolution": metadata,
                             "errors": observation_errors, "retained_data_issues": retained,
                             "retained_clinical_judgments": observation["clinical_negatives"]})
