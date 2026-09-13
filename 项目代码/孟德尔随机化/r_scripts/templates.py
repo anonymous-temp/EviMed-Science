@@ -133,43 +133,58 @@ tryCatch({{
 # --- Shared plot generation block (PDF + PNG) ---
 
 _PLOT_BLOCK = """
-pdf(file.path(output_dir, "scatter_plot.pdf"))
-mr_scatter_plot(mr_res, dat)
-dev.off()
-
-png(file.path(output_dir, "scatter_plot.png"), width=8, height=6,
-    units="in", res=300)
-mr_scatter_plot(mr_res, dat)
-dev.off()
-
-pdf(file.path(output_dir, "forest_plot.pdf"))
-res_single <- mr_singlesnp(dat)
-mr_forest_plot(res_single)
-dev.off()
-
-png(file.path(output_dir, "forest_plot.png"), width=8, height=6,
-    units="in", res=300)
-mr_forest_plot(res_single)
-dev.off()
-
-pdf(file.path(output_dir, "funnel_plot.pdf"))
-mr_funnel_plot(res_single)
-dev.off()
-
-png(file.path(output_dir, "funnel_plot.png"), width=8, height=6,
-    units="in", res=300)
-mr_funnel_plot(res_single)
-dev.off()
-
-pdf(file.path(output_dir, "loo_plot.pdf"))
-res_loo <- mr_leaveoneout(dat)
-mr_leaveoneout_plot(res_loo)
-dev.off()
-
-png(file.path(output_dir, "loo_plot.png"), width=8, height=6,
-    units="in", res=300)
-mr_leaveoneout_plot(res_loo)
-dev.off()
+diagnostic_plots <- list()
+render_diagnostic <- function(name, make_plots, minimum_snps) {{
+    old_files <- list.files(output_dir,
+        pattern=paste0("^", name, "(-[0-9][0-9][0-9])?\\\\.(pdf|png)$"), full.names=TRUE)
+    unlink(old_files)
+    if (any(file.exists(old_files))) {{
+        diagnostic_plots[[name]] <<- list(status="failed",
+            reason_code="plot_cleanup_failed", pages=0L)
+        return(invisible(NULL))
+    }}
+    if (sum(dat$mr_keep %in% TRUE) < minimum_snps) {{
+        diagnostic_plots[[name]] <<- list(status="skipped",
+            reason_code="insufficient_instruments", pages=0L)
+        return(invisible(NULL))
+    }}
+    created <- character(0)
+    tryCatch({{
+        plots <- make_plots()
+        if (!is.list(plots) || length(plots) == 0L ||
+            !all(vapply(plots, inherits, logical(1), "ggplot"))) {{
+            stop("The diagnostic did not return drawable plots")
+        }}
+        pdf_path <- file.path(output_dir, paste0(name, ".pdf"))
+        created <- c(created, pdf_path)
+        pdf(pdf_path, width=8, height=6)
+        tryCatch({{
+            for (plot in plots) print(plot)
+        }}, finally=dev.off())
+        for (i in seq_along(plots)) {{
+            suffix <- if (i == 1L) "" else sprintf("-%03d", i)
+            png_path <- file.path(output_dir, paste0(name, suffix, ".png"))
+            created <- c(created, png_path)
+            png(png_path, width=8, height=6, units="in", res=300)
+            tryCatch(print(plots[[i]]), finally=dev.off())
+        }}
+        diagnostic_plots[[name]] <<- list(status="ready", reason_code="",
+            pages=length(plots))
+    }}, error=function(e) {{
+        # Failed renders are diagnostics, never successfully generated figures.
+        unlink(created)
+        diagnostic_plots[[name]] <<- list(status="failed",
+            reason_code="plot_render_failed", pages=0L)
+        cat(sprintf("%s: plot_render_failed\\n", name))
+    }})
+}}
+render_diagnostic("scatter_plot", function() mr_scatter_plot(mr_res, dat), 2L)
+res_single <- tryCatch(mr_singlesnp(dat), error=function(e) NULL)
+render_diagnostic("forest_plot", function() mr_forest_plot(res_single), 2L)
+render_diagnostic("funnel_plot", function() mr_funnel_plot(res_single), 2L)
+render_diagnostic("loo_plot", function() mr_leaveoneout_plot(mr_leaveoneout(dat)), 3L)
+write(toJSON(diagnostic_plots, auto_unbox=TRUE),
+    file.path(output_dir, "diagnostic-plots.json"))
 """
 
 MR_STANDARD_TEMPLATE = """

@@ -76,6 +76,8 @@ class PaperGenerator:
 
     def generate(self) -> dict[str, str]:
         """Generate all paper sections with multi-pass review."""
+        from mr_agent.analysis.delivery import require_report_ready
+        require_report_ready(self.state.analysis_results)
         self.on_progress("收集参考文献...", 0.0)
         refs = self._gather_references()
         self.state.references = refs
@@ -462,6 +464,7 @@ class PaperGenerator:
 
     def _grounded_methods(self, results: list[MRAnalysisResult]) -> str:
         """Return methods that contain only operations and metadata we observed."""
+        from mr_agent.analysis.delivery import diagnostic_plot_checks
         zh = self.language == "zh"
         blocks: list[str] = []
         for index, result in enumerate(results, start=1):
@@ -487,7 +490,7 @@ class PaperGenerator:
                 sensitivity.append("Steiger directionality")
             if result.presso_global_pval is not None or result.presso_n_outliers is not None:
                 sensitivity.append("MR-PRESSO")
-            if result.plots.get("loo_plot_png") or result.plots.get("loo_plot_pdf"):
+            if diagnostic_plot_checks(result)["loo_plot"]["status"] == "ok":
                 sensitivity.append("leave-one-out plot")
             sensitivity_text = ", ".join(sensitivity) or "N/A"
             threshold = f"{result.pval_threshold:.1e}"

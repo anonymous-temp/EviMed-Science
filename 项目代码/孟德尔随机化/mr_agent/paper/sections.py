@@ -107,7 +107,7 @@ def write_methods(
         outcome_id=first.outcome_id,
         pval_threshold=first.pval_threshold,
         n_ivs=first.n_instruments,
-        methods=methods_used or "IVW, MR-Egger, Weighted Median, Simple Mode, Weighted Mode",
+        methods=methods_used or "No completed estimation methods recorded",
         sensitivity=sensitivity,
         exposure_metadata=json.dumps(first.exposure_metadata, ensure_ascii=False),
         outcome_metadata=json.dumps(first.outcome_metadata, ensure_ascii=False),
@@ -194,18 +194,24 @@ def _strip_leading_heading(text: str) -> str:
 
 def _describe_sensitivity(result: MRAnalysisResult) -> str:
     """Describe sensitivity analyses performed."""
-    analyses = ["MR-Egger regression", "Weighted median method"]
+    from mr_agent.analysis.delivery import diagnostic_plot_checks
+    analyses = [item.method for item in result.mr_results if item.method in {
+        "MR Egger", "MR Egger (bootstrap)", "Weighted median", "Penalised weighted median",
+    }]
     if result.heterogeneity:
         analyses.append("Cochran's Q test for heterogeneity")
     if result.pleiotropy:
         analyses.append("MR-Egger intercept test for pleiotropy")
-    analyses.append("Leave-one-out analysis")
-    analyses.append("Funnel plot for asymmetry")
+    plots = diagnostic_plot_checks(result)
+    if plots["loo_plot"]["status"] == "ok":
+        analyses.append("Leave-one-out analysis")
+    if plots["funnel_plot"]["status"] == "ok":
+        analyses.append("Funnel plot for asymmetry")
     if result.steiger_correct is not None:
         analyses.append("Steiger directionality test")
     if result.presso_global_pval is not None:
         analyses.append("MR-PRESSO outlier detection")
-    return ", ".join(analyses)
+    return ", ".join(analyses) or "No completed sensitivity analyses recorded"
 
 
 def _build_results_summary(results: list[MRAnalysisResult]) -> str:

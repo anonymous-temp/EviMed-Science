@@ -158,6 +158,8 @@ def test_release_artifacts_are_copied_and_paths_become_portable(tmp_path: Path):
     (runtime / "paper.docx").write_bytes(b"docx")
     (runtime / "mr_report.pdf").write_bytes(b"pdf")
     result = _result(tmp_path)
+    from delivery_fixture import ready_delivery
+    ready_delivery(result, result.raw_data_path)
     output = tmp_path / "output"
     output.mkdir()
 

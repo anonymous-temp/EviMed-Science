@@ -25,6 +25,7 @@ from evimed_local_inputs import (
     verify_published_inputs,
 )
 from mr_agent.tools.mr_replay import copy_replay_package
+from mr_agent.analysis.delivery import MRDeliveryError, diagnostic_artifact_name, diagnostic_plot_checks, require_interpretations, require_report_ready
 
 # Load environment from .env and deploy.env for API tokens
 load_dotenv(Path(__file__).parent / ".env", override=False)
@@ -67,7 +68,21 @@ def _module_ledger(results: list, bidirectional: bool) -> dict:
     modules = {
         "instrumentSelection": _module("ok"),
         "primaryEstimate": _module("ok"),
+        "interpretation": _module("ok"),
     }
+    try:
+        require_interpretations(results)
+    except MRDeliveryError as error:
+        modules["interpretation"] = _module("failed", error.code, fatal=True)
+    plot_checks = [diagnostic_plot_checks(result) for result in results]
+    failed_plots = any(item["status"] == "failed" for checks in plot_checks for item in checks.values())
+    skipped_plots = any(item["status"] == "skipped" for checks in plot_checks for item in checks.values())
+    modules["diagnosticPlots"] = _module(
+        "failed" if failed_plots else "degraded" if skipped_plots else "ok",
+        "plot_artifact_invalid" if failed_plots else "inapplicable diagnostics are explicitly skipped" if skipped_plots else "",
+        fatal=failed_plots,
+    )
+    modules["diagnosticPlots"]["checks"] = plot_checks
 
     skipped: list[str] = []
     for result in results:
@@ -111,6 +126,10 @@ def _failure_ledger(code: str) -> dict:
         return {"instrumentSelection": _module("failed", "LD clumping failed", fatal=True)}
     if code.startswith("mr_input_"):
         return {"localInputs": _module("failed", code, fatal=True)}
+    if code.startswith("mr_interpretation_"):
+        return {"interpretation": _module("failed", code, fatal=True)}
+    if code == "mr_plot_generation_failed":
+        return {"diagnosticPlots": _module("failed", code, fatal=True)}
     return {"primaryEstimate": _module("failed", code or "analysis produced no result", fatal=True)}
 
 
@@ -268,7 +287,7 @@ def _validate_release(paper: str, results: list) -> None:
                 raise RuntimeError(f"MR paper treated an unavailable {label} as negative")
 
 
-def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]:
+def _copy_release_artifacts(output_dir: Path, state, results: list, *, include_reports: bool = True) -> list[str]:
     """Copy the real analysis package out of the temporary runtime directory.
 
     Only known report/data/figure formats are published.  Paths in the
@@ -277,7 +296,7 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
     """
     copied: list[str] = []
     runtime_dir = Path(state.output_dir).resolve() if state.output_dir else None
-    if runtime_dir and runtime_dir.is_dir():
+    if include_reports and runtime_dir and runtime_dir.is_dir():
         for name in ("paper.docx", "mr_report.pdf", "paper.txt"):
             source = runtime_dir / name
             if source.is_file() and not source.is_symlink() and source.stat().st_size <= 50_000_000:
@@ -292,6 +311,8 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
     allowed_suffixes = {".csv", ".json", ".png", ".pdf"}
     for index, result in enumerate(results, start=1):
         raw = Path(result.raw_data_path).resolve() if result.raw_data_path else None
+        plot_checks = diagnostic_plot_checks(result)
+        published_sources = set()
         pair_name = re.sub(
             r"[^A-Za-z0-9._-]+", "-", f"{index}-{result.exposure_id}-{result.outcome_id}"
         ).strip("-")
@@ -299,6 +320,9 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
         if raw and raw.is_dir():
             target_dir.mkdir(parents=True, exist_ok=True)
             for source in sorted(raw.iterdir()):
+                diagnostic = diagnostic_artifact_name(source)
+                if diagnostic and plot_checks[diagnostic]["status"] != "ok":
+                    continue
                 if (
                     source.is_file()
                     and not source.is_symlink()
@@ -309,6 +333,7 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
                     if source.resolve() != target.resolve():
                         shutil.copy2(source, target)
                     copied.append(target.relative_to(output_dir).as_posix())
+                    published_sources.add(source)
             copied.extend(
                 path.relative_to(output_dir).as_posix()
                 for path in copy_replay_package(raw / "replay", target_dir / "replay")
@@ -318,7 +343,7 @@ def _copy_release_artifacts(output_dir: Path, state, results: list) -> list[str]
         for label, path in result.plots.items():
             source = Path(path)
             target = target_dir / source.name
-            if target.is_file():
+            if source.resolve() in published_sources and target.is_file():
                 rewritten_plots[label] = target.relative_to(output_dir)
         result.plots = rewritten_plots
     return copied
@@ -382,6 +407,24 @@ def run(
             bind_result_provenance(valid_results, provenance, request)
             if repository_metadata:
                 bind_remote_metadata(valid_results, repository_metadata)
+        try:
+            require_report_ready(valid_results)
+        except MRDeliveryError as error:
+            if provenance:
+                verify_published_inputs(request, output_dir, provenance, output_directory_fd=output_directory_fd)
+            modules = _module_ledger(valid_results, agent.state.slots.bidirectional)
+            modules[error.module] = _module("failed", error.code, fatal=True)
+            copied = _copy_release_artifacts(output_dir, agent.state, valid_results, include_reports=False)
+            analysis_path = output_dir / "mendelian-randomization-run.json"
+            analysis_path.write_text(json.dumps(
+                [result.model_dump(mode="json") for result in valid_results], ensure_ascii=False, indent=2,
+            ), encoding="utf-8")
+            _write_result(output_dir, {
+                "status": "failed", "errorCode": error.code, "error": str(error),
+                "modules": modules, "degraded": True, "diagnosticOnly": True,
+                "artifacts": [analysis_path.name, *copied],
+            })
+            return 1
         agent._run_paper_generation()
         paper = _paper_markdown(agent.state.paper_sections, exposure, outcome)
         if len(paper.strip()) < 500:
@@ -393,6 +436,7 @@ def run(
             )
         report_path = output_dir / "mendelian-randomization-report.md"
         report_path.write_text(paper, encoding="utf-8")
+        modules = _module_ledger(valid_results, agent.state.slots.bidirectional)
         copied_artifacts = _copy_release_artifacts(output_dir, agent.state, valid_results)
         if provenance:
             copied_artifacts.extend(
@@ -414,7 +458,6 @@ def run(
             ),
             encoding="utf-8",
         )
-        modules = _module_ledger(valid_results, agent.state.slots.bidirectional)
         _write_result(
             output_dir,
             {
@@ -475,6 +518,7 @@ def finalize_existing(request_path: Path, output_dir: Path) -> int:
                 label: path if Path(path).is_absolute() else (output_dir / Path(path)).resolve()
                 for label, path in result.plots.items()
             }
+        require_report_ready(results)
         generator = PaperGenerator(object(), state, language=str(request.get("outputLanguage") or "zh"))
         sections = _parse_paper_markdown(report_path.read_text(encoding="utf-8"))
         sections = generator._enforce_structured_grounding(sections)
@@ -487,6 +531,7 @@ def finalize_existing(request_path: Path, output_dir: Path) -> int:
             generator.save_paper(state.output_dir)
             generator.save_paper_docx(state.output_dir)
             generate_pdf_report(state, state.output_dir)
+            modules = _module_ledger(results, state.slots.bidirectional)
             copied = _copy_release_artifacts(output_dir, state, results)
         result_path.write_text(
             json.dumps([result.model_dump(mode="json") for result in results], ensure_ascii=False, indent=2),
@@ -501,11 +546,15 @@ def finalize_existing(request_path: Path, output_dir: Path) -> int:
             "report": report_path.name,
             "artifacts": [report_path.name, result_path.name, *copied],
             "refinalized": True,
+            "modules": modules,
+            "degraded": _degraded(modules),
         })
         return 0
     except Exception as error:
         traceback.print_exc()
-        _write_result(output_dir, {"status": "failed", "error": str(error)})
+        code = str(getattr(error, "code", "") or "")
+        _write_result(output_dir, {"status": "failed", "error": str(error),
+            "errorCode": code or "mr_finalize_failed", "modules": _failure_ledger(code), "degraded": True})
         return 1
 
 

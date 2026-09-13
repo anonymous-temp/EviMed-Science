@@ -13,6 +13,7 @@ import pytest
 import evimed_local_inputs as inputs
 import evimed_runner
 from mr_agent.models import DataSourceType, MRAnalysisResult
+from delivery_fixture import ready_delivery
 
 
 def prepared_job(tmp_path, *, remote=False):
@@ -95,6 +96,8 @@ def test_fixed_runner_populates_local_slots_and_releases_honest_metadata(
                         outcome_source_type=DataSourceType.LOCAL_FILE,
                     )
                 )
+            for index, result in enumerate(self.state.analysis_results):
+                ready_delivery(result, tmp_path / f"analysis-{index}")
             return "Fake analysis complete."
 
         def _run_paper_generation(self):
@@ -288,6 +291,7 @@ def test_mixed_runner_gets_remote_metadata_from_the_existing_client(tmp_path, mo
                     outcome_source_type=DataSourceType.OPENGWAS,
                 )
             ]
+            ready_delivery(self.state.analysis_results[0], tmp_path / "analysis")
             return "Fake mixed analysis completed."
 
         def _run_paper_generation(self):

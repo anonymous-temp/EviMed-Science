@@ -589,12 +589,22 @@ def _parse_presso_csv(result: MRAnalysisResult, output_dir: Path) -> None:
 
 def _collect_plots(result: MRAnalysisResult, output_dir: Path) -> None:
     """Collect generated plot paths (PDF and PNG)."""
+    try:
+        ledger = json.loads((output_dir / "diagnostic-plots.json").read_text())
+    except (OSError, ValueError):
+        ledger = {}
     for name in ["scatter_plot", "forest_plot", "funnel_plot", "loo_plot",
                   "summary_forest"]:
-        for ext in [".pdf", ".png"]:
-            plot_path = output_dir / f"{name}{ext}"
-            if plot_path.exists():
-                key = f"{name}{ext.replace('.', '_')}"
+        paths = [output_dir / f"{name}.pdf", output_dir / f"{name}.png"]
+        item = ledger.get(name, {}) if isinstance(ledger, dict) else {}
+        if name != "summary_forest" and isinstance(item, dict) and item.get("status") in {"skipped", "failed"}:
+            continue
+        pages = item.get("pages") if isinstance(item, dict) else None
+        if type(pages) is int and 1 < pages <= 64:
+            paths.extend(output_dir / f"{name}-{index:03d}.png" for index in range(2, pages + 1))
+        for plot_path in paths:
+            if plot_path.is_file():
+                key = f"{plot_path.stem}_{plot_path.suffix[1:]}"
                 result.plots[key] = plot_path
 
 

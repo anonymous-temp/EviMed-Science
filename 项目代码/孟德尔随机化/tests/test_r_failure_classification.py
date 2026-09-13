@@ -194,7 +194,7 @@ def test_a_refused_source_is_a_fatal_ledger_entry(tmp_path):
         assert code.replace("_", " ") or code in entry["reason"] or code in str(modules)
 
 
-def test_skipped_sensitivity_analyses_degrade_without_failing_the_run():
+def test_skipped_sensitivity_analyses_degrade_without_failing_the_run(tmp_path):
     import evimed_runner
     from mr_agent.models import MRAnalysisResult
 
@@ -203,6 +203,8 @@ def test_skipped_sensitivity_analyses_degrade_without_failing_the_run():
         steiger_correct=True,
         skipped_analyses=["radial_mr: RadialMR package not installed"],
     )
+    from delivery_fixture import ready_delivery
+    ready_delivery(result, tmp_path / "analysis")
     modules = evimed_runner._module_ledger([result], bidirectional=False)
     assert modules["sensitivityAnalyses"]["status"] == "degraded"
     assert "RadialMR" in modules["sensitivityAnalyses"]["reason"]
