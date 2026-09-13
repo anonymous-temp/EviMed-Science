@@ -108,6 +108,15 @@ async function rebuildCapsules({ database, jobs, indexing, userIds, failurePolic
   while ([...outcomes.values()].some((outcome) => outcome.status === "pending")) {
     const job = await jobs.claim(["memory-index"], workerId, { leaseMs: CAPSULE_LEASE_MS });
     if (!job) break;
+    // The same renewal the server's worker runs, for the same reason. A capsule
+    // large enough to out-run one lease would otherwise have it expire
+    // mid-rebuild: a second claimer would start over on a subtree this process
+    // is still writing, and the finish would be refused as a lost lease after
+    // the work was done.
+    const renewal = setInterval(() => {
+      void jobs.renew(job.userId, job.id, job.leaseToken, CAPSULE_LEASE_MS).catch(() => {});
+    }, Math.max(1000, Math.floor(CAPSULE_LEASE_MS / 3)));
+    renewal.unref();
     try {
       const finished = await indexing.rebuild(job);
       if (mine.has(job.id)) {
@@ -132,6 +141,8 @@ async function rebuildCapsules({ database, jobs, indexing, userIds, failurePolic
         await jobs.fail(job.userId, job.id, job.leaseToken, { code, message: "Memory index rebuild failed." },
           failurePolicy(code, job.attempts)).catch(() => {});
       }
+    } finally {
+      clearInterval(renewal);
     }
   }
 

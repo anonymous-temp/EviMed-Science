@@ -800,6 +800,43 @@ docker compose --env-file deploy/web/.env \
   --profile tls up -d --no-build --pull never
 ```
 
+### Research memory cutover
+
+A deployment upgrading from the release that ran the separate memory service
+holds its notes and structured records in the `public` schema of the same
+PostgreSQL, and the new schema `evimed_memory` starts empty. Nothing fails when
+this step is skipped, which is the reason it is written down: readiness passes,
+the memory page loads, recall returns nothing, and the only symptom is a
+research assistant that has forgotten every researcher it ever had. Carry the
+memory over as part of the release, not after someone notices.
+
+```bash
+# 1. Read-only rehearsal. It reports counts only — never memory content, a
+#    note, a quote, a key or a connection string.
+pnpm migrate:research-memory --source same --dry-run
+# 2. The import. Reruns are safe: whatever is already carried over wins.
+pnpm migrate:research-memory --source same
+# 3. Publish the imported records to the recall index. Only this backfill needs
+#    running by hand; from here every write publishes itself.
+pnpm rebuild:memory-index --all
+# 4. Only once the counts above are what you expect, remove the retired copy.
+pnpm migrate:research-memory --source same --purge-source
+```
+
+`unmapped` and `quarantined` must both be zero before step 4, and step 4
+refuses while either is not. `unmapped` counts memories whose owner could not be
+resolved to an account — they are left exactly where they are, because a memory
+handed to the wrong account is worse than a memory not carried over — and
+`quarantined` counts rows the new schema refused, each with a reason. Both are
+read and repaired with the deployment's own database tooling before the cutover
+is called done.
+
+Step 4 is what makes account deletion honest again. The retired tables key
+ownership by that service's own user ids and reference nothing in
+`evimed_control`, so until they are emptied every memory exists twice and only
+one of the two copies is reachable by "forget this memory" or by the cascade
+that deletes an account.
+
 The exported release values and `deploy/web/.env` must be identical. In a
 release pipeline, derive both from one immutable release context rather than
 maintaining two independent copies. `pnpm release:manifest` refuses placeholder

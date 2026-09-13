@@ -157,7 +157,14 @@ services:
         # chmod, for the reason above.
         data = pathlib.Path('/data/data')
         data.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chown(data, 10001, 10001)
+        # The directory and everything already in it. A deployment upgrading
+        # from a release that ran this image as root arrives with a volume full
+        # of root-owned index files, and giving away only the directory leaves
+        # every one of them unreadable to the uid that has to read them — an
+        # index that starts, stays healthy and answers nothing.
+        for path in (data, *data.rglob('*')):
+            if os.lstat(path).st_uid != 10001 or os.lstat(path).st_gid != 10001:
+                os.lchown(path, 10001, 10001)
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}

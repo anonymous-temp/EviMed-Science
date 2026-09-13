@@ -6,7 +6,7 @@
  *   node scripts/ops/migrate-research-memory.mjs --source same [--source-schema public]
  *   node scripts/ops/migrate-research-memory.mjs --source postgres://... [--source-schema public]
  *   node scripts/ops/migrate-research-memory.mjs --source sqlite:/path/to/memos_prod.db
- *   ... [--target postgres://...] [--dry-run]
+ *   ... [--target postgres://...] [--dry-run] [--purge-source]
  *
  * In production the source and the target are the same PostgreSQL database:
  * memos ran with `MEMOS_DRIVER: postgres` against a DSN identical to the
@@ -68,11 +68,12 @@ const recordFields = Object.freeze(["memory", "scope", "scopeId", "kind", "key",
 
 /** @param {string[]} argv */
 function parseArguments(argv) {
-  const options = { source: "", sourceSchema: "public", target: "", dryRun: false };
+  const options = { source: "", sourceSchema: "public", target: "", dryRun: false, purgeSource: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const value = argv[index + 1];
     if (argument === "--dry-run") options.dryRun = true;
+    else if (argument === "--purge-source") options.purgeSource = true;
     else if (["--source", "--source-schema", "--target"].includes(argument)) {
       if (!value || value.startsWith("--")) throw new Error(`${argument} needs a value`);
       if (argument === "--source") options.source = value;
@@ -83,6 +84,10 @@ function parseArguments(argv) {
   }
   if (!options.source) throw new Error("give --source same, --source postgres://... or --source sqlite:<path>");
   if (!identifierPattern.test(options.sourceSchema)) throw new Error("--source-schema must be a plain identifier");
+  if (options.purgeSource && options.dryRun) throw new Error("--purge-source and --dry-run ask for opposite things");
+  if (options.purgeSource && options.source !== "same") {
+    throw new Error("--purge-source empties tables in the target database, so it needs --source same");
+  }
   return options;
 }
 
@@ -269,22 +274,40 @@ async function importRecords(database, dryRun, owners, rows) {
     if (!createdAt || !updatedAt) { count(counts, "quarantined", "invalid_timestamps"); continue; }
     const version = Math.max(1, Number(row.version) || 1);
     if (dryRun) {
-      const existing = await database.query(`SELECT 1 FROM evimed_memory.records
-        WHERE user_id=$1 AND (id=$2 OR (scope=$3 AND scope_id=$4 AND kind=$5 AND key=$6)) LIMIT 1`,
-      [userId, id, next.scope, next.scopeId, next.kind, next.key]);
-      count(counts, existing.rowCount ? "alreadyPresent" : "imported");
+      // The two ways a row can already be there are not the same news. The same
+      // id is this memory, carried over by an earlier run. The same canonical
+      // key under a different id is a *different* memory holding the place,
+      // and this one would not be carried over at all.
+      const same = await database.query("SELECT 1 FROM evimed_memory.records WHERE user_id=$1 AND id=$2",
+        [userId, id]);
+      if (same.rowCount) { count(counts, "alreadyPresent"); continue; }
+      const taken = await database.query(`SELECT 1 FROM evimed_memory.records
+        WHERE user_id=$1 AND scope=$2 AND scope_id=$3 AND kind=$4 AND key=$5 LIMIT 1`,
+      [userId, next.scope, next.scopeId, next.kind, next.key]);
+      if (taken.rowCount) count(counts, "quarantined", "canonical_key_taken");
+      else count(counts, "imported");
       continue;
     }
     // Anything already there wins: a rerun after an interrupted import must add
-    // what is missing and touch nothing else.
+    // what is missing and touch nothing else. The conflict target is the id,
+    // not "any constraint": a row whose canonical key is held by a *different*
+    // memory has not been carried over, and counting that as already present
+    // would report the migration complete while one memory stayed behind. It
+    // raises 23505 instead and is quarantined with a reason, which is the only
+    // way anyone finds out.
     const inserted = await database.query(`INSERT INTO evimed_memory.records
       (user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,sensitive,
        evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20)
-      ON CONFLICT DO NOTHING`,
+      ON CONFLICT (user_id,id) DO NOTHING`,
     [userId, id, next.scope, next.scopeId, next.kind, next.key, next.value, next.summary, next.origin, next.status,
       next.confidence, next.importance, next.sensitive, JSON.stringify(evidence), JSON.stringify(revisions),
-      version, createdAt, updatedAt, next.lastConfirmedAt, next.expiresAt]);
+      version, createdAt, updatedAt, next.lastConfirmedAt, next.expiresAt])
+      .catch((/** @type {any} */ error) => {
+        if (error?.code === "23505") return null;
+        throw error;
+      });
+    if (!inserted) { count(counts, "quarantined", "canonical_key_taken"); continue; }
     count(counts, inserted.rowCount ? "imported" : "alreadyPresent");
   }
   return counts;
@@ -333,6 +356,43 @@ async function importNotes(database, dryRun, owners, rows) {
   return counts;
 }
 
+/**
+ * Empty the retired service's tables, once their contents are demonstrably carried over.
+ *
+ * Until this runs, every note and every record exists twice in one database and
+ * only one of the two copies can be forgotten. The retired tables key ownership
+ * by that service's own user ids and reference nothing in `evimed_control`, so
+ * neither "forget this memory" nor the cascade that deletes an account reaches
+ * them. A cutover that stops at the import leaves memory behind that a deleted
+ * account cannot take with it.
+ *
+ * The guard is the import's own tally: a row that could not be attributed to an
+ * account, or that the new schema refused, was not carried over, and emptying
+ * the table would destroy it rather than de-duplicate it.
+ *
+ * Rows, not tables. `memo_share` holds the only foreign key into `memo`, with
+ * ON DELETE CASCADE, so a delete takes its dependants with it where a DROP
+ * would be refused by that same constraint. What is left is an empty retired
+ * schema, which the deployment's own database tooling can remove whenever the
+ * release is accepted.
+ *
+ * @param {any} database @param {string} schema
+ * @param {ReturnType<typeof tally>} records @param {ReturnType<typeof tally>} notes
+ */
+async function purgeSource(database, schema, records, notes) {
+  const stranded = records.unmapped + records.quarantined + notes.unmapped + notes.quarantined;
+  if (stranded > 0) {
+    throw new Error(`refusing to empty the retired tables: ${stranded} rows were not carried over`);
+  }
+  /** @type {Record<string, number>} */
+  const purged = {};
+  for (const table of ["memory_record", "memo"]) {
+    const result = await database.query(`DELETE FROM "${schema}"."${table}"`);
+    purged[table] = Number(result.rowCount ?? 0);
+  }
+  return purged;
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   let targetUrl = options.target;
@@ -362,8 +422,10 @@ async function main() {
     const source = await readSource(options, database);
     const records = await importRecords(database, options.dryRun, namespaceOwners, source.records);
     const notes = await importNotes(database, options.dryRun, tagOwners, source.memos);
+    const purged = options.purgeSource ? await purgeSource(database, options.sourceSchema, records, notes) : null;
     process.stdout.write(`${JSON.stringify({
       ok: true, dryRun: options.dryRun, driver: source.driver, accounts: users.length, records, notes,
+      ...(purged ? { purged } : {}),
     })}\n`);
   } finally { await database.close(); }
 }
