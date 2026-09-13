@@ -7,6 +7,7 @@ import {
 } from "./openVikingClient.mjs";
 import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallPolicy.mjs";
 import { HttpError } from "./security.mjs";
+import { TERMINAL_INDEX_FAILURES } from "./memoryIndexWorker.mjs";
 
 /**
  * The narrow port in front of whatever ranks a recall.
@@ -54,11 +55,48 @@ const CANDIDATE_OVERFETCH = 3;
  *  has not answered in five seconds is not about to. */
 const WRITE_WAIT_SECONDS = 5;
 
+/** The usual constant from the reciprocal-rank-fusion literature: large enough
+ *  that the first few ranks sit close together, small enough that a long tail
+ *  still decays. */
+const RANK_FUSION_K = 60;
+
+/** Merge lists that were scored on different scales.
+ *
+ *  The index answers with cosine similarity, where a good hit is around 0.6 and
+ *  1.0 is unreachable. The note matcher answers with a count of matched query
+ *  terms, where one matched word is 1.0. Sorted together on those numbers, a
+ *  single note mentioning one word of the question displaces every structured
+ *  memory the index found — silently, and only on the provider this stack now
+ *  selects by default. Fusing by rank removes the comparison instead of
+ *  calibrating it: each list is ordered on its own terms, and the best note and
+ *  the best record then compete as equals. */
+function fuseByRank(lists) {
+  const byRecency = (left, right) =>
+    String(right.memo.updatedAt ?? "").localeCompare(String(left.memo.updatedAt ?? ""));
+  const fused = [];
+  for (const list of lists) {
+    [...list]
+      .sort((left, right) => right.score - left.score || byRecency(left, right))
+      .forEach((row, index) => fused.push({ ...row, score: 1 / (RANK_FUSION_K + index + 1) }));
+  }
+  return fused.sort((left, right) => right.score - left.score || byRecency(left, right));
+}
+
 /** The one leaf a record occupies.
  *
  *  A record's identity is its canonical key — scope, scope id, kind, key — and
  *  an update never moves a row between keys, so the path a record was written
  *  to is the path it will be removed from. There is no earlier path to chase. */
+/** The three subtrees a research rebuild owns.
+ *
+ *  Not `memories/evimed` itself: the capsule index lives under it, has its own
+ *  publication ledger and its own rebuild, and a research rebuild that removed
+ *  it would silently un-publish every approved fact. */
+function researchRoots(userId) {
+  const root = `viking://user/${openVikingUserId(userId)}/memories/evimed`;
+  return [`${root}/user`, `${root}/project`, `${root}/session`];
+}
+
 function recordUri(userId, record) {
   return memoryUri(userId, {
     scope: record.scope, scopeId: record.scopeId, kind: record.kind, recordId: record.id,
@@ -195,8 +233,7 @@ export class MemorySubstrate {
     // gain. Records are the machine-extracted many, and the reason for an index.
     const notes = await this.#matchingNotes(userId, query);
 
-    const ranked = [...structured, ...notes].sort((left, right) =>
-      right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt)));
+    const ranked = fuseByRank([structured, notes]);
     return selectWithinBudget(await this.#reranked(query, ranked), {
       contextLimit: this.contextLimit,
       contextMaxChars: this.contextMaxChars,
@@ -317,8 +354,18 @@ export class MemorySubstrate {
    * index is mostly empty where a second run would have finished the job.
    */
   async rebuild(userId) {
-    if (!this.active) return { written: 0, skipped: 0, failed: 0 };
+    if (!this.active) return { written: 0, skipped: 0, failed: 0, removed: 0 };
     const records = await this.store.listAllRecords(userId);
+    // Empty first, then republish. Writing over what is there would make this
+    // command converge only downwards: a copy whose record was deleted while
+    // the index was unreachable has no event left to remove it and no row to
+    // find it from, and one stranded by an expiry never had an event at all.
+    // Starting from nothing is the only way a rebuild can be the answer to
+    // "the index and the store disagree" rather than half of it.
+    let removed = 0;
+    for (const root of researchRoots(userId)) {
+      if (await this.openViking.remove(userId, root, { recursive: true })) removed += 1;
+    }
     const now = Date.now();
     let written = 0;
     let skipped = 0;
@@ -345,7 +392,25 @@ export class MemorySubstrate {
     }
     // The count and the last code go back to the caller rather than into state:
     // a rebuild has exactly one caller, and it is the thing that reports.
-    return { written, skipped, failed, ...(failureCode ? { code: failureCode } : {}) };
+    return { written, skipped, failed, removed, ...(failureCode ? { code: failureCode } : {}) };
+  }
+
+  /**
+   * Re-arm index jobs that failed for a reason that may have passed.
+   *
+   * Ten attempts spread over about five minutes of backoff, which an ordinary
+   * restart of the index outruns. Without this, a job that lost that race stays
+   * `failed` for ever and its record's copy is wrong until somebody runs the
+   * rebuild — and for a *deleted* record, "wrong" means the index still holds
+   * the text the researcher asked to be forgotten. The capsule half has had
+   * this since it was written; the record half now has it too.
+   *
+   * Only the codes the retry policy calls terminal are left alone: a payload
+   * that could not name a path will not name one on the tenth retry either.
+   */
+  async reconcileRecords(limit = 25) {
+    if (!this.active || !this.jobs) return 0;
+    return this.jobs.rearm("memory-record-index", { limit, terminalCodes: TERMINAL_INDEX_FAILURES });
   }
 
   /**

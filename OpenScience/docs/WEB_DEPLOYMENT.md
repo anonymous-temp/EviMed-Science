@@ -810,28 +810,38 @@ the memory page loads, recall returns nothing, and the only symptom is a
 research assistant that has forgotten every researcher it ever had. Carry the
 memory over as part of the release, not after someone notices.
 
+Run all three inside the API container. The database and the index publish no
+ports and answer only to their Compose network aliases, and the host has
+neither; the container has both, plus the two secret files these scripts read.
+
 ```bash
+cutover() { docker compose --env-file deploy/web/.env -f deploy/web/docker-compose.yml \
+  exec -T open-science-web node "$@"; }
+
 # 1. Read-only rehearsal. It reports counts only — never memory content, a
 #    note, a quote, a key or a connection string.
-pnpm migrate:research-memory --source same --dry-run
-# 2. The import. Reruns are safe: whatever is already carried over wins.
-pnpm migrate:research-memory --source same
-# 3. Publish the imported records to the recall index. Only this backfill needs
+cutover scripts/ops/migrate-research-memory.mjs --source same --dry-run
+# 2. The import, and the removal of the retired copy, in one run. One run
+#    rather than two: a second import would re-insert anything a researcher
+#    deleted between them, and resurrecting a deleted memory is worse than
+#    carrying none. It imports first and empties the retired tables only if
+#    nothing was left behind.
+cutover scripts/ops/migrate-research-memory.mjs --source same --purge-source
+# 3. Publish the carried records to the recall index. Only this backfill needs
 #    running by hand; from here every write publishes itself.
-pnpm rebuild:memory-index --all
-# 4. Only once the counts above are what you expect, remove the retired copy.
-pnpm migrate:research-memory --source same --purge-source
+cutover scripts/ops/rebuild-memory-index.mjs --all
 ```
 
-`unmapped` and `quarantined` must both be zero before step 4, and step 4
-refuses while either is not. `unmapped` counts memories whose owner could not be
+`unmapped` and `quarantined` must both be zero for step 2 to empty anything,
+and it refuses while either is not — repair them from the rehearsal's report
+and run step 2 again. `unmapped` counts memories whose owner could not be
 resolved to an account — they are left exactly where they are, because a memory
 handed to the wrong account is worse than a memory not carried over — and
 `quarantined` counts rows the new schema refused, each with a reason. Both are
 read and repaired with the deployment's own database tooling before the cutover
 is called done.
 
-Step 4 is what makes account deletion honest again. The retired tables key
+Emptying the retired tables is what makes account deletion honest again. The retired tables key
 ownership by that service's own user ids and reference nothing in
 `evimed_control`, so until they are emptied every memory exists twice and only
 one of the two copies is reachable by "forget this memory" or by the cascade

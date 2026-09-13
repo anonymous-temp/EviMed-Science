@@ -525,6 +525,24 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * Take the account row first, when this write will also enqueue.
+   *
+   * The outbox row references `evimed_control.users`, so inserting it takes a
+   * FOR KEY SHARE on that row — at the end of a transaction that already holds
+   * the memory row. Account deletion locks the same user row FOR UPDATE and
+   * then cascades into the memory rows, so without this the two acquire the
+   * pair in opposite orders and PostgreSQL aborts one of them: either the
+   * memory write answers 503, or the deletion fails after it has begun.
+   * Reproduced as a real 40P01 before this line existed.
+   *
+   * @param {any} client @param {string} owner
+   */
+  async #lockOwnerForOutbox(client, owner) {
+    if (!this.jobs) return;
+    await client.query("SELECT 1 FROM evimed_control.users WHERE id=$1 FOR KEY SHARE", [owner]);
+  }
+
+  /**
    * Tell the derived index that one record changed, in the writer's own transaction.
    *
    * A transactional outbox rather than a call after the commit: a write that
@@ -639,6 +657,7 @@ export class ResearchMemoryStore {
     const providedId = input?.id == null || input.id === "" ? null : assertRecordId(input.id);
 
     return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
       // Two writers extracting from two runs of the same conversation reach
       // this line at the same instant. The lock is on the canonical key rather
       // than the table, so unrelated memories still write in parallel, and it
@@ -711,6 +730,7 @@ export class ResearchMemoryStore {
     const owner = assertUserId(userId);
     const recordId = assertRecordId(id);
     return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
       const result = await client.query(`DELETE FROM evimed_memory.records
         WHERE user_id=$1 AND id=$2 RETURNING id,scope,scope_id,kind`, [owner, recordId]);
       if (result.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
@@ -930,9 +950,25 @@ export class ResearchMemoryStore {
     return { version: 1, records, manualMemos: [...current, ...archived] };
   }
 
+  /** What an account's memory amounts to, without deleting any of it.
+   *
+   *  Account deletion reports these counts and lets the foreign key cascade do
+   *  the deleting, inside the transaction that can still fail. Deleting them
+   *  first only to name them in an audit line would mean a deletion that failed
+   *  halfway had already destroyed the memory of an account that still exists.
+   *  @param {string} userId */
+  async countUserMemory(userId) {
+    const owner = assertUserId(userId);
+    const result = await this.#query(`SELECT
+      (SELECT count(*)::integer FROM evimed_memory.records WHERE user_id=$1) AS structured,
+      (SELECT count(*)::integer FROM evimed_memory.notes WHERE user_id=$1) AS manual`, [owner]);
+    return { structured: result.rows[0].structured, manual: result.rows[0].manual };
+  }
+
   /** Hard deletion of everything one account holds, with the counts the
-   *  deletion audit records. The foreign key would do this on its own when the
-   *  user row goes; this runs first so the audit can say how much there was.
+   *  deletion audit records. Account deletion no longer calls it — the cascade
+   *  does that work inside the transaction that can fail — and the export and
+   *  the tests still do.
    *  @param {string} userId */
   async purgeUserMemory(userId) {
     const owner = assertUserId(userId);

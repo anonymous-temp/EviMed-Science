@@ -2983,8 +2983,13 @@ export function createWebApiApp(overrides = {}) {
         // researcher whose memory is gone because a component that holds no
         // original data was unreachable for a moment.
         await memorySubstrate.forgetUser(user.id);
+        // Counted, not deleted. The memory tables reference the account with ON
+        // DELETE CASCADE, so `store.deleteUser` below removes them inside the
+        // transaction that can still fail — where deleting them here would mean
+        // a deletion that failed halfway had already destroyed the memory of an
+        // account that still exists.
         const memoryPurge = researchMemory.configured
-          ? await researchMemory.purgeUserMemory(user.id)
+          ? await researchMemory.countUserMemory(user.id)
           : { structured: 0, manual: 0 };
         let memoryIndexPurge = null;
         const data = await store.deleteUser(user, {
@@ -3076,6 +3081,14 @@ export function createWebApiApp(overrides = {}) {
           // the reverse order answers 500 with the memory already destroyed.
           await memorySubstrate.forgetProject(user.id, project.id);
           if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
+          // Again, now that the rows are gone. Between the removal above and
+          // the delete, a queued index job for one of those records still finds
+          // its row and republishes the copy; a second pass removes what that
+          // window let back in. Not awaited for the request's verdict: the
+          // deletion the researcher asked for has happened by this line, and a
+          // derived copy that survives holds no original data and goes with the
+          // next rebuild, so failing here would report a deletion that did.
+          await memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
           const data = await store.deleteProject(user, projectId);
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
@@ -4623,6 +4636,26 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       labels: { check, code: result.ok ? "ok" : result.code ?? "check_failed" },
     })),
   );
+  // The index answers its own health endpoint from its own process, so "up"
+  // says nothing about whether it can embed. A wrong model id, a revoked key or
+  // a vector of the wrong width fails every write while `/health` keeps saying
+  // ok: readiness stays green, the deployment pays for an index and gets term
+  // matching, and the only trace is a field of the readiness body that nothing
+  // scrapes. These two scrape it. The alternative on offer was
+  // `MEMORY_INDEX_STRICT`, which turns a ranking outage into a product outage.
+  const memoryIndex = readiness.checks.memoryIndex ?? {};
+  addMetric(lines, "open_science_memory_index_writing",
+    "Whether the recall index accepted the work last given to it (0 when the index worker's last job failed).",
+    "gauge", {
+      value: memoryIndex.worker?.lastError ? 0 : 1,
+      labels: { provider: String(memoryIndex.provider ?? "builtin"), code: String(memoryIndex.worker?.lastError ?? "ok") },
+    });
+  addMetric(lines, "open_science_memory_recall_degraded",
+    "Whether a recall last had to fall back to the term matcher because the index could not answer.",
+    "gauge", {
+      value: memoryIndex.recall?.lastError ? 1 : 0,
+      labels: { code: String(memoryIndex.recall?.lastError ?? "none") },
+    });
   addMetric(lines, "open_science_process_uptime_seconds", "EviMed Web API process uptime.", "gauge", {
     value: process.uptime(),
   });
@@ -5053,6 +5086,10 @@ async function readinessMemoryIndex(config, substrate, worker) {
     ...(status.code ? { code: status.code } : {}),
     ...(worker ? { worker: worker.status() } : {}),
     ...(rerank ? { rerank } : {}),
+    // Whether recall has had to answer without the index. It is the one symptom
+    // of "up but refusing" that the reader of a recall can observe, and it was
+    // computed and then kept to itself.
+    ...(substrate?.lastError ? { recall: { lastError: substrate.lastError } } : {}),
   };
   if (required && !(status.configured && status.connected)) {
     throw readinessFailure(status.code ?? "memory_index_unavailable", details);

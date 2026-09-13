@@ -552,6 +552,28 @@ test("worker stops retrying a job whose input the index will refuse again", asyn
   }
 });
 
+// Both halves can be left behind by the same outage, so both are reconciled.
+// The capsule ledger re-arms from what it published; the record half re-arms
+// the jobs its writers enqueued. A reconcile that drove only one of them would
+// leave a deleted memory's copy in the index with nothing left to remove it.
+test("the reconcile drives both halves of the index, not only the one it started with", async () => {
+  const ran = [];
+  const indexing = { async reconcile() { ran.push("capsules"); return 1; } };
+  const substrate = { async reconcileRecords() { ran.push("records"); return 2; } };
+  const worker = new MemoryIndexWorker({ jobs: {}, indexing, substrate, pollMs: 60_000, reconcileMs: 60_000 });
+  await worker.reconcile();
+  assert.deepEqual(ran.sort(), ["capsules", "records"]);
+});
+
+test("a worker with no substrate still reconciles the half it has", async () => {
+  const ran = [];
+  const indexing = { async reconcile() { ran.push("capsules"); return 1; } };
+  const worker = new MemoryIndexWorker({ jobs: {}, indexing, pollMs: 60_000, reconcileMs: 60_000 });
+  await worker.reconcile();
+  assert.deepEqual(ran, ["capsules"]);
+  assert.equal(worker.status().lastError, null);
+});
+
 test("worker refuses invalid timer configuration before it can create a busy loop", () => {
   assert.throws(() => new MemoryIndexWorker({ jobs: {}, indexing: {}, pollMs: 0 }), /Invalid memory index poll interval/);
   assert.throws(() => new MemoryIndexWorker({ jobs: {}, indexing: {}, leaseMs: 500 }), /Invalid memory index lease interval/);

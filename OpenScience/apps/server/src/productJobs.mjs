@@ -41,6 +41,33 @@ export class ProductJobs {
     return job(result.rows[0]);
   }
 
+  /**
+   * Put failed jobs of one kind back in the queue, oldest first.
+   *
+   * A worker's retry policy gives up after `max_attempts`; that is the right
+   * answer for one outage and the wrong one for a component that was down
+   * longer than the budget. Re-arming is safe exactly when the job is
+   * idempotent — these read the current row and write what it says — and is
+   * never applied to the codes the policy calls terminal, which will refuse the
+   * same input again.
+   *
+   * @param {string} kind @param {{limit?:number,terminalCodes?:readonly string[]}} options
+   * @returns {Promise<number>} how many were re-armed
+   */
+  async rearm(kind, { limit = 25, terminalCodes = [] } = {}) {
+    productInteger(limit, 1, 1000);
+    await migrateProductStore(this.database);
+    const result = await this.database.query(`UPDATE evimed_product.jobs SET status='queued',attempts=0,error=NULL,
+        finished_at=NULL,worker_id=NULL,lease_token=NULL,lease_expires_at=NULL,
+        run_after=clock_timestamp(),updated_at=clock_timestamp()
+      WHERE id IN (
+        SELECT id FROM evimed_product.jobs
+        WHERE kind=$1 AND status='failed' AND COALESCE(error->>'code','') <> ALL($2::text[])
+        ORDER BY updated_at, id LIMIT $3)
+      RETURNING id`, [productKind(kind, PRODUCT_JOB_KINDS), [...terminalCodes], limit]);
+    return result.rowCount ?? 0;
+  }
+
   /** @param {string} userId @param {string} id */
   async get(userId, id) {
     await migrateProductStore(this.database);
