@@ -307,3 +307,46 @@ def test_dual_disagreement_preserves_original_exclusion_and_inclusion():
     assert len(rows) == 1 and rows[0]["decision"] == "include"
     assert rows[0]["full_text_review_required"] is True
     assert [r["screening_attempts"][0]["response"] for r in rows[0]["reviewer_decisions"]] == [first, second]
+
+
+@pytest.mark.parametrize("path", ["single", "temperature", "dual", "batch"])
+def test_every_ta_path_supplies_the_exact_identity_item_schema(path):
+    import json
+    from new_meta.schemas.screening import PublicationIdentityCheck
+    _row, prompts = execute(path, response())
+    schema = PublicationIdentityCheck.model_json_schema()
+    assert set(schema["required"]) == {"identifier_type", "requirement", "identifiers", "protocol_criterion"}
+    rendered = json.dumps(schema, ensure_ascii=False)
+    assert prompts and all(rendered in prompt for prompt in prompts)
+
+
+@pytest.mark.parametrize("observation_index", [0, 1, 2])
+@pytest.mark.parametrize("path", ["single", "temperature", "dual", "batch"])
+def test_observed_requirement_aliases_remain_unvalidated_and_unchanged(observation_index, path):
+    import hashlib
+    import json
+    from pathlib import Path
+    fixture = json.loads((Path(__file__).parent / "fixtures/ta_identity_requirement_observations.json").read_text())
+    observation = fixture["observations"][observation_index]
+    raw = observation["raw_response"]
+    before = deepcopy(raw)
+    assert hashlib.sha256(json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest() == observation["raw_response_sha256"]
+    assert all("requirement" not in item for item in raw["publication_identity_checks"])
+    row, _ = execute(path, raw, paper=observation["paper"], scoped=ResearchProtocol.model_validate(fixture["protocol"]))
+    assert row["decision"] == "include" and row["priority_tier"] == "uncertain"
+    assert row["full_text_review_required"] is True
+    attempts = row["reviewer_decisions"][0]["screening_attempts"] if path == "dual" else row["screening_attempts"]
+    assert attempts[0]["response"] == before == raw
+    assert ".requirement" in attempts[0]["validation_error"]
+    if path == "batch": assert row["batch_screening_observations"] == [before]
+
+
+@pytest.mark.parametrize("path", ["single", "temperature", "dual", "batch"])
+def test_exact_requirement_field_keeps_a_legitimate_identity_exclusion(path):
+    paper = {**PAPER, "pmid": "33333333", "doi": "10.9999/other"}
+    payload = response(paper, decision="exclude", priority_tier="indirect", reason_code="publication_identity",
+        reason="This publication is outside the explicitly permitted publication IDs.", exclusion_criterion=CRITERION)
+    row, _ = execute(path, payload, paper=paper)
+    assert row["decision"] == "exclude"
+    assert not row.get("full_text_review_required", False)
+    assert payload["publication_identity_checks"][0]["requirement"] == "any_of"

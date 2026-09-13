@@ -1,0 +1,232 @@
+{
+  "source_job_id": "meta-20260913222940-1cbc3a3d201d",
+  "protocol": {
+    "research_question": "In randomized adults with type 2 diabetes and albuminuric chronic kidney disease (excluding maintenance dialysis or transplantation at baseline), what is the effect of canagliflozin 100 mg daily versus matching placebo on the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (excluding cardiovascular death)? Prespecified bounded replication using only the main reports PMID 30990260 and PMID 35861630; this is not an exhaustive systematic review of SGLT2 inhibitors.",
+    "pico": {
+      "population": "Randomized adults with type 2 diabetes and albuminuric chronic kidney disease; exclude maintenance dialysis or kidney transplantation at baseline.",
+      "intervention": "Canagliflozin 100 mg daily",
+      "comparator": "Matching placebo",
+      "outcome_primary": "Renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death; exclude cardiovascular death.",
+      "outcomes_secondary": []
+    },
+    "study_design": "parallel_rct",
+    "study_designs": [
+      "parallel_rct"
+    ],
+    "inclusion_criteria": [
+      "Main report of a randomized controlled trial identified by PMID 30990260 or PMID 35861630.",
+      "Randomized adults (≥18 years) with type 2 diabetes and albuminuric chronic kidney disease.",
+      "Randomized to canagliflozin 100 mg daily or matching placebo.",
+      "Reports the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death, with cardiovascular death excluded.",
+      "Reports exactly one overall randomized-cohort hazard ratio (HR) with a directly reported 95% confidence interval for the primary composite outcome.",
+      "Adjustment retained only if based on legitimate baseline covariates; mediator-adjusted or postrandomization-selected models are excluded.",
+      "Effect estimate must be bound to its source publication (PMID) and trial registration number.",
+      "Reported P values, if used, must be preserved as bounded inequalities; exact P values will not be invented or used for precision calculation."
+    ],
+    "exclusion_criteria": [
+      "Maintenance dialysis or kidney transplantation at baseline.",
+      "Secondary publications, post hoc reports, or analyses not representing the overall randomized cohort.",
+      "Mediator-adjusted models or models with postrandomization-selected covariates.",
+      "Any composite outcome that includes cardiovascular death.",
+      "Analyses reporting only a P value without a directly reported 95% confidence interval for the HR; exact P values will not be used to derive precision.",
+      "Any study other than the two specified main reports (PMID 30990260 and PMID 35861630).",
+      "If the source or estimand cannot be verified, the precise limitation will be reported and no effect will be invented or substituted."
+    ],
+    "databases": [
+      "Internal literature database",
+      "PubMed"
+    ],
+    "date_range": "Not applicable (bounded to two prespecified main reports)",
+    "language": "No language restriction",
+    "effect_measure": "HR",
+    "model_preference": "fixed",
+    "tau_estimator": "Not applicable (fixed-effect inverse-variance for two-trial bounded synthesis; no between-study variance estimated)",
+    "subgroup_variables": [],
+    "review_family": "intervention_rct",
+    "primary_outcome_type": "time_to_event",
+    "protocol_version": "1.0",
+    "interventions": [
+      "canagliflozin 100 mg daily"
+    ],
+    "analysis_type": "pairwise"
+  },
+  "observations": [
+    {
+      "paper": {
+        "pmid": "41735586",
+        "doi": "10.1007/s00125-026-06682-w",
+        "trial_registration": "",
+        "title": "Canagliflozin attenuates CMR-quantified myocardial fibrosis in individuals with type 2 diabetes mellitus at high cardiovascular risk: a randomised open-label controlled trial.",
+        "abstract": "Aims/hypothesis We aimed to investigate canagliflozin’s effects on myocardial fibrosis, cardiac structure and function, and microcirculation in high-cardiovascular-risk type 2 diabetes mellitus through cardiac magnetic resonance (CMR) quantification, while investigating the cardiovascular protective mechanisms of sodium–glucose cotransporter 2 (SGLT2) inhibitors. Methods This open-label parallel RCT recruited 45 high-risk participants (18–75 years) with type 2 diabetes (HbA1c 53.0–91.3 mmol/mol [7.0–10.5%]) and left ventricular ejection fraction (LVEF) >50% from the Endocrinology Outpatient Clinic of Zhongshan Hospital, Fudan University (August 2022 to November 2024). Participants were 1:1 randomised via a computer-generated sequence through the centralised iClinicalStation system (allocation concealed, performed by independent personnel not involved in outcome assessment). They received canagliflozin 100 mg/day (n=23) or sitagliptin 100 mg/day (n=22) for 26 weeks. Consistent with the open-label design, participants and care providers were aware of treatment assignments; however, outcome assessors (radiologists, sonographers) and data analysts remained blinded to group allocation to minimise bias. The primary endpoint was CMR-quantified extracellular volume (ECV) change. Secondary outcomes included ventricular structure and function parameters, for example, left ventricular end-diastolic volume, left ventricular end-diastolic diameter, LVEF, etc. Results Among 67 individuals screened, 45 completed the intention-to-treat analysis (age 60.4 ± 9.7 years, BMI 26.4 ± 2.6 kg/m2, HbA1c 63.0 ± 8.7 mmol/mol [7.9 ± 0.8%]). At 26 weeks, compared with sitagliptin, canagliflozin significantly reduced the primary outcome of ECV (adjusted mean difference [AMD]: −3.67%; 95% CI −5.33, −2.01; p<0.001). Significant improvements were also observed in cardiac structure, including left ventricular end-diastolic volume (AMD: −20.72 ml; 95% CI −36.30, −5.14; p=0.010) and echocardiography-derived end-diastolic diameter (AMD: −2.82 mm; 95% CI −4.95, −0.70; p=0.010). Both groups showed comparable reductions in HbA1c (both Δ 0.7%, inter-group p=0.972). Conclusions/interpretation This study demonstrates that 26 weeks of canagliflozin significantly reduces myocardial fibrosis, as assessed by CMR-derived ECV, in individuals with type 2 diabetes at high cardiovascular risk, providing imaging evidence for SGLT2 inhibitor cardiovascular protection mechanisms. Trial registration ClinicalTrials.gov NCT05367063 Funding This study was financially supported by the National Key Research and Development programme (2023YFA1802000), the National Natural Science Foundation of China (Youth Fund 82200909), the Young and Middle-aged Diabetes project from the Bethune Foundation (Z04JKM2022E002), the Joint Research Development project between Shenkang and United Imaging on Clinical Research and Translation (SKLY2022CRT201), the Shanghai Municipal ‘Explorer plan’ (the second batch) project in 2024 (24TS1411000) and the Shanghai pujiang programme (21PJD012). Graphical Abstract Supplementary Information The online version contains peer-reviewed but unedited supplementary material available at 10.1007/s00125-026-06682-w."
+      },
+      "raw_response": {
+        "source_identity": {
+          "record_id": "41735586",
+          "pmid": "41735586",
+          "doi": "10.1007/s00125-026-06682-w",
+          "trial_registration": ""
+        },
+        "decision": "exclude",
+        "priority_tier": "indirect",
+        "reason_code": "publication_identity",
+        "reason": "This is a randomized open-label CMR imaging trial of canagliflozin 100 mg/day versus sitagliptin 100 mg/day in 45 high-cardiovascular-risk T2D patients; PMID 41735586 is not one of the two prespecified main reports (30990260 or 35861630). It also mismatches the protocol on comparator (sitagliptin, not matching placebo), population (not albuminuric CKD), and outcome (myocardial fibrosis/ECV, not the renal-specific composite).",
+        "exclusion_criterion": "Any study other than the two specified main reports (PMID 30990260 and PMID 35861630).",
+        "confidence": "high",
+        "publication_role": "adjacent_outcome_trial",
+        "target_outcome_evidence": "not_mentioned",
+        "outcome_evidence_quote": null,
+        "publication_identity_checks": [
+          {
+            "protocol_criterion": "In randomized adults with type 2 diabetes and albuminuric chronic kidney disease (excluding maintenance dialysis or transplantation at baseline), what is the effect of canagliflozin 100 mg daily versus matching placebo on the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (excluding cardiovascular death)? Prespecified bounded replication using only the main reports PMID 30990260 and PMID 35861630; this is not an exhaustive systematic review of SGLT2 inhibitors.",
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "match_type": "any_of",
+            "satisfied": false,
+            "rationale": "Supplied PMID 41735586 does not equal 30990260 or 35861630; the review is bounded to these two main reports."
+          },
+          {
+            "protocol_criterion": "Main report of a randomized controlled trial identified by PMID 30990260 or PMID 35861630.",
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "match_type": "any_of",
+            "satisfied": false,
+            "rationale": "PMID 41735586 is not the main report of either permitted trial."
+          },
+          {
+            "protocol_criterion": "Any study other than the two specified main reports (PMID 30990260 and PMID 35861630).",
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "match_type": "any_of",
+            "satisfied": false,
+            "rationale": "Only the two main reports are permitted; this record (PMID 41735586) falls outside that set and is therefore excluded."
+          }
+        ]
+      },
+      "raw_response_sha256": "13f4c5caf16d2c902ad29d011f3465806380df9e07e1511e161d6b33903fa334"
+    },
+    {
+      "paper": {
+        "pmid": "25495002",
+        "doi": "",
+        "trial_registration": "",
+        "title": "Cost efficiency of canagliflozin versus sitagliptin for type 2 diabetes mellitus.",
+        "abstract": "OBJECTIVES: To compare 1-year clinical outcomes and cost efficiency of treating adults with type 2 diabetes mellitus (T2DM) with canagliflozin (300 mg/day) or sitagliptin (100 mg/day), both added on a background of metformin and sulfonylurea. STUDY DESIGN: An economic model integrated data from an active-controlled, randomized trial, claims database analyses, and published literature. METHODS: The model adopted a US managed care payer perspective and included the clinical and economic impact of achieving specific clinical quality goals. The model was run separately for 2 single clinical quality metrics, glycated hemoglobin (A1C) < 7% (used as base case) or < 8%, and 4 composite metrics (A1C < 7% or < 8% combined with body mass index < 30 kg/m2 and blood pressure < 140/90 mm Hg or low-density lipoprotein cholesterol < 100 mg/dL). Cost savings of achieving versus not achieving metrics were derived from a claims database analysis. Drug and adverse event costs were included. RESULTS: In the base case, compared with sitagliptin 100 mg, treatment with canagliflozin 300 mg resulted in $215 in annual cost savings and 12.3 absolute percentage points more patients achieving goal. Similar findings were found across all other quality metrics (difference in proportion achieving goal ranging from 6.7% to 19.0% and annual savings ranging from $1 to $669). Canagliflozin remained cost saving versus sitagliptin in sensitivity analyses. CONCLUSIONS: Canagliflozin 300 mg may represent a cost-efficient T2DM treatment option versus sitagliptin 100 mg for patients on metformin plus sulfonylurea due to lower overall costs and better achievement of A1C and quality composite goals."
+      },
+      "raw_response": {
+        "source_identity": {
+          "record_id": "25495002",
+          "pmid": "25495002",
+          "doi": "",
+          "trial_registration": ""
+        },
+        "decision": "exclude",
+        "priority_tier": "indirect",
+        "reason_code": "publication_identity",
+        "reason": "PMID 25495002 is not one of the two protocol-specified main reports (PMID 30990260 or PMID 35861630), and the protocol excludes any study other than those two. Substantively it is also ineligible: an economic model of canagliflozin 300 mg versus sitagliptin 100 mg, with neither the target intervention dose (canagliflozin 100 mg), the comparator (matching placebo), the population (albuminuric CKD), nor the renal composite outcome.",
+        "exclusion_criterion": "Any study other than the two specified main reports (PMID 30990260 and PMID 35861630).",
+        "confidence": "high",
+        "publication_role": "other",
+        "target_outcome_evidence": "not_mentioned",
+        "outcome_evidence_quote": null,
+        "publication_identity_checks": [
+          {
+            "protocol_criterion": "In randomized adults with type 2 diabetes and albuminuric chronic kidney disease (excluding maintenance dialysis or transplantation at baseline), what is the effect of canagliflozin 100 mg daily versus matching placebo on the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (excluding cardiovascular death)? Prespecified bounded replication using only the main reports PMID 30990260 and PMID 35861630; this is not an exhaustive systematic review of SGLT2 inhibitors.",
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "check": "any_of"
+          },
+          {
+            "protocol_criterion": "Main report of a randomized controlled trial identified by PMID 30990260 or PMID 35861630.",
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "check": "any_of"
+          },
+          {
+            "protocol_criterion": "Any study other than the two specified main reports (PMID 30990260 and PMID 35861630).",
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "check": "any_of"
+          }
+        ]
+      },
+      "raw_response_sha256": "1d0936ddec709b07f93d70e5ae8387ff44ff54a399f6d456b28513924cb8bed8"
+    },
+    {
+      "paper": {
+        "pmid": "30990260",
+        "doi": "10.1056/NEJMoa1811744",
+        "trial_registration": "",
+        "title": "Canagliflozin and Renal Outcomes in Type 2 Diabetes and Nephropathy.",
+        "abstract": "BACKGROUND\nType 2 diabetes mellitus is the leading cause of kidney failure worldwide, but few effective long-term treatments are available. In cardiovascular trials of inhibitors of sodium-glucose cotransporter 2 (SGLT2), exploratory results have suggested that such drugs may improve renal outcomes in patients with type 2 diabetes.\n\n\nMETHODS\nIn this double-blind, randomized trial, we assigned patients with type 2 diabetes and albuminuric chronic kidney disease to receive canagliflozin, an oral SGLT2 inhibitor, at a dose of 100 mg daily or placebo. All the patients had an estimated glomerular filtration rate (GFR) of 30 to <90 ml per minute per 1.73 m2 of body-surface area and albuminuria (ratio of albumin [mg] to creatinine [g], >300 to 5000) and were treated with renin-angiotensin system blockade. The primary outcome was a composite of end-stage kidney disease (dialysis, transplantation, or a sustained estimated GFR of <15 ml per minute per 1.73 m2), a doubling of the serum creatinine level, or death from renal or cardiovascular causes. Prespecified secondary outcomes were tested hierarchically.\n\n\nRESULTS\nThe trial was stopped early after a planned interim analysis on the recommendation of the data and safety monitoring committee. At that time, 4401 patients had undergone randomization, with a median follow-up of 2.62 years. The relative risk of the primary outcome was 30% lower in the canagliflozin group than in the placebo group, with event rates of 43.2 and 61.2 per 1000 patient-years, respectively (hazard ratio, 0.70; 95% confidence interval [CI], 0.59 to 0.82; P = 0.00001). The relative risk of the renal-specific composite of end-stage kidney disease, a doubling of the creatinine level, or death from renal causes was lower by 34% (hazard ratio, 0.66; 95% CI, 0.53 to 0.81; P<0.001), and the relative risk of end-stage kidney disease was lower by 32% (hazard ratio, 0.68; 95% CI, 0.54 to 0.86; P = 0.002). The canagliflozin group also had a lower risk of cardiovascular death, myocardial infarction, or stroke (hazard ratio, 0.80; 95% CI, 0.67 to 0.95; P = 0.01) and hospitalization for heart failure (hazard ratio, 0.61; 95% CI, 0.47 to 0.80; P<0.001). There were no significant differences in rates of amputation or fracture.\n\n\nCONCLUSIONS\nIn patients with type 2 diabetes and kidney disease, the risk of kidney failure and cardiovascular events was lower in the canagliflozin group than in the placebo group at a median follow-up of 2.62 years. (Funded by Janssen Research and Development; CREDENCE ClinicalTrials.gov number, NCT02065791.)."
+      },
+      "raw_response": {
+        "source_identity": {
+          "record_id": "30990260",
+          "pmid": "30990260",
+          "doi": "10.1056/NEJMoa1811744",
+          "trial_registration": ""
+        },
+        "decision": "include",
+        "priority_tier": "direct",
+        "reason_code": "eligible",
+        "reason": "PMID 30990260 is one of the two prespecified main reports (CREDENCE, NCT02065791). Double-blind randomized trial of canagliflozin 100 mg daily versus placebo in adults with type 2 diabetes and albuminuric chronic kidney disease (eGFR 30 to <90, albuminuria >300 to 5000 mg/g, on RAS blockade). The abstract explicitly reports the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (excluding cardiovascular death): HR 0.66 (95% CI 0.53 to 0.81; P<0.001), with a directly reported confidence interval.",
+        "exclusion_criterion": null,
+        "confidence": "high",
+        "publication_role": "primary_publication",
+        "target_outcome_evidence": "reported",
+        "outcome_evidence_quote": "The relative risk of the renal-specific composite of end-stage kidney disease, a doubling of the creatinine level, or death from renal causes was lower by 34% (hazard ratio, 0.66; 95% CI, 0.53 to 0.81; P<0.001)",
+        "publication_identity_checks": [
+          {
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "protocol_criterion": "In randomized adults with type 2 diabetes and albuminuric chronic kidney disease (excluding maintenance dialysis or transplantation at baseline), what is the effect of canagliflozin 100 mg daily versus matching placebo on the renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (excluding cardiovascular death)? Prespecified bounded replication using only the main reports PMID 30990260 and PMID 35861630; this is not an exhaustive systematic review of SGLT2 inhibitors.",
+            "check": "any_of",
+            "matched": true
+          },
+          {
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "protocol_criterion": "Main report of a randomized controlled trial identified by PMID 30990260 or PMID 35861630.",
+            "check": "any_of",
+            "matched": true
+          },
+          {
+            "identifier_type": "pmid",
+            "identifiers": [
+              "30990260",
+              "35861630"
+            ],
+            "protocol_criterion": "Any study other than the two specified main reports (PMID 30990260 and PMID 35861630).",
+            "check": "none_of",
+            "matched": false
+          }
+        ]
+      },
+      "raw_response_sha256": "f6b209482d2cd26a36805d1fa5e7439d3b7b92e59386d5adf44032cec9fa420d"
+    }
+  ]
+}

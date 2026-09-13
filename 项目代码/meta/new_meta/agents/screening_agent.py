@@ -12,7 +12,7 @@ from new_meta.core.known_source_recovery import TRIAL_PUBLICATION_IDS, known_sou
 from new_meta.core.project import Project
 from new_meta.core.extraction_status import IncompletePhaseError, persist_incomplete_phase
 from new_meta.schemas.protocol import ResearchProtocol
-from new_meta.schemas.screening import FullTextScreeningDecision, TitleAbstractScreeningDecision
+from new_meta.schemas.screening import FullTextScreeningDecision, TitleAbstractScreeningDecision, PublicationIdentityCheck
 from new_meta.schemas.phase_result import ExecutionStatus, NextAction, PhaseIssue, PhaseName, PhaseResult
 from new_meta.prompts import screening_prompts
 from new_meta.config import MAX_WORKERS, BATCH_SCREENING_THRESHOLD
@@ -327,6 +327,7 @@ class ScreeningAgent(BaseAgent):
             "inclusion_criteria": "\n".join(f"  - {c}" for c in protocol.inclusion_criteria),
             "exclusion_criteria": "\n".join(f"  - {c}" for c in protocol.exclusion_criteria),
             "publication_identity_inventory": json.dumps(self._publication_identity_inventory(protocol), ensure_ascii=False),
+            "publication_identity_check_schema": json.dumps(PublicationIdentityCheck.model_json_schema(), ensure_ascii=False),
         }
 
     @classmethod
