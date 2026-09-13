@@ -265,7 +265,7 @@ def test_extraction_prompt_receives_exact_prespecified_result_scope(tmp_path, mo
     prompts = []
     def extract(prompt, schema, _identity):
         prompts.append(prompt)
-        return OutcomeList(outcomes=fixture.outcomes) if schema is OutcomeList else fixture.characteristics
+        return OutcomeList(outcomes=[item.model_dump(mode="json") for item in fixture.outcomes]) if schema is OutcomeList else fixture.characteristics
     monkeypatch.setattr(agent, "_extract_with_retry", extract)
     agent._extract_single({"pmid": "trial-paper"}, {"full_text": SOURCE}, current,
                           Project("scope extraction", output_dir=tmp_path))
@@ -642,7 +642,7 @@ def test_numeric_refinement_cannot_erase_preserved_conflict_notes(monkeypatch):
     candidate=study(); candidate.outcomes[0].conflicts=[ConflictNote(field="hr_ci_upper",message="Source disagreement",observed_values={"abstract":.78,"results":1.02})]
     correction=candidate.outcomes[0].model_copy(deep=True); correction.conflicts=[]; correction.hr_ci_upper=1.02
     agent=DataExtractionAgent()
-    monkeypatch.setattr(agent,"call_llm_structured",lambda *args,**kwargs:ExtractionRefinement(outcomes=[{"outcome_index":0,"outcome":correction}]))
+    monkeypatch.setattr(agent,"call_llm_structured",lambda *args,**kwargs:ExtractionRefinement(outcomes=[{"outcome_index":0,"outcome":correction.model_dump(mode="json")}]))
     refined=agent._refine_extraction(SOURCE,candidate,ExtractionCheckResult(data_issues=[], score=9),protocol(),[0],[])
     assert refined.outcomes[0].hr_ci_upper==1.02 and refined.outcomes[0].conflicts==candidate.outcomes[0].conflicts
 

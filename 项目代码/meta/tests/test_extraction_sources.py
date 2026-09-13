@@ -145,7 +145,7 @@ def test_new_proofs_replay_bound_observations_and_never_downgrade(tmp_path, monk
     from test_extraction_verification import protocol
     project, result, _, _ = run_provider(tmp_path, monkeypatch, [json.dumps(payload())])
     proof = result.outcomes[0].primary_analysis_alignment
-    assert proof.assessor == "extraction-check-sources-v2"
+    assert proof.assessor == "extraction-check-sources-v3"
     assert alignment_status(project, protocol(), result, 0)["status"] == "match"
     reference = proof.source_reference.model_dump(mode="json")
     receipt = json.loads((project.base_dir / reference["path"]).read_text())

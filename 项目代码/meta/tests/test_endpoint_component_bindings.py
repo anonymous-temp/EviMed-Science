@@ -157,7 +157,7 @@ def test_repeated_text_at_different_positions_is_a_different_target():
     last = next(item for item in catalogue["sources"] if item["end"] == repeated_start + len(old["quote"]))
     target.update(source_id=first["source_id"], end_source_id=last["source_id"])
     resolved, errors, _ = resolve_reference_payload(text, catalogue, wire)
-    assert errors == []
+    assert any(item["code"] == "verification_component_target_mismatch" for item in errors)
     parsed = PrimaryAlignmentAssessment.model_validate(resolved["primary_analysis_alignment"][0], strict=True)
     assert any(item["code"] == "verification_component_target_mismatch"
                for item in validate_check_batch(study(), [0], [parsed], text, protocol()))
@@ -222,8 +222,9 @@ def test_component_target_identity_cannot_be_replaced(damage):
                for item in validate_check_batch(study(), [0], [parsed], SOURCE, protocol()))
 
 
+@pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize("negative", [False, True])
-def test_legacy_source_receipt_replays_without_rewriting_history(tmp_path, negative):
+def test_legacy_source_receipt_replays_without_rewriting_history(tmp_path, negative, version):
     import json
     from new_meta.core.project import Project
     from new_meta.core.primary_analysis_alignment import (_record_proof, _write_scoped_once,
@@ -231,12 +232,12 @@ def test_legacy_source_receipt_replays_without_rewriting_history(tmp_path, negat
     from new_meta.core.extraction_sources import source_catalogue, resolve_reference_payload
     from extraction_source_fixture import wire_payload
     project = Project("legacy source receipt", output_dir=tmp_path)
-    candidate = study(); row = legacy_row()
+    candidate = study(); row = legacy_row() if version == 1 else bound_row()
     if negative: row["verification"]["components"][0]["relation"] = "extra"
     source_sha = hashlib.sha256(SOURCE.encode()).hexdigest()
     catalogue = source_catalogue(SOURCE, source_sha)
-    wire = wire_payload({"score": 9, "data_issues": [], "primary_analysis_alignment": [row]}, SOURCE, catalogue)
-    resolved, errors, metadata = resolve_reference_payload(SOURCE, catalogue, wire)
+    wire = wire_payload({"score": 9, "data_issues": [], "primary_analysis_alignment": [row]}, SOURCE, catalogue, wire_version=version)
+    resolved, errors, metadata = resolve_reference_payload(SOURCE, catalogue, wire, wire_version=version)
     assert not errors
     def store(kind, value):
         encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
@@ -244,21 +245,21 @@ def test_legacy_source_receipt_replays_without_rewriting_history(tmp_path, negat
         path = f"extraction/verification/{kind}/{sha}.json"
         _write_scoped_once(project, path, encoded)
         return {"path": path, "sha256": sha}
-    raw_record = store("raw", {"version": 1, "verification_id": "legacy-synthetic",
+    raw_record = store("raw", {"version": version, "verification_id": "legacy-synthetic",
         "outcome_indices": [0], "attempt": 1, "source_sha256": source_sha, "checked_source_sha256": source_sha,
         "protocol_sha256": protocol_fingerprint(protocol()), "row_sha256": {"0": row_fingerprint(candidate, 0)},
         "catalogue": store("sources", catalogue), "raw_response": {"content": json.dumps(wire),
             "finish_reason": "stop", "provider_response_ordinal": 1}})
-    reference = store("resolved", {"version": 1, "raw_record": raw_record, "resolved_response": resolved,
+    reference = store("resolved", {"version": version, "raw_record": raw_record, "resolved_response": resolved,
         "resolution": metadata, "errors": [], "retained_data_issues": [], "retained_clinical_judgments": []})
     assessment = PrimaryAlignmentAssessment.model_validate(resolved["primary_analysis_alignment"][0], strict=True)
     proof = _record_proof(project, protocol(), candidate, 0, assessment,
-        source_text=SOURCE, source_path=None, assessor="extraction-check-sources-v1", issue_history=([], True),
+        source_text=SOURCE, source_path=None, assessor=f"extraction-check-sources-v{version}", issue_history=([], True),
         source_reference=reference)
     before = {str(path): path.read_bytes() for path in project.base_dir.rglob("*.json")}
     result = alignment_status(project, protocol(), candidate, 0)
-    assert result["status"] == ("mismatch" if negative else "unknown")
-    if not negative: assert result["reason"] == "endpoint_membership_recheck_required"
+    assert result["status"] == ("mismatch" if negative else "unknown" if version == 1 else "match")
+    if not negative and version == 1: assert result["reason"] == "endpoint_membership_recheck_required"
     assert before == {str(path): path.read_bytes() for path in project.base_dir.rglob("*.json")}
     assert candidate.outcomes[0].primary_analysis_alignment.proof_id == proof.proof_id
 

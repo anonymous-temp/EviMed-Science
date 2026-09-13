@@ -1,0 +1,20 @@
+{
+  "source_job_id": "meta-20260913225707-fc95dc56c87a",
+  "resolved_receipt_sha256": "58f35e5af6bde1f991ab4a455f5669bf3d05df1ba4e9133e4993fd9d9eb850ef",
+  "component": {
+    "protocol_component": "Doubling of serum creatinine",
+    "relation": "match",
+    "source_component": "Doubling of serum creatinine level"
+  },
+  "support": {
+    "quote": "doubling of the serum creatinine level, or renal",
+    "source_location": "Page 5; characters 19598:19646"
+  },
+  "errors": [
+    {
+      "code": "verification_component_label_not_anchored",
+      "component_index": 1,
+      "outcome_index": 0
+    }
+  ]
+}

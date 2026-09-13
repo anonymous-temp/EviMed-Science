@@ -227,7 +227,7 @@ def test_reextraction_preserves_prior_source_conflict_origin(tmp_path, monkeypat
     project, candidate = pending(tmp_path, monkeypatch, conflict=True)
     origin = candidate.outcomes[0].primary_analysis_alignment.unresolved_data_issues[0]
     fresh = study()
-    responses = iter([fresh.characteristics, OutcomeList(outcomes=fresh.outcomes)])
+    responses = iter([fresh.characteristics, OutcomeList(outcomes=[item.model_dump(mode="json") for item in fresh.outcomes])])
     agent = DataExtractionAgent()
     monkeypatch.setattr(agent, "_extract_with_retry", lambda *_args: next(responses))
     result = agent._extract_single({"pmid": "trial-paper"}, {"full_text": SOURCE}, protocol(), project)
