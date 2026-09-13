@@ -10,7 +10,7 @@ export const PRODUCT_KINDS = Object.freeze([
   // be on trial in one project and absent from another at the same instant.
   "method-trial",
 ]);
-export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "plugin-apply"]);
+export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply"]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -169,6 +169,22 @@ BEGIN
   END IF;
 END $migration$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-06-plugin-apply-v1') ON CONFLICT DO NOTHING;
+DO $migration$
+BEGIN
+  -- The research-memory outbox. A kind the CHECK does not list is refused by
+  -- the database, so this has to reach an existing deployment before the first
+  -- memory is written there, not when somebody next recreates the table.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_product' AND t.relname='jobs' AND c.conname='product_jobs_kind_check'
+      AND pg_get_constraintdef(c.oid) LIKE '%memory-record-index%'
+  ) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $migration$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-13-memory-record-index-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.plugin_prompt_admissions (
   id text PRIMARY KEY,
   user_id text NOT NULL,

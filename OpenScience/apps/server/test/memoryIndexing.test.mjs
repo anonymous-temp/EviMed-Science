@@ -507,6 +507,37 @@ test("worker uses ProductJobs leases and retries a bounded failed index job", as
   assert.equal(calls[1][4].message, "Memory indexing failed.");
 });
 
+// One worker, two producers. The capsule half publishes approved facts; the
+// record half carries one research memory. They are dispatched by the kind the
+// queue leased, never by inspecting a payload, so a capsule job can never be
+// handed to the component that indexes records and call it a bad payload.
+test("the worker leases both halves of the index and gives each to the component that owns it", async () => {
+  const claimed = [
+    { id: "job-capsule", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-index", payload: { capsuleId: "c" } },
+    { id: "job-record", userId: "owner", leaseToken: "lease", attempts: 0, kind: "memory-record-index", payload: { recordId: "r" } },
+  ];
+  const asked = [];
+  const jobs = {
+    async claim(kinds) { asked.push(kinds); return claimed.shift() ?? null; },
+    async renew() { return true; },
+  };
+  const ran = [];
+  const indexing = { async rebuild(job) { ran.push(["capsule", job.id]); return { status: "published" }; }, async reconcile() {} };
+  const substrate = { async indexRecord(job) { ran.push(["record", job.id]); return { status: "indexed" }; } };
+  const worker = new MemoryIndexWorker({ jobs, indexing, substrate, pollMs: 60_000, reconcileMs: 60_000 });
+
+  assert.deepEqual(worker.kinds, ["memory-index", "memory-record-index"]);
+  await worker.tick();
+  await worker.tick();
+  assert.deepEqual(ran, [["capsule", "job-capsule"], ["record", "job-record"]]);
+  assert.deepEqual(asked[0], ["memory-index", "memory-record-index"]);
+});
+
+test("a worker with no substrate does not lease the work it could not run", () => {
+  const worker = new MemoryIndexWorker({ jobs: {}, indexing: {}, pollMs: 60_000, reconcileMs: 60_000 });
+  assert.deepEqual(worker.kinds, ["memory-index"]);
+});
+
 test("worker stops retrying a job whose input the index will refuse again", async () => {
   const calls = [];
   const jobs = {

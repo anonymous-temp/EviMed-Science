@@ -6,6 +6,7 @@ import {
   recallTargets,
 } from "./openVikingClient.mjs";
 import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { HttpError } from "./security.mjs";
 
 /**
  * The narrow port in front of whatever ranks a recall.
@@ -29,6 +30,19 @@ import { recallContent, searchTokens, selectWithinBudget } from "./memoryRecallP
  *  OpenViking context database's hierarchical retrieval. */
 export const MEMORY_INDEX_PROVIDERS = Object.freeze(["builtin", "openviking"]);
 
+/** Which provider a configuration selects, with an unknown name read as the
+ *  builtin one.
+ *
+ *  Exported because two components have to agree on the answer and are built
+ *  apart: the substrate that reads the index, and the store that enqueues the
+ *  writes into it. A store that enqueued on a `builtin` deployment would queue
+ *  work no worker claims; one that did not enqueue on an `openviking` one would
+ *  leave the index empty, which is the same defect seen from the other side. */
+export function selectedMemoryIndexProvider(config) {
+  const requested = String(config?.memoryIndexProvider ?? "builtin");
+  return MEMORY_INDEX_PROVIDERS.includes(requested) ? requested : "builtin";
+}
+
 /** How many candidates to ask the index for, relative to what the budget will
  *  admit. Over-fetching costs one larger response and gives the budget room to
  *  drop a hit whose record has been deleted, is sensitive, or has expired,
@@ -40,17 +54,39 @@ const CANDIDATE_OVERFETCH = 3;
  *  has not answered in five seconds is not about to. */
 const WRITE_WAIT_SECONDS = 5;
 
+/** The one leaf a record occupies.
+ *
+ *  A record's identity is its canonical key — scope, scope id, kind, key — and
+ *  an update never moves a row between keys, so the path a record was written
+ *  to is the path it will be removed from. There is no earlier path to chase. */
+function recordUri(userId, record) {
+  return memoryUri(userId, {
+    scope: record.scope, scopeId: record.scopeId, kind: record.kind, recordId: record.id,
+  });
+}
+
+/** What the index may hold a copy of, and the text of that copy.
+ *
+ *  One function because the incremental write and the rebuild have to agree:
+ *  a record either has a derived copy or does not, and two answers to that
+ *  would mean the state of the index depended on which path last touched it. */
+function publishableContent(record, now) {
+  if (!record || record.status !== "active" || record.sensitive) return "";
+  if (record.expiresAt && Date.parse(record.expiresAt) <= now) return "";
+  return recallContent(record) || "";
+}
+
 export class MemorySubstrate {
   /**
    * @param {any} config
-   * @param {{ store?: any, openViking?: any, rerank?: any }} dependencies
+   * @param {{ store?: any, openViking?: any, rerank?: any, jobs?: any }} dependencies
    */
-  constructor(config, { store = null, openViking = null, rerank = null } = {}) {
-    const requested = String(config.memoryIndexProvider ?? "builtin");
-    this.provider = MEMORY_INDEX_PROVIDERS.includes(requested) ? requested : "builtin";
+  constructor(config, { store = null, openViking = null, rerank = null, jobs = null } = {}) {
+    this.provider = selectedMemoryIndexProvider(config);
     this.store = store;
     this.openViking = openViking;
     this.rerank = rerank;
+    this.jobs = jobs;
     this.contextLimit = Math.max(0, Math.min(20, Number(config.memoryContextLimit ?? 8)));
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config.memoryContextMaxChars ?? 20_000)));
     // A derived index is an optimisation. When it is down, a run that would
@@ -211,6 +247,63 @@ export class MemorySubstrate {
   }
 
   /**
+   * Bring one record's derived copy up to date. The incremental half of the index.
+   *
+   * `rebuild` converges a whole account and is what an operator runs; this is
+   * what keeps the index true between those runs. Without it a deployment that
+   * selects this provider would index a record only when somebody remembered to
+   * run that command, and every memory extracted afterwards would be invisible
+   * to recall — which reads to a researcher as the model having forgotten,
+   * not as an index being behind.
+   *
+   * The job names the record; the record's current row decides what happens to
+   * the leaf. A row that is gone, archived, superseded, sensitive, expired or
+   * empty is removed rather than written, so "stop remembering this" reaches
+   * the copy as well as the original.
+   *
+   * @param {{userId:string,id:string,leaseToken:string,payload:any}} job
+   */
+  async indexRecord(job) {
+    if (!this.jobs) {
+      throw new HttpError(503, "memory_index_queue_missing", "Indexing one record requires the product job queue.");
+    }
+    const payload = job?.payload ?? {};
+    const recordId = typeof payload.recordId === "string" ? payload.recordId : "";
+    const descriptor = {
+      scope: payload.scope, scopeId: payload.scopeId ?? "", kind: payload.memoryKind, recordId,
+    };
+    if (!recordId || typeof descriptor.scope !== "string" || typeof descriptor.kind !== "string") {
+      throw new HttpError(400, "memory_index_job_invalid", "Memory record index job payload is invalid.");
+    }
+    // The job outlived the provider that enqueued it. There is nothing to
+    // write, and retrying would only burn attempts against a component this
+    // deployment has since switched off.
+    if (!this.active) {
+      return this.jobs.finish(job.userId, job.id, job.leaseToken, { status: "index_disabled", recordId });
+    }
+    const record = await this.store.getRecord(job.userId, recordId).catch((error) => {
+      if (error?.code === "memory_not_found") return null;
+      throw error;
+    });
+    const content = publishableContent(record, Date.now());
+    if (!content) {
+      // Addressed from the job, not from the row: when the row is gone it can
+      // no longer say where its copy was written. The path is stable, so the
+      // job's copy of it is the path the write used.
+      await this.openViking.remove(job.userId, memoryUri(job.userId, descriptor), { recursive: false });
+      return this.jobs.finish(job.userId, job.id, job.leaseToken,
+        { status: record ? "withheld" : "removed", recordId });
+    }
+    // `wait: true` for the reason the rebuild waits: a write that returns
+    // before the vector exists reports work that has not finished, and here
+    // that report is what marks the job done.
+    await this.openViking.write(job.userId, recordUri(job.userId, record), content,
+      { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+    return this.jobs.finish(job.userId, job.id, job.leaseToken,
+      { status: "indexed", recordId, version: record.version });
+  }
+
+  /**
    * Rewrite one user's whole index from the store.
    *
    * The index holds nothing of its own, so this is always safe to run and
@@ -233,14 +326,7 @@ export class MemorySubstrate {
     /** @type {string|null} */
     let failureCode = null;
     for (const record of records) {
-      const publishable = record.status === "active"
-        && !record.sensitive
-        && (!record.expiresAt || Date.parse(record.expiresAt) > now);
-      if (!publishable) {
-        skipped += 1;
-        continue;
-      }
-      const content = recallContent(record);
+      const content = publishableContent(record, now);
       if (!content) {
         skipped += 1;
         continue;
@@ -249,12 +335,8 @@ export class MemorySubstrate {
         // `wait: true`: the caller of a rebuild is an operator or a script that
         // reports having rebuilt the index, and a write that returns before the
         // vector exists makes that report false for a while nobody can measure.
-        await this.openViking.write(userId, memoryUri(userId, {
-          scope: record.scope,
-          scopeId: record.scopeId,
-          kind: record.kind,
-          recordId: record.id,
-        }), content, { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+        await this.openViking.write(userId, recordUri(userId, record), content,
+          { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
         written += 1;
       } catch (error) {
         failed += 1;

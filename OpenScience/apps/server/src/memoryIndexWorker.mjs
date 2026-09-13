@@ -26,10 +26,18 @@ export function memoryIndexFailurePolicy(code, attempts) {
   };
 }
 
-/** Durable ProductJobs drive indexing; timers only wake the next lease claim. */
+/** Durable ProductJobs drive indexing; timers only wake the next lease claim.
+ *
+ * Two producers, one worker. `memory-index` republishes a capsule's approved
+ * facts; `memory-record-index` carries one research-memory record. They share a
+ * worker because they share an index, a lease policy and a retry policy, and
+ * because a second worker would be a second thing to compose, configure and
+ * forget to compose — which is how the record half came to have no writer at
+ * all while the capsule half had one.
+ */
 export class MemoryIndexWorker {
-  /** @param {{jobs:any,indexing:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, indexing, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
+  /** @param {{jobs:any,indexing:any,substrate?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, indexing, substrate = null, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
     /** @type {[string,number,number][]} */
     const intervals = [["poll", pollMs, 100], ["lease", leaseMs, 1000], ["reconcile", reconcileMs, 1000]];
     for (const [name, value, minimum] of intervals) {
@@ -39,10 +47,14 @@ export class MemoryIndexWorker {
     }
     this.jobs = jobs;
     this.indexing = indexing;
+    this.substrate = substrate;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
-    this.kinds = ["memory-index"];
+    // Claim only what this worker can run. Without a substrate the record half
+    // is not composed, and claiming its jobs would lease work nothing here can
+    // do — worse than leaving them queued, which at least stays visible.
+    this.kinds = substrate ? ["memory-index", "memory-record-index"] : ["memory-index"];
     this.workerId = `memory-index-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
@@ -82,7 +94,9 @@ export class MemoryIndexWorker {
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     try {
-      const result = await this.indexing.rebuild(job);
+      const result = job.kind === "memory-record-index"
+        ? await this.substrate.indexRecord(job)
+        : await this.indexing.rebuild(job);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return result;
