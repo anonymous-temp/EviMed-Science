@@ -10,6 +10,7 @@ import {
   MEMORY_STATUSES,
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
+import { migrateProductStore } from "./productPersistence.mjs";
 
 /**
  * Research memory — structured records and manual notes — on the control-plane
@@ -467,9 +468,18 @@ const recordColumns = "user_id,id,scope,scope_id,kind,key,value,summary,origin,s
   + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at";
 
 export class ResearchMemoryStore {
-  /** @param {any} config @param {{ database?: any }} options */
-  constructor(config, { database = null } = {}) {
+  /**
+   * `jobs` is the derived index's outbox, and it is handed over only when
+   * something will claim from it — the same rule the feedback ledger follows
+   * for its distillation queue. A store given the queue on a deployment whose
+   * recall provider is `builtin` would enqueue one job per memory for a worker
+   * that is never composed.
+   *
+   * @param {any} config @param {{ database?: any, jobs?: any }} options
+   */
+  constructor(config, { database = null, jobs = null } = {}) {
     this.database = database ?? null;
+    this.jobs = jobs ?? null;
     this.contextLimit = Math.max(0, Math.min(20, Number(config?.memoryContextLimit ?? 8)));
     this.contextMaxChars = Math.max(0, Math.min(100_000, Number(config?.memoryContextMaxChars ?? 20_000)));
   }
@@ -503,10 +513,38 @@ export class ResearchMemoryStore {
     this.#assertConfigured();
     try {
       await migrateResearchMemory(this.database);
+      // The outbox row goes into `evimed_product.jobs` inside the same
+      // transaction as the memory it describes, so that table has to exist
+      // before the transaction opens; inside one there is no second connection
+      // to run DDL on. Memoised per database, so this costs one lookup.
+      if (this.jobs) await migrateProductStore(this.database);
       return await this.database.transaction(operation);
     } catch (error) {
       throw memoryDatabaseError(error);
     }
+  }
+
+  /**
+   * Tell the derived index that one record changed, in the writer's own transaction.
+   *
+   * A transactional outbox rather than a call after the commit: a write that
+   * succeeds and an index that never hears about it is exactly the state that
+   * makes a recall answer from memory the researcher has already corrected.
+   * Rolling the queue row back with the write is the other half — a job naming
+   * a version that was never committed would write the wrong text.
+   *
+   * The job is the *event*, so its key is fresh every time rather than derived
+   * from the record and its version. Those repeat: delete a memory and create
+   * another under the same id and the pair is back at version 1, and a key that
+   * collided there would silently drop the write that re-publishes it.
+   *
+   * @param {any} client @param {string} owner @param {{scope:string,scopeId:string,kind:string,id:string}} record
+   */
+  async #enqueueRecordIndex(client, owner, record) {
+    if (!this.jobs) return;
+    await this.jobs.enqueue(owner, "memory-record-index", {
+      recordId: record.id, scope: record.scope, scopeId: record.scopeId, memoryKind: record.kind,
+    }, { idempotencyKey: `memory-record-index:${randomUUID()}`, maxAttempts: 10, transactionClient: client });
   }
 
   async status() {
@@ -629,7 +667,9 @@ export class ResearchMemoryStore {
         if (inserted.rowCount !== 1) {
           throw new HttpError(409, "memory_conflict", "That memory id already names another memory.");
         }
-        return publicRecord(inserted.rows[0]);
+        const record = publicRecord(inserted.rows[0]);
+        await this.#enqueueRecordIndex(client, owner, record);
+        return record;
       }
 
       const stored = publicRecord(found.rows[0]);
@@ -660,16 +700,29 @@ export class ResearchMemoryStore {
       if (updated.rowCount !== 1) {
         throw new HttpError(409, "memory_conflict", "This memory changed while it was being written.");
       }
-      return publicRecord(updated.rows[0]);
+      const record = publicRecord(updated.rows[0]);
+      await this.#enqueueRecordIndex(client, owner, record);
+      return record;
     });
   }
 
   /** @param {string} userId @param {string} id */
   async deleteRecord(userId, id) {
-    const result = await this.#query("DELETE FROM evimed_memory.records WHERE user_id=$1 AND id=$2 RETURNING id",
-      [assertUserId(userId), assertRecordId(id)]);
-    if (result.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
-    return true;
+    const owner = assertUserId(userId);
+    const recordId = assertRecordId(id);
+    return this.#transaction(async (client) => {
+      const result = await client.query(`DELETE FROM evimed_memory.records
+        WHERE user_id=$1 AND id=$2 RETURNING id,scope,scope_id,kind`, [owner, recordId]);
+      if (result.rowCount !== 1) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      const row = result.rows[0];
+      // Enqueued from the delete's own transaction: a forget that commits must
+      // not be able to leave the derived copy behind, and a forget that rolls
+      // back must not remove a copy of a memory that still exists.
+      await this.#enqueueRecordIndex(client, owner, {
+        id: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind,
+      });
+      return true;
+    });
   }
 
   /** @param {string} userId */

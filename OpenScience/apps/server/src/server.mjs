@@ -52,7 +52,7 @@ import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSea
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { ResearchMemoryStore } from "./researchMemory.mjs";
 import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
-import { MemorySubstrate } from "./memorySubstrate.mjs";
+import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
 import { MemoryRerank } from "./memoryRerank.mjs";
 import { OpenVikingClient } from "./openVikingClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
@@ -646,10 +646,18 @@ export function createWebApiApp(overrides = {}) {
   // of the control-plane database, so the store exists exactly when that
   // database does. `overrides.researchMemory` is for tests that need the
   // interface without one.
-  const researchMemory = overrides.researchMemory
-    ?? new ResearchMemoryStore(config, { database: productDatabase });
   const openVikingClient = overrides.openVikingClient
     ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
+  // Whether a memory write has an index to tell about it. Decided before the
+  // store is built, because the store is handed the outbox only when something
+  // will claim from it, and decided by the same function the substrate reads so
+  // that the writer and the reader cannot disagree about which provider is on.
+  const memoryIndexActive = selectedMemoryIndexProvider(config) === "openviking"
+    && Boolean(openVikingClient.configured) && Boolean(productDatabase && productJobs);
+  const researchMemory = overrides.researchMemory
+    ?? new ResearchMemoryStore(config, {
+      database: productDatabase, jobs: memoryIndexActive ? productJobs : null,
+    });
   // One reranker for both recall paths. It orders candidates that have already
   // been hydrated from the authoritative store, because the index's own
   // reranked endpoint navigates by directory abstracts that nothing generates
@@ -664,6 +672,7 @@ export function createWebApiApp(overrides = {}) {
   // control-plane database whichever provider is selected.
   const memorySubstrate = new MemorySubstrate(config, {
     store: researchMemory, openViking: openVikingClient, rerank: memoryRerank,
+    jobs: memoryIndexActive ? productJobs : null,
   });
   // One switch governs both recall paths: the capsule index is the same
   // OpenViking the research recall uses, so it exists exactly when that
@@ -671,8 +680,9 @@ export function createWebApiApp(overrides = {}) {
   const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
     ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, rerank: memoryRerank }) : null;
   const memoryIndexWorker = memoryIndexing
-    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, pollMs: config.memoryIndexPollMs,
-      leaseMs: config.memoryIndexLeaseMs, reconcileMs: config.memoryIndexReconcileMs }) : null;
+    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, substrate: memorySubstrate,
+      pollMs: config.memoryIndexPollMs, leaseMs: config.memoryIndexLeaseMs,
+      reconcileMs: config.memoryIndexReconcileMs }) : null;
   // What the researcher did, and the one producer that reads it back. Both
   // exist exactly when the product ledger does; without it the memory routes
   // below record nothing and say so by being null rather than by pretending.
@@ -2965,10 +2975,17 @@ export function createWebApiApp(overrides = {}) {
         // Completeness no longer depends on it: the memory tables reference the
         // account with ON DELETE CASCADE, so `store.deleteUser` below removes
         // whatever a failed purge would have left.
+        // The derived copies go first. Either order can fail halfway; only this
+        // one fails harmlessly. An index emptied for an account whose rows are
+        // still there costs a degraded recall until the next rebuild, and the
+        // caller can simply try again. The other order destroys the memory and
+        // then answers 500, leaving an account that still exists and a
+        // researcher whose memory is gone because a component that holds no
+        // original data was unreachable for a moment.
+        await memorySubstrate.forgetUser(user.id);
         const memoryPurge = researchMemory.configured
           ? await researchMemory.purgeUserMemory(user.id)
           : { structured: 0, manual: 0 };
-        await memorySubstrate.forgetUser(user.id);
         let memoryIndexPurge = null;
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
@@ -3050,13 +3067,15 @@ export function createWebApiApp(overrides = {}) {
           }
           await runtimeManager.stop(project);
           await audit({ config, user, project }, "project.delete", "completed", { target: project.id });
-          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
-          // Derived copies go with the record they were derived from. Awaited
-          // and not swallowed: an index that still answers with a deleted
-          // project's memories is a copy of deleted data, so a failure here
-          // fails the delete rather than reporting a deletion that did not
-          // happen.
+          // Derived copies go first, and go with the record they were derived
+          // from. Awaited and not swallowed: an index that still answers with a
+          // deleted project's memories is a copy of deleted data, so a failure
+          // here fails the delete rather than reporting a deletion that did not
+          // happen. Before the rows rather than after, so that failure leaves
+          // the project and its memory both intact and the request retryable —
+          // the reverse order answers 500 with the memory already destroyed.
           await memorySubstrate.forgetProject(user.id, project.id);
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
           const data = await store.deleteProject(user, projectId);
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });

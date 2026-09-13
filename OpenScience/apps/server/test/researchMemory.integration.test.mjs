@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { migrateNotifications } from "../src/notificationPersistence.mjs";
+import { ProductJobs } from "../src/productJobs.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 
@@ -481,4 +482,101 @@ test("a dropped memory table fails the ownership audit, like every other registe
   assert.deepEqual(await auditWithout("evimed_inbox.notifications"), { failedWith: "42P01" },
     "and so must a dropped table outside that schema");
   assert.equal((await relationalIntegrity(database)).ok, true, "and both probes left the schema as they found it");
+});
+
+/**
+ * The outbox: every memory write tells the derived index, in its own transaction.
+ *
+ * This is the half the index had no writer for. A deployment that selects the
+ * OpenViking provider used to publish a record only when an operator ran the
+ * rebuild command, so everything extracted between two runs of that command was
+ * absent from recall — silently, because an empty index answers like a
+ * relevance judgement rather than like a failure.
+ */
+/** @param {string} owner @returns {Promise<any[]>} */
+async function indexJobs(owner) {
+  // A queue that was never migrated holds no jobs, which is the answer the
+  // `builtin` case wants and the only way to read it without a store that
+  // migrates on the way past.
+  const result = await database.query(`SELECT payload,status FROM evimed_product.jobs
+    WHERE user_id=$1 AND kind='memory-record-index' ORDER BY created_at,id`, [owner])
+    .catch((/** @type {any} */ error) => {
+      if (error?.code === "42P01") return { rows: [] };
+      throw error;
+    });
+  return result.rows;
+}
+
+test("a memory written is a memory the index is told about, in the same transaction", options, async () => {
+  const owner = `memory_outbox_${randomUUID()}`;
+  await createUsers([owner]);
+  const queued = new ResearchMemoryStore({}, { database, jobs: new ProductJobs(database) });
+
+  const created = await queued.upsertRecord(owner, {
+    scope: "project", scopeId: "prj_outbox", kind: "analysis", key: "dose/response",
+    value: "The 40 mg arm carried the effect.", origin: "inferred", status: "active",
+  });
+  const afterCreate = await indexJobs(owner);
+  assert.equal(afterCreate.length, 1);
+  assert.equal(afterCreate[0].status, "queued");
+  assert.deepEqual(afterCreate[0].payload, {
+    recordId: created.id, scope: "project", scopeId: "prj_outbox", memoryKind: "analysis",
+  });
+
+  // A write that changes nothing is not an event. Re-enqueueing on it would
+  // turn one extraction repeated across a run into one index write per repeat.
+  await queued.upsertRecord(owner, {
+    scope: "project", scopeId: "prj_outbox", kind: "analysis", key: "dose/response",
+    value: "The 40 mg arm carried the effect.", origin: "inferred", status: "active",
+  });
+  assert.equal((await indexJobs(owner)).length, 1, "a no-op write must not enqueue an index job");
+
+  await queued.upsertRecord(owner, {
+    scope: "project", scopeId: "prj_outbox", kind: "analysis", key: "dose/response",
+    value: "The 40 mg arm carried the effect in the per-protocol set.", origin: "inferred", status: "active",
+  });
+  assert.equal((await indexJobs(owner)).length, 2, "a real edit must enqueue one");
+
+  await queued.deleteRecord(owner, created.id);
+  const afterDelete = await indexJobs(owner);
+  assert.equal(afterDelete.length, 3, "forgetting a memory must reach the copy of it");
+  assert.deepEqual(afterDelete[2].payload, {
+    recordId: created.id, scope: "project", scopeId: "prj_outbox", memoryKind: "analysis",
+  });
+
+  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+});
+
+test("a write that does not commit does not tell the index it did", options, async () => {
+  const owner = `memory_rollback_${randomUUID()}`;
+  await createUsers([owner]);
+  const queued = new ResearchMemoryStore({}, { database, jobs: new ProductJobs(database) });
+  const first = await queued.upsertRecord(owner, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "Tables, not prose.", origin: "inferred", status: "active",
+  });
+  assert.equal((await indexJobs(owner)).length, 1);
+
+  // A provided id that already names another memory is refused after the row
+  // would have been inserted. The outbox row has to go back with it, or the
+  // index would be told to publish a version that never existed.
+  await assert.rejects(() => queued.upsertRecord(owner, {
+    id: first.id, scope: "user", scopeId: "", kind: "preference", key: "format",
+    value: "Another memory entirely.", origin: "inferred", status: "active",
+  }), { code: "memory_conflict" });
+  assert.equal((await indexJobs(owner)).length, 1, "a refused write must leave no index job behind");
+
+  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
+});
+
+test("a deployment on the term matcher queues nothing for a worker it never composes", options, async () => {
+  const owner = `memory_builtin_${randomUUID()}`;
+  await createUsers([owner]);
+  // The store built without the queue is what `builtin` composes.
+  await store.upsertRecord(owner, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "Tables, not prose.", origin: "inferred", status: "active",
+  });
+  assert.deepEqual(await indexJobs(owner), []);
+  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
 });

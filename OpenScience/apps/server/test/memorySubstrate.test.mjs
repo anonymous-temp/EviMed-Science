@@ -321,6 +321,114 @@ test("a deployment on the term matcher has nothing to forget and does not preten
   assert.equal(index.calls.remove.length, 0);
 });
 
+/** The job queue as the worker sees it: one `finish` and what it was told. */
+function fakeJobs() {
+  const finished = [];
+  return {
+    finished,
+    async finish(userId, id, leaseToken, result) {
+      finished.push({ userId, id, leaseToken, result });
+      return { id, status: "succeeded", result };
+    },
+  };
+}
+
+function indexJob(overrides = {}) {
+  return {
+    userId: USER,
+    id: "job1",
+    leaseToken: "lease1",
+    payload: { recordId: "rec1", scope: "user", scopeId: "", memoryKind: "preference", ...overrides },
+  };
+}
+
+// The gap this closes: before it, a record reached the index only when an
+// operator remembered to run the rebuild command. Everything extracted after
+// that run was invisible to recall — which a researcher reads as the model
+// having forgotten, not as an index being behind.
+test("a record's own write reaches the index, without waiting for an operator", async () => {
+  const index = fakeIndex([]);
+  const jobs = fakeJobs();
+  const substrate = new MemorySubstrate(openVikingConfig, {
+    store: fakeStore([record({ id: "rec1", version: 4 })]), openViking: index, jobs,
+  });
+
+  await substrate.indexRecord(indexJob());
+
+  assert.equal(index.calls.write.length, 1);
+  assert.equal(index.calls.write[0].uri, memoryUri(USER, {
+    scope: "user", scopeId: "", kind: "preference", recordId: "rec1",
+  }));
+  assert.deepEqual(index.calls.write[0].options, { wait: true, timeoutSeconds: 5 });
+  assert.deepEqual(jobs.finished[0].result, { status: "indexed", recordId: "rec1", version: 4 });
+});
+
+test("a memory the researcher deleted loses its copy, addressed from the job", async () => {
+  const index = fakeIndex([]);
+  const jobs = fakeJobs();
+  // The row is gone, so it cannot say where its copy was written. The job's
+  // own description of the path is what makes the removal possible at all.
+  const substrate = new MemorySubstrate(openVikingConfig, { store: fakeStore([]), openViking: index, jobs });
+
+  await substrate.indexRecord(indexJob({ recordId: "gone", scope: "project", scopeId: PROJECT, memoryKind: "analysis" }));
+
+  assert.equal(index.calls.write.length, 0);
+  assert.equal(index.calls.remove.length, 1);
+  assert.equal(index.calls.remove[0].uri, memoryUri(USER, {
+    scope: "project", scopeId: PROJECT, kind: "analysis", recordId: "gone",
+  }));
+  assert.deepEqual(index.calls.remove[0].options, { recursive: false });
+  assert.deepEqual(jobs.finished[0].result, { status: "removed", recordId: "gone" });
+});
+
+// Archiving a memory, marking it sensitive and letting it expire are three
+// ways of saying stop using this. All three have to reach the derived copy,
+// or "stop" would mean "stop, unless the index answers first".
+for (const [name, overrides] of [
+  ["archived", { status: "archived" }],
+  ["sensitive", { sensitive: true }],
+  ["expired", { expiresAt: "2000-01-01T00:00:00Z" }],
+  ["emptied", { value: "", summary: "" }],
+]) {
+  test(`a record that has been ${name} is removed from the index rather than rewritten`, async () => {
+    const index = fakeIndex([]);
+    const jobs = fakeJobs();
+    const substrate = new MemorySubstrate(openVikingConfig, {
+      store: fakeStore([record({ id: "rec1", ...overrides })]), openViking: index, jobs,
+    });
+
+    await substrate.indexRecord(indexJob());
+
+    assert.equal(index.calls.write.length, 0);
+    assert.equal(index.calls.remove.length, 1);
+    assert.deepEqual(jobs.finished[0].result, { status: "withheld", recordId: "rec1" });
+  });
+}
+
+test("a job that outlived the provider is finished, not retried against a component nobody configured", async () => {
+  const jobs = fakeJobs();
+  const substrate = new MemorySubstrate({ memoryIndexProvider: "builtin" }, {
+    store: fakeStore([record({ id: "rec1" })]), openViking: fakeIndex([]), jobs,
+  });
+
+  await substrate.indexRecord(indexJob());
+
+  assert.deepEqual(jobs.finished[0].result, { status: "index_disabled", recordId: "rec1" });
+});
+
+test("a payload that names no path is refused terminally, not retried ten times", async () => {
+  const index = fakeIndex([]);
+  const substrate = new MemorySubstrate(openVikingConfig, {
+    store: fakeStore([record({ id: "rec1" })]), openViking: index, jobs: fakeJobs(),
+  });
+
+  await assert.rejects(
+    () => substrate.indexRecord({ userId: USER, id: "job1", leaseToken: "lease1", payload: { recordId: "" } }),
+    (error) => error.code === "memory_index_job_invalid" && error.status === 400);
+  assert.equal(index.calls.write.length, 0);
+  assert.equal(index.calls.remove.length, 0);
+});
+
 test("a rebuild publishes what may be recalled and skips what may not", async () => {
   const records = [
     record({ id: "ok1" }),

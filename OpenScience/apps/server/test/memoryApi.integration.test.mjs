@@ -22,13 +22,15 @@ if (databaseUrl) {
 }
 const options = { timeout: 20_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
 
-/** The real app, a real account, and a signed-in browser's headers. */
-async function fixture(t) {
+/** The real app, a real account, and a signed-in browser's headers.
+ *  `extra` is spread over the same object the app reads both its configuration
+ *  and its injected collaborators from. */
+async function fixture(t, extra = {}) {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-memory-api-"));
   const app = createWebApiApp({
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true,
-    databaseUrl,
+    databaseUrl, ...extra,
   });
   const username = `memory${randomUUID().replaceAll("-", "").slice(0, 10)}`;
   const password = "test-only-memory-password";
@@ -175,4 +177,48 @@ test("deleting an account takes every memory with it, counted for the audit", op
     `SELECT (SELECT count(*)::integer FROM evimed_memory.records WHERE user_id=$1) AS records,
             (SELECT count(*)::integer FROM evimed_memory.notes WHERE user_id=$1) AS notes`, [user.id]);
   assert.deepEqual(rows.rows[0], { records: 0, notes: 0 });
+});
+
+// Which of the two halves of a deletion goes first is decidable, and only one
+// order is safe. The index holds no original data, so an index emptied for
+// memory that still exists costs a degraded recall until the next write or
+// rebuild, and the caller can simply try again. The other order answers 500
+// with the memory already destroyed: the researcher asked to delete a project,
+// was told it failed, still has the project, and has lost its memory for good.
+test("an index that cannot be reached fails the delete without destroying the memory first", options, async (t) => {
+  const index = {
+    configured: true,
+    async status() { return { configured: true, connected: true, code: null }; },
+    async find() { return []; },
+    async write() { return { ok: true }; },
+    async list() { return []; },
+    async listAll() { return []; },
+    async remove() {
+      throw Object.assign(new Error("the index is unreachable"), { code: "memory_index_unavailable" });
+    },
+  };
+  const { app, base, headers, user } = await fixture(t, {
+    memoryIndexProvider: "openviking", openVikingClient: index,
+  });
+  const projectId = "project-index-unreachable";
+  assert.equal((await fetch(`${base}/api/projects`, {
+    method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Index unreachable" }),
+  })).status, 200);
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "project", scopeId: projectId, kind: "run_summary", key: "run.index-unreachable",
+    value: "project run", summary: "project run", origin: "system", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
+  });
+
+  const refused = await fetch(`${base}/api/projects/${projectId}`, {
+    method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
+  });
+  assert.notEqual(refused.status, 200, "an unreachable index must not report a deletion that did not happen");
+
+  const exported = await app.researchMemory.exportUserMemory(user.id);
+  assert.deepEqual(exported.records.map((record) => record.key), ["run.index-unreachable"],
+    "the memory must survive a delete that failed; nothing was deleted, so nothing may be gone");
+  assert.equal((await (await fetch(`${base}/api/projects`, { headers })).json()).data
+    .filter((/** @type {any} */ project) => project.id === projectId).length, 1,
+  "and so must the project, or the failure would have been half applied");
 });
