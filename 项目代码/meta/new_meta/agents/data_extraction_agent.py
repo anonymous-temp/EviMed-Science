@@ -23,6 +23,8 @@ from new_meta.core.denominator_recovery import (
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
 from new_meta.core.rct_design_reconciliation import reconcile_extracted_rct_designs
 from new_meta.schemas.study import ConflictNote, ExtractedStudy, ExtractionDataIssue, StudyCharacteristics, OutcomeData, PrimaryAlignmentAssessment, PrimaryAlignmentAssessmentV3, ExtractionReferenceEnvelope
+from new_meta.schemas.extracted_outcome import ExtractedOutcomeData
+from new_meta.schemas.outcome_types import CANONICAL_EXTRACTION_OUTCOME_TYPES
 from new_meta.prompts import extraction_prompts
 from new_meta.agents.pdf_parser import get_page_for_position
 from new_meta.config import LLM_MAX_TOKENS_EXTRACTION, MAX_WORKERS, MAX_CHECK_ROUNDS
@@ -44,7 +46,7 @@ class ExtractionCheckResult(LegacyExtractionCheckResult):
 
 class IndexedOutcomeCorrection(BaseModel):
     outcome_index: int = Field(ge=0, strict=True)
-    outcome: OutcomeData
+    outcome: ExtractedOutcomeData
 
 
 class ExtractionRefinement(BaseModel):
@@ -59,7 +61,7 @@ VERIFICATION_SOURCE_CHAR_LIMIT = 128_000
 
 class OutcomeList(BaseModel):
     """Wrapper for structured extraction of outcomes."""
-    outcomes: list[OutcomeData] = []
+    outcomes: list[ExtractedOutcomeData] = []
     quality_notes: str = ""
 
 
@@ -330,6 +332,7 @@ class DataExtractionAgent(BaseAgent):
             secondary_outcomes=secondary_str,
             planned_subgroups=json.dumps(protocol.subgroup_variables or [], ensure_ascii=False),
             effect_measure=protocol.effect_measure,
+            outcome_types=json.dumps(CANONICAL_EXTRACTION_OUTCOME_TYPES),
             paper_content=paper_content,
         )
 

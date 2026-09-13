@@ -47,6 +47,11 @@ component, threshold, subgroup or observational association as the review endpoi
 - Secondary Outcomes: {secondary_outcomes}
 - Prespecified Subgroup Analyses: {planned_subgroups}
 - Effect Measure: {effect_measure}
+- Allowed outcome_type values: {outcome_types}
+
+Every extracted row must use exactly one allowed statistical outcome_type.
+Composite components, disease names and time horizons belong in outcome_name,
+not in the statistical type. Never append qualifiers such as _composite to a type.
 
 Extract the source results needed for these prespecified outcomes and subgroups.
 An empty secondary-outcome list requests no additional outcomes. An empty subgroup
@@ -221,10 +226,14 @@ Required per-row verification payload (never omit it, even with a high score):
   belongs_to_other_endpoint, or uncertain. match and extra require inclusion in
   THIS endpoint; missing requires absence from THIS endpoint. A component present
   only in another endpoint is not extra in this result. Do not put explanatory
-  prose in source_component: copy the actual source label from its support passage;
-  put interpretation in rationale. For a missing component, quote the complete
+  source_component in your response: the runtime derives its exact source excerpt
+  from that component's support reference. Supply protocol_component, relation and
+  the binding's membership/rationale unchanged as your clinical judgments.
+  Do not retype a source label or omit words to shorten a quote. For a missing component, select the complete
   relevant definition rather than inventing an absent phrase. Source range identity
   is assigned by the runtime; supply only source_id and optional end_source_id.
+  Copy the COMPLETE source ID as printed, including its namespace prefix; a suffix
+  such as _1fa alone is not a source ID. Never remove or reconstruct a prefix.
 - numeric_findings: verify EVERY supplied numeric_fields_to_verify field, naming its
   directly reported value, source_id, match/mismatch/uncertain and
   rationale. Check every CI endpoint, sign, unit, measure and scale. A score cannot

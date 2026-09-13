@@ -5,8 +5,9 @@ import json
 import re
 
 VERSION = 1
-OBSERVATION_VERSION = 2
-ASSESSOR = "extraction-check-sources-v2"
+OBSERVATION_VERSION = 3
+ASSESSOR = "extraction-check-sources-v3"
+SOURCE_ASSESSOR_VERSIONS = {f"extraction-check-sources-v{version}": version for version in (1, 2, 3)}
 MAX_SPAN_CHARS = 8192
 MAX_SOURCE_CHARS = 128_000
 
@@ -97,9 +98,15 @@ def source_prompt(text, catalogue):
                      for item in catalogue["sources"])
 
 
-def reference_schema(canonical_schema):
+def reference_schema(canonical_schema, *, wire_version=OBSERVATION_VERSION):
     """Derive the wire schema; all non-reference fields keep their actual types."""
     schema = deepcopy(canonical_schema)
+    if type(wire_version) is not int or wire_version not in {1, 2, 3}:
+        raise ValueError("Extraction source wire version is unsupported")
+    if wire_version == 3:
+        component = schema.get("$defs", {}).get("EndpointComponentVerification", {})
+        component.get("properties", {}).pop("source_component", None)
+        component["required"] = [name for name in component.get("required", []) if name != "source_component"]
     for definition in [schema, *schema.get("$defs", {}).values()]:
         properties = definition.get("properties", {})
         if "quote" not in properties or "source_location" not in properties: continue
@@ -139,8 +146,59 @@ def _supports(payload):
                             yield f"{prefix}/verification/component_bindings/{child}/{name}", binding[name]
 
 
-def resolve_reference_payload(text, catalogue, payload):
+def _materialize_component_sources(resolved, text, errors, metadata):
+    """Resolve each component excerpt without changing any model judgment.
+
+    A valid component's binding is independent of broken siblings. The shared
+    validator still checks membership, selected-result identity, and literal text.
+    """
+    from new_meta.core.extraction_verification import endpoint_binding_errors
+    rows = resolved.get("primary_analysis_alignment") if isinstance(resolved, dict) else None
+    if not isinstance(rows, list):
+        return
+    for row_index, row in enumerate(rows):
+        details = row.get("verification") if isinstance(row, dict) else None
+        if not isinstance(details, dict) or not isinstance(details.get("components"), list):
+            continue
+        bindings = details.get("component_bindings")
+        bindings = bindings if isinstance(bindings, list) else []
+        for index, component in enumerate(details["components"]):
+            if not isinstance(component, dict):
+                continue
+            path = f"primary_analysis_alignment/{row_index}/verification/components/{index}/source_component"
+            context = {"outcome_index": row.get("outcome_index"), "component_index": index, "path": path}
+            if "source_component" in component:
+                # Preserve the supplied value visibly, but never treat it as a
+                # validated negative or silently replace it with another excerpt.
+                component["source_component_reference_invalid"] = True
+                errors.append({"code": "verification_component_source_supplied", **context})
+                continue
+            matches = [(position, item) for position, item in enumerate(bindings) if isinstance(item, dict)
+                and type(item.get("component_index")) is int and item["component_index"] == index]
+            if len(matches) != 1:
+                errors.append({"code": "verification_component_binding_coverage", **context})
+                continue
+            position, binding = matches[0]
+            support = binding.get("support")
+            quote = support.get("quote") if isinstance(support, dict) else None
+            value = quote if component.get("relation") in {"match", "extra"} else ""
+            candidate = {**component, "source_component": value}
+            components = list(details["components"])
+            components[index] = candidate
+            failures = endpoint_binding_errors({**details, "components": components}, text, index)
+            if failures:
+                errors.extend({**failure, **context} for failure in failures)
+                continue
+            component["source_component"] = value
+            metadata.append({"path": path,
+                "from_path": f"primary_analysis_alignment/{row_index}/verification/component_bindings/{position}/support",
+                "text_sha256": _hash(value)})
+
+
+def resolve_reference_payload(text, catalogue, payload, *, wire_version=OBSERVATION_VERSION):
     resolved, errors, metadata = deepcopy(payload), [], []
+    if type(wire_version) is not int or wire_version not in {1, 2, 3}:
+        return {}, [{"code": "verification_source_wire_version_invalid"}], metadata
     try: validate_catalogue(text, catalogue)
     except (ValueError, TypeError, KeyError):
         return {}, [{"code": "verification_source_catalogue_invalid"}], metadata
@@ -181,6 +239,8 @@ def resolve_reference_payload(text, catalogue, payload):
         metadata.append({"path": location, "source_id": first, "end_source_id": last,
             "start": start, "end": end, "start_byte": begin["start_byte"], "end_byte": finish["end_byte"],
             "text_sha256": _hash(quote), "source_location": source_location})
+    if wire_version == 3:
+        _materialize_component_sources(resolved, text, errors, metadata)
     return resolved, errors, metadata
 
 
@@ -261,7 +321,7 @@ def replay_source_receipt(project, reference, source_text, source_sha, protocol_
     def read(record):
         return _read_source_record(project, record)
     record = read(reference)
-    if (expected_version not in {1, OBSERVATION_VERSION}
+    if (type(expected_version) is not int or expected_version not in {1, 2, 3}
             or not isinstance(record, dict) or type(record.get("version")) is not int or record.get("version") != expected_version
             or "raw_record" not in record or any(error.get("outcome_index") in {None, index}
                 or error.get("code", "").startswith("verification_") for error in record.get("errors", []))):
@@ -279,10 +339,10 @@ def replay_source_receipt(project, reference, source_text, source_sha, protocol_
     if catalogue.get("source_sha256") != source_sha:
         raise ValueError("Extraction source catalogue belongs to a different document")
     payload = parse_source_json(raw["raw_response"]["content"])
-    resolved, errors, metadata = resolve_reference_payload(source_text, catalogue, payload)
+    resolved, errors, metadata = resolve_reference_payload(source_text, catalogue, payload, wire_version=expected_version)
     if errors or record.get("resolution") != metadata or record.get("resolved_response") != resolved:
         raise ValueError("Extraction source resolution cannot be replayed")
-    schema = ExtractionCheckResult if expected_version == OBSERVATION_VERSION else LegacyExtractionCheckResult
+    schema = ExtractionCheckResult if expected_version >= 2 else LegacyExtractionCheckResult
     checked = schema.model_validate(resolved, strict=True)
     if expected_version == 1 and any(isinstance(item.verification, ExtractionRowVerificationV3)
                                    for item in checked.primary_analysis_alignment):
@@ -290,7 +350,7 @@ def replay_source_receipt(project, reference, source_text, source_sha, protocol_
     matches = [item for item in checked.primary_analysis_alignment if item.outcome_index == index]
     if len(matches) != 1 or digest(matches[0].model_dump(mode="json")) != digest(assessment.model_dump(mode="json")):
         raise ValueError("Extraction source response does not reproduce the stored judgment")
-    if expected_version == OBSERVATION_VERSION:
+    if expected_version >= 2:
         from new_meta.core.extraction_verification import endpoint_binding_errors
         details = matches[0].verification
         if endpoint_binding_errors(details, source_text) or any(endpoint_binding_errors(details, source_text, component)

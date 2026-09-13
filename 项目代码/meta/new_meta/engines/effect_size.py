@@ -14,6 +14,8 @@ import math
 import numpy as np
 from scipy import stats
 
+from new_meta.schemas.outcome_types import PAIRWISE_EFFECT_MEASURES_BY_OUTCOME_TYPE
+
 
 # =============================================================================
 # Dichotomous outcomes — from 2x2 table (a, b, c, d)
@@ -374,22 +376,12 @@ def compute_effect_size(
     outcome_type = str(outcome_type or "").strip().lower().replace("-", "_")
     effect_measure = str(effect_measure or "").strip().upper()
     reported_effect_measure = str(reported_effect_measure or "").strip().upper()
-    compatible_measures = {
-        "dichotomous": {"OR", "RR", "RD", "IRR"},
-        "binary": {"OR", "RR", "RD", "IRR"},
-        "continuous": {"MD", "SMD"},
-        "time_to_event": {"HR"},
-        "proportion": {"PROP"},
-        "correlation": {"COR"},
-        "count": {"IRR"},
-        "incidence_rate": {"IRR"},
-    }
-    if outcome_type not in compatible_measures:
+    if outcome_type not in PAIRWISE_EFFECT_MEASURES_BY_OUTCOME_TYPE:
         raise EffectInputMismatch(
             "outcome_type_requires_adjudication",
             f"Outcome type {outcome_type!r} is not a supported typed input.",
         )
-    if effect_measure not in compatible_measures[outcome_type]:
+    if effect_measure not in PAIRWISE_EFFECT_MEASURES_BY_OUTCOME_TYPE[outcome_type]:
         raise EffectInputMismatch(
             "outcome_type_measure_mismatch",
             f"Outcome type {outcome_type!r} is incompatible with requested measure {effect_measure!r}.",

@@ -1,0 +1,23 @@
+{
+  "provenance": {
+    "source_revision": "ea356467b2a4c118e284204fe1f5552d577bcfc7",
+    "job_id": "meta-20260913225707-fc95dc56c87a",
+    "study_id": "35861630",
+    "source_checkpoint_sha256": "b0e87c5b99482f0d13c948f0bc71151fe2e2333f0fcdb99c595a4c24aedafa46",
+    "note": "Unmodified selected fields of an actual rejected extraction row; not an oracle for model generation."
+  },
+  "outcome": {
+    "outcome_name": "Renal-specific composite of end-stage kidney disease, doubling of serum creatinine, or renal death (CV death excluded)",
+    "outcome_type": "time_to_event_composite",
+    "effect_size": 0.38,
+    "reported_effect_measure": "HR",
+    "reported_effect_scale": "original",
+    "ci_lower": 0.12,
+    "ci_upper": 1.22,
+    "hazard_ratio": null,
+    "hr_ci_lower": null,
+    "hr_ci_upper": null,
+    "p_value": 0.103,
+    "p_value_inequality": ""
+  }
+}

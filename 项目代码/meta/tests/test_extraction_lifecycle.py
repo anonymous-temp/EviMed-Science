@@ -43,7 +43,7 @@ def test_provider_failure_preserves_partial_extraction_and_stops_pipeline(tmp_pa
             return StudyCharacteristics()
         if "S2 full article" in prompt:
             raise ProviderUnavailable("private provider body must not enter diagnostics")
-        return OutcomeList(outcomes=study().outcomes)
+        return OutcomeList(outcomes=[item.model_dump(mode="json") for item in study().outcomes])
 
     monkeypatch.setattr(agent, "call_llm_structured", llm)
     verifier = Mock(side_effect=AssertionError("No verification after incomplete extraction"))
@@ -83,7 +83,7 @@ def test_provider_failure_preserves_partial_extraction_and_stops_pipeline(tmp_pa
 
     # A genuine successful retry replaces only this phase's transient failure.
     monkeypatch.setattr(agent, "call_llm_structured", lambda prompt, schema, **kw:
-                        StudyCharacteristics() if schema is StudyCharacteristics else OutcomeList(outcomes=study().outcomes))
+                        StudyCharacteristics() if schema is StudyCharacteristics else OutcomeList(outcomes=[item.model_dump(mode="json") for item in study().outcomes]))
     monkeypatch.setattr(agent, "_verify_alignment", lambda value, *args: value)
     completed = agent.run(papers, parsed, protocol(), project)
     require_complete_extraction(project, completed, papers)
@@ -151,7 +151,7 @@ def test_initial_extraction_keeps_results_in_middle_of_complete_source(tmp_path,
 
     def llm(prompt, schema, **kwargs):
         prompts.append(prompt)
-        return StudyCharacteristics() if schema is StudyCharacteristics else OutcomeList(outcomes=study().outcomes)
+        return StudyCharacteristics() if schema is StudyCharacteristics else OutcomeList(outcomes=[item.model_dump(mode="json") for item in study().outcomes])
 
     monkeypatch.setattr(agent, "call_llm_structured", llm)
     agent._extract_single({"pmid": "S1"}, {"full_text": source}, protocol(), Project("complete source", output_dir=tmp_path))

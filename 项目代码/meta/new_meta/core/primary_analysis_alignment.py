@@ -422,7 +422,7 @@ def record_checked_alignments(project, protocol, study, assessments, *, source_t
                                  protocol_fingerprint(protocol), row_fingerprint(study, index), index, assessment)
         _record_proof(project, protocol, study, index, assessment,
                       source_text=source_text, source_path=source_path, expected_source_sha256=expected_source_sha256,
-                      assessor="extraction-check-sources-v2" if source_references is not None else "extraction-check-v3",
+                      assessor="extraction-check-sources-v3" if source_references is not None else "extraction-check-v3",
                       assessor_id=assessor_id, issue_history=histories[index], publish_checkpoint=False,
                       source_reference=source_reference)
     _persist_alignment_checkpoint(project, study)
@@ -446,10 +446,11 @@ def alignment_status(project, protocol, study, index: int) -> dict:
     except (OSError, ValueError, TypeError, AttributeError):
         return {**unknown, "reason": "current_extraction_checkpoint_required"}
     try:
-        if proof.assessor not in {"extraction-check-v2", "extraction-check-v3", "extraction-check-sources-v1",
-                                  "extraction-check-sources-v2", "human-review-v1", "human-review-v2", "pending-review-v1"}:
+        from new_meta.core.extraction_sources import SOURCE_ASSESSOR_VERSIONS
+        if proof.assessor not in {*SOURCE_ASSESSOR_VERSIONS, "extraction-check-v2", "extraction-check-v3",
+                                  "human-review-v1", "human-review-v2", "pending-review-v1"}:
             return unknown
-        if proof.source_reference is not None and proof.assessor not in {"extraction-check-sources-v1", "extraction-check-sources-v2"}:
+        if proof.source_reference is not None and proof.assessor not in SOURCE_ASSESSOR_VERSIONS:
             return unknown
         if proof.assessor in {"human-review-v1", "human-review-v2"} and proof.assessor_id in {"", "unknown"}:
             return unknown
@@ -466,11 +467,11 @@ def alignment_status(project, protocol, study, index: int) -> dict:
         legacy_assessor = proof.assessor in {"extraction-check-v2", "extraction-check-sources-v1", "human-review-v1"}
         if proof.assessor != "pending-review-v1" and current_contract == legacy_assessor:
             return unknown
-        if proof.assessor in {"extraction-check-sources-v1", "extraction-check-sources-v2"}:
+        if proof.assessor in SOURCE_ASSESSOR_VERSIONS:
             from new_meta.core.extraction_sources import replay_source_receipt
             replay_source_receipt(project, proof.source_reference.model_dump(mode="json") if proof.source_reference else None,
                 checked.decode(), proof.source_sha256, proof.protocol_sha256, proof.row_sha256, index, proof.assessment,
-                expected_version=1 if legacy_assessor else 2)
+                expected_version=SOURCE_ASSESSOR_VERSIONS[proof.assessor])
         elif proof.assessor in {"human-review-v2", "extraction-check-v3"}:
             # Direct quoted proofs also need real catalogue identities. Their
             # identical self-supplied target IDs alone cannot certify a result.
