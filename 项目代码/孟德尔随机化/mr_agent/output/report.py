@@ -28,6 +28,8 @@ def generate_pdf_report(
     output_dir: Path | None = None,
 ) -> Path:
     """Generate complete PDF report with text and plots."""
+    from mr_agent.analysis.delivery import require_report_ready
+    require_report_ready(state.analysis_results)
     output_dir = output_dir or state.output_dir or Path("mr_output")
     output_dir.mkdir(parents=True, exist_ok=True)
     filepath = output_dir / "mr_report.pdf"

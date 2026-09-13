@@ -173,6 +173,14 @@ class PleiotopyResult(BaseModel):
     pval: float
 
 
+class InterpretationFailure(BaseModel):
+    """Bounded diagnostics from the failed call, without provider response text."""
+
+    error_type: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    status_code: int | None = Field(default=None, strict=True, ge=100, le=599)
+    finish_reason: Literal["stop", "length", "content_filter", "tool_calls", "function_call"] | None = None
+
+
 class MRAnalysisResult(BaseModel):
     exposure_id: str
     outcome_id: str
@@ -189,6 +197,10 @@ class MRAnalysisResult(BaseModel):
     plots: dict[str, Path] = Field(default_factory=dict)
     raw_data_path: Path | None = None
     interpretation: str = ""
+    # Legacy text alone cannot establish successful generation.
+    interpretation_status: Literal["pending", "succeeded", "failed", "not_applicable"] = "pending"
+    interpretation_error_code: Literal["", "mr_interpretation_failed"] = ""
+    interpretation_failure: InterpretationFailure | None = None
     steiger_correct: bool | None = None
     steiger_pval: float | None = None
     presso_global_pval: float | None = Field(default=None, ge=0, le=1)

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Callable
 
 from mr_agent.core.state import save_session
+from mr_agent.analysis.delivery import EmptyInterpretationError, MRDeliveryError, require_report_ready
 from mr_agent.llm.client import LLMClient
 from mr_agent.llm.prompts import (
     EXTRACT_EO_PAIRS,
@@ -32,6 +33,7 @@ from mr_agent.models import (
     DataSourceType,
     ExposureOutcome,
     GWASEntry,
+    InterpretationFailure,
     MRAnalysisResult,
     MRMethod,
     SessionState,
@@ -160,6 +162,7 @@ class MRPipeline:
         )
         self.on_progress("解读分析结果...", 0.80)
         results = self._step9_interpret(results)
+        require_report_ready(results)
         self.state.analysis_results = results
         self.on_progress("MR分析完成!", 1.0)
         return results
@@ -261,6 +264,7 @@ class MRPipeline:
         results = self._step8_bidirectional(results, pairs, output_dir, slots)
         self.on_progress("解读分析结果...", 0.85)
         results = self._step9_interpret(results)
+        require_report_ready(results)
         if len(results) >= 2:
             self.on_progress("生成汇总Forest Plot...", 0.95)
             run_summary_forest(results, output_dir)
@@ -576,8 +580,11 @@ class MRPipeline:
 
     def _step9_interpret(self, results: list[MRAnalysisResult]) -> list[MRAnalysisResult]:
         """Step 9: LLM interprets each result."""
+        # Keep the completed numerical work when generation fails afterwards.
+        self.state.analysis_results = results
         for r in results:
             if not r.mr_results:
+                r.interpretation_status = "not_applicable"
                 r.interpretation = (
                     "分析未产生有效结果，可能原因：工具变量不足或数据不可用。"
                     if self.language == "zh"
@@ -585,14 +592,37 @@ class MRPipeline:
                 )
                 continue
             try:
-                r.interpretation = self._interpret_single(r)
-            except Exception as e:
-                logger.warning(f"Interpretation failed for {r.exposure_id}→{r.outcome_id}: {e}")
-                r.interpretation = (
-                    "结果解读生成失败，请查看原始数据。"
-                    if self.language == "zh"
-                    else "Interpretation generation failed — please review the raw data."
+                interpretation = self._interpret_single(r)
+                if not isinstance(interpretation, str) or not interpretation.strip():
+                    raise EmptyInterpretationError("Empty interpretation")
+                r.interpretation = interpretation
+                r.interpretation_status = "succeeded"
+                r.interpretation_error_code = ""
+                r.interpretation_failure = None
+            except Exception as error:
+                r.interpretation = ""
+                r.interpretation_status = "failed"
+                r.interpretation_error_code = "mr_interpretation_failed"
+                error_type = type(error).__name__
+                if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", error_type):
+                    error_type = "Exception"
+                try:
+                    status_code = getattr(error, "status_code", None)
+                    finish_reason = getattr(error, "finish_reason", None)
+                except Exception:
+                    status_code = finish_reason = None
+                if type(status_code) is not int or not 100 <= status_code <= 599:
+                    status_code = None
+                if not isinstance(finish_reason, str) or finish_reason not in {
+                    "stop", "length", "content_filter", "tool_calls", "function_call",
+                }:
+                    finish_reason = None
+                r.interpretation_failure = InterpretationFailure(
+                    error_type=error_type, status_code=status_code, finish_reason=finish_reason,
                 )
+                logger.warning("MR interpretation failed: mr_interpretation_failed; type=%s; status=%s; finish=%s",
+                    error_type, status_code, finish_reason)
+                raise MRDeliveryError("mr_interpretation_failed", "interpretation") from None
         return results
 
     def _interpret_single(self, r: MRAnalysisResult) -> str:

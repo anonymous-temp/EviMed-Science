@@ -12,6 +12,7 @@ from r_scripts.templates import (
     _LOCAL_EXPOSURE_READ,
     _LOCAL_OUTCOME_READ,
     _SENSITIVITY_BLOCK,
+    _PLOT_BLOCK,
 )
 
 
@@ -85,3 +86,72 @@ def test_radial_summary_reports_heterogeneity_and_outlier_rows(tmp_path, outlier
         assert row["n_outliers"] == "NA"
     else:
         assert int(row["n_outliers"]) == (0 if outlier_count == "none" else outlier_count)
+
+
+@pytest.mark.parametrize("mode", ["normal", "multi_page", "render_failure", "inapplicable"])
+def test_actual_twosamplemr_diagnostics_render_all_pdf_and_png_pages(tmp_path, mode):
+    from PIL import Image, ImageStat
+    from PyPDF2 import PdfReader
+    from mr_agent.models import MRAnalysisResult
+    from mr_agent.tools.mr_executor import _collect_plots
+    from mr_agent.analysis.delivery import diagnostic_plot_checks
+
+    script = '''
+if (!requireNamespace("TwoSampleMR", quietly=TRUE)) quit(status=77)
+library(TwoSampleMR)
+library(jsonlite)
+set.seed(1729)
+dat <- data.frame(SNP=paste0("rs", 1:8), beta.exposure=seq(0.08,0.22,length.out=8),
+    beta.outcome=0.35*seq(0.08,0.22,length.out=8)+c(-0.01,0.02,-0.015,0.005,0.01,-0.005,0.025,-0.02),
+    se.exposure=rep(0.01,8), se.outcome=rep(0.02,8),
+    id.exposure="exposure", id.outcome="outcome", exposure="Synthetic exposure",
+    outcome="Synthetic outcome", mr_keep=TRUE)
+mr_res <- mr(dat, method_list=c("mr_ivw","mr_egger_regression"))
+'''
+    analysis = tmp_path / "analysis.R"
+    if mode == "multi_page":
+        script += '\noriginal_scatter <- mr_scatter_plot\nmr_scatter_plot <- function(...) {p <- original_scatter(...); c(p,p)}\n'
+    elif mode == "render_failure":
+        script += '\nmr_scatter_plot <- function(...) stop("simulated rendering failure")\n'
+    elif mode == "inapplicable":
+        script += '\ndat <- dat[1:2,]\n'
+    # A reused output location may contain a figure from an earlier attempt.
+    # Only the exact owned diagnostic names may be removed by the new attempt.
+    stale_name = "loo_plot" if mode == "inapplicable" else "scatter_plot"
+    for suffix in (".pdf", ".png", "-003.png"):
+        (tmp_path / (stale_name + suffix)).write_bytes(b"old diagnostic")
+    unrelated = tmp_path / "unrelated.pdf"
+    unrelated.write_bytes(b"preserve unrelated output")
+    analysis.write_text(script + f'output_dir <- {json.dumps(tmp_path.as_posix())}\n' + _PLOT_BLOCK.format())
+    # Portable replay executes through source(), where returned plot lists are
+    # not auto-printed, unlike a top-level Rscript expression.
+    run_r(f'source({json.dumps(analysis.as_posix())}, local=TRUE)', tmp_path)
+    status = json.loads((tmp_path / "diagnostic-plots.json").read_text())
+    result = MRAnalysisResult(exposure_id="exposure", outcome_id="outcome",
+        n_instruments=2 if mode == "inapplicable" else 8, raw_data_path=tmp_path)
+    _collect_plots(result, tmp_path)
+    checks = diagnostic_plot_checks(result)
+    for name in ("scatter_plot", "forest_plot", "funnel_plot", "loo_plot"):
+        if mode == "render_failure" and name == "scatter_plot":
+            assert status[name]["status"] == "failed"
+            assert checks[name]["status"] == "failed"
+            assert not (tmp_path / f"{name}.pdf").exists()
+            continue
+        if mode == "inapplicable" and name == "loo_plot":
+            assert status[name]["status"] == "skipped"
+            assert checks[name]["status"] == "skipped"
+            assert not (tmp_path / f"{name}.pdf").exists()
+            continue
+        reader = PdfReader(tmp_path / f"{name}.pdf")
+        pages = 2 if mode == "multi_page" and name == "scatter_plot" else 1
+        assert len(reader.pages) == pages
+        text = reader.pages[0].extract_text()
+        assert ("MR Method" if name == "funnel_plot" else "Synthetic") in text
+        assert len(reader.pages[0].get_contents().get_data()) > 1000
+        with Image.open(tmp_path / f"{name}.png") as picture:
+            assert picture.size == (2400, 1800)
+            assert max(ImageStat.Stat(picture.convert("RGB")).stddev) > 5
+        assert status[name]["status"] == "ready"
+        assert checks[name] == {"status": "ok", "pages": pages, "images": pages}
+    assert not (tmp_path / f"{stale_name}-003.png").exists()
+    assert unrelated.read_bytes() == b"preserve unrelated output"
