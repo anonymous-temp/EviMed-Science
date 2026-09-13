@@ -213,6 +213,10 @@ def _authenticated_proof(project, proof):
             return None
         payload = proof.model_dump(mode="json")
         record = json.loads(_read_scoped(project, f"{_PROOF_DIR}/{proof.proof_id}.json", max_bytes=1024 * 1024))
+        # Explicit compatibility for old quoted proofs, whose schema predates
+        # source-reference receipts. A present new field is never stripped.
+        if "source_reference" not in record and proof.source_reference is None:
+            payload.pop("source_reference", None)
         if record != payload or digest({key: value for key, value in payload.items() if key != "proof_id"}) != proof.proof_id:
             return None
         return proof
@@ -297,6 +301,7 @@ def recover_issue_history(project, study, index, *, allow_new=False):
 
 def _store_proof(project, study, index, payload):
     payload["current_checkpoint_path"] = _checkpoint_path(study)
+    payload.setdefault("source_reference", None)
     proof_id = digest(payload)
     proof = PrimaryAnalysisAlignment(**payload, proof_id=proof_id)
     _write_scoped_once(project, f"{_PROOF_DIR}/{proof_id}.json",
@@ -329,7 +334,8 @@ def invalidate_alignment_proofs(project, protocol, study, histories, *, reason):
 
 
 def _record_proof(project, protocol, study, index, assessment, *, source_text, source_path, expected_source_sha256=None,
-                  assessor="extraction-check-v1", assessor_id="", issue_history=None, publish_checkpoint=True):
+                  assessor="extraction-check-v1", assessor_id="", issue_history=None, publish_checkpoint=True,
+                  source_reference=None):
     source_bytes = source_text.encode()
     checked_sha = hashlib.sha256(source_bytes).hexdigest()
     checked_path = f"{_PROOF_DIR}/{checked_sha}.txt"
@@ -350,6 +356,7 @@ def _record_proof(project, protocol, study, index, assessment, *, source_text, s
         "checked_source_path": checked_path, "checked_source_sha256": checked_sha,
         "unresolved_data_issues": [item.model_dump(mode="json") for item in issues],
         "issue_history_complete": complete,
+        "source_reference": source_reference,
     }
     proof = _store_proof(project, study, index, payload)
     if publish_checkpoint:
@@ -359,7 +366,8 @@ def _record_proof(project, protocol, study, index, assessment, *, source_text, s
 
 def record_checked_alignments(project, protocol, study, assessments, *, source_text: str,
                               source_path=None, checked_rows: dict[int, str] | None = None, expected_source_sha256=None, assessor_id="",
-                              pending_reasons: dict | None = None, issue_histories: dict | None = None):
+                              pending_reasons: dict | None = None, issue_histories: dict | None = None,
+                              source_references: dict | None = None):
     """Discard model provenance, validate unique row judgments, then stamp in code."""
     histories = issue_histories if issue_histories is not None else {
         index: recover_issue_history(project, study, index, allow_new=True) for index in range(len(study.outcomes))}
@@ -406,9 +414,17 @@ def record_checked_alignments(project, protocol, study, assessments, *, source_t
         if checked_rows is not None and checked_rows.get(index) != row_fingerprint(study, index):
             validation_errors.append({"code": "verification_row_snapshot_changed", "outcome_index": index})
             continue
+        source_reference = None
+        if source_references is not None:
+            from new_meta.core.extraction_sources import replay_source_receipt
+            source_reference = source_references.get(index)
+            replay_source_receipt(project, source_reference, source_text, expected_source_sha256,
+                                 protocol_fingerprint(protocol), row_fingerprint(study, index), index, assessment)
         _record_proof(project, protocol, study, index, assessment,
                       source_text=source_text, source_path=source_path, expected_source_sha256=expected_source_sha256,
-                      assessor="extraction-check-v2", assessor_id=assessor_id, issue_history=histories[index], publish_checkpoint=False)
+                      assessor="extraction-check-sources-v1" if source_references is not None else "extraction-check-v2",
+                      assessor_id=assessor_id, issue_history=histories[index], publish_checkpoint=False,
+                      source_reference=source_reference)
     _persist_alignment_checkpoint(project, study)
     return validation_errors
 
@@ -430,7 +446,9 @@ def alignment_status(project, protocol, study, index: int) -> dict:
     except (OSError, ValueError, TypeError, AttributeError):
         return {**unknown, "reason": "current_extraction_checkpoint_required"}
     try:
-        if proof.assessor not in {"extraction-check-v2", "human-review-v1", "pending-review-v1"}:
+        if proof.assessor not in {"extraction-check-v2", "extraction-check-sources-v1", "human-review-v1", "pending-review-v1"}:
+            return unknown
+        if proof.source_reference is not None and proof.assessor != "extraction-check-sources-v1":
             return unknown
         if proof.assessor == "human-review-v1" and proof.assessor_id in {"", "unknown"}:
             return unknown
@@ -442,6 +460,10 @@ def alignment_status(project, protocol, study, index: int) -> dict:
             return unknown
         if proof.assessment.outcome_index != index or not _anchored(proof.assessment, checked.decode()):
             return unknown
+        if proof.assessor == "extraction-check-sources-v1":
+            from new_meta.core.extraction_sources import replay_source_receipt
+            replay_source_receipt(project, proof.source_reference.model_dump(mode="json") if proof.source_reference else None,
+                checked.decode(), proof.source_sha256, proof.protocol_sha256, proof.row_sha256, index, proof.assessment)
     except (OSError, ValueError, TypeError, UnicodeDecodeError, AttributeError):
         return unknown
     dimensions = {name: getattr(proof.assessment, name).status for name in DIMENSIONS}

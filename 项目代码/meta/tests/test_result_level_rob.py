@@ -355,5 +355,6 @@ def test_effective_rob_loader_prefers_completed_result_assessment_but_not_draft(
 def test_grade_phase_consumes_effective_result_level_rob_assessments() -> None:
     source = inspect.getsource(main_module._run_grade_from_cached_meta)
 
-    assert "load_effective_rob_assessments(" in source
+    assert "_require_cli_pairwise_rob(" in source
+    assert source.index("_require_cli_pairwise_rob(") < source.index('if project.is_step_done("grade")')
     assert "rob_results=effective_rob_results" in source

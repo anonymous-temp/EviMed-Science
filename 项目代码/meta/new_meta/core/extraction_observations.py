@@ -99,6 +99,12 @@ def inspect_extraction_observation(content, schema, study, indices, source_text,
     except (ValueError, TypeError) as exc:
         result["errors"].append({"code": "verification_raw_json_invalid", "error_type": type(exc).__name__})
         return result
+    return inspect_extraction_payload(raw, schema, study, indices, source_text, protocol)
+
+
+def inspect_extraction_payload(raw, schema, study, indices, source_text, protocol):
+    """Inspect resolved data without representing it as an actual provider response."""
+    result = {"response": None, "errors": [], "data_errors": [], "clinical_negatives": []}
     try:
         result["response"] = schema.model_validate(raw, strict=True)
     except ValidationError as exc:

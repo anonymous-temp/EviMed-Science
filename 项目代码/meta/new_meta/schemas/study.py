@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 
@@ -345,6 +345,17 @@ class PrimaryAlignmentAssessment(BaseModel):
     verification: ExtractionRowVerification | None = None
 
 
+class ExtractionReferenceEnvelope(RootModel[dict[str, Any]]):
+    """Observe the actual envelope before independently validating each support leaf."""
+
+
+class ExtractionSourceReceipt(BaseModel):
+    """Runtime-owned reference to an immutable replayable source-resolution record."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    path: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class PrimaryAnalysisAlignment(BaseModel):
     """Runtime-created proof; model-facing schemas omit this field entirely."""
     model_config = ConfigDict(extra="forbid")
@@ -362,6 +373,7 @@ class PrimaryAnalysisAlignment(BaseModel):
     issue_history_complete: bool = False
     current_checkpoint_path: str = ""
     proof_id: str
+    source_reference: ExtractionSourceReceipt | None = None
 
 
 class OutcomeData(BaseModel):

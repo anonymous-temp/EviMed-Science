@@ -159,7 +159,7 @@ this batch for missing other primary, secondary or safety endpoints.
 Always return data_issues, using [] when no actual supplied-row data defect remains.
 Each data issue must name a supplied outcome_index, an actual outcome field,
 kind (incorrect_value, missing_value, source_conflict or incorrect_metadata),
-rationale and an exact source quote/location supporting that specific defect.
+rationale and a source_id (optionally end_source_id) supporting that specific defect.
 Missing_value means a missing field of a supplied row that the source actually
 reports; it never means another outcome row should have been extracted.
 Clinical match/mismatch/uncertain belongs ONLY in primary_analysis_alignment.
@@ -178,7 +178,7 @@ errors or requests for numerical refinement. Put all real data defects in data_i
 Independently assess EVERY indexed outcome row for primary_analysis_alignment.
 Return exactly one unique outcome_index per row, with outcome, population and
 contrast dimensions, each status match/mismatch/uncertain, a concise rationale,
-an exact complete source quote and source_location. These are clinical judgments,
+a source_id and optional end_source_id selecting its supporting original passage. These are clinical judgments,
 not lexical similarity. A paper's primary result is not necessarily this review's
 primary result. Do not change extracted values, names or labels to make them match.
 - Outcome: assess component versus composite, thresholds (30% is not 50%), units,
@@ -199,22 +199,22 @@ rationale that an intervention comparison is not applicable to this protocol and
 quote that source evidence; never invent a comparison or assume missing arms match.
 
 Use uncertain when the supplied source cannot support the judgment; do not invent
-quotes, eligibility or assessor/verification metadata. Only verbatim full quotes
-present in the supplied paper content count as anchors. One sentence per rationale
-and a short but complete source sentence per quote is sufficient.
-The text may contain PDF line breaks, split words, separate columns or rotated
-tables. Copy a contiguous source passage exactly, preserving intervening words
-and numeric tokens; do not reconstruct a smoother sentence or invent an events/N
-pair absent from the text. Different fields may cite different short passages.
-Keep each rationale to one concise sentence; never repeat the full article.
+quotes, eligibility or assessor/verification metadata. Return source_id, never quote or source_location. Source IDs label immutable
+original passages. For a passage spanning adjacent units, select its first
+source_id and last end_source_id; the runtime resolves ONE contiguous raw slice.
+Select the full relevant context, including negations, qualifiers, and table
+headers. Do not reorder split table text, smooth PDF hyphenation, or manufacture
+events/N. IDs from another catalogue are invalid. Use null only when evidence
+is unavailable, with the same honest uncertain judgment. Keep rationales to one
+concise sentence. Reuse IDs instead of repeating source text.
 
 Required per-row verification payload (never omit it, even with a high score):
 - numeric_findings: verify EVERY supplied numeric_fields_to_verify field, naming its
-  directly reported value, exact source quote/location, match/mismatch/uncertain and
+  directly reported value, source_id, match/mismatch/uncertain and
   rationale. Check every CI endpoint, sign, unit, measure and scale. A score cannot
   override an incorrect CI or an unresolved source/OCR conflict. Use full Results
   and table evidence rather than converting an ambiguous abstract percentage.
-- source_endpoint_definition: quote the actual endpoint DEFINITION, not merely a
+- source_endpoint_definition: select source IDs for the actual endpoint DEFINITION, not merely a
   numeric table row. List all source and protocol components and their relation.
   A component explicitly excluded from BOTH the protocol and the source endpoint
   is not a missing component. 'missing' means required by the protocol but absent
@@ -223,7 +223,7 @@ Required per-row verification payload (never omit it, even with a high score):
   Extra cardiovascular death is not equivalent to a renal-only composite. "As
   reported by the trial" does not authorize adding components absent from the
   protocol. Scalar outcomes still require one explicit matched endpoint component.
-- estimand_support and conditioning_variables: quote model adjustment and cohort
+- estimand_support and conditioning_variables: select evidence IDs for model adjustment and cohort
   selection. Distinguish baseline covariates from treatment-induced/postrandomization
   changes or nonresponse. The randomized treatment coefficient conditional on year1
   substrate change is a conditional effect, not the total randomized treatment effect.
@@ -235,7 +235,9 @@ Required per-row verification payload (never omit it, even with a high score):
   explicitly mark randomized-comparison/trial identities not applicable where justified.
 - trial_units: identify ALL underlying trials/cohorts CONTRIBUTING to THIS row,
   using source-quoted registration IDs and/or explicit trial names. Names/IDs only
-  mentioned in a reference or comparison are not contributing units. A pooled
+  mentioned in a reference or comparison are not contributing units; you do not
+  need to enumerate them. If included, their names still must appear literally
+  in the selected source passage. A pooled
   estimate carries all component trials. Do not invent an ID from PMID, DOI, author
   or sample size. Missing identity or uncertain membership means uncertain coverage.
   An anchored registry_id is sufficient when no explicit trial name is reported;

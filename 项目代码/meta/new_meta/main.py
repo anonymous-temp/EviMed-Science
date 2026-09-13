@@ -61,6 +61,9 @@ from new_meta.core.pdf_intake import PDF_PARSE_CACHE_VERSION, parse_file_with_ca
 from new_meta.core.model_selection import build_model_decision_and_sensitivity
 from new_meta.core.method_planning import compile_project_method_plan
 from new_meta.core.extraction_ledger import migrate_extractions_to_ledger
+from new_meta.core.pairwise_result_rob import (
+    ensure_pairwise_result_rob, require_study_rob_refresh_safe, validated_pairwise_result_rob,
+)
 from new_meta.core.rct_design_reconciliation import reconcile_extracted_rct_designs
 from new_meta.core.positioning import ensure_review_positioning
 from new_meta.core.proofreading import LanguageToolProofreader
@@ -1120,6 +1123,46 @@ def _require_cli_current_alignment(project, *, protocol=None, effects=None, meta
     except PrimaryAlignmentRequired as exc:
         project.save_json("primary_alignment_status.json", exc.phase, subdir="analysis")
         _require_cli_method_delivery(project, exc.phase)
+
+
+def _require_cli_pairwise_rob(project, *, protocol, meta_results, extracted_studies,
+                              study_assessments=None, model=None):
+    from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired
+    try:
+        if study_assessments is None:
+            return validated_pairwise_result_rob(
+                project, protocol=protocol, meta_results=meta_results, extracted_studies=extracted_studies,
+            )
+        completed = ensure_pairwise_result_rob(
+            project, protocol=protocol, meta_results=meta_results, extracted_studies=extracted_studies,
+            study_assessments=study_assessments, agent_factory=lambda: RoBAgent(model=model),
+        )
+        _refresh_selected_rob_figure(project, extracted_studies, completed)
+        return completed
+    except PrimaryAlignmentRequired as exc:
+        project.save_json("primary_alignment_status.json", exc.phase, subdir="analysis")
+        _require_cli_method_delivery(project, exc.phase)
+
+
+def _run_verified_pairwise_writer(writer, *, project, protocol, meta_results,
+                                   extracted_studies, rob_results, **kwargs):
+    effective = _require_cli_pairwise_rob(
+        project, protocol=protocol, meta_results=meta_results, extracted_studies=extracted_studies,
+    ) if meta_results is not None else rob_results
+    return writer.run(project=project, protocol=protocol, meta_results=meta_results,
+                      extracted_studies=extracted_studies, rob_results=effective, **kwargs)
+
+
+def _run_study_rob_refresh(project, model, extracted_studies, parsed_papers, *, clear_downstream=False):
+    from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired
+    try:
+        require_study_rob_refresh_safe(project)
+    except PrimaryAlignmentRequired as exc:
+        project.save_json("primary_alignment_status.json", exc.phase, subdir="analysis")
+        _require_cli_method_delivery(project, exc.phase)
+    if clear_downstream:
+        project.clear_downstream("rob")
+    return RoBAgent(model=model).run(extracted_studies, parsed_papers, project)
 
 
 def _can_write_manuscript_from_cached_artifacts(project: Project) -> bool:
@@ -2810,6 +2853,9 @@ def _write_manuscript_from_artifacts(
     """Write references and manuscript from already-loaded analysis artifacts."""
     if meta_results is not None:
         _require_cli_current_alignment(project, protocol=protocol, meta_results=meta_results)
+        rob_results = _require_cli_pairwise_rob(
+            project, protocol=protocol, meta_results=meta_results, extracted_studies=extracted_studies,
+        )
     print_step("13", "Manuscript Generation")
     ref_manager = ReferenceManager()
     for paper in included_papers:
@@ -2839,7 +2885,7 @@ def _write_manuscript_from_artifacts(
     print(f"Review positioning: {positioning.get('category', 'not_assessed')}")
 
     writer = WritingAgent(model=model, lang=lang, topic=args.topic)
-    manuscript = writer.run(
+    manuscript = _run_verified_pairwise_writer(writer,
         protocol=protocol,
         meta_results=meta_results,
         extracted_studies=extracted_studies,
@@ -3032,9 +3078,10 @@ def _run_grade_from_cached_meta(
     extracted_studies: list[ExtractedStudy],
     force: bool = False,
 ) -> GRADEProfile | None:
-    from new_meta.core.result_rob import load_effective_rob_assessments
-
-    effective_rob_results = load_effective_rob_assessments(project, rob_results)
+    effective_rob_results = _require_cli_pairwise_rob(
+        project, protocol=protocol, meta_results=meta_results, extracted_studies=extracted_studies,
+        study_assessments=rob_results, model=model,
+    )
     snapshot = build_grade_input_snapshot(
         project=project,
         protocol=protocol,
@@ -3088,6 +3135,36 @@ def _run_grade_from_cached_meta(
         project.add_warning("grade", f"GRADE assessment failed: {e}", code="grade_failed")
     project.save_checkpoint("grade")
     return grade_profile
+
+
+def _refresh_selected_rob_figure(project, extracted_studies, completed_results):
+    """Refresh only the RoB figure, including direct-to-manuscript resumes.
+
+    This runs before the GRADE cache path. A legacy Low-risk plot must not remain
+    in a manuscript after result-specific assessments establish High risk.
+    """
+    labels = {study.characteristics.pmid or study.characteristics.study_id:
+              _display_study_label(study.characteristics)
+              for study in extracted_studies}
+    summary = [{"study_id": item.study_id, "study_label": labels.get(item.study_id, item.study_id),
+                "tool": item.tool_used, "domains": {domain.domain: domain.judgment for domain in item.domains},
+                "overall": item.overall_judgment, "is_synthetic": item.is_synthetic}
+               for item in completed_results]
+    figures = project.base_dir / "figures"
+    figures.mkdir(exist_ok=True)
+    from tempfile import NamedTemporaryFile
+    with NamedTemporaryFile(dir=figures, prefix=".rob-summary-", suffix=".png", delete=False) as handle:
+        temporary = Path(handle.name)
+    try:
+        visualization.rob_summary_plot(summary, str(temporary))
+        temporary.replace(figures / "rob_summary.png")
+        project.save_json("rob_summary.json", summary, subdir="risk_of_bias")
+    except Exception as exc:
+        temporary.unlink(missing_ok=True)
+        from new_meta.core.primary_analysis_alignment import PrimaryAlignmentRequired, needs_input_phase
+        raise PrimaryAlignmentRequired(needs_input_phase(
+            project, [], reason="pairwise_result_rob_figure_incomplete",
+        )) from exc
 
 
 def _pool_primary_effects(
@@ -4584,10 +4661,10 @@ def main():
                     for item in (project.load_json("rob_results.json", subdir="risk_of_bias") or [])
                 ]
             else:
-                project.clear_downstream("rob")
                 print_step("9", "Risk of Bias Assessment (narrative mode)")
-                rob_agent = RoBAgent(model=model)
-                rob_results = rob_agent.run(extracted_studies, parsed_papers, project)
+                rob_results = _run_study_rob_refresh(
+                    project, model, extracted_studies, parsed_papers, clear_downstream=True,
+                )
                 project.save_checkpoint("rob")
             print(f"Risk of bias assessed for {len(rob_results)} studies")
             _run_evidence_understanding(
@@ -4669,8 +4746,7 @@ def main():
         print(f"Risk of bias assessed for {len(rob_results)} studies (cached)")
     else:
         print_step("9", "Risk of Bias Assessment (page-aware)")
-        rob_agent = RoBAgent(model=model)
-        rob_results = rob_agent.run(extracted_studies, parsed_papers, project)
+        rob_results = _run_study_rob_refresh(project, model, extracted_studies, parsed_papers)
         for r in rob_results:
             print(f"  {r.study_id}: {r.overall_judgment} ({r.tool_used})")
         project.save_checkpoint("rob")
@@ -5000,7 +5076,7 @@ def main():
     )
 
     writer = WritingAgent(model=model, lang=_lang, topic=args.topic)
-    manuscript = writer.run(
+    manuscript = _run_verified_pairwise_writer(writer,
         protocol=protocol,
         meta_results=meta_results,
         extracted_studies=extracted_studies,

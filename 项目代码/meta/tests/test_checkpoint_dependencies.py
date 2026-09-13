@@ -28,6 +28,18 @@ from new_meta.main import (
 )
 from new_meta.agents.writing_agent import WritingAgent
 from new_meta.agents.grade_agent import GRADEAgent
+
+
+def _isolate_result_rob_gate(monkeypatch):
+    # These unit fixtures intentionally omit source/selection provenance and test
+    # downstream resume orchestration. Real result-RoB bindings and all three
+    # resume routes are exercised in test_pairwise_result_rob_workflow.py.
+    def records(project, *, study_assessments=None, **_kwargs):
+        if study_assessments is not None:
+            return study_assessments
+        return [StudyRoB.model_validate(item) for item in
+                project.load_json("rob_results.json", subdir="risk_of_bias") or []]
+    monkeypatch.setattr(main_module, "_require_cli_pairwise_rob", records)
 from new_meta.schemas.grade import GRADEOutcome, GRADEProfile
 from new_meta.core.evidence_gate import GateDecision, GateResult
 from new_meta.schemas.meta_result import MetaAnalysisResults, PooledEffect, StudyEffect
@@ -325,6 +337,7 @@ def test_project_rejects_existing_project_root_as_output_dir(tmp_path) -> None:
 
 
 def test_direct_manuscript_resume_uses_cached_analysis(monkeypatch, tmp_path) -> None:
+    _isolate_result_rob_gate(monkeypatch)
     # Alignment admission is tested separately; isolate downstream orchestration here.
     monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached manuscript resume", output_dir=tmp_path / uuid4().hex)
@@ -412,6 +425,7 @@ def test_direct_manuscript_resume_uses_cached_analysis(monkeypatch, tmp_path) ->
 
 
 def test_direct_manuscript_resume_passes_evidence_gate_state_to_writer(monkeypatch, tmp_path) -> None:
+    _isolate_result_rob_gate(monkeypatch)
     # Alignment admission is tested separately; isolate downstream orchestration here.
     monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached manuscript evidence gate", output_dir=tmp_path / uuid4().hex)
@@ -725,6 +739,7 @@ def test_can_rerun_manuscript_only_uses_cached_files_even_if_checkpoint_is_missi
 
 
 def test_cached_meta_resume_skips_pooling_and_runs_missing_late_steps(monkeypatch, tmp_path) -> None:
+    _isolate_result_rob_gate(monkeypatch)
     # Alignment admission is tested separately; isolate downstream orchestration here.
     monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached meta resume", output_dir=tmp_path / uuid4().hex)
@@ -840,6 +855,7 @@ def test_cached_meta_resume_skips_pooling_and_runs_missing_late_steps(monkeypatc
 
 
 def test_cached_effect_size_resume_skips_effect_recomputation(monkeypatch, tmp_path) -> None:
+    _isolate_result_rob_gate(monkeypatch)
     # Alignment admission is tested separately; isolate downstream orchestration here.
     monkeypatch.setattr(main_module, "_require_cli_current_alignment", lambda *_args, **_kwargs: None)
     project = Project("cached effect resume", output_dir=tmp_path / uuid4().hex)

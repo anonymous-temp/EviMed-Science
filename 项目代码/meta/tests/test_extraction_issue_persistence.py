@@ -18,7 +18,7 @@ def issue(index=0, *, conflict=False):
         "kind": "source_conflict" if conflict else "incorrect_metadata",
         "rationale": "The source contains conflicting values." if conflict else "The HR is an original-scale ratio.",
         "quote": "The renal endpoint HR was 0.38 (95% CI 0.12 to 1.22).",
-        "source_location": "Table 3"}
+        "source_location": f"Source characters {SOURCE.index('The renal endpoint HR')}:{SOURCE.index('The treatment model') - 1}"}
 
 
 def response(*issues, count=1):
@@ -37,7 +37,9 @@ def reverify(project, candidate, monkeypatch, *, current_protocol=None, parsed=N
     path = project.base_dir / "papers/source.txt"
     current = path.read_text() if path.exists() else SOURCE
     agent = DataExtractionAgent()
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_args: response())
+    from extraction_source_fixture import observed_check
+    monkeypatch.setattr(agent, "_check_extraction", lambda text, _study, _protocol, _indices, _feedback, observe, catalogue:
+                        observed_check(response(), text, observe, catalogue))
     monkeypatch.setattr(agent, "_refine_extraction", lambda _text, row, *_args: row)
     return agent._verify_alignment(candidate, {"fulltext_path": str(path)}, parsed or {
         "full_text": current, "_source_sha256": hashlib.sha256(current.encode()).hexdigest()},
@@ -203,9 +205,10 @@ def test_interrupted_check_resumes_with_the_observed_issue_checkpoint(tmp_path, 
     calls = []
 
     def check(*_args):
+        from extraction_source_fixture import observed_check
         calls.append(True)
         if len(calls) == 1:
-            return response(issue())
+            return observed_check(response(issue()), _args[0], _args[5], _args[6])
         raise KeyboardInterrupt
 
     monkeypatch.setattr(agent, "_check_extraction", check)

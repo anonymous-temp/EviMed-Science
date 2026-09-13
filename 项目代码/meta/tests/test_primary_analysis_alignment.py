@@ -235,8 +235,11 @@ def test_existing_checker_receives_full_pico_and_cannot_supply_provenance(tmp_pa
     calls = []
 
     def check_call(messages, schema, **kwargs):
+        from extraction_source_fixture import observed_check
+        from new_meta.core.extraction_sources import source_catalogue
         calls.append((messages[-1]["content"], schema, kwargs))
-        return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()])
+        return observed_check(ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()]),
+            SOURCE, kwargs["on_raw_response"], source_catalogue(SOURCE, hashlib.sha256(SOURCE.encode()).hexdigest()))
 
     monkeypatch.setattr(agent.llm, "structured_output", check_call)
     checked = agent._verify_alignment(study, {"pdf_path": str(source)}, {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}, protocol, project)
@@ -268,7 +271,9 @@ def test_new_extraction_reconciliation_and_selection_preserve_a_current_proof(tm
     project, protocol, study, source = alignment_fixture(tmp_path)
     agent = DataExtractionAgent()
     monkeypatch.setattr(agent, "_extract_single", lambda *_: study)
-    monkeypatch.setattr(agent, "_check_extraction", lambda *_: ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()]))
+    from extraction_source_fixture import observed_check
+    monkeypatch.setattr(agent, "_check_extraction", lambda *args: observed_check(
+        ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[assessment_payload()]), args[0], args[5], args[6]))
     rows = agent.run([{"pmid": "S1", "pdf_path": str(source)}], {"S1": {"full_text": SOURCE, "_source_sha256": hashlib.sha256(SOURCE.encode()).hexdigest()}}, protocol, project)
     assert alignment_status(project, protocol, rows[0], 0)["status"] == "match"
     rob = StudyRoB(study_id="S1", overall_judgment="Low risk", tool_used="RoB 2", domains=[])
@@ -570,8 +575,11 @@ def test_independent_checker_can_confirm_source_backed_single_arm_not_applicable
     agent = DataExtractionAgent()
     prompts = []
     def checked(messages, *_args, **_kwargs):
+        from extraction_source_fixture import observed_check
+        from new_meta.core.extraction_sources import source_catalogue
         prompts.append(messages[-1]["content"])
-        return ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[data])
+        return observed_check(ExtractionCheckResult(data_issues=[], score=9, primary_analysis_alignment=[data]),
+            statement, _kwargs["on_raw_response"], source_catalogue(statement, hashlib.sha256(statement.encode()).hexdigest()))
     monkeypatch.setattr(agent.llm, "structured_output", checked)
     verified = agent._verify_alignment(study, {"pdf_path": str(source)},
         {"full_text": statement, "_source_sha256": hashlib.sha256(statement.encode()).hexdigest()}, protocol, project)
