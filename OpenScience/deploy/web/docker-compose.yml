@@ -162,8 +162,24 @@ services:
         # of root-owned index files, and giving away only the directory leaves
         # every one of them unreadable to the uid that has to read them — an
         # index that starts, stays healthy and answers nothing.
-        for path in (data, *data.rglob('*')):
-            if os.lstat(path).st_uid != 10001 or os.lstat(path).st_gid != 10001:
+        #
+        # Children first, this directory last, and that order is what makes the
+        # step restartable. This process holds CAP_CHOWN and neither
+        # DAC_OVERRIDE nor DAC_READ_SEARCH, so once /data/data belongs to 10001
+        # at mode 0700 root can no longer list it — and a failed listing is
+        # returned as an empty one, not raised. Giving the directory away first
+        # would therefore make every later run a silent no-op over files it
+        # cannot read. Last means the opposite: a directory that already belongs
+        # to 10001 is the proof that everything under it was done.
+        unreadable = []
+        below = []
+        for parent, directories, files in os.walk(data, topdown=False, onerror=unreadable.append):
+            below.extend(os.path.join(parent, name) for name in files + directories)
+        if unreadable and os.lstat(data).st_uid != 10001:
+            raise SystemExit('cannot read the memory index data directory: %s' % unreadable[0])
+        for path in below + [str(data)]:
+            entry = os.lstat(path)
+            if entry.st_uid != 10001 or entry.st_gid != 10001:
                 os.lchown(path, 10001, 10001)
     volumes:
       - type: bind
@@ -1187,14 +1203,16 @@ services:
 # a host that ran the previous stack, and both are an operator decision rather
 # than something a compose file can do:
 #
-#   volumes  `web_evimed-memos-data`, `web_evimed-memos-integration` and the six
+#   volumes  `web_evimed-memos-data`, `web_evimed-memos-integration`,
+#            `web_evimed-memos-secrets` — which holds the retired service's
+#            credentials and is the one worth removing first — and the five
 #            `web_evimed-memos-{engine,neo4j,qdrant,redis,ollama}-*` volumes are
 #            now orphans; `docker volume rm` is the only thing that removes them
 #   tables   `public.memo` and `public.memory_record` stay in the `evimed`
 #            database, where `scripts/ops/postgres-backup.py` keeps dumping them
-#            into every backup, until they are dropped
+#            into every backup, until `--purge-source` empties them
 #
-# Both wait on `pnpm migrate:research-memory` having verified its copy.
+# Both wait on the cutover in `docs/WEB_DEPLOYMENT.md` having verified its copy.
 volumes:
   evimed-postgres-data:
   evimed-openviking-data:

@@ -111,6 +111,23 @@ BEGIN
     ALTER TABLE evimed_memory.notes ADD CONSTRAINT memory_notes_user_fk
       FOREIGN KEY (user_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID;
   END IF;
+  -- Validate what was just added. The audit that readiness runs refuses an
+  -- unvalidated constraint, and both tables are either empty or already
+  -- consistent by construction, so the scan is free and cannot fail. Without
+  -- this, the first deployment to take the NOT VALID path would answer 503
+  -- until somebody ran an ops command nothing tells them about.
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_memory' AND t.relname='records' AND c.conname='memory_records_user_fk' AND NOT c.convalidated
+  ) THEN
+    ALTER TABLE evimed_memory.records VALIDATE CONSTRAINT memory_records_user_fk;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_memory' AND t.relname='notes' AND c.conname='memory_notes_user_fk' AND NOT c.convalidated
+  ) THEN
+    ALTER TABLE evimed_memory.notes VALIDATE CONSTRAINT memory_notes_user_fk;
+  END IF;
 END $foreign_keys$;
 `;
 

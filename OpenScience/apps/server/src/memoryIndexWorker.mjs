@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 /** Retrying a job whose input the index will refuse again only burns attempts:
  *  an unusable job payload, and a fact whose id, kind or revision cannot become
  *  a path, are decided before any request. */
-const TERMINAL_INDEX_FAILURES = ["memory_index_job_invalid", "memory_id_invalid"];
+export const TERMINAL_INDEX_FAILURES = ["memory_index_job_invalid", "memory_id_invalid"];
 
 /**
  * How a failed `memory-index` job goes back to the queue.
@@ -119,7 +119,13 @@ export class MemoryIndexWorker {
 
   async reconcile() {
     if (this.reconciling) return this.reconciling;
-    this.reconciling = this.indexing.reconcile().catch((error) => {
+    // Both halves, because both can be left behind by the same outage: the
+    // capsule ledger re-arms from what it published, the record half from the
+    // jobs its writers enqueued.
+    this.reconciling = Promise.all([
+      this.indexing.reconcile(),
+      this.substrate ? this.substrate.reconcileRecords() : null,
+    ]).catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_reconcile_failed";
       return null;
     }).finally(() => { this.reconciling = null; });

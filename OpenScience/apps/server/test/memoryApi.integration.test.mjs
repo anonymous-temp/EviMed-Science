@@ -222,3 +222,82 @@ test("an index that cannot be reached fails the delete without destroying the me
     .filter((/** @type {any} */ project) => project.id === projectId).length, 1,
   "and so must the project, or the failure would have been half applied");
 });
+
+// The composition root is where the outbox is handed over, and a store built
+// without the queue enqueues nothing and says nothing. Asserting it through the
+// real app is the only place that proves the wire exists: every unit test here
+// builds the store itself and would keep passing over a server that never
+// passed the queue at all.
+test("the app on the index provider hands its store the outbox, and a write uses it", options, async (t) => {
+  const { app, user } = await fixture(t, {
+    memoryIndexProvider: "openviking",
+    openVikingClient: {
+      configured: true,
+      async status() { return { configured: true, connected: true, code: null }; },
+      async find() { return []; },
+      async write() { return { ok: true }; },
+      async list() { return []; },
+      async listAll() { return []; },
+      async remove() { return true; },
+    },
+  });
+  // Through the app's own store instance, which is the object under test: a
+  // record is written by the product, not posted by the researcher.
+  const written = await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
+  });
+
+  const jobs = await app.store.database.query(`SELECT payload FROM evimed_product.jobs
+    WHERE user_id=$1 AND kind='memory-record-index'`, [user.id]);
+  assert.equal(jobs.rowCount, 1, "a memory written through the app must reach the index's queue");
+  assert.equal(jobs.rows[0].payload.recordId, written.id);
+});
+
+test("a deployment on the term matcher writes the same memory and queues nothing", options, async (t) => {
+  const { app, user } = await fixture(t);
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
+  });
+  const jobs = await app.store.database.query(`SELECT 1 FROM evimed_product.jobs
+    WHERE user_id=$1 AND kind='memory-record-index'`, [user.id]);
+  assert.equal(jobs.rowCount, 0, "a queue nothing claims must not be filled");
+});
+
+// The same rule as project deletion, on the path where it matters most: the
+// index holds no original data, so a deletion that fails must leave the memory
+// where it was rather than report a failure over an account it has emptied.
+test("an unreachable index fails an account deletion without emptying the account first", options, async (t) => {
+  const { app, base, headers, user } = await fixture(t, {
+    memoryIndexProvider: "openviking",
+    openVikingClient: {
+      configured: true,
+      async status() { return { configured: true, connected: true, code: null }; },
+      async find() { return []; },
+      async write() { return { ok: true }; },
+      async list() { return []; },
+      async listAll() { return []; },
+      async remove() {
+        throw Object.assign(new Error("the index is unreachable"), { code: "memory_index_unavailable" });
+      },
+    },
+  });
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "tables over prose", summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
+  });
+  await app.researchMemory.create(user.id, "a note that must survive a failed deletion");
+
+  const refused = await fetch(`${base}/api/account`, {
+    method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
+  });
+  assert.notEqual(refused.status, 200);
+
+  const exported = await app.researchMemory.exportUserMemory(user.id);
+  assert.equal(exported.records.length, 1, "a deletion that failed must not have deleted anything");
+  assert.equal(exported.manualMemos.length, 1);
+});

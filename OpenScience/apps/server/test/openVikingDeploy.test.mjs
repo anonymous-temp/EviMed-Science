@@ -137,8 +137,15 @@ test("the server runs unprivileged, which takes a data directory made for it fir
   // files; giving away only the directory leaves every one of them unreadable
   // to the uid that has to read them, and the index then starts, stays healthy
   // and answers nothing.
-  assert.match(script, /for path in \(data, \*data\.rglob\('\*'\)\)/);
+  assert.match(script, /os\.walk\(data, topdown=False/);
   assert.match(script, /os\.lchown\(path, 10001, 10001\)/);
+  // Children first and the directory last, because this process cannot list a
+  // directory it has already given away and a failed listing comes back empty
+  // rather than raised. The order is what makes an interrupted run restartable.
+  assert.ok(script.indexOf("for path in below + [str(data)]") > script.indexOf("os.walk(data, topdown=False"),
+    "the listing must be taken before anything is given away");
+  assert.match(script, /raise SystemExit\('cannot read the memory index data directory/,
+    "an unreadable listing while the directory is still root-owned must fail loudly");
   assert.deepEqual(init.cap_drop, ["ALL"]);
   assert.deepEqual(init.cap_add, ["CHOWN"], "root without CAP_CHOWN cannot give the directory away");
 });

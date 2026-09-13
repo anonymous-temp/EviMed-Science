@@ -321,6 +321,60 @@ test("a deployment on the term matcher has nothing to forget and does not preten
   assert.equal(index.calls.remove.length, 0);
 });
 
+// Two score spaces in one sort. The index answers with cosine similarity,
+// where a good hit is about 0.6; the note matcher answers with a count of
+// matched query terms, where one matched word is 1.0. Compared directly, a
+// handful of notes mentioning one word of the question takes the whole budget
+// and the researcher's structured profile never reaches the prompt — silently,
+// and only on the provider this stack now selects by default.
+test("a note that shares a word with the question cannot crowd out every memory the index found", async () => {
+  const records = [0, 1, 2, 3].map((n) => record({
+    id: `rec${n}`, key: `topic.${n}`, value: `Structured memory ${n} about metformin dosing.`,
+    updatedAt: `2026-09-0${n + 1}T00:00:00Z`,
+  }));
+  const notes = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({
+    id: `note${n}`, content: "a passing note that mentions metformin", pinned: false,
+    updatedAt: `2026-08-0${n + 1}T00:00:00Z`,
+  }));
+  const index = fakeIndex(records.map((row, n) => hit(
+    memoryUri(USER, { scope: "user", scopeId: "", kind: "preference", recordId: row.id }), 0.61 - n * 0.02)));
+  const substrate = new MemorySubstrate(openVikingConfig, {
+    store: fakeStore(records, { memos: notes }), openViking: index,
+  });
+
+  const recalled = await substrate.recall(USER, "metformin dosing", {});
+  const kinds = recalled.map((row) => row.memoryType);
+  assert.ok(kinds.includes("structured"), `the index's hits were crowded out entirely: ${kinds.join(",")}`);
+  assert.ok(kinds.filter((kind) => kind === "structured").length >= 3,
+    `the best records must compete with the best notes, not lose to all of them: ${kinds.join(",")}`);
+  assert.ok(kinds.includes("manual"), "and a matching note must still be able to reach the prompt");
+});
+
+// Ten attempts spread over about five minutes of backoff, which an ordinary
+// restart of the index outruns. Without a reconcile, the job that lost that
+// race stays failed for ever — and for a deleted record that means the index
+// keeps the text the researcher asked to be forgotten.
+test("an index job that failed while the index was down is put back in the queue", async () => {
+  const asked = [];
+  const jobs = { async rearm(kind, options) { asked.push([kind, options]); return 2; } };
+  const substrate = new MemorySubstrate(openVikingConfig, {
+    store: fakeStore([]), openViking: fakeIndex([]), jobs,
+  });
+
+  assert.equal(await substrate.reconcileRecords(), 2);
+  assert.equal(asked[0][0], "memory-record-index");
+  assert.deepEqual(asked[0][1].terminalCodes, ["memory_index_job_invalid", "memory_id_invalid"],
+    "a payload that could not name a path will not name one on the eleventh attempt either");
+});
+
+test("a term-matcher deployment has no index jobs to reconcile and does not ask", async () => {
+  const substrate = new MemorySubstrate({}, {
+    store: fakeStore([]),
+    jobs: { async rearm() { throw new Error("a builtin deployment must not touch the index queue"); } },
+  });
+  assert.equal(await substrate.reconcileRecords(), 0);
+});
+
 /** The job queue as the worker sees it: one `finish` and what it was told. */
 function fakeJobs() {
   const finished = [];
@@ -441,7 +495,15 @@ test("a rebuild publishes what may be recalled and skips what may not", async ()
 
   const result = await substrate.rebuild(USER);
 
-  assert.deepEqual(result, { written: 1, skipped: 3, failed: 0 });
+  assert.deepEqual(result, { written: 1, skipped: 3, failed: 0, removed: 3 });
+  // Empty first, then republish. A rebuild that only wrote could converge in
+  // one direction: a copy whose record was deleted while the index was
+  // unreachable has no event left to remove it and no row to find it from, so
+  // the command an operator runs to make the two agree would leave the
+  // forgotten text exactly where it was.
+  assert.deepEqual(index.calls.remove.map((call) => call.uri.split("/memories/evimed/")[1]),
+    ["user", "project", "session"], "the three research subtrees, and not the capsule tree beside them");
+  assert.ok(index.calls.remove.every((call) => call.options.recursive));
   assert.equal(index.calls.write.length, 1);
   assert.ok(index.calls.write[0].uri.endsWith("/preference/ok1.md"));
   // An operator's rebuild reports that the index is current. A write that
@@ -465,7 +527,7 @@ test("a rebuild that one record refuses still publishes the rest, and counts the
 
   const result = await substrate.rebuild(USER);
 
-  assert.deepEqual(result, { written: 2, skipped: 0, failed: 1, code: "memory_index_timeout" });
+  assert.deepEqual(result, { written: 2, skipped: 0, failed: 1, removed: 3, code: "memory_index_timeout" });
   assert.equal(index.calls.write.length, 3, "the rebuild stopped at the refused record instead of continuing");
 });
 
