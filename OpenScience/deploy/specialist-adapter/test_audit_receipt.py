@@ -344,7 +344,7 @@ def test_cleanup_error_is_visible_without_changing_analysis_result(tmp_path, mon
     service = setup[0]
     if not analysis_success:
         runner = tmp_path / "agent/evimed_runner.py"
-        runner.write_text(runner.read_text().replace("'status':'succeeded'", "'status':'failed','error':'deliberate-analysis-failure'"))
+        runner.write_text(runner.read_text().replace("'status':'succeeded'", "'status':'failed','errorCode':'mr_interpretation_failed','error':'deliberate-analysis-failure'"))
     original = service._mr_job
     diagnostic = {"code": "mr_analysis_cleanup_failed", "message": "Temporary analysis data could not be fully removed."}
 
@@ -370,4 +370,5 @@ def test_cleanup_error_is_visible_without_changing_analysis_result(tmp_path, mon
     assert "auditReceipt" not in result["data"]
     assert service._read_state(state)["cleanupError"] == diagnostic
     if not analysis_success:
-        assert "deliberate-analysis-failure" in json.dumps(result)
+        assert result["error"]["code"] == "mr_interpretation_failed"
+        assert "deliberate-analysis-failure" not in json.dumps(result)

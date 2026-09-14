@@ -317,6 +317,23 @@ class MRJobStore:
             ) from None
 
     @contextmanager
+    def diagnostic_directory(self, path: Path) -> Iterator[int]:
+        """One private, non-deliverable directory beside this validated job state."""
+        self.read(path)
+        parts, job_id = self._state_location(path)
+        with self.inputs.directory_fd(self.root, parts[:-1]) as generation:
+            info = os.fstat(generation)
+            if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+                raise ValueError("MR diagnostic generation is not private.")
+            name = f"{job_id}.diagnostics"
+            os.mkdir(name, mode=0o700, dir_fd=generation)
+            directory = self._child(generation, name, False, private=True)
+            try:
+                yield directory
+            finally:
+                os.close(directory)
+
+    @contextmanager
     def _job_lock(self, directory: int, job_id: str) -> Iterator[None]:
         descriptor = os.open(job_id + ".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
         try:

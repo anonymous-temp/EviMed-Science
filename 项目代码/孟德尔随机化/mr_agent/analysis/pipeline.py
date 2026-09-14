@@ -617,9 +617,21 @@ class MRPipeline:
                     "stop", "length", "content_filter", "tool_calls", "function_call",
                 }:
                     finish_reason = None
-                r.interpretation_failure = InterpretationFailure(
-                    error_type=error_type, status_code=status_code, finish_reason=finish_reason,
-                )
+                try:
+                    diagnostic = getattr(error, "mr_diagnostics", {})
+                    diagnostic = {key: diagnostic[key] for key in ("category", "sdk_call_attempts", "calls")
+                                  if isinstance(diagnostic, dict) and key in diagnostic}
+                    failure = InterpretationFailure(
+                        error_type=error_type, status_code=status_code, finish_reason=finish_reason,
+                        **diagnostic,
+                    )
+                except (ValueError, TypeError, AttributeError):
+                    failure = InterpretationFailure(error_type=error_type, status_code=status_code,
+                                                    finish_reason=finish_reason)
+                if failure.calls:
+                    failure.finish_reason = failure.calls[-1].finish_reason
+                    failure.status_code = failure.calls[-1].status_code
+                r.interpretation_failure = failure
                 logger.warning("MR interpretation failed: mr_interpretation_failed; type=%s; status=%s; finish=%s",
                     error_type, status_code, finish_reason)
                 raise MRDeliveryError("mr_interpretation_failed", "interpretation") from None

@@ -39,6 +39,14 @@ def require_interpretations(results: list[MRAnalysisResult]) -> None:
             raise MRDeliveryError("mr_interpretation_incomplete", "interpretation")
 
 
+def interpretation_diagnostics(results: list[MRAnalysisResult]) -> dict:
+    """A small typed failure projection, with no phenotype, prompt or response text."""
+    failed = [{"result_index": index, "failure": result.interpretation_failure.model_dump(mode="json")}
+              for index, result in enumerate(results) if result.interpretation_failure is not None]
+    return {"schema_version": 1, "phase": "interpretation", "failures": failed[:8],
+            "omitted_results": max(0, len(failed) - 8)}
+
+
 def diagnostic_plot_checks(result: MRAnalysisResult) -> dict:
     """Inspect generated pages and image pixels; file existence is insufficient."""
     from PIL import Image, ImageStat

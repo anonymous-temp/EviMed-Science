@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -18,6 +19,52 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 5
 RETRY_DELAY = 3.0
+
+
+def _safe_attribute(value, name):
+    try:
+        return getattr(value, name, None)
+    except Exception:
+        return None
+
+
+def _counter(value):
+    return value if type(value) is int and 0 <= value <= 1_000_000_000 else None
+
+
+def _error_type(error):
+    name = type(error).__name__
+    return name if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", name) else "Exception"
+
+
+def _observe_call(calls, retry_attempt, budget, *, response=None, choice=None, error=None, category):
+    """No message, request, provider body or exception text enters this record."""
+    usage = _safe_attribute(response, "usage")
+    details = _safe_attribute(usage, "completion_tokens_details")
+    content = _safe_attribute(_safe_attribute(choice, "message"), "content")
+    finish = _safe_attribute(choice, "finish_reason")
+    if not isinstance(finish, str) or finish not in {"stop", "length", "content_filter", "tool_calls", "function_call"}:
+        finish = None
+    status = _safe_attribute(error if error is not None else response, "status_code")
+    status = status if type(status) is int and 100 <= status <= 599 else None
+    if error is not None:
+        names = {cls.__name__ for cls in type(error).__mro__}
+        category = ("http_error" if status is not None else "timeout" if names & {
+            "TimeoutError", "APITimeoutError", "TimeoutException"} else
+            "connection" if "APIConnectionError" in names else "response_error")
+    if len(calls) >= 10:
+        return
+    calls.append({
+        "sdk_call": len(calls) + 1, "retry_attempt": retry_attempt,
+        "request_max_tokens": _counter(budget), "category": category,
+        "error_type": _error_type(error) if error is not None else None,
+        "status_code": status, "finish_reason": finish,
+        "content_present": isinstance(content, str) and bool(content.strip()) if choice is not None else None,
+        "prompt_tokens": _counter(_safe_attribute(usage, "prompt_tokens")),
+        "completion_tokens": _counter(_safe_attribute(usage, "completion_tokens")),
+        "total_tokens": _counter(_safe_attribute(usage, "total_tokens")),
+        "reasoning_tokens": _counter(_safe_attribute(details, "reasoning_tokens")),
+    })
 
 
 class LLMClient:
@@ -117,8 +164,13 @@ class LLMClient:
     ) -> str:
         """Send messages through the selected DeepSeek V4 tier."""
         model = self.model_for_tier(model_tier)
-        return self._with_retry(
-            lambda: self._chat_openai(
+        observations = []
+        retry_attempt = 0
+
+        def call():
+            nonlocal retry_attempt
+            retry_attempt += 1
+            return self._chat_openai(
                 messages,
                 system,
                 temperature,
@@ -126,8 +178,18 @@ class LLMClient:
                 model,
                 json_mode,
                 model_tier,
+                observations=observations,
+                retry_attempt=retry_attempt,
             )
-        )
+        try:
+            return self._with_retry(call)
+        except Exception as error:
+            error.mr_diagnostics = {
+                "sdk_call_attempts": len(observations),
+                "category": observations[-1]["category"] if observations else "client_error",
+                "calls": observations,
+            }
+            raise
 
     def _chat_openai(
         self,
@@ -138,6 +200,7 @@ class LLMClient:
         model: str,
         json_mode: bool,
         model_tier: str,
+        *, observations: list | None = None, retry_attempt: int = 1,
     ) -> str:
         """Call the DeepSeek OpenAI-compatible Chat Completions API."""
         start_time = time.perf_counter()
@@ -170,24 +233,38 @@ class LLMClient:
             budgets.append(expanded_tokens)
 
         last_issue = ""
+        observations = [] if observations is None else observations
         for budget in budgets:
             kwargs["max_tokens"] = budget
-            response = client.chat.completions.create(**kwargs)
-            choice = response.choices[0]
-            content = choice.message.content
-            finish_reason = getattr(choice, "finish_reason", None)
+            response = choice = None
+            try:
+                response = client.chat.completions.create(**kwargs)
+                choice = response.choices[0]
+                content = choice.message.content
+                finish_reason = getattr(choice, "finish_reason", None)
+                empty_content = finish_reason != "length" and (not content or not content.strip())
+            except Exception as error:
+                _observe_call(observations, retry_attempt, budget, response=response, choice=choice,
+                              error=error, category="response_error")
+                raise
             if finish_reason == "length":
+                _observe_call(observations, retry_attempt, budget, response=response, choice=choice,
+                              category="truncated")
                 last_issue = (
                     "DeepSeek response was truncated "
                     f"(model={model}, request_max_tokens={budget})"
                 )
                 continue
-            if not content or not content.strip():
+            if empty_content:
+                _observe_call(observations, retry_attempt, budget, response=response, choice=choice,
+                              category="empty_content")
                 last_issue = (
                     "DeepSeek returned empty content "
                     f"(model={model}, request_max_tokens={budget})"
                 )
                 continue
+            _observe_call(observations, retry_attempt, budget, response=response, choice=choice,
+                          category="completed")
             logger.info(
                 "DeepSeek call completed: service=mendelian_randomization "
                 "model=%s tier=%s thinking=%s latency_seconds=%.3f "
@@ -301,7 +378,9 @@ class LLMClient:
 
     def _log_retry(self, attempt: int, retries: int, error: Exception) -> None:
         delay = RETRY_DELAY * (2**attempt)
-        logger.warning("DeepSeek call failed (attempt %s): %s", attempt + 1, error)
+        status = _safe_attribute(error, "status_code")
+        status = status if type(status) is int and 100 <= status <= 599 else None
+        logger.warning("DeepSeek call failed (attempt %s): type=%s status=%s", attempt + 1, _error_type(error), status)
         if attempt < retries - 1:
             time.sleep(delay)
 

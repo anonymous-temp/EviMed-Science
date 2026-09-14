@@ -733,8 +733,10 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
                 message,
                 bool(state.get("retryable")),
             )
-            if cleanup:
-                response["data"] = {"jobId": job_id, "jobStatus": "failed", "cleanupError": cleanup}
+            if cleanup or state.get("failureDiagnosticReceipt"):
+                response["data"] = {"jobId": job_id, "jobStatus": "failed"}
+                if cleanup:
+                    response["data"]["cleanupError"] = cleanup
             return response
         tail = _log_tail(log_path)
         if tail:
@@ -855,7 +857,16 @@ def _run_isolated_mr(
             credentials = audit_receipt.analysis_credentials()
         except audit_receipt.AuditReceiptUnavailable:
             raise helper.MRInputError("mr_input_isolation_unavailable", "Signed MR audit requires isolated analysis permissions.") from None
-        outcome = jobs.execute(helper, job, environment, analysis_credentials=credentials)
+        try:
+            with _mr_store().diagnostic_directory(state_path) as diagnostic_directory:
+                outcome = jobs.execute(helper, job, environment, analysis_credentials=credentials,
+                                       failure_directory=diagnostic_directory)
+        except helper.MRInputError:
+            raise
+        except (OSError, ValueError):
+            raise helper.MRInputError(
+                "mr_analysis_diagnostics_unavailable", "Protected MR diagnostics are unavailable."
+            ) from None
         if outcome.get("cleanupError"):
             state["cleanupError"] = outcome["cleanupError"]
         if state.get("sourceEvidence") != _source_evidence(root):
@@ -883,9 +894,14 @@ def _run_isolated_mr(
                 state.pop("auditReceipt", None)
                 raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
         if not success:
-            state["error"] = str(result.get("error") or "The fixed MR runner failed.")
-            if str(result.get("errorCode", "")).startswith(("mr_input_", "mr_analysis_")):
-                state["errorCode"] = result["errorCode"]
+            code = result.get("errorCode")
+            if isinstance(code, str) and (re.fullmatch(r"mr_(?:input|analysis)_[a-z_]{1,80}", code) or code in {
+                "mr_interpretation_failed", "mr_interpretation_incomplete", "mr_plot_generation_failed",
+            }):
+                state["errorCode"] = code
+            state["error"] = "The fixed MR runner failed."
+            if outcome.get("failureDiagnosticReceipt"):
+                state["failureDiagnosticReceipt"] = outcome["failureDiagnosticReceipt"]
         _write_state(state_path, state)
         return 0 if success else outcome["returnCode"] or 1
     except helper.MRInputError as error:

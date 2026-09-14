@@ -356,6 +356,12 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
     )
     (agent / "mr_agent/__init__.py").write_text("")
     (agent / "mr_agent/core/__init__.py").write_text("")
+    (agent / "mr_agent/analysis").mkdir()
+    (agent / "mr_agent/analysis/__init__.py").write_text("")
+    (agent / "mr_agent/analysis/delivery.py").write_bytes(
+        (source / "mr_agent/analysis/delivery.py").read_bytes()
+    )
+    (agent / "delivery_fixture.py").write_bytes((source / "tests/delivery_fixture.py").read_bytes())
     (agent / "mr_agent/tools").mkdir()
     (agent / "mr_agent/tools/__init__.py").write_text("")
     (agent / "mr_agent/tools/mr_replay.py").write_bytes(
@@ -368,6 +374,7 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
         "import json,tempfile\nfrom pathlib import Path\n"
         "from types import SimpleNamespace\n"
         "from mr_agent.models import DataSourceType,MRAnalysisResult\n"
+        "from delivery_fixture import ready_delivery\n"
         "class MRAgent:\n"
         " def __init__(self,language):\n"
         "  self.state=SimpleNamespace(slots=SimpleNamespace(),analysis_results=[],"
@@ -385,6 +392,7 @@ def test_analysis_scratch_is_cleaned_and_never_published(tmp_path, monkeypatch, 
         "outcome_id='outcome.csv',n_instruments=1,"
         "exposure_source_type=DataSourceType.LOCAL_FILE,"
         "outcome_source_type=DataSourceType.LOCAL_FILE)]\n"
+        "  ready_delivery(self.state.analysis_results[0], analysis/'figures')\n"
         "  return 'Fixture completed.'\n"
         " def _run_paper_generation(self):\n"
         "  self.state.paper_sections={'abstract':"
