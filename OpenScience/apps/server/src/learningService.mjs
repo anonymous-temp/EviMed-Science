@@ -97,14 +97,16 @@ export const MAX_TRIAL_METHODS = 4;
 
 export class LearningService {
   /**
-   * @param {{documents: any, jobs?: any, notifications?: any, now?: () => Date}} dependencies
+   * @param {{documents: any, jobs?: any, notifications?: any, now?: () => Date,
+   * resolveBaselineDigest?: (userId: string, projectId: string) => Promise<string>}} dependencies
    */
-  constructor({ documents, jobs = null, notifications = null, now = () => new Date() }) {
+  constructor({ documents, jobs = null, notifications = null, now = () => new Date(), resolveBaselineDigest }) {
     if (!documents) throw new TypeError("The learning service needs the product document store.");
     this.documents = documents;
     this.jobs = jobs;
     this.notifications = notifications;
     this.now = now;
+    this.resolveBaselineDigest = resolveBaselineDigest;
   }
 
   /**
@@ -362,6 +364,15 @@ export class LearningService {
     return page.items ?? [];
   }
 
+  /** Read the current owner/project mount, never a digest asserted by a caller.
+   * An unscoped inferred method has no project baseline it can safely claim.
+   * @param {string} userId @param {string|null} projectId
+   */
+  async currentBaselineDigest(userId, projectId) {
+    if (!projectId || !this.resolveBaselineDigest) return "";
+    return this.resolveBaselineDigest(userId, projectId);
+  }
+
   /**
    * Promote a candidate, if the record says it may be promoted.
    *
@@ -370,14 +381,18 @@ export class LearningService {
    * exactly the caller most likely to believe its own conclusion, and this is
    * the one place where believing it would put unvalidated text into every
    * later run of a project.
+   * The current baseline is read here, immediately before the revision write;
+   * a caller-supplied digest cannot make an old evaluation current again.
    * @param {string} userId
    * @param {string} methodId
-   * @param {{expectedRevision: number, currentBaselineDigest?: string}} input
+   * @param {{expectedRevision: number}} input
    */
   async approve(userId, methodId, input) {
     const document = await this.getMethod(userId, methodId);
+    const currentBaselineDigest = document.payload.provenance?.origin === "explicit" ? ""
+      : await this.currentBaselineDigest(userId, document.projectId);
     const verdict = promotionVerdict(methodRecordFrom(document), {
-      ...(input.currentBaselineDigest ? { currentBaselineDigest: input.currentBaselineDigest } : {}),
+      currentBaselineDigest,
     });
     if (verdict.status !== "approved") {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);

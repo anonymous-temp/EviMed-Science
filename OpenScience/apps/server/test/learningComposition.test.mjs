@@ -24,6 +24,14 @@ import test from "node:test";
 
 const serverSource = await readFile(new URL("../src/server.mjs", import.meta.url), "utf8");
 
+test("approval receives a live baseline reader checked against the stored owner's project", () => {
+  const service = serverSource.slice(serverSource.indexOf("const learningService ="), serverSource.indexOf("const learningRoutes ="));
+  assert.match(service, /resolveBaselineDigest: async \(userId, projectId\)/);
+  assert.match(service, /store\.userById\(userId\)/);
+  assert.match(service, /await store\.requireProject\(user, projectId\)/);
+  assert.match(service, /freezeLearningBaseline\(\{ learning: learningService, capsules: capsuleService, userId, projectId \}\)/);
+});
+
 test("every learning module the loop needs is imported by the composition root", () => {
   for (const module of [
     "./runTranscripts.mjs",

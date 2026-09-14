@@ -12,6 +12,10 @@ import test from "node:test";
 import { METHOD_SKILL_SCHEMA, methodContentDigest, renderMethodSkill, evaluationEligible } from "@evimed/domain";
 
 import { LearningService, learnedMethodId, methodRecordFrom } from "../src/learningService.mjs";
+import { freezeLearningEvaluation } from "../src/learningEvaluation.mjs";
+import { MethodConsolidation } from "../src/methodConsolidation.mjs";
+import { freezeLearningBaseline } from "../src/learningBaseline.mjs";
+import { productId } from "../src/productPersistence.mjs";
 
 /** @param {string} text */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -53,9 +57,10 @@ function fakeDocuments() {
       return next;
     },
     async get(userId, kind, id) { return rows.get(key(userId, kind, id)) ?? null; },
-    async list(userId, kind, { filter = {} } = {}) {
-      const items = [...rows.values()].filter((row) => row.kind === kind
-        && Object.entries(filter).every(([field, value]) => row.payload?.[field] === value));
+    async list(userId, kind, { filter = {}, projectId } = {}) {
+      const items = [...rows.entries()].filter(([at, row]) => at.startsWith(`${userId}:${kind}:`) && row.kind === kind
+        && (projectId === undefined || row.projectId === projectId)
+        && Object.entries(filter).every(([field, value]) => row.payload?.[field] === value)).map(([, row]) => row);
       return { items, nextCursor: null };
     },
     async history(userId, kind, id) { return { items: [...(history.get(key(userId, kind, id)) ?? [])].reverse() }; },
@@ -98,7 +103,8 @@ function service(options = {}) {
   const jobs = { async enqueue(userId, kind, payload, opts) { enqueued.push({ userId, kind, payload, opts }); return { id: "job_1" }; } };
   return {
     documents, notices, enqueued,
-    learning: new LearningService({ documents, jobs, notifications, now: () => new Date("2026-09-07T00:00:00.000Z") }),
+    learning: new LearningService({ documents, jobs, notifications, resolveBaselineDigest: options.resolveBaselineDigest,
+      now: () => new Date("2026-09-07T00:00:00.000Z") }),
   };
 }
 
@@ -251,7 +257,7 @@ test("concurrent successful bootstrap observations all survive CAS conflicts", a
 });
 
 test("nothing that generates a method can approve one", async () => {
-  const { learning } = service();
+  const { learning } = service({ resolveBaselineDigest: async () => `sha256:${"b".repeat(64)}` });
   const created = await create(learning);
 
   // 1. A fresh candidate cannot be approved, and the refusal names what is missing.
@@ -306,8 +312,189 @@ test("nothing that generates a method can approve one", async () => {
   );
 });
 
+async function evaluatedCandidate(learning) {
+  let document = await create(learning);
+  for (const index of [1, 2, 3]) {
+    document = await learning.recordObservation("u1", document.id, {
+      runId: `r${index}`, family: `f${index}`, outcome: "accepted", invoked: true,
+      at: "2026-09-10T00:00:00.000Z", contentDigest: document.payload.contentDigest,
+    });
+  }
+  return document;
+}
+
+test("an inferred approval cannot use a caller digest when its live baseline resolver is missing", async () => {
+  const { learning } = service();
+  const candidate = await evaluatedCandidate(learning);
+  const baselineDigest = `sha256:${"b".repeat(64)}`;
+  const evaluated = await learning.recordEvaluation("u1", candidate.id, {
+    report: "r.json", baselineDigest, candidateDigest: candidate.payload.contentDigest, verdict: "better",
+  });
+  for (const supplied of [undefined, baselineDigest]) {
+    await assert.rejects(() => learning.approve("u1", evaluated.id, {
+      expectedRevision: evaluated.revision, currentBaselineDigest: supplied,
+    }), (error) => error.code === "method_not_promotable" && /current baseline.*unavailable/.test(error.message));
+  }
+  assert.equal((await learning.getMethod("u1", evaluated.id)).payload.status, "candidate");
+});
+
+for (const change of ["project method", "account method", "capsule method", "unavailable", "unchanged"]) {
+  test(`promotion compares the evaluated baseline to the live ${change}`, async () => {
+    const entries = [{ id: "preference", payload: { status: "approved", factKind: "method_preference", layer: "methods", content: "Quote the source." } }];
+    const capsules = {
+      active: async () => ({ items: [{ capsuleId: "capsule" }] }),
+      entries: async () => ({ items: entries }),
+    };
+    let unavailable = false;
+    const { learning, enqueued } = service({ resolveBaselineDigest: async (userId, projectId) => {
+      assert.equal(userId, "u1");
+      assert.equal(projectId, "p1");
+      if (unavailable) throw new Error("baseline store unavailable");
+      return (await freezeLearningBaseline({ learning, capsules, userId, projectId })).baselineDigest;
+    } });
+    const candidate = await evaluatedCandidate(learning);
+    const frozen = await freezeLearningEvaluation({ learning, capsules, project: { id: "p1" },
+      request: { userId: "u1", methodId: candidate.id, candidateDigest: candidate.payload.contentDigest } });
+    const evaluated = await learning.recordEvaluation("u1", candidate.id, {
+      report: "original.json", baselineDigest: frozen.grant.baselineDigest,
+      candidateDigest: candidate.payload.contentDigest, verdict: "better",
+    });
+    if (change.endsWith("method") && change !== "capsule method") {
+      await create(learning, { frontmatter: frontmatter({ name: "new-library-method" }),
+        projectId: change === "account method" ? null : "p1", provenance: { origin: "explicit" } });
+    } else if (change === "capsule method") {
+      entries[0].payload.content = "Check the revised label before quoting the source.";
+    } else if (change === "unavailable") unavailable = true;
+
+    if (change === "unchanged") {
+      const approved = await learning.approve("u1", candidate.id, { expectedRevision: evaluated.revision });
+      assert.equal(approved.payload.status, "approved");
+      return;
+    }
+    await assert.rejects(() => learning.approve("u1", candidate.id, {
+      expectedRevision: evaluated.revision, currentBaselineDigest: frozen.grant.baselineDigest,
+    }), change === "unavailable" ? /baseline store unavailable/ : /baseline that has since moved/);
+    assert.equal((await learning.getMethod("u1", candidate.id)).payload.status, "candidate");
+    assert.deepEqual((await learning.getMethod("u1", candidate.id)).payload.learning.evaluations, evaluated.payload.learning.evaluations);
+    if (change === "unavailable") return;
+
+    // The production nightly pass must queue a new comparison, preserving the
+    // old verdict rather than crediting its result to the changed baseline.
+    const consolidation = new MethodConsolidation({ learning,
+      jobs: { enqueue: async (userId, kind, payload, options) => {
+        productId(options.idempotencyKey, "idempotency key");
+        enqueued.push({ userId, kind, payload, options }); return { id: "evaluation" };
+      } },
+      dispatch: async () => { throw new Error("no model calls in this test"); }, readResult: async () => ({}),
+    });
+    const job = { id: "night", userId: "u1", projectId: "p1" };
+    const slept = await consolidation.sleep({ job });
+    assert.deepEqual(slept.promoted, []);
+    assert.deepEqual(slept.queuedForEvaluation, [candidate.id]);
+    const queued = enqueued.at(-1);
+    assert.equal(queued.payload.bootstrap, false);
+    assert.notEqual(queued.payload.baselineDigest, frozen.grant.baselineDigest);
+    assert.ok(queued.payload.baselineDigest);
+    assert.ok(queued.options.idempotencyKey.endsWith(queued.payload.baselineDigest));
+    await consolidation.sleep({ job: { ...job, id: "next-night" } });
+    assert.equal(enqueued.at(-1).options.idempotencyKey, queued.options.idempotencyKey,
+      "the same changed baseline has one durable evaluation identity");
+    assert.deepEqual((await learning.getMethod("u1", candidate.id)).payload.learning.evaluations, evaluated.payload.learning.evaluations);
+    await learning.recordEvaluation("u1", candidate.id, {
+      report: "reevaluated.json", baselineDigest: queued.payload.baselineDigest,
+      candidateDigest: candidate.payload.contentDigest, verdict: "non_inferior",
+    });
+    const afterReevaluation = await consolidation.sleep({ job });
+    assert.deepEqual(afterReevaluation.promoted, [candidate.id]);
+    assert.equal((await learning.getMethod("u1", candidate.id)).payload.learning.evaluations.length, 2);
+  });
+}
+
+test("changing candidate text during the baseline read cannot overwrite its new revision", async () => {
+  let changeCandidate;
+  const { learning } = service({ resolveBaselineDigest: async () => {
+    await changeCandidate();
+    return `sha256:${"b".repeat(64)}`;
+  } });
+  const candidate = await evaluatedCandidate(learning);
+  const evaluated = await learning.recordEvaluation("u1", candidate.id, {
+    report: "r.json", baselineDigest: `sha256:${"b".repeat(64)}`,
+    candidateDigest: candidate.payload.contentDigest, verdict: "better",
+  });
+  changeCandidate = () => learning.amendMethod("u1", candidate.id, {
+    expectedRevision: evaluated.revision, frontmatter: frontmatter(), body: `${BODY}\nNew candidate revision.`,
+  });
+  await assert.rejects(() => learning.approve("u1", candidate.id, { expectedRevision: evaluated.revision }),
+    { code: "product_revision_conflict" });
+  const changed = await learning.getMethod("u1", candidate.id);
+  assert.equal(changed.payload.status, "candidate");
+  assert.match(changed.payload.body, /New candidate revision/);
+  assert.deepEqual(changed.payload.learning.evaluations, []);
+});
+
+test("an inferred method without a stored project scope cannot borrow a caller's baseline", async () => {
+  const { learning } = service({ resolveBaselineDigest: async () => { throw new Error("no project scope should be read"); } });
+  const candidate = await create(learning, { projectId: null });
+  let evaluated = candidate;
+  for (const index of [1, 2, 3]) evaluated = await learning.recordObservation("u1", candidate.id, {
+    runId: `r${index}`, family: `f${index}`, outcome: "accepted", invoked: true,
+    at: "2026-09-10T00:00:00.000Z", contentDigest: candidate.payload.contentDigest,
+  });
+  evaluated = await learning.recordEvaluation("u1", candidate.id, {
+    report: "r.json", baselineDigest: `sha256:${"b".repeat(64)}`,
+    candidateDigest: candidate.payload.contentDigest, verdict: "better",
+  });
+  await assert.rejects(() => learning.approve("u1", candidate.id, {
+    expectedRevision: evaluated.revision, currentBaselineDigest: `sha256:${"b".repeat(64)}`,
+  }), /current baseline.*unavailable/);
+});
+
+test("an unchanged inconclusive evaluation is not rerun by every nightly pass", async () => {
+  const baselineDigest = `sha256:${"b".repeat(64)}`;
+  const { learning, enqueued } = service({ resolveBaselineDigest: async () => baselineDigest });
+  const candidate = await evaluatedCandidate(learning);
+  await learning.recordEvaluation("u1", candidate.id, {
+    report: "r.json", baselineDigest, candidateDigest: candidate.payload.contentDigest, verdict: "inconclusive",
+  });
+  const consolidation = new MethodConsolidation({ learning,
+    jobs: { enqueue: async (...args) => { enqueued.push(args); return { id: "job" }; } },
+    dispatch: async () => { throw new Error("no model calls"); }, readResult: async () => ({}),
+  });
+  const slept = await consolidation.sleep({ job: { id: "night", userId: "u1", projectId: "p1" } });
+  assert.deepEqual(slept.promoted, []);
+  assert.deepEqual(slept.queuedForEvaluation, []);
+  assert.deepEqual(enqueued, []);
+});
+
+test("a baseline that returns after another comparison can receive a fresh evaluation job", async () => {
+  let baselineDigest = `sha256:${"b".repeat(64)}`;
+  const { learning } = service({ resolveBaselineDigest: async () => baselineDigest });
+  const candidate = await evaluatedCandidate(learning);
+  const recorded = (report) => learning.recordEvaluation("u1", candidate.id, {
+    report, baselineDigest: `sha256:${"a".repeat(64)}`,
+    candidateDigest: candidate.payload.contentDigest, verdict: "inconclusive",
+  });
+  const keys = new Set();
+  const consolidation = new MethodConsolidation({ learning,
+    jobs: { enqueue: async (_userId, _kind, _payload, options) => { keys.add(options.idempotencyKey); return { id: options.idempotencyKey }; } },
+    dispatch: async () => { throw new Error("no model calls"); }, readResult: async () => ({}),
+  });
+  const job = { id: "night", userId: "u1", projectId: "p1" };
+  await recorded("first-a.json");
+  await consolidation.sleep({ job });
+  await consolidation.sleep({ job });
+  assert.equal(keys.size, 1, "one pending comparison per unchanged old verdict and current baseline");
+  await learning.recordEvaluation("u1", candidate.id, { report: "b.json", baselineDigest,
+    candidateDigest: candidate.payload.contentDigest, verdict: "inconclusive" });
+  baselineDigest = `sha256:${"a".repeat(64)}`;
+  await recorded("second-a.json");
+  baselineDigest = `sha256:${"b".repeat(64)}`;
+  await consolidation.sleep({ job });
+  assert.equal(keys.size, 2, "a previously completed comparison must not absorb a new evaluation request");
+});
+
 test("an explicitly taught method takes effect at once, which is the other half of the bargain", async () => {
-  const { learning, notices } = service();
+  const { learning, notices } = service({ resolveBaselineDigest: async () => { throw new Error("explicit teaching does not need evaluation"); } });
   // At creation, with nothing else called. Before this, `approve` was the only
   // way into `approved` and no production caller ever reached it, so a method a
   // researcher wrote sat as a candidate waiting for evidence it could not

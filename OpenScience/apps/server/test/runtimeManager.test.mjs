@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createServer, request as httpRequest } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { assertDockerDataVolumeSupport } from "../src/dockerMounts.mjs";
@@ -289,6 +290,13 @@ server.listen(socketPath);
 `,
     { mode: 0o755 },
   );
+  // Initialize the executable fixture before testing synchronous Docker availability.
+  const initialized = await promisify(execFile)(bin, ["info", "--format", "{{.ServerVersion}}"], {
+    encoding: "utf8",
+    timeout: 15_000,
+  });
+  assert.equal(initialized.stdout.trim(), "26.0.0");
+  assert.equal(initialized.stderr, "");
   return bin;
 }
 

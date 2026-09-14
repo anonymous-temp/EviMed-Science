@@ -188,6 +188,12 @@ test("an inferred method needs the threshold, a passing evaluation on its own te
   const good = promotionVerdict(method({ learning: passing }), { currentBaselineDigest: DIGEST_B });
   assert.equal(good.status, "approved", good.missing.join("; "));
 
+  for (const currentBaselineDigest of [undefined, "", "   "]) {
+    const unavailable = promotionVerdict(method({ learning: passing }), { currentBaselineDigest });
+    assert.equal(unavailable.status, "candidate", "omitting the live baseline must not bypass freshness");
+    assert.match(unavailable.missing.join(" "), /current baseline.*unavailable/);
+  }
+
   // No evaluation at all.
   const unevaluated = promotionVerdict(method({ learning: threeSuccesses() }));
   assert.equal(unevaluated.status, "candidate");

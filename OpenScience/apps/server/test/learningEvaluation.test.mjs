@@ -19,6 +19,10 @@ test("method evaluation freezes body, files and both digests under the original 
   const learning = { getMethod: async (userId) => { assert.equal(userId, "owner"); return current; }, approvedMethods: async () => [] };
   const capsules = { active: async () => ({ items: [{ capsuleId: "capsule" }] }), entries: async () => ({ items: [{ id: "capsule-method", payload: { status: "approved", factKind: "method_preference", layer: "methods", content: "Quote the source." } }] }) };
   const frozen = await freezeLearningEvaluation({ learning, capsules, project: { id: "source" }, request });
+  // Captured from the release's original frozen-arm implementation. Extracting
+  // the promotion-time reader must not invalidate existing evaluation grants.
+  assert.equal(frozen.grant.baselineDigest, "sha256:5816c29c9caadc4e366077e8647b1e22ab8a712855947887afcde8c84b8cb904");
+  assert.equal(frozen.grant.snapshotDigest, "sha256:4bacada3c164a8b480f04632801319490fa5a747d8423b9af266d7f853ab8e59");
   current.payload.body = "Amended while evaluating.";
   current.payload.files["scripts/example.py"] = "print(2)";
   assert.match(frozen.arms.candidate.learnedMethods[0].document, /Original method body/);
