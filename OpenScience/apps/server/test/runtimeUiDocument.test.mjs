@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-// Unmodified published @deepseek-ai/dsh-web-frontend@0.1.2-rc.1 dist/index.html.
+// Unmodified published @deepseek-ai/dsh-web-frontend@0.1.5-rc.2 dist/index.html.
 const publishedHtml = await readFile(new URL("./fixtures/dsh/rc1/index.html", import.meta.url), "utf8");
 const prefix = `/__evimed/f/${"A".repeat(32)}/`;
 

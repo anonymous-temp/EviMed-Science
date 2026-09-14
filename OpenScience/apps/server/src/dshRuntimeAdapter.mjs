@@ -796,11 +796,33 @@ export function decodeMuxFrame(frame) {
         },
       };
     }
+    // Retired by DSH 0.1.5, and kept anyway. Upstream's own
+    // `KNOWN_SESSION_EVENT_TYPES` no longer lists it and nothing appends it:
+    // on a successful attempt the stream now rides inside `assistant/message`
+    // as `data.stream`, which this decoder ignores because the message's own
+    // content is the settled text and replaying the stream beside it would
+    // double every answer. But session logs written before the upgrade are on
+    // the project volumes and `session/page` replays them verbatim, so deleting
+    // this case would blank the assistant text of every transcript recorded
+    // before today.
     case "assistant/chunk": {
       const chunk = data.chunk && typeof data.chunk === "object" ? data.chunk : {};
       const kind = String(chunk.type ?? "").includes("reason") ? "reasoning" : "text";
       const text = String(chunk.text ?? chunk.delta ?? "");
       if (!text) return null;
+      return { sessionId, event: { type: "assistant/delta", seq, kind: /** @type {any} */ (kind), text } };
+    }
+    // An attempt that streamed and then failed or was interrupted without
+    // settling into a message. It is the only record that those tokens existed
+    // — the success path appends `assistant/message` instead — so it decodes
+    // rather than being dropped, and there is no message beside it to double.
+    case "assistant/attempt": {
+      const members = Array.isArray(data.stream) ? data.stream : [];
+      const chunks = members.map((member) => (member && typeof member === "object" && member.chunk && typeof member.chunk === "object" ? member.chunk : {}));
+      const carried = chunks.filter((chunk) => String(chunk.text ?? chunk.delta ?? ""));
+      const text = carried.map((chunk) => String(chunk.text ?? chunk.delta ?? "")).join("");
+      if (!text) return null;
+      const kind = carried.every((chunk) => String(chunk.type ?? "").includes("reason")) ? "reasoning" : "text";
       return { sessionId, event: { type: "assistant/delta", seq, kind: /** @type {any} */ (kind), text } };
     }
     case "tool/call": {

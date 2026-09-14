@@ -98,17 +98,20 @@ export const SOURCES = {
  * ship.
  */
 export const BASELINE_PROVENANCE = {
-  dshVersion: "0.1.2-rc.1",
-  sha256: "ee0977a56ae51ba770bd28e060ec33a90109d58349bb54895e50904d8fc94ef5",
-  recordedBy: "deploy/runtime-dsh/Dockerfile - `dsh --profile evimed-runtime --dump-config` on the seeded profile",
-  // ECO03 plugin-probe was re-recorded with the exact rc.1 CLI in an isolated
-  // network-disabled cached image on 2026-09-07; its only byte change is that row.
-  // The EviMed native-client row was recorded by the actual rc.1 native UI
-  // acceptance image. The dsh-cite row was recorded on 2026-09-06 by adding
-  // dsh-cite@0.3.2 to an isolated rc.1 profile on the production host and
-  // copying that profile's --dump-config output out of the disposable
-  // container. The release image build still diffs its fresh combined dump
-  // against this file before it can be published.
+  dshVersion: "0.1.5-rc.2",
+  sha256: "2978ba6c2cbfc52c6bab9beac0bbf3715d33cb524b99bb9b1cf5b4e609f6dd7a",
+  recordedBy:
+    "`dsh --profile evimed-runtime --dump-config` on a profile seeded by the same four `dsh plugin add` arguments deploy/runtime-dsh/Dockerfile uses, on linux-x64 outside the image",
+  // Recorded outside a container, and that is only admissible because the
+  // procedure was calibrated first: run at 0.1.2-rc.1 it reproduced the
+  // previous baseline -- the one the image build itself wrote -- byte for
+  // byte, including the three rows earlier provenance notes say were taken
+  // from a plugin-probe image, the native-UI acceptance image and an
+  // isolated profile on the production host. So the seeding, not the
+  // container, is what determines this file. The release image build still
+  // diffs its own fresh dump against this one before it can be published,
+  // and that diff is what would catch a platform-dependent row this host
+  // cannot produce.
 };
 
 /**
