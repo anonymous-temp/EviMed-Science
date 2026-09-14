@@ -32,11 +32,12 @@ def reconcile_extracted_rct_designs(
     *,
     parsed_papers: dict[str, dict] | None = None,
 ) -> dict[str, Any]:
-    """Annotate source-backed comparative dependencies and update RCT designs.
+    """Annotate source-backed comparative dependencies without changing eligibility.
 
     The returned report is deterministic and suitable for persistence.  The
-    protocol and study objects are mutated only when the review is an
-    intervention RCT and the extracted fields justify the change.
+    study objects are mutated only when the review is an intervention RCT and
+    the extracted fields justify the change. The protocol remains the admitted
+    eligibility specification; observed designs belong to the method plan.
     """
     if not _is_intervention_rct(protocol):
         return {
@@ -101,32 +102,54 @@ def reconcile_extracted_rct_designs(
             for _, outcome in eligible_rows
             if str(outcome.reference_arm or "").strip()
         }
-        is_multi_arm = len(eligible_rows) >= 2 and len(distinct_treatments) >= 2 and len(distinct_comparators) == 1
         base_design = _map_extracted_design(characteristics.study_design)
+        if base_design not in {"parallel_rct", "multi_arm_rct", "cluster_rct", "crossover_rct"}:
+            # Preserve the free-text source description on characteristics;
+            # it cannot manufacture a typed design when extraction left it open.
+            base_design = ""
+        declared_designs = {
+            index: _map_extracted_design(outcome.comparative_design)
+            for index, outcome in eligible_rows
+        }
+        parallel_designs = {"parallel_rct", "multi_arm_rct"}
+        is_multi_arm = (
+            len(eligible_rows) >= 2 and len(distinct_treatments) >= 2 and len(distinct_comparators) == 1
+            and (
+                base_design in parallel_designs
+                or (not base_design and all(value in parallel_designs for value in declared_designs.values()))
+            )
+            and all(value in parallel_designs | {""} for value in declared_designs.values())
+        )
         design = "multi_arm_rct" if is_multi_arm else base_design
-        detected_designs.add(design)
         if is_multi_arm:
             multi_arm_studies.append(study_id)
             retired = _retire_legacy_count_covariances(eligible_rows, protocol)
             changed = changed or bool(retired)
-            if "multi" not in str(characteristics.study_design or "").lower():
-                characteristics.study_design = "multi-arm RCT"
-                changed = True
 
         estimand_id = _estimand_id(protocol)
         prepared: list[tuple[OutcomeData, str]] = []
         for index, outcome in eligible_rows:
+            declared_design = declared_designs[index]
+            # A generic characteristic label cannot erase a typed dependency or
+            # an unresolved design. Only an ordinary parallel contrast may be
+            # promoted by source-backed characteristics or shared-arm structure.
+            row_design = declared_design if declared_design and (
+                declared_design != "parallel_rct"
+                or design not in parallel_designs | {"cluster_rct", "crossover_rct"}
+            ) else design
+            if row_design:
+                detected_designs.add(row_design)
             treatment = str(outcome.treatment_arm or characteristics.intervention_description or "Intervention").strip()
             comparator = str(outcome.reference_arm or characteristics.control_description or "Comparator").strip()
             contrast_id = _contrast_id(study_id, treatment, comparator, index)
             updates = {
-                "comparative_design": design,
+                "comparative_design": row_design,
                 "treatment_arm": treatment,
                 "reference_arm": comparator,
                 "contrast_id": contrast_id,
                 "estimand_id": estimand_id,
             }
-            if design in {"parallel_rct", "multi_arm_rct"}:
+            if row_design in {"parallel_rct", "multi_arm_rct"}:
                 if _has_protocol_reported_effect(outcome, protocol):
                     updates["precision_basis"] = "source_reported_effect"
                 elif _can_compute_from_counts(outcome, protocol):
@@ -170,18 +193,6 @@ def reconcile_extracted_rct_designs(
                     if right.covariance_with.get(left_id) != covariance:
                         right.covariance_with[left_id] = covariance
                         changed = True
-
-    if detected_designs:
-        desired = [_display_design(item) for item in sorted(detected_designs)]
-        existing_mapped = {
-            _map_extracted_design(item)
-            for item in (list(protocol.study_designs or []) or [protocol.study_design or ""])
-            if str(item).strip()
-        }
-        if existing_mapped != detected_designs:
-            protocol.study_designs = desired
-            protocol.study_design = desired[0] if len(desired) == 1 else "mixed RCT designs"
-            changed = True
 
     return {
         "schema_version": 1,
@@ -634,14 +645,15 @@ def _arm_matches_comparator(arm: str | None, comparator: str) -> bool:
 
 
 def _map_extracted_design(value: str) -> str:
-    normalized = _normalise_label(value)
-    if "cluster" in normalized:
-        return "cluster_rct"
-    if "crossover" in normalized or "cross over" in normalized:
-        return "crossover_rct"
-    if "multi arm" in normalized:
-        return "multi_arm_rct"
-    return "parallel_rct"
+    # Planning also imports ledger migration, so share its exact-alias mapper
+    # at call time. Missing and unknown labels must never manufacture an RCT.
+    from new_meta.core.method_planning import _map_design
+    from new_meta.schemas.method_policy import ReviewFamily
+
+    mapped = _map_design(value, ReviewFamily.INTERVENTION_RCT)
+    if mapped in {"parallel_rct", "multi_arm_rct", "cluster_rct", "crossover_rct"}:
+        return mapped
+    return value
 
 
 def _normalise_early_postoperative_timepoint(value: str | None) -> str:
@@ -651,15 +663,6 @@ def _normalise_early_postoperative_timepoint(value: str | None) -> str:
     if re.search(r"(?:first|within)\s+7\s+(?:postoperative\s+)?days?", text):
         return "within 7 postoperative days"
     return ""
-
-
-def _display_design(value: str) -> str:
-    return {
-        "parallel_rct": "parallel RCT",
-        "cluster_rct": "cluster RCT",
-        "crossover_rct": "crossover RCT",
-        "multi_arm_rct": "multi-arm RCT",
-    }[value]
 
 
 def _estimand_id(protocol: ResearchProtocol) -> str:

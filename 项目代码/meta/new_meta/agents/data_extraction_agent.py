@@ -173,7 +173,6 @@ class DataExtractionAgent(BaseAgent):
             subdir="extraction",
         )
         if design_reconciliation.get("changed"):
-            project.save_json("protocol.json", protocol)
             for item in results:
                 sid = item.characteristics.pmid or item.characteristics.study_id
                 if sid:
@@ -190,7 +189,7 @@ class DataExtractionAgent(BaseAgent):
             ))
         results = checked
         # Refinement may change clinical fields. Reconciliation is deterministic;
-        # changed rows/protocol will invalidate the preceding check, never rebind it.
+        # changed rows will invalidate the preceding check, never rebind it.
         reconcile_extracted_rct_designs(protocol, results, parsed_papers=parsed_papers)
         for study in results:
             sid = study.characteristics.pmid or study.characteristics.study_id
@@ -800,6 +799,9 @@ class DataExtractionAgent(BaseAgent):
             "Never change endpoint/population/contrast labels to make a result eligible. "
             "Prefer directly reported estimates and precision over deriving them from a damaged abstract. "
             "Do not delete an unresolved value to evade verification; retain it with a conflict note.\n"
+            "Return comparative_design using the schema's canonical design enum, never descriptive prose. "
+            "Correct it only from source evidence; preserve complex trial dependencies. Use unknown "
+            "when unresolved or when one design cannot represent combined complex dependencies.\n"
             f"Protocol: {protocol.model_dump_json()}\n"
             f"Row data defects: {json.dumps([item.model_dump(mode='json') for item in check_result.data_issues if item.outcome_index in indices], ensure_ascii=False)}\n"
             f"Validation errors: {json.dumps([item for item in feedback or [] if item.get('outcome_index') in indices], ensure_ascii=False)}\n"
@@ -820,7 +822,7 @@ class DataExtractionAgent(BaseAgent):
                     value = getattr(item.outcome, field)
                     if field in NUMERIC_MAP_FIELDS:
                         data[field] = {**data.get(field, {}), **{key: entry for key, entry in value.items() if entry is not None}}
-                    elif value is not None and value != "":
+                    elif field == "comparative_design" or (value is not None and value != ""):
                         data[field] = value
                 result.outcomes[item.outcome_index] = OutcomeData.model_validate(data)
                 result.outcomes[item.outcome_index].primary_analysis_alignment = original.primary_analysis_alignment

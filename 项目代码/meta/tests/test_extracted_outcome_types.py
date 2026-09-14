@@ -32,7 +32,7 @@ def test_new_outcome_schema_requires_one_closed_statistical_type():
     assert set(schema["properties"]["outcome_type"]["enum"]) == CANONICAL
     assert set(CANONICAL_EXTRACTION_OUTCOME_TYPES) == CANONICAL
     with pytest.raises(ValidationError):
-        ExtractedOutcomeData(outcome_name="A supplied endpoint")
+        ExtractedOutcomeData(outcome_name="A supplied endpoint", comparative_design="")
 
 
 @pytest.mark.parametrize("kind", sorted(CANONICAL))
@@ -40,6 +40,7 @@ def test_all_canonical_generation_types_keep_the_existing_row_shape(kind):
     from new_meta.schemas.extracted_outcome import ExtractedOutcomeData
 
     payload = {"outcome_name": "A disease-specific composite at 36 months", "outcome_type": kind,
+               "comparative_design": "",
                "effect_size": 0.38, "ci_lower": 0.12, "ci_upper": 1.22,
                "source_quote": "The reported outcome, including its full qualifiers."}
     generated = ExtractedOutcomeData.model_validate(deepcopy(payload))
@@ -56,7 +57,7 @@ def test_new_generation_never_guesses_aliases_or_composite_type_suffixes(kind):
     from new_meta.schemas.extracted_outcome import ExtractedOutcomeData
 
     with pytest.raises(ValidationError):
-        ExtractedOutcomeData(outcome_name="A supplied endpoint", outcome_type=kind)
+        ExtractedOutcomeData(outcome_name="A supplied endpoint", outcome_type=kind, comparative_design="")
 
 
 def test_actual_japanese_unknown_type_is_rejected_only_at_new_generation_boundary():
@@ -69,7 +70,7 @@ def test_actual_japanese_unknown_type_is_rejected_only_at_new_generation_boundar
     assert legacy.effect_size == 0.38 and (legacy.ci_lower, legacy.ci_upper) == (0.12, 1.22)
     assert OutcomeData.model_validate_json(legacy.model_dump_json()).outcome_type == payload["outcome_type"]
     with pytest.raises(ValidationError):
-        ExtractedOutcomeData.model_validate(deepcopy(payload))
+        ExtractedOutcomeData.model_validate({**deepcopy(payload), "comparative_design": ""})
     with pytest.raises(EffectInputMismatch) as caught:
         compute_effect_size(legacy.outcome_type, "HR", effect=legacy.effect_size,
                             ci_lower=legacy.ci_lower, ci_upper=legacy.ci_upper, reported_effect_measure="HR")

@@ -1,13 +1,26 @@
 """Compile and persist immutable project method plans from review protocols."""
 from __future__ import annotations
 
+import logging
 import re
+
+from pydantic import TypeAdapter
 
 from new_meta.core.extraction_ledger import ensure_project_review_id
 from new_meta.core.method_registry import MethodCompilationError, MethodInputError, MethodRegistry, default_method_registry
 from new_meta.core.project import Project
 from new_meta.schemas.method_policy import MethodPlan, ReviewDesignSpec, ReviewFamily
 from new_meta.schemas.protocol import ResearchProtocol
+from new_meta.schemas.study import ExtractedStudy
+
+
+_GENERIC_RCT_DESIGNS = {
+    "rct", "rcts",
+    "randomized_controlled_trial", "randomized_controlled_trials",
+    "randomised_controlled_trial", "randomised_controlled_trials",
+    "randomized_controlled_trial_rct", "randomized_controlled_trials_rcts",
+    "randomised_controlled_trial_rct", "randomised_controlled_trials_rcts",
+}
 
 
 class ProtocolInputRequired(MethodCompilationError):
@@ -247,7 +260,13 @@ def compile_project_method_plan(
     review_id = ensure_project_review_id(project)
     try:
         design_spec = protocol_design_spec(protocol, review_id)
+        # Validate the complete eligible specification before deriving execution
+        # designs. Observing a subset must not hide unsupported protocol inputs.
         plan = registry.compile(design_spec, allow_validating=allow_validating)
+        execution_spec = _project_execution_design_spec(project, protocol, design_spec, registry)
+        if execution_spec != design_spec:
+            design_spec = execution_spec
+            plan = registry.compile(design_spec, allow_validating=allow_validating)
     except MethodInputError as exc:
         raise ProtocolInputRequired(str(exc), context=exc.context, protocol=protocol, project=project) from exc
     family = design_spec.family
@@ -284,6 +303,96 @@ def compile_project_method_plan(
     if enforce and not plan.execution_allowed:
         raise MethodCapabilityBlockedError(plan, project)
     return plan
+
+
+def _study_execution_designs(study: ExtractedStudy, known_designs: set[str]) -> set[str]:
+    """Read typed designs and exact legacy labels without classifying source prose."""
+    family = ReviewFamily.INTERVENTION_RCT
+    typed = {outcome.comparative_design for outcome in study.outcomes
+             if outcome.comparative_design.strip()}
+    designs = {_map_design(value, family) for value in typed}
+    label = study.characteristics.study_design
+    characteristic_design = _map_design(label, family)
+    # New extraction and refinement require canonical result designs; the
+    # existing verifier checks their clinical accuracy. Exact characteristic
+    # labels still contribute known dependencies or a known non-RCT conflict.
+    if label.strip() and (not typed or characteristic_design in known_designs):
+        designs.add(characteristic_design)
+    if characteristic_design not in known_designs and any(
+        not outcome.comparative_design.strip() for outcome in study.outcomes
+    ):
+        # One result's randomized design cannot certify another comparison.
+        designs.add("unknown")
+    if len(designs) > 1:
+        # Parallel arms may coexist with cluster allocation or other dependencies.
+        designs.discard("parallel_rct")
+    return designs or {"unknown"}
+
+
+def _project_execution_design_spec(
+    project: Project, protocol: ResearchProtocol, spec: ReviewDesignSpec, registry: MethodRegistry,
+) -> ReviewDesignSpec:
+    """Derive RCT execution requirements from all current extracted studies.
+
+    Before extraction the eligible designs supply the planning requirements.
+    Afterwards the existing method plan carries the observed designs, including
+    non-poolable studies and typed dependencies. No cached reconciliation report
+    or scope receipt substitutes for the current extraction data.
+    """
+    if spec.family is not ReviewFamily.INTERVENTION_RCT:
+        return spec
+    payload = project.load_json("all_extractions.json", subdir="extraction")
+    if payload is None or payload == []:
+        return spec
+    studies = TypeAdapter(list[ExtractedStudy]).validate_python(payload)
+    known_designs = {design for family in registry.families()
+                     for design in registry.plugin(family).supported_designs} | {"unknown"}
+    rct_designs = set(registry.plugin(spec.family).supported_designs)
+    observed = set()
+    for study in studies:
+        study_designs = _study_execution_designs(study, known_designs)
+        if len(study_designs) > 1 and study_designs <= rct_designs:
+            if not _has_computable_effect(studies, protocol):
+                return spec
+            raise MethodInputError(
+                "Combined trial design dependencies need a supported execution path before synthesis: "
+                + ", ".join(sorted(study_designs)),
+                field="extraction.study_designs", requested=sorted(study_designs),
+                supported=registry.plugin(spec.family).supported_designs,
+            )
+        observed.update(study_designs)
+
+    eligible = set(spec.study_designs)
+    raw_eligible = protocol.study_designs or [protocol.study_design]
+    if any(_normalize_design_label(value) in _GENERIC_RCT_DESIGNS for value in raw_eligible):
+        # "RCT" does not mean "only parallel-group RCT". Keep this exact-alias
+        # interpretation separate from the legacy pre-extraction default route.
+        eligible.update(registry.plugin(spec.family).supported_designs)
+    if observed - eligible:
+        if not _has_computable_effect(studies, protocol):
+            return spec
+        raise MethodInputError(
+            "Extracted study design(s) are unknown or outside the admitted RCT eligibility; "
+            "source-based canonical design extraction is required: "
+            + ", ".join(sorted(observed - eligible)),
+            field="extraction.study_designs", requested=sorted(observed), supported=sorted(eligible),
+        )
+    return spec.model_copy(update={"study_designs": sorted(observed)})
+
+
+def _has_computable_effect(studies: list[ExtractedStudy], protocol: ResearchProtocol) -> bool:
+    """Preserve existing diagnostic reports when no quantitative result exists.
+
+    Reuse the pure effect calculator, including HR/SE and other reported-effect
+    representations. It does not supply design adjustments: a computable scalar
+    still requires the full design-aware execution checks. Every compilation
+    reads current data, so adding numeric results removes this diagnostic path.
+    """
+    from new_meta.core.effect_selection import compute_study_effect
+
+    logger = logging.getLogger(__name__)
+    return any(compute_study_effect(study, outcome, protocol, logger) is not None
+               for study in studies for outcome in study.outcomes)
 
 
 def admit_project_protocol(project, protocol, **kwargs):
@@ -330,13 +439,10 @@ def _method_designs(protocol: ResearchProtocol, family: ReviewFamily) -> list[st
 
 def _map_design(value: str, family: ReviewFamily) -> str:
     """Normalize exact legacy aliases, never infer a design from a substring."""
-    normalized = re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
+    normalized = _normalize_design_label(value)
+    if normalized in _GENERIC_RCT_DESIGNS:
+        normalized = "parallel_rct"
     aliases = {
-        "rct": "parallel_rct", "rcts": "parallel_rct",
-        "randomized_controlled_trial": "parallel_rct", "randomized_controlled_trials": "parallel_rct",
-        "randomised_controlled_trial": "parallel_rct", "randomised_controlled_trials": "parallel_rct",
-        "randomized_controlled_trial_rct": "parallel_rct", "randomized_controlled_trials_rcts": "parallel_rct",
-        "randomised_controlled_trial_rct": "parallel_rct", "randomised_controlled_trials_rcts": "parallel_rct",
         "parallel_group_rct": "parallel_rct", "parallel_randomized_controlled_trial": "parallel_rct",
         "cluster_randomized_trial": "cluster_rct", "cluster_randomised_trial": "cluster_rct",
         "cluster_randomized_controlled_trial": "cluster_rct", "cluster_randomised_controlled_trial": "cluster_rct",
@@ -352,6 +458,10 @@ def _map_design(value: str, family: ReviewFamily) -> str:
     }
     normalized = aliases.get(normalized, normalized)
     return family_aliases.get(family, {}).get(normalized, normalized)
+
+
+def _normalize_design_label(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value).strip().lower()).strip("_")
 
 
 def _default_design(family: ReviewFamily) -> str:

@@ -2472,7 +2472,6 @@ def _reconcile_project_rct_designs(
     )
     project.save_json("rct_design_reconciliation.json", report, subdir="extraction")
     if report.get("changed"):
-        project.save_json("protocol.json", protocol)
         project.save_json("all_extractions.json", extracted_studies, subdir="extraction")
         for study in extracted_studies:
             sid = study.characteristics.pmid or study.characteristics.study_id

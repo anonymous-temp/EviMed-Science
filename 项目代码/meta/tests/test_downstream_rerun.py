@@ -334,6 +334,7 @@ def test_primary_effect_selection_keeps_audit_id_aligned_with_effect_id_for_pmid
             characteristics=StudyCharacteristics(
                 study_id="benchmark_source:dexa_covid_19",
                 pmid="32799933",
+                study_design="RCT",
                 title="DEXA-COVID 19",
                 authors=["DEXA-COVID"],
                 source_type="benchmark_source_review",
