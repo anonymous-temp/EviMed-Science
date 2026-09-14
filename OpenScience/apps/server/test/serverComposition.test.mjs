@@ -33,7 +33,6 @@ import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { DISTILL_TRIGGER, FeedbackEvents, deliverableSubjectId } from "../src/feedbackEvents.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput } from "../src/methodDistillationRuns.mjs";
-import { memoryNamespace } from "../src/memosClient.mjs";
 import { buildRuntimeLaunchPlan } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
@@ -406,7 +405,12 @@ async function composedApp(t, overrides = {}) {
     databaseUrl: "postgres://composition@127.0.0.1:5432/evimed_test",
     databasePool: pool,
     evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
-    memOsEngineUrl: "", requireMemoryIndex: false,
+    // Research memory is a schema of the control-plane database, and the pool
+    // here is a double that answers capsule statements. A test that is about
+    // something else gets a deployment without a memory store — the state local
+    // development runs in — and the two tests that are about memory inject a
+    // store at its own interface.
+    researchMemory: { configured: false, async status() { return { configured: false, connected: false, code: "memory_unconfigured", structured: false }; } },
     ...overrides,
   });
 
@@ -494,6 +498,48 @@ test("the capsule service the composition root builds is the one the runtime man
   const skill = await readFile(path.join(mounted.directory, "approved-method", "SKILL.md"), "utf8");
   assert.match(skill, /Report every effect estimate with its confidence interval\./);
   assert.doesNotMatch(skill, /stranger/, "an unapproved candidate must never be mounted");
+});
+
+// One index, one reranker, one strictness switch — and every one of them has to
+// arrive where it is used. Each of these was wired and unfed at some point in
+// this migration: the reranker existed and no recall called it, and the capsule
+// service degraded to lexical search for an operator who had asked for strict
+// recall. Construction is not the property; reaching the consumer is.
+test("the reranker and the index strictness reach both recall paths", async (t) => {
+  const openViking = {
+    configured: true,
+    async status() { return { configured: true, connected: true, code: null }; },
+    async find() { return []; },
+    async write() { return { ok: true }; },
+    async remove() { return true; },
+  };
+  const fixture = await composedApp(t, {
+    memoryIndexProvider: "openviking",
+    memoryIndexStrict: true,
+    openVikingClient: openViking,
+    // A key and a model are all the reranker needs to exist; nothing is called
+    // here, and an unconfigured one would make every assertion below vacuous.
+    dashscopeApiKey: "test-only-rerank-key",
+  });
+  const app = fixture.app;
+
+  assert.equal(app.memoryRerank.configured, true,
+    "the composition built a reranker that can never run, so the wiring below proves nothing");
+  assert.equal(app.memorySubstrate.rerank, app.memoryRerank,
+    "research recall was given no reranker, so the vector order would stand forever");
+  assert.ok(app.memoryIndexing, "the capsule index must be composed when the index provider is active");
+  assert.equal(app.memoryIndexing.rerank, app.memoryRerank,
+    "capsule recall was given no reranker");
+  assert.equal(app.memorySubstrate.openViking, app.openVikingClient,
+    "both recall paths must address one index");
+  assert.equal(app.memoryIndexing.openViking, app.openVikingClient);
+
+  assert.equal(app.memorySubstrate.strict, true);
+  assert.equal(app.capsuleService.strictIndex, true,
+    "an operator who asked for strictness got the lexical fallback on the capsule path in silence");
+
+  // And the store both of them hydrate from is the one the routes write to.
+  assert.equal(app.memorySubstrate.store, app.researchMemory);
 });
 
 test("startup arms every recurring sweep, and each timer really drives its own sweep", async (t) => {
@@ -1043,30 +1089,39 @@ test("a deployment without the learning loop records the fact and queues nothing
 });
 
 /**
- * The two memory-service calls the structured-memory PATCH route makes.
+ * The three store calls the structured-memory routes make.
  *
- * Only two, and both against the record under test: `getRecord` to read the
- * version the caller claims, and `memoryRecords:upsert` to write the change.
- * Everything the route decides — accepted inference, edit, rejection — is
- * decided from what those two return.
+ * `getRecord` to read the version the caller claims, `upsertRecord` to write
+ * the change, `deleteRecord` to reject one. Everything the routes decide —
+ * accepted inference, edit, rejection — is decided from what those return, so a
+ * fake at the store's own interface is what this composition needs: the store
+ * is in-process now, and a fake HTTP service would be a fake of nothing.
  */
-function memoryServiceDouble(record) {
+function researchMemoryDouble(record) {
   const state = { ...record };
+  let deleted = false;
+  const notFound = () => {
+    const error = new Error("Memory not found.");
+    /** @type {any} */ (error).code = "memory_not_found";
+    /** @type {any} */ (error).status = 404;
+    return error;
+  };
   return {
     state,
-    fetchImpl: async (input, init = {}) => {
-      const url = new URL(String(input));
-      const method = String(init.method ?? "GET").toUpperCase();
-      if (url.pathname === "/api/v1/memoryRecords:upsert" && method === "POST") {
-        const body = JSON.parse(String(init.body));
-        Object.assign(state, body.memoryRecord, { version: state.version + 1, updateTime: new Date().toISOString() });
-        return Response.json(state);
-      }
-      if (/^\/api\/v1\/memoryRecords\/[^/]+$/.test(url.pathname)) {
-        if (method === "GET") return Response.json(state);
-        if (method === "DELETE") return new Response(null, { status: 200 });
-      }
-      return Response.json({ message: "unexpected fake route" }, { status: 500 });
+    configured: true,
+    async status() { return { configured: true, connected: true, code: null, structured: true }; },
+    async getRecord(_userId, id) {
+      if (deleted || id !== state.id) throw notFound();
+      return { ...state };
+    },
+    async upsertRecord(_userId, input) {
+      Object.assign(state, input, { version: state.version + 1, updatedAt: new Date().toISOString() });
+      return { ...state };
+    },
+    async deleteRecord(_userId, id) {
+      if (deleted || id !== state.id) throw notFound();
+      deleted = true;
+      return true;
     },
   };
 }
@@ -1076,16 +1131,15 @@ test("confirming a pending memory over HTTP writes the feedback event the loop n
   // `acceptedInference` and wrote a record plus an audit line, and nothing
   // downstream could ever read that. Driven over the real HTTP server, through
   // the real memory routes, into the ledger the composition root built.
-  const memory = memoryServiceDouble({
-    name: "memoryRecords/record_1", namespace: memoryNamespace(USER_ID),
-    scope: "MEMORY_SCOPE_USER", scopeId: "", kind: "MEMORY_KIND_PREFERENCE", key: "response.evidence_depth",
-    value: "优先给原始证据", summary: "原始证据优先", origin: "MEMORY_ORIGIN_INFERRED",
-    status: "MEMORY_STATUS_PENDING", confidence: 0.7, importance: 0.9, sensitive: false,
+  const memory = researchMemoryDouble({
+    id: "record_1", scope: "user", scopeId: "", kind: "preference", key: "response.evidence_depth",
+    value: "优先给原始证据", summary: "原始证据优先", origin: "inferred",
+    status: "pending", confidence: 0.7, importance: 0.9, sensitive: false,
     evidenceCount: 1, version: 1, evidence: [], revisions: [],
+    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
   });
   const fixture = await composedApp(t, {
-    memosUrl: "http://memos.internal", memosAccessToken: "memos_pat_test",
-    memosRequestTimeoutMs: 1_000, memosFetch: memory.fetchImpl,
+    researchMemory: memory,
     // The distillation half of this test needs the loop that claims what the
     // ledger queues. Off by default, and the ledger is honest about it: with no
     // claimer composed it enqueues nothing and answers a null job id, so this
@@ -1219,45 +1273,44 @@ test("confirming a pending memory over HTTP writes the feedback event the loop n
  * The memory service, as much of it as one extraction run touches: list what is
  * already stored, and upsert what the run produces.
  *
- * The records are proto-shaped because that is what `MemosClient` parses, and
- * parsing them is part of what this proves: a fixture that handed the client
- * its own internal shape would certify a conversion that never ran.
+ * Keyed by the canonical identity the real store enforces — scope, scope id,
+ * kind and key — because that identity is what makes the second observation of
+ * one change an update rather than a second record, which is the property the
+ * inbox assertion below rests on. The separator is written as an escape: a raw
+ * control byte in a source file is invisible to every reader and every grep.
  *
  * @param {any[]} seed
  */
 function memoryRecordsDouble(seed = []) {
   /** @type {Map<string, any>} */
-  const records = new Map(seed.map((record) => [record.name, record]));
+  const records = new Map(seed.map((record) => [record.id, record]));
   let minted = seed.length;
-  const identity = (record) => [record.scope, record.scopeId ?? "", record.kind, record.key].join("\0");
+  const identity = (record) => [record.scope, record.scopeId ?? "", record.kind, record.key].join("\u0000");
   return {
     records,
-    /** @param {any} input @param {any} init */
-    fetchImpl: async (input, init = {}) => {
-      const url = new URL(String(input));
-      const method = String(init.method ?? "GET").toUpperCase();
-      if (url.pathname === "/api/v1/memoryRecords" && method === "GET") {
-        return Response.json({ memoryRecords: [...records.values()] });
-      }
-      if (url.pathname === "/api/v1/memoryRecords:upsert" && method === "POST") {
-        const sent = JSON.parse(String(init.body)).memoryRecord;
-        const existing = sent.name
-          ? records.get(sent.name)
-          : [...records.values()].find((item) => identity(item) === identity(sent));
-        const name = existing?.name ?? `memoryRecords/record_${(minted += 1)}`;
-        const written = {
-          ...existing, ...sent, name,
-          version: (existing?.version ?? 0) + 1,
-          evidenceCount: (existing?.evidenceCount ?? 0) + 1,
-          evidence: existing?.evidence ?? [],
-          revisions: existing?.revisions ?? [],
-          createTime: existing?.createTime ?? "2026-01-01T00:00:00.000Z",
-          updateTime: "2026-09-07T08:00:00.000Z",
-        };
-        records.set(name, written);
-        return Response.json(written);
-      }
-      return Response.json({ message: "unexpected fake memory route" }, { status: 500 });
+    configured: true,
+    async status() { return { configured: true, connected: true, code: null, structured: true }; },
+    async listRecords(_userId, { query = "" } = {}) {
+      const rows = [...records.values()];
+      return query ? rows.filter((row) => row.key.includes(query) || row.value.includes(query)) : rows;
+    },
+    /** @param {string} _userId @param {any} input */
+    async upsertRecord(_userId, input) {
+      const existing = input.id
+        ? records.get(input.id) ?? [...records.values()].find((item) => identity(item) === identity(input))
+        : [...records.values()].find((item) => identity(item) === identity(input));
+      const id = existing?.id ?? `record_${(minted += 1)}`;
+      const written = {
+        ...existing, ...input, id,
+        version: (existing?.version ?? 0) + 1,
+        evidenceCount: (existing?.evidenceCount ?? 0) + 1,
+        evidence: existing?.evidence ?? [],
+        revisions: existing?.revisions ?? [],
+        createdAt: existing?.createdAt ?? "2026-01-01T00:00:00Z",
+        updatedAt: "2026-09-07T08:00:00Z",
+      };
+      records.set(id, written);
+      return written;
     },
   };
 }
@@ -1270,16 +1323,15 @@ test("the memory extractor the composition root built reports a rewritten memory
   // composed. Both halves are asserted here: the seam, and one contradiction
   // driven through the composed objects into the inbox table.
   const language = {
-    name: "memoryRecords/record_1", namespace: memoryNamespace(USER_ID),
-    scope: "MEMORY_SCOPE_USER", scopeId: "", kind: "MEMORY_KIND_PREFERENCE", key: "preference.output_language",
-    value: "回答请用中文", summary: "回答语言", origin: "MEMORY_ORIGIN_EXPLICIT", status: "MEMORY_STATUS_ACTIVE",
+    id: "record_1",
+    scope: "user", scopeId: "", kind: "preference", key: "preference.output_language",
+    value: "回答请用中文", summary: "回答语言", origin: "explicit", status: "active",
     confidence: 1, importance: 0.8, sensitive: false, evidenceCount: 1, version: 1, evidence: [], revisions: [],
-    createTime: "2026-01-01T00:00:00.000Z", updateTime: "2026-01-01T00:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
   };
   const memory = memoryRecordsDouble([language]);
   const fixture = await composedApp(t, {
-    memosUrl: "http://memos.internal", memosAccessToken: "memos_pat_test",
-    memosRequestTimeoutMs: 1_000, memosFetch: memory.fetchImpl,
+    researchMemory: memory,
     deepseekProviderEnabled: true, deepseekApiKey: "composition-extraction-key",
     // The extraction model, answering with the one candidate this test is
     // about: the researcher saying the opposite of what they confirmed before.
@@ -1310,7 +1362,7 @@ test("the memory extractor the composition root built reports a rewritten memory
   assert.equal(result.conflicts.length, 1, "the contradiction was not detected at all");
   const stored = [...memory.records.values()].find((record) => record.key === "preference.output_language");
   assert.equal(stored.value, "回答请用英文");
-  assert.equal(stored.status, "MEMORY_STATUS_ACTIVE");
+  assert.equal(stored.status, "active");
 
   // And the researcher was told, in the table the composed inbox writes to.
   const notices = [...fixture.pool.inbox.values()];

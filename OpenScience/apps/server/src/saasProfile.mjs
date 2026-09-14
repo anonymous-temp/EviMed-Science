@@ -65,7 +65,11 @@ export function readinessSaasProfile(config, checks) {
       "audited-science-connectors",
       checkMatches(checks.scienceConnectors, (check) => check.enabled === 7) && checkMatches(checks.evimedAdapters),
     ],
-    ["research-memory", !config.requireMemos || checkMatches(checks.memory, (check) => check.connected === true)],
+    // A hosted deployment has a control-plane database, so it has a research
+    // memory store; the question left is whether that store answers. There is
+    // no requirement flag to consult any more — one existed while memory was a
+    // separate service a deployment could choose not to run.
+    ["research-memory", checkMatches(checks.memory, (check) => check.connected === true)],
     ["release-provenance", checkMatches(checks.release, (check) => check.required === true && check.tracked === true)],
     [
       "external-recovery",

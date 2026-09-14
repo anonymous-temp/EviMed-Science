@@ -106,9 +106,6 @@ jobs:
           pnpm check:community-skills
           pnpm audit:saas-alignment
 
-      - name: Test private memory engine logging boundary
-        run: python3 -m unittest discover -s deploy/memos-engine -p 'test_*.py'
-
       - name: Test Hosted Web API
         run: |
           CI=true pnpm test:mcp
@@ -233,12 +230,17 @@ jobs:
           echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/postgres-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/database-url.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-dsn.txt" >> "$GITHUB_ENV"
-          echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/memos-admin-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/document-parser.token" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/document-parser-web.token" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openlist-admin-password.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/evimed-api-key.txt" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/dashscope.api-key" >> "$GITHUB_ENV"
+          # The recall index reads its configuration and its own key from two
+          # bind mounts Compose refuses to interpolate without a path, so both
+          # names have to exist before the first `docker compose` call, not only
+          # before `configure:production-state` writes the files they point at.
+          echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-ov.conf" >> "$GITHUB_ENV"
+          echo "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/openviking-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_DEEPSEEK_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/deepseek-api-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/model-gateway-signing-key.txt" >> "$GITHUB_ENV"
           echo "OPEN_SCIENCE_MATERIALS_PROJECT_API_KEY_HOST_FILE=${GITHUB_WORKSPACE}/OpenScience/deploy/web/secrets/materials-project-api-key.txt" >> "$GITHUB_ENV"
@@ -254,6 +256,10 @@ jobs:
           printf '%s\n' 'ci-fake-deepseek-key-no-external-calls' > deploy/web/secrets/deepseek-api-key.txt
           printf '%s\n' 'ci-model-gateway-signing-secret-0123456789abcdef' > deploy/web/secrets/model-gateway-signing-key.txt
           printf '%s\n' 'ci-fake-materials-project-key-no-external-calls' > deploy/web/secrets/materials-project-api-key.txt
+          # The operator supplies this key in production; nothing generates it.
+          # `configure:production-state` renders it into the recall index's
+          # `ov.conf`, so the file has to exist before that step runs.
+          printf '%s\n' 'ci-fake-dashscope-key-no-external-calls' > deploy/web/secrets/dashscope.api-key
           printf '%s\n' 'ci-evimed-workload-signing-secret-0123456789abcdef' > deploy/web/secrets/evimed-workload-signing-key.txt
           printf '%s\n' '{}' > deploy/web/secrets/deepseek-release-receipt.json
           {
@@ -282,13 +288,12 @@ jobs:
             echo "OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR=${OPEN_SCIENCE_PRODUCTION_STATE_SECRETS_DIR}"
             echo "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE=${OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_DATABASE_URL_HOST_FILE=${OPEN_SCIENCE_DATABASE_URL_HOST_FILE}"
-            echo "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE=${OPEN_SCIENCE_MEMOS_DSN_HOST_FILE}"
-            echo "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE}"
             echo "OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE=${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}"
             echo "OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE=${OPEN_SCIENCE_DOCUMENT_PARSER_WEB_TOKEN_HOST_FILE}"
             echo "OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE=${OPEN_SCIENCE_OPENLIST_ADMIN_PASSWORD_HOST_FILE}"
-            echo "OPEN_SCIENCE_MEMOS_ADMIN_USER=evimed-memory"
-            echo "OPEN_SCIENCE_MEMOS_PUBLIC_URL=https://localhost/memos"
+            echo "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE=${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}"
+            echo "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}"
+            echo "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE=${OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE}"
             echo "OPEN_SCIENCE_OPERATOR_METRICS_TOKEN=${OPEN_SCIENCE_OPERATOR_METRICS_TOKEN}"
             echo "OPEN_SCIENCE_BACKUP_MODE=local"
             echo "OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK=true"
@@ -326,7 +331,7 @@ jobs:
           pnpm configure:local-auth
           pnpm check:local-auth
 
-      - name: Generate and validate PostgreSQL and Memos secrets
+      - name: Generate and validate PostgreSQL and recall-index secrets
         run: |
           pnpm configure:production-state
           pnpm check:production-state
@@ -359,16 +364,13 @@ jobs:
           df -h /
 
       - name: Build hosted Web and agent runtime images
-        env:
-          OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE: /tmp/ci-unused-memos-provider.json
-          OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
         run: |
           # This is an ephemeral CI builder, never the serving host. Stop before
           # builds or exports exhaust the filesystem; no production volume exists here.
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
           docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
           export BUILDX_BUILDER=evimed-ci
-          extra_compose=(-f deploy/web/docker-compose.memos-engine.yml -f deploy/web/docker-compose.ingestion.yml)
+          extra_compose=(-f deploy/web/docker-compose.ingestion.yml)
           build_flags=()
           if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
             build_flags=(--no-cache)
@@ -394,18 +396,12 @@ jobs:
           # Images were loaded into the daemon; discard only this job's owned
           # BuildKit cache before pulling dependencies or creating an archive.
           # Buildx's short API deadline expired deleting the full-build cache
-          # after all twelve images had loaded. Remove that exact volume with
+          # after all built images had loaded. Remove that exact volume with
           # the Docker CLI under a separate bounded cleanup deadline.
           docker buildx rm --keep-state evimed-ci
           timeout 300 docker volume rm buildx_buildkit_evimed-ci0_state
           remaining_cache_volume="$(docker volume ls -q --filter name='^buildx_buildkit_evimed-ci0_state$')"
           test -z "$remaining_cache_volume"
-
-      - name: Test Memos private DSN before privilege drop
-        run: >-
-          docker run --rm --network none --user 0 --entrypoint sh
-          -v "$GITHUB_WORKSPACE/记忆模块/scripts:/entrypoint-tests:ro"
-          evimed-memos:0.31.1-evimed /entrypoint-tests/entrypoint_test.sh
 
       - name: Test parser admission inside the built image
         run: |
@@ -691,9 +687,6 @@ jobs:
 
       - name: Package verified full-release images
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-') && contains(github.event.head_commit.message, '[full-release]')
-        env:
-          OPEN_SCIENCE_MEMOS_ENGINE_PROVIDER_CONFIG_HOST_FILE: /tmp/ci-unused-memos-provider.json
-          OPEN_SCIENCE_MEMOS_NEO4J_AUTH_HOST_FILE: /tmp/ci-unused-neo4j-auth
         run: |
           set -euo pipefail
           python3 -m unittest discover -s scripts/ops/test -p 'test_image_archive_inventory.py'
@@ -702,7 +695,6 @@ jobs:
             -f deploy/web/docker-compose.yml \
             -f deploy/web/docker-compose.local-auth.yml \
             -f deploy/web/docker-compose.backup.yml \
-            -f deploy/web/docker-compose.memos-engine.yml \
             -f deploy/web/docker-compose.ingestion.yml \
             --profile backup --profile runtime-image config --format json \
             | python3 -c 'import json,sys; d=json.load(sys.stdin); print("\n".join(sorted({s["image"] for s in d["services"].values() if s.get("build") and (not s.get("profiles") or set(s["profiles"]) & {"backup", "runtime-image"})})))' \
@@ -790,7 +782,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test real deployed agent runtime, DeepSeek, specialist, Memos, RAG, and kernels
+      - name: Test real deployed agent runtime, DeepSeek, specialist, research memory, RAG, and kernels
         env:
           OPEN_SCIENCE_E2E_BASE_URL: ${{ secrets.OPEN_SCIENCE_E2E_BASE_URL }}
           OPEN_SCIENCE_E2E_USERNAME: ${{ secrets.OPEN_SCIENCE_E2E_USERNAME }}

@@ -1,5 +1,5 @@
 {
-  "dsh": "0.1.5-rc.1",
+  "dsh": "0.1.5-rc.2",
   "cordis": "4.0.2",
   "services": {
     "required": [
@@ -36,6 +36,7 @@
     "step/start",
     "step/end",
     "user/message",
+    "assistant/attempt",
     "assistant/message",
     "tool/call",
     "tool/result",

@@ -58,7 +58,7 @@ function findVerified(verified, specifier, file) {
  * `@deepseek-ai/dsh-tool-subagent-report@0.1.2-alpha.4`: 404 on the version
  * document, 200 on the packument, with the version absent from its list.
  */
-function registryStub({ missing = [], published = ["0.1.2-rc.1"] } = {}) {
+function registryStub({ missing = [], published = ["0.1.5-rc.2"] } = {}) {
   const gone = new Set(missing);
   return async (url) => {
     const rest = String(url).replace("https://registry.npmjs.org/", "");
@@ -272,14 +272,14 @@ test("a package mounted by the composition but missing from the seam manifest is
 test("a registry answering 200 with something else does not certify a package", async () => {
   // A mirror serving an HTML index, or a proxy rewriting scoped names, both
   // answer 200. The status code is not the evidence; the body is.
-  const wrongBody = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-rc.1", {
+  const wrongBody = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.5-rc.2", {
     registry: "https://registry.npmjs.org",
-    fetchImpl: async () => new Response(JSON.stringify({ name: "@deepseek-ai/dsh-tool-fs", version: "0.1.2-rc.1" }), { status: 200 }),
+    fetchImpl: async () => new Response(JSON.stringify({ name: "@deepseek-ai/dsh-tool-fs", version: "0.1.5-rc.2" }), { status: 200 }),
   });
   assert.equal(wrongBody.status, "unverified");
   assert.match(wrongBody.detail, /answered 200 .* with @deepseek-ai\/dsh-tool-fs/);
 
-  const unreachable = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-rc.1", {
+  const unreachable = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.5-rc.2", {
     registry: "https://registry.npmjs.org",
     fetchImpl: async () => {
       throw new Error("ECONNREFUSED");
@@ -288,7 +288,7 @@ test("a registry answering 200 with something else does not certify a package", 
   assert.equal(unreachable.status, "unverified");
   assert.match(unreachable.detail, /unreachable: ECONNREFUSED/);
 
-  const serverError = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.2-rc.1", {
+  const serverError = await resolveRegistry("@deepseek-ai/dsh-tool-bash", "0.1.5-rc.2", {
     registry: "https://registry.npmjs.org",
     fetchImpl: async () => new Response("", { status: 503 }),
   });

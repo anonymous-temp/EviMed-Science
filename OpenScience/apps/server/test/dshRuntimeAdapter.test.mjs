@@ -16,6 +16,7 @@ import {
 } from "../src/dshRuntimeAdapter.mjs";
 
 const golden = JSON.parse(await readFile(new URL("./fixtures/dsh/golden-frames.json", import.meta.url), "utf8"));
+const streamingGolden = JSON.parse(await readFile(new URL("./fixtures/dsh/golden-frames-0.1.5-rc.1.json", import.meta.url), "utf8"));
 
 /** The session the golden run actually happened in. Everything live in the fixture is this one. */
 // Read out of the recording, not restated beside it. Every one of these was a
@@ -384,7 +385,13 @@ test("the live session/page records normalize into a transcript the gate can rea
     ["reasoning"],
     "the tool call must not also appear as a part of the message that made it",
   );
+  // The answer, and only the answer, as text. A reasoning block may sit beside
+  // it — `assistants[0]` above asserts reasoning blocks are ordinary — so this
+  // pins what the gate reads as prose rather than the block count, which is the
+  // model's business and changed between recordings.
   assert.deepEqual(assistants.at(-1).parts.filter((part) => part.type === "text"), [{ type: "text", text: "done" }]);
+  assert.ok(assistants.at(-1).parts.every((part) => ["text", "reasoning"].includes(part.type)),
+    "the settled answer carries prose and reasoning only; a tool part here would double the call");
 
   const tools = transcript.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool");
   assert.deepEqual(tools.map((part) => part.tool), ["write", "subagent"],
@@ -398,10 +405,20 @@ test("the live session/page records normalize into a transcript the gate can rea
   assert.match(tools[0].output, /Created file/);
   assert.deepEqual(tools[0].input, JSON.parse(RECORDED_WRITE.arguments));
 
-  // V3 embeds packed attempts in the final message instead of separate chunks
-  // records. Reading that stream again would double the committed text.
-  assert.ok(golden.history.some((record) => Array.isArray(record.event?.data?.stream) && record.event.data.stream.length),
-    "the v3 fixture must contain packed assistant attempt data");
+  // A `chunks` record is a run of deltas the following message already
+  // summarises; replaying it would double the text. DSH 0.1.5 stopped writing
+  // them — the stream settles inside `assistant/message` now — so a live
+  // recording no longer carries one, and the rule is asserted against a record
+  // of that shape directly. The fixture cannot supply it and a synthetic one
+  // must not be smuggled into the fixture, so it is built here, in the open.
+  assert.ok(!golden.history.some((record) => record.type === "chunks"),
+    "0.1.5 stopped writing chunks records; a recording that has one is from an older kernel");
+  const withChunks = normalizeTranscript(RECORDED_SESSION, [
+    ...golden.history,
+    { type: "chunks", event: { type: "chunkrow/assistant-chunks", seq: RECORDED_HEAD + 1, data: { text: "double me" } } },
+  ]);
+  assert.ok(!JSON.stringify(withChunks.messages).includes("double me"),
+    "a chunks record must contribute no text, whichever kernel wrote it");
   assert.equal(transcript.messages.some((message) => message.parts.some((part) => part.text === "recorded")), false);
 });
 
@@ -462,8 +479,13 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // of the decoder. What is: which decoded shapes this build produces at all,
   // and that nothing the kernel sent vanished on the way.
   const produced = new Set(decoded.map((item) => item.event.type));
+  // No `assistant/delta` here, and that is the build changing rather than the
+  // decoder: DSH 0.1.5 retired `assistant/chunk`, and a successful attempt now
+  // settles as one `assistant/message` carrying the whole stream in
+  // `data.stream`. The delta path still has coverage — the synthesized section
+  // below, and the `assistant/attempt` case that a failed attempt produces —
+  // but a live recording of a run that succeeds no longer contains one.
   assert.deepEqual([...produced].sort(), [
-    "assistant/delta",
     "message/assistant",
     "message/user",
     "step/end",
@@ -485,12 +507,19 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // that started returning null for a whole class would still satisfy the set
   // above while losing most of the run.
   const dropped = golden.session
-    .filter((frame) => frame?.type !== "snapshot" && frame?.type !== "assistant-stream" && !decodeSessionFrame(RECORDED_SESSION, frame))
-    .map((frame) => (frame?.event?.type === "assistant/chunk"
-      ? `assistant/chunk:${frame.event.data?.chunk?.type ?? "?"}`
-      : String(frame?.event?.type ?? "?")));
-  assert.deepEqual(dropped, [], "every durable v3 frame is decoded or surfaced as an explicit unknown");
-  assert.ok(golden.session.some((frame) => frame.type === "assistant-stream"), "this fixture must exercise the live v3 presentation channel");
+    .filter((frame) => frame?.type !== "snapshot" && !decodeSessionFrame(RECORDED_SESSION, frame))
+    .map((frame) => String(frame?.event?.type ?? "?"));
+  // Empty at 0.1.5, where it used to be the five structural `assistant/chunk`
+  // markers. Those frames do not exist any more, so the list they populated is
+  // empty — and an exact empty is a stronger assertion than the list was: any
+  // frame class that starts decoding to null fails here by name, which is the
+  // thing the old list was protecting.
+  assert.deepEqual([...new Set(dropped)].sort(), [],
+    "a frame class that stops decoding must be added here deliberately, not discovered in production");
+  // The vacuity guard the drop count used to provide. A recording that shrank
+  // to nothing, or a decoder that started returning null for everything, must
+  // not read as "all frames accounted for".
+  assert.ok(decoded.length >= 10, `only ${decoded.length} frames decoded; the recording, not the decoder, is what this test needs`);
   const unknowns = decoded.filter((item) => item.event.type === "unknown");
   assert.ok(unknowns.length > 0, "an unrecognized frame must still arrive, or this test proves nothing");
 
@@ -506,17 +535,24 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // is how a kernel that starts sending one becomes visible.
   assert.equal(result.tool, "");
 
-  // Deltas carry their kind, and with thinking on a real turn produces both.
-  // The old assertion read the first delta and called it text; against a kernel
-  // that reasons first, "the first one" is the reasoning stream — so the kind
-  // is asserted per kind rather than by position.
-  const deltas = decoded.filter((item) => item.event.type === "assistant/delta").map((item) => item.event);
-  assert.deepEqual(
-    [...new Set(deltas.map((delta) => delta.kind))].sort(),
-    ["reasoning", "text"],
-    "both delta kinds decode, and neither is folded into the other",
-  );
-  assert.equal(deltas.filter((delta) => delta.kind === "text").map((delta) => delta.text).join(""), "done");
+  // A failed attempt settles its presentation stream as an interrupted
+  // message. Both channels survive independently, including attempts that
+  // never reached the answer channel. The successful recording cannot provoke
+  // these on demand, so use the upstream settle-path shape here.
+  const attempt = (members) => decodeSessionFrame(RECORDED_SESSION,
+    { type: "event", event: { type: "assistant/attempt", seq: 1, data: { turn: 1, step: 1, stream: members.map((chunk) => ({ chunk })) } } });
+  const attempts = [
+    attempt([{ type: "reasoning-delta", text: "thinking " }, { type: "reasoning-delta", text: "aloud" }]).event,
+    attempt([{ type: "text-delta", text: "the " }, { type: "text-delta", text: "answer" }]).event,
+  ];
+  assert.deepEqual(attempts.map(({ type, text, reasoning, interrupted }) => ({ type, text, reasoning, interrupted })), [
+    { type: "message/assistant", text: "", reasoning: "thinking aloud", interrupted: true },
+    { type: "message/assistant", text: "the answer", reasoning: "", interrupted: true },
+  ], "partial attempts settle without merging their channels or appending another delta");
+  assert.equal(attempt([{ type: "text-delta", text: "" }]), null, "an attempt that carried no text decodes to nothing");
+  // The live half of the same claim: the recorded run's answer arrives whole on
+  // the settled message, which is where 0.1.5 puts it.
+  assert.equal(decoded.filter((item) => item.event.type === "message/assistant").at(-1).event.text, "done");
   assert.equal(decoded.at(-1).event.type, "turn/end");
   assert.equal(decoded.at(-1).event.endKind, "completed");
 
@@ -590,6 +626,20 @@ test("a session's events are attributed to the session whose stream they arrived
   assert.deepEqual(transport.opened[0].args, { request: { address: { kind: "session", sessionId: "s-parent" }, assistantStream: true } });
 });
 
+test("the recorded rc.1 presentation feed still produces transient deltas after the pin upgrade", async () => {
+  assert.equal(streamingGolden.dsh, "0.1.5-rc.1");
+  const chunks = streamingGolden.session.filter((frame) => frame.type === "assistant-stream"
+    && frame.frame?.type === "chunk" && ["text-delta", "reasoning-delta"].includes(frame.frame.chunk?.type));
+  assert.ok(chunks.length > 0, "the original recording must exercise the presentation feed");
+  const transport = scriptedTransport({ "session/follow": streamingGolden.session });
+  const seen = [];
+  for await (const item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "recorded-rc1", signal: AbortSignal.timeout(2000) })) {
+    if (item.event.stream) seen.push(item);
+  }
+  assert.deepEqual(seen.map((item) => item.event.text), chunks.map((frame) => frame.frame.chunk.text ?? frame.frame.chunk.delta));
+  assert.ok(seen.every((item) => item.replay === false && item.sessionId === "recorded-rc1"));
+});
+
 test("v3 assistant streams retain their durable anchor and ignore replayed chunk indexes", async () => {
   const transport = scriptedTransport({ "session/follow": [
     { type: "snapshot", records: [], assistantStream: { revision: 3, activeAttempt: { attemptId: "a1", startedAfterSeq: 12, nextIndex: 1, stream: [] } } },
@@ -615,6 +665,78 @@ test("v3 assistant stream gaps request a fresh baseline instead of inventing mis
   await assert.rejects(async () => {
     for await (const _item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "s1", signal: AbortSignal.timeout(2000) })) { /* drain */ }
   }, { code: "runtime_assistant_stream_gap" });
+});
+
+const failedAttemptChunks = [
+  { type: "reasoning-delta", text: "private reasoning " },
+  { type: "text-delta", text: "partial " },
+  { type: "reasoning-delta", delta: "continued" },
+  { type: "text-delta", delta: "answer" },
+];
+const failedAttemptRecord = {
+  type: "event",
+  event: { type: "assistant/attempt", seq: 13, data: {
+    turn: 1, step: 1,
+    stream: failedAttemptChunks.map((chunk, index) => ({ index, chunk })),
+  } },
+};
+const failedAttemptMessage = {
+  type: "message/assistant", seq: 13, text: "partial answer",
+  reasoning: "private reasoning continued", usage: null, interrupted: true,
+};
+
+test("a mixed failed attempt keeps reasoning out of answer text and ignores nonprose chunks", () => {
+  const record = structuredClone(failedAttemptRecord);
+  record.event.data.stream.push({ index: 4, chunk: { type: "tool-input-delta", text: "tool arguments are not an answer" } });
+  assert.deepEqual(decodeSessionFrame("s1", record), { sessionId: "s1", event: failedAttemptMessage });
+});
+
+for (const settlementOrder of ["record-before-end", "record-after-end"]) {
+  test(`a live failed attempt settles without replaying its deltas (${settlementOrder})`, async () => {
+    const end = { type: "assistant-stream", frame: { type: "end", revision: 6, attemptId: "a1",
+      outcome: { kind: "committed", eventType: "assistant/attempt", seq: 13 } } };
+    const transport = scriptedTransport({ "session/follow": [
+      { type: "snapshot", records: [], assistantStream: { revision: 0, activeAttempt: null } },
+      { type: "assistant-stream", frame: { type: "start", revision: 1, attemptId: "a1", startedAfterSeq: 12 } },
+      ...failedAttemptChunks.map((chunk, index) => ({ type: "assistant-stream",
+        frame: { type: "chunk", revision: index + 2, attemptId: "a1", index, chunk } })),
+      ...(settlementOrder === "record-before-end" ? [failedAttemptRecord, end] : [end, failedAttemptRecord]),
+    ] });
+    const seen = [];
+    for await (const item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "s1" })) seen.push(item);
+    const deltas = seen.filter(({ event }) => event.type === "assistant/delta");
+    assert.equal(deltas.length, failedAttemptChunks.length, "the durable record must not emit a second copy of the deltas");
+    assert.equal(deltas.filter(({ event }) => event.kind === "text").map(({ event }) => event.text).join(""), "partial answer");
+    assert.deepEqual(seen.at(-1), { sessionId: "s1", event: failedAttemptMessage, replay: false });
+  });
+}
+
+for (const replay of [false, true]) {
+  test(`a persisted mixed attempt remains readable without a native feed (replay=${replay})`, async () => {
+    const transport = scriptedTransport({ "session/follow": replay
+      ? [{ type: "snapshot", records: [failedAttemptRecord], assistantStream: { revision: 6, activeAttempt: null } }]
+      : [failedAttemptRecord] });
+    const seen = [];
+    for await (const item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "s1" })) seen.push(item);
+    assert.deepEqual(seen, [{ sessionId: "s1", event: failedAttemptMessage, replay }]);
+  });
+}
+
+test("reconnecting during an attempt preserves the complete partial text when it settles", async () => {
+  const transport = scriptedTransport({ "session/follow": [
+    { type: "snapshot", records: [], assistantStream: { revision: 3,
+      activeAttempt: { attemptId: "a1", startedAfterSeq: 12, nextIndex: 2,
+        stream: failedAttemptChunks.slice(0, 2).map((chunk, index) => ({ index, chunk })) } } },
+    { type: "assistant-stream", frame: { type: "chunk", revision: 4, attemptId: "a1", index: 1,
+      chunk: failedAttemptChunks[1] } },
+    ...failedAttemptChunks.slice(2).map((chunk, index) => ({ type: "assistant-stream",
+      frame: { type: "chunk", revision: index + 5, attemptId: "a1", index: index + 2, chunk } })),
+    failedAttemptRecord,
+  ] });
+  const seen = [];
+  for await (const item of new DshRuntimeAdapter(transport).watchSession({ sessionId: "s1" })) seen.push(item);
+  assert.deepEqual(seen.filter(({ event }) => event.type === "assistant/delta").map(({ event }) => event.text), ["continued", "answer"]);
+  assert.deepEqual(seen.at(-1).event, failedAttemptMessage, "the durable message includes the prefix from before reconnect");
 });
 
 test("the opening snapshot is replayed as events, so a tab that connects mid-run sees what it missed", async () => {

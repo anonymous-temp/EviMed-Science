@@ -473,8 +473,12 @@ not sufficient containment for those events.
   non-secret status directory read-only. Web verifies its age, restore/cleanup
   proof and actual PostgreSQL system identifier, database OID and name. The
   tracked empty default directory preserves non-PostgreSQL local deployment;
-  it is not a production restore receipt. This database dump does not cover
-  separate attachment volumes, MemOS stores/queues or OpenList configuration.
+  it is not a production restore receipt. This database dump carries research
+  memory, whose notes and structured records are rows in the `evimed_memory`
+  schema. It does not cover separate attachment volumes, the OpenViking recall
+  index or OpenList configuration. The OpenViking volume is derived from
+  PostgreSQL and is deliberately not backed up: rebuild it after a restore with
+  `pnpm rebuild:memory-index --all`.
 - When S3-compatible off-host backup is configured, record the uploaded object
   URI without credentials, download it with `pnpm restore:object`, verify its
   checksum, and run a disposable restore drill. Confirm bucket versioning,

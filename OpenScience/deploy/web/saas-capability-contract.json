@@ -87,7 +87,7 @@
     {
       "id": "research-memory",
       "status": "adapted",
-      "evidence": ["apps/server/src/memosClient.mjs", "deploy/web/docker-compose.yml"]
+      "evidence": ["apps/server/src/researchMemory.mjs", "deploy/web/docker-compose.yml"]
     },
     {
       "id": "account-self-service-and-operations",

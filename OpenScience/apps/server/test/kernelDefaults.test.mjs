@@ -73,6 +73,10 @@ test("every setting the runtime depends on still holds in the composition the im
   // rows read out of them is fixed too, and a parser that thinned out silently
   // is the way a checker starts reporting nothing wrong. Re-recording the image
   // moves BASELINE_PROVENANCE and this number in the same edit.
+  // 150 at 0.1.2-rc.1, 157 at 0.1.5-rc.2: eight rows added (open-in-app and
+  // its UI half, workspace-files, file-upload, resources, and the right
+  // sidebar with its files and document-preview tabs) less the
+  // tool-str-replace-editor row upstream dropped.
   assert.equal(report.counts.baselineRows, 157, "the recorded composition includes the native client, citation bundle and ECO03 plugin probe");
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.rows.filter(row => row.id === "evimed-plugin-probe").length, 1);

@@ -68,7 +68,7 @@ test("builds a hidden system context without changing the user's prompt", async 
   });
 });
 
-test("injects relevant Memos records as untrusted research context", async () => {
+test("injects relevant memory records as untrusted research context", async () => {
   await withProject(async (project) => {
     const prepared = await prepareResearchContext(project, { mode: "open-domain" }, config, {
       memories: [

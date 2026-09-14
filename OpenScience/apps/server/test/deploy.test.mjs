@@ -518,28 +518,48 @@ test("production compose isolates runtimes behind the internal model gateway net
   assert.match(compose, /open-science-web:[\s\S]*?networks:\n\s+- default\n\s+- runtime-internal/);
 });
 
-test("production compose requires PostgreSQL control-plane state and a healthy provisioned Memos service", async () => {
+test("production compose holds every memory in PostgreSQL and ranks it with the bundled index", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const envExample = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
   assert.match(compose, /evimed-postgres:\n\s+image: postgres:16\.14-bookworm/);
   assert.match(compose, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/postgres-password/);
-  assert.match(compose, /evimed-memos:\n\s+image: \$\{OPEN_SCIENCE_MEMOS_CONTAINER_IMAGE:-evimed-memos:0\.31\.1-evimed\}/);
-  assert.match(compose, /dockerfile: OpenScience\/deploy\/memos\/Dockerfile/);
-  assert.match(compose, /MEMOS_DRIVER: postgres/);
-  assert.match(compose, /MEMOS_DSN_FILE: \/run\/secrets\/memos-dsn/);
-  assert.match(compose, /evimed-memos-bootstrap:[\s\S]*scripts\/ops\/provision-memos\.mjs/);
   assert.match(compose, /OPEN_SCIENCE_STATE_STORE: postgres/);
   assert.match(compose, /OPEN_SCIENCE_REQUIRE_SHARED_STATE_STORE: "true"/);
   assert.match(compose, /OPEN_SCIENCE_DATABASE_URL_FILE: \/run\/secrets\/database-url/);
-  assert.match(compose, /OPEN_SCIENCE_MEMOS_URL: http:\/\/evimed-memos:5230/);
-  assert.match(compose, /OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE: \/run\/memos-integration\/access-token/);
-  assert.match(compose, /OPEN_SCIENCE_REQUIRE_MEMOS: "true"/);
-  assert.match(compose, /evimed-memos-bootstrap:\n\s+condition: service_completed_successfully/);
+  // Research memory and capsules read the control plane's own database. A
+  // separate memory service, with its own image, its own bootstrap job and its
+  // own DSN pointing back at this same PostgreSQL, is what this replaced — and
+  // the negative is asserted because "it still works" is how a retired service
+  // survives a migration.
+  //
+  // What the stack configures, not what the file mentions: the volumes block
+  // carries a comment naming the volumes and tables the migration leaves on a
+  // host that ran the previous stack, because a volume this file stops
+  // declaring is a volume `compose down -v` stops removing. A commented-out
+  // service configures nothing, so comment lines are not part of the scan.
+  // `.env.example` is scanned whole, where a commented key is still an
+  // instruction to an operator.
+  const configured = compose
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
+  assert.ok(configured.includes("evimed-postgres:"), "the comment filter removed the configuration it was meant to keep");
+  for (const retired of [
+    /evimed-memos\b/,
+    /MEMOS_DRIVER/,
+    /OPEN_SCIENCE_MEMOS_/,
+    /provision-memos\.mjs/,
+    /docker-compose\.memos-engine\.yml/,
+  ]) {
+    assert.doesNotMatch(configured, retired, `the base stack still names ${retired}`);
+    assert.doesNotMatch(envExample, retired, `.env.example still documents ${retired}`);
+  }
   for (const name of [
     "OPEN_SCIENCE_POSTGRES_PASSWORD_HOST_FILE",
     "OPEN_SCIENCE_DATABASE_URL_HOST_FILE",
-    "OPEN_SCIENCE_MEMOS_DSN_HOST_FILE",
-    "OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE",
+    "OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE",
+    "OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE",
+    "OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE",
   ]) {
     assert.match(envExample, new RegExp(`^${name}=`, "m"));
   }
@@ -1043,7 +1063,7 @@ test("web deployment env example documents required hosted settings", async () =
   // launching the image it just built.
   const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
-  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26");
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26");
   assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);

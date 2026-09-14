@@ -155,6 +155,24 @@ export function renderProfilePatch(input) {
     "- id: session-telemetry-otel",
     "  disabled: true",
     "",
+    "# Open-in-app launches a locally installed application on the machine running",
+    "# the kernel, which here is this project's container, and it does so over three",
+    "# routes under /open-in-app/ rather than as an /api/ method -- so the method",
+    "# deny list, which reads the path as a namespace and a name, never sees them.",
+    "# This row is what removes the routes: booted without it a probe gets 401 and",
+    "# booted with it a probe gets 404. The path refusal in runtimeUiServer.mjs is",
+    "# the second half, for a later composition that mounts them again.",
+    "#",
+    "# The two other capabilities 0.1.5 added -- file-upload and workspace-files --",
+    "# are NOT disabled here, and the difference is measured rather than assumed:",
+    "# with `file-upload` disabled the kernel refuses to boot at all",
+    "# (`dsh-api-session-controller: pending (waiting for service: fileUploads)`,",
+    "# and `dsh-client-ui-deliverables` pending behind it), and deliverables",
+    "# requires `workspaceFiles` the same way. Those two are held by the deny list",
+    "# alone.",
+    "- id: open-in-app",
+    "  disabled: true",
+    "",
     "# The preset ships with the image in a root this deployment owns.",
     "#",
     "# Naming a root here was useless at 0.1.2-alpha.3: `composeProfile` pushed a",
@@ -276,6 +294,14 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   "ui-goal",
   "ui-cordis",
   "ui-brand-official",
+  // Arrived in 0.1.5. Leaves, all three: nothing injects `documentPreview`,
+  // `sidebarFiles` is injected only by the tab type itself, and the "Open In..."
+  // split button is a session-header row. The right sidebar that docks them
+  // (`ui-sidebar-right`) stays, because `dsh-client-ui-chat` requires it -- the
+  // `ui-workspace` lesson, checked rather than recalled.
+  "ui-open-in-app",
+  "ui-sidebar-files",
+  "ui-sidebar-documentpreview",
 ]);
 
 /**

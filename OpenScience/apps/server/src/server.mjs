@@ -52,8 +52,10 @@ import {
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
-import { MemosClient } from "./memosClient.mjs";
-import { MemorySubstrate } from "./memorySubstrate.mjs";
+import { ResearchMemoryStore } from "./researchMemory.mjs";
+import { migrateResearchMemory } from "./researchMemoryPersistence.mjs";
+import { MemorySubstrate, selectedMemoryIndexProvider } from "./memorySubstrate.mjs";
+import { MemoryRerank } from "./memoryRerank.mjs";
 import { OpenVikingClient } from "./openVikingClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
@@ -61,7 +63,6 @@ import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./acc
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
-import { MemOsClient } from "./memOsEngineClient.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
@@ -567,6 +568,28 @@ class OperationalMetrics {
   }
 }
 
+/**
+ * A failed recall, for a dispatch that must not answer without memories.
+ *
+ * A research-memory store exists exactly when the control-plane database does,
+ * so a store that is there and cannot answer is a fault rather than a
+ * deployment choice: the agent would otherwise reply as if the researcher had
+ * never told it anything, and nothing in the reply would say so. The only other
+ * way a recall throws is a strict index that is down, which is the operator
+ * asking for exactly this. Definitive, because a repair attempt would run the
+ * same broken recall again.
+ *
+ * @param {any} error
+ */
+function memoryRecallRejection(error) {
+  /** @type {any} */
+  const rejection = error instanceof HttpError
+    ? error
+    : new HttpError(503, "memory_unavailable", "Required research memory is unavailable.");
+  rejection.definitivelyRejected = true;
+  return rejection;
+}
+
 function normalizeClientAddress(value) {
   if (typeof value !== "string") return null;
   const candidate = value.trim();
@@ -621,14 +644,47 @@ export function createWebApiApp(overrides = {}) {
     }).finally(() => { notificationRun = null; });
     return notificationRun;
   };
-  const memOsEngine = config.memOsEngineUrl
-    ? overrides.memOsEngineClient ?? new MemOsClient({ memOsBaseUrl: config.memOsEngineUrl, memOsWriteMode: "sync-fast" })
-    : null;
-  const memoryIndexing = productDatabase && productJobs && memOsEngine
-    ? new MemoryIndexing({ database: productDatabase, engine: memOsEngine, jobs: productJobs }) : null;
+  // Research memory — the structured records and the manual notes — is a schema
+  // of the control-plane database, so the store exists exactly when that
+  // database does. `overrides.researchMemory` is for tests that need the
+  // interface without one.
+  const openVikingClient = overrides.openVikingClient
+    ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
+  // Whether a memory write has an index to tell about it. Decided before the
+  // store is built, because the store is handed the outbox only when something
+  // will claim from it, and decided by the same function the substrate reads so
+  // that the writer and the reader cannot disagree about which provider is on.
+  const memoryIndexActive = selectedMemoryIndexProvider(config) === "openviking"
+    && Boolean(openVikingClient.configured) && Boolean(productDatabase && productJobs);
+  const researchMemory = overrides.researchMemory
+    ?? new ResearchMemoryStore(config, {
+      database: productDatabase, jobs: memoryIndexActive ? productJobs : null,
+    });
+  // One reranker for both recall paths. It orders candidates that have already
+  // been hydrated from the authoritative store, because the index's own
+  // reranked endpoint navigates by directory abstracts that nothing generates
+  // for this layout. Unconfigured it is inert: the vector order stands.
+  const memoryRerank = overrides.memoryRerank ?? new MemoryRerank({
+    apiKey: config.dashscopeApiKey,
+    model: config.memoryRerankModel,
+    apiBase: config.memoryRerankApiBase,
+    timeoutMs: config.memoryRerankTimeoutMs,
+  }, { fetchImpl: overrides.memoryRerankFetch ?? globalThis.fetch });
+  // Which component ranks a recall. The records themselves stay in the
+  // control-plane database whichever provider is selected.
+  const memorySubstrate = new MemorySubstrate(config, {
+    store: researchMemory, openViking: openVikingClient, rerank: memoryRerank,
+    jobs: memoryIndexActive ? productJobs : null,
+  });
+  // One switch governs both recall paths: the capsule index is the same
+  // OpenViking the research recall uses, so it exists exactly when that
+  // provider is selected and reachable — never as a second thing to configure.
+  const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
+    ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, rerank: memoryRerank }) : null;
   const memoryIndexWorker = memoryIndexing
-    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, pollMs: config.memoryIndexPollMs,
-      leaseMs: config.memoryIndexLeaseMs, reconcileMs: config.memoryIndexReconcileMs }) : null;
+    ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing, substrate: memorySubstrate,
+      pollMs: config.memoryIndexPollMs, leaseMs: config.memoryIndexLeaseMs,
+      reconcileMs: config.memoryIndexReconcileMs }) : null;
   // What the researcher did, and the one producer that reads it back. Both
   // exist exactly when the product ledger does; without it the memory routes
   // below record nothing and say so by being null rather than by pretending.
@@ -820,7 +876,12 @@ export function createWebApiApp(overrides = {}) {
   let learningRuntime = null;
   /** @type {any} */
   let learningWorker = null;
-  const capsuleService = productDocuments ? new CapsuleService(productDocuments, { indexing: memoryIndexing }) : null;
+  // Strictness reaches the capsules too. An operator who asked for a failing
+  // index to be visible must not be given the lexical fallback in silence on
+  // one of the two recall paths.
+  const capsuleService = productDocuments
+    ? new CapsuleService(productDocuments, { indexing: memoryIndexing, strictIndex: config.memoryIndexStrict })
+    : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
@@ -973,13 +1034,7 @@ export function createWebApiApp(overrides = {}) {
   };
   const researchSessions = new ResearchSessionStore(agentRegistry, { stateStore: store });
   const oidcService = new OidcService(config, store);
-  const memosClient = new MemosClient(config, { fetchImpl: overrides.memosFetch ?? globalThis.fetch });
-  const openVikingClient = overrides.openVikingClient
-    ?? new OpenVikingClient(config, { fetchImpl: overrides.openVikingFetch ?? globalThis.fetch });
-  // Which component ranks a recall. The records themselves stay in the
-  // research-memory service whichever provider is selected.
-  const memorySubstrate = new MemorySubstrate(config, { memos: memosClient, openViking: openVikingClient });
-  const memoryIntelligence = new MemoryIntelligence(config, memosClient, {
+  const memoryIntelligence = new MemoryIntelligence(config, researchMemory, {
     // A conversation that changes a memory the researcher confirmed is worth
     // telling them about, and the inbox is where that is told. It never holds
     // the write back: see contradictedValue in memoryIntelligence.mjs.
@@ -1269,9 +1324,9 @@ export function createWebApiApp(overrides = {}) {
       // This is the only moment the conversation is still readable: the
       // container is alive because the terminal write has not released it yet,
       // and `sessionTranscript` starts answering `runtime_not_running` shortly
-      // afterwards. It sits above the Memos branch deliberately — that branch
-      // returns early on a deployment with no memory service, and a deployment
-      // without Memos is still a deployment whose runs should be learnable.
+      // afterwards. It sits above the memory branch deliberately — that branch
+      // returns early on a deployment with no memory store, and a deployment
+      // without one is still a deployment whose runs should be learnable.
       //
       // Best effort, and it audits its own failure: a throw in this callback is
       // caught by `finishInternal` and then caught again, so a step that does
@@ -1364,15 +1419,10 @@ export function createWebApiApp(overrides = {}) {
           });
         }
       }
-      if (!memosClient.configured) {
-        if (config.requireMemos) {
-          /** @type {Error & Record<string, any>} */
-          const error = new Error("Required Memos run recording is unavailable.");
-          error.code = "memory_required_unavailable";
-          throw error;
-        }
-        return;
-      }
+      // A deployment with no control-plane database has no research memory, so
+      // there is nothing to record the run into. It is still a deployment whose
+      // runs are learnable, which is why the transcript above is written first.
+      if (!researchMemory.configured) return;
       let messages = [];
       let historyError = null;
       try {
@@ -1722,7 +1772,7 @@ export function createWebApiApp(overrides = {}) {
           effectiveRouteReason: VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
           const prepared = await prepareResearchContext({ ...scoped, baseDir: scoped.workspaceDir }, binding, config, {
-            query: prompt, memories: [], memoryError: null, specialists: [],
+            query: prompt, memories: [], specialists: [],
             routedSpecialist: {
               agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
               skill: selected.skill, companionSkills: selected.companionSkills,
@@ -1796,16 +1846,16 @@ export function createWebApiApp(overrides = {}) {
             }
             const promptText = typeof repairText === "string" && repairText.trim() ? repairText : episode.prompt;
             let memories = [];
-            let memoryError = null;
             try { memories = await memorySubstrate.recall(user.id, episode.prompt, { projectId: project.id, sessionId: session.id }); }
             catch (error) {
-              memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
-              if (config.requireMemos) throw error;
+              // The same gate the chat path applies, and for the same reason: an
+              // autopilot episode that answers from an empty memory is a worse
+              // outcome than an episode that did not run.
+              throw memoryRecallRejection(error);
             }
             const prepared = await prepareResearchContext(project, binding, config, {
               query: episode.prompt,
               memories,
-              memoryError,
               specialists: [],
               routedSpecialist: {
                 agentId: selected.id,
@@ -2140,7 +2190,7 @@ export function createWebApiApp(overrides = {}) {
         if (maintenanceService && (await maintenanceService.status()).state !== "open") {
           throw new HttpError(503, "maintenance_active", "The service is temporarily draining for maintenance.");
         }
-        const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate);
+        const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openListConnector, productDatabase, memorySubstrate);
         sendJson(res, readiness.ok ? 200 : 503, { data: readiness });
         return;
       }
@@ -2151,9 +2201,8 @@ export function createWebApiApp(overrides = {}) {
           store,
           taskManager,
           runtimeManager,
-          memosClient,
+          researchMemory,
           memorySubstrate,
-          memOsEngine,
           memoryIndexWorker,
           usageLedger,
           notificationService,
@@ -2364,7 +2413,7 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/memory/status" && req.method === "GET") {
         await store.ensureUser(req, res);
-        sendJson(res, 200, { data: await memosClient.status() });
+        sendJson(res, 200, { data: await researchMemory.status() });
         return;
       }
 
@@ -2372,7 +2421,7 @@ export function createWebApiApp(overrides = {}) {
         const ctx = await context(req, res);
         const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
         const state = url.searchParams.get("state") === "archived" ? "archived" : "normal";
-        sendJson(res, 200, { data: await memosClient.list(ctx.user.id, { state }) });
+        sendJson(res, 200, { data: await researchMemory.list(ctx.user.id, { state }) });
         return;
       }
 
@@ -2385,7 +2434,7 @@ export function createWebApiApp(overrides = {}) {
         }
         const content = assertString(body.content, "content", { max: Math.min(config.maxJsonBytes, 100_000) }).trim();
         if (!content) throw new HttpError(400, "memory_content_empty", "Memory content must not be empty.");
-        const memo = await memosClient.create(ctx.user.id, content);
+        const memo = await researchMemory.create(ctx.user.id, content);
         await audit(ctx, "memory.create", "completed", { target: memo.id });
         sendJson(res, 201, { data: memo });
         return;
@@ -2418,13 +2467,13 @@ export function createWebApiApp(overrides = {}) {
             }
             update.state = body.state;
           }
-          const memo = await memosClient.update(ctx.user.id, memoId, update);
+          const memo = await researchMemory.update(ctx.user.id, memoId, update);
           await audit(ctx, "memory.update", "completed", { target: memo.id });
           sendJson(res, 200, { data: memo });
           return;
         }
         if (req.method === "DELETE") {
-          await memosClient.delete(ctx.user.id, memoId);
+          await researchMemory.delete(ctx.user.id, memoId);
           await audit(ctx, "memory.delete", "completed", { target: memoId });
           sendJson(res, 200, { data: true });
           return;
@@ -2444,7 +2493,7 @@ export function createWebApiApp(overrides = {}) {
           .flatMap((value) => value.split(","))
           .map((value) => value.trim())
           .filter((value) => allowed.has(value));
-        const records = await memosClient.listRecords(ctx.user.id, {
+        const records = await researchMemory.listRecords(ctx.user.id, {
           scopes: readFilters("scope", allowedScopes),
           kinds: readFilters("kind", allowedKinds),
           statuses: readFilters("status", allowedStatuses),
@@ -2458,7 +2507,7 @@ export function createWebApiApp(overrides = {}) {
 
       if (pathname === "/api/memory/profile" && req.method === "GET") {
         const ctx = await context(req, res);
-        sendJson(res, 200, { data: await memosClient.profile(ctx.user.id, { projectId: ctx.project.id }) });
+        sendJson(res, 200, { data: await researchMemory.profile(ctx.user.id, { projectId: ctx.project.id }) });
         return;
       }
 
@@ -2474,7 +2523,7 @@ export function createWebApiApp(overrides = {}) {
           if (unknown.length > 0) {
             throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
           }
-          const existing = await memosClient.getRecord(ctx.user.id, recordId);
+          const existing = await researchMemory.getRecord(ctx.user.id, recordId);
           const expectedVersion = Number(body.expectedVersion);
           if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
             throw new HttpError(400, "memory_version_invalid", "expectedVersion must be a positive integer.");
@@ -2511,7 +2560,7 @@ export function createWebApiApp(overrides = {}) {
           next.origin = acceptedInference ? "explicit" : "manual";
           next.confidence = acceptedInference ? 1 : next.confidence;
           next.lastConfirmedAt = new Date().toISOString();
-          const updated = await memosClient.upsertRecord(ctx.user.id, next, null, {
+          const updated = await researchMemory.upsertRecord(ctx.user.id, next, null, {
             expectedVersion,
             reason: acceptedInference ? "user confirmed a pending memory" : "user updated structured memory",
           });
@@ -2528,8 +2577,8 @@ export function createWebApiApp(overrides = {}) {
         if (req.method === "DELETE") {
           // Read before deleting: what was rejected is the whole content of the
           // event, and after the delete there is nothing left to name it by.
-          const rejected = await memosClient.getRecord(ctx.user.id, recordId);
-          await memosClient.deleteRecord(ctx.user.id, recordId);
+          const rejected = await researchMemory.getRecord(ctx.user.id, recordId);
+          await researchMemory.deleteRecord(ctx.user.id, recordId);
           await audit(ctx, "memory.record.delete", "completed", { target: recordId });
           await recordFeedback(ctx, () => feedbackEvents?.recordMemoryDeletion(ctx.user.id, {
             record: rejected, projectId: ctx.project.id,
@@ -2770,28 +2819,22 @@ export function createWebApiApp(overrides = {}) {
         }, async (session, dispatchedRun, repairText = null) => {
           const promptText = typeof repairText === "string" && repairText.trim() ? repairText : text;
           let memories = [];
-          let memoryError = null;
-          if (config.requireMemos && !memosClient.configured) {
-            const error = new HttpError(503, "memory_required_unavailable", "Required research memory is not configured.");
-            error.definitivelyRejected = true;
-            throw error;
-          }
           try {
             memories = await memorySubstrate.recall(ctx.user.id, text, {
               projectId: ctx.project.id,
               sessionId: session.sessionId,
             });
           } catch (error) {
-            memoryError = error instanceof HttpError ? error.code : "memory_unavailable";
-            if (config.requireMemos) {
-              if (error instanceof HttpError) {
-                error.definitivelyRejected = true;
-                throw error;
-              }
-              const unavailable = new HttpError(503, memoryError, "Required research memory is unavailable.");
-              unavailable.definitivelyRejected = true;
-              throw unavailable;
-            }
+            // A recall that throws has exactly two causes, and neither is a
+            // footnote to put in the prompt. Either the authoritative store is
+            // unreachable — it is a schema of the control-plane database, so the
+            // run could not be recorded anyway — or the operator set
+            // `OPEN_SCIENCE_MEMORY_INDEX_STRICT`, which is the statement that
+            // they would rather see the index failure than an answer built on a
+            // silent fallback. A deployment with no store at all never arrives
+            // here: an unconfigured store returns no memories instead of
+            // failing, which is why there is no "answer anyway" branch left.
+            throw memoryRecallRejection(error);
           }
           const contextSpecialist = routedSpecialist
             ? registry.get(routedSpecialist.agentId)
@@ -2807,7 +2850,6 @@ export function createWebApiApp(overrides = {}) {
           const prepared = await prepareResearchContext(ctx.project, session, config, {
             query: text,
             memories,
-            memoryError,
             specialists: session.mode === "open-domain" ? routableAgents : [],
             mountableSkills: answerPackage?.skillText
               ? [{ name: answerPackage.manifest.skill, body: answerPackage.skillText }]
@@ -2935,10 +2977,11 @@ export function createWebApiApp(overrides = {}) {
         const user = await store.ensureUser(req, res);
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
           const projects = snapshot?.projects ?? await store.listProjects(user);
-          if (config.requireMemos && !memosClient.configured) {
-            throw new HttpError(503, "memory_required_unavailable", "Required research memory is unavailable for account export.");
-          }
-          const memory = memosClient.configured ? await memosClient.exportUserMemory(user.id) : null;
+          // Written as `memory/memory.json`, from the store itself rather than
+          // from the account-state snapshot: the export is the researcher's own
+          // copy of their memory, and a deployment without a store has none to
+          // carry rather than an empty one to claim.
+          const memory = researchMemory.configured ? await researchMemory.exportUserMemory(user.id) : null;
           let entries = appendMemoryArchiveEntry(await collectUserArchiveEntries(user, projects, config), memory, config);
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
@@ -2970,13 +3013,26 @@ export function createWebApiApp(overrides = {}) {
           }
         }
         await Promise.all(projects.map((project) => runtimeManager.stop(project)));
-        if (config.requireMemos && !memosClient.configured) {
-          throw new HttpError(503, "memory_required_unavailable", "Required research memory is unavailable for account deletion.");
-        }
-        const memoryPurge = memosClient.configured
-          ? await memosClient.purgeUserMemory(user.id)
-          : { structured: 0, manual: 0 };
+        // The purge still runs first, for the counts the audit line carries.
+        // Completeness no longer depends on it: the memory tables reference the
+        // account with ON DELETE CASCADE, so `store.deleteUser` below removes
+        // whatever a failed purge would have left.
+        // The derived copies go first. Either order can fail halfway; only this
+        // one fails harmlessly. An index emptied for an account whose rows are
+        // still there costs a degraded recall until the next rebuild, and the
+        // caller can simply try again. The other order destroys the memory and
+        // then answers 500, leaving an account that still exists and a
+        // researcher whose memory is gone because a component that holds no
+        // original data was unreachable for a moment.
         await memorySubstrate.forgetUser(user.id);
+        // Counted, not deleted. The memory tables reference the account with ON
+        // DELETE CASCADE, so `store.deleteUser` below removes them inside the
+        // transaction that can still fail — where deleting them here would mean
+        // a deletion that failed halfway had already destroyed the memory of an
+        // account that still exists.
+        const memoryPurge = researchMemory.configured
+          ? await researchMemory.countUserMemory(user.id)
+          : { structured: 0, manual: 0 };
         let memoryIndexPurge = null;
         const data = await store.deleteUser(user, {
           beforeLock: memoryIndexing ? (id, client) => memoryIndexing.lockAccountDeletion(id, client) : null,
@@ -3058,13 +3114,23 @@ export function createWebApiApp(overrides = {}) {
           }
           await runtimeManager.stop(project);
           await audit({ config, user, project }, "project.delete", "completed", { target: project.id });
-          if (memosClient.configured) await memosClient.deleteProjectMemory(user.id, project.id);
-          // Derived copies go with the record they were derived from. Awaited
-          // and not swallowed: an index that still answers with a deleted
-          // project's memories is a copy of deleted data, so a failure here
-          // fails the delete rather than reporting a deletion that did not
-          // happen.
+          // Derived copies go first, and go with the record they were derived
+          // from. Awaited and not swallowed: an index that still answers with a
+          // deleted project's memories is a copy of deleted data, so a failure
+          // here fails the delete rather than reporting a deletion that did not
+          // happen. Before the rows rather than after, so that failure leaves
+          // the project and its memory both intact and the request retryable —
+          // the reverse order answers 500 with the memory already destroyed.
           await memorySubstrate.forgetProject(user.id, project.id);
+          if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
+          // Again, now that the rows are gone. Between the removal above and
+          // the delete, a queued index job for one of those records still finds
+          // its row and republishes the copy; a second pass removes what that
+          // window let back in. Not awaited for the request's verdict: the
+          // deletion the researcher asked for has happened by this line, and a
+          // derived copy that survives holds no original data and goes with the
+          // next rebuild, so failing here would report a deletion that did.
+          await memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
           const data = await store.deleteProject(user, projectId);
           taskManager.purgeProject(project);
           sendJson(res, 200, { data });
@@ -3699,10 +3765,10 @@ export function createWebApiApp(overrides = {}) {
     config,
     store,
     runtimeManager,
-    memosClient,
+    researchMemory,
     memorySubstrate,
+    memoryRerank,
     openVikingClient,
-    memOsEngine,
     memoryIndexing,
     memoryIndexWorker,
     sourceService,
@@ -4528,8 +4594,8 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {
-  const readiness = await readinessStatus(config, store, runtimeManager, memosClient, memOsEngine, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null }) {
+  const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
   const loadAverage = typeof os.loadavg === "function" ? os.loadavg() : [];
@@ -4552,6 +4618,26 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       labels: { check, code: result.ok ? "ok" : result.code ?? "check_failed" },
     })),
   );
+  // The index answers its own health endpoint from its own process, so "up"
+  // says nothing about whether it can embed. A wrong model id, a revoked key or
+  // a vector of the wrong width fails every write while `/health` keeps saying
+  // ok: readiness stays green, the deployment pays for an index and gets term
+  // matching, and the only trace is a field of the readiness body that nothing
+  // scrapes. These two scrape it. The alternative on offer was
+  // `MEMORY_INDEX_STRICT`, which turns a ranking outage into a product outage.
+  const memoryIndex = readiness.checks.memoryIndex ?? {};
+  addMetric(lines, "open_science_memory_index_writing",
+    "Whether the recall index accepted the work last given to it (0 when the index worker's last job failed).",
+    "gauge", {
+      value: memoryIndex.worker?.lastError ? 0 : 1,
+      labels: { provider: String(memoryIndex.provider ?? "builtin"), code: String(memoryIndex.worker?.lastError ?? "ok") },
+    });
+  addMetric(lines, "open_science_memory_recall_degraded",
+    "Whether a recall last had to fall back to the term matcher because the index could not answer.",
+    "gauge", {
+      value: memoryIndex.recall?.lastError ? 1 : 0,
+      labels: { code: String(memoryIndex.recall?.lastError ?? "none") },
+    });
   addMetric(lines, "open_science_process_uptime_seconds", "EviMed Web API process uptime.", "gauge", {
     value: process.uptime(),
   });
@@ -4825,7 +4911,7 @@ async function readTailText(rootDir, file, maxBytes) {
   }
 }
 
-async function readinessStatus(config, store, runtimeManager, memosClient = null, memOsEngine = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null) {
+async function readinessStatus(config, store, runtimeManager, researchMemory = null, memoryIndexWorker = null, usageLedger = null, notificationService = null, documentParser = null, openList = null, productDatabase = null, memorySubstrate = null) {
   const checks = {
     dataDir: await readinessCheck(async () => readinessDataDir(config)),
     examples: await readinessCheck(async () => readinessExamples(config)),
@@ -4838,9 +4924,8 @@ async function readinessStatus(config, store, runtimeManager, memosClient = null
     publicUrl: await readinessCheck(() => readinessPublicUrl(config)),
     auth: await readinessCheck(async () => readinessAuth(config, store)),
     stateStore: await readinessCheck(async () => readinessStateStore(config, store)),
-    memory: await readinessCheck(async () => readinessMemory(config, memosClient)),
-    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memOsEngine, memoryIndexWorker)),
-    memoryRecall: await readinessCheck(async () => readinessMemoryRecall(memorySubstrate)),
+    memory: await readinessCheck(async () => readinessMemory(researchMemory)),
+    memoryIndex: await readinessCheck(async () => readinessMemoryIndex(config, memorySubstrate, memoryIndexWorker)),
     usageLedger: await readinessCheck(async () => readinessUsageLedger(config, usageLedger)),
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
@@ -4883,6 +4968,11 @@ async function readinessOpenList(config, connector) {
 
 async function readinessRelationalIntegrity(config, database) {
   if (!database) return { required: false, configured: false };
+  // The audit registers the research-memory tables, and the store creates them
+  // lazily on its first query. Migrating here means the audit meets a schema
+  // that exists rather than a missing table it would have to be taught to
+  // tolerate — a tolerance that then hides a genuinely dropped table.
+  await migrateResearchMemory(database);
   const status = await relationalIntegrity(database);
   if (config.production && !status.ok) {
     throw readinessFailure("relational_integrity_unverified", {
@@ -4914,42 +5004,79 @@ async function readinessStateStore(config, store) {
   return { ...status, required: Boolean(config.requireSharedStateStore) };
 }
 
-async function readinessMemory(config, memosClient) {
-  if (!config.requireMemos) return { required: false };
-  if (!memosClient) throw readinessFailure("memory_client_missing");
-  const status = await memosClient.status();
-  if (!status.configured || !status.connected) {
+/** Whether research memory can be read and written.
+ *
+ * There is no requirement flag any more: the store is a schema of the
+ * control-plane database, so it exists exactly when that database does. A
+ * deployment with none — local development on the file-backed state store — has
+ * no research memory at all, which is a configuration rather than a fault and
+ * says so as `required: false`. A store that exists and cannot answer IS a
+ * fault, because every recall and every extraction goes through it. */
+async function readinessMemory(researchMemory) {
+  if (!researchMemory?.configured) return { required: false, configured: false };
+  const status = await researchMemory.status();
+  if (!status.connected) {
     throw readinessFailure(status.code ?? "memory_unavailable", {
       configured: Boolean(status.configured),
-      connected: Boolean(status.connected),
+      connected: false,
     });
   }
   return { required: true, connected: true };
 }
 
-/** Which component ranks a recall, and whether it can be reached.
+/** Which component ranks a recall, whether it can be reached, and what the
+ *  capsule index worker is doing.
  *
- * Reported, never required. A deployment that selected an index and cannot
- * reach it still answers — recall falls back to the term matcher — so failing
- * readiness would take a working product offline over a degraded one. What the
- * operator needs is to see that it is degraded, which is what this is for. */
-async function readinessMemoryRecall(substrate) {
-  if (!substrate) return { required: false, provider: "builtin" };
-  const status = await substrate.status();
-  return {
-    required: false,
+ * One check rather than two, because there is one index: research recall and
+ * capsule recall address the same OpenViking, and an operator reading two rows
+ * that can only ever agree learns nothing from the second.
+ *
+ * Reported, not required, by default. A deployment whose index is down still
+ * answers — research recall falls back to the term matcher and capsule recall to
+ * the lexical search — so failing readiness would take a working product offline
+ * over a degraded one. `OPEN_SCIENCE_MEMORY_INDEX_STRICT` is the operator's
+ * statement that they would rather see the failure, and it is the same switch
+ * that makes those recalls fail instead of degrade. */
+async function readinessMemoryIndex(config, substrate, worker) {
+  const required = Boolean(config.memoryIndexStrict);
+  const status = substrate
+    ? await substrate.status()
+    : { provider: "builtin", configured: false, connected: false, code: "memory_index_client_missing" };
+  // The reranker rides this check rather than one of its own: it improves the
+  // order this provider produced, and it is off unless a key is configured.
+  // Reported because "off" and "misconfigured" are indistinguishable from the
+  // outside — an unreadable key file leaves recall working, in vector order,
+  // with nothing anywhere saying the reranker was never asked.
+  //
+  // A reranker only ever runs behind a provider that ranks: research recall
+  // reranks inside the index arm, and on `builtin` the capsule index is not
+  // built at all. So a key configured on a term-matcher deployment is reported
+  // as not reached rather than as on, because a row that reads "configured"
+  // where nothing reranks is exactly the third state this report exists to
+  // keep out.
+  const rerankStatus = typeof substrate?.rerank?.status === "function" ? substrate.rerank.status() : null;
+  const rerank = !rerankStatus
+    ? null
+    : substrate?.active
+      ? { configured: rerankStatus.configured, code: config.dashscopeApiKeyError ?? rerankStatus.code ?? null }
+      : { configured: false, code: "memory_rerank_not_reached" };
+  const details = {
+    required,
     provider: status.provider,
     configured: Boolean(status.configured),
     connected: Boolean(status.connected),
     ...(status.code ? { code: status.code } : {}),
+    ...(worker ? { worker: worker.status() } : {}),
+    ...(rerank ? { rerank } : {}),
+    // Whether recall has had to answer without the index. It is the one symptom
+    // of "up but refusing" that the reader of a recall can observe, and it was
+    // computed and then kept to itself.
+    ...(substrate?.lastError ? { recall: { lastError: substrate.lastError } } : {}),
   };
-}
-
-async function readinessMemoryIndex(config, memOsEngine, worker) {
-  if (!config.requireMemoryIndex) return { required: false, configured: Boolean(memOsEngine) };
-  if (!memOsEngine || !worker) throw readinessFailure("memory_index_unconfigured");
-  const health = await memOsEngine.health();
-  return { required: true, connected: health.status === "healthy", worker: worker.status() };
+  if (required && !(status.configured && status.connected)) {
+    throw readinessFailure(status.code ?? "memory_index_unavailable", details);
+  }
+  return details;
 }
 
 async function readinessExamples(config) {

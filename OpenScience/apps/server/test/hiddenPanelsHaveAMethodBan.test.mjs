@@ -20,16 +20,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
+import { RUNTIME_UI_DENIED_HOST_ROUTES, RUNTIME_UI_DENIED_METHODS, RUNTIME_UI_DENIED_NAMESPACES } from "@evimed/domain";
 
 import { HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET } from "../src/dshProfilePatch.mjs";
 
 /**
  * What stops each hidden panel from being reached another way.
  *
- * `namespace` and `methods` are checked against the deny lists. `cosmetic`
- * means the panel draws something with no endpoint behind it, and the string
- * is the argument for that — reviewed when the pairing changes, not assumed.
+ * `namespace` and `methods` are checked against the deny lists. `hostRoute`
+ * is the third kind, and 0.1.5 is what made it necessary: a panel whose backing
+ * endpoint is not an `/api/` method at all but a route on the kernel's web
+ * server, stopped by path rather than by name. `cosmetic` means the panel draws
+ * something with no endpoint behind it, and the string is the argument for
+ * that — reviewed when the pairing changes, not assumed.
  */
 const WHAT_STOPS_IT = {
   "ui-settings-general": { namespace: "settings" },
@@ -53,10 +56,20 @@ const WHAT_STOPS_IT = {
     cosmetic: "the access-mode chip switches by sending /permission on the prompt path, which no method rule can see; "
       + "the hosted permission table is narrowed to one preset instead, and that is what bounds it.",
   },
+  // 0.1.5. The split button posts to /open-in-app/open, which is a web-server
+  // route and not a method — so the pairing is the path, and the hosted profile
+  // also disables the row that mounts it.
+  "ui-open-in-app": { hostRoute: "/open-in-app/" },
+  // Both read files through the `workspaceFiles` namespace: the tab lists a
+  // directory, and the preview calls read/readAll/readRelated on what the tab
+  // opened.
+  "ui-sidebar-files": { namespace: "workspaceFiles" },
+  "ui-sidebar-documentpreview": { namespace: "workspaceFiles" },
 };
 
 const namespaces = new Set(RUNTIME_UI_DENIED_NAMESPACES);
 const methods = new Set(RUNTIME_UI_DENIED_METHODS);
+const hostRoutes = new Set(RUNTIME_UI_DENIED_HOST_ROUTES);
 
 test("every hidden panel has something that stops what it does, not just what it draws", () => {
   assert.ok(HOSTED_DISABLED_BROWSER_PANELS.length >= 10, "no panels were read, so this test walked nothing");
@@ -71,6 +84,10 @@ test("every hidden panel has something that stops what it does, not just what it
       for (const method of stop.methods) {
         assert.ok(methods.has(method), `${panel} is paired with ${method}, which is not denied`);
       }
+      continue;
+    }
+    if (stop.hostRoute) {
+      assert.ok(hostRoutes.has(stop.hostRoute), `${panel} is paired with the ${stop.hostRoute} route, which is not denied`);
       continue;
     }
     assert.equal(typeof stop.cosmetic, "string");

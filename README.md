@@ -11,7 +11,6 @@ the Tauri desktop shell is optional and is not the primary release target.
   manifests, and release gates. This is a ground-up rewrite of the drug-evaluation
   platform; all new product work happens here.
 - `项目代码/` — the six specialist Python agents consumed by the SaaS runtime.
-- `记忆模块/` — the EviMed memory service (vendored Memos).
 - `接口文档/` — shared capability contracts.
 - `docs/superpowers/` — architecture specs and implementation plans.
 

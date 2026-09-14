@@ -829,12 +829,38 @@ export function decodeMuxFrame(frame) {
         },
       };
     }
+    // Retired by DSH 0.1.5, and kept anyway. Upstream's own
+    // `KNOWN_SESSION_EVENT_TYPES` no longer lists it and nothing appends it:
+    // on a successful attempt the stream now rides inside `assistant/message`
+    // as `data.stream`, which this decoder ignores because the message's own
+    // content is the settled text and replaying the stream beside it would
+    // double every answer. But session logs written before the upgrade are on
+    // the project volumes and `session/page` replays them verbatim, so deleting
+    // this case would blank the assistant text of every transcript recorded
+    // before today.
     case "assistant/chunk": {
       const chunk = data.chunk && typeof data.chunk === "object" ? data.chunk : {};
       const kind = String(chunk.type ?? "").includes("reason") ? "reasoning" : "text";
       const text = String(chunk.text ?? chunk.delta ?? "");
       if (!text) return null;
       return { sessionId, event: { type: "assistant/delta", seq, kind: /** @type {any} */ (kind), text } };
+    }
+    // An unsuccessful attempt still settles the presentation stream. Its
+    // durable record may follow deltas that watchSession already published,
+    // or be the only text available in a historical snapshot. Use the same
+    // message representation as a successful settlement, with interrupted
+    // marked explicitly; emitting another delta would append the stream twice.
+    case "assistant/attempt": {
+      const members = Array.isArray(data.stream) ? data.stream : [];
+      const chunks = members.map((member) => (member && typeof member === "object" && member.chunk && typeof member.chunk === "object" ? member.chunk : {}));
+      /** @param {string} type */
+      const joined = (type) => chunks.filter((chunk) => chunk.type === type)
+        .map((chunk) => typeof chunk.text === "string" ? chunk.text : typeof chunk.delta === "string" ? chunk.delta : "").join("");
+      const text = joined("text-delta");
+      const reasoning = joined("reasoning-delta");
+      if (!text && !reasoning) return null;
+      return { sessionId, event: { type: "message/assistant", seq, text, reasoning,
+        usage: data.usage ? toUsage(data.usage) : null, interrupted: true } };
     }
     case "tool/call": {
       const tool = String(data.name ?? "");

@@ -78,7 +78,7 @@ boundaries instead of treating authentication alone as isolation.
 | Drug evidence decision support | Adapted | Drug selection, off-label use, and comprehensive evaluation use EviMed retrieval, frozen evidence snapshots bound by compiler input SHA-256, deterministic compilation, independent regression tests, and mandatory human decision boundaries |
 | Artifacts, provenance, review | Adapted | Stable traceable project artifacts remain the product core |
 | Hosted notebooks | Adapted | Python and R execution are project-scoped and sandboxed when enabled |
-| Research memory | Adapted | Required Memos integration is a readiness boundary |
+| Research memory | Adapted | Notes and structured records live in the control-plane PostgreSQL schema `evimed_memory`; a readiness check covers that store, and the recall index is derived and rebuildable |
 | Account and operator surfaces | Adapted | Project/resource/task/audit/error/security/readiness cards are available |
 | Security and isolation | Adapted | CSRF, exact CORS, scoped files, controller boundary and quotas are gated |
 | Release and observability | Adapted | Immutable manifest plus protected metrics, alerts and dashboards |

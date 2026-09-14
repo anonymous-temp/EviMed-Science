@@ -69,11 +69,11 @@ test("the transcript is captured before anything can decide not to", () => {
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource);
   assert.ok(hook, "onRunFinished is gone; this test now checks nothing");
   const capture = hook[0].indexOf("persistRunTranscript");
-  const memosGuard = hook[0].indexOf("if (!memosClient.configured)");
+  const memoryGuard = hook[0].indexOf("if (!researchMemory.configured) return;");
   assert.ok(capture > 0, "the terminal hook no longer persists the transcript");
-  assert.ok(memosGuard > 0, "the Memos early-return is gone");
-  assert.ok(capture < memosGuard,
-    "the transcript capture moved below the Memos early-return; a deployment without a memory service would stop recording runs");
+  assert.ok(memoryGuard > 0, "the memory early-return is gone");
+  assert.ok(capture < memoryGuard,
+    "the transcript capture moved below the memory early-return; a deployment without a memory store would stop recording runs");
 });
 
 test("the transcript capture and the distill enqueue each report their own failure", () => {

@@ -54,7 +54,7 @@ per-project workspace + JSONL provenance.
 - `deploy/runtime-dsh/` — the runtime image: Node, the pinned kernel, the socket
   bundle, the capability manifests and a profile pre-initialized at build time.
 - `deps-version.json` — the one place a tracked upstream pin is written
-  (`dsh` / `memos` / `openlist` / `mineru`). A Dockerfile ARG, a seam manifest,
+  (`dsh` / `openlist` / `mineru` / `openviking`). A Dockerfile ARG, a seam manifest,
   a peer dependency and a release manifest that each carried their own copy
   meant "bump the pin" was four edits and one was always missed.
 - `runtime/` — `mcp` (the `evimed` research server, 26 tools), `kernel` (the
@@ -91,8 +91,10 @@ per-project workspace + JSONL provenance.
   is not a weaker credential — it is one the kernel never looks for. `dshMux.mjs`
   is where that lives; the frame vocabulary there was transcribed from a running
   0.1.2-alpha.3 binary, not inferred (the pin has since moved to
-  0.1.5-rc.1: durable V3 records and the separate assistant-stream feed are
-  covered by newly captured golden frames).
+  0.1.5-rc.2; every frame type, event and session-event name that vocabulary
+  uses still appears in the shipped code, which `pnpm verify:seams` checks, and
+  the golden fixture re-recorded at each pin move is what checks the frames
+  themselves).
 - **`@deepseek-ai/*` may be imported in `packages/harness-port` and nowhere else** —
   including in a JSDoc `import()` type. The port owns its own types and converts
   shapes, so a rename upstream is one file. `seam-manifest.json` lists every

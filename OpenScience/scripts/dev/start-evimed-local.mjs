@@ -3,13 +3,10 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureLocalMemos, registerMemosCleanup } from "./local-memos.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const secretsDir = path.resolve(rootDir, "..", ".evimed-local", "secrets");
 const staticDir = path.join(rootDir, "apps", "web", "dist");
-const memosRoot = path.resolve(rootDir, "..", "记忆模块");
-const memosDataDir = path.resolve(rootDir, "..", ".evimed-local", "memos");
 
 process.env.OPEN_SCIENCE_LOCAL_AUTO_CONFIG ??= "true";
 process.env.OPEN_SCIENCE_PORT ??= "8798";
@@ -37,12 +34,9 @@ if (!existsSync(evimedKey)) {
   );
 }
 
-const memosProcess = await ensureLocalMemos({
-  memosRoot,
-  dataDir: memosDataDir,
-  accessTokenFile: path.join(secretsDir, "memos.pat"),
-  enabled: process.env.OPEN_SCIENCE_START_LOCAL_MEMOS !== "false",
-});
-registerMemosCleanup(memosProcess);
-
+// No research-memory store here. It lives in the control-plane PostgreSQL,
+// which this local stack does not run: `OPEN_SCIENCE_STATE_STORE` defaults to
+// `file`, so memory reports itself unconfigured exactly as it did on a
+// deployment without a memory service. Point `OPEN_SCIENCE_DATABASE_URL` at a
+// PostgreSQL and set `OPEN_SCIENCE_STATE_STORE=postgres` to get one.
 await import("../../apps/server/src/index.mjs");

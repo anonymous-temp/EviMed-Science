@@ -75,6 +75,32 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // more than one written after it ships.
   "cordis",
   "messageFeedback",
+  // Arrived together in 0.1.5, all three reachable before anyone had an opinion
+  // about them, because this is a deny list and silence is consent:
+  //
+  // - `workspaceFiles` reads files. Its own documentation says "absolute path
+  //   or path relative to the workspace root; files outside it are allowed",
+  //   and the code agrees: `read`, `readAll`, `readBytes` and `stat` go through
+  //   `locateFile`, which resolves with the workspace as *cwd* and never calls
+  //   the `confine` helper sitting next to it -- only `list` does. `readRelated`
+  //   then re-enters `readAll` from a resolved dirname. That is the
+  //   `directoryPicker` ban under another name, and this container's `DSH_HOME`
+  //   is a writable volume.
+  // - `fileUploads` writes them. Knowledge enters a project through
+  //   `sourceService`, content-addressed and recorded per source; a second
+  //   intake reaching the workspace directly is unledgered by construction.
+  // - `sessionFeedback` is `messageFeedback` renamed for the session scope --
+  //   the same upstream channel, banned for the same reason.
+  //
+  // The rows behind the first two stay mounted: booting with `file-upload`
+  // disabled fails with `dsh-api-session-controller: pending (waiting for
+  // service: fileUploads)`, taking the deliverables panel down after it, and
+  // `dsh-client-ui-deliverables` requires `workspaceFiles` the same way. So
+  // for these there is no composition-level answer and this list is the whole
+  // of the defence -- which is the case it was written for.
+  "workspaceFiles",
+  "fileUploads",
+  "sessionFeedback",
 ]);
 
 /**
@@ -105,7 +131,56 @@ export const RUNTIME_UI_DENIED_METHODS = Object.freeze([
   "workspace/archiveSession",
   "workspace/insertBefore",
   "workspace/insertSessionBefore",
+  // `@deepseek-ai/dsh-client-file-upload` registers a raw-byte POST at
+  // `/api/session/uploadFileBinary` on the connection's own fetch registry,
+  // beside the mux rather than inside it. By path shape it reads as a method in
+  // the `session` namespace, which is the product's namespace and cannot be
+  // closed wholesale -- so it is named here. Denying `fileUploads/upload`
+  // without this one would close the receipt and leave the bytes.
+  "session/uploadFileBinary",
 ]);
+
+/**
+ * Kernel HTTP routes that are not method calls, and are refused by path.
+ *
+ * Everything above this classifies `/api/<namespace>/<method>`. That is not the
+ * whole surface: a plugin may register any route on the composition's web
+ * server, and one that does not start with `/api/` never reaches the method
+ * gate at all -- it is forwarded, because that is how the application's own
+ * document, assets and plugin bundles load.
+ *
+ * 0.1.5 is where that stopped being theoretical. `@deepseek-ai/dsh-host-open-in-app`
+ * mounts three routes under `/open-in-app/`, and the last of them launches a
+ * locally installed application on the machine running the kernel -- which
+ * here is the runtime container, from a page in someone's browser.
+ *
+ * A prefix list and not an allow list, for the same time-boxed reason the
+ * method side is a deny list: the legitimate non-API traffic is the web
+ * application's own assets, nobody has observed that set, and an allow list
+ * written from a guess refuses the product on its first day. What is
+ * enumerable today is the routes that are not assets, and this is them.
+ *
+ * The composition answers this one too -- the hosted profile disables the
+ * `open-in-app` row, and a probe against a kernel booted that way gets 404
+ * where an unpatched one gets 401. Both halves are kept: the row disable is
+ * what removes the capability, and this is what holds if a later composition
+ * mounts it again.
+ */
+export const RUNTIME_UI_DENIED_HOST_ROUTES = Object.freeze([
+  "/open-in-app/",
+]);
+
+/**
+ * Whether the hosted surface refuses this path outright, before any method
+ * question is asked.
+ *
+ * @param {string | null | undefined} pathname
+ * @returns {boolean}
+ */
+export function isDeniedRuntimeUiHostRoute(pathname) {
+  const clean = String(pathname ?? "").split("?")[0];
+  return RUNTIME_UI_DENIED_HOST_ROUTES.some((prefix) => clean === prefix.replace(/\/$/, "") || clean.startsWith(prefix));
+}
 
 const deniedNamespaces = new Set(RUNTIME_UI_DENIED_NAMESPACES);
 const deniedMethods = new Set(RUNTIME_UI_DENIED_METHODS);
