@@ -18,6 +18,7 @@ NUMERIC_SOURCE = (
     "A separately reported HR was 0.66 (95% CI 0.42 to 1.04)."
 )
 SOURCE = (
+    "These were individually randomized parallel-group trials. "
     "Participants all had chronic kidney disease. Drug was compared with placebo. "
     "The primary endpoint was a sustained 50% eGFR decline or kidney failure. "
     + NUMERIC_SOURCE
@@ -35,7 +36,8 @@ def alignment_fixture(tmp_path):
                   outcome_primary="Sustained eGFR decline of at least 50% or kidney failure"),
         effect_measure="RR", primary_outcome_type="dichotomous",
     )
-    study = ExtractedStudy(characteristics=StudyCharacteristics(study_id="S1", title="Trial", year=2025), outcomes=[
+    study = ExtractedStudy(characteristics=StudyCharacteristics(
+        study_id="S1", title="Trial", year=2025, study_design="parallel RCT"), outcomes=[
         OutcomeData(outcome_name="Renal composite endpoint", outcome_type="dichotomous",
                     events_intervention=5, total_intervention=100, events_control=10, total_control=100,
                     source_quote="The primary endpoint was a sustained 50% eGFR decline or kidney failure.",

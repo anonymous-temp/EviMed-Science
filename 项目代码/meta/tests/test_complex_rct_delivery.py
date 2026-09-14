@@ -197,7 +197,7 @@ def test_extracted_shared_control_arms_recompile_and_execute_complex_route(tmp_p
             outcome_primary="Incidence of postoperative delirium",
         ),
         review_family="intervention_rct",
-        study_designs=["parallel RCT"],
+        study_designs=["parallel RCT", "multi-arm RCT"],
         primary_outcome_type="dichotomous",
         effect_measure="RR",
     )
@@ -248,6 +248,7 @@ def test_extracted_shared_control_arms_recompile_and_execute_complex_route(tmp_p
 
     report = reconcile_extracted_rct_designs(protocol, studies)
     project.save_json("protocol.json", protocol)
+    project.save_json("all_extractions.json", studies, subdir="extraction")
     migrate_extractions_to_ledger(project, protocol=protocol, extracted_studies=studies)
     plan = compile_project_method_plan(project, protocol, enforce=True)
     from primary_alignment_fixture import approve_synthetic_method_fixture
@@ -255,7 +256,8 @@ def test_extracted_shared_control_arms_recompile_and_execute_complex_route(tmp_p
     phase = PipelineRunner(project).run_compiled_method_synthesis(auto_select_ambiguous=True)
 
     assert report["multi_arm_studies"] == ["M1"]
-    assert protocol.study_designs == ["multi-arm RCT", "parallel RCT"]
+    assert protocol.study_designs == ["parallel RCT", "multi-arm RCT"]
+    assert plan.study_designs == ["multi_arm_rct", "parallel_rct"]
     assert plan.capability_id == "intervention_rct.complex_design"
     assert phase.status.value == "succeeded"
     envelope = project.load_json("synthesis_result.json", subdir="analysis")

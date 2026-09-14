@@ -13,7 +13,7 @@ def protocol():
 
 
 def study():
-    return ExtractedStudy(characteristics=StudyCharacteristics(study_id="trial-paper"), outcomes=[
+    return ExtractedStudy(characteristics=StudyCharacteristics(study_id="trial-paper", study_design="RCT"), outcomes=[
         OutcomeData(outcome_name="Renal endpoint", outcome_type="time_to_event", hazard_ratio=0.38,
                     hr_ci_lower=0.12, hr_ci_upper=1.22, reported_effect_measure="HR",
                     source_quote="The renal endpoint HR was 0.38 (95% CI 0.12 to 1.22).", source_location="Table 3", source_quote_verified=True)])
@@ -461,7 +461,7 @@ def test_actual_japanese_renal_result_remains_selectable(tmp_path):
     from new_meta.core.extraction_verification import validate_check_batch
     from new_meta.schemas.study import PrimaryAlignmentAssessment
     case = real_case("35861630"); data = case["row"]
-    candidate = ExtractedStudy(characteristics=StudyCharacteristics(study_id="35861630", pmid="35861630", title="Japanese phase III trial", authors=["Wada Takashi"], year=2022),
+    candidate = ExtractedStudy(characteristics=StudyCharacteristics(study_id="35861630", pmid="35861630", title="Japanese phase III trial", authors=["Wada Takashi"], year=2022, study_design="RCT"),
         outcomes=[OutcomeData(**data, outcome_type="time_to_event", reported_effect_measure="HR", source_quote=source_piece(case, "numeric"), source_location="Table 3", source_quote_verified=True)])
     assessment = case_assessment(case, candidate, 0, "numeric")
     errors = validate_check_batch(candidate, [0], [PrimaryAlignmentAssessment.model_validate(assessment)], case_source(case), protocol())
@@ -485,7 +485,7 @@ def test_actual_conditional_cardiorenal_rows_cannot_be_primary_choices(tmp_path)
         index=row["outcome_index"]
         outcomes[index] = OutcomeData(**{key: value for key, value in row.items() if key != "outcome_index"}, outcome_type="time_to_event", reported_effect_measure="HR",
             source_quote=source_piece(case, f"numeric_{index}"), source_location="Table 5", source_quote_verified=True)
-    candidate = ExtractedStudy(characteristics=StudyCharacteristics(study_id="39704168", pmid="39704168", title="Reduced CREDENCE analysis", authors=["Ferrannini Ele"], year=2024), outcomes=outcomes)
+    candidate = ExtractedStudy(characteristics=StudyCharacteristics(study_id="39704168", pmid="39704168", title="Reduced CREDENCE analysis", authors=["Ferrannini Ele"], year=2024, study_design="RCT"), outcomes=outcomes)
     assessments = [case_assessment(case, candidate, index, f"numeric_{index}", incompatible=True) for index in range(8,13)]
     assert validate_check_batch(candidate, list(range(8,13)), [PrimaryAlignmentAssessment.model_validate(item) for item in assessments], case_source(case), protocol()) == []
     project, phase = select_stamped(tmp_path, [(candidate, assessments, case_source(case))])

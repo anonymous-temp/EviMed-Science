@@ -17,7 +17,7 @@ The paper text contains [PAGE N] markers indicating page boundaries.
 
 ## Extract the following (provide source_location for each):
 0. Bibliographic metadata if available in the PDF: title, authors, year, journal, DOI/PMID
-1. Study design (RCT, cohort, case-control, etc.)
+1. Study design (RCT, cohort, case-control, etc.); preserve the descriptive source wording in study_design
 2. Country/setting
 3. Sample size (intervention group, control group)
 4. Population description (age, sex, disease status, etc.)
@@ -108,6 +108,20 @@ For SINGLE-ARM PREVALENCE or INCIDENCE outcomes:
 - Incidence: events, person_time, and person_time_unit
 - Preserve zero-event studies and the exact time unit
 
+For EVERY outcome, supply comparative_design using its closed schema vocabulary:
+- For a randomized comparison, choose parallel_rct, cluster_rct, crossover_rct,
+  or multi_arm_rct from the source's allocation and analysis design.
+- Descriptive wording belongs in study_design and quality_notes, not this field.
+- Parallel arms may coexist with cluster allocation or a multi-arm layout. Retain
+  the more specific cluster_rct, crossover_rct or multi_arm_rct dependency.
+- If the result combines multiple complex dependencies that one enum value cannot
+  represent (for example cluster allocation plus shared multi-arm controls), use
+  unknown and explain the dependencies in quality_notes. Do not silently drop one.
+- Use unknown when the source cannot resolve the randomized design. Do not infer
+  parallel_rct from missing information or from the review's eligible designs.
+- Use an empty string for a non-RCT result; keep that study's actual design in
+  study_design and its existing family-specific fields. Do not relabel it an RCT.
+
 For DIAGNOSTIC-ACCURACY outcomes:
 - true_positive, false_negative, false_positive, true_negative
 - diagnostic_threshold and reference standard when reported
@@ -179,6 +193,14 @@ errors or requests for numerical refinement. Put all real data defects in data_i
 3. Are source_location and source_quote correct for each value?
 4. Are the outcome types (continuous/dichotomous) correctly classified?
 5. Are units consistent?
+6. Does comparative_design correctly identify this source result's randomized
+   allocation and dependencies? Treat its canonical value as an extracted claim,
+   not proof. Report incorrect_metadata or missing_value for a supplied row when
+   the source supports a different or missing design; cite that source passage.
+   Descriptive wording alone is not a defect when the canonical value is correct.
+   Parallel layout can coexist with cluster, crossover or multi-arm dependencies;
+   ensure none is discarded. Unknown remains honest when one supported value
+   cannot represent a compound design. Non-RCT results use an empty value.
 
 Independently assess EVERY indexed outcome row for primary_analysis_alignment.
 Return exactly one unique outcome_index per row, with outcome, population and
