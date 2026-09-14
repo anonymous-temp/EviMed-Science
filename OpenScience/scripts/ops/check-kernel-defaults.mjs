@@ -100,12 +100,11 @@ export const SOURCES = {
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.5-rc.2",
   sha256: "b0a3eb1e6378186ac7d68946a1e3c204a31ccd789e636075a4f45c45d4ce9bf0",
-  recordedBy: "dsh@0.1.5-rc.1 --profile evimed-runtime --dump-config on an isolated profile with the CLI bundle order observed in Linux CI run 34471182645 (base, web, socket, cite)",
-  // Captured at rc.1 on 2026-09-10; rc.2 has the same rows apart from the
-  // open-in-app disablement supplied by our socket. The rc.2 image must
-  // independently reproduce these bytes. Captured without the local
-  // recording/gateway patches. The release image must independently generate
-  // and byte-diff its dump before publication.
+  recordedBy: "dsh@0.1.5-rc.2 --profile evimed-runtime --dump-config on an isolated Darwin arm64 profile using Node 22.22.0 and pnpm 11.7.0, initialized and pinned with the Dockerfile's profile steps (base, web, socket, cite)",
+  // Re-captured on 2026-09-14 from 231 verified rc.2 packages and the current
+  // socket; byte-identical to the previous baseline. Network was denied during
+  // the dump, with no boot, model calls or recording/gateway patches. The Linux
+  // release image must independently generate and byte-diff its own dump.
 };
 
 /**
