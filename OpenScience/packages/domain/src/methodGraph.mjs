@@ -524,7 +524,9 @@ export function promotionVerdict(method, options = {}) {
     missing.push(latest.candidateDigest
       ? 'the last evaluation measured a revision this method no longer holds'
       : 'the last evaluation does not name the text it measured')
-  } else if (options.currentBaselineDigest && latest.baselineDigest !== options.currentBaselineDigest) {
+  } else if (!options.currentBaselineDigest?.trim()) {
+    missing.push('the current baseline is unavailable; a fresh comparison is required before promotion')
+  } else if (latest.baselineDigest !== options.currentBaselineDigest) {
     missing.push('the last evaluation was measured against a baseline that has since moved')
   } else {
     reasons.push(`evaluation ${latest.verdict} against ${latest.baselineDigest}`)

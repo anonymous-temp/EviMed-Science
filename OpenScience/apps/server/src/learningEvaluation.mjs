@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import { mountedMethodDigest, parseSkillFrontmatter, skillBodyDigest } from "@evimed/domain";
-import { MAX_MOUNTED_CAPSULE_METHODS, MAX_MOUNTED_CAPSULE_METHOD_BYTES, selectCapsuleMethods } from "./capsuleMethods.mjs";
-import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
+import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
+import { selectLearnedMethods } from "./learnedMethodMount.mjs";
+import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { startLearningEvaluationBridge } from "./learningEvaluationBridge.mjs";
 import { runLearningEvaluationProcess } from "./learningEvaluationProcess.mjs";
 import { HttpError, assertProjectCapacity, resolveScopedPath, writeFileAtomicNoFollow } from "./security.mjs";
@@ -19,23 +20,16 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
     || (candidate.projectId != null && candidate.projectId !== project.id)) {
     throw new HttpError(409, "method_evaluation_stale", "The candidate no longer matches the requested owner, project and revision.");
   }
-  const approved = structuredClone([
-    ...await learning.approvedMethods(request.userId, { projectId: project.id }),
-    ...await learning.approvedMethods(request.userId, { projectId: null }),
-  ]);
+  const { approved, approvedMethods, capsuleMethods, learnedMethods: baseline, limits, baselineDigest } =
+    await freezeLearningBaseline({ learning, capsules, userId: request.userId, projectId: project.id });
   const frozenLearning = {
     getMethod: async (_userId, id) => id === candidate.id ? candidate : null,
-    approvedMethods: async (_userId, { projectId }) => approved.filter((document) => document.projectId === projectId),
+    approvedMethods,
   };
-  const capsuleMethods = capsules ? structuredClone(await selectCapsuleMethods(capsules, { userId: request.userId, projectId: project.id })) : [];
   const capsuleBytes = capsuleMethods.reduce((sum, method) => sum + method.bytes, 0);
-  const baseline = await selectLearnedMethods(frozenLearning, { userId: request.userId, projectId: project.id,
-    maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - capsuleMethods.length),
-    maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES - capsuleBytes });
   const candidateMethods = await selectLearnedMethods(frozenLearning, {
     userId: request.userId, projectId: project.id, trialMethodIds: [candidate.id],
-    maxCount: Math.min(MAX_MOUNTED_LEARNED_METHODS, MAX_MOUNTED_CAPSULE_METHODS - capsuleMethods.length),
-    maxBytes: MAX_MOUNTED_CAPSULE_METHOD_BYTES - capsuleBytes,
+    ...limits,
   });
   if (!candidateMethods.some((method) => method.id === candidate.id)
     || capsuleBytes + candidateMethods.reduce((sum, method) => sum + method.bytes, 0) > MAX_MOUNTED_CAPSULE_METHOD_BYTES) {
@@ -50,7 +44,6 @@ export async function freezeLearningEvaluation({ learning, capsules, project, re
     name: String(parseSkillFrontmatter(method.document).frontmatter?.name ?? ""),
     digest: skillBodyDigest(method.document, sha256),
   }));
-  const baselineDigest = `sha256:${sha256(JSON.stringify({ capsuleMethods, learnedMethods: baseline }))}`;
   return {
     arms,
     grant: {

@@ -20,6 +20,7 @@ import { resolveGatewayFetch } from "./recordedGateway.mjs";
 import { LearningService } from "./learningService.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { evaluateLearnedMethod } from "./learningEvaluation.mjs";
+import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation } from "./methodConsolidation.mjs";
 import { LearningWorker } from "./learningWorker.mjs";
@@ -673,7 +674,13 @@ export function createWebApiApp(overrides = {}) {
   }
 
   const learningService = productDocuments
-    ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService })
+    ? new LearningService({ documents: productDocuments, jobs: productJobs, notifications: notificationService,
+      resolveBaselineDigest: async (userId, projectId) => {
+        const user = await store.userById(userId);
+        if (!user) throw new HttpError(404, "learning_account_unavailable", "The evaluation owner is unavailable.");
+        await store.requireProject(user, projectId);
+        return (await freezeLearningBaseline({ learning: learningService, capsules: capsuleService, userId, projectId })).baselineDigest;
+      } })
     : null;
   const learningRoutes = createLearningRoutes({
     store, service: learningService, maxJsonBytes: config.maxJsonBytes,

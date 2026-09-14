@@ -95,6 +95,7 @@ function harness() {
   const enqueued = [];
   const learning = new LearningService({
     documents,
+    resolveBaselineDigest: async () => "sha256:" + "c".repeat(64),
     jobs: { async enqueue(userId, kind, payload, opts) { enqueued.push({ userId, kind, payload, opts }); return { id: "job_1" }; } },
     notifications: { async create(userId, input) { notices.push({ userId, ...input }); return input; } },
     now: () => new Date("2026-09-07T00:00:00.000Z"),

@@ -156,6 +156,7 @@ test("a candidate reaches a container, earns observations, is promoted on a dige
   /** @type {any[]} */ const enqueued = [];
   const learning = new LearningService({
     documents,
+    resolveBaselineDigest: async () => "sha256:baseline",
     jobs: { async enqueue(userId, kind, payload) { enqueued.push({ userId, kind, payload }); return { id: `job_${enqueued.length}` }; } },
     notifications: { async create() { return {}; } },
     now: () => new Date("2026-09-10T00:00:00.000Z"),

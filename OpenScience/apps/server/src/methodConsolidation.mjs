@@ -262,12 +262,21 @@ export class MethodConsolidation {
         // evaluation but has not had one gets queued for it here — that is the
         // one thing a nightly pass can do about "we do not know yet".
         if (error?.code !== "method_not_promotable") throw error;
-        if (!(document.payload.learning?.evaluations ?? []).length) {
+        const latest = document.payload.learning?.evaluations?.at(-1);
+        if (!latest) {
           // A fresh candidate cannot earn observations until an isolated trial
           // mounts it. Bootstrap buys a bounded trial, never an approval or a
           // weaker promotion threshold.
           await this.enqueueEvaluation(job, document, !eligibility.eligible);
           queuedForEvaluation.push(document.id);
+        } else if (eligibility.eligible) {
+          // A changed library needs a new measurement. Keep the previous
+          // verdict intact, and do not retry an unchanged failed comparison.
+          const baselineDigest = await this.learning.currentBaselineDigest(job.userId, document.projectId);
+          if (baselineDigest && baselineDigest !== latest.baselineDigest) {
+            await this.enqueueEvaluation(job, document, false, baselineDigest);
+            queuedForEvaluation.push(document.id);
+          }
         }
       }
     }
@@ -600,17 +609,24 @@ export class MethodConsolidation {
     return { applied };
   }
 
-  /** @param {any} job @param {any} document */
-  async enqueueEvaluation(job, document, bootstrap = false) {
+  /** @param {any} job @param {any} document @param {boolean} [bootstrap] @param {string} [baselineDigest] */
+  async enqueueEvaluation(job, document, bootstrap = false, baselineDigest = "") {
     if (!this.jobs) return;
+    // Include the superseded comparison so a completed job for an earlier
+    // visit to this baseline cannot swallow a later re-evaluation request.
+    const previousEvaluation = document.payload.learning?.evaluations?.at(-1);
+    const evaluationKey = baselineDigest
+      ? `consolidate:evaluate:${shortDigest(document.id)}:${shortDigest(JSON.stringify([document.payload.contentDigest, previousEvaluation]))}:paired:${baselineDigest}`
+      : `consolidate:evaluate:${document.id}:${document.payload.contentDigest}:${bootstrap ? "bootstrap" : "paired"}`;
     try {
       await this.jobs.enqueue(job.userId, "consolidate", {
         action: "evaluate",
         methodId: document.id,
         candidateDigest: document.payload.contentDigest,
         bootstrap,
+        ...(baselineDigest ? { baselineDigest } : {}),
       }, {
-        idempotencyKey: `consolidate:evaluate:${document.id}:${document.payload.contentDigest}:${bootstrap ? "bootstrap" : "paired"}`,
+        idempotencyKey: evaluationKey,
         projectId: job.projectId,
       });
     } catch {
