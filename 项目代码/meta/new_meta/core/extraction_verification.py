@@ -40,7 +40,8 @@ CHECKER_HIDDEN_FIELDS = frozenset({"primary_analysis_alignment", "source_quote_v
     "canonical_outcome_name", "estimand_id", "contrast_id", "manual_adjudication", "override_revision"})
 REFINABLE_FIELDS = frozenset(NUMERIC_FIELDS) | frozenset(NUMERIC_MAP_FIELDS) | {
     "source_quote", "source_location", "source_page", "source_section", "reported_effect_measure",
-    "reported_effect_scale", "outcome_type", "comparative_design", "p_value_inequality", "extraction_confidence"}
+    "reported_effect_scale", "reported_effect_adjusted", "adjustment_covariates",
+    "outcome_type", "comparative_design", "p_value_inequality", "extraction_confidence"}
 
 
 def numeric_fields(outcome: OutcomeData) -> dict[str, int | float]:
