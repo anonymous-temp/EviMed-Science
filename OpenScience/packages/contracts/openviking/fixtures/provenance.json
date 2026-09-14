@@ -4,21 +4,26 @@
   "imageDigest": "sha256:49e20c09ec7ea2f16c116d9ddb2ea90b4c24bf3f5a83078609e52399487dbec1",
   "sourceRepo": "https://github.com/volcengine/OpenViking",
   "sourceCommitAtObservation": "39670e7b95a26ab6d562e018c7b8681ae3dba17a",
-  "observedAt": "2026-09-09",
+  "observedAt": "2026-09-14",
   "observedOn": "an isolated evaluation instance holding only records generated for this measurement; no user memory was read or written",
-  "fixtureEvidence": "Every file beside this one is a verbatim response from that running server, captured with curl against the same routes apps/server/src/openVikingClient.mjs calls. find.json is trimmed to its first three hits and re-indented; no field was added, renamed or invented. Recording rather than authoring is deliberate: a hand-written fixture once certified a shape the wire never produced and defeated the audit that depended on it.",
+  "fixtureEvidence": "Every file beside this one is a verbatim response from that running server, captured with curl against the same routes apps/server/src/openVikingClient.mjs calls, with the request body that client builds. find.json is trimmed to its first three hits and re-indented; no field was added, renamed or invented. Recording rather than authoring is deliberate: a hand-written fixture once certified a shape the wire never produced and defeated the audit that depended on it.",
   "configuration": {
     "auth_mode": "trusted",
     "root_api_key": "set (value never leaves the host)",
-    "embedding": "ollama / bge-m3, dimension 1024, on the evaluation instance of that date. Production configures DashScope `qwen3.7-text-embedding` at the same dimension instead; this capture predates that change and is not re-recorded until a live server runs it.",
+    "embedding": "dashscope / qwen3.7-text-embedding, dimension 1024, the production pin. Probed the same day: the model answers at 1024 with and without an explicit `dimensions` parameter, so the provider's own `dimensions` send is consistent with the collection width. The 2026-09-09 capture used ollama / bge-m3 at the same dimension; re-recording against the production embedder changed the scores and nothing else — every key of every response, and the unauthenticated error, are byte-identical in shape.",
     "vlm": "not configured",
-    "memory.extraction_enabled": false
+    "memory.extraction_enabled": false,
+    "allow_private_networks": "false, as the production render sets it. The server started healthy and embedded against a public HTTPS endpoint with it, which is what that value was untested on.",
+    "container": "uid 10001 with cap_drop ALL and no-new-privileges, a 0600 ov.conf owned by 10001, and a volume whose data directory was created and chowned before the first start — the production recipe, started healthy."
   },
   "observations": [
     "Trusted mode with root_api_key set requires X-API-Key on EVERY request, not only when asserting a role as the multi-tenant documentation implies. A client sending only the account and user headers is refused with UNAUTHENTICATED; find-unauthenticated.json is that refusal.",
     "A write with no VLM configured returns semantic_status 'skipped' and vector_status 'complete': L0/L1 directory summaries are not generated, and the record is still embedded and retrievable. Recall therefore needs no language model, only an embedder.",
     "The container tag is v0.4.19 while the PyPI version is 0.4.19; the unprefixed tag does not exist.",
     "ghcr.io answers its API but stalls on blob download from the Aliyun builder; ghcr.m.daocloud.io serves the same digest.",
-    "The server refuses to start in dev auth mode when bound to 0.0.0.0, which is why the deployment uses trusted mode rather than a localhost bind."
+    "The server refuses to start in dev auth mode when bound to 0.0.0.0, which is why the deployment uses trusted mode rather than a localhost bind.",
+    "Scores are wider under qwen3.7-text-embedding than under bge-m3: on four records and two questions the relevant hit scored 0.71 and 0.87 while the unrelated ones fell to 0.21, where the bge-m3 capture kept every hit between 0.58 and 0.61. The client's explicit `score_threshold: 0` still matters — the server's own default of 0.1 is applied with no reranker configured — but the separation the reranker has to work with is real rather than nominal.",
+    "`ls` is not recursive. Listing `.../memories/evimed/user` on a tree written as `<kind>/<id>.md` returns the kind directories, each with `isDir: true` and an abstract reading '[Directory abstract is not ready]', not the leaves. Anything that needs the leaves has to walk.",
+    "A write with `wait: true` against DashScope returned in 323-780 ms for a short Chinese memory, inside the 5 s bound the index code asks for and well inside the client's 8 s request timeout."
   ]
 }

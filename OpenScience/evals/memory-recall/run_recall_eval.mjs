@@ -47,10 +47,30 @@ const serverSrc = path.join(repoRoot, "apps/server/src");
 const { OpenVikingClient, capsuleMemoryRoot, capsuleFactUri, memoryUri, parseCapsuleFactUri } =
   await import(path.join(serverSrc, "openVikingClient.mjs"));
 const { MemorySubstrate } = await import(path.join(serverSrc, "memorySubstrate.mjs"));
+const { MemoryRerank } = await import(path.join(serverSrc, "memoryRerank.mjs"));
 const { DURABLE_RECALL_KINDS, recallContent, searchTokens } = await import(path.join(serverSrc, "memoryRecallPolicy.mjs"));
 
+/** The control-plane reranker, or nothing.
+ *
+ *  Built from the same key file the index's own embedder is configured from,
+ *  and from the pinned model and endpoint, so the arm measures what production
+ *  would run rather than a reranker chosen for the measurement. */
+async function buildRerank(options) {
+  if (!options.rerank) return null;
+  const pin = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
+  const rerank = new MemoryRerank({
+    apiKey: (await readFile(process.env.OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE
+      ?? process.env.OPEN_SCIENCE_OPENVIKING_API_KEY_FILE ?? "", "utf8")).trim(),
+    model: pin.openviking.rerank.model,
+    apiBase: pin.openviking.rerank.apiBase,
+    timeoutMs: 20_000,
+  });
+  if (!rerank.configured) throw new Error(`the reranker is not configured: ${rerank.status().code ?? "no key, model or endpoint"}`);
+  return rerank;
+}
+
 function parseArguments(argv) {
-  const options = { mode: "record", arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "" };
+  const options = { mode: "record", arm: "builtin", label: "", url: "", limit: 5, seedIndex: false, user: "eval-recall-user", out: "", rerank: false };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
@@ -62,11 +82,17 @@ function parseArguments(argv) {
     else if (flag === "--user") { options.user = value; index += 1; }
     else if (flag === "--out") { options.out = value; index += 1; }
     else if (flag === "--seed-index") options.seedIndex = true;
+    // The third arm. Reranking happens in the control plane, not in the index,
+    // so it is a flag on the same vector candidates rather than a different
+    // server: what it measures is what the extra DashScope call adds to the
+    // order the embedder already produced, and what it costs.
+    else if (flag === "--rerank") options.rerank = true;
     else throw new Error(`unknown argument ${flag}`);
   }
   if (!["record", "capsule"].includes(options.mode)) throw new Error(`unknown mode ${options.mode}`);
   if (!["builtin", "openviking"].includes(options.arm)) throw new Error(`unknown arm ${options.arm}`);
   if (options.arm === "openviking" && !options.url) throw new Error("--url is required for the openviking arm");
+  if (options.rerank && options.arm !== "openviking") throw new Error("--rerank reorders index candidates, so it needs --arm openviking");
   // Free-form on purpose: what distinguishes two runs of one arm is whatever
   // the operator changed, and a closed list here would have to be edited before
   // every measurement it was meant to record.
@@ -138,12 +164,23 @@ async function runCapsuleMode() {
     process.stderr.write(`seeded ${written}/${facts.length}\n`);
   }
 
+  const reranker = await buildRerank(options);
   const targets = corpus.capsules.map((capsule) =>
     capsuleMemoryRoot(options.user, { accountCreatedAt, capsuleId: capsule.id }));
   const recall = async (query) => {
     if (options.arm === "builtin") return lexical(query, options.limit);
     const hits = await client.find(options.user, query, { targets, limit: Math.min(100, options.limit * 4) });
     const ordered = [];
+    if (reranker) {
+      // The capsule index reranks the same way the control plane does: over the
+      // hydrated text, after the vector order and before anything is cut.
+      const documents = hits.map((hit) => String(hit.content ?? ""));
+      const order = await reranker.order(query, documents);
+      if (Array.isArray(order) && order.length === hits.length) {
+        const reordered = order.map((position) => hits[position]).filter(Boolean);
+        if (reordered.length === hits.length) hits.splice(0, hits.length, ...reordered);
+      }
+    }
     for (const hit of hits) {
       const parsed = parseCapsuleFactUri(hit.uri);
       // Hydrated from the corpus, the way production hydrates from PostgreSQL:
@@ -225,7 +262,7 @@ async function runRecordMode() {
     memoryContextMaxChars: 20_000,
   };
   const client = options.arm === "openviking" ? new OpenVikingClient(config) : null;
-  const substrate = new MemorySubstrate(config, { store, openViking: client });
+  const substrate = new MemorySubstrate(config, { store, openViking: client, rerank: await buildRerank(options) });
 
   if (options.seedIndex) {
     if (!substrate.active) throw new Error("nothing to seed: the index provider is not active");
