@@ -234,6 +234,55 @@ for (const [group, list] of Object.entries(nameGroups)) {
   report(`${group}: ${list.length - absent.length}/${list.length} appear in shipped code`, absent.length === 0, absent.join(", "));
 }
 
+/**
+ * Session event types, checked against the kernel's own register rather than
+ * against a text search.
+ *
+ * The generic check above asks whether a name appears anywhere in the shipped
+ * code, and for this group that is not the same question. DSH 0.1.5 retired
+ * `assistant/chunk` — nothing appends it, and the stream it used to carry now
+ * rides inside `assistant/message` — but the name still appears, in
+ * `dsh-session-format-v0-to-v1` and `v1-to-v2`, which exist precisely to read
+ * sessions that were written when it was live. So the presence check stayed
+ * green on a name the kernel had stopped producing, which is the exact failure
+ * this file was written to catch, one level down.
+ *
+ * `@deepseek-ai/dsh-session` ships the register as a literal
+ * `KNOWN_SESSION_EVENT_TYPES = new Set([...])`, which is decidable and
+ * authoritative: an event type the kernel does not know is one it will not
+ * append. Read it, and fail when it cannot be read rather than skipping — a
+ * checker that silently finds no register reports nothing wrong.
+ */
+function knownSessionEventTypes() {
+  const pkg = deepseekPackages.find((entry) => entry.dir.endsWith("/dsh-session"));
+  if (!pkg) return null;
+  for (const file of ["lib/index.js", "index.js"]) {
+    const full = path.join(pkg.dir, file);
+    if (!existsSync(full)) continue;
+    const source = readFileSync(full, "utf8");
+    const start = source.indexOf("KNOWN_SESSION_EVENT_TYPES = new Set([");
+    if (start < 0) continue;
+    const end = source.indexOf("]);", start);
+    if (end < 0) continue;
+    return new Set([...source.slice(start, end).matchAll(/"([^"]+)"/g)].map((match) => match[1]));
+  }
+  return null;
+}
+
+const known = knownSessionEventTypes();
+if (!known || known.size < 20) {
+  report("the kernel's session-event register was read", false,
+    known ? `only ${known.size} types found; the reader, not the kernel, is wrong` : "no KNOWN_SESSION_EVENT_TYPES in @deepseek-ai/dsh-session");
+} else {
+  const declared = nameGroups["session event types"];
+  const retired = declared.filter((name) => !known.has(name));
+  report(
+    `session event types are ones the kernel still appends (${declared.length} declared, ${known.size} known)`,
+    retired.length === 0,
+    retired.length ? `${retired.join(", ")} — retired upstream; it may still appear in dsh-session-format-* migrators, which is why the presence check above does not catch this` : "",
+  );
+}
+
 // The mux vocabulary, checked in the shape it is written rather than as bare
 // words. `open`, `item`, `end` and `error` appear in any JavaScript ever
 // written, so a plain literal search over them is a check that cannot fail —

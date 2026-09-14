@@ -179,8 +179,12 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // the other. Disjointness is asserted beside it, because a method that is
   // both allowed and denied would keep the total right.
   // The upstream split plus its gateway remains 51. ECO03 adds exactly the
-  // two parameterless, registered EviMed plugin probe endpoints below.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 53);
+  // two parameterless, registered EviMed plugin probe endpoints below. DSH
+  // 0.1.5 adds ten more methods, every one of them denied: the seven
+  // `workspaceFiles/*` reads, `fileUploads/upload`, `sessionFeedback/record`
+  // and `goals/get`. The number moving by exactly ten is the point — it is what
+  // notices an eleventh arriving without a decision.
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 63);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }
@@ -384,7 +388,13 @@ test("the live session/page records normalize into a transcript the gate can rea
     ["reasoning"],
     "the tool call must not also appear as a part of the message that made it",
   );
-  assert.deepEqual(assistants.at(-1).parts, [{ type: "text", text: "done" }]);
+  // The answer, and only the answer, as text. A reasoning block may sit beside
+  // it — `assistants[0]` above asserts reasoning blocks are ordinary — so this
+  // pins what the gate reads as prose rather than the block count, which is the
+  // model's business and changed between recordings.
+  assert.deepEqual(assistants.at(-1).parts.filter((part) => part.type === "text"), [{ type: "text", text: "done" }]);
+  assert.ok(assistants.at(-1).parts.every((part) => ["text", "reasoning"].includes(part.type)),
+    "the settled answer carries prose and reasoning only; a tool part here would double the call");
 
   const tools = transcript.messages.flatMap((message) => message.parts).filter((part) => part.type === "tool");
   assert.deepEqual(tools.map((part) => part.tool), ["write", "subagent"],
@@ -399,8 +409,19 @@ test("the live session/page records normalize into a transcript the gate can rea
   assert.deepEqual(tools[0].input, JSON.parse(RECORDED_WRITE.arguments));
 
   // A `chunks` record is a run of deltas the following message already
-  // summarises; replaying it would double the text.
-  assert.ok(golden.history.some((record) => record.type === "chunks"), "the recording must still contain the chunks record this asserts about");
+  // summarises; replaying it would double the text. DSH 0.1.5 stopped writing
+  // them — the stream settles inside `assistant/message` now — so a live
+  // recording no longer carries one, and the rule is asserted against a record
+  // of that shape directly. The fixture cannot supply it and a synthetic one
+  // must not be smuggled into the fixture, so it is built here, in the open.
+  assert.ok(!golden.history.some((record) => record.type === "chunks"),
+    "0.1.5 stopped writing chunks records; a recording that has one is from an older kernel");
+  const withChunks = normalizeTranscript(RECORDED_SESSION, [
+    ...golden.history,
+    { type: "chunks", event: { type: "chunkrow/assistant-chunks", seq: RECORDED_HEAD + 1, data: { text: "double me" } } },
+  ]);
+  assert.ok(!JSON.stringify(withChunks.messages).includes("double me"),
+    "a chunks record must contribute no text, whichever kernel wrote it");
   assert.equal(transcript.messages.some((message) => message.parts.some((part) => part.text === "recorded")), false);
 });
 
@@ -459,8 +480,13 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // of the decoder. What is: which decoded shapes this build produces at all,
   // and that nothing the kernel sent vanished on the way.
   const produced = new Set(decoded.map((item) => item.event.type));
+  // No `assistant/delta` here, and that is the build changing rather than the
+  // decoder: DSH 0.1.5 retired `assistant/chunk`, and a successful attempt now
+  // settles as one `assistant/message` carrying the whole stream in
+  // `data.stream`. The delta path still has coverage — the synthesized section
+  // below, and the `assistant/attempt` case that a failed attempt produces —
+  // but a live recording of a run that succeeds no longer contains one.
   assert.deepEqual([...produced].sort(), [
-    "assistant/delta",
     "message/assistant",
     "message/user",
     "step/end",
@@ -483,23 +509,18 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // above while losing most of the run.
   const dropped = golden.session
     .filter((frame) => frame?.type !== "snapshot" && !decodeSessionFrame(RECORDED_SESSION, frame))
-    .map((frame) => (frame?.event?.type === "assistant/chunk"
-      ? `assistant/chunk:${frame.event.data?.chunk?.type ?? "?"}`
-      : String(frame?.event?.type ?? "?")));
-  assert.deepEqual([...new Set(dropped)].sort(), [
-    // Structural markers around a block, and the two trailers. The text and
-    // reasoning deltas inside the block are what carry content and every one of
-    // them decodes; these five say only where a block began, ended, what it
-    // cost and why it stopped — all of which arrive again on the
-    // `assistant/message` that follows.
-    "assistant/chunk:block-end",
-    "assistant/chunk:block-start",
-    "assistant/chunk:finish",
-    "assistant/chunk:tool-call-delta",
-    "assistant/chunk:usage",
-  ], "a frame class that stops decoding must be added here deliberately, not discovered in production");
-  assert.ok(dropped.length > 0 && decoded.length > dropped.length * 2,
-    "the recording must contain both kinds, or this accounting is vacuous");
+    .map((frame) => String(frame?.event?.type ?? "?"));
+  // Empty at 0.1.5, where it used to be the five structural `assistant/chunk`
+  // markers. Those frames do not exist any more, so the list they populated is
+  // empty — and an exact empty is a stronger assertion than the list was: any
+  // frame class that starts decoding to null fails here by name, which is the
+  // thing the old list was protecting.
+  assert.deepEqual([...new Set(dropped)].sort(), [],
+    "a frame class that stops decoding must be added here deliberately, not discovered in production");
+  // The vacuity guard the drop count used to provide. A recording that shrank
+  // to nothing, or a decoder that started returning null for everything, must
+  // not read as "all frames accounted for".
+  assert.ok(decoded.length >= 10, `only ${decoded.length} frames decoded; the recording, not the decoder, is what this test needs`);
   const unknowns = decoded.filter((item) => item.event.type === "unknown");
   assert.ok(unknowns.length > 0, "an unrecognized frame must still arrive, or this test proves nothing");
 
@@ -519,13 +540,28 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   // The old assertion read the first delta and called it text; against a kernel
   // that reasons first, "the first one" is the reasoning stream — so the kind
   // is asserted per kind rather than by position.
-  const deltas = decoded.filter((item) => item.event.type === "assistant/delta").map((item) => item.event);
+  // Built here rather than read from the recording: 0.1.5 emits deltas only for
+  // an attempt that failed or was interrupted without settling into a message,
+  // which the recorder cannot provoke on demand. The frames are upstream's
+  // shape — `assistant/attempt` carries `data.stream`, each member a
+  // `{ chunk }` — read off `dsh-agent-loop`'s settle path.
+  const attempt = (members) => decodeSessionFrame(RECORDED_SESSION,
+    { type: "event", event: { type: "assistant/attempt", seq: 1, data: { turn: 1, step: 1, stream: members.map((chunk) => ({ chunk })) } } });
+  const deltas = [
+    attempt([{ type: "reasoning-delta", text: "thinking " }, { type: "reasoning-delta", text: "aloud" }]).event,
+    attempt([{ type: "text-delta", text: "the " }, { type: "text-delta", text: "answer" }]).event,
+  ];
+  assert.deepEqual(deltas.map((delta) => delta.text), ["thinking aloud", "the answer"],
+    "an attempt's stream is joined in order, not sampled");
+  assert.equal(attempt([{ type: "text-delta", text: "" }]), null, "an attempt that carried no text decodes to nothing");
   assert.deepEqual(
     [...new Set(deltas.map((delta) => delta.kind))].sort(),
     ["reasoning", "text"],
     "both delta kinds decode, and neither is folded into the other",
   );
-  assert.equal(deltas.filter((delta) => delta.kind === "text").map((delta) => delta.text).join(""), "done");
+  // The live half of the same claim: the recorded run's answer arrives whole on
+  // the settled message, which is where 0.1.5 puts it.
+  assert.equal(decoded.filter((item) => item.event.type === "message/assistant").at(-1).event.text, "done");
   assert.equal(decoded.at(-1).event.type, "turn/end");
   assert.equal(decoded.at(-1).event.endKind, "completed");
 

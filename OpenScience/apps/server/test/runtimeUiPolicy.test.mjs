@@ -205,7 +205,7 @@ test("real HTTP and mux startup cannot replace a bounded source workspace and hi
   assert.equal(calls.stop, 1);
 });
 
-// Source-derived contract: @deepseek-ai/dsh-api-gateway@0.1.2-rc.1,
+// Source-derived contract: @deepseek-ai/dsh-api-gateway@0.1.5-rc.2,
 // lib/client.js:105-146. Its native parser requires these exact keys and a
 // record for details; a malformed error closes the shared carrier with 4002.
 function assertNativeError(frame, streamId, code) {
@@ -357,6 +357,73 @@ test("every deployment method uses the same denial policy on HTTP and mux", { ti
     assert.equal((await c.next()).error?.code, "runtime_ui_method_denied", endpoint);
     assert.equal((await c.next()).type, "end");
   }
+  assert.deepEqual(f.received, []);
+});
+
+test("a kernel route that is not a method is refused by path, and ordinary assets still pass", { timeout: 5000 }, async (t) => {
+  // 0.1.5 mounted `/open-in-app/{apps,icon,open}` on the kernel's web server.
+  // They are not `/api/<namespace>/<name>`, so the method gate never sees them,
+  // and `open` launches an application on the machine running the kernel --
+  // here, this project's container. Probed against a live 0.1.5-rc.2 kernel:
+  // unpatched it answers 401 (the route exists); with the hosted profile's
+  // `open-in-app` row disabled it answers 404.
+  const f = await fixture(t);
+  const forwarded = [];
+  f.manager.proxy = async (req, res) => { forwarded.push(new URL(req.url, "http://ui.local").pathname); res.writeHead(200); res.end("{}"); };
+  for (const route of ["/open-in-app/apps", "/open-in-app/icon", "/open-in-app/open", "/open-in-app/", "/open-in-app"]) {
+    const response = await fetch(`${f.base}${route}`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal(response.status, 403, route);
+    assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", route);
+  }
+  // The disguise the `/api/` check already decodes for, applied to this half.
+  const escaped = await fetch(`${f.base}/%6Fpen-in-app/open`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+  assert.equal(escaped.status, 403, "a percent-escaped spelling is the same route");
+  assert.deepEqual(forwarded, [], "nothing reached the runtime");
+
+  // The control, and the reason this is a prefix list rather than a blanket
+  // refusal of everything outside `/api/`: the application's own document,
+  // assets and plugin bundles are non-API paths and must still be forwarded. A
+  // rule that took those down would pass the assertions above and ship a blank
+  // page.
+  const assets = ["/", "/assets/index-4f2a.js", "/plugins/??@deepseek-ai/dsh-client-ui-chat"];
+  for (const asset of assets) {
+    const response = await fetch(`${f.base}${asset}`, { headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal(response.status, 200, asset);
+  }
+  // The recorded paths still carry this frame's prefix, which is what the proxy
+  // forwards; the assertion is that all three arrived and none was the route.
+  assert.equal(forwarded.length, assets.length);
+  for (const [index, asset] of assets.entries()) {
+    assert.ok(forwarded[index].startsWith(f.frame.prefix), forwarded[index]);
+    assert.ok(asset === "/" || forwarded[index].includes(asset.split("?")[0].slice(1)), `${forwarded[index]} is not ${asset}`);
+  }
+});
+
+test("the file-read and file-write namespaces 0.1.5 added are refused on both transports", { timeout: 5000 }, async (t) => {
+  // `workspaceFiles/{read,readAll,readBytes,stat}` resolve an absolute path
+  // against the workspace as cwd and never confine it -- upstream's own
+  // parameter docs say "files outside it are allowed" -- so unrefused they are
+  // an arbitrary read of the runtime container from a browser. `fileUploads`
+  // and the raw-byte `session/uploadFileBinary` are the write half, and
+  // `sessionFeedback/record` is `messageFeedback` under its session-scoped name.
+  const f = await fixture(t);
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  const arrived = [];
+  f.manager.proxy = async (req, res) => { arrived.push(new URL(req.url, "http://ui.local").pathname); res.writeHead(200); res.end("{}"); };
+  const endpoints = [
+    "workspaceFiles/read", "workspaceFiles/readAll", "workspaceFiles/readBytes", "workspaceFiles/readRelated",
+    "workspaceFiles/stat", "workspaceFiles/list", "workspaceFiles/changes",
+    "fileUploads/upload", "session/uploadFileBinary", "sessionFeedback/record",
+  ];
+  for (const [index, endpoint] of endpoints.entries()) {
+    const response = await fetch(`${f.base}/api/${endpoint}`, { method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN } });
+    assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", endpoint);
+    c.send(open(String(index), endpoint));
+    assert.equal((await c.next()).error?.code, "runtime_ui_method_denied", endpoint);
+    assert.equal((await c.next()).type, "end");
+  }
+  assert.deepEqual(arrived, []);
   assert.deepEqual(f.received, []);
 });
 

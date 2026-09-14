@@ -1,5 +1,5 @@
 {
-  "dsh": "0.1.2-rc.1",
+  "dsh": "0.1.5-rc.2",
   "cordis": "4.0.2",
   "services": {
     "required": [
@@ -36,7 +36,7 @@
     "step/start",
     "step/end",
     "user/message",
-    "assistant/chunk",
+    "assistant/attempt",
     "assistant/message",
     "tool/call",
     "tool/result",
@@ -155,10 +155,12 @@
       "directoryPicker/createDirectory",
       "directoryPicker/list",
       "directoryPicker/pick",
+      "fileUploads/upload",
       "goals/clear",
       "goals/complete",
       "goals/create",
       "goals/edit",
+      "goals/get",
       "goals/pause",
       "goals/resume",
       "llm/discoverModels",
@@ -172,6 +174,7 @@
       "session/search",
       "session/selectModel",
       "session/updateQueue",
+      "sessionFeedback/record",
       "sessionReferenceResolver/candidates",
       "settings/describe",
       "settings/update",
@@ -182,7 +185,14 @@
       "workspace/delete",
       "workspace/insertBefore",
       "workspace/insertSessionBefore",
-      "workspace/rename"
+      "workspace/rename",
+      "workspaceFiles/changes",
+      "workspaceFiles/list",
+      "workspaceFiles/read",
+      "workspaceFiles/readAll",
+      "workspaceFiles/readBytes",
+      "workspaceFiles/readRelated",
+      "workspaceFiles/stat"
     ],
     "downlink": [
       "/api/events.mux",
