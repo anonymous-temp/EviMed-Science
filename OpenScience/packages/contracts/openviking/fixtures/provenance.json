@@ -24,6 +24,7 @@
     "The server refuses to start in dev auth mode when bound to 0.0.0.0, which is why the deployment uses trusted mode rather than a localhost bind.",
     "Scores are wider under qwen3.7-text-embedding than under bge-m3: on four records and two questions the relevant hit scored 0.71 and 0.87 while the unrelated ones fell to 0.21, where the bge-m3 capture kept every hit between 0.58 and 0.61. The client's explicit `score_threshold: 0` still matters — the server's own default of 0.1 is applied with no reranker configured — but the separation the reranker has to work with is real rather than nominal.",
     "`ls` is not recursive. Listing `.../memories/evimed/user` on a tree written as `<kind>/<id>.md` returns the kind directories, each with `isDir: true` and an abstract reading '[Directory abstract is not ready]', not the leaves. Anything that needs the leaves has to walk.",
-    "A write with `wait: true` against DashScope returned in 323-780 ms for a short Chinese memory, inside the 5 s bound the index code asks for and well inside the client's 8 s request timeout."
+    "A write with `wait: true` against DashScope returned in 323-780 ms for a short Chinese memory, inside the 5 s bound the index code asks for and well inside the client's 8 s request timeout.",
+    "The configuration this server ran is byte-identical to what `scripts/ops/configure-production-state.mjs` renders — generated into a throwaway directory and compared field by field with only the two key values masked — so the shape the renderer produces is the shape a live v0.4.19 accepts, rather than a shape that merely resembles it."
   ]
 }
