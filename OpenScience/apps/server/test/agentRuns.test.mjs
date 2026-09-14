@@ -29,6 +29,7 @@ import {
 import { runStateFileFor, workspaceLayout } from "@evimed/domain";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
+import { HttpError } from "../src/security.mjs";
 
 /**
  * A completed `skill` tool call as the kernel reports one: the result is the
@@ -139,19 +140,44 @@ async function dispatchRun(base, sessionId, dispatchId, text = "research this qu
   return { response, body: await response.json() };
 }
 
-test("required research memory fails dispatch closed when Memos is unavailable", async () => {
+/** A research-memory store at the interface, for the two cases a dispatch has
+ *  to tell apart: a deployment that has none, and one whose store is broken. */
+function memoryStoreDouble({ configured = true, fail = null } = {}) {
+  const refuse = () => { if (fail) throw fail; };
+  return {
+    configured,
+    async status() {
+      return fail
+        ? { configured, connected: false, code: "memory_unavailable", structured: false }
+        : { configured, connected: configured, code: null, structured: configured };
+    },
+    async relevant() { refuse(); return []; },
+    async list() { refuse(); return []; },
+    async listRecords() { refuse(); return []; },
+    async listAllRecords() { refuse(); return []; },
+    async profile() { refuse(); return { records: [], memos: [] }; },
+  };
+}
+
+// A deployment with no control-plane database has no research memory, and that
+// is a configuration rather than a fault: the researcher gets an answer without
+// recalled memories, which is what every local development run has always got.
+test("a deployment with no research memory store still dispatches", async () => {
   await withApp(async ({ base }) => {
-    assert.equal((await bind(base, "ses_memory_required", { mode: "open-domain" })).status, 200);
-    const result = await startRun(base, "ses_memory_required");
-    assert.equal(result.response.status, 503);
-    assert.equal(result.body.code, "memory_required_unavailable");
-    const runs = await listRuns(base);
-    assert.equal(runs.body.data[0].status, "failed");
-    assert.equal(runs.body.data[0].errorCode, "memory_required_unavailable");
-  }, { requireMemos: true });
+    assert.equal((await bind(base, "ses_memory_absent", { mode: "open-domain" })).status, 200);
+    const result = await startRun(base, "ses_memory_absent");
+    assert.equal(result.response.status, 202, JSON.stringify(result.body));
+    assert.equal(result.body.data.status, "running");
+  }, { researchMemory: memoryStoreDouble({ configured: false }) });
 });
 
-test("required research memory records a terminal failure when configured Memos goes offline", async () => {
+// A store that exists and cannot answer is the opposite case. Continuing would
+// answer as if the researcher had never told the product anything, and nothing
+// in the answer would say so — so the dispatch fails, terminally, and the run
+// ledger carries the reason.
+test("a research memory store that cannot answer fails the dispatch and records why", async () => {
+  const offline = new Error("the control-plane database is unreachable");
+  /** @type {any} */ (offline).code = "memory_unavailable";
   await withApp(async ({ base }) => {
     assert.equal((await bind(base, "ses_memory_offline", { mode: "open-domain" })).status, 200);
     const result = await startRun(base, "ses_memory_offline");
@@ -160,12 +186,22 @@ test("required research memory records a terminal failure when configured Memos 
     const runs = await listRuns(base);
     assert.equal(runs.body.data[0].status, "failed");
     assert.equal(runs.body.data[0].errorCode, "memory_unavailable");
-  }, {
-    requireMemos: true,
-    memosUrl: "http://127.0.0.1:5230",
-    memosAccessToken: "test-memos-token",
-    memosFetch: async () => { throw new TypeError("offline"); },
-  });
+  }, { researchMemory: memoryStoreDouble({ fail: offline }) });
+});
+
+// The third case, and the one the prompt's old "科研记忆服务暂时不可用" note used
+// to serve: a deployment with no store of its own whose recall still fails.
+// That is what a strict index asks for when the index is down, and it is a
+// rejection like any other — a run that has been told to stop is not a run to
+// decorate with an excuse and dispatch anyway.
+test("a recall that fails rejects the dispatch even where the store itself is absent", async () => {
+  const offline = new HttpError(503, "memory_index_unavailable", "The memory index is unavailable.");
+  await withApp(async ({ base }) => {
+    assert.equal((await bind(base, "ses_memory_strict", { mode: "open-domain" })).status, 200);
+    const result = await startRun(base, "ses_memory_strict");
+    assert.equal(result.response.status, 503, JSON.stringify(result.body));
+    assert.equal(result.body.code, "memory_index_unavailable");
+  }, { researchMemory: memoryStoreDouble({ configured: false, fail: offline }) });
 });
 
 test("starts immutable open-domain and specialist run identities from research-session bindings", async () => {

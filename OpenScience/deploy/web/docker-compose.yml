@@ -41,64 +41,166 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
 
-  evimed-memos:
-    image: ${OPEN_SCIENCE_MEMOS_CONTAINER_IMAGE:-evimed-memos:0.31.1-evimed}
-    build:
-      context: ../../..
-      dockerfile: OpenScience/deploy/memos/Dockerfile
-      args:
-        VERSION: 0.31.1-evimed
-        COMMIT: ${OPEN_SCIENCE_SOURCE_REVISION:?set OPEN_SCIENCE_SOURCE_REVISION}
-        GOPROXY: ${OPEN_SCIENCE_GOPROXY:-https://goproxy.cn,direct}
+  # The recall index: a third-party context database holding derived copies of
+  # user memories, and nothing original. Every record it ranks is hydrated back
+  # from PostgreSQL before it reaches anyone, so a lost volume costs one
+  # `pnpm rebuild:memory-index --all` and no data.
+  #
+  # It is in the base stack rather than an overlay because both recall paths —
+  # research memory and capsule facts — now rank through it, and a deployment
+  # that skipped the overlay would silently fall back to term matching.
+  evimed-openviking:
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.19@sha256:49e20c09ec7ea2f16c116d9ddb2ea90b4c24bf3f5a83078609e52399487dbec1}
     environment:
-      MEMOS_ADDR: 0.0.0.0
-      MEMOS_PORT: 5230
-      MEMOS_DRIVER: postgres
-      MEMOS_DSN_FILE: /run/secrets/memos-dsn
-      MEMOS_INSTANCE_URL: ${OPEN_SCIENCE_MEMOS_PUBLIC_URL:-http://localhost:5230}
+      # The bot gateway is a second product on the same image — a chat frontend
+      # with its own channels. Nothing here calls it, and it would be the only
+      # part of this container that wants to reach the internet.
+      OPENVIKING_WITH_BOT: "0"
+      OPENVIKING_SERVER_PORT: "1933"
+      # Read-only: the configuration carries the embedding credential, and the
+      # entrypoint rewrites this path only when OPENVIKING_CONF_CONTENT is set,
+      # which would put that credential in `docker inspect` output.
+      OPENVIKING_CONFIG_FILE: /run/openviking-secrets/ov.conf
     volumes:
-      - evimed-memos-data:/var/opt/memos
-      - type: bind
-        source: ${OPEN_SCIENCE_MEMOS_DSN_HOST_FILE:?set OPEN_SCIENCE_MEMOS_DSN_HOST_FILE}
-        target: /run/secrets/memos-dsn
-        read_only: true
+      - evimed-openviking-data:/app/.openviking
+      - evimed-openviking-secrets:/run/openviking-secrets:ro
     depends_on:
-      evimed-postgres:
-        condition: service_healthy
+      evimed-openviking-init:
+        condition: service_completed_successfully
+    # The image declares no USER and its server creates `storage.workspace`
+    # while loading its configuration, so it runs as an unprivileged uid only
+    # because the init step made that directory inside the volume and gave it
+    # away. Chowning the volume's own root does not survive: an empty named
+    # volume is re-populated from the image on every mount, which resets it.
+    user: "10001:10001"
+    # No published ports. The control plane is the only caller and reaches it
+    # over the internal network; the runtime container never learns it exists.
+    #
+    # The second network is egress, and it is the reason this service has one
+    # at all: embeddings are computed by DashScope over the public internet.
+    # Dedicated rather than `default` so that reaching this index still means
+    # being on `memory-recall-internal`, which only the web service joins.
+    networks:
+      - memory-recall-internal
+      - memory-index-egress
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5230/api/v1/instance/profile"]
-      interval: 10s
+      # `/health` is answered by the process itself and needs no credential.
+      # `/ready` is the other candidate and probes the embedder: it would make
+      # this container's health a report on DashScope's availability, so an
+      # unpaid or rate-limited account would read here as a broken index.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1933/health', timeout=3).read()",
+        ]
+      interval: 30s
       timeout: 5s
-      retries: 12
-      start_period: 20s
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /tmp:rw,nosuid,nodev,noexec,size=32m
-    restart: unless-stopped
-
-  evimed-memos-bootstrap:
-    image: ${OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0.1.3}
-    command: ["node", "scripts/ops/provision-memos.mjs"]
-    environment:
-      OPEN_SCIENCE_MEMOS_URL: http://evimed-memos:5230
-      OPEN_SCIENCE_MEMOS_ADMIN_USER: ${OPEN_SCIENCE_MEMOS_ADMIN_USER:-evimed-memory}
-      OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_FILE: /run/secrets/memos-admin-password
-      OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE: /run/memos-integration/access-token
-    volumes:
-      - evimed-memos-integration:/run/memos-integration
-      - type: bind
-        source: ${OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE:?set OPEN_SCIENCE_MEMOS_ADMIN_PASSWORD_HOST_FILE}
-        target: /run/secrets/memos-admin-password
-        read_only: true
-    depends_on:
-      evimed-memos:
-        condition: service_healthy
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3g
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    restart: unless-stopped
+
+  # One root one-shot with no network: it copies the two secrets into the
+  # secrets volume at 0600, owned by the uid that reads each, and prepares the
+  # data directory the server would otherwise have to be root to create.
+  evimed-openviking-init:
+    image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.4.19@sha256:49e20c09ec7ea2f16c116d9ddb2ea90b4c24bf3f5a83078609e52399487dbec1}
+    user: "0:0"
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        import json, os, pathlib
+        # Every mode here is set once, while this process still owns the path.
+        # It holds CAP_CHOWN and nothing else, so a path it has given away can
+        # no longer be chmod'ed by it — not on this run, and not on the next
+        # one, when the file already belongs to the uid that reads it.
+        os.umask(0o077)
+        output = pathlib.Path('/output')
+        output.mkdir(parents=True, exist_ok=True)
+        # One owner per file, and it is the uid of the container that reads it.
+        # Both readers drop every capability, so neither holds DAC_OVERRIDE and
+        # a 0600 file owned by anyone else is unreadable to them: the index
+        # reads ov.conf as 10001, the control plane reads api-key as root.
+        for source, name, owner in (('/input/ov.conf', 'ov.conf', 10001), ('/input/api-key', 'api-key', 0)):
+            target = output / name
+            temporary = output / (name + '.tmp')
+            with open(source, 'rb') as stream:
+                payload = stream.read(65537)
+            if not payload or len(payload) > 65536:
+                raise SystemExit('protected memory-index secret has invalid size')
+            if name == 'ov.conf':
+                # A malformed configuration makes the server exit into a restart
+                # loop whose only symptom is an unhealthy container. Rejecting it
+                # here names the file instead.
+                json.loads(payload.decode('utf-8'))
+            with open(temporary, 'wb') as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, 0o600)
+            os.chown(temporary, owner, owner)
+            os.replace(temporary, target)
+        # `storage.workspace` in the rendered configuration. The server mkdirs it
+        # while loading that file, as uid 10001, and an empty volume arrives
+        # owned by root — so the directory is created and given away here, where
+        # root still exists. Its mode comes from `mkdir` rather than a later
+        # chmod, for the reason above.
+        data = pathlib.Path('/data/data')
+        data.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # The directory and everything already in it. A deployment upgrading
+        # from a release that ran this image as root arrives with a volume full
+        # of root-owned index files, and giving away only the directory leaves
+        # every one of them unreadable to the uid that has to read them — an
+        # index that starts, stays healthy and answers nothing.
+        #
+        # Children first, this directory last, and that order is what makes the
+        # step restartable. This process holds CAP_CHOWN and neither
+        # DAC_OVERRIDE nor DAC_READ_SEARCH, so once /data/data belongs to 10001
+        # at mode 0700 root can no longer list it — and a failed listing is
+        # returned as an empty one, not raised. Giving the directory away first
+        # would therefore make every later run a silent no-op over files it
+        # cannot read. Last means the opposite: a directory that already belongs
+        # to 10001 is the proof that everything under it was done.
+        unreadable = []
+        below = []
+        for parent, directories, files in os.walk(data, topdown=False, onerror=unreadable.append):
+            below.extend(os.path.join(parent, name) for name in files + directories)
+        if unreadable and os.lstat(data).st_uid != 10001:
+            raise SystemExit('cannot read the memory index data directory: %s' % unreadable[0])
+        for path in below + [str(data)]:
+            entry = os.lstat(path)
+            if entry.st_uid != 10001 or entry.st_gid != 10001:
+                os.lchown(path, 10001, 10001)
+    volumes:
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_CONF_HOST_FILE}
+        target: /input/ov.conf
+        read_only: true
+      - type: bind
+        source: ${OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE:?set OPEN_SCIENCE_OPENVIKING_API_KEY_HOST_FILE}
+        target: /input/api-key
+        read_only: true
+      - evimed-openviking-secrets:/output
+      - evimed-openviking-data:/data
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # The one capability it keeps, and the one thing it does that root alone
+    # cannot: give the data directory to the uid the server runs as.
+    cap_add:
+      - CHOWN
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,size=16m
@@ -168,20 +270,35 @@ services:
       OPEN_SCIENCE_REQUIRE_SHARED_STATE_STORE: "true"
       OPEN_SCIENCE_DATABASE_URL_FILE: /run/secrets/database-url
       OPEN_SCIENCE_SESSION_TTL_MS: ${OPEN_SCIENCE_SESSION_TTL_MS:-604800000}
-      OPEN_SCIENCE_MEMOS_URL: http://evimed-memos:5230
-      OPEN_SCIENCE_MEMOS_ACCESS_TOKEN_FILE: /run/memos-integration/access-token
-      OPEN_SCIENCE_REQUIRE_MEMOS: "true"
       OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED: ${OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED:-true}
       OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS: ${OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS:-30000}
-      # Which component ranks a recall. `builtin` needs nothing deployed;
-      # `openviking` needs the `docker-compose.openviking.yml` overlay. Listed
-      # here rather than in that overlay so that selecting a provider the
-      # deployment does not run is visible in readiness instead of silent.
-      OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ${OPEN_SCIENCE_MEMORY_INDEX_PROVIDER:-builtin}
+      # Which component ranks a recall. `openviking` is what this stack starts;
+      # `builtin` is the term matcher, which needs nothing deployed and is what
+      # a recall falls back to when the index is unreachable.
+      OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ${OPEN_SCIENCE_MEMORY_INDEX_PROVIDER:-openviking}
       OPEN_SCIENCE_MEMORY_INDEX_STRICT: ${OPEN_SCIENCE_MEMORY_INDEX_STRICT:-false}
-      OPEN_SCIENCE_OPENVIKING_URL: ${OPEN_SCIENCE_OPENVIKING_URL:-}
+      # Defaulted to the service this file starts, still movable: a deployment
+      # may point at an OpenViking it manages elsewhere, and a literal here
+      # would make the value in `.env` unreachable.
+      OPEN_SCIENCE_OPENVIKING_URL: ${OPEN_SCIENCE_OPENVIKING_URL:-http://evimed-openviking:1933}
       OPEN_SCIENCE_OPENVIKING_ACCOUNT: ${OPEN_SCIENCE_OPENVIKING_ACCOUNT:-evimed}
       OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS: ${OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS:-8000}
+      OPEN_SCIENCE_OPENVIKING_API_KEY_FILE: /run/openviking-secrets/api-key
+      # The reranker orders what a recall already hydrated from PostgreSQL, so
+      # it runs here rather than in the index: the index's own reranked endpoint
+      # navigates by directory abstracts that no language model generates for
+      # this layout, and returns nothing at all for it.
+      OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE: /run/secrets/dashscope-api-key
+      # The reranker's model and endpoint default to the pins the image was
+      # built with; passed here so a model deprecation can be followed from
+      # `.env` rather than from a rebuild. Value-less on purpose: unset, they are
+      # absent from the container and the pinned defaults apply, while `${KEY:-}`
+      # would deliver an empty string and turn the reranker off in silence.
+      OPEN_SCIENCE_MEMORY_RERANK_MODEL:
+      OPEN_SCIENCE_MEMORY_RERANK_API_BASE:
+      OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS:
+      OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT: ${OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT:-8}
+      OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS: ${OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS:-20000}
       # Autopilot's levers belong to the base stack, not to an overlay. Compose
       # passes environment item by item, and these were listed only in
       # `docker-compose.ingestion.yml` — so on a deployment without that overlay
@@ -236,7 +353,7 @@ services:
       OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS: ${OPEN_SCIENCE_RUNTIME_CONTROLLER_POLL_MS:-500}
       OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS: ${OPEN_SCIENCE_RUNTIME_UI_FRAME_TTL_MS:-300000}
       OPEN_SCIENCE_ALLOW_DIRECT_DOCKER_CONTROL: "false"
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -415,7 +532,7 @@ services:
       - open-science-data:/data
       - open-science-backups:/backups:ro
       - open-science-runtime-control:/run/open-science-controller:ro
-      - evimed-memos-integration:/run/memos-integration:ro
+      - evimed-openviking-secrets:/run/openviking-secrets:ro
       - type: bind
         source: ${OPEN_SCIENCE_DATABASE_URL_HOST_FILE:?set OPEN_SCIENCE_DATABASE_URL_HOST_FILE}
         target: /run/secrets/database-url
@@ -448,13 +565,22 @@ services:
         source: ${OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE:?set OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_HOST_FILE}
         target: /run/secrets/deepseek-release-receipt.json
         read_only: true
+      # The same host file the index's own configuration is rendered from. The
+      # runtime container never sees it; only the control plane and the index do.
+      - type: bind
+        source: ${OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE:?set OPEN_SCIENCE_DASHSCOPE_API_KEY_HOST_FILE}
+        target: /run/secrets/dashscope-api-key
+        read_only: true
     depends_on:
       evimed-postgres:
         condition: service_healthy
-      evimed-memos:
-        condition: service_healthy
-      evimed-memos-bootstrap:
-        condition: service_completed_successfully
+      evimed-openviking:
+        # Started, not healthy. Recall degrades to the term matcher when the
+        # index cannot answer — that is what `OPEN_SCIENCE_MEMORY_INDEX_STRICT`
+        # being false by default means — so waiting for the index to be healthy
+        # would turn a ranking outage into a control-plane outage, and would
+        # make starting the product depend on a third party's API.
+        condition: service_started
       open-science-runtime-controller:
         condition: service_healthy
       evimed-meta-agent:
@@ -480,6 +606,7 @@ services:
     networks:
       - default
       - runtime-internal
+      - memory-recall-internal
     healthcheck:
       test:
         [
@@ -968,7 +1095,7 @@ services:
       OPEN_SCIENCE_RUNTIME_MODE: ${OPEN_SCIENCE_RUNTIME_MODE:-kernel}
       OPEN_SCIENCE_RUNTIME_SANDBOX_MODE: ${OPEN_SCIENCE_RUNTIME_SANDBOX_MODE:-docker}
       OPEN_SCIENCE_RUNTIME_CONTAINER_BIN: ${OPEN_SCIENCE_RUNTIME_CONTAINER_BIN:-docker}
-      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26}
+      OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26}
       OPEN_SCIENCE_UV_VERSION: ${OPEN_SCIENCE_UV_VERSION:-0.11.26}
       OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL: ${OPEN_SCIENCE_RUNTIME_REQUIRE_IMAGE_LOCAL:-true}
       OPEN_SCIENCE_RUNTIME_DATA_VOLUME: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
@@ -1032,12 +1159,12 @@ services:
   # nothing else. While two kernels shipped this service built under a second
   # name, so the profile produced the image the control plane never launched.
   dsh-runtime-image:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.1-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26}
     build:
       context: ../..
       dockerfile: deploy/runtime-dsh/Dockerfile
       args:
-        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.5-rc.1}
+        DSH_VERSION: ${OPEN_SCIENCE_DSH_VERSION:-0.1.5-rc.2}
         DSH_CORDIS_VERSION: ${OPEN_SCIENCE_DSH_CORDIS_VERSION:-4.0.2}
         SOCKET_VERSION: ${OPEN_SCIENCE_SOCKET_VERSION:-0.1.0}
         NODE_VERSION: ${OPEN_SCIENCE_NODE_VERSION:-22.22.0}
@@ -1075,10 +1202,25 @@ services:
       - open-science-web
     restart: unless-stopped
 
+# A volume this file stops declaring is a volume `compose down -v` stops
+# removing, so the memory migration leaves two kinds of retired data behind on
+# a host that ran the previous stack, and both are an operator decision rather
+# than something a compose file can do:
+#
+#   volumes  `web_evimed-memos-data`, `web_evimed-memos-integration`,
+#            `web_evimed-memos-secrets` — which holds the retired service's
+#            credentials and is the one worth removing first — and the five
+#            `web_evimed-memos-{engine,neo4j,qdrant,redis,ollama}-*` volumes are
+#            now orphans; `docker volume rm` is the only thing that removes them
+#   tables   `public.memo` and `public.memory_record` stay in the `evimed`
+#            database, where `scripts/ops/postgres-backup.py` keeps dumping them
+#            into every backup, until `--purge-source` empties them
+#
+# Both wait on the cutover in `docs/WEB_DEPLOYMENT.md` having verified its copy.
 volumes:
   evimed-postgres-data:
-  evimed-memos-data:
-  evimed-memos-integration:
+  evimed-openviking-data:
+  evimed-openviking-secrets:
   open-science-data:
     name: ${OPEN_SCIENCE_DATA_VOLUME:-open-science-data}
   open-science-runtime-control:
@@ -1090,3 +1232,11 @@ networks:
   runtime-internal:
     name: ${OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME:-open-science-runtime-internal}
     internal: true
+  # Web and the recall index, and nobody else.
+  memory-recall-internal:
+    internal: true
+  # The index's route to the embedding API. Its own network rather than
+  # `default` so that being able to reach the index still means being on
+  # `memory-recall-internal`: a service that joins this one to reach the
+  # internet would otherwise get the index with it.
+  memory-index-egress:

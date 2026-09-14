@@ -315,7 +315,6 @@ S23 关停时 `app.close()` 抛异常照样 `exit(0)`，编排层看到干净退
 | `webSearchTimeoutMs` | 30000 | 30000（`docker-compose.yml:249`） | **总时限**，含重试 | `config.mjs:722-724` |
 | `modelGatewayTimeoutMs` | 300000 | 300000 (`:214`) | **空闲** | `config.mjs:732-734` |
 | 分类器超时 | `clamp(modelGatewayTimeoutMs,1e3,1.2e5)` | 实际 120000 | 总时限 | `specialistClassifier.mjs:90` |
-| `memosRequestTimeoutMs` | 8000 | 未设 | 单次请求 | `config.mjs:766-768` |
 | `memoryExtractionTimeoutMs` | 120000 | **30000** (`:75`) | 总时限 | `config.mjs:794-796` |
 | MCP 公共源读超时 | 20s（`EVIMED_PUBLIC_SOURCE_TIMEOUT_SECONDS`） | 未设 | socket 读 | `public_sources.py:94-96` |
 | MCP 全文/官方页读超时 | 60s（硬编码） | 不可配 | socket 读 | `open_access_fulltext.py:36`、`official_pages.py:166` |

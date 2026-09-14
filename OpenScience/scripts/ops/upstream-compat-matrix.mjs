@@ -19,11 +19,11 @@
  * test `latest`. The contract run is `contractAtPin` — that name is the honest
  * one — so a green row says nothing about whether the newest release would
  * pass. A real test-latest tier has to install the candidate into a scratch
- * tree and re-run the contracts there, and the four tracked dependencies do not
- * install alike (`dsh` is npm, `mineru` is PyPI, `openlist` is a container
- * image, `memos` is a self-hosted service), so it is its own piece of work
- * rather than a flag on this one. Until it exists, an upgrade PR still has to
- * run the contracts by hand after moving the pin.
+ * tree and re-run the contracts there, and the tracked dependencies do not
+ * install alike (`dsh` is npm, `mineru` is PyPI, `openlist` and `openviking`
+ * are container images), so it is its own piece of work rather than a flag on
+ * this one. Until it exists, an upgrade PR still has to run the contracts by
+ * hand after moving the pin.
  *
  * What it also does not do: upgrade anything. The pin moves in a PR a person reads.
  *
@@ -161,14 +161,12 @@ async function latestVersion(name, pin, offline) {
       // An image tag is not a version list; the release feed is.
       //
       // The feed, not `releases/latest`: one repository can publish more than
-      // one product. `MemTensor/MemOS` ships both MemOS itself (`v2.0.30`, the
-      // thing pinned here) and a separate local plugin
-      // (`memos-local-plugin-v2.0.17`), and `releases/latest` answers with
-      // whichever was published most recently. That made the matrix report
-      // `memos 2.0.30 → memos-local-plugin-v2.0.16`: not a version, a different
-      // product, and a downgrade — an upgrade instruction an operator could
-      // have followed. Releases whose tag is not a plain version are another
-      // product's, and are skipped.
+      // one product, and `releases/latest` answers with whichever was published
+      // most recently. A repository shipping both a server and its own plugin
+      // once made this matrix report the plugin's tag as the server's next
+      // version — not a version, a different product, and a downgrade, which is
+      // an upgrade instruction an operator could have followed. Releases whose
+      // tag is not a plain version are another product's, and are skipped.
       const response = await fetch(`https://api.github.com/repos/${pin.githubRepo}/releases?per_page=100`, {
         headers: { accept: "application/vnd.github+json" },
         signal: AbortSignal.timeout(60_000),

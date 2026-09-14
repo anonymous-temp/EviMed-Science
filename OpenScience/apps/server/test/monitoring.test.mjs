@@ -291,7 +291,6 @@ test("Docker CI root shell preserves toolchain PATH and GITHUB_ENV across sudo",
   assert.match(dockerJob, /shell: \/usr\/local\/bin\/evimed-ci-root-shell \{0\}/);
   assert.equal((dockerJob.match(/shell: bash/g) ?? []).length, 1);
   assert.match(dockerJob, /configure-monitoring\.mjs --prepare-container-secrets/);
-  assert.match(dockerJob, /evimed-memos:0\.31\.1-evimed \/entrypoint-tests\/entrypoint_test\.sh/);
   const wrapper = dockerJob.match(/cat > "\$RUNNER_TEMP\/evimed-ci-root-shell" <<'SH'\n([\s\S]*?)\n          SH/)[1]
     .split("\n").map((line) => line.replace(/^          /, "")).join("\n");
   const tmp = await temporaryDirectory();

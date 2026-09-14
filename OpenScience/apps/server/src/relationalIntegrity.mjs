@@ -8,6 +8,8 @@ const orphanChecks = Object.freeze([
   ["inbox_notifications_user", "SELECT count(*)::integer AS count FROM evimed_inbox.notifications n LEFT JOIN evimed_control.users u ON u.id=n.user_id WHERE u.id IS NULL"],
   ["inbox_notifications_project", "SELECT count(*)::integer AS count FROM evimed_inbox.notifications n LEFT JOIN evimed_control.projects p ON p.user_id=n.user_id AND p.id=n.project_id WHERE n.project_id IS NOT NULL AND p.id IS NULL"],
   ["inbox_preferences_user", "SELECT count(*)::integer AS count FROM evimed_inbox.preferences p LEFT JOIN evimed_control.users u ON u.id=p.user_id WHERE u.id IS NULL"],
+  ["memory_records_user", "SELECT count(*)::integer AS count FROM evimed_memory.records r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
+  ["memory_notes_user", "SELECT count(*)::integer AS count FROM evimed_memory.notes n LEFT JOIN evimed_control.users u ON u.id=n.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_user", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.users u ON u.id=r.user_id WHERE u.id IS NULL"],
   ["usage_model_requests_project", "SELECT count(*)::integer AS count FROM evimed_usage.model_requests r LEFT JOIN evimed_control.projects p ON p.user_id=r.user_id AND p.id=r.project_id WHERE p.id IS NULL"],
 ]);
@@ -22,21 +24,33 @@ const relationships = Object.freeze([
   ["inbox_notifications_user", "evimed_inbox", "notifications", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["inbox_notifications_project", "evimed_inbox", "notifications", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
   ["inbox_preferences_user", "evimed_inbox", "preferences", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
+  ["memory_records_user", "evimed_memory", "records", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
+  ["memory_notes_user", "evimed_memory", "notes", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["usage_model_requests_user", "evimed_usage", "model_requests", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["usage_model_requests_project", "evimed_usage", "model_requests", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
 ]);
 
+const auditedSchemas = Object.freeze(["evimed_product", "evimed_inbox", "evimed_usage", "evimed_memory"]);
+
 function identifier(value) { return `"${String(value).replaceAll('"', '""')}"`; }
 
-/** Audit existing ownership rows and the validation state of every required FK. */
+/** Audit existing ownership rows and the validation state of every required FK.
+ *
+ *  Every registered table is migrated by a caller each auditing tool already
+ *  runs, so a missing one is a dropped table and fails the audit with the
+ *  relation error PostgreSQL raises. There is deliberately no tolerated-absent
+ *  list: one existed while `evimed_memory` had no migration caller here, and a
+ *  registry that cannot fail on a dropped table is not a registry. */
 export async function relationalIntegrity(database, { validate = false } = {}) {
   const counts = {};
-  for (const [name, query] of orphanChecks) counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
+  for (const [name, query] of orphanChecks) {
+    counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
+  }
   const orphanTotal = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const rows = (await database.query(`SELECT n.nspname AS schema_name,t.relname AS table_name,c.conname,c.convalidated,
     pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid
     JOIN pg_namespace n ON n.oid=t.relnamespace WHERE c.contype='f'
-    AND n.nspname IN ('evimed_product','evimed_inbox','evimed_usage')`)).rows;
+    AND n.nspname=ANY($1::text[])`, [auditedSchemas])).rows;
   const matched = new Map();
   for (const [name, schema, table, prefix] of relationships) {
     const row = rows.find((candidate) => candidate.schema_name === schema && candidate.table_name === table
@@ -55,5 +69,6 @@ export async function relationalIntegrity(database, { validate = false } = {}) {
     unvalidated = [];
   }
   return { ok: orphanTotal === 0 && missing.length === 0 && unvalidated.length === 0,
-    orphanTotal, counts, missing, unvalidated, validated: validate && orphanTotal === 0 && missing.length === 0 };
+    orphanTotal, counts, missing, unvalidated,
+    validated: validate && orphanTotal === 0 && missing.length === 0 };
 }

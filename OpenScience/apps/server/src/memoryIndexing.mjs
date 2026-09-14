@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { HttpError } from "./security.mjs";
+import { capsuleFactUri, capsuleMemoryRoot, capsuleSegment, capsuleTreeUri, parseCapsuleFactUri } from "./openVikingClient.mjs";
 
 function digest(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -14,13 +15,46 @@ function accountLockName(userId) {
   return `memory-index-account:${userId}`;
 }
 
-/** Canonical PostgreSQL remains authoritative; MemOS supplies ranking only. */
+/** How many facts are written at once, and how long a write may wait for its
+ *  vector before the server answers 504. The wait bound stays below the
+ *  client's own request timeout so that a slow embedding is reported by the
+ *  server, which knows whether the content was written, rather than by an
+ *  aborted socket, which does not. */
+const WRITE_CONCURRENCY = 4;
+const WRITE_WAIT_SECONDS = 5;
+
+/** What one fact looks like as a file. The kind and the layer lead, because
+ *  they are the words a reader (and an embedding) needs to place the sentence
+ *  that follows. Provenance is deliberately absent: it is delivered from the
+ *  canonical row at recall time and has no business being embedded. */
+function factDocument(entry) {
+  const header = entry.layer ? `${entry.factKind} / ${entry.layer}` : entry.factKind;
+  return `${header}\n\n${entry.content}`;
+}
+
+/**
+ * The capsule index: canonical PostgreSQL stays authoritative, OpenViking ranks.
+ *
+ * The index holds a derived copy of approved capsule facts, one file per fact,
+ * under a path bound to the account generation. Nothing is ever delivered from
+ * it: a hit names a fact, that fact is reloaded from PostgreSQL, and a hit
+ * whose row is gone, retired, superseded or in a deactivated capsule is
+ * dropped. That is what makes a stale index harmless and a rebuild always safe.
+ */
 export class MemoryIndexing {
-  /** @param {{database:any,engine:any,jobs:any}} dependencies */
-  constructor({ database, engine, jobs }) {
+  /** @param {{database:any,openViking:any,jobs:any,rerank?:any,scoreThreshold?:number}} dependencies */
+  constructor({ database, openViking, jobs, rerank = null, scoreThreshold = 0 }) {
     this.database = database;
-    this.engine = engine;
+    this.openViking = openViking;
     this.jobs = jobs;
+    this.rerank = rerank;
+    // The relevance floor a recall asks the index for. Zero rather than the
+    // server's own 0.1, which is applied even with no reranker configured and
+    // drops weak but correct hits; every hit is re-checked against PostgreSQL
+    // and then ranked and budgeted by the caller, so a weak one costs a slot,
+    // not correctness. A deployment that would rather spend fewer slots sets a
+    // floor here.
+    this.scoreThreshold = Number(scoreThreshold) || 0;
   }
 
   /** @param {string} userId */
@@ -38,7 +72,7 @@ export class MemoryIndexing {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [accountLockName(userId)]);
   }
 
-  /** Purge every registered capsule namespace while the caller holds the account deletion transaction.
+  /** Purge every registered capsule subtree while the caller holds the account deletion transaction.
    * Taking the same capsule locks as rebuild prevents an index worker from restoring data after purge.
    * @param {string} userId @param {string} accountCreatedAt @param {any} client */
   async prepareAccountDeletion(userId, accountCreatedAt, client) {
@@ -61,8 +95,12 @@ export class MemoryIndexing {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`memory-index:${userId}:${capsuleId}`]);
     }
     for (const capsuleId of capsuleIds) {
-      await this.engine.deleteScope(userId, { accountCreatedAt, capsuleId });
+      await this.openViking.remove(userId, capsuleMemoryRoot(userId, { accountCreatedAt, capsuleId }), { recursive: true });
     }
+    // Then the whole capsule tree, which is the only thing that also removes a
+    // subtree this ledger never recorded — an earlier account generation's, or
+    // one whose publication row was lost.
+    await this.openViking.remove(userId, capsuleTreeUri(userId), { recursive: true });
     return { scopes: capsuleIds.length, verified: true };
   }
 
@@ -87,43 +125,111 @@ export class MemoryIndexing {
           WHERE user_id=$1 AND kind='fact' AND deleted_at IS NULL
           AND payload->>'capsuleId'=$2 AND payload->>'status'='approved' ORDER BY id${lockClause}`, [userId, capsuleId])
       : { rows: [] };
-    const entries = facts.rows.map((fact) => ({
-      id: fact.id,
-      revision: fact.revision,
-      content: fact.payload.content,
-      provenanceIds: provenanceIds(fact.payload.provenance),
-    }));
     const generation = account.rows[0].generation;
+    const entries = [];
+    // A fact whose kind, id or revision cannot become a path is not a reason to
+    // leave a whole capsule unindexed. It would be: the path is built inside
+    // the rebuild, after the subtree has already been removed, and the worker
+    // treats that refusal as terminal — so one legacy row without a `factKind`
+    // (nothing stops one being written) would empty its capsule permanently and
+    // silently. It is counted and skipped instead, and the count rides on the
+    // job result. It stays out of the fingerprint, which describes what the
+    // index is meant to hold: the row becomes publishable the moment it is
+    // repaired, and that changes the fingerprint by itself.
+    let unpublishable = 0;
+    // A root this capsule could never have — no account generation, no capsule
+    // id — is not one fact's fault, and counting it per fact would publish an
+    // empty capsule instead of failing. It is raised here, once, before the
+    // per-fact refusals below can be mistaken for it.
+    capsuleMemoryRoot(userId, { accountCreatedAt: generation, capsuleId });
+    for (const fact of facts.rows) {
+      const entry = {
+        id: fact.id,
+        revision: fact.revision,
+        // The kind is part of the path and the layer part of the file, so both
+        // belong to the fingerprint: editing either has to force a rebuild.
+        factKind: String(fact.payload.factKind ?? ""),
+        layer: String(fact.payload.layer ?? ""),
+        content: fact.payload.content,
+        provenanceIds: provenanceIds(fact.payload.provenance),
+      };
+      try {
+        capsuleFactUri(userId, { accountCreatedAt: generation, capsuleId, factKind: entry.factKind, factId: entry.id, revision: entry.revision });
+      } catch (error) {
+        if (error?.code !== "memory_id_invalid") throw error;
+        unpublishable++;
+        continue;
+      }
+      entries.push(entry);
+    }
     const live = Boolean(row && row.deleted_at == null);
     return {
-      userId, capsuleId, generation, live, capsuleRevision: row?.revision ?? 0, entries,
+      userId, capsuleId, generation, live, capsuleRevision: row?.revision ?? 0, entries, unpublishable,
       fingerprint: digest([generation, capsuleId, live, row?.revision ?? 0, entries]),
     };
   }
 
-  /** @param {any} snapshot */
+  /** What the index actually holds for this capsule, read from the paths.
+   *
+   * The leaf name carries the fact id and its revision, so this compares exact
+   * pairs without reading a single file: OpenViking drops unknown frontmatter,
+   * which means a header inside the file could not be trusted to survive the
+   * round trip, while the path it was written to always does.
+   *
+   * What it verifies is our own drift — a leaf of ours that names a revision
+   * the snapshot does not, a fact that is no longer canonical, a fact that is
+   * missing. An entry this layout never wrote is counted, not raised: the
+   * server materializes artifacts of its own next to the files it is given, and
+   * a rewrite cannot remove what it did not write, so raising on one would put
+   * the capsule in a rebuild loop that repeats forever. No hit is ever
+   * delivered from a path alone, so a foreign file can name nothing.
+   *
+   * @param {any} snapshot
+   */
   async readback(snapshot) {
-    const records = [];
-    for (let page = 1; ; page++) {
-      const result = await this.engine.export(snapshot.userId, {
-        accountCreatedAt: snapshot.generation, capsuleId: snapshot.capsuleId, page, pageSize: 100,
-      });
-      records.push(...result.records);
-      if (result.nextPage === null) break;
-      if (page >= 10_000) throw new HttpError(502, "memory_index_readback_invalid", "Memory index readback did not terminate.");
-    }
-    const expected = new Map(snapshot.entries.map((entry) => [entry.id, entry.revision]));
-    const found = new Set();
-    for (const record of records) {
-      if (!record.entryId || expected.get(record.entryId) !== record.revision) {
-        throw new HttpError(502, "memory_index_readback_mismatch", "Memory index readback contained a stale or unowned revision.");
+    const root = capsuleMemoryRoot(snapshot.userId, { accountCreatedAt: snapshot.generation, capsuleId: snapshot.capsuleId });
+    const segment = capsuleSegment(snapshot.generation, snapshot.capsuleId);
+    const expected = new Map(snapshot.entries.map((entry) => [entry.id, entry]));
+    const mismatch = () => new HttpError(502, "memory_index_readback_mismatch", "Memory index readback contained a stale or unowned leaf.");
+    const found = [];
+    const seen = new Set();
+    let foreign = 0;
+    for (const directory of await this.#list(snapshot.userId, root)) {
+      // Only a directory holds leaves of ours: every fact is written under its
+      // kind. A file directly in the capsule root is therefore not ours.
+      if (!directory?.isDir) { foreign++; continue; }
+      for (const leaf of await this.#list(snapshot.userId, String(directory.uri ?? ""))) {
+        const parsed = parseCapsuleFactUri(String(leaf?.uri ?? ""));
+        if (!parsed || parsed.capsuleSegment !== segment) { foreign++; continue; }
+        const entry = expected.get(parsed.factId);
+        if (!entry || seen.has(parsed.factId) || entry.revision !== parsed.revision || entry.factKind !== parsed.factKind) {
+          throw mismatch();
+        }
+        seen.add(parsed.factId);
+        found.push({ factId: parsed.factId, factKind: parsed.factKind, revision: parsed.revision, uri: String(leaf.uri) });
       }
-      found.add(record.entryId);
     }
-    if (found.size !== expected.size) {
+    if (seen.size !== expected.size) {
       throw new HttpError(502, "memory_index_readback_incomplete", "Memory index readback did not contain every canonical fact.");
     }
-    return records;
+    return { found, foreign };
+  }
+
+  /** A directory as it is, where "not there" and "empty" mean the same thing.
+   *  A capsule that was never indexed, or whose subtree was removed, must read
+   *  as an empty index rather than as an error, or rebuild could never be the
+   *  thing that repairs it. Only a directory that was already absent reaches
+   *  this: the client ends a walk that broke after its first page with the
+   *  pages it had, so a subtree removed underneath a reader is reported as the
+   *  part that is still there rather than as nothing at all.
+   *  @param {string} userId @param {string} uri */
+  async #list(userId, uri) {
+    try {
+      return await this.openViking.listAll(userId, uri);
+    } catch (error) {
+      if (error instanceof HttpError && error.code === "memory_index_not_found") return [];
+      throw error;
+    }
   }
 
   /** Rebuild one capsule as a unit. A later writer changes the fingerprint and prevents publication.
@@ -163,9 +269,9 @@ export class MemoryIndexing {
           await this.readback(snapshot);
           verified = true;
         } catch (error) {
-          // An old SQL receipt cannot prove that the engine still has its
-          // records. Only observed record drift justifies replacing a scope;
-          // transport and malformed-response failures retain ordinary retries.
+          // An old SQL receipt cannot prove that the index still has its files.
+          // Only observed drift justifies rewriting a subtree; transport and
+          // malformed-response failures retain ordinary retries.
           if (!["memory_index_readback_incomplete", "memory_index_readback_mismatch"].includes(error?.code)) throw error;
         }
         if (verified) {
@@ -173,30 +279,26 @@ export class MemoryIndexing {
             { status: "already_current", capsuleId, fingerprint: snapshot.fingerprint }, verifySnapshot);
         }
       }
-      await this.engine.deleteScope(job.userId, { accountCreatedAt, capsuleId });
-      const memoryIds = [];
-      for (let offset = 0; offset < snapshot.entries.length; offset += 20) {
-        const batch = snapshot.entries.slice(offset, offset + 20).map((entry) => ({
-          entryId: entry.id, content: entry.content, provenanceIds: entry.provenanceIds, revision: entry.revision,
-        }));
-        const stored = await this.engine.add(job.userId, batch, { accountCreatedAt, capsuleId });
-        for (const record of stored.records) memoryIds.push(...record.memoryIds);
-      }
-      const readback = await this.readback(snapshot);
+      await this.openViking.remove(job.userId, capsuleMemoryRoot(job.userId, { accountCreatedAt, capsuleId }), { recursive: true });
+      await this.#writeEntries(job.userId, accountCreatedAt, capsuleId, snapshot.entries);
+      const { foreign } = await this.readback(snapshot);
       const status = snapshot.live ? "published" : "retired";
+      // What was skipped and what was found that we did not write are reported
+      // on the job, not enforced: both are things this index cannot repair, and
+      // the ledger is where an operator can see them accumulate.
       return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken,
-        { status, capsuleId, entries: snapshot.entries.length, fingerprint: snapshot.fingerprint },
+        { status, capsuleId, entries: snapshot.entries.length, fingerprint: snapshot.fingerprint,
+          ...(snapshot.unpublishable ? { unpublishable: snapshot.unpublishable } : {}),
+          ...(foreign ? { foreign } : {}) },
         async (client) => {
           await verifySnapshot(client);
           await client.query(`INSERT INTO evimed_product.memory_index_state
-            (user_id,capsule_id,account_created_at,fingerprint,entry_count,status,engine_memory_ids,last_job_id,published_at,verified_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,clock_timestamp(),clock_timestamp())
+            (user_id,capsule_id,account_created_at,fingerprint,entry_count,status,last_job_id,published_at,verified_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,clock_timestamp(),clock_timestamp())
             ON CONFLICT(user_id,capsule_id) DO UPDATE SET account_created_at=excluded.account_created_at,
               fingerprint=excluded.fingerprint,entry_count=excluded.entry_count,status=excluded.status,
-              engine_memory_ids=excluded.engine_memory_ids,last_job_id=excluded.last_job_id,
-              published_at=clock_timestamp(),verified_at=clock_timestamp()`,
-          [job.userId, capsuleId, accountCreatedAt, snapshot.fingerprint, snapshot.entries.length,
-            status, JSON.stringify(memoryIds.length ? memoryIds : readback.map((record) => record.id)), job.id]);
+              last_job_id=excluded.last_job_id,published_at=clock_timestamp(),verified_at=clock_timestamp()`,
+          [job.userId, capsuleId, accountCreatedAt, snapshot.fingerprint, snapshot.entries.length, status, job.id]);
         });
     } finally {
       try {
@@ -209,19 +311,75 @@ export class MemoryIndexing {
     }
   }
 
-  /** MemOS ranks opaque references; every delivered value is reloaded from PostgreSQL.
+  /** Write every fact of one capsule, a few at a time.
+   *
+   * There is no batch write, and `wait: true` is not optional here: a file the
+   * server has accepted but not yet embedded is invisible to `find`, so a
+   * rebuild that did not wait would publish a fingerprint for an index that
+   * cannot answer yet, and the readback that follows would fail at random.
+   * Concurrency is bounded because each write costs one embedding call.
+   *
+   * @param {string} userId @param {string} accountCreatedAt @param {string} capsuleId @param {any[]} entries
+   */
+  async #writeEntries(userId, accountCreatedAt, capsuleId, entries) {
+    const pending = [...entries];
+    /** @type {any} */
+    let failure = null;
+    const worker = async () => {
+      for (let entry = pending.shift(); entry && !failure; entry = pending.shift()) {
+        try {
+          await this.openViking.write(userId, capsuleFactUri(userId, {
+            accountCreatedAt, capsuleId, factKind: entry.factKind, factId: entry.id, revision: entry.revision,
+          }), factDocument(entry), { wait: true, timeoutSeconds: WRITE_WAIT_SECONDS });
+        } catch (error) {
+          // Stop taking new work, but let the writers already in flight settle
+          // before the failure is raised: a rebuild that abandoned them would
+          // race its own retry.
+          failure ??= error;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(WRITE_CONCURRENCY, entries.length) }, worker));
+    if (failure) throw failure;
+  }
+
+  /** The index nominates; PostgreSQL decides. Every value delivered here is
+   *  read from the canonical row, so the worst a stale index can do is name a
+   *  fact that is then dropped.
    * @param {string} userId @param {string} accountCreatedAt @param {{capsuleId:string,mode:string}[]} selections
    * @param {string} query @param {number} limit @param {string|null} projectId */
   async recall(userId, accountCreatedAt, selections, query, limit, projectId = null) {
     const current = await this.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [userId]);
     if (current.rows[0]?.generation !== accountCreatedAt) throw new HttpError(409, "memory_account_changed", "The account changed during memory recall.");
-    const ranked = await Promise.all(selections.map(async (selection, scopeRank) => {
-      const records = await this.engine.search(userId, query, { accountCreatedAt, capsuleId: selection.capsuleId, limit });
-      return records.map((record) => ({ ...record, scopeRank, selection }));
-    }));
-    const candidates = ranked.flat().sort((a, b) => a.rank - b.rank || a.scopeRank - b.scopeRank).slice(0, limit * 4);
-    const ids = [...new Set(candidates.map((item) => item.entryId).filter(Boolean))];
-    if (!ids.length) return [];
+    if (!selections.length) return [];
+    const targets = [];
+    /** @type {Map<string,{capsuleId:string,scopeRank:number}>} */
+    const owners = new Map();
+    for (const [scopeRank, selection] of selections.entries()) {
+      targets.push(capsuleMemoryRoot(userId, { accountCreatedAt, capsuleId: selection.capsuleId }));
+      owners.set(capsuleSegment(accountCreatedAt, selection.capsuleId), { capsuleId: selection.capsuleId, scopeRank });
+    }
+    // One search over every active capsule's subtree. No peer header: it filters
+    // nothing outside `peers/`, and the isolation that matters is the target
+    // list plus the canonical re-check below.
+    const hits = await this.openViking.find(userId, query, {
+      targets, limit: Math.max(1, Math.min(100, Number(limit) || 1)), scoreThreshold: this.scoreThreshold,
+    });
+    const candidates = [];
+    const nominated = new Set();
+    for (const [rank, hit] of hits.entries()) {
+      const parsed = parseCapsuleFactUri(hit.uri);
+      // A hit we did not write, or one from a capsule this recall did not ask
+      // for: it names nothing we can hydrate, so it is not a candidate.
+      if (!parsed || nominated.has(parsed.factId)) continue;
+      const owner = owners.get(parsed.capsuleSegment);
+      if (!owner) continue;
+      nominated.add(parsed.factId);
+      candidates.push({ ...parsed, rank, score: hit.score, capsuleId: owner.capsuleId, scopeRank: owner.scopeRank });
+    }
+    if (!candidates.length) return [];
+    candidates.sort((a, b) => b.score - a.score || a.scopeRank - b.scopeRank || a.rank - b.rank);
+    const ids = candidates.map((candidate) => candidate.factId);
     const activationIds = ["active-capsules:account", ...(projectId ? [`active-capsules:project:${projectId}`] : [])];
     const preferences = await this.database.query(`SELECT id,payload FROM evimed_product.documents
       WHERE user_id=$1 AND kind='preferences' AND id=ANY($2::text[]) AND deleted_at IS NULL`, [userId, activationIds]);
@@ -236,21 +394,47 @@ export class MemoryIndexing {
     const canonical = await this.database.query(`SELECT id,revision,payload,created_at FROM evimed_product.documents
       WHERE user_id=$1 AND kind='fact' AND id=ANY($2::text[]) AND deleted_at IS NULL`, [userId, ids]);
     const byId = new Map(canonical.rows.map((row) => [row.id, row]));
-    const delivered = [];
+    const eligible = [];
     const seen = new Set();
     for (const candidate of candidates) {
-      const row = byId.get(candidate.entryId);
+      const row = byId.get(candidate.factId);
       if (!row || seen.has(row.id) || row.revision !== candidate.revision
-        || row.payload.status !== "approved" || row.payload.capsuleId !== candidate.selection.capsuleId
-        || !active.has(candidate.selection.capsuleId)) continue;
+        || row.payload.status !== "approved" || row.payload.capsuleId !== candidate.capsuleId
+        || !active.has(candidate.capsuleId)) continue;
       seen.add(row.id);
-      delivered.push({ row, selection: { capsuleId: candidate.selection.capsuleId, mode: active.get(candidate.selection.capsuleId) } });
-      if (delivered.length === limit) break;
+      eligible.push({ row, selection: { capsuleId: candidate.capsuleId, mode: active.get(candidate.capsuleId) } });
     }
-    return delivered;
+    const ordered = await this.#reranked(query, eligible);
+    return ordered.slice(0, limit);
   }
 
-  /** Detect canonical changes and engine loss without manufacturing recurring duplicate jobs. */
+  /** Reorder the hydrated candidates, if a reranker is configured.
+   *
+   * The candidates are already the surviving canonical rows, so this reorders
+   * the text the researcher would actually see. Anything unexpected keeps the
+   * vector order: a reranker is an improvement, never a dependency.
+   *
+   * @param {string} query @param {{row:any,selection:any}[]} candidates
+   */
+  async #reranked(query, candidates) {
+    if (!this.rerank?.configured || candidates.length < 2) return candidates;
+    try {
+      const order = await this.rerank.order(query, candidates.map((candidate) => String(candidate.row.payload.content ?? "")));
+      if (!Array.isArray(order) || order.length !== candidates.length) return candidates;
+      const reordered = [];
+      const used = new Set();
+      for (const index of order) {
+        if (!Number.isInteger(index) || index < 0 || index >= candidates.length || used.has(index)) return candidates;
+        used.add(index);
+        reordered.push(candidates[index]);
+      }
+      return reordered;
+    } catch {
+      return candidates;
+    }
+  }
+
+  /** Detect canonical changes and index loss without manufacturing recurring duplicate jobs. */
   async reconcile(limit = 25) {
     const rows = await this.database.query(`SELECT d.user_id,d.id,s.fingerprint,s.status,s.published_at
       FROM evimed_product.documents d LEFT JOIN evimed_product.memory_index_state s
@@ -267,7 +451,7 @@ export class MemoryIndexing {
       }
       if (drift) {
         await this.jobs.enqueue(row.user_id, "memory-index", { capsuleId: row.id, accountCreatedAt: snapshot.generation,
-          reason: row.fingerprint === snapshot.fingerprint ? "engine_drift" : "canonical_change" }, {
+          reason: row.fingerprint === snapshot.fingerprint ? "index_drift" : "canonical_change" }, {
           idempotencyKey: `memory-index:reconcile:${snapshot.fingerprint}:${row.published_at?.toISOString?.() ?? "new"}`,
           maxAttempts: 10, rearmFailed: true,
         });

@@ -61,3 +61,19 @@ try {
   if (error?.code !== "ENOENT") throw error;
   process.stdout.write(`Required: create ${evimedFile} as a mode-600 file containing only the EviMed evidence API key.\n`);
 }
+
+// Optional, and said so: the DashScope key is what a local recall index embeds
+// with and what the control plane reranks with. Without it both degrade to what
+// a deployment with no index has — the term matcher and the vector order — so a
+// developer who does not have one is not blocked, only told.
+const dashscopeFile = path.join(secretsDir, "dashscope.api-key");
+try {
+  const current = await stat(dashscopeFile);
+  if (!current.isFile() || (process.platform !== "win32" && (current.mode & 0o077) !== 0)) {
+    throw new Error("not a mode-600 regular file");
+  }
+  process.stdout.write(`Ready: ${dashscopeFile}\n`);
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+  process.stdout.write(`Optional: create ${dashscopeFile} as a mode-600 file to enable memory reranking.\n`);
+}

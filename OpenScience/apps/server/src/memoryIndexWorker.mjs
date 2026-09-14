@@ -1,9 +1,43 @@
 import { randomUUID } from "node:crypto";
 
-/** Durable ProductJobs drive indexing; timers only wake the next lease claim. */
+/** Retrying a job whose input the index will refuse again only burns attempts:
+ *  an unusable job payload, and a fact whose id, kind or revision cannot become
+ *  a path, are decided before any request. */
+export const TERMINAL_INDEX_FAILURES = ["memory_index_job_invalid", "memory_id_invalid"];
+
+/**
+ * How a failed `memory-index` job goes back to the queue.
+ *
+ * Exported because this worker is not the only claimer. `ProductJobs.claim`
+ * selects by kind with no user filter, so the operator rebuild command claims
+ * jobs this worker enqueued for accounts nobody named on its command line — and
+ * a second policy over there would decide, on its own terms, the fate of a job
+ * it did not create. One function, so a job's retries do not depend on which
+ * process happened to pick it up.
+ *
+ * @param {string} code @param {number} attempts
+ * @returns {{retry:boolean,delayMs:number}}
+ */
+export function memoryIndexFailurePolicy(code, attempts) {
+  const terminal = TERMINAL_INDEX_FAILURES.includes(code);
+  return {
+    retry: !terminal,
+    delayMs: terminal ? 0 : Math.min(60_000, 1000 * 2 ** Math.min(Number(attempts) || 0, 6)),
+  };
+}
+
+/** Durable ProductJobs drive indexing; timers only wake the next lease claim.
+ *
+ * Two producers, one worker. `memory-index` republishes a capsule's approved
+ * facts; `memory-record-index` carries one research-memory record. They share a
+ * worker because they share an index, a lease policy and a retry policy, and
+ * because a second worker would be a second thing to compose, configure and
+ * forget to compose — which is how the record half came to have no writer at
+ * all while the capsule half had one.
+ */
 export class MemoryIndexWorker {
-  /** @param {{jobs:any,indexing:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, indexing, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
+  /** @param {{jobs:any,indexing:any,substrate?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, indexing, substrate = null, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
     /** @type {[string,number,number][]} */
     const intervals = [["poll", pollMs, 100], ["lease", leaseMs, 1000], ["reconcile", reconcileMs, 1000]];
     for (const [name, value, minimum] of intervals) {
@@ -13,10 +47,14 @@ export class MemoryIndexWorker {
     }
     this.jobs = jobs;
     this.indexing = indexing;
+    this.substrate = substrate;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
-    this.kinds = ["memory-index"];
+    // Claim only what this worker can run. Without a substrate the record half
+    // is not composed, and claiming its jobs would lease work nothing here can
+    // do — worse than leaving them queued, which at least stays visible.
+    this.kinds = substrate ? ["memory-index", "memory-record-index"] : ["memory-index"];
     this.workerId = `memory-index-${randomUUID()}`;
     this.timer = null;
     this.reconcileTimer = null;
@@ -56,18 +94,19 @@ export class MemoryIndexWorker {
     }, Math.max(1000, Math.floor(this.leaseMs / 3)));
     renewal.unref();
     try {
-      const result = await this.indexing.rebuild(job);
+      const result = job.kind === "memory-record-index"
+        ? await this.substrate.indexRecord(job)
+        : await this.indexing.rebuild(job);
       this.lastError = null;
       this.lastCompletedAt = new Date().toISOString();
       return result;
     } catch (error) {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_failed";
       if (!leaseLost && this.lastError !== "product_job_lease_lost") {
-        const terminal = ["memory_index_job_invalid", "mem_os_payload_invalid"].includes(this.lastError);
         try {
           await this.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: this.lastError, message: "Memory indexing failed." },
-            { retry: !terminal, delayMs: terminal ? 0 : Math.min(60_000, 1000 * 2 ** Math.min(job.attempts, 6)) });
+            memoryIndexFailurePolicy(this.lastError, job.attempts));
         } catch (failure) {
           if (failure?.code !== "product_job_lease_lost") throw failure;
         }
@@ -80,7 +119,13 @@ export class MemoryIndexWorker {
 
   async reconcile() {
     if (this.reconciling) return this.reconciling;
-    this.reconciling = this.indexing.reconcile().catch((error) => {
+    // Both halves, because both can be left behind by the same outage: the
+    // capsule ledger re-arms from what it published, the record half from the
+    // jobs its writers enqueued.
+    this.reconciling = Promise.all([
+      this.indexing.reconcile(),
+      this.substrate ? this.substrate.reconcileRecords() : null,
+    ]).catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_reconcile_failed";
       return null;
     }).finally(() => { this.reconciling = null; });

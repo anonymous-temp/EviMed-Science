@@ -312,10 +312,12 @@ export {
   validateAgendaClaim,
 } from './src/agenda.mjs'
 
-// runtimeUiSurface — 4 exports
+// runtimeUiSurface — 6 exports
 export {
+  RUNTIME_UI_DENIED_HOST_ROUTES,
   RUNTIME_UI_DENIED_METHODS,
   RUNTIME_UI_DENIED_NAMESPACES,
+  isDeniedRuntimeUiHostRoute,
   isDeniedRuntimeUiMethod,
   runtimeUiMethodFromPath,
 } from './src/runtimeUiSurface.mjs'

@@ -4,6 +4,7 @@ import { before, after, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
+import { HttpError } from "../src/security.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (url) {
@@ -102,6 +103,52 @@ test("runtime notes are idempotent candidates until the account approves them", 
   assert.equal((await service.recall(other, { projectId: "other", query: "analytic" })).items.length, 1);
 });
 
+
+/** An index whose recall does whatever the case needs. Nothing else is reached:
+ *  the capsule service asks it for the account generation and for hits. */
+function indexDouble(recall) {
+  return { async accountGeneration() { return "2026-09-11 00:00:00+00"; }, recall };
+}
+
+test("capsule recall answers from PostgreSQL when the index cannot, including before it holds anything", options, async () => {
+  const capsule = await service.create(owner, { title: "Fallback capsule" });
+  await service.addEntry(owner, capsule.id, { factKind: "preference", content: "Fallback evidence sentence." });
+  await service.activate(owner, capsule.id, { mode: "own" });
+  const documents = new ProductDocuments(database);
+
+  const unavailable = new CapsuleService(documents, {
+    indexing: indexDouble(async () => { throw new HttpError(502, "memory_index_unavailable", "The memory index is unavailable."); }),
+  });
+  const afterFailure = await unavailable.recall(owner, { query: "Fallback" });
+  assert.equal(afterFailure.mode, "lexical");
+  assert.deepEqual(afterFailure.items.map((item) => item.content), ["Fallback evidence sentence."]);
+  assert.equal(unavailable.lastIndexError, "memory_index_unavailable");
+
+  // An index that holds nothing for this capsule yet is the ordinary state of
+  // one the worker has not reached — and of every capsule on the day the
+  // provider is turned on. Answering nothing there would be a regression
+  // against the deployment that had no index at all.
+  const cold = await new CapsuleService(documents, { indexing: indexDouble(async () => []) }).recall(owner, { query: "Fallback" });
+  assert.equal(cold.mode, "lexical");
+  assert.deepEqual(cold.items.map((item) => item.content), ["Fallback evidence sentence."]);
+
+  const strict = new CapsuleService(documents, { indexing: indexDouble(async () => []), strictIndex: true });
+  assert.deepEqual(await strict.recall(owner, { query: "Fallback" }), { items: [], mode: "semantic", contextOnly: true });
+});
+
+test("an account recreated under this request is reported, not answered from the lexical path", options, async () => {
+  // The generation guard is not an index failure. It says the account was
+  // deleted and made again while this recall ran, and a caller that asked about
+  // one account must not be handed the other's answer without being told.
+  const capsule = await service.create(owner, { title: "Generation capsule" });
+  await service.addEntry(owner, capsule.id, { factKind: "preference", content: "Generation evidence sentence." });
+  await service.activate(owner, capsule.id, { mode: "own" });
+  const changed = new CapsuleService(new ProductDocuments(database), {
+    indexing: indexDouble(async () => { throw new HttpError(409, "memory_account_changed", "The account changed during memory recall."); }),
+  });
+
+  await assert.rejects(changed.recall(owner, { query: "Generation" }), { code: "memory_account_changed" });
+});
 
 test("recall applies type and time filters before limiting the selected context", options, async () => {
   const capsule = await service.create(owner, { title: "Filtered recall" });

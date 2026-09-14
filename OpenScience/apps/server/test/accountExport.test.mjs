@@ -157,7 +157,8 @@ test("the archive carries the account's own feedback ledger", async () => {
 });
 
 /** The migration modules, read as the text they are. */
-const migrationSources = ["controlPlaneDatabase.mjs", "productPersistence.mjs", "notificationPersistence.mjs", "usagePersistence.mjs"];
+const migrationSources = ["controlPlaneDatabase.mjs", "productPersistence.mjs", "notificationPersistence.mjs",
+  "usagePersistence.mjs", "researchMemoryPersistence.mjs"];
 
 /** Every table the migrations create, mapped to whether it is account-scoped.
  * Read as source text because that is what a migration is here: one template

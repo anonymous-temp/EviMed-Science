@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
 
-import { isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
+import { isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
@@ -84,6 +84,30 @@ function sendNotice(res, status, title, detail) {
   res.end(body);
 }
 
+/**
+ * A refusal the calling page can read, and the audit row can name.
+ *
+ * JSON rather than {@link sendNotice}'s page: these are reached by the
+ * application's own `fetch`, not by a navigation, so a rendered notice would
+ * arrive as a body no error surface can act on. Shared by the two refusals --
+ * the method one and the route one -- because they answer the same question
+ * about different halves of the surface, and a second copy of the shape is how
+ * one of them quietly stops matching the other.
+ *
+ * @param {any} res @param {string} subject
+ */
+function sendDenied(res, subject) {
+  const payload = JSON.stringify({
+    error: { code: "runtime_ui_method_denied", message: `${subject} is not available in the hosted surface.` },
+  });
+  res.writeHead(403, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": String(Buffer.byteLength(payload)),
+    "Cache-Control": "no-store",
+  });
+  res.end(payload);
+}
+
 /** @param {any} socket @param {number} status @param {string} code */
 function destroyUpgrade(socket, status, code) {
   try {
@@ -163,6 +187,19 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
       && (!method || pathname !== `/api/${method}` || pathname !== decodedPath)) {
       throw new HttpError(400, "runtime_ui_endpoint_invalid", "A canonical native API method is required.");
     }
+    // Not every kernel route is a method call. A path outside `/api/` never
+    // reaches the method gate below -- it is forwarded, because that is how the
+    // application's document, assets and plugin bundles load. 0.1.5 mounted
+    // `/open-in-app/{apps,icon,open}` there, and `open` launches an application
+    // on the machine running the kernel. Refused by path, here, because there
+    // is no method to refuse.
+    // Both spellings, for the reason the `/api/` check above decodes: a percent
+    // escape is a disguise, and which of the two a downstream normalizer acts
+    // on is not ours to assume.
+    if (isDeniedRuntimeUiHostRoute(pathname) || isDeniedRuntimeUiHostRoute(decodedPath)) {
+      sendDenied(res, pathname);
+      return;
+    }
     let workspaceBody = null;
     let promptBody = null;
     if (method === "session/prompt" && authorizePrompt) {
@@ -200,15 +237,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
       // Named in the body so the page's own error surface says which one, and
       // named in the audit row by the proxy's target — the panels that call
       // these are hidden, so a call arriving here is worth seeing.
-      const payload = JSON.stringify({
-        error: { code: "runtime_ui_method_denied", message: `${method} is not available in the hosted surface.` },
-      });
-      res.writeHead(403, {
-        "Content-Type": "application/json; charset=utf-8",
-        "Content-Length": String(Buffer.byteLength(payload)),
-        "Cache-Control": "no-store",
-      });
-      res.end(payload);
+      sendDenied(res, method);
       return;
     }
 

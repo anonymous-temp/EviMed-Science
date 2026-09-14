@@ -169,7 +169,7 @@ function toolMemorySources(message, sessionId, messageId) {
  * ending, is kept. Both are shapes an older transcript has, and unlike
  * `actualUserMessage` — which is asking which turn belongs to which run, and
  * may safely answer "none" — a rule here that needs metadata to be *present*
- * before it allows anything is one missing field away from a memory service
+ * before it allows anything is one missing field away from a memory store
  * that quietly stops learning. That is the failure `demotionReason` above
  * exists because we already shipped it once.
  *
@@ -352,8 +352,8 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     summary,
     origin,
     status: pendingReason ? "pending" : "active",
-    // Carried on the candidate, not sent as a record field: the memory service
-    // has a fixed record schema and would drop it. It travels to the audit
+    // Carried on the candidate, not sent as a record field: the store has a
+    // fixed record schema and would drop it. It travels to the audit
     // ledger as the upsert reason, and to the user as a run notice.
     statusReason: pendingReason,
     confidence: boundedScore(candidate.confidence, origin === "explicit" ? 1 : 0.65),
@@ -410,7 +410,7 @@ function canonicalKey(record) {
  * When an observation happened: the run it happened in, not the moment the
  * extractor got round to it.
  *
- * This is what makes "distinct runs" decidable. The memory service fingerprints
+ * This is what makes "distinct runs" decidable. The store fingerprints
  * an evidence entry by (sourceType, sourceRef, quote) — never by time — so a
  * later run re-quoting the same message still adds nothing, and the entries a
  * record does accumulate each carry the terminal timestamp of the run that
@@ -424,9 +424,9 @@ function canonicalKey(record) {
  * single conversation can never look like several. Two runs that end in the
  * same second would look like one, which delays a promotion the person can
  * still make by hand — the safe direction of an unsafe-either-way choice. A
- * second, not a millisecond: the memory service stores an evidence time as
- * `ObservedTime.AsTime().Unix()` and reads it back with `time.Unix(ts, 0)`, so
- * whatever precision is sent here, whole seconds are what round-trip.
+ * second, not a millisecond: the store truncates an evidence time to whole
+ * seconds on write and compares the truncated values, so whatever precision is
+ * sent here, whole seconds are what round-trip.
  *
  * Evidence written before this existed carries the extractor's own clock, one
  * distinct value per candidate, so a record that already holds three such
@@ -468,7 +468,7 @@ function normalizedValue(value) {
 /**
  * The memories that steer every later run, whatever the question is.
  *
- * The same four kinds `memosClient`'s `DURABLE_RECALL_KINDS` recalls
+ * The same four kinds `memoryRecallPolicy`'s `DURABLE_RECALL_KINDS` recalls
  * unconditionally. That is the reason for the boundary rather than a
  * coincidence: an episodic fact legitimately changes between projects, while a
  * contradiction in these four is carried into every future prompt.
@@ -544,11 +544,11 @@ function excerpt(value) {
 }
 
 export class MemoryIntelligence {
-  /** @param {any} config @param {any} memosClient
+  /** @param {any} config @param {any} memoryStore
    *  @param {{fetchImpl?:any,notifications?:any,audit?:any}} dependencies */
-  constructor(config, memosClient, { fetchImpl = globalThis.fetch, notifications = null, audit = null } = {}) {
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null } = {}) {
     this.config = config;
-    this.memosClient = memosClient;
+    this.memoryStore = memoryStore;
     this.fetchImpl = fetchImpl;
     // Optional: a deployment without a product database has no inbox, and a
     // contradiction is still recorded on the record and still reported on the
@@ -583,7 +583,7 @@ export class MemoryIntelligence {
     // user.profile.work_domain for the same fact — so the profile accumulates
     // near-duplicates that each stay at one observation instead of one memory
     // that gets reinforced.
-    const existing = await this.memosClient.listRecords(project.userId, { pageSize: 100 });
+    const existing = await this.memoryStore.listRecords(project.userId, { pageSize: 100 });
     const known = new Map(existing.map((record) => [canonicalKey(record), record]));
 
     let candidates = [];
@@ -624,13 +624,13 @@ export class MemoryIntelligence {
       }
       let stored;
       try {
-        stored = await this.memosClient.upsertRecord(project.userId, {
+        stored = await this.memoryStore.upsertRecord(project.userId, {
           ...candidate,
           ...(previous ? { id: previous.id } : {}),
         }, candidate.evidence, {
           expectedVersion: previous?.version ?? 0,
           // The demotion reason rides the revision reason, which is what the
-          // memory service keeps as this record's audit trail and what
+          // store keeps as this record's audit trail and what
           // publicMemoryRecord hands back on `revisions[].reason`. Before this,
           // a parked record's history said only that it had been written.
           reason: [
@@ -644,10 +644,10 @@ export class MemoryIntelligence {
         });
       } catch (error) {
         if (!(error instanceof HttpError) || error.code !== "memory_conflict") throw error;
-        const refreshed = await this.memosClient.listRecords(project.userId, { query: candidate.key, pageSize: 100 });
+        const refreshed = await this.memoryStore.listRecords(project.userId, { query: candidate.key, pageSize: 100 });
         const current = refreshed.find((record) => canonicalKey(record) === canonicalKey(candidate));
         if (!current) throw error;
-        stored = await this.memosClient.upsertRecord(project.userId, { ...candidate, id: current.id }, candidate.evidence, {
+        stored = await this.memoryStore.upsertRecord(project.userId, { ...candidate, id: current.id }, candidate.evidence, {
           expectedVersion: current.version,
           // The retry writes the same record, so it carries the same reason.
           reason: [
@@ -669,7 +669,7 @@ export class MemoryIntelligence {
         && distinctObservationRuns(stored) >= MEMORY_PROMOTION_MIN_RUNS
         && stored.revisions.length === 0
       ) {
-        stored = await this.memosClient.upsertRecord(project.userId, { ...stored, status: "active" }, null, {
+        stored = await this.memoryStore.upsertRecord(project.userId, { ...stored, status: "active" }, null, {
           expectedVersion: stored.version,
           reason: `${MEMORY_PROMOTION_MIN_OCCURRENCES} observations across at least `
             + `${MEMORY_PROMOTION_MIN_RUNS} runs activated an inferred memory`,
@@ -787,7 +787,7 @@ export class MemoryIntelligence {
       question,
       answer,
     });
-    return this.memosClient.upsertRecord(project.userId, {
+    return this.memoryStore.upsertRecord(project.userId, {
       scope: "project",
       scopeId: project.id,
       kind: "run_summary",

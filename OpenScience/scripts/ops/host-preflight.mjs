@@ -856,7 +856,7 @@ export async function runHostPreflight({
     cwd: repoRoot,
     env: scriptEnv,
   });
-  onCheck("production-state-secrets", "private PostgreSQL and Memos connection files");
+  onCheck("production-state-secrets", "private PostgreSQL and recall-index configuration files");
   if (config.authMode === "local") {
     execute(process.execPath, [path.join(repoRoot, "scripts/ops/configure-local-auth.mjs"), "--check"], {
       cwd: repoRoot,

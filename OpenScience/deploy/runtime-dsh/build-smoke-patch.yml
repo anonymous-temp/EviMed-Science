@@ -55,6 +55,14 @@
 - id: session-telemetry-otel
   disabled: true
 
+# Open-in-app launches a locally installed application on the machine running
+# the kernel, over three routes under /open-in-app/ that are not /api/ methods
+# and so are invisible to the method deny list. Mirrors the control plane's
+# patch; see apps/server/src/dshProfilePatch.mjs for why file-upload and
+# workspace-files are not disabled beside it.
+- id: open-in-app
+  disabled: true
+
 # The preset ships with the bundle as a system-trusted root, so a copy a user
 # made into their own root cannot shadow it: the first root wins a name
 # collision, and system roots come first.
@@ -100,7 +108,7 @@
 - id: evimed-seam-probe
   config:
     requiredEnforcement: 'partial'
-    dshVersion: '0.1.5-rc.1'
+    dshVersion: '0.1.5-rc.2'
 
 
 # Inside a container whose only writable place is the workspace nothing
@@ -164,4 +172,10 @@
 - id: ui-cordis
   disabled: true
 - id: ui-brand-official
+  disabled: true
+- id: ui-open-in-app
+  disabled: true
+- id: ui-sidebar-files
+  disabled: true
+- id: ui-sidebar-documentpreview
   disabled: true

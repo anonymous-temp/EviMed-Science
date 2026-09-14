@@ -132,6 +132,30 @@
             "summary": "A running runtime lacks quota monitoring",
             "description": "At least one attached runtime is not covered by the periodic project quota monitor."
           }
+        },
+        {
+          "alert": "OpenScienceMemoryIndexRefusingWrites",
+          "expr": "open_science_memory_index_writing == 0",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "The recall index is up but not accepting what it is given",
+            "description": "The memory index worker's last job failed for fifteen minutes. The index answers its own health endpoint from its own process, so this is the symptom of a wrong embedding model, a revoked embedding key or a vector width the collection refuses. Recall keeps working on the term matcher; new memories are not being indexed."
+          }
+        },
+        {
+          "alert": "OpenScienceMemoryRecallDegraded",
+          "expr": "open_science_memory_recall_degraded == 1",
+          "for": "15m",
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Recall is answering without the index it is configured to use",
+            "description": "Every recall for fifteen minutes fell back to term matching because the index could not answer. No memory is lost and nothing wrong is shown, but the deployment is paying for ranking it is not getting."
+          }
         }
       ]
     },

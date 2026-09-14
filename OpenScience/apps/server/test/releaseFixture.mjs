@@ -14,9 +14,9 @@ export const releaseManifestFixture = Object.freeze({
     imageId: `sha256:${"b".repeat(64)}`,
   },
   runtime: {
-    image: "evimed-runtime-dsh:dsh-0.1.2-rc.1-uv-0.11.26",
+    image: "evimed-runtime-dsh:dsh-0.1.5-rc.2-uv-0.11.26",
     imageId: `sha256:${"a".repeat(64)}`,
-    dshVersion: "0.1.2-rc.1",
+    dshVersion: "0.1.5-rc.2",
     cordisVersion: "4.0.2",
     socketVersion: "0.1.0",
     domainVersion: "0.1.0",
@@ -29,9 +29,12 @@ export const releaseManifestFixture = Object.freeze({
   },
   services: [
     { name: "document-parser", image: "evimed-document-parser:3.4.5", imageId: `sha256:${"1".repeat(64)}` },
-    { name: "memos-engine", image: "evimed-memos-engine:2.0.30", imageId: `sha256:${"2".repeat(64)}` },
-    { name: "ollama", image: `ollama/ollama:0.33.3@sha256:${"3".repeat(64)}`, imageId: `sha256:${"4".repeat(64)}` },
     { name: "openlist", image: `openlistteam/openlist:v4.2.6@sha256:${"5".repeat(64)}`, imageId: `sha256:${"6".repeat(64)}` },
+    {
+      name: "openviking",
+      image: `ghcr.io/volcengine/openviking:v0.4.19@sha256:${"2".repeat(64)}`,
+      imageId: `sha256:${"3".repeat(64)}`,
+    },
   ],
   skills: [
     {

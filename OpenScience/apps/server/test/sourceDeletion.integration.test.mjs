@@ -11,6 +11,7 @@ import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 import { removeSourceCopies, sourceAttemptId } from "../src/sourceFiles.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { MemoryIndexing } from "../src/memoryIndexing.mjs";
+import { capsuleFactUri } from "../src/openVikingClient.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -73,9 +74,14 @@ test("the real source deletion producer and leased consumer retire owned underst
   await f.documents.put(f.owner, "source-unit", "unit-one", { sourceId: current.id, content: "indexed source content" }, { expectedRevision: 0, projectId: "default" });
   await f.documents.put(f.owner, "capsule", "source-capsule", { title: "Source understanding" }, { expectedRevision: 0 });
   await f.documents.put(f.owner, "preferences", "active-capsules:account", { items: [{ capsuleId: "source-capsule", mode: "own" }] }, { expectedRevision: 0 });
-  await f.documents.put(f.owner, "fact", "derived-fact", { capsuleId: "source-capsule", content: "audited derived fact", status: "approved", provenance: [{ type: "source", id: current.id }] }, { expectedRevision: 0 });
+  await f.documents.put(f.owner, "fact", "derived-fact", { capsuleId: "source-capsule", factKind: "analysis", layer: "knowledge", content: "audited derived fact", status: "approved", provenance: [{ type: "source", id: current.id }] }, { expectedRevision: 0 });
   await f.documents.put(f.other, "fact", "derived-fact", { content: "other owner's fact", status: "approved", provenance: [{ type: "source", id: current.id }] }, { expectedRevision: 0 });
-  const indexing = new MemoryIndexing({ database: f.database, jobs: f.jobs, engine: { search: async () => [{ entryId: "derived-fact", revision: 1, rank: 0 }] } });
+  // An index that still nominates the fact after the source is gone. It is
+  // pinned at the revision it indexed, which is exactly how a stale hit looks.
+  const generation = (await f.database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [f.owner])).rows[0].generation;
+  const stale = capsuleFactUri(f.owner, { accountCreatedAt: generation, capsuleId: "source-capsule", factKind: "analysis", factId: "derived-fact", revision: 1 });
+  const indexing = new MemoryIndexing({ database: f.database, jobs: f.jobs,
+    openViking: { async find() { return [{ uri: stale, score: 1, content: "audited derived fact", level: 2 }]; } } });
   const capsules = new CapsuleService(f.documents, { indexing });
   assert.equal((await capsules.recall(f.owner, { query: "audited" })).items.length, 1);
   const removed = await f.sources.remove(f.owner, current.id, { expectedRevision: current.revision });
