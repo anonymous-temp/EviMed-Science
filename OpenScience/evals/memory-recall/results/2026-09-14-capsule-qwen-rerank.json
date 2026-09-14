@@ -1,0 +1,292 @@
+{
+  "label": "capsule-qwen-rerank",
+  "mode": "capsule",
+  "arm": "openviking",
+  "active": true,
+  "lastError": null,
+  "corpus": 172,
+  "queries": 16,
+  "limit": 5,
+  "recallAtLimit": 0.85,
+  "meanReciprocalRank": 0.8021,
+  "queriesWithNothingRelevant": 1,
+  "medianMs": 593,
+  "rows": [
+    {
+      "query": "做剂量反应那种分析，我这边一般是怎么跑的？",
+      "expected": [
+        "cf013"
+      ],
+      "returned": [
+        "cf013",
+        "cf115",
+        "cf082",
+        "cf083",
+        "cf114"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 1272
+    },
+    {
+      "query": "合并结果之间差异特别大的时候，下一步该干什么",
+      "expected": [
+        "cf020"
+      ],
+      "returned": [
+        "cf118",
+        "cf140",
+        "cf020",
+        "cf160",
+        "cf092"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 0.3333333333333333,
+      "ms": 497
+    },
+    {
+      "query": "写结果的时候要不要把 p 值单独列出来",
+      "expected": [
+        "cf032",
+        "cf034"
+      ],
+      "returned": [
+        "cf032",
+        "cf139",
+        "cf156",
+        "cf118",
+        "cf120"
+      ],
+      "hit": 1,
+      "of": 2,
+      "reciprocalRank": 1,
+      "ms": 635
+    },
+    {
+      "query": "这个人平时研究什么方向的药",
+      "expected": [
+        "cf002"
+      ],
+      "returned": [
+        "cf138",
+        "cf002",
+        "cf083",
+        "cf001",
+        "cf137"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 0.5,
+      "ms": 542
+    },
+    {
+      "query": "钠-葡萄糖共转运蛋白抑制剂对肾功能到底有没有好处",
+      "expected": [
+        "cf046",
+        "cf047",
+        "cf086"
+      ],
+      "returned": [
+        "cf048",
+        "cf046",
+        "cf055",
+        "cf086",
+        "cf047"
+      ],
+      "hit": 3,
+      "of": 3,
+      "reciprocalRank": 0.5,
+      "ms": 499
+    },
+    {
+      "query": "我们对中成药的临床试验是什么看法",
+      "expected": [
+        "cf006"
+      ],
+      "returned": [
+        "cf006",
+        "cf135",
+        "cf134",
+        "cf071",
+        "cf111"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 475
+    },
+    {
+      "query": "评价一项诊断试验的质量用哪个清单",
+      "expected": [
+        "cf023"
+      ],
+      "returned": [
+        "cf023",
+        "cf123",
+        "cf091",
+        "cf025",
+        "cf024"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 462
+    },
+    {
+      "query": "老人吃很多种药那个课题现在进行到哪一步了",
+      "expected": [
+        "cf095",
+        "cf100"
+      ],
+      "returned": [
+        "cf095",
+        "cf097",
+        "cf096",
+        "cf165",
+        "cf166"
+      ],
+      "hit": 1,
+      "of": 2,
+      "reciprocalRank": 1,
+      "ms": 497
+    },
+    {
+      "query": "以前在哪些说法上被指出过错，别再写错",
+      "expected": [
+        "cf086"
+      ],
+      "returned": [
+        "cf088",
+        "cf038",
+        "cf090",
+        "cf142",
+        "cf149"
+      ],
+      "hit": 0,
+      "of": 1,
+      "reciprocalRank": 0,
+      "ms": 761
+    },
+    {
+      "query": "组里对观察性数据的可信程度有没有争论",
+      "expected": [
+        "cf091"
+      ],
+      "returned": [
+        "cf091",
+        "cf092",
+        "cf142",
+        "cf093",
+        "cf007"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 462
+    },
+    {
+      "query": "稿子要投出去之前，最后还会做一件什么事",
+      "expected": [
+        "cf038"
+      ],
+      "returned": [
+        "cf038",
+        "cf019",
+        "cf103",
+        "cf005",
+        "cf120"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 593
+    },
+    {
+      "query": "用遗传变异推因果的时候前提要怎么交代",
+      "expected": [
+        "cf028"
+      ],
+      "returned": [
+        "cf132",
+        "cf028",
+        "cf133",
+        "cf020",
+        "cf029"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 0.5,
+      "ms": 869
+    },
+    {
+      "query": "看不良反应的苗头一般盯哪几个指标",
+      "expected": [
+        "cf030"
+      ],
+      "returned": [
+        "cf030",
+        "cf128",
+        "cf052",
+        "cf150",
+        "cf070"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 691
+    },
+    {
+      "query": "给医生看的那版摘要写多长合适",
+      "expected": [
+        "cf036"
+      ],
+      "returned": [
+        "cf036",
+        "cf120",
+        "cf144",
+        "cf163",
+        "cf092"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 601
+    },
+    {
+      "query": "我手上有哪些肾脏方面的指南文件",
+      "expected": [
+        "cf109"
+      ],
+      "returned": [
+        "cf109",
+        "cf152",
+        "cf110",
+        "cf151",
+        "cf055"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 678
+    },
+    {
+      "query": "合并的时候安慰剂对照和常规治疗对照怎么处理，之前定过吗",
+      "expected": [
+        "cf104"
+      ],
+      "returned": [
+        "cf104",
+        "cf072",
+        "cf140",
+        "cf142",
+        "cf073"
+      ],
+      "hit": 1,
+      "of": 1,
+      "reciprocalRank": 1,
+      "ms": 458
+    }
+  ]
+}

@@ -52,26 +52,32 @@ At 15 records the two arms were within one hit of each other. The term matcher
 degrades with corpus size, which is the regime that matters: a user accumulates
 records for as long as they use the product.
 
-## 2026-09-11, DashScope Qwen — pending
+## 2026-09-14, DashScope Qwen — measured
 
-Production embeds with DashScope (`qwen3.7-text-embedding`, dimension 1024, in
-the index's own `ov.conf`) and reranks in the control plane. Nothing here has
-been measured yet: no DashScope key existed when the arms were defined, so this
-section records what will be run, not what was found. Three arms, same 12
-queries and same 300 records:
+Against a live OpenViking v0.4.19 configured exactly as production renders it —
+`dashscope` / `qwen3.7-text-embedding`, dimension 1024, `allow_private_networks:
+false`, uid 10001 with `cap_drop: ALL` — and the control-plane reranker
+(`qwen3-rerank` on the OpenAI-compatible reranks path). Same 12 queries, same
+300 records, top 5.
 
-| label | what it is |
-|---|---|
-| `builtin` | the shipped term matcher; the floor, and the fallback when the index is down |
-| `qwen` | OpenViking vector order with the DashScope embedder |
-| `qwen-rerank` | the same vector candidates, reordered by the control-plane reranker |
+| | term matcher | + qwen3.7 embedding | + control-plane rerank |
+|---|---|---|---|
+| recall@5 | 0.667 | 0.933 | **1.000** |
+| mean reciprocal rank | 0.736 | **1.000** | 0.958 |
+| queries returning nothing relevant | 2 | 0 | 0 |
+| median added latency | none | 274 ms | 467 ms |
 
-The third arm is separate from the second because the reranking does not happen
-in the index: `/search/find` never reranks, and `/search/search`, which does,
-returns nothing at all for this memory layout — it navigates by directory
-abstracts that no language model generates here. So a rerank section in `ov.conf`
-would buy nothing, and the comparison that matters is the last two rows: what the
-extra call to DashScope adds over the vector order, and what it costs in latency.
+Two things worth reading carefully. The embedder alone already answers every
+question — nothing relevant fell to zero, and every first hit was a gold record,
+which is what a mean reciprocal rank of exactly 1 means. The reranker then finds
+the *last* gold record for the one query that was still missing one, at the cost
+of pushing one other gold record from first place to second: recall goes to 1.0
+and MRR falls by 0.042. Both ranks are inside a budget of five, so the recall is
+the row that decides, and reranking stays on.
+
+The comparison with the retired `bge-m3` arm above is not close: 0.800 → 0.933
+recall and 650 ms → 274 ms, so the embedder that replaced it is both better and
+faster here.
 
 ## Capsule recall
 
@@ -102,14 +108,36 @@ node evals/memory-recall/run_recall_eval.mjs --mode capsule --arm openviking --l
 
 | | lexical PostgreSQL | OpenViking |
 |---|---|---|
-| recall@5 | 0.000 | not yet measured |
-| queries returning nothing relevant | 16 of 16 | not yet measured |
+| recall@5 | 0.000 | measured on 2026-09-14, below |
+| queries returning nothing relevant | 16 of 16 | measured on 2026-09-14, below |
 
 The lexical baseline is the whole finding: sixteen out of sixteen reworded
 questions get nothing at all. A substring match cannot answer a question the
 researcher phrased differently from the fact, which is what a capsule is for —
-and until the index answers these, capsule recall works only for someone who
-already knows the words the distiller used. The index arm needs a
-DashScope-configured server and has not been run; the row stays visible and
-empty rather than absent, because an unmeasured arm is a fact about this
-comparison.
+so without the index, capsule recall works only for someone who already knows
+the words the distiller used.
+
+### Capsule recall, 2026-09-14 — measured
+
+Same server and the same reranker, 172 facts and 16 queries, top 5.
+
+| | lexical fallback | + qwen3.7 embedding | + control-plane rerank |
+|---|---|---|---|
+| recall@5 | 0.000 | **0.900** | 0.850 |
+| mean reciprocal rank | 0.000 | **0.828** | 0.802 |
+| queries returning nothing relevant | 16 | 1 | 1 |
+| median added latency | none | 227 ms | 593 ms |
+
+The first column is the finding, not the last: the lexical fallback answers
+**nothing** — 16 of 16 questions return no relevant fact — because one `strpos`
+of a whole researcher-worded question against a fact's text matches only when
+the researcher happens to quote the fact. It is a safe degradation, not a
+working ranker, and a deployment that loses the index loses capsule recall
+rather than slowing it down.
+
+The reranker does not help here. It moves one gold fact out of the top five
+(0.900 → 0.850 recall, 18 of 20 gold facts found rather than 19) and mixes four
+queries' ordering, two better and two worse. That is one fact of twenty on
+sixteen questions, which is not enough to change a default on — the reranker
+stays on for both paths and this table is the number a later decision can start
+from rather than an argument for one now.
