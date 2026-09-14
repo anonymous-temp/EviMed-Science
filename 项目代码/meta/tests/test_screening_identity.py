@@ -347,3 +347,146 @@ def test_malformed_pmid_tokens_never_become_an_unrestricted_protocol(tmp_path, c
     with pytest.raises(screening_agent.ScreeningReviewRequired):
         agent.screen_full_text([paper], scoped, {paper["pmid"]: {"full_text": FULL_TEXT}}, project)
     assert project.load_json("full_text_screening.json", subdir="screening")[0]["decision"] == "review_required"
+
+
+@pytest.mark.parametrize("reason_code,publication_role,source", [
+    ("publication_type", "other", "This correspondence summarizes earlier research and reports no original trial data."),
+    ("population", "primary_publication", "Participants were healthy volunteers without diabetes or kidney disease."),
+    ("intervention", "primary_publication", "Participants received a different glucose-lowering intervention, not canagliflozin."),
+    ("comparator", "primary_publication", "The active comparator was sitagliptin; there was no placebo arm."),
+    ("outcome", "primary_publication", "The specified renal outcome was not measured in this study."),
+    ("study_design", "primary_publication", "This was an observational cohort with no randomized treatment assignment."),
+])
+def test_missing_pmid_does_not_override_a_source_consistent_independent_exclusion(
+    tmp_path, reason_code, publication_role, source,
+):
+    paper = {**PAPER, "pmid": "", "doi": "10.7777/source-only"}
+    expected_identity = {**identity(paper), "record_id": paper["doi"]}
+    decision = response(decision="exclude", reason_code=reason_code, reason=source,
+        exclusion_criterion=f"The publication must meet the protocol's {reason_code} criterion.",
+        publication_role=publication_role, target_outcome_priority="not_reported",
+        source_identity=expected_identity)
+    agent, project, calls, paper = run_screen(tmp_path, [decision], paper)
+
+    included, excluded = agent.screen_full_text(
+        [paper], protocol(), {paper["doi"]: {"full_text": source}}, project,
+    )
+
+    assert included == [] and excluded == [paper] and len(calls) == 1
+    record = project.load_json("full_text_screening.json", subdir="screening")[0]
+    assert record["screening_attempts"] == [{"response": decision.model_dump(), "validation_error": None}]
+    assert record["source_identity"] == expected_identity
+    assert record["identity_check_results"] == [{
+        **decision.publication_identity_checks[0], "context_reason": None, "source_value": "", "satisfied": None,
+        "unresolved_reason": "source_identifier_missing",
+    }]
+    assert project.load_json("full_text_screening_status.json", subdir="screening")["status"] == "succeeded"
+
+
+@pytest.mark.parametrize("changes", [
+    {"decision": "include", "reason_code": "eligible", "exclusion_criterion": None},
+    {"reason_code": "publication_identity"},
+    {"decision": "review_required", "reason_code": "uncertain"},
+    {"reason_code": "other"},
+    {"reason_code": "data_unavailable"},
+    {"publication_role": "primary_publication"},
+    {"publication_role": "uncertain"},
+    {"full_text_identity_status": "conflicting"},
+    {"full_text_identity_status": "uncertain"},
+    {"reason": " "},
+    {"exclusion_criterion": " "},
+    {"publication_identity_checks": []},
+    {"source_identity": identity()},
+])
+def test_missing_pmid_does_not_make_unresolved_or_conflicting_bases_safe(tmp_path, changes):
+    paper = {**PAPER, "pmid": "", "doi": "10.7777/source-only"}
+    payload = {
+        "decision": "exclude", "reason_code": "publication_type",
+        "reason": "This correspondence contains no original trial data.",
+        "exclusion_criterion": "Only original randomized trial reports are eligible.",
+        "publication_role": "other", "source_identity": {**identity(paper), "record_id": paper["doi"]},
+        **changes,
+    }
+    agent, project, calls, paper = run_screen(tmp_path, [response(**payload)], paper)
+
+    with pytest.raises(screening_agent.ScreeningReviewRequired):
+        agent.screen_full_text([paper], protocol(), {paper["doi"]: {
+            "full_text": "This correspondence contains no original trial data.",
+        }}, project)
+
+    record = project.load_json("full_text_screening.json", subdir="screening")[0]
+    assert record["decision"] == "review_required" and len(calls) == 2
+    assert len(record["screening_attempts"]) == 2
+    assert project.prisma.full_text_excluded == 0
+    assert not project.is_step_done("ft_screening")
+
+
+def test_missing_doi_uses_the_same_unresolved_metadata_without_an_identity_override(tmp_path):
+    paper = {**PAPER, "doi": ""}
+    scoped = protocol()
+    criterion = "Only the publication DOI 10.7777/eligible-study is eligible."
+    scoped.inclusion_criteria = [criterion]
+    decision = response(decision="exclude", reason_code="comparator",
+        reason="The trial has an active control rather than a placebo arm.",
+        exclusion_criterion="Matching placebo is required.", source_identity=identity(paper),
+        publication_identity_checks=[{"identifier_type": "doi", "requirement": "any_of",
+            "identifiers": ["10.7777/eligible-study"], "protocol_criterion": criterion}])
+    agent, project, calls, paper = run_screen(tmp_path, [decision], paper)
+
+    included, excluded = agent.screen_full_text([paper], scoped, {
+        paper["pmid"]: {"full_text": "Participants were randomized between two active treatments without placebo."},
+    }, project)
+
+    assert included == [] and excluded == [paper] and len(calls) == 1
+    record = project.load_json("full_text_screening.json", subdir="screening")[0]
+    assert record["identity_check_results"][0]["identifier_type"] == "doi"
+    assert record["identity_check_results"][0]["satisfied"] is None
+    assert record["identity_check_results"][0]["unresolved_reason"] == "source_identifier_missing"
+    assert record["screening_attempts"][0]["response"] == decision.model_dump()
+
+
+def test_missing_identity_title_abstract_triage_remains_conservative():
+    paper = {**PAPER, "pmid": "", "doi": "10.7777/source-only"}
+    raw = response(decision="exclude", reason_code="publication_type",
+        reason="This correspondence summarizes earlier research without original trial data.",
+        exclusion_criterion="Only original randomized trial reports are eligible.",
+        publication_role="other", source_identity={**identity(paper), "record_id": paper["doi"]}).model_dump()
+    raw.update(priority_tier="indirect", target_outcome_evidence="not_mentioned", outcome_evidence_quote=None)
+
+    record = screening_agent.ScreeningAgent._title_abstract_result(raw, paper, protocol())
+
+    assert record["decision"] == "include" and record["priority_tier"] == "uncertain"
+    assert record["full_text_review_required"]
+    assert record["screening_attempts"][0]["response"] == raw
+
+
+@pytest.mark.parametrize("source_metadata,parsed_text", [
+    ({}, None),
+    ({"text_availability": "abstract_only"}, "This correspondence reports no original trial data."),
+    ({"text_availability": "metadata_only"}, "This correspondence reports no original trial data."),
+    ({"metadata_only": True}, "This correspondence reports no original trial data."),
+    ({"fulltext_source": "europe_pmc_abstract"}, "This correspondence reports no original trial data."),
+])
+@pytest.mark.parametrize("metadata_location", ["paper", "parsed"])
+def test_abstract_fallback_cannot_authorize_missing_identity_exclusion(
+    tmp_path, source_metadata, parsed_text, metadata_location,
+):
+    paper = {**PAPER, "pmid": "", "doi": "10.7777/source-only",
+             "abstract": "This correspondence reports no original trial data.",
+             **(source_metadata if metadata_location == "paper" else {})}
+    decision = response(decision="exclude", reason_code="publication_type", publication_role="other",
+        reason="This correspondence reports no original trial data.",
+        exclusion_criterion="Only original randomized trial reports are eligible.",
+        source_identity={**identity(paper), "record_id": paper["doi"]})
+    agent, project, calls, paper = run_screen(tmp_path, [decision], paper)
+    parsed = {} if parsed_text is None else {paper["doi"]: {"full_text": parsed_text}}
+    if metadata_location == "parsed":
+        parsed.setdefault(paper["doi"], {"full_text": parsed_text}).update(source_metadata)
+
+    with pytest.raises(screening_agent.ScreeningReviewRequired):
+        agent.screen_full_text([paper], protocol(), parsed, project)
+
+    record = project.load_json("full_text_screening.json", subdir="screening")[0]
+    assert record["decision"] == "review_required" and len(calls) == 2
+    assert record["screening_attempts"][0]["response"] == decision.model_dump()
+    assert project.prisma.full_text_excluded == 0

@@ -473,6 +473,12 @@ class ScreeningAgent(BaseAgent):
             paper_id = paper_identity(paper)
             parsed = parsed_papers.get(paper_id, {})
             full_text = parsed.get("full_text", "")
+            full_text_available = isinstance(full_text, str) and bool(full_text.strip()) and not any(
+                source.get("metadata_only")
+                or source.get("text_availability") in {"abstract_only", "metadata_only"}
+                or source.get("fulltext_source") == "europe_pmc_abstract"
+                for source in (paper, parsed)
+            )
 
             if not full_text:
                 # Use abstract for screening instead of auto-including
@@ -516,7 +522,9 @@ class ScreeningAgent(BaseAgent):
                     raw = self.call_llm_structured(current_prompt, FullTextScreeningDecision)
                     response = raw.model_dump()
                     decision = FullTextScreeningDecision.model_validate(response)
-                    checks = self._validate_full_text_decision(decision, paper, protocol)
+                    checks = self._validate_full_text_decision(
+                        decision, paper, protocol, full_text_available=full_text_available,
+                    )
                     attempts.append({"response": response, "validation_error": None})
                     result = {"paper": paper, **decision.model_dump(),
                               "identity_check_results": checks, "screening_attempts": attempts}
@@ -589,6 +597,7 @@ class ScreeningAgent(BaseAgent):
     @classmethod
     def _validate_full_text_decision(
         cls, decision: FullTextScreeningDecision, paper: dict, protocol: ResearchProtocol,
+        *, full_text_available: bool = False,
     ) -> list[dict]:
         """Check binding and exact IDs, never infer clinical criteria from prose."""
         identity = cls._screening_source_identity(paper)
@@ -611,12 +620,14 @@ class ScreeningAgent(BaseAgent):
         }:
             raise ValueError("Publication-type exclusion conflicts with the publication role; a secondary endpoint is not a secondary publication")
 
-        return cls._validate_publication_identity(decision, paper, protocol)
+        return cls._validate_publication_identity(
+            decision, paper, protocol, full_text_validated=full_text_available,
+        )
 
     @classmethod
     def _validate_publication_identity(
         cls, decision: FullTextScreeningDecision | TitleAbstractScreeningDecision,
-        paper: dict, protocol: ResearchProtocol,
+        paper: dict, protocol: ResearchProtocol, *, full_text_validated: bool = False,
     ) -> list[dict]:
         """Validate complete model-interpreted constraints by exact identifier equality."""
         identity = cls._screening_source_identity(paper)
@@ -639,7 +650,18 @@ class ScreeningAgent(BaseAgent):
                 checks.append({**check.model_dump(), "source_value": source_value, "satisfied": None})
                 continue
             if not source_value:
-                raise ValueError("Source lacks the identifier required to evaluate the publication constraint")
+                if not (full_text_validated and decision.decision == "exclude" and decision.reason_code in {
+                    "publication_type", "population", "intervention", "comparator", "outcome", "study_design",
+                }):
+                    raise ValueError("Source lacks the identifier required to evaluate the publication constraint")
+                # The caller has validated source consistency and the typed
+                # exclusion basis. Missing identity cannot prove a mismatch,
+                # but does not invalidate an independent full-text exclusion.
+                # Keep this runtime result separate from the model's unchanged
+                # publication_identity_checks and retained screening attempts.
+                checks.append({**check.model_dump(), "source_value": "", "satisfied": None,
+                               "unresolved_reason": "source_identifier_missing"})
+                continue
             matches = source_value in values
             satisfied = matches if check.requirement == "any_of" else not matches
             checks.append({**check.model_dump(), "source_value": source_value, "satisfied": satisfied})
