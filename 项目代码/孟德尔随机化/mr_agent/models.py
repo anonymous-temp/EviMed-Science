@@ -173,12 +173,33 @@ class PleiotopyResult(BaseModel):
     pval: float
 
 
+class LLMCallObservation(BaseModel):
+    """One SDK create call, not the SDK's unobserved internal HTTP retries."""
+
+    model_config = {"extra": "forbid"}
+    sdk_call: int = Field(strict=True, ge=1, le=10)
+    retry_attempt: int = Field(strict=True, ge=1, le=5)
+    request_max_tokens: int | None = Field(default=None, strict=True, ge=0, le=1_000_000_000)
+    category: Literal["http_error", "timeout", "connection", "response_error", "truncated", "empty_content", "completed"]
+    error_type: str | None = Field(default=None, pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+    status_code: int | None = Field(default=None, strict=True, ge=100, le=599)
+    finish_reason: Literal["stop", "length", "content_filter", "tool_calls", "function_call"] | None = None
+    content_present: bool | None = Field(default=None, strict=True)
+    prompt_tokens: int | None = Field(default=None, strict=True, ge=0, le=1_000_000_000)
+    completion_tokens: int | None = Field(default=None, strict=True, ge=0, le=1_000_000_000)
+    total_tokens: int | None = Field(default=None, strict=True, ge=0, le=1_000_000_000)
+    reasoning_tokens: int | None = Field(default=None, strict=True, ge=0, le=1_000_000_000)
+
+
 class InterpretationFailure(BaseModel):
     """Bounded diagnostics from the failed call, without provider response text."""
 
     error_type: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
     status_code: int | None = Field(default=None, strict=True, ge=100, le=599)
     finish_reason: Literal["stop", "length", "content_filter", "tool_calls", "function_call"] | None = None
+    category: Literal["http_error", "timeout", "connection", "response_error", "truncated", "empty_content", "completed", "application_error", "client_error"] = "application_error"
+    sdk_call_attempts: int | None = Field(default=None, strict=True, ge=0, le=10)
+    calls: list[LLMCallObservation] = Field(default_factory=list, max_length=10)
 
 
 class MRAnalysisResult(BaseModel):

@@ -6,9 +6,13 @@ fixed runner. Workspace paths are never reopened for runner input or output.
 """
 
 import copy
+import csv
 import hashlib
+import io
 import json
+import math
 import os
+import re
 import signal
 import sys
 import stat
@@ -24,6 +28,161 @@ from typing import Any, Iterator
 AUTHORITY_LIMIT = 64 * 1024
 MAX_ARTIFACTS = 100
 MAX_PUBLISHED_BYTES = 384 * 1024 * 1024
+MAX_DIAGNOSTIC_BYTES = 32 * 1024 * 1024
+MAX_DIAGNOSTIC_FILE_BYTES = 8 * 1024 * 1024
+MAX_DIAGNOSTIC_FILES = 32
+_FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "function_call"}
+_CATEGORIES = {"http_error", "timeout", "connection", "response_error", "truncated", "empty_content", "completed", "application_error", "client_error"}
+_PLOTS = {name + suffix for name in ("forest_plot", "scatter_plot", "funnel_plot", "loo_plot") for suffix in (".pdf", ".png")}
+_NUMERIC_FILES = {"mr_results.csv", "heterogeneity.csv", "pleiotropy.csv", "f_statistics.csv", "conmix.csv", "radial.csv", "mrpresso.csv", "steiger.csv"}
+_NUMERIC_COLUMNS = {"b", "beta", "se", "pval", "nsnp", "Q", "Q_df", "Q_pval", "egger_intercept", "F_stat", "F_statistic", "F", "lo_ci", "up_ci", "or", "or_lci95", "or_uci95"}
+_METHODS = {"IVW", "Inverse variance weighted", "MR Egger", "Weighted median", "Weighted mode", "Simple mode", "Wald ratio", "Maximum likelihood", "Penalised weighted median", "MR RAPS", "Contamination mixture"}
+
+
+def _integer(value, low=0, high=1_000_000_000):
+    return value if type(value) is int and low <= value <= high else None
+
+
+def _failure_fields(value):
+    if not isinstance(value, dict):
+        raise ValueError("invalid failure diagnostic")
+    error_type = value.get("error_type")
+    return {
+        "error_type": error_type if isinstance(error_type, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", error_type) else "Exception",
+        "status_code": _integer(value.get("status_code"), 100, 599),
+        "finish_reason": value.get("finish_reason") if isinstance(value.get("finish_reason"), str) and value["finish_reason"] in _FINISH_REASONS else None,
+        "category": value.get("category") if isinstance(value.get("category"), str) and value["category"] in _CATEGORIES else "application_error",
+    }
+
+
+def _failure_projection(result):
+    """Validate the untrusted runner's projection without importing its package."""
+    source = result.get("failureDiagnostics")
+    if not isinstance(source, dict) or type(source.get("schema_version")) is not int or source["schema_version"] != 1 or source.get("phase") != "interpretation":
+        return {"schema_version": 1, "phase": "runner", "failures": []}
+    rows = source.get("failures")
+    if not isinstance(rows, list) or len(rows) > 8:
+        raise ValueError("invalid failure count")
+    failures = []
+    for row in rows:
+        if not isinstance(row, dict) or _integer(row.get("result_index"), 0, 1000) is None:
+            raise ValueError("invalid result index")
+        raw = row.get("failure")
+        failure = _failure_fields(raw)
+        calls = raw.get("calls", [])
+        if not isinstance(calls, list) or len(calls) > 10:
+            raise ValueError("invalid SDK call count")
+        observed = []
+        for call in calls:
+            record = _failure_fields(call)
+            if call.get("error_type") is None:
+                record["error_type"] = None
+            sdk_call = _integer(call.get("sdk_call"), 1, 10)
+            retry = _integer(call.get("retry_attempt"), 1, 5)
+            if sdk_call is None or retry is None:
+                raise ValueError("invalid SDK attempt")
+            record.update(sdk_call=sdk_call, retry_attempt=retry,
+                          content_present=call.get("content_present") if type(call.get("content_present")) is bool else None)
+            for key in ("request_max_tokens", "prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens"):
+                record[key] = _integer(call.get(key))
+            observed.append(record)
+        failure.update(sdk_call_attempts=_integer(raw.get("sdk_call_attempts"), 0, 10), calls=observed)
+        failures.append({"result_index": row["result_index"], "failure": failure})
+    return {"schema_version": 1, "phase": "interpretation", "failures": failures,
+            "omitted_results": _integer(source.get("omitted_results"))}
+
+
+def _numeric_projection(body):
+    """Retain numeric columns and closed method/SNP labels, not free-text metadata."""
+    reader = csv.DictReader(io.StringIO(body.decode("utf-8")))
+    names = reader.fieldnames or []
+    if len(names) != len(set(names)) or len(names) > 64:
+        raise ValueError("invalid numeric columns")
+    selected = [name for name in names if name in _NUMERIC_COLUMNS or name in {"SNP", "method"}]
+    if not set(selected) & _NUMERIC_COLUMNS:
+        return None
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=selected)
+    writer.writeheader()
+    for index, row in enumerate(reader):
+        if index >= 5000 or None in row:
+            raise ValueError("numeric row limit")
+        values = {}
+        for name in selected:
+            value = (row.get(name) or "").strip()
+            if name == "method":
+                if value not in _METHODS:
+                    raise ValueError("unrecognized method label")
+            elif name == "SNP":
+                if not re.fullmatch(r"rs[0-9]{1,16}", value):
+                    raise ValueError("unrecognized SNP label")
+            elif value not in {"", "NA", "NaN"} and (len(value) > 40 or not math.isfinite(float(value))):
+                raise ValueError("invalid numeric value")
+            values[name] = value
+        writer.writerow(values)
+    return output.getvalue().encode()
+
+
+def _retain_failure(inputs, stage, directory, result, environment, *, artifacts_safe=True):
+    """Persist bounded diagnostics before scratch cleanup, never into workspace output."""
+    record = {"failed": True, "diagnosticOnly": True, "artifacts": []}
+    try:
+        record["failureDiagnostics"] = _failure_projection(result)
+    except (ValueError, TypeError):
+        record["failureDiagnostics"] = {"schema_version": 1, "phase": "unknown", "failures": []}
+        record["diagnosticProjectionError"] = "mr_failure_diagnostic_invalid"
+    secrets = [value.encode() for key, value in environment.items() if key in {
+        "LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "OPENGWAS_JWT", "EVIMED_WORKLOAD_TOKEN"
+    } and isinstance(value, str) and len(value) >= 8]
+    encoded = json.dumps(record, allow_nan=False, sort_keys=True).encode()
+    if any(secret in encoded for secret in secrets):
+        record = {"failed": True, "diagnosticOnly": True, "artifacts": [],
+                  "diagnosticProjectionError": "mr_sensitive_diagnostic_withheld"}
+        encoded = json.dumps(record, sort_keys=True).encode()
+    if directory is None:
+        return record
+    facts = os.fstat(directory)
+    if not stat.S_ISDIR(facts.st_mode) or facts.st_uid != os.geteuid() or facts.st_mode & 0o077 or os.listdir(directory):
+        raise ValueError("unsafe diagnostic directory")
+    inputs._write_new(directory, "diagnostic.json", encoded)
+    if not artifacts_safe:
+        record["artifactRetentionError"] = "mr_analysis_group_unconfirmed"
+        return record
+    total = len(encoded)
+    pairs = {}
+    try:
+        candidates = [(parts, size) for parts, size in _inventory(inputs, stage)
+                      if len(parts) == 3 and parts[0] == "analysis-data" and parts[2] in _PLOTS | _NUMERIC_FILES]
+        if len(candidates) > MAX_DIAGNOSTIC_FILES or sum(size for _, size in candidates) > MAX_DIAGNOSTIC_BYTES:
+            raise ValueError("diagnostic inventory limit")
+        for parts, size in candidates:
+            if size > MAX_DIAGNOSTIC_FILE_BYTES:
+                raise ValueError("diagnostic file limit")
+            with inputs._regular_file(stage, parts) as source:
+                with os.fdopen(os.dup(source), "rb") as stream:
+                    body = stream.read(MAX_DIAGNOSTIC_FILE_BYTES + 1)
+            if len(body) != size or any(secret in body for secret in secrets):
+                raise ValueError("diagnostic body invalid")
+            if parts[2] in _NUMERIC_FILES:
+                body = _numeric_projection(body)
+                if body is None:
+                    continue
+            elif not body.startswith(b"%PDF-" if parts[2].endswith(".pdf") else b"\x89PNG\r\n\x1a\n"):
+                raise ValueError("diagnostic image format")
+            total += len(body)
+            if total > MAX_DIAGNOSTIC_BYTES:
+                raise ValueError("diagnostic byte limit")
+            name = pairs.setdefault(parts[1], f"pair-{len(pairs) + 1:03d}")
+            if name not in os.listdir(directory):
+                os.mkdir(name, mode=0o700, dir_fd=directory)
+            with inputs.directory_fd(directory, (name,)) as parent:
+                inputs._write_new(parent, parts[2], body)
+            record["artifacts"].append({"name": f"{name}/{parts[2]}", "bytes": len(body),
+                "sha256": hashlib.sha256(body).hexdigest(), "numericProjection": parts[2] in _NUMERIC_FILES})
+    except (OSError, ValueError, csv.Error, inputs.MRInputError):
+        record["artifactRetentionError"] = "mr_diagnostic_artifacts_invalid"
+    os.fsync(directory)
+    return record
 
 
 @dataclass(frozen=True)
@@ -345,10 +504,10 @@ def _cleanup_error():
     return {"code": "mr_analysis_cleanup_failed", "message": "Temporary analysis data could not be fully removed."}
 
 
-def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_credentials=None) -> dict[str, Any]:
+def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_credentials=None, failure_directory=None) -> dict[str, Any]:
     cleanup_errors = []
     try:
-        outcome = _execute(inputs, job, environment, analysis_credentials, cleanup_errors)
+        outcome = _execute(inputs, job, environment, analysis_credentials, cleanup_errors, failure_directory)
     except inputs.MRInputError as error:
         if cleanup_errors:
             error.cleanup_error = _cleanup_error()
@@ -358,7 +517,7 @@ def execute(inputs: Any, job: Job, environment: dict[str, str], *, analysis_cred
     return outcome
 
 
-def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_credentials, cleanup_errors) -> dict[str, Any]:
+def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_credentials, cleanup_errors, failure_directory=None) -> dict[str, Any]:
     """Run in the adapter's private mount and publish through the original FD."""
     parts = job.workspace.relative_to(job.data_root).parts
     output_parts = job.output_root.relative_to(job.workspace).parts
@@ -424,10 +583,19 @@ def _execute(inputs: Any, job: Job, environment: dict[str, str], analysis_creden
                             cleanup_errors.append("process_running")
                         result = interruption or _read_result(inputs, stage)
                         if completed.returncode != 0 or result.get("status") != "succeeded":
+                            try:
+                                diagnostic = _retain_failure(
+                                    inputs, stage, failure_directory, result, environment,
+                                    artifacts_safe=not interruption or interruption.get("errorCode") != "mr_analysis_stop_failed",
+                                )
+                            except (OSError, ValueError, inputs.MRInputError):
+                                diagnostic = {"failed": True, "diagnosticOnly": True,
+                                              "retentionError": "mr_failure_diagnostic_retention_failed"}
                             return {
                                 "returnCode": completed.returncode or 1,
                                 "result": result,
                                 "artifacts": [],
+                                "failureDiagnosticReceipt": diagnostic,
                             }
                         if authority["sources"]:
                             inputs.verify_published_inputs(

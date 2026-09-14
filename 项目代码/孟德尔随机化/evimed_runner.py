@@ -25,7 +25,7 @@ from evimed_local_inputs import (
     verify_published_inputs,
 )
 from mr_agent.tools.mr_replay import copy_replay_package
-from mr_agent.analysis.delivery import MRDeliveryError, diagnostic_artifact_name, diagnostic_plot_checks, require_interpretations, require_report_ready
+from mr_agent.analysis.delivery import MRDeliveryError, diagnostic_artifact_name, diagnostic_plot_checks, interpretation_diagnostics, require_interpretations, require_report_ready
 
 # Load environment from .env and deploy.env for API tokens
 load_dotenv(Path(__file__).parent / ".env", override=False)
@@ -422,6 +422,7 @@ def run(
             _write_result(output_dir, {
                 "status": "failed", "errorCode": error.code, "error": str(error),
                 "modules": modules, "degraded": True, "diagnosticOnly": True,
+                "failureDiagnostics": interpretation_diagnostics(valid_results),
                 "artifacts": [analysis_path.name, *copied],
             })
             return 1

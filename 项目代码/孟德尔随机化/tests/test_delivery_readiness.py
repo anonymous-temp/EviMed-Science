@@ -52,6 +52,23 @@ def test_successful_interpretation_is_recorded_explicitly():
     assert result.interpretation_error_code == ""
 
 
+def test_interpretation_failure_keeps_observed_sdk_metadata(monkeypatch):
+    from mr_agent.analysis.delivery import MRDeliveryError
+    from test_llm_failure_diagnostics import client_with, response
+
+    client = client_with(monkeypatch, lambda **kwargs: response("private provider text", "length"))
+    state = SessionState()
+    result = numeric_result()
+    with pytest.raises(MRDeliveryError):
+        MRPipeline(client, state)._step9_interpret([result])
+    failure = result.interpretation_failure
+    assert failure.sdk_call_attempts == 10
+    assert failure.category == "truncated"
+    assert failure.calls[-1].request_max_tokens == 12192
+    assert failure.finish_reason == "length"
+    assert "private provider text" not in result.model_dump_json()
+
+
 def test_legacy_interpretation_text_is_not_completion_evidence():
     from mr_agent.analysis.delivery import MRDeliveryError, require_report_ready
 
@@ -105,6 +122,8 @@ def test_fixed_runner_preserves_failed_interpretation_diagnostics(tmp_path, monk
     assert receipt["errorCode"] == "mr_interpretation_failed"
     assert receipt["modules"]["interpretation"]["fatal"] is True
     assert receipt["diagnosticOnly"] is True
+    assert receipt["failureDiagnostics"]["phase"] == "interpretation"
+    assert receipt["failureDiagnostics"]["failures"][0]["failure"]["error_type"] == "RuntimeError"
     assert paper_calls == []
     assert "mendelian-randomization-run.json" in receipt["artifacts"]
     assert any(path.endswith("mr_results.csv") for path in receipt["artifacts"])
