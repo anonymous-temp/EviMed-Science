@@ -437,14 +437,32 @@ jobs:
         run: |
           set -euo pipefail
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
-          timeout 300 docker pull "caddy:${OPEN_SCIENCE_CADDY_VERSION}"
-          mapfile -t images < <(node - <<'JS'
+          # A checked command, before any pull: process substitution hides a
+          # failed producer from `set -e` and leaves an empty dependency list.
+          dependency_file="${RUNNER_TEMP}/evimed-manifest-dependencies.txt"
+          node - > "$dependency_file" <<'JS'
           const d = require('./deps-version.json');
-          console.log(d.ollama.image + ':' + d.ollama.version + '@' + d.ollama.imageDigest);
-          console.log(d.openlist.image + ':v' + d.openlist.version + '@' + d.openlist.imageDigest);
+          const version = /^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/;
+          const tag = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
+          const repository = /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)+$/;
+          if (!version.test(process.env.OPEN_SCIENCE_CADDY_VERSION ?? '')) throw new Error('Missing or malformed manifest dependency pin: caddy');
+          if (typeof d.openlist?.version !== 'string' || !version.test(d.openlist.version)) throw new Error('Missing or malformed manifest dependency pin: openlist');
+          const dependencies = [
+            ['openlist', d.openlist, `v${d.openlist.version}`],
+            ['openviking', d.openviking, d.openviking?.imageTag],
+          ];
+          const images = dependencies.map(([name, pin, imageTag]) => {
+            if (typeof pin?.image !== 'string' || !repository.test(pin.image)
+              || typeof imageTag !== 'string' || !tag.test(imageTag)
+              || typeof pin?.imageDigest !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(pin.imageDigest)) {
+              throw new Error(`Missing or malformed manifest dependency pin: ${name}`);
+            }
+            return `${pin.image}:${imageTag}@${pin.imageDigest}`;
+          });
+          process.stdout.write(images.join('\n') + '\n');
           JS
-          )
-          for image in "${images[@]}"; do
+          timeout 300 docker pull "caddy:${OPEN_SCIENCE_CADDY_VERSION}"
+          while IFS= read -r image; do
             test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
             timeout 900 docker pull "$image" &
             pull_pid=$!
@@ -458,7 +476,7 @@ jobs:
               sleep 5
             done
             wait "$pull_pid"
-          done
+          done < "$dependency_file"
 
       - name: Generate and verify deployment release manifest
         run: |
