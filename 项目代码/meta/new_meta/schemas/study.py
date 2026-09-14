@@ -445,7 +445,8 @@ class OutcomeData(BaseModel):
     def coerce_none_strings(cls, data):
         if not isinstance(data, dict):
             return data
-        if data.get("adjustment_covariates") is None:
+        # An absent field must remain unset for explicit-field refinement patches.
+        if "adjustment_covariates" in data and data["adjustment_covariates"] is None:
             data["adjustment_covariates"] = []
         if _is_p_value_inequality(data.get("p_value_inequality") or ""):
             data["p_value"] = None

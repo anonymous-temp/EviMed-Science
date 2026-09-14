@@ -8,7 +8,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 from uuid import uuid4
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from tqdm import tqdm
 
 from new_meta.core.agent_base import BaseAgent
@@ -47,6 +47,23 @@ class ExtractionCheckResult(LegacyExtractionCheckResult):
 class IndexedOutcomeCorrection(BaseModel):
     outcome_index: int = Field(ge=0, strict=True)
     outcome: ExtractedOutcomeData
+
+    @field_validator("outcome", mode="before")
+    @classmethod
+    def validate_adjustment_correction(cls, value: object) -> object:
+        """Reject ambiguous correction types before legacy row coercion runs."""
+        data = value.model_dump(exclude_unset=True) if isinstance(value, ExtractedOutcomeData) else value
+        if not isinstance(data, dict):
+            return value
+        if "reported_effect_adjusted" in data and not isinstance(data["reported_effect_adjusted"], bool):
+            raise ValueError("reported_effect_adjusted corrections require an explicit boolean")
+        if "adjustment_covariates" in data:
+            covariates = data["adjustment_covariates"]
+            if not isinstance(covariates, list) or any(
+                not isinstance(item, str) or not item.strip() for item in covariates
+            ):
+                raise ValueError("adjustment_covariates corrections require a list of nonblank strings")
+        return value
 
 
 class ExtractionRefinement(BaseModel):
@@ -794,11 +811,14 @@ class DataExtractionAgent(BaseAgent):
         from new_meta.core.extraction_verification import NUMERIC_MAP_FIELDS, REFINABLE_FIELDS
         indices = list(range(len(current.outcomes))) if outcome_indices is None else outcome_indices
         prompt = (
-            "Correct the inaccurate numerical extraction using the complete source below. "
+            "Correct inaccurate extracted values and analysis metadata using the complete source below. "
             "Return exactly the original outcome_index values requested. Do not reorder, add or drop rows. "
             "Never change endpoint/population/contrast labels to make a result eligible. "
             "Prefer directly reported estimates and precision over deriving them from a damaged abstract. "
             "Do not delete an unresolved value to evade verification; retain it with a conflict note.\n"
+            "Repair reported_effect_adjusted and adjustment_covariates only from this result's reported analysis. "
+            "Do not infer adjustment or covariates from trial eligibility, baseline descriptions, or another "
+            "outcome's model. Keep unreported fields unchanged.\n"
             "Return comparative_design using the schema's canonical design enum, never descriptive prose. "
             "Correct it only from source evidence; preserve complex trial dependencies. Use unknown "
             "when unresolved or when one design cannot represent combined complex dependencies.\n"
