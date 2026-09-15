@@ -7,12 +7,6 @@ const api = vi.hoisted(() => ({ fetchWebMe: vi.fn(), getWebProjectId: vi.fn() })
 vi.mock("@/lib/apiClient", () => api);
 vi.mock("@/components/settings/PluginsCard", () => ({ PluginsCard: ({ projectId }: { projectId: string }) => <div>Plugin project: {projectId}</div> }));
 vi.mock("@/components/settings/WebProjectsCard", () => ({ WebProjectsCard: ({ onProjectChange }: { onProjectChange: (project: { id: string }) => void }) => <div>托管项目自助管理<button onClick={() => onProjectChange({ id: "beta" })}>Switch project</button></div> }));
-vi.mock("@/components/settings/WebReadinessCard", () => ({ WebReadinessCard: () => <div>SaaS 部署就绪</div> }));
-vi.mock("@/components/settings/WebResourcesCard", () => ({ WebResourcesCard: () => <div>资源与配额</div> }));
-vi.mock("@/components/settings/WebAuditCard", () => ({ WebAuditCard: () => <div>项目审计记录</div> }));
-vi.mock("@/components/settings/WebErrorsCard", () => ({ WebErrorsCard: () => <div>错误记录</div> }));
-vi.mock("@/components/settings/WebSecurityCard", () => ({ WebSecurityCard: () => <div>安全记录</div> }));
-vi.mock("@/components/settings/WebTasksCard", () => ({ WebTasksCard: () => <div>异步任务状态</div> }));
 
 beforeEach(() => { vi.clearAllMocks(); api.getWebProjectId.mockReturnValue("alpha"); });
 
@@ -25,17 +19,23 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("keeps the operational surface: projects, resources, data flow and readiness", async () => {
+  it("keeps the researcher's surface: project, plugins, data flow and appearance", async () => {
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
     expect(await screen.findByText("托管项目自助管理")).toBeInTheDocument();
-    expect(screen.getByText("资源与配额")).toBeInTheDocument();
     expect(screen.getByText("隐私与数据流向")).toBeInTheDocument();
-    expect(screen.getByText("SaaS 部署就绪")).toBeInTheDocument();
-    expect(screen.getByText("任务、审计与安全详情")).toBeInTheDocument();
-    expect(screen.getByText("异步任务状态")).toBeInTheDocument();
-    expect(screen.getByText("项目审计记录")).toBeInTheDocument();
-    expect(screen.getByText("错误记录")).toBeInTheDocument();
-    expect(screen.getByText("安全记录")).toBeInTheDocument();
+    expect(screen.getByText("外观")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "外观主题" })).toBeInTheDocument();
+  });
+
+  // The deployment console left for `/app/ops` on 2026-09-15. A researcher who
+  // opens 「设置」 to rename a project was being shown a readiness board, a
+  // security-event ledger and a control that stops containers (walk, C6).
+  it("no longer shows the deployment's own operational surface", async () => {
+    render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+    await screen.findByText("托管项目自助管理");
+    for (const moved of ["部署就绪检查", "运行资源", "后台任务", "操作审计", "错误账本", "安全事件", "任务、审计与安全详情"]) {
+      expect(screen.queryByText(moved)).not.toBeInTheDocument();
+    }
   });
 
   // A hosted account does not pick a model and does not hold a provider key —

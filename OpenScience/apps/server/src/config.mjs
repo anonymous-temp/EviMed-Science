@@ -1231,6 +1231,16 @@ export function loadConfig(overrides = {}) {
     // hours, so a loop that only ever runs at night costs half as much as the
     // same loop run whenever a job happens to be queued.
     learningWindow: String(overrides.learningWindow ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW ?? "22:00-09:00"),
+    // Which zone the window above is written in.
+    //
+    // It used to be whatever the process's clock said, and the web container
+    // ships with no `TZ`: the operator wrote `22:00-09:00` meaning Beijing and
+    // the loop evaluated it in UTC, arming itself for the Chinese working day
+    // (2026-09-15 walk, B3). Defaulting to `TZ` keeps a correctly configured
+    // container correct, and naming the zone separately lets a deployment
+    // whose containers run UTC still write the window in the operator's time.
+    learningWindowTimeZone: String(overrides.learningWindowTimeZone
+      ?? process.env.OPEN_SCIENCE_LEARNING_WINDOW_TIMEZONE ?? process.env.TZ ?? ""),
     learningDailyLimitCny: Number(overrides.learningDailyLimitCny
       ?? process.env.OPEN_SCIENCE_LEARNING_DAILY_LIMIT_CNY ?? 5),
     learningWeeklyLimitCny: Number(overrides.learningWeeklyLimitCny
@@ -1263,6 +1273,19 @@ export function loadConfig(overrides = {}) {
     // method by any path, which is what makes the mount safe to have at all.
     learningEvaluationUsers: String(overrides.learningEvaluationUsers
       ?? process.env.OPEN_SCIENCE_LEARNING_EVALUATION_USERS ?? "")
+      .split(",").map((value) => value.trim()).filter(Boolean),
+    // Who sees the operations page.
+    //
+    // Same shape and same reason as the allowlist above: an id list, empty by
+    // default, no new role and no approval flow. It gates one surface — the
+    // readiness board, the audit, error and security ledgers, the hosted task
+    // list and the runtime controls — which a researcher was shown in full
+    // until 2026-09-15 because the settings page was the deployment's console
+    // and the product's settings at the same time. Gating presentation only:
+    // every route behind it keeps its own authorization, so an empty list
+    // removes a page from a menu, never a check from a request.
+    operatorUsers: String(overrides.operatorUsers
+      ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
     // How long a trial lasts if the caller does not say. A trial that outlives
     // the evaluation that set it would keep an unproven method in front of

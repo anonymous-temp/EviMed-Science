@@ -34,7 +34,7 @@ describe("WebResourcesCard", () => {
 
     render(<WebResourcesCard />);
 
-    expect(await screen.findByText("托管资源")).toBeInTheDocument();
+    expect(await screen.findByText("运行资源")).toBeInTheDocument();
     expect(await screen.findByText("256 KB / 1 MB")).toBeInTheDocument();
     expect(screen.getByText("已用 25%")).toBeInTheDocument();
     expect(screen.getByText("2 个进行中")).toBeInTheDocument();

@@ -13,7 +13,7 @@ export function WebAuditCard() {
     try {
       setEvents(await listWebAuditLog(20));
     } catch (e) {
-      toast.error(`无法读取托管审计日志：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(`无法读取操作审计日志：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
@@ -27,7 +27,7 @@ export function WebAuditCard() {
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">托管审计</h2>
+          <h2 className="font-serif text-body text-text">操作审计</h2>
           <p className="mt-0.5 text-xs text-muted">该工作区最近的项目操作</p>
         </div>
         <button

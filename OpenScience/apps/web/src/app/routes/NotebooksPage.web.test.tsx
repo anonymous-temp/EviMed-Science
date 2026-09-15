@@ -36,13 +36,13 @@ describe("NotebooksPage hosted web mode", () => {
     render(<NotebooksPage />);
 
     expect(await screen.findByText("analysis.ipynb")).toBeInTheDocument();
-    expect(screen.getByText(/服务端隔离内核/)).toBeInTheDocument();
+    expect(screen.getByText(/服务端隔离环境/)).toBeInTheDocument();
     const create = screen.getByRole("button", { name: /新建笔记本/ });
     expect(create).toBeEnabled();
     fireEvent.click(create);
     expect(screen.getByRole("menuitem", { name: /Python 笔记本/ })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /R 笔记本/ })).toBeInTheDocument();
-    expect(screen.getByText(/Python 或 R 单元格在服务端隔离内核/)).toBeInTheDocument();
+    expect(screen.getByText(/Python 或 R 单元格在服务端隔离环境/)).toBeInTheDocument();
   });
 
   it("creates a hosted Python notebook through the command backend", async () => {

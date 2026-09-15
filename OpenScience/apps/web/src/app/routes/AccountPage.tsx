@@ -2,18 +2,31 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, UserRound, WalletMinimal } from "lucide-react";
 import { useNavigate } from "react-router";
 import { describeWebUsageBudget, fetchWebMe, lastWebUsageBudgetRefusal } from "@/lib/apiClient";
-import { ThemeSegmentedControl } from "@/components/settings/ThemeSegmentedControl";
 import { WebAccountCard } from "@/components/settings/WebAccountCard";
 import { UsageCard } from "@/components/settings/UsageCard";
 import { ConnectorsCard } from "@/components/settings/ConnectorsCard";
 import { Card } from "@/components/ui/Card";
+import { WorkbenchTabs, type WorkbenchTab } from "@/components/layout/WorkbenchTabs";
+import { SettingsPage } from "./SettingsPage";
+import { OpsPage } from "./OpsPage";
 
+/**
+ * Everything about the account, in one destination.
+ *
+ * Four rows of the old ten-row navigation pointed here in some form: the
+ * account page, the settings page, the connector banner's "go set these up"
+ * link, and the operations cards that shared the settings page with them. They
+ * are four views of one thing now — who you are, what you have spent, which
+ * data sources you have connected, and how this project is configured — with
+ * the deployment console behind an allowlist (2026-09-15 walk, C6/C7/C8).
+ */
 export function AccountPage() {
   const navigate = useNavigate();
   const [identity, setIdentity] = useState({
     name: "",
     tenantId: "",
     projectId: "default",
+    operator: false,
   });
   // Read once on entry. The refusal happened on whatever page tried to spend;
   // nothing on this page spends, so there is nothing to keep watching for.
@@ -26,27 +39,25 @@ export function AccountPage() {
         name: me.user.name,
         tenantId: me.tenant?.id ?? me.user.tenantId ?? me.user.id,
         projectId: me.project?.id ?? "default",
+        operator: me.operator === true,
       });
     });
   }, []);
 
   const leaveHostedSession = () => navigate("/login", { replace: true });
 
-  return (
+  const overview = (
     <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-content px-8 py-10">
-        <h1 className="font-serif text-display font-semibold text-text">账户与额度</h1>
-        <p className="mt-2 text-body text-muted">你的个人租户、登录方式与外观偏好。</p>
-
-        <Card className="mt-7" title="个人租户边界" hint="一期 SaaS 采用个人账号即租户；项目是租户内的隔离单元。">
+      <div className="mx-auto max-w-content px-8 py-8">
+        <Card title="个人租户边界" hint="一期 SaaS 采用个人账号即租户；项目是租户内的隔离单元。">
           <div className="flex items-center gap-4">
             <div className="grid h-11 w-11 place-items-center rounded-full bg-surface-2 text-accent">
               <UserRound size={20} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-body font-medium text-text">{identity.name || "EviMed 用户"}</div>
-              <div className="mt-1 truncate font-mono text-caption text-muted">
-                tenant: {identity.tenantId || "正在读取…"}
+              <div className="mt-1 truncate text-caption text-muted">
+                账号 {identity.tenantId || "正在读取…"}
               </div>
             </div>
             <div className="flex items-center gap-1.5 rounded-full bg-ok/10 px-2.5 py-1 text-caption font-medium text-ok">
@@ -81,21 +92,28 @@ export function AccountPage() {
         )}
 
         <UsageCard />
-        <div id="connectors">
-          <ConnectorsCard />
-        </div>
-
         <WebAccountCard onAccountDeleted={leaveHostedSession} onSignedOut={leaveHostedSession} />
-
-        <Card
-          className="mt-5"
-          title="外观"
-          hint="主题保存在本浏览器中，跟随系统会随系统明暗自动切换。"
-        >
-          <ThemeSegmentedControl />
-        </Card>
-
       </div>
     </div>
+  );
+
+  const tabs: WorkbenchTab[] = [
+    { key: "account", label: "账户与额度", render: () => overview },
+    { key: "connectors", label: "数据源", render: () => (
+      <div className="h-full overflow-y-auto bg-bg">
+        <div className="mx-auto max-w-content px-8 py-8" id="connectors"><ConnectorsCard /></div>
+      </div>
+    ) },
+    { key: "settings", label: "设置", render: () => <SettingsPage embedded /> },
+    ...(identity.operator ? [{ key: "ops", label: "运维台", render: () => <OpsPage embedded /> }] : []),
+  ];
+
+
+  return (
+    <WorkbenchTabs
+      title="账户"
+      description="你的个人租户、用量、数据源凭据与项目设置。"
+      tabs={tabs}
+    />
   );
 }

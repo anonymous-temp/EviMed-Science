@@ -34,7 +34,7 @@ describe("WebErrorsCard", () => {
 
     render(<WebErrorsCard />);
 
-    expect(await screen.findByText("托管错误")).toBeInTheDocument();
+    expect(await screen.findByText("错误账本")).toBeInTheDocument();
     expect(screen.getByText("404")).toBeInTheDocument();
     expect(screen.getByText("/api/files/preview/:path")).toBeInTheDocument();
     expect(screen.getByText("file_not_found")).toBeInTheDocument();

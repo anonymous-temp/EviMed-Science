@@ -1707,6 +1707,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     presetRoot: "/opt/evimed/dsh/presets",
     presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
     capabilitiesDir: "/opt/evimed/capabilities",
+    answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
     capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
     // The same rule the launch plan's `--env` list used, applied to the same
     // plan: the methods the container mounts and the methods the profile names
@@ -2196,6 +2197,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         ...Object.entries(runtimeEnvironment({
           presetSkillsDir: "/opt/evimed/socket/presets/evimed-universal/skills",
           capabilitiesDir: "/opt/evimed/capabilities",
+          answerPersonaDir: RUNTIME_ANSWER_PERSONA_DIR,
           capabilitySkillsDir: RUNTIME_CAPABILITY_SKILLS_DIR,
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
           capsuleGatewayUrl,
@@ -2459,6 +2461,16 @@ export const RUNTIME_KERNEL_NAME = "dsh";
  * deployment come to disagree with nothing able to notice.
  */
 export const RUNTIME_CAPABILITY_SKILLS_DIR = "/opt/evimed/capability-skills";
+/**
+ * Where the image puts the answer line's persona package.
+ *
+ * The Dockerfile copies exactly this one package out of `runtime/skills/evimed`
+ * (the specialists ship as capability bodies instead), and the guidance plugin
+ * reads `SKILL.md` from here to put it in the session's own context. A path
+ * that does not exist leaves the model to load the skill itself, which is what
+ * it did before.
+ */
+export const RUNTIME_ANSWER_PERSONA_DIR = "/opt/evimed/skills/evimed/open-domain-answer";
 
 /**
  * The authority the control plane sends as `Host` over the unix transport.
@@ -4462,9 +4474,80 @@ export class RuntimeManager {
   activityFor(key) {
     const existing = this.runtimeActivity.get(key);
     if (existing) return existing;
-    const activity = { activeProxies: 0, idleTimer: null };
+    const activity = { activeProxies: 0, idleTimer: null, lastUseAt: Date.now() };
     this.runtimeActivity.set(key, activity);
     return activity;
+  }
+
+  /**
+   * That someone actually used this runtime, just now.
+   *
+   * Separate from `activeProxies`, which counts open connections. The session
+   * surface holds one multiplexed WebSocket for as long as its tab is open, so
+   * `activeProxies` never reaches zero while a browser is parked on the page
+   * and the idle timer below is therefore never even scheduled: on 2026-09-15
+   * the only runtime this deployment can run sat `Up` for four hours after its
+   * last model call, holding the single slot, and nothing reclaimed it (walk,
+   * B1'). An open connection is not use; a request through it is.
+   *
+   * @param {Record<string, any>} project
+   */
+  noteRuntimeUse(project) {
+    this.activityFor(this.key(project)).lastUseAt = Date.now();
+  }
+
+  /**
+   * Stop runtimes whose last use is older than the idle timeout, even when a
+   * connection is still open.
+   *
+   * Guarded twice over: a runtime with work in flight is skipped (the kernel is
+   * asked, this does not infer it), and a runtime whose last use is inside the
+   * window is left alone. Called on a timer; safe to call at any time, and a
+   * no-op when no idle timeout is configured.
+   *
+   * @returns {Promise<number>} how many were stopped
+   */
+  async sweepIdleRuntimes() {
+    const timeoutMs = Number(this.config.runtimeIdleTimeoutMs);
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return 0;
+    let stopped = 0;
+    for (const [key, runtime] of [...this.runtimes.entries()]) {
+      const activity = this.runtimeActivity.get(key);
+      if (!activity) continue;
+      if (Date.now() - Number(activity.lastUseAt ?? 0) < timeoutMs) continue;
+      const project = runtime.project;
+      if (!project) continue;
+      let busy = false;
+      try {
+        busy = await this.runtimeBusy(project);
+      } catch {
+        // Unreadable means unknown, and unknown is not idle. A runtime whose
+        // kernel cannot be asked stays up; the next sweep asks again.
+        continue;
+      }
+      if (busy) {
+        activity.lastUseAt = Date.now();
+        continue;
+      }
+      await this.stopIdleRuntime(project).catch(() => {});
+      stopped++;
+    }
+    return stopped;
+  }
+
+  /**
+   * Whether any session in this runtime is mid-turn.
+   * @param {Record<string, any>} project @returns {Promise<boolean>}
+   */
+  async runtimeBusy(project) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return false;
+    const value = await this.withRuntimeDeadline(
+      (signal) => this.callKernel(runtime, project, "session/list", { _request: {} }, signal),
+      "runtime_status_unavailable",
+      "Runtime session status did not answer in time.",
+    );
+    return sessionListItems(value).some((item) => item?.running);
   }
 
   clearIdleTimer(key) {
@@ -4674,6 +4757,7 @@ export class RuntimeManager {
   }
 
   beginProxy(project) {
+    this.noteRuntimeUse(project);
     this.enforceProxyCapacity(project);
     const key = this.key(project);
     const activity = this.activityFor(key);

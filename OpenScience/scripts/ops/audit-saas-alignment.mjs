@@ -98,6 +98,7 @@ const [
   server,
   runtime,
   account,
+  ops,
   compose,
   saasOverlay,
   pkg,
@@ -115,6 +116,7 @@ const [
   read("apps/server/src/server.mjs"),
   read("apps/server/src/runtimeManager.mjs"),
   read("apps/web/src/app/routes/SettingsPage.tsx"),
+  read("apps/web/src/app/routes/OpsPage.tsx"),
   read("deploy/web/docker-compose.yml"),
   read("deploy/web/docker-compose.saas.yml"),
   read("package.json"),
@@ -136,12 +138,20 @@ requireBoundary(/reproducible artifact system/.test(requirements) && /domain too
 requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE/.test(config) && /controlled-pilot/.test(config), "config_profile", "Server config lacks a safe deployment profile default.");
 requireBoundary(/readinessSaasProfile/.test(server) && /tenant: \{ id: user\.tenantId \?\? user\.id, model: "individual-account"/.test(server), "server_tenant", "Server readiness or tenant identity is not first-class.");
 requireBoundary(/OPEN_SCIENCE_TENANT_ID/.test(runtime), "runtime_tenant", "Runtime workload lacks tenant context.");
-// These moved from the account page to the settings page on 2026-09-04, when
-// the two were split: the account page is who you are, the settings page is
-// how the deployment runs. The variable keeps its name; the surface is the one
-// that has to carry them.
-for (const component of ["WebProjectsCard", "WebResourcesCard", "WebReadinessCard", "WebTasksCard", "WebAuditCard", "WebSecurityCard"]) {
+// Which surface has to carry which card, after two splits.
+//
+// 2026-09-04 moved them off the account page onto the settings page: the
+// account page is who you are, the settings page is how the deployment runs.
+// 2026-09-15 split that again, because "how the deployment runs" had become
+// two audiences — a researcher renaming a project, and an operator reading a
+// readiness board and a security ledger. What matters to this audit is
+// unchanged: every one of these cards is reachable somewhere in the hosted
+// build. A card that exists in no surface is a control the SaaS dropped.
+for (const component of ["WebProjectsCard"]) {
   requireBoundary(account.includes(component), `settings_${component}`, `Hosted settings surface is missing ${component}.`);
+}
+for (const component of ["WebResourcesCard", "WebReadinessCard", "WebTasksCard", "WebAuditCard", "WebSecurityCard"]) {
+  requireBoundary(ops.includes(component), `ops_${component}`, `Hosted operations surface is missing ${component}.`);
 }
 requireBoundary(/OPEN_SCIENCE_DEPLOYMENT_PROFILE: \$\{OPEN_SCIENCE_DEPLOYMENT_PROFILE:-controlled-pilot\}/.test(compose), "compose_default", "Base Compose must default to controlled-pilot.");
 // The overlay still selects external recovery — as its default. It may no

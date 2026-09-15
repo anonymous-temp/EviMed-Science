@@ -75,7 +75,8 @@ function profileFromRecords(records: WebStructuredMemory[]): WebMemoryProfile {
   };
 }
 
-export function MemoryPage() {
+/** @param embedded rendered as one view of 记忆; the hub owns the title. */
+export function MemoryPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [status, setStatus] = useState<WebMemoryStatus | null>(null);
   const [items, setItems] = useState<WebResearchMemory[]>([]);
   const [profile, setProfile] = useState<WebMemoryProfile | null>(null);
@@ -248,11 +249,13 @@ export function MemoryPage() {
       <main className="mx-auto w-full max-w-content-full px-6 py-8 lg:px-10 lg:py-10">
         <header className="flex flex-col gap-5 border-b border-border pb-7 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-ui-sm font-medium tracking-[0.12em] text-accent">
-              <Brain size={15} /> 个人科研记忆
-            </div>
-            <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研记忆</h1>
-            <p className="mt-2 max-w-2xl text-body text-muted">
+            {!embedded && (
+              <div className="mb-2 flex items-center gap-2 text-ui-sm font-medium tracking-[0.12em] text-accent">
+                <Brain size={15} /> 个人科研记忆
+              </div>
+            )}
+            {!embedded && <h1 className="font-serif text-display font-semibold tracking-tight text-text">科研记忆</h1>}
+            <p className={embedded ? "max-w-2xl text-body text-muted" : "mt-2 max-w-2xl text-body text-muted"}>
               保存长期有效的研究背景、偏好与判断线索。EviMed 会按当前问题检索相关记录，并与知识库文件和外部证据分开处理。
             </p>
           </div>

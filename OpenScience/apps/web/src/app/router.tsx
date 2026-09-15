@@ -1,17 +1,13 @@
 import { createBrowserRouter, Navigate, useParams, type RouteObject } from "react-router";
 import { AppShell } from "./layout/AppShell";
 import { SessionRoute } from "./routes/SessionRoute";
-import { FilesPage } from "./routes/FilesPage";
-import { SourcesPage } from "./routes/SourcesPage";
+import { KnowledgePage } from "./routes/KnowledgePage";
 import { AutopilotPage } from "./routes/AutopilotPage";
 import { CapabilitiesPage } from "./routes/CapabilitiesPage";
-import { CapsulesPage } from "./routes/CapsulesPage";
 import { InboxPage } from "./routes/InboxPage";
-import { MemoryPage } from "./routes/MemoryPage";
-import { SettingsPage } from "./routes/SettingsPage";
+import { MemoryHubPage } from "./routes/MemoryHubPage";
 import { LoginPage } from "./routes/LoginPage";
 import { AccountPage } from "./routes/AccountPage";
-import { NotebooksPage } from "./routes/NotebooksPage";
 import { RunsPage } from "./routes/RunsPage";
 import { NotFound } from "./routes/NotFound";
 
@@ -34,16 +30,21 @@ export const routes: RouteObject[] = [
       { path: "chat", element: <SessionRoute /> },
       { path: "chat/:sessionId", element: <SessionRoute /> },
       { path: "runs", element: <RunsPage /> },
-      { path: "files", element: <FilesPage /> },
-      { path: "sources", element: <SourcesPage /> },
+      { path: "files", element: <KnowledgePage /> },
       { path: "autopilot", element: <AutopilotPage /> },
-      { path: "notebooks", element: <NotebooksPage /> },
-      { path: "memory", element: <MemoryPage /> },
-      { path: "capsules", element: <CapsulesPage /> },
+      { path: "memory", element: <MemoryHubPage /> },
       { path: "inbox", element: <InboxPage /> },
       { path: "capabilities", element: <CapabilitiesPage /> },
       { path: "account", element: <AccountPage /> },
-      { path: "settings", element: <SettingsPage /> },
+      // Seven destinations, six of them above (2026-09-15 walk, C8). The four
+      // below were top-level rows until then; each is now a view of one of the
+      // six, and each keeps its address, because these are in people's
+      // bookmarks, in notification links and in this shell's own history.
+      { path: "sources", element: <Navigate to="/app/files?tab=sources" replace /> },
+      { path: "notebooks", element: <Navigate to="/app/files?tab=notebooks" replace /> },
+      { path: "capsules", element: <Navigate to="/app/memory?tab=capsules" replace /> },
+      { path: "settings", element: <Navigate to="/app/account?tab=settings" replace /> },
+      { path: "ops", element: <Navigate to="/app/account?tab=ops" replace /> },
       { path: "*", element: <NotFound /> },
     ],
   },
@@ -56,11 +57,11 @@ export const routes: RouteObject[] = [
   { path: "/live/:sessionId", element: <ChatRedirect /> },
   { path: "/runs", element: <Navigate to="/app/runs" replace /> },
   { path: "/files", element: <Navigate to="/app/files" replace /> },
-  { path: "/sources", element: <Navigate to="/app/sources" replace /> },
-  { path: "/notebooks", element: <Navigate to="/app/notebooks" replace /> },
+  { path: "/sources", element: <Navigate to="/app/files?tab=sources" replace /> },
+  { path: "/notebooks", element: <Navigate to="/app/files?tab=notebooks" replace /> },
   { path: "/memory", element: <Navigate to="/app/memory" replace /> },
   { path: "/agents", element: <Navigate to="/app/capabilities" replace /> },
-  { path: "/settings", element: <Navigate to="/app/settings" replace /> },
+  { path: "/settings", element: <Navigate to="/app/account?tab=settings" replace /> },
   { path: "*", element: <NotFound /> },
 ];
 

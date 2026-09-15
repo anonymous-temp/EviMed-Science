@@ -1,5 +1,6 @@
 import { errorCodeMessage, runOutcomeKind } from "@evimed/domain";
 import type { WebAgentRun, WebAgentRunStatus } from "@/lib/apiClient";
+import { capabilityTitle } from "@/lib/researchAgentUi";
 
 export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
   running: "执行中",
@@ -24,13 +25,25 @@ export function runDotClass(run: WebAgentRun): string {
   return "bg-muted";
 }
 
-/** What to call a run in a list: its question, else the capability, else its id. */
+/**
+ * What to call a run in a list: its question, else the capability's product
+ * name, else a sentence saying the brief was not recorded.
+ *
+ * It used to end `return run.id`, and a ledger row whose brief predates the
+ * `question` column is exactly the row that reaches that line: the run list a
+ * new account opens on was twelve identical `clinical-evidence-synthesis`
+ * entries and a `run_c657a9e0…` used as a title. An id is not a name — it is
+ * the absence of one — and saying so is more use to a reader than printing it.
+ * The id stays reachable in the run's own detail, where it is labelled.
+ */
 export function runTitle(run: WebAgentRun): string {
   const question = run.question?.trim();
   if (question) return question;
   const agent = run.effectiveAgentId ?? run.agentId;
+  const named = capabilityTitle(agent);
+  if (named) return named;
   if (agent) return agent;
-  return run.id;
+  return "未记录题面的运行";
 }
 
 /* ------------------------------------------------------------------ */

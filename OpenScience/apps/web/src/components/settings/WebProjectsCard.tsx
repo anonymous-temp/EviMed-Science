@@ -128,7 +128,7 @@ export function WebProjectsCard({
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">托管项目</h2>
+          <h2 className="font-serif text-body text-text">项目</h2>
           <p className="mt-0.5 truncate text-xs text-muted">
             {currentProject ? `${currentProject.name} · ${currentProject.id}` : currentId}
           </p>
@@ -256,7 +256,7 @@ export function WebProjectsCard({
             className={inputCls("font-mono")}
             value={newId}
             onChange={(e) => setNewId(e.target.value)}
-            placeholder="project-id"
+            placeholder="项目标识，如 cardiology-2026"
             aria-label="项目 id"
             disabled={controlsDisabled}
           />

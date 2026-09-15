@@ -1074,6 +1074,10 @@ export async function releaseWebRuntimeUiFrame(frameId: string): Promise<void> {
 export async function fetchWebMe(): Promise<{
   user: { id: string; name: string; tenantId?: string };
   tenant?: { id: string; model: "individual-account"; role: "owner" };
+  /** Whether this deployment offers this account the operations page. The
+   *  server decides from an id allowlist; a browser that flips this gains a
+   *  menu entry, not access — every route behind it authorizes itself. */
+  operator?: boolean;
   project: WebProject;
   projects: WebProject[];
   csrfToken?: string;
@@ -1093,6 +1097,7 @@ export async function fetchWebMe(): Promise<{
     data: {
       user: { id: string; name: string; tenantId?: string };
       tenant?: { id: string; model: "individual-account"; role: "owner" };
+      operator?: boolean;
       project: WebProject;
       projects: WebProject[];
       csrfToken?: string;

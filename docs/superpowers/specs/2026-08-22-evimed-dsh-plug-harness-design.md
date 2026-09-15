@@ -922,7 +922,7 @@ guardTools(ctx, call => call.name === 'evimed_submit_deliverable' && attemptsOf(
 
 ### 9.8 入口、UI 与目录重组
 
-- `/api/agents` → `/api/capabilities`：`title / description / starterPrompts / inputs`。UI 的「科研 Agent」列表变成「能力模板」：点选 = 预填题面并点名能力 = 高置信期望（§9.4）。上位方案的入口形态保留，语义从「绑定包」变为「建议」。
+- `/api/agents` → `/api/capabilities`：`title / description / starterPrompts / inputs`。UI 的「科研 Agent」列表变成**「科研能力」**：点选 = 预填题面并点名能力 = 高置信期望（§9.4）。上位方案的入口形态保留，语义从「绑定包」变为「建议」。**2026-09-15 修订：中文名由「能力模板」改为「科研能力」。** 「模板」在中文里指向文档模板，而这一页里是十五个专项科研能力（药品安全性分析、Meta 分析、孟德尔随机化、论文审稿……）；改名的原因（语义从绑定变建议）由页面上的一句话承担，不由名字承担——名字要说清里面是什么。
 - 目标目录（「重组到位」；用户称插座的包名随之改为 `@evimed/dsh-socket`）：
 
 ```text
@@ -1252,6 +1252,7 @@ nightly:
 | 24（2026-09-01 用户拍板） | 门禁归属 | **①的分界线不是主题，是「平台性质 vs 内容性质」**：部署门只断言**我们代码的**性质，模型产出的性质归契约与评测。按此把记忆两条判据切开，与 signals 的处置并不矛盾：**`evidence_invalid` 保留硬阻断**——客户端已在发送边界执行服务端自己的界（quote 1..4000 **字节**、sourceType 1..64、sourceRef 1..500），**模型产出什么都不该再触发 400**；它再响，响的就是我们客户端的真缺陷（正是这次抓到的那类跨语言边界错），降级等于把刚证明了价值的哨兵摘下来。**`extraction_missing` 一分为二**：**机械半保留硬阻断**——「抽取管线执行了并得到合法应答」，客户端可判的证据是**该运行的 run_summary 记录存在**（`recordRun` 在抽取之前写它，它在＝管线跑过且记忆服务收下了写入）；少了这半，「空」与「确实没有」就从这个口回来了。**内容半降为 notice 带观测值**——`extracted ≥ 1`；实测同栈同题面连着两轮 `proposed=6/extracted=6` 与 `proposed=0/extracted=0`（两轮 `rejected=0`，即模型没给），23 条消息里没有值得记的事实是合法输出。notice 带三个数（messages / proposed / extracted），经**运行账本的 qualityNotices** 暴露（仅在 `extracted===0` 时追加，普通运行不加噪），与 signals 进**同一份分布收集**（33 篇批测顺路）；分布出来再定要不要在哪一层（契约？技能正文？）提要求。**执行要求同①**：notice 的观测值必须打进 e2e 输出与窗口清单，不是删掉 | §16 #23、§29.3 |
 | 25（2026-09-01 用户拍板） | 内核与回滚 | **回滚杆取消，OpenCode 整体删除，内核直上 `0.1.2-alpha.3`，不再等窗口。**原口径「翻默认可逆，因为它只是一个配置开关」当天被两条实测推翻：①那个开关**从未接进容器**——web 服务逐项传 env、没有 `env_file`，`OPEN_SCIENCE_RUNTIME_KERNEL` 不在表里，实测生产容器环境里没有这个变量，即拨回 opencode 会一切照旧并报告成功；②即使接上，**光拨杆也回不到绿灯**——release manifest 钉着运行时镜像且只描述一个内核，而 HEAD 的清单生成器按设计**产不出 opencode 清单**（`dshVersion` 无条件写入），所以完整回滚只能是切回上一个 release 目录。既然「一分钟可逆」不成立，保留一棵冻结的第二内核树就只剩成本。**采纳判据同步改写**：不再等 rc 标签（那条理由是「alpha 只有 GitHub tag、零产物，钉不住也验不了」，而 alpha.2 起已发 npm，理由过期），改为**「对着跑起来的该版本二进制探过线」＋「自家电池全绿」**。0.1.2 是一次全轴破坏——方法名点号→斜杠、参数进具名描述符、`/api/events.mux` 与 `/api/events.host` 随 ApiProxy 整包删除、改为一条 `/api/remote.mux` 多路 WebSocket、**会话事件不再自带 sessionId**（由「这条 follow 流为谁而开」决定）、且**环回也要求认证**——读发布说明至多能发现其中两条。**另立一条硬规矩**：每次挪钉子必须对新旧两版各跑一次 `--dump-config` 并 diff。这次正是它抓出三条静默移动的默认：遥测默认 `DISABLED`→`FEEDBACK_ONLY`、新增沙箱内直连 HTTP 取数、新增每请求上报本部署插件清单。我们恰好挡住了第一条，**但只因为整行 disabled 而不是设了 mode** | §12.5、§16 #25 |
 | 26（2026-09-04 用户拍板） | 托管会话面 | **内核自带的浏览器应用改为托管产品的会话面，D12 / §16 #10 / §18.1 结论 / ARCH §14 / 前端生态方案的两条「明确不做」同时作废。**原口径是「保留并改造我们自己的 React 应用，DSH 客户端只用于本地 profile」，理由是它没有受支持的页内嵌入途径、是单用户产品 UI、我们的核心面它没有。三条里第一条被实测改写、后两条按用户裁决不再是否决理由：**它可以嵌入，只是必须给它一个源**——它用 `location.origin` 拼绝对路径（`/plugins/??…`、`/api/<方法>`），放在路径前缀下这些请求落回控制面、被兜底文档冒充成 JS，页面在启动时死于 `__ModuleLoader__ bootstrap facade is missing`，而每个请求都是 200（2026-09-04 真浏览器实测）。同主机另开一个端口即可：端口不同是不同 origin（框内外互相读不到），端口不属于 site（会话 cookie 照送）。**代价与边界，逐条写明**：①它的设计语言、i18n、四态纪律是 DSH 的不是我们的——接受，产品壳负责其余九个导航项；②它自带 settings / models / presets / workspace / directory-picker / permission 面板——托管 profile 里逐行 `disabled`，且只禁叶子行（`ui-settings` 被九行注入、`ui-workspace` 被三行注入，禁了不是隐藏面板而是应用起不来）；③隐藏面板只隐藏按钮，页面是 JS 可以调任何方法——真正的界是 `@evimed/domain` 的 `runtimeUiSurface`（settings / credentials / llm / directoryPicker / goals / agentTeams / cordis / messageFeedback 整命名空间，加 preset 切换、模型选择、workspace 增删）；④「UI 件不进托管镜像」反转为「client-ui 包按显式清单进镜像」，因为现在有人加载它了。**换来的**：会话、工具卡片、计划、审批、提问、子代理、轨迹、交付物这八类呈现不再由我们实现和维护，F 轨 F1–F2 的会话层重写条目作废，我们只做 DSH 没有的那三样（交付回执与门禁判定、证据台账、胶囊时间轴）。**同批作废**：`LiveSessionPage`、`components/thread/*`、`lib/runtime.ts`、`packages/sdk`、`src-tauri` 由「重写」改为「删除」。 |
+| 27（2026-09-15 用户拍板，走查后） | 外壳按会话面重切 | **决策 26 只换了会话面，外壳没跟着换；现在补上。**真机走查（验收账号 `cdss-access`，12 个路由 + 一条开放域问答全链路，证据在 `docs/ui-ux-audit/2026-09-15-上线走查与整改方案.md`）看到的是三层壳：外壳左栏十项导航 + 「最近运行」12 条、内核左栏（工作区树 + 六个都叫 `workspace` 的会话）、外壳右栏「运行记录 · 本项目」把同一批 run 再列一遍，内核自己的右栏是第四层；同一个东西三个名字（任务 / 会话 / 运行）。**四条拍板**：①**DSH 网页就是主面**——`/app/chat` 只有内核 iframe，`RunSidePanel` 退役，§18.1 的方案 C 与 §23.3.1 的「三栏」作废；②**导航 12 → 7**——新任务 / 运行记录 / 知识库 / 记忆 / 主动科研 / 科研能力 + 账户与设置，资料整理、计算笔记本、方法胶囊、设置、运维台降为所属目的地的 tab，收件箱降为顶栏铃铛，旧路由全部重定向（§23.1 重写）；③**「能力模板」改名「科研能力」**（§9.8）——「模板」被读成文档模板，而里面是十五个专项科研能力；④**设置拆出运维台**——就绪检查、运行资源、后台任务、操作审计、错误账本、安全事件移到 `/app/account?tab=ops`，由 `OPEN_SCIENCE_OPERATOR_USERS` 名单决定是否呈现（沿用 `learningEvaluationUsers` 的允许清单形状：只管呈现，每条路由各自照样鉴权）。**内核左栏怎么处理**：占布局包的 `sidebar` slot——它自己的契约写明「占它就是整列替换，它声明的内部座位随之消失」——换成一条竖条；列关不掉（`SIDEBAR_COLLAPSED = 56`），所以是 56 px 而不是 0；竖条上的「新任务」经 `runtimeUiBridge` 的既有 postMessage 通道发一个**封闭词表**的目的地名（不是路径：框内是第三方组合的代码、跑在自己的源上，能自由拼写的目的地就是它能自选的跳转）。 |
 
 ---
 
@@ -1315,6 +1316,10 @@ nightly:
 
 ### 18.1 结论
 
+> **2026-09-15 修订（走查后）。现行结论是：DSH 的网页就是会话面，外壳只剩一根导航条，导航以 slot 注入进内核左栏。** 下表的 C「改造现有 React 应用、不嵌 DSH 客户端」在 2026-09-04（决策 26）已被 B 取代，但外壳当时没有跟着重切：十项导航、外壳右栏的运行面板、以及「任务 / 会话 / 运行」三套词汇都还是给 C 设计的，于是一个会话页里出现三层壳、同一批运行被列三遍。整改方案与证据见 `docs/ui-ux-audit/2026-09-15-上线走查与整改方案.md`。落实到三条：①`/app/chat` 只有内核 iframe，外壳右栏 `RunSidePanel` 退役；②占 `sidebar`（布局包自己的契约写明：占它就是整列替换，它声明的内部座位随之消失）把内核左栏换成一条 56 px 竖条——列关不掉，`SIDEBAR_COLLAPSED = 56` 是下限；③会话列表归外壳的「最近任务」一处，点进去回到对话而不是回到台账行。
+
+下表是 2026-08-22 的原始比较，保留为当时的判断记录。
+
 **保留并改造现有 React 应用；不用 TUI 作为产品界面；DSH 自带的 Web 客户端只用于本地 profile 与开发调试。** 后端换内核之后，前端要换的是**词汇表**（从 OpenCode 的 message/part/SSE 换成 DSH 的 session event / subagent / workflow / deliverable），不是框架。
 
 | 选项 | 事实 | 判断 |
@@ -1345,7 +1350,7 @@ nightly:
 | `lib/runtime.ts`（2,027 行，OpenCode store） | **重写**为 `lib/runStream.ts`：消费控制面 SSE `GET /api/runs/:id/events`（§18.4），按 `since` seq 续订；不再知道任何内核 |
 | `LiveSessionPage.tsx`、`components/thread/{Composer, ToolGroup, InteractionPrompt, WorkspaceChip, atoms}` | **重写**：按 §18.2 的对象渲染；Composer 去掉 OpenCode 审批模式 |
 | `RunsPage.tsx`（1,113 行） | **扩展**：运行树 + 交付物回执 + 门禁判定 + `verification` 三值 |
-| `AgentsPage.tsx` | **改名** 能力模板：`/api/capabilities`，点选 = 预填题面并点名能力（§9.8） |
+| `AgentsPage.tsx` | **改名** 科研能力（2026-09-15 前叫「能力模板」）：`/api/capabilities`，点选 = 预填题面并点名能力（§9.8） |
 | `MemoryPage.tsx`（618 行） | **替换**为胶囊页面（§19） |
 | `SettingsPage.tsx`（1,150 行） | **清理**：删除 OpenCode / 审批模式 / 运行时 URL 卡片；保留账号、项目、资源、就绪 |
 | Files、Notebooks、16 个 inspector、命令面板、登录、`AppShell`、设计令牌 | 不动 |
@@ -1995,18 +2000,19 @@ score = w_rel · relevance + w_imp · importance/10 + w_rec · γ^(Δhours) + w_
 
 ### 23.1 信息架构
 
+> **2026-09-15 修订（走查后）。六个导航项 + 页脚一项，其余全部降为所属目的地的 tab。** 原表十项的问题是它按实现的模块分栏而不是按研究者的工作分栏：知识库 / 资料整理 / 科研笔记本是同一批材料的三个视图，科研记忆 / 记忆胶囊差一个词（§23.1 原文本来就写着「记忆胶囊替换 `/memory` 并下设子页」，实现却并列了），收件箱只有一条通知却占一格，设置同时是产品设置和部署控制台。真机走查见 `docs/ui-ux-audit/2026-09-15-上线走查与整改方案.md` C1/C3/C5/C6/C8。
+
 | 导航项 | 路由 | 内容 | 阶段 |
 |---|---|---|---|
-| 新任务 | `/live/:id` | 会话流 + 运行面板（运行树 / 交付物 / 证据 / 预算） | F0–F2 |
-| 今晨简报 | `/agenda` | 主动科研首页：简报卡、正在进行、议程板、预算（§24.9） | A1 |
-| 知识库 | `/files` | 不变（项目文件） | — |
-| 科研笔记本 | `/notebooks` | 不变 | — |
-| 记忆胶囊 | `/capsule/{overview, sources, data, memory, methods, timeline, sharing}` | 替换 `/memory`；新增 **数据** 页（§23.4） | F2–F3 |
-| 能力模板 | `/capabilities` | 原 `/agents`（§9.8） | F1 |
-| 运行记录 | `/runs` | 扩展：运行树、回执、门禁判定、待人工复核 | F1 |
-| 收件箱 | `/inbox` | 通知 / 提问 / 审阅三类（§23.6） | F2 |
-| 账户与额度 | `/account` | 余额、用量、日上限、充值、告警（§25） | B1 |
-| 设置 | `/settings` | 清理后保留账号、项目、资源、就绪 | F1 |
+| 新任务 | `/app/chat/:id` | 内核网页整屏；无外壳左右栏 | 已上线 |
+| 运行记录 | `/app/runs` | 运行树、回执、门禁判定、待人工复核；id / 模型 / 会话折进「技术标识」 | 已上线 |
+| 知识库 | `/app/files?tab={files,sources,notebooks}` | 文件 / 整理进度 / 计算笔记本 | 已上线 |
+| 记忆 | `/app/memory?tab={notes,capsules}` | 记忆 / 方法胶囊（胶囊的分享与导入在胶囊页内） | 已上线 |
+| 主动科研 | `/app/autopilot` | 议程创建 + 晨间简报（原 `/agenda`，§24.9） | 议程创建已上线，简报首页待做 |
+| 科研能力 | `/app/capabilities` | 原「能力模板」、再原 `/agents`（§9.8）；「模板」被读成文档模板 | 已上线 |
+| 账户与设置 | `/app/account?tab={account,connectors,settings,ops}` | 用量 / 数据源凭据 / 项目与插件设置 / 运维台（仅 `OPEN_SCIENCE_OPERATOR_USERS` 名单可见） | 已上线 |
+
+收件箱是顶栏的铃铛（带未读数），路由 `/app/inbox` 保留。退役的一级路由 `/app/{sources,notebooks,capsules,settings,ops}` 一律 `Navigate` 重定向到对应 tab——它们在书签、通知链接和本壳自己的历史里。
 
 三种呈现面：**桌面工作台**（≥ 1024 px，全功能）、**手机**（< 768 px：简报、收件箱、发现、胶囊时间轴、运行状态只读、会话可追问；不渲染运行树与轨迹检查器）、**邮件简报**（纯 HTML，每卡一个深链接）。现有 `AppShell`、侧边栏、`ui/` 原语（`Button / Card / ConfirmDialog / Input / SegmentedControl / Toaster / ShortcutHelp`）、命令面板与设计令牌（`index.css` 已按 WCAG AA 调色）全部沿用。
 
@@ -2030,6 +2036,10 @@ score = w_rel · relevance + w_imp · importance/10 + w_rec · γ^(Δhours) + w_
 ### 23.3 页面规格
 
 #### 23.3.1 会话页：执行流程的呈现
+
+> **2026-09-15 修订。两栏：外壳导航 / 内核网页整屏。** 原文的「三栏」是 §18.1 方案 C 的设想——我们自己实现会话页时，右栏运行面板是我们的。会话面换成内嵌 DSH 网页之后，那一栏变成第三份同样的运行列表（外壳左栏「最近运行」12 条、外壳右栏「运行记录 · 本项目」、内核左栏会话树），加上内核自己的右栏就是四层。现在：外壳左栏是唯一导航，内核网页占满其余空间，内核左栏是一条 56 px 竖条（列关不掉），内核右栏（轨迹）保持用户自己开合。下面这一节描述的流、计划卡、工具卡片、分工、回合尾、终态**全部由内核的浏览器应用实现**（决策 26），我们只保留它没有的三样：交付回执与门禁判定、证据台账、胶囊时间轴。
+
+原文（会话页由我们自己实现时的规格，保留为参照）：
 
 三栏：左导航 / 中流 / 右「运行面板」（可折叠，记住偏好）。
 

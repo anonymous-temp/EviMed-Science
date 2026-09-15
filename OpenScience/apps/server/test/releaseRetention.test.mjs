@@ -97,6 +97,29 @@ test("same-day releases are ordered by the build time their manifests record, no
   assert.deepEqual(result.remove, ["evimed-20260908-7bd5117", "evimed-20260908-5898a48"]);
 });
 
+test("bare-revision release directories are planned, and ordered by their manifests", async () => {
+  // The 2026-09-14 redeploy named releases by revision alone. The pattern only
+  // matched `evimed-YYYYMMDD-<rev>`, so the weekly timer walked a directory
+  // holding ten of them and reported `0 releases, 0 kept, 0 removed` — success
+  // wording for a job that had stopped doing anything (2026-09-15 walk, B6).
+  const { writeFile } = await import("node:fs/promises");
+  const ids = ["28389d824e1f", "98036fb91f51", "f000cf96af5e"];
+  const built = { "28389d824e1f": "2026-09-08T02:00:00.000Z", "98036fb91f51": "2026-09-11T02:00:00.000Z",
+    "f000cf96af5e": "2026-09-14T08:00:00.000Z" };
+  const dir = await releasesDir([...ids, "acceptance", "ops-source-f000cf96af5e"]);
+  for (const id of ids) {
+    await mkdir(path.join(dir, id, "OpenScience/deploy/web"), { recursive: true });
+    await writeFile(path.join(dir, id, "OpenScience/deploy/web/release-manifest.json"), JSON.stringify({ source: { createdAt: built[id] } }));
+  }
+  const result = await plan(dir, 2, async () => new Set());
+  assert.deepEqual(result.releases, ids);
+  assert.deepEqual(result.remove, ["28389d824e1f"]);
+  // A hex-looking word is a release; a word that is not hex is not, however
+  // much it sits beside them.
+  assert.ok(!result.releases.includes("acceptance"));
+  assert.ok(!result.releases.includes("ops-source-f000cf96af5e"));
+});
+
 test("the release `current` points at is kept even when it is neither newest nor mounted", async () => {
   const dir = await releasesDir(IDS);
   await symlink(path.join(dir, "evimed-20260901-aaaaaaa"), path.join(path.dirname(dir), "current"));

@@ -57,6 +57,7 @@
     - id: evimed-guidance
       config:
         capabilitiesDir: !!js process.env.EVIMED_CAPABILITIES_DIR
+        answerPersonaDir: !!js process.env.EVIMED_ANSWER_PERSONA_DIR
         askUserEnabled: !!js process.env.EVIMED_ASK_USER === '1'
         capsuleActive: !!js process.env.EVIMED_CAPSULE_ACTIVE === '1'
         reviewEnabled: !!js process.env.EVIMED_REVIEW_ENABLED === '1'

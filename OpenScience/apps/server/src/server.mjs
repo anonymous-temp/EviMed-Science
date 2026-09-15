@@ -1615,6 +1615,7 @@ export function createWebApiApp(overrides = {}) {
       jobs: productJobs, distillation, consolidation,
       enabled: config.learningEnabled,
       window: config.learningWindow,
+      windowTimeZone: config.learningWindowTimeZone,
       pollMs: config.learningPollMs,
       leaseMs: config.learningLeaseMs,
       resolveProject: async (job) => {
@@ -2341,14 +2342,13 @@ export function createWebApiApp(overrides = {}) {
             project: { id: project.id, name: project.name },
             projects: await store.listProjects(user),
             csrfToken: session.csrfToken,
-            // Which session view this deployment serves. The browser must not
-            // infer it from a build flag: the view reads the control plane's
-            // own `RunEvent` stream, and it is the server that knows what it
-            // serves. The field stayed after the second view was retired
-            // because a browser bundle older than this server still asks.
+            // Whether this account sees the operations page. Presentation
+            // only: `config.operatorUsers` decides which menu the shell draws,
+            // and every route the page calls keeps its own authorization, so a
+            // browser that sets this to true by hand gains a link, not access.
+            operator: config.operatorUsers.includes(user.id),
             runtime: {
               kernel: RUNTIME_KERNEL_NAME,
-              sessionView: "run-stream",
               // Where the kernel's own browser application is served. Empty
               // when this deployment does not serve it, which is how the shell
               // knows to render its own session view instead of a frame.
@@ -3668,6 +3668,7 @@ export function createWebApiApp(overrides = {}) {
   };
 
   let usageReconcileTimer = null;
+  let idleRuntimeSweepTimer = null;
   let usageReconcileRun = null;
   // A reservation whose settlement never arrived would otherwise stay 'reserved'
   // forever: nothing else in the system reads reservation_expires_at, so the row
@@ -3708,11 +3709,13 @@ export function createWebApiApp(overrides = {}) {
     if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
     if (usageReconcileTimer) clearInterval(usageReconcileTimer);
+    if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
     capsuleCleanupTimer = null;
     autopilotScheduleTimer = null;
     consolidationScheduleTimer = null;
     notificationTimer = null;
     usageReconcileTimer = null;
+    idleRuntimeSweepTimer = null;
   };
 
   const startRecurringWork = async () => {
@@ -3754,6 +3757,18 @@ export function createWebApiApp(overrides = {}) {
       if (usageLedger && !usageReconcileTimer) {
         usageReconcileTimer = setInterval(() => { void reconcileUsageReservations(); }, 60_000);
         usageReconcileTimer.unref();
+      }
+      // Reclaiming runtimes nobody is using.
+      //
+      // The per-runtime idle timer only ever starts when the last connection
+      // closes, and the session surface holds one for as long as its tab is
+      // open, so a parked tab pinned the runtime — and with the deployment's
+      // ceiling at one, pinned every other account out (2026-09-15 walk, B1').
+      // This sweep measures the last request rather than the last connection,
+      // and asks the kernel before stopping anything.
+      if (!idleRuntimeSweepTimer) {
+        idleRuntimeSweepTimer = setInterval(() => { void runtimeManager.sweepIdleRuntimes().catch(() => {}); }, 60_000);
+        idleRuntimeSweepTimer.unref();
       }
     } catch (error) {
       recurringWorkStarted = false;
@@ -3836,6 +3851,7 @@ export function createWebApiApp(overrides = {}) {
       if (notificationTimer) clearInterval(notificationTimer);
       await notificationRun;
       if (usageReconcileTimer) clearInterval(usageReconcileTimer);
+      if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
       await usageReconcileRun;
       await runtimeUi.close();
       await taskManager.close();

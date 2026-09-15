@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router";
 import {
+  Bell,
   Bot,
   Brain,
   FlaskConical,
@@ -70,21 +71,26 @@ export function CommandPalette() {
     close();
   };
 
+  // The six destinations plus the views inside them. The palette may be longer
+  // than the sidebar — typing a name is how someone reaches a view without
+  // knowing which destination now owns it.
   const navigation: Action[] = [
     { id: "new", label: "新任务", icon: <SquarePen size={16} />, run: () => { navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }); close(); } },
     { id: "runs", label: "运行记录", icon: <FlaskConical size={16} />, run: () => go("/app/runs") },
     { id: "files", label: "知识库", icon: <FolderTree size={16} />, run: () => go("/app/files") },
-    { id: "sources", label: "资料整理", icon: <ListFilter size={16} />, run: () => go("/app/sources") },
+    { id: "sources", label: "资料整理进度", icon: <ListFilter size={16} />, run: () => go("/app/files?tab=sources") },
+    { id: "notebooks", label: "计算笔记本", icon: <NotebookPen size={16} />, run: () => go("/app/files?tab=notebooks") },
+    { id: "memory", label: "记忆", icon: <Brain size={16} />, run: () => go("/app/memory") },
+    { id: "capsules", label: "方法胶囊", icon: <Brain size={16} />, run: () => go("/app/memory?tab=capsules") },
     { id: "autopilot", label: "主动科研", icon: <Orbit size={16} />, run: () => go("/app/autopilot") },
-    { id: "notebooks", label: "科研笔记本", icon: <NotebookPen size={16} />, run: () => go("/app/notebooks") },
-    { id: "memory", label: "科研记忆", icon: <Brain size={16} />, run: () => go("/app/memory") },
-    { id: "capabilities", label: "能力模板", icon: <Bot size={16} />, run: () => go("/app/capabilities") },
+    { id: "capabilities", label: "科研能力", icon: <Bot size={16} />, run: () => go("/app/capabilities") },
+    { id: "inbox", label: "收件箱", icon: <Bell size={16} />, run: () => go("/app/inbox") },
   ];
 
   // Task creation travels as a native navigation intent; no prompt is submitted.
   const actions: Action[] = [
     { id: "account", label: "账户与额度", icon: <UserRound size={16} />, run: () => go("/app/account") },
-    { id: "settings", label: "打开设置", icon: <Settings size={16} />, run: () => go("/app/settings") },
+    { id: "settings", label: "打开设置", icon: <Settings size={16} />, run: () => go("/app/account?tab=settings") },
     { id: "theme", label: "切换主题", hint: THEME_LABEL[theme], icon: <Moon size={16} />, run: () => { toggleTheme(); close(); } },
   ];
 

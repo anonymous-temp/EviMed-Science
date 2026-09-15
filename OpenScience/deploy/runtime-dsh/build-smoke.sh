@@ -115,6 +115,15 @@ fi
 
 export EVIMED_CAPABILITIES_DIR=/opt/evimed/capabilities
 export EVIMED_CAPABILITY_SKILLS_DIR=/opt/evimed/capability-skills
+# The answer line's persona, which `evimed-guidance` reads and registers as a
+# system-prompt section. The Dockerfile copies exactly this one package out of
+# `runtime/skills/evimed`; booting without it is a boot no hosted run has.
+export EVIMED_ANSWER_PERSONA_DIR=/opt/evimed/skills/evimed/open-domain-answer
+[ -r "${EVIMED_ANSWER_PERSONA_DIR}/SKILL.md" ] || {
+  echo "build smoke: the answer persona is missing at ${EVIMED_ANSWER_PERSONA_DIR}/SKILL.md" >&2
+  echo "  every open-domain answer would then be delivered unverified for a method the image was holding." >&2
+  exit 1
+}
 export EVIMED_CAPSULE_METHODS_DIR="" EVIMED_CAPSULE_GATEWAY_URL="" EVIMED_REVISION_AUTHORIZE_URL=""
 export EVIMED_PUBLIC_SOURCE_GATEWAY_URL="" EVIMED_MODEL_GATEWAY_TOKEN_FILE=""
 export EVIMED_WORKLOAD_TOKEN_FILE="${home}/evimed-workload.token"

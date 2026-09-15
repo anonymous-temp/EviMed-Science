@@ -1,20 +1,63 @@
 import { useEffect, useState } from "react";
-import { PanelRight } from "lucide-react";
-import { fetchWebMe, webRuntimeProfile } from "@/lib/apiClient";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { fetchWebMe, listWebAgentRuns, webRuntimeProfile } from "@/lib/apiClient";
 import { RuntimeUiFrame } from "./RuntimeUiFrame";
-import { RunSidePanel } from "@/components/run/RunSidePanel";
 import { Button } from "@/components/ui/Button";
 
-const PANEL_KEY = "evimed.chat.runPanel";
-
-/** The native application is the session surface, including its failure state. */
+/**
+ * The session surface is the kernel's own application, and nothing else.
+ *
+ * It used to be the kernel's application plus a shell-owned run panel on the
+ * right, and the shell's navigation on the left, inside which the kernel drew
+ * its own left column and its own right pane. Four columns, three of which
+ * listed the same work under three names — 任务, 会话, 运行 (2026-09-15 walk,
+ * A1/A6). The panel is gone rather than moved: the same twelve rows are in the
+ * sidebar's 「最近任务」 list and on the run ledger, and a third copy beside
+ * them was the surplus.
+ *
+ * The design spec chose the opposite arrangement (§18.1 option C: keep a
+ * self-built session page, do not embed the kernel's client) and the
+ * implementation went the other way on 2026-09-09 without the shell being
+ * re-cut around it. This file is that re-cut; the spec records the reversal.
+ */
 export function SessionRoute() {
   const [uiOrigin, setUiOrigin] = useState(() => webRuntimeProfile().uiOrigin);
   const [loading, setLoading] = useState(() => !webRuntimeProfile().uiOrigin);
   const [attempt, setAttempt] = useState(0);
-  const [panelOpen, setPanelOpen] = useState(
-    () => typeof window !== "undefined" && window.localStorage.getItem(PANEL_KEY) !== "0",
-  );
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Whether this arrival is a deliberate new task. 「新任务」 — the sidebar
+  // row, the palette entry, a capability card — carries an intent in the
+  // navigation state; a plain visit to /app/chat does not.
+  // Presence, not validity: `RuntimeUiFrame` validates the intent against the
+  // current project. What this decides is only whether the arrival was
+  // deliberate, and an intent for another project is still a deliberate one.
+  const wantsNewTask = Boolean((location.state as { runtimeUiIntent?: unknown } | null)?.runtimeUiIntent);
+
+  // Land on the conversation you were last in, not on a new empty one.
+  //
+  // Arriving without a session id used to mean `kind: "create"`, so every visit
+  // to /app/chat — the post-login landing route, the 「/」 redirect, a reload —
+  // minted another session, and the kernel's own list filled with empty
+  // 「新会话」 rows (2026-09-15 walk, A7). Creating is now what 「新任务」 does
+  // and only that; an ordinary visit resumes, and resumes nothing only when
+  // there is nothing to resume.
+  useEffect(() => {
+    if (sessionId || wantsNewTask) return;
+    let active = true;
+    void listWebAgentRuns()
+      .then((runs) => {
+        if (!active) return;
+        const recent = runs.find((run) => /^[A-Za-z0-9_-]{1,160}$/.test(run.sessionId));
+        if (recent) navigate(`/app/chat/${encodeURIComponent(recent.sessionId)}`, { replace: true });
+      })
+      // A ledger that cannot be read falls through to creating one, which is
+      // the behaviour this replaced: never a blocked session page.
+      .catch(() => {});
+    return () => { active = false; };
+  }, [sessionId, wantsNewTask, navigate]);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -25,33 +68,18 @@ export function SessionRoute() {
     return () => { active = false; clearTimeout(timer); };
   }, [attempt]);
 
-  const togglePanel = () => {
-    setPanelOpen((open) => {
-      const next = !open;
-      if (typeof window !== "undefined") window.localStorage.setItem(PANEL_KEY, next ? "1" : "0");
-      return next;
-    });
-  };
-
+  // Exclusive by construction: a frame, a wait, or a refusal — never a loading
+  // sentence rendered over a page that is already saying something else, which
+  // is how 「正在启动研究运行时…」 came to sit on top of the kernel's own
+  // 「内核界面暂时不可用」 (A3).
+  if (uiOrigin) return <RuntimeUiFrame />;
+  if (loading) {
+    return <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">正在启动研究运行时…</div>;
+  }
   return (
-    <div className="flex h-full w-full">
-      <div className="relative min-w-0 flex-1">
-        {uiOrigin ? <RuntimeUiFrame /> : loading ? (
-          <div role="status" className="flex h-full items-center justify-center text-ui-sm text-muted">正在启动研究运行时…</div>
-        ) : (
-          <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui-sm text-error">
-            <p>研究会话暂时无法连接</p>
-            <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>
-          </div>
-        )}
-        {!panelOpen && (
-          <Button onClick={togglePanel} aria-label="打开运行面板" title="运行记录" variant="ghost"
-            className="absolute right-3 top-3" size="sm">
-            <PanelRight size={14} strokeWidth={1.5} />
-          </Button>
-        )}
-      </div>
-      {panelOpen && <RunSidePanel onClose={togglePanel} />}
+    <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 text-ui-sm text-error">
+      <p>研究会话暂时无法连接</p>
+      <Button variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>
     </div>
   );
 }

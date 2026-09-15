@@ -121,6 +121,11 @@ export async function apply(ctx, config) {
       evidence: [...store.evidence.entries()].map(([, value]) => value).filter((value) => value.runId === run.runId),
       gateRuns: [...store.gateRuns.entries()].map(([, value]) => value).filter((value) => value.runId === run.runId),
       subagents: [...store.subagents.values()].filter((value) => value.runId === run.runId),
+      // What the composition put in front of the model without the model
+      // having to ask for it. Provided by `evimed-guidance`; absent in a
+      // composition that does not inject anything, which the gate reads as
+      // "the model had to load it itself", exactly as before.
+      injectedSkills: /** @type {string[]} */ (ctx.get('evimedInjectedSkills') ?? []),
       qualityNotices: [...store.qualityNotices, ...(store.runQualityNotices.get(run.runId) ?? [])],
       degraded: [...store.degraded, ...(store.runDegraded.get(run.runId) ?? [])],
       now: new Date().toISOString(),

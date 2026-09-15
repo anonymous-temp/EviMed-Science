@@ -32,15 +32,17 @@ const TYPE_OPTIONS = [
 ] as const;
 const DEPTH_OPTIONS = [["skip", "仅保留指纹"], ["index_only", "只建索引"], ["structured", "结构化抽取"], ["deep", "深度分析"]] as const;
 
-export function SourcesPage() {
+/** @param embedded rendered as one view of 知识库 rather than as its own
+ *  destination, so the hub above it owns the title. */
+export function SourcesPage({ embedded = false }: { embedded?: boolean } = {}) {
   // Store fallback repairs do not reload the document. Subscribe to those
   // repairs, while the tab's current selection still owns in-flight requests.
   useProjectStore(state => state.currentId);
   const projectId = getWebProjectId();
-  return <ProjectSourcesPage key={projectId} projectId={projectId} />;
+  return <ProjectSourcesPage key={projectId} projectId={projectId} embedded={embedded} />;
 }
 
-function ProjectSourcesPage({ projectId }: { projectId: string }) {
+function ProjectSourcesPage({ projectId, embedded }: { projectId: string; embedded: boolean }) {
   const [filter, setFilter] = useState("all");
   const [sources, setSources] = useState<SourceRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,10 @@ function ProjectSourcesPage({ projectId }: { projectId: string }) {
   return (
     <main className="h-full overflow-y-auto px-5 py-6">
       <div className="mx-auto max-w-content-wide space-y-5">
-        <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="font-serif text-title text-text">资料整理台</h1><p className="mt-2 text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p></div>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          {embedded
+            ? <p className="max-w-2xl text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p>
+            : <div><h1 className="font-serif text-title text-text">资料整理</h1><p className="mt-2 text-ui text-muted">查看每份资料为什么这样分类、抽取是否完整，并随时调整分析深度。</p></div>}
           <div className="flex flex-wrap gap-2">
             <Button variant="ghost" onClick={() => setShowDuplicates((value) => !value)}><Copy size={15} />疑似重复</Button>
             <Button variant="ghost" onClick={() => setShowOpenList((value) => !value)}><Cloud size={15} />连接网盘资料</Button>

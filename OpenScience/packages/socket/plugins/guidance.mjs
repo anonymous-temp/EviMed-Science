@@ -21,6 +21,20 @@ import { GUIDANCE_SECTION_NAME, GUIDANCE_SECTION_ORDER, buildGuidanceText } from
 
 const Schema = await configSchema()
 
+/** The persona the answer line is graded against. */
+const ANSWER_PERSONA_SKILL = 'open-domain-answer'
+/** Sits just after the orchestration guidance, inside DSH's guidance band. */
+const ANSWER_PERSONA_SECTION_NAME = 'evimed:answer-persona'
+const ANSWER_PERSONA_SECTION_ORDER = GUIDANCE_SECTION_ORDER + 1
+/**
+ * A skill body far larger than this is a packaging mistake, not a persona.
+ *
+ * Counted in characters rather than bytes: this plugin's lint environment has
+ * no `Buffer`, and the number is a sanity ceiling, not an accounting of the
+ * wire. `open-domain-answer` is a few thousand characters.
+ */
+const ANSWER_PERSONA_MAX_CHARS = 32_000
+
 export const name = 'evimed-guidance'
 
 export const inject = ['systemPrompt']
@@ -34,6 +48,17 @@ export const inject = ['systemPrompt']
  */
 
 export const Config = Schema.object({
+  // Where `open-domain-answer/SKILL.md` lives in this image.
+  //
+  // Principle 7: priors live in context, not control flow. The answer line's
+  // contract requires this persona to have been loaded, and the model was left
+  // to fetch it with the `skill` tool — which it skips on a fast question. On
+  // 2026-09-15 a fourteen-second answer with clean citations was delivered
+  // 「待人工复核」 because of it, and the production ledger had already shown
+  // 11 of 17 answer-line runs doing the same. The platform is holding the text;
+  // handing it over costs one section and removes a whole class of false doubt.
+  answerPersonaDir: Schema.string().default('')
+    .description('Read-only directory holding the open-domain-answer skill package. Empty leaves the model to load it itself.'),
   // A deployment-owned read-only directory. It is not the workspace: a manifest
   // a user could upload would be a capability a user could invent.
   capabilitiesDir: Schema.string().default('')
@@ -60,6 +85,58 @@ export async function apply(ctx, config) {
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))
+
+  // Provided whether or not the persona loads, so a reader of the projection
+  // can tell "this deployment injects nothing" from "this key is missing".
+  const persona = await loadAnswerPersona(ctx, config.answerPersonaDir)
+  ctx.provide('evimedInjectedSkills', persona ? [ANSWER_PERSONA_SKILL] : [], true)
+  if (persona) {
+    ctx.effect(() => registerSection(ctx, {
+      name: ANSWER_PERSONA_SECTION_NAME,
+      order: ANSWER_PERSONA_SECTION_ORDER,
+      text: persona,
+    }))
+  }
+}
+
+/**
+ * The answer-line persona, wrapped so the model can see what it is.
+ *
+ * Returns null — not a throw and not an empty section — when the deployment
+ * did not mount it. A missing persona is the state that existed before this
+ * function, and the gate's `skillsLoaded` check still covers it: without the
+ * injection the run has to load the skill itself, exactly as it did.
+ *
+ * @param {any} ctx @param {string} directory @returns {Promise<string | null>}
+ */
+export async function loadAnswerPersona(ctx, directory) {
+  if (!directory) return null
+  let body = ''
+  try {
+    body = String(await readFileAt(ctx, directory, 'SKILL.md') ?? '')
+  } catch (error) {
+    ctx.get('evimedDiagnostics')?.degrade?.(`answer persona unreadable: ${errorMessage(error)}`)
+    return null
+  }
+  if (!body.trim()) {
+    ctx.get('evimedDiagnostics')?.degrade?.(`answer persona is empty: ${directory}/SKILL.md`)
+    return null
+  }
+  if (body.length > ANSWER_PERSONA_MAX_CHARS) {
+    ctx.get('evimedDiagnostics')?.degrade?.(
+      `answer persona too large to inject (${body.length} characters); the model must load it itself`,
+    )
+    return null
+  }
+  return [
+    `<evimed-skill name="${ANSWER_PERSONA_SKILL}">`,
+    '',
+    '开放域问答的人设与规范正文如下，已由平台直接注入，无需再用 skill 工具加载。',
+    '',
+    body.trim(),
+    '',
+    '</evimed-skill>',
+  ].join('\n')
 }
 
 /**

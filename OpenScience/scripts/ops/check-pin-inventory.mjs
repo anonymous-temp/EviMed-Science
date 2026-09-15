@@ -111,6 +111,11 @@ export const RULES = [
   { kind: "history", where: /^STATUS$/, why: "an execution log entry" },
   { kind: "history", where: /PROGRESS\.md$/, why: "a milestone entry, dated when it happened" },
   { kind: "history", where: /^docs\/superpowers\//, why: "a dated design or decision record" },
+  // A dated audit of a running deployment: it names the release it walked.
+  // Moving it forward would claim the walk saw a kernel it never opened —
+  // the same failure the provenance rules above exist to prevent, in prose.
+  { kind: "history", where: /^docs\/ui-ux-audit\//, why: "a dated walk of a specific release" },
+  { kind: "history", where: /^OpenScience\/docs\/RELEASE_REVIEW_ISSUES_/, why: "a dated review of a specific release" },
   { kind: "history", where: /^(AGENTS|CLAUDE)\.md$/, why: "orientation prose; moves with a documentation pass, not with the pin" },
   { kind: "history", where: /^OpenScience\/AGENTS\.md$/, why: "orientation prose; moves with a documentation pass, not with the pin" },
 
@@ -147,7 +152,13 @@ export async function findOccurrences(version) {
       // moment it was committed, which is the moment the classification stops
       // being cheap. Ignored files stay out: `--untracked` alone still honours
       // the exclude rules, so `node_modules` and build output are not swept.
-      ({ stdout } = await run("git", ["grep", "-nI", "--untracked", "--fixed-strings", pattern], { cwd: workspaceRoot, maxBuffer: 32 * 1024 * 1024 }));
+      // `core.quotePath=false`, because git renders a non-ASCII filename as a
+      // C-quoted string with octal escapes by default — and this repository has
+      // Chinese filenames under `docs/`. A quoted path matches no `where` rule,
+      // so an occurrence in a file this list has a rule for read as
+      // unclassified and failed the guard for a reason that was about the
+      // filename's alphabet.
+      ({ stdout } = await run("git", ["-c", "core.quotePath=false", "grep", "-nI", "--untracked", "--fixed-strings", pattern], { cwd: workspaceRoot, maxBuffer: 32 * 1024 * 1024 }));
     } catch (error) {
       // git grep exits 1 for "no matches", which is an answer. Anything else
       // is a failure and must not be read as an empty tree.

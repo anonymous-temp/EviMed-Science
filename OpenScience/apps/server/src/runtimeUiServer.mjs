@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { SEAMS } from "@evimed/harness-port";
 
-import { isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
+import { errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, runtimeUiMethodFromPath } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { HttpError, readBody } from "./security.mjs";
@@ -63,18 +63,64 @@ function isBoundWorkspaceRegistration(body, cwd) {
     && typeof cwd === "string" && cwd.startsWith("/") && body.payload.args.request.path === cwd;
 }
 
+/** @param {unknown} value @returns {string} HTML-safe text */
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] ?? char
+  ));
+}
+
+/**
+ * What a reader should be told a raw code means.
+ *
+ * The page used to print the code itself as its whole explanation, so the
+ * first thing a researcher saw when the deployment was at its runtime ceiling
+ * was the words `runtime_limit_exceeded` (2026-09-15 walk, A4/D5). Every code
+ * the control plane raises already has a Simplified Chinese sentence in
+ * `@evimed/domain`; this routes through it, and adds the one sentence the
+ * table cannot carry because it is about this surface rather than the code:
+ * a session that cannot start because another is running is waited out or
+ * freed, not retried.
+ *
+ * @param {string} code
+ */
+function noticeDetail(code) {
+  if (code === "runtime_limit_exceeded") {
+    return "当前正在运行的研究会话已达本部署上限，这次没有为你新开一个。"
+      + "等已在运行的会话结束，或先去「运行记录」停掉一个，再重新打开。";
+  }
+  return errorCodeMessage(code);
+}
+
 /**
  * A page, not JSON, because everything served here is loaded by a browser as a
  * frame or a navigation: JSON would render as text the person cannot act on.
  *
  * @param {any} res @param {number} status @param {string} title @param {string} detail
+ * @param {{ code?: string, shellOrigin?: string }} [context] What to tell the
+ *   embedding shell. Without it the shell learns nothing until its own 30 s
+ *   deadline fires and blames a slow cold start for a refusal the server
+ *   already named — which is exactly what the walk recorded (A8).
  */
-function sendNotice(res, status, title, detail) {
-  const body = `<!doctype html><meta charset="utf-8"><title>${title}</title>`
+function sendNotice(res, status, title, detail, context = {}) {
+  const { code, shellOrigin } = context;
+  // The bridge is not loaded on this page: it ships with the kernel's own
+  // application, and this page is served instead of it. So the notice posts
+  // for itself, with no frame claims and no sequence — the shell accepts it on
+  // origin and source alone, and it selects a message rather than granting
+  // anything.
+  const announce = shellOrigin
+    ? `<script>try{parent.postMessage({type:"evimed.runtime-ui.notice",version:1,`
+      + `code:${JSON.stringify(String(code ?? ""))},title:${JSON.stringify(title)},`
+      + `detail:${JSON.stringify(detail)}},${JSON.stringify(shellOrigin)})}catch(e){}</script>`
+    : "";
+  const body = `<!doctype html><meta charset="utf-8"><title>${escapeHtml(title)}</title>`
     + `<body style="font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;`
     + `display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#3f3a36">`
-    + `<div style="text-align:center"><p style="font-weight:600;margin:0 0 8px">${title}</p>`
-    + `<p style="margin:0;color:#8a8178;font-size:14px">${detail}</p></div></body>`;
+    + `<div style="text-align:center;max-width:36rem;padding:0 1.5rem">`
+    + `<p style="font-weight:600;margin:0 0 8px">${escapeHtml(title)}</p>`
+    + `<p style="margin:0;color:#8a8178;font-size:14px;line-height:1.6">${escapeHtml(detail)}</p></div>`
+    + `</body>${announce}`;
   res.writeHead(status, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": String(Buffer.byteLength(body)),
@@ -150,6 +196,22 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
     if (transport.destroyed || transport.writableFinished) remove();
   }
   /**
+   * Where a notice page may announce itself, or "" when this deployment has no
+   * valid pair of origins.
+   *
+   * `runtimeUiOrigins` THROWS on an unconfigured or malformed pair — it is the
+   * validator, not a getter — so reading it eagerly here threw during server
+   * construction for every deployment that does not serve this surface, and
+   * `createWebApiApp` never finished listening. Caught rather than hoisted out
+   * of the constructor because a notice page that cannot name its parent is
+   * still a notice page: it renders, it just does not post.
+   */
+  const noticeShellOrigin = () => {
+    try { return runtimeUiOrigins(config).shellOrigin; } catch { return ""; }
+  };
+  const shellOrigin = noticeShellOrigin();
+
+  /**
    * @param {any} req @param {any} res
    * @returns {Promise<Record<string, any>>} the project this request addresses
    */
@@ -163,14 +225,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
 
   async function handle(req, res) {
     if (!config.runtimeUiProxyEnabled) {
-      sendNotice(res, 404, "未启用", "此部署没有开启内核界面。");
+      sendNotice(res, 404, "未启用", "此部署没有开启内核界面。", { code: "runtime_ui_not_enabled", shellOrigin });
       return;
     }
     // An unauthenticated frame must not be handed a session: the cookie it
     // would receive is this deployment's, and minting one here would make a
     // frame a way in. It is told to log in, in the surface it is displayed in.
     if (!runtimeUiCookie(req, config.sessionCookieName)) {
-      sendNotice(res, 401, "请先登录", "请在 EviMed 中登录后重新打开。");
+      sendNotice(res, 401, "请先登录", "请在 EviMed 中登录后重新打开。", { code: "unauthorized", shellOrigin });
       return;
     }
 
@@ -274,14 +336,14 @@ export function createRuntimeUiServer({ config, store, runtimeManager, usageLedg
       const status = error instanceof HttpError ? error.status : 502;
       const code = error?.code ?? "runtime_ui_failed";
       if (code === "runtime_reserved_for_autopilot") {
-        sendNotice(res, status, "后台任务正在进行", "当前项目正在整理资料或执行科研任务，请稍后重试。任务完成后可打开历史记录。");
+        sendNotice(res, status, "后台任务正在进行", "当前项目正在整理资料或执行科研任务，请稍后重试。任务完成后可打开历史记录。", { code, shellOrigin });
         return;
       }
       if (code === "agent_background_only") {
-        sendNotice(res, status, "此任务由资料页管理", "请在资料页调整或重试该来源；已有结果仍可查看。");
+        sendNotice(res, status, "此任务由资料页管理", "请在资料页调整或重试该来源；已有结果仍可查看。", { code, shellOrigin });
         return;
       }
-      sendNotice(res, status, "内核界面暂时不可用", String(code));
+      sendNotice(res, status, "研究会话暂时打不开", noticeDetail(String(code)), { code: String(code), shellOrigin });
     });
   });
 

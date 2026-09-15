@@ -165,6 +165,32 @@ export function apply(ctx, _config, target = globalThis) {
     requests.set(data.requestId, request);
     schedule({ requestId: data.requestId, intent, request, seq: data.seq });
   }
+  /**
+   * What the hosted shell's own navigation is called, from inside the frame.
+   *
+   * A closed vocabulary, not a path: the frame is third-party-composed code on
+   * its own origin, and a destination it could spell freely would be a
+   * redirect it could choose. The shell maps each name to a route and ignores
+   * anything else.
+   */
+  const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account'];
+
+  /**
+   * The channel the EviMed sidebar rail navigates through.
+   *
+   * Placed on the global rather than posted directly by the shell plugin
+   * because this bridge owns the sequence counter: the shell validates a
+   * strictly increasing `seq` per frame, and a second sender with its own
+   * counter would have every one of its messages dropped as a replay.
+   */
+  target.__EVIMED_SHELL__ = {
+    /** @param {string} destination one of `SHELL_DESTINATIONS` */
+    navigate(destination) {
+      if (typeof destination !== 'string' || !SHELL_DESTINATIONS.includes(destination)) return;
+      post('shell-navigate', { destination });
+    },
+  };
+
   target.addEventListener('message', message);
   const unsubscribe = ctx.sessions.list.subscribe(sessionChanged);
   const unsubscribeGeneration = ctx.connection.generation.subscribe(() => {
@@ -177,6 +203,7 @@ export function apply(ctx, _config, target = globalThis) {
     disposed = true; ready = false;
     target.removeEventListener('message', message); unsubscribe(); unsubscribeGeneration();
     pendingNavigation = undefined;
+    if (target.__EVIMED_SHELL__) delete target.__EVIMED_SHELL__;
     requests.clear(); target.__DSH_TRANSPORT__?.dispose?.();
   }, 'evimed.runtime-ui.bridge');
 }

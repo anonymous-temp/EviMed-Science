@@ -84,7 +84,7 @@ describe("WebReadinessCard", () => {
     expect(screen.getByText("50 MiB 文件 · 1 GiB 项目 · 2 任务 · 64 代理 · 30s 配额检查")).toBeInTheDocument();
     expect(screen.getByText("local · 保留 30 天 · 已加密 · 恢复演练")).toBeInTheDocument();
     expect(screen.getByText("kernel · docker · bridge · explicitly_allowed · acknowledged")).toBeInTheDocument();
-    expect(screen.getByText("SaaS Profile")).toBeInTheDocument();
+    expect(screen.getByText("SaaS 配置档")).toBeInTheDocument();
     expect(screen.getByText("individual-saas · individual-account · SaaS 技术边界通过")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchWebReadiness).toHaveBeenCalledTimes(1));
   });

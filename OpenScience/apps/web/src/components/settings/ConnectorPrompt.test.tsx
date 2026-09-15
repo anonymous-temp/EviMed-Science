@@ -9,7 +9,7 @@ vi.mock("@/lib/apiClient", () => ({ fetchWebConnectors: mocks.fetchWebConnectors
 
 function Location() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname + location.hash}</div>;
+  return <div data-testid="location">{location.pathname + location.search}</div>;
 }
 
 const renderPrompt = () =>
@@ -36,11 +36,11 @@ describe("ConnectorPrompt", () => {
     expect(screen.getByText(/1 个数据源本部署没有配置凭据/)).toHaveTextContent("OpenGWAS");
     expect(screen.queryByText(/UMLS/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "去配置" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/account#connectors");
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/account?tab=connectors");
     expect(screen.queryByRole("region", { name: "数据源凭据提示" })).not.toBeInTheDocument();
   });
 
-  it("stays silent when every source is served, when the store is absent, and for a week after 稍后再说", async () => {
+  it("stays silent when every source is served, when the store is absent, and after 稍后再说", async () => {
     mocks.fetchWebConnectors.mockResolvedValue([served]);
     const { unmount } = renderPrompt();
     await waitFor(() => expect(mocks.fetchWebConnectors).toHaveBeenCalled());
@@ -59,7 +59,7 @@ describe("ConnectorPrompt", () => {
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
     expect(Number(localStorage.getItem(CONNECTOR_PROMPT_SNOOZE_KEY))).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
     shown.unmount();
-    // Snoozed: not even asked.
+    // Dismissed: not even asked.
     renderPrompt();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mocks.fetchWebConnectors).toHaveBeenCalledTimes(3);

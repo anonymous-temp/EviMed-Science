@@ -30,7 +30,7 @@ describe("CommandPalette", () => {
     expect(input).toBeInTheDocument();
 
     await user.type(input, "记忆");
-    expect(screen.getByText("科研记忆")).toBeInTheDocument();
+    expect(screen.getByText("记忆")).toBeInTheDocument();
     expect(screen.queryByText("知识库")).not.toBeInTheDocument();
   });
 
@@ -48,9 +48,12 @@ describe("CommandPalette", () => {
       "新任务",
       "运行记录",
       "知识库",
-      "科研笔记本",
-      "科研记忆",
-      "能力模板",
+      "计算笔记本",
+      "记忆",
+      "方法胶囊",
+      "主动科研",
+      "科研能力",
+      "收件箱",
       "账户与额度",
       "打开设置",
       "切换主题",

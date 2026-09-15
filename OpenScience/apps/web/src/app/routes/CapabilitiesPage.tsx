@@ -100,25 +100,35 @@ export function CapabilitiesPage() {
       <div className="mx-auto max-w-5xl px-8 py-9">
         <div className="flex flex-col gap-6 border-b border-border pb-7 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-accent">
+            {/* `uppercase` on a line that is already Chinese did nothing to
+              * the Chinese and shouted the one English word in it. */}
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium tracking-[0.16em] text-accent">
               <Bot size={14} /> EviMed 能力目录
             </div>
-            <h1 className="font-serif text-2xl font-semibold tracking-tight text-text">能力模板</h1>
+            {/* 「能力模板」 read as document templates. These are the fifteen
+              * specialist research capabilities — drug safety, meta-analysis,
+              * Mendelian randomization, peer review — and a researcher who was
+              * told the platform ships research plugins did not find them under
+              * a word that means stationery (2026-09-15 walk, C2). §9.8 renamed
+              * them from "agents" because a pick became a suggestion rather
+              * than a binding; that is still true, and the sentence below says
+              * it, which is where it belongs. */}
+            <h1 className="font-serif text-2xl font-semibold tracking-tight text-text">科研能力</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
-              选一个模板，它会把题面填进对话框并点名该能力；你可以随意修改，也可以在同一次对话里接着要别的产出。
-              模板是建议，不是绑定。
+              选一项能力，它会把题面填进对话框并点名该能力；你可以随意修改，也可以在同一次对话里接着要别的产出。
+              这是建议，不是绑定。
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
             <label className="relative min-w-64 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
-              <span className="sr-only">搜索能力模板</span>
+              <span className="sr-only">搜索科研能力</span>
               <input
                 type="search"
-                aria-label="搜索能力模板"
+                aria-label="搜索科研能力"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索能力模板"
+                placeholder="搜索科研能力"
                 className="h-9 w-full rounded-input border border-border bg-surface pl-9 pr-3 text-sm text-text outline-none placeholder:text-muted focus:border-accent"
               />
             </label>
@@ -151,12 +161,12 @@ export function CapabilitiesPage() {
           {!loading && !error && !hasWebApi && (
             <EmptyState
               icon={ServerCrash}
-              title="能力模板仅在 EviMed 在线工作空间中可用"
+              title="科研能力仅在 EviMed 在线工作空间中可用"
               description="请在 EviMed 在线工作空间中使用此功能。"
             />
           )}
           {!loading && !error && hasWebApi && visible.length === 0 && (
-            <EmptyState icon={Search} title="没有符合条件的能力模板" />
+            <EmptyState icon={Search} title="没有符合条件的科研能力" />
           )}
           {!loading && !error && visible.map((agent) => (
             <AgentRow key={agent.id} agent={agent} onOpen={() => open(agent)} />

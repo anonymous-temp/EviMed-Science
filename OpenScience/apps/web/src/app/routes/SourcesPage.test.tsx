@@ -59,7 +59,7 @@ describe("SourcesPage", () => {
 
   it("shows status, coverage, value reasons and derived outputs", async () => {
     render(<SourcesPage />);
-    expect(await screen.findByRole("heading", { name: "资料整理台" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "资料整理" })).toBeInTheDocument();
     expect(await screen.findByText("研究方案.docx")).toBeInTheDocument();
     expect(screen.getByText("解析处理成功 90% · 处理台账 100% · 失败单元 2/20")).toBeInTheDocument();
     expect(screen.getByText("理解遗漏尚未审计")).toBeInTheDocument();

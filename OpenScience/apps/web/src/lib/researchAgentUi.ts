@@ -121,6 +121,26 @@ export function researchAgentUi(agent: WebResearchAgent): WebResearchAgent & { c
   return translation ? { ...agent, ...translation } : { ...agent, code: agent.title.slice(0, 2).toUpperCase() };
 }
 
+/**
+ * The product name of a capability, from its id alone.
+ *
+ * The catalog is fetched, and the run ledger is not: a run row names the
+ * capability that produced it and has no title to show for it, which is why
+ * the ledger, the sidebar and the run panel each displayed
+ * `clinical-evidence-synthesis` — and `CLINICAL-EVIDENCE-SYNTHESIS` upper-cased
+ * beside it — where a reader expected 「临床证据综合」 (2026-09-15 walk, D1/D2).
+ * These translations are already in this file and are keyed by exactly that id,
+ * so the name is available without a fetch.
+ *
+ * Returns null for an id this build has no name for, so the caller decides
+ * whether an untranslated id is better shown raw or hidden — an id silently
+ * rendered as a title is the failure being fixed here.
+ */
+export function capabilityTitle(id: string | null | undefined): string | null {
+  const key = String(id ?? "").trim();
+  return key && translations[key] ? translations[key].title : null;
+}
+
 export function researchInputLabel(value: string): string {
   const labels: Record<string, string> = {
     drug: "药品",

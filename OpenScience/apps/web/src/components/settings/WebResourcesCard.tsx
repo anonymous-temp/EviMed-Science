@@ -76,7 +76,7 @@ export function WebResourcesCard() {
     <section className="mt-5 rounded-card border border-border bg-surface shadow-card">
       <header className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="font-serif text-body text-text">托管资源</h2>
+          <h2 className="font-serif text-body text-text">运行资源</h2>
           <p className="mt-0.5 text-xs text-muted">
             {metrics ? `${metrics.project.name} · ${formatTime(metrics.createdAt)}` : "当前项目与服务端进程"}
           </p>

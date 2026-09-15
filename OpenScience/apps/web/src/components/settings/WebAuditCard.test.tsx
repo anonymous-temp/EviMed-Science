@@ -47,7 +47,7 @@ describe("WebAuditCard", () => {
 
     render(<WebAuditCard />);
 
-    expect(await screen.findByText("托管审计")).toBeInTheDocument();
+    expect(await screen.findByText("操作审计")).toBeInTheDocument();
     expect(screen.getByText("file.upload")).toBeInTheDocument();
     expect(screen.getByText("inputs/data.csv")).toBeInTheDocument();
     expect(screen.getByText("2 KB")).toBeInTheDocument();
