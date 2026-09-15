@@ -69,6 +69,16 @@ export async function apply(ctx, config) {
      * isolated agent store; no process-global custom service is published. */
     /** @type {Map<string, string>} */
     sessionRuns: new Map(),
+    /**
+     * Skill bodies this composition put into the session's own context rather
+     * than leaving the model to fetch them with the `skill` tool.
+     *
+     * A property of the runtime, not of a run — the composition either injects
+     * the persona or it does not — so it is one set, merged into every
+     * projection the way `qualityNotices` is.
+     * @type {Set<string>}
+     */
+    injectedSkills: new Set(),
     /** @param {string} sessionId @returns {string} */
     runIdForSession(sessionId) { return this.sessionRuns.get(sessionId) ?? '' },
   }
@@ -98,6 +108,21 @@ export async function apply(ctx, config) {
     notice(line) {
       store.qualityNotices.add(line)
     },
+    /**
+     * Record that a skill body was handed to the model directly.
+     *
+     * Reached by `evimed-guidance`, which runs inside the agent preset's own
+     * realm: a preset row may not publish a process-global service (the kernel
+     * refuses to mount the preset if it tries), but it may CALL one the host
+     * composition provides — which is the direction this fact travels anyway.
+     * The control plane's completion gate reads the result out of the run-state
+     * projection and counts an injected skill as a loaded one.
+     * @param {string} skillName
+     */
+    injectedSkill(skillName) {
+      const skill = String(skillName ?? '').trim()
+      if (skill) store.injectedSkills.add(skill)
+    },
     /** @param {string} runId */
     forRun(runId) { return runId ? scopedDiagnostics(runId) : this },
     /** @param {string} sessionId */
@@ -122,10 +147,11 @@ export async function apply(ctx, config) {
       gateRuns: [...store.gateRuns.entries()].map(([, value]) => value).filter((value) => value.runId === run.runId),
       subagents: [...store.subagents.values()].filter((value) => value.runId === run.runId),
       // What the composition put in front of the model without the model
-      // having to ask for it. Provided by `evimed-guidance`; absent in a
-      // composition that does not inject anything, which the gate reads as
-      // "the model had to load it itself", exactly as before.
-      injectedSkills: /** @type {string[]} */ (ctx.get('evimedInjectedSkills') ?? []),
+      // having to ask for it. Recorded by `evimed-guidance` through the
+      // diagnostics service; empty in a composition that injects nothing,
+      // which the gate reads as "the model had to load it itself", exactly as
+      // it did before this existed.
+      injectedSkills: [...store.injectedSkills],
       qualityNotices: [...store.qualityNotices, ...(store.runQualityNotices.get(run.runId) ?? [])],
       degraded: [...store.degraded, ...(store.runDegraded.get(run.runId) ?? [])],
       now: new Date().toISOString(),

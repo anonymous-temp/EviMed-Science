@@ -1,0 +1,111 @@
+# A dependency-preserving delta of the runtime image.
+#
+# WHY THIS EXISTS. The full runtime build installs Debian packages, R,
+# Chromium, uv, Node and the pinned DSH CLI before it ever reaches our own
+# code; on the production host those steps are the build. A change that
+# touches only `packages/socket`, `packages/harness-port` and
+# `packages/domain` — no new dependency, no changed lockfile — does not need
+# any of them rebuilt, and `docs/WEB_DEPLOYMENT.md` admits exactly that case
+# as "a dependency-preserving delta". This replays the tail of `Dockerfile`
+# from the socket bundle onward, on top of a base image that is itself a
+# verified release.
+#
+# WHAT MAKES IT SAFE, and the reason each line is here rather than a `COPY`
+# over the old one:
+#
+#   - Every directory it replaces was sealed `a-w` by the full build. Root
+#     ignores the mode, so a plain COPY would half-overwrite a read-only tree
+#     and leave whichever files the new bundle no longer has. Each is removed
+#     first, so what ships is the new tree and nothing of the old one.
+#   - The socket is in FOUR places in a built image: `/opt/evimed/socket`,
+#     the preset inside it, the copy of that preset under the kernel's own
+#     preset root, and the profile seed's installed copy — which is the only
+#     one a running container ever imports. A delta that refreshed three of
+#     them would boot the old plugins and look like the build had not taken.
+#   - The seed carries a digest seal the boot-time migration checks, so it is
+#     re-sealed after being written to, not before.
+#   - `build-smoke.sh` BOOTS the relocated seed and imports a plugin. It is
+#     the acceptance for this file: three of the four checks in the full build
+#     passed once on an image whose bundle could not be imported at all.
+#
+# NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
+# pin move, or anything under `runtime/` other than the skill trees this
+# copies. Those change what the base installed, and the base is what this
+# trusts. Build the full `Dockerfile` for them.
+ARG RUNTIME_BASE_IMAGE
+FROM ${RUNTIME_BASE_IMAGE}
+
+ARG DSH_PRESET_ROOT=/opt/evimed/dsh/presets
+ARG DSH_HOME_SEED=/opt/evimed/dsh-home-seed
+ARG SOCKET_VERSION=0.1.0
+
+USER root
+
+# The sealed trees this delta rewrites, removed rather than written over.
+RUN set -eux; \
+  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
+
+COPY packages/socket /opt/evimed/socket
+COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
+COPY capability-skills /opt/evimed/capability-skills
+COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
+COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+
+RUN set -eux; \
+  node /opt/evimed/socket/scripts/build-client.mjs; \
+  test -s /opt/evimed/socket/dist/client.js
+
+# The preset's system-trusted skill roots, and the copy of the preset under the
+# kernel's own root. Both are rebuilt from the skill trees the base already has.
+RUN set -eux; \
+  install -d -m 0755 /opt/evimed/socket/presets/evimed-universal/skills; \
+  cp -a /opt/evimed/skills/core /opt/evimed/socket/presets/evimed-universal/skills/core; \
+  cp -a /opt/evimed/skills/evimed /opt/evimed/socket/presets/evimed-universal/skills/evimed; \
+  cp -a /usr/local/share/evimed/skills/curated-scientific /opt/evimed/socket/presets/evimed-universal/skills/curated-scientific; \
+  cp -a /usr/local/share/evimed/skills/office /opt/evimed/socket/presets/evimed-universal/skills/office; \
+  cp -a /opt/evimed/skills/community /opt/evimed/socket/presets/evimed-universal/skills/community; \
+  chmod -R a-w /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
+
+RUN set -eux; \
+  rm -rf "${DSH_PRESET_ROOT}/evimed-universal"; \
+  mkdir -p "${DSH_PRESET_ROOT}"; \
+  cp -a /opt/evimed/socket/presets/evimed-universal "${DSH_PRESET_ROOT}/evimed-universal"; \
+  chmod -R a-w "${DSH_PRESET_ROOT}/evimed-universal"; \
+  grep -q "^name: evimed-universal$" "${DSH_PRESET_ROOT}/evimed-universal/preset.yml"; \
+  test -f "${DSH_PRESET_ROOT}/evimed-universal/agent.cordis.yml"
+
+# The copy a running container actually imports.
+#
+# pnpm installed it from `file:/opt/evimed/socket` as a plain directory under
+# `.pnpm/`, so refreshing it is a directory replacement and not an install —
+# which is what keeps this delta offline. The path is found rather than
+# spelled: it encodes the relative source path pnpm saw, and that is the
+# base's business, not this file's.
+RUN set -eux; \
+  chmod -R u+w "${DSH_HOME_SEED}"; \
+  installed="$(dirname "$(readlink -f "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@evimed/dsh-socket/package.json")")"; \
+  case "${installed}" in "${DSH_HOME_SEED}"/*) ;; *) echo "refusing to write outside the seed: ${installed}" >&2; exit 1;; esac; \
+  rm -rf "${installed}"; \
+  mkdir -p "${installed}"; \
+  cp -a /opt/evimed/socket/. "${installed}/"; \
+  test -s "${installed}/dist/client.js"; \
+  DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json; \
+  test -s /opt/evimed/dump-config.baseline.json; \
+  diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
+  node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
+  chmod -R a-w "${DSH_HOME_SEED}"
+
+COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
+COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
+RUN set -eux; \
+  chmod 0755 /usr/local/bin/evimed-build-smoke; \
+  SOCKET_VERSION="${SOCKET_VERSION}" /usr/local/bin/evimed-build-smoke
+
+ARG RELEASE_ID=untracked
+ARG SOURCE_REVISION=unknown
+ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
+LABEL org.opencontainers.image.version="${RELEASE_ID}"
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
+LABEL org.opencontainers.image.created="${BUILD_CREATED}"
+
+WORKDIR /workspace

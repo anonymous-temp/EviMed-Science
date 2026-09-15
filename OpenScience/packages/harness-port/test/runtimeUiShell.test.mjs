@@ -34,7 +34,12 @@ function fixture({ framed = true, withReact = true, localeApi = true, capabiliti
       if (result && typeof result.next === 'function') for (const _ of result) { /* drain the registration set */ }
       return () => {};
     },
-    register: (/** @type {{name: string, priority?: number}} */ spec, /** @type {any} */ component) => {
+    register: (/** @type {{name: string, priority?: number, id?: string, key?: string}} */ spec, /** @type {any} */ component) => {
+      // The kernel's rule for a list slot, learned from its own refusal:
+      // `list slot "conversation.input.dock" requires options.id`. `key` is
+      // what the right sidebar's tab slot takes; passing it here registered
+      // nothing and the dock silently did not appear.
+      if (spec.name === 'conversation.input.dock' && !spec.id) throw new Error(`list slot "${spec.name}" requires options.id`);
       // The kernel's rule: a single slot renders its lowest priority and
       // refuses a second registration at an occupied one. The kernel's own
       // picker holds `conversation.hero.workspace` at 0.
@@ -76,87 +81,60 @@ test('the left column, the three brand slots and the hero workspace picker are o
   // `sidebar` is the whole left column, and occupying it replaces the column
   // rather than adding to it (the layout package's own contract says so). The
   // rail is what takes its place: one control, and the mark at the foot.
-  const rail = f.occupants.sidebar({ collapsed: true });
-  assert.equal(rail.type, 'div');
-  const button = rail.children.find((/** @type {any} */ child) => child?.type === 'button');
-  assert.equal(button.props['aria-label'], '新任务');
-  let navigated = null;
-  f.target.__EVIMED_SHELL__ = { navigate: (/** @type {string} */ destination) => { navigated = destination; } };
-  button.props.onClick();
-  assert.equal(navigated, 'new-task');
-  // Without the bridge there is no channel, and a click must still not throw:
-  // the conversation is what this frame is for.
-  delete f.target.__EVIMED_SHELL__;
-  assert.doesNotThrow(() => button.props.onClick());
+  // `sidebar` is the whole left column, and occupying it replaces the column
+  // rather than adding to it (the layout package's own contract says so). The
+  // occupant renders nothing; the stylesheet below removes the column's width,
+  // which occupying the slot does not.
+  assert.equal(f.occupants.sidebar({ collapsed: false }), null);
+  const sheet = f.styles.map((/** @type {any} */ node) => node.textContent).join('\n');
+  // Hiding the column is not enough on its own: removing it from the grid's
+  // flow shifts the conversation into the sidebar's 280 px track, so the two
+  // remaining columns are pinned to the tracks they belong in.
+  for (const rule of ['[class$="_sidebarCol"]{display:none', '[class$="_centerCol"]{grid-column:1 / 3', '[class$="_rightbarCol"]{grid-column:3']) {
+    assert.ok(sheet.includes(rule), `missing layout rule: ${rule}`);
+  }
 });
 
-// The frame opens the column at its 280 px default and the rail is 56 px of
-// content, so it closes itself — once. `SIDEBAR_COLLAPSED` is the floor: the
-// column cannot be removed, only narrowed.
-// `conversation.hero.agentPreset` is the kernel's "agent-preset control staged
-// for a New Session". The hosted composition has one preset and refuses the
-// panel that would change it, so the seat was a dead control on the first
-// screen anyone sees; the capabilities the platform actually has belong there.
-test('the hero offers the capability cards the control plane handed the frame', () => {
+// Not the blank-session hero: its seat is `conversation.hero.agentPreset`,
+// declared by `ui-agent-preset`, which this deployment disables — a disabled
+// row declares no slot, so occupying it registered nothing and rendered
+// nothing, silently. Measured on the deployed build before this moved.
+test('the composer dock offers the capability cards the control plane handed the frame', () => {
   const capabilities = [
     { id: 'meta-analysis', title: '自动化 Meta 分析', category: '证据综合', brief: '请以「自动化 Meta 分析」能力完成以下任务：\n\n…' },
     { id: 'broken', title: '', category: '', brief: '' },
   ];
   const f = fixture({ capabilities });
   apply(f.ctx, {}, f.target, f.require);
-  const hero = f.occupants['conversation.hero.agentPreset'];
-  assert.ok(hero, 'the hero seat is occupied when there are cards to show');
+  const dock = f.occupants['conversation.input.dock'];
+  assert.ok(dock, 'the dock is occupied when there are cards to show');
+  assert.equal(f.occupants['conversation.hero.agentPreset'], undefined);
+
   // The fixture's `createElement` keeps children as its rest arguments, so a
   // mapped list arrives as one nested array.
-  const cards = hero({}).children[1].children.flat();
-  // A malformed entry costs that entry, never the hero.
+  const cards = dock({}).children[1].children.flat();
+  // A malformed entry costs that entry, never the dock.
   assert.equal(cards.length, 1, 'the entry with no title or brief is dropped');
   assert.match(JSON.stringify(cards), /自动化 Meta 分析/);
 
-  // The click leaves through the shell with the brief: the hero is
-  // root-scoped, so there is no session yet and no composer to write into.
+  // The click leaves through the shell carrying the brief. Writing the draft
+  // here would not work from the hero, where there is no session yet.
   /** @type {any[]} */ const sent = [];
   f.target.__EVIMED_SHELL__ = { navigate: (/** @type {any} */ ...args) => sent.push(args) };
   cards[0].props.onClick();
   assert.deepEqual(sent, [['new-task', capabilities[0].brief]]);
+
+  // Without the bridge there is no channel, and a click must still not throw:
+  // the conversation is what this frame is for.
+  delete f.target.__EVIMED_SHELL__;
+  assert.doesNotThrow(() => cards[0].props.onClick());
 });
 
-test('a deployment that sent no cards leaves the hero seat alone', () => {
+test('a deployment that sent no cards leaves the dock alone', () => {
   const f = fixture();
   apply(f.ctx, {}, f.target, f.require);
-  assert.equal(f.occupants['conversation.hero.agentPreset'], undefined);
-  assert.ok(!f.injected.includes('conversation.hero.agentPreset'));
-});
-
-test('the rail closes the kernel column once and never fights a reopen', () => {
-  /** @type {number} */ let toggles = 0;
-  /** @type {(() => void)[]} */ const deferred = [];
-  const f = fixture();
-  f.ctx.layout = { toggleSidebar: () => { toggles++; } };
-  f.target.setTimeout = (/** @type {() => void} */ fn) => { deferred.push(fn); return 0; };
-  apply(f.ctx, {}, f.target, f.require);
-
-  f.occupants.sidebar({ collapsed: false });
-  f.occupants.sidebar({ collapsed: false });
-  assert.equal(deferred.length, 1, 'one collapse request, however many renders');
-  for (const fn of deferred) fn();
-  assert.equal(toggles, 1);
-
-  // Reopened by the researcher: rendered expanded again, and left alone.
-  f.occupants.sidebar({ collapsed: false });
-  assert.equal(deferred.length, 1);
-});
-
-test('a layout service without the toggle costs the geometry, not the rail', () => {
-  const f = fixture();
-  /** @type {(() => void)[]} */ const deferred = [];
-  f.target.setTimeout = (/** @type {() => void} */ fn) => { deferred.push(fn); return 0; };
-  apply(f.ctx, {}, f.target, f.require);
-  assert.doesNotThrow(() => f.occupants.sidebar({ collapsed: false }));
-  assert.doesNotThrow(() => { for (const fn of deferred) fn(); });
-  // Every occupant sits below the kernel's default priority: single slots
-  // render the lowest, and a collision at 0 fails the whole loader entry.
-  for (const [name, priority] of Object.entries(f.priorities)) assert.ok(priority < 0, `${name} registered at ${priority}`);
+  assert.equal(f.occupants['conversation.input.dock'], undefined);
+  assert.ok(!f.injected.includes('conversation.input.dock'));
 });
 
 test('a slot the kernel refuses costs that slot, never the bridge sharing the bundle', () => {
