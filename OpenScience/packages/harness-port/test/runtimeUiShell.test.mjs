@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apply, inject, EVIMED_DICTIONARIES, EVIMED_LOCALE } from '../src/runtimeUiShell.mjs';
 
-function fixture({ framed = true, withReact = true, localeApi = true } = {}) {
+function fixture({ framed = true, withReact = true, localeApi = true, capabilities = [] } = {}) {
   /** @type {Record<string, any>} */ const occupants = {};
   /** @type {Record<string, number>} */ const priorities = {};
   /** @type {any[]} */ const injected = [];
@@ -18,7 +18,7 @@ function fixture({ framed = true, withReact = true, localeApi = true } = {}) {
   /** @type {any[]} */ const styles = [];
   const head = { appendChild: (/** @type {any} */ node) => styles.push(node) };
   const target = {
-    __EVIMED_FRAME__: framed ? { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', cwd: '/workspace' } : undefined,
+    __EVIMED_FRAME__: framed ? { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', cwd: '/workspace', capabilities } : undefined,
     parent: {},
     document: { head, createElement: () => {
       /** @type {{attributes: Record<string, string>, textContent: string, setAttribute: (k: string, v: string) => void, remove: () => void}} */
@@ -93,6 +93,41 @@ test('the left column, the three brand slots and the hero workspace picker are o
 // The frame opens the column at its 280 px default and the rail is 56 px of
 // content, so it closes itself — once. `SIDEBAR_COLLAPSED` is the floor: the
 // column cannot be removed, only narrowed.
+// `conversation.hero.agentPreset` is the kernel's "agent-preset control staged
+// for a New Session". The hosted composition has one preset and refuses the
+// panel that would change it, so the seat was a dead control on the first
+// screen anyone sees; the capabilities the platform actually has belong there.
+test('the hero offers the capability cards the control plane handed the frame', () => {
+  const capabilities = [
+    { id: 'meta-analysis', title: '自动化 Meta 分析', category: '证据综合', brief: '请以「自动化 Meta 分析」能力完成以下任务：\n\n…' },
+    { id: 'broken', title: '', category: '', brief: '' },
+  ];
+  const f = fixture({ capabilities });
+  apply(f.ctx, {}, f.target, f.require);
+  const hero = f.occupants['conversation.hero.agentPreset'];
+  assert.ok(hero, 'the hero seat is occupied when there are cards to show');
+  // The fixture's `createElement` keeps children as its rest arguments, so a
+  // mapped list arrives as one nested array.
+  const cards = hero({}).children[1].children.flat();
+  // A malformed entry costs that entry, never the hero.
+  assert.equal(cards.length, 1, 'the entry with no title or brief is dropped');
+  assert.match(JSON.stringify(cards), /自动化 Meta 分析/);
+
+  // The click leaves through the shell with the brief: the hero is
+  // root-scoped, so there is no session yet and no composer to write into.
+  /** @type {any[]} */ const sent = [];
+  f.target.__EVIMED_SHELL__ = { navigate: (/** @type {any} */ ...args) => sent.push(args) };
+  cards[0].props.onClick();
+  assert.deepEqual(sent, [['new-task', capabilities[0].brief]]);
+});
+
+test('a deployment that sent no cards leaves the hero seat alone', () => {
+  const f = fixture();
+  apply(f.ctx, {}, f.target, f.require);
+  assert.equal(f.occupants['conversation.hero.agentPreset'], undefined);
+  assert.ok(!f.injected.includes('conversation.hero.agentPreset'));
+});
+
 test('the rail closes the kernel column once and never fights a reopen', () => {
   /** @type {number} */ let toggles = 0;
   /** @type {(() => void)[]} */ const deferred = [];

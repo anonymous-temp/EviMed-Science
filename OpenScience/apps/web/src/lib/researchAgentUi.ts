@@ -1,120 +1,16 @@
+import { CAPABILITY_DISPLAY, capabilityTitle as domainCapabilityTitle } from "@evimed/domain";
 import type { WebResearchAgent } from "./apiClient";
 
-interface AgentTranslation {
-  code: string;
-  title: string;
-  category: string;
-  description: string;
-  starterPrompts: string[];
-}
-
-const translations: Record<string, AgentTranslation> = {
-  "adr-analysis": {
-    code: "SA",
-    title: "药品安全性分析",
-    category: "药物警戒",
-    description: "开展不良事件信号挖掘、说明书比对与安全性证据汇总。",
-    starterPrompts: ["分析奥希替尼相关的心脏安全性信号，并形成可追溯的证据报告。"],
-  },
-  "off-label-analysis": {
-    code: "OL",
-    title: "超说明书用药分析",
-    category: "循证评价",
-    description: "逐项比对属地说明书，辅助评价证据支持度；缺失信息会先集中提示补充。",
-    starterPrompts: ["按适应证、人群、剂量和给药方案逐项比对属地说明书，并辅助评价证据支持度。"],
-  },
-  "comprehensive-drug-evaluation": {
-    code: "CE",
-    title: "综合药品评价",
-    category: "综合评价",
-    description: "从有效性、安全性、适用性、经济性与可及性等维度完成可追溯评价；提供量表时可辅助计分。",
-    starterPrompts: ["围绕一个药品及适应证完成综合评价；先提示缺项，提供量表时辅助计分。"],
-  },
-  "drug-selection": {
-    code: "DS",
-    title: "药品遴选评价",
-    category: "药品遴选",
-    description: "结合 EviMed 证据与用户提供的量表辅助药品遴选；缺项不计零，仅在数据可比时排名。",
-    starterPrompts: ["比较候选药品，先提示我补齐量表和关键数据，再生成可追溯评分与敏感性分析。"],
-  },
-  "meta-analysis": {
-    code: "MA",
-    title: "自动化 Meta 分析",
-    category: "证据综合",
-    description: "自动完成系统评价、统计合并、偏倚风险、GRADE、图表、论文与发布质量门。",
-    starterPrompts: ["围绕一个明确的 PICO 问题完成系统评价和 Meta 分析，并生成可追溯的完整研究包。"],
-  },
-  "mendelian-randomization": {
-    code: "MR",
-    title: "孟德尔随机化",
-    category: "因果推断",
-    description: "基于 GWAS 工具变量完成因果推断、敏感性分析与 STROBE-MR 研究报告。",
-    starterPrompts: ["评估体重指数对冠心病的因果效应，并完成双向孟德尔随机化分析。"],
-  },
-  "bibliometric-analysis": {
-    code: "BA",
-    title: "文献计量分析",
-    category: "研究全景",
-    description: "分析发文趋势、合作网络、主题演化、突现词和研究前沿。",
-    starterPrompts: ["分析 GLP-1 受体激动剂治疗肥胖的研究全景、热点演化和新兴前沿。"],
-  },
-  "research-topic-selection": {
-    code: "RT",
-    title: "科研选题",
-    category: "研究规划",
-    description: "从宽泛方向中识别证据空白、科学矛盾与可执行的高价值研究问题。",
-    starterPrompts: ["围绕重症患者抗菌药精准给药，提出有证据依据且可落地的科研选题。"],
-  },
-  "dataset-research-scoping": {
-    code: "DR",
-    title: "数据集科研可行性勘查",
-    category: "研究规划",
-    description: "从你手上的数据出发：先按字段逐列剖析，再对照文献版图，逐个课题判定能不能做；判定不可行的必须说清缺哪个字段。",
-    starterPrompts: ["剖析我上传的住院数据，判断它到底能支撑哪些研究课题。"],
-  },
-  "peer-review": {
-    code: "PR",
-    title: "论文审稿",
-    category: "研究质量",
-    description: "按研究类型审查方法学、统计、报告规范、完整性并给出可执行修改建议。",
-    starterPrompts: ["审查我上传的论文，定位方法学、统计学、报告规范和完整性问题。"],
-  },
-  "clinical-evidence-synthesis": {
-    code: "CS",
-    title: "临床证据深度分析",
-    category: "临床证据",
-    description: "把一个开放的临床问题做成可复现检索、逐条核验引文、主张可追溯的深度证据分析，并单独给出以安全为先的实践性回答。",
-    starterPrompts: ["分析急性胸闷胸痛的鉴别诊断，以及速效救心丸在其中的合理定位。"],
-  },
-  "evidence-appraisal": {
-    code: "EA",
-    title: "证据质量评价",
-    category: "临床证据",
-    description: "对你手上已有的一组研究逐篇评价设计、偏倚风险、间接性与不精确性，再按结局汇总成一个证据确定性判断，每次升降级都注明来自哪个领域。",
-    starterPrompts: ["这 9 篇是我准备写进综述的文献，帮我逐篇评一下质量，再给个整体证据确定性。"],
-  },
-  "geo-content": {
-    code: "GE",
-    title: "答案引擎内容优化",
-    category: "内容生产",
-    description: "先测量各消费级答案引擎当前如何回答一组真实问题，再产出可被后续测量对照的证据绑定内容块：结论、依据、适用条件、可解析引文、作者资质与 JSON-LD。",
-    starterPrompts: ["用这十个真实问法测一下五个平台现在怎么回答，然后把能站住的结论写成内容块。"],
-  },
-  "manuscript-support": {
-    code: "MS",
-    title: "论文章节写作",
-    category: "论文写作",
-    description: "在固定的资料集内起草或修改论文的一节（前言、方法、结果、讨论）：每条主张绑定主张台账，每条引文可在引文台账解析，写作过程说明只进修订说明而不进正文。",
-    starterPrompts: ["这是我们回顾性队列的分析结果和数据字典，按 STROBE 帮我写资料与方法这一节。"],
-  },
-  "research-grant-development": {
-    code: "GR",
-    title: "基金申报书开发",
-    category: "研究规划",
-    description: "把一份申报指南和一个研究方向转成具体目标、申报书大纲、里程碑表和面向评审的自查；引用的每条指南要求都逐字来自指南本身。",
-    starterPrompts: ["这是基金申报指南和我的研究方向，帮我把具体目标和里程碑写出来，并逐条对照评审要点自查。"],
-  },
-};
+/**
+ * The display table moved to `@evimed/domain` on 2026-09-15.
+ *
+ * Two surfaces outside this bundle need it: the run ledger names the
+ * capability that produced a row, and the kernel's own hero renders the
+ * capability cards inside an iframe on another origin, from a catalogue the
+ * server hands it. A second copy here is how the two would drift into
+ * disagreeing about what a capability is called.
+ */
+const translations = CAPABILITY_DISPLAY;
 
 export function researchAgentUi(agent: WebResearchAgent): WebResearchAgent & { code: string } {
   const translation = translations[agent.id];
@@ -128,17 +24,15 @@ export function researchAgentUi(agent: WebResearchAgent): WebResearchAgent & { c
  * capability that produced it and has no title to show for it, which is why
  * the ledger, the sidebar and the run panel each displayed
  * `clinical-evidence-synthesis` — and `CLINICAL-EVIDENCE-SYNTHESIS` upper-cased
- * beside it — where a reader expected 「临床证据综合」 (2026-09-15 walk, D1/D2).
- * These translations are already in this file and are keyed by exactly that id,
- * so the name is available without a fetch.
+ * beside it — where a reader expected 「临床证据深度分析」 (2026-09-15 walk,
+ * D1/D2). Re-exported rather than reimplemented: one table, one answer.
  *
  * Returns null for an id this build has no name for, so the caller decides
  * whether an untranslated id is better shown raw or hidden — an id silently
  * rendered as a title is the failure being fixed here.
  */
 export function capabilityTitle(id: string | null | undefined): string | null {
-  const key = String(id ?? "").trim();
-  return key && translations[key] ? translations[key].title : null;
+  return domainCapabilityTitle(id);
 }
 
 export function researchInputLabel(value: string): string {

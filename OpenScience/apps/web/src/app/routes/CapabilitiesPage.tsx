@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, Clock3, FileCheck2, RefreshCw, Search, ServerCrash } from "lucide-react";
 import { useNavigate } from "react-router";
+import { capabilityBrief } from "@evimed/domain";
 import { hasWebApi, listWebResearchAgents, type WebResearchAgent, type WebResearchAgentOutput } from "@/lib/apiClient";
 import { researchAgentUi } from "@/lib/researchAgentUi";
 import { EmptyState } from "@/components/cards/EmptyState";
@@ -24,19 +25,14 @@ import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
  */
 
 /**
- * The brief a template hands the composer.
+ * The brief a capability card hands the composer.
  *
- * The capability is named in the sentence rather than in a request field on
- * purpose: there is no capability parameter on the dispatch route, the
- * orchestrator reads the brief, and a person can edit or delete the naming line
- * — which is exactly the difference between a suggestion and a binding.
- *
- * @param title the capability's own title @param prompt the starter brief
- * @returns the text to prefill
+ * Re-exported from `@evimed/domain` rather than written here: the kernel's own
+ * hero renders the same cards inside the session frame, and a brief that two
+ * surfaces spell differently is two different high-confidence expectations for
+ * the delivery gate to read.
  */
-export function capabilityBrief(title: string, prompt: string): string {
-  return `请以「${title}」能力完成以下任务：\n\n${prompt}`;
-}
+export { capabilityBrief };
 
 export function CapabilitiesPage() {
   const navigate = useNavigate();

@@ -87,6 +87,16 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     },
   };
   const localeId = 'zh-x-evimed';
+  /**
+   * The capability cards the hero offers, handed over in the frame's bootstrap
+   * object by the control plane. Validated rather than trusted: this file
+   * renders them, and a malformed entry must cost that entry, not the hero.
+   */
+  const capabilities = (Array.isArray(frame.capabilities) ? frame.capabilities : [])
+    .filter((entry) => entry && typeof entry.id === 'string' && typeof entry.title === 'string'
+      && typeof entry.category === 'string' && typeof entry.brief === 'string'
+      && entry.title && entry.brief && entry.brief.length <= 100_000)
+    .slice(0, 24);
 
   // --- brand -------------------------------------------------------------
   /** @type {any} */
@@ -107,6 +117,50 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     };
     const Name = () => h('span', { style: { fontWeight: 600, letterSpacing: '0.01em' } }, 'EviMed');
     const Nothing = () => null;
+
+    /**
+     * The fifteen research capabilities, on the screen a new task starts from.
+     *
+     * `conversation.hero.agentPreset` is the kernel's own words: "agent-preset
+     * control staged for a New Session". In the hosted composition there is no
+     * preset to pick — one preset is composed, and the panel that would change
+     * it is refused — so the seat was a control that did nothing on the first
+     * screen anyone sees. What belongs there is what the platform can actually
+     * do: an empty composer asks a researcher to know what to type, and a page
+     * of capability cards behind a navigation row is a page most of them never
+     * opened (2026-09-15 walk, P2-1).
+     *
+     * A card fills the brief and names the capability in it — a suggestion the
+     * delivery gate reads as a high-confidence expectation (§9.4), not a
+     * binding: the sentence is editable and the same conversation may go on to
+     * ask for something else. The brief comes from `@evimed/domain`, the same
+     * function the 「科研能力」 page calls, because two spellings of it would be
+     * two different expectations.
+     *
+     * Clicking leaves through the shell: the hero has no session yet (the slot
+     * is root-scoped), so there is no composer to write into. The shell opens a
+     * new task carrying the draft, which is the path the capability page has
+     * always taken.
+     */
+    const HeroCapabilities = () => h('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '44rem', margin: '0 auto' },
+    },
+    h('div', { style: { fontSize: '13px', opacity: 0.6 } }, '或从一项科研能力开始'),
+    h('div', {
+      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(11rem, 1fr))', gap: '8px' },
+    }, capabilities.map((capability) => h('button', {
+      key: capability.id,
+      type: 'button',
+      title: `${capability.category} · ${capability.title}`,
+      onClick: () => {
+        try { target.__EVIMED_SHELL__?.navigate?.('new-task', capability.brief); } catch { /* no channel, no navigation */ }
+      },
+      style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px',
+        padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(127,127,127,0.25)',
+        background: 'transparent', color: 'inherit', cursor: 'pointer', textAlign: 'left', font: 'inherit' },
+    },
+    h('span', { style: { fontSize: '13px', fontWeight: 500 } }, capability.title),
+    h('span', { style: { fontSize: '11px', opacity: 0.55 } }, capability.category)))));
 
     /**
      * The left column, replaced by a rail.
@@ -186,6 +240,9 @@ export function apply(ctx, _config, target = globalThis, require = undefined) {
     })));
     guarded('hero brand', () => ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({ name: 'conversation.hero.brand.mark', priority: below }, Mark)));
     guarded('sidebar rail', () => ctx.slots.inject('sidebar', () => ctx.slots.register({ name: 'sidebar', priority: below }, Rail)));
+    if (capabilities.length) {
+      guarded('hero capabilities', () => ctx.slots.inject('conversation.hero.agentPreset', () => ctx.slots.register({ name: 'conversation.hero.agentPreset', priority: below }, HeroCapabilities)));
+    }
     // The picker is a popup the chip opens; an occupant that renders nothing
     // leaves the chip (the bound workspace's name) and removes the choice.
     guarded('workspace picker', () => ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register({ name: 'conversation.hero.workspace', priority: below }, Nothing)));

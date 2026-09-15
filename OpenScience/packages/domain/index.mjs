@@ -184,6 +184,13 @@ export {
   validateCapabilityManifest,
 } from './src/capabilityManifest.mjs'
 
+// capabilityDisplay — 3 exports
+export {
+  CAPABILITY_DISPLAY,
+  capabilityBrief,
+  capabilityTitle,
+} from './src/capabilityDisplay.mjs'
+
 // contractRegistry — 6 exports
 export {
   CONTRACT_VALIDATOR_KINDS,

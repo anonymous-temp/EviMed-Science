@@ -6,6 +6,8 @@ import { AutopilotPage } from "./AutopilotPage";
 
 const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), createAgenda: vi.fn(), startAgenda: vi.fn(), stopAgenda: vi.fn(), scheduleAgenda: vi.fn(), listDigests: vi.fn(), decideDigest: vi.fn(), getDigest: vi.fn(), markDigestOpened: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
+const inbox = vi.hoisted(() => ({ listInbox: vi.fn() }));
+vi.mock("@/lib/inboxClient", () => inbox);
 // Partial: only the project identity is stubbed. A total mock listing two
 // exports by hand is a list that goes stale — it did, the moment the error
 // dictionary gained `webErrorMessage`, and this page stopped rendering at all
@@ -34,6 +36,48 @@ describe("AutopilotPage", () => {
     mocks.createAgenda.mockResolvedValue(agenda); mocks.startAgenda.mockResolvedValue(agenda); mocks.stopAgenda.mockResolvedValue(agenda);
     mocks.scheduleAgenda.mockResolvedValue({ episode: { id: "episode-one" } }); mocks.decideDigest.mockResolvedValue(digest);
     mocks.getDigest.mockResolvedValue(digest); mocks.markDigestOpened.mockResolvedValue(digest);
+    inbox.listInbox.mockReset();
+    inbox.listInbox.mockResolvedValue({ items: [], nextCursor: null });
+  });
+
+  // §24.9: the page IS the morning briefing. It used to open on an agenda
+  // board with the digests below it — and on 2026-09-15 there was no board
+  // either, because nothing could create an agenda (walk, B4/C4).
+  it("opens on the newest briefing without being told which one", async () => {
+    render("/app/autopilot");
+    expect(await screen.findByText("新增直接证据")).toBeInTheDocument();
+    // Once as the lead's own claim, once as the section label above it.
+    expect(screen.getAllByText("待验证线索").length).toBeGreaterThan(0);
+    // The opening line is built from what the digest records, and from nothing
+    // else: an invented saving or runway is a number a reader would act on.
+    expect(screen.getByText("2026-09-06 的简报：1 条重点发现 · 1 条待验证线索 · 花费 ¥3.2")).toBeInTheDocument();
+  });
+
+  it("names when the first briefing is due, in the agenda's own hour and zone", async () => {
+    mocks.listDigests.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.getDigest.mockResolvedValue(null);
+    render("/app/autopilot");
+    expect(await screen.findByText(/「心衰证据追踪」将在每天 01:00（Asia\/Shanghai）运行一回合/)).toBeInTheDocument();
+  });
+
+  it("says a paused agenda is waiting on the researcher, not on the clock", async () => {
+    mocks.listAgendas.mockResolvedValue({ items: [{ ...agenda, payload: { ...agenda.payload, status: "paused", enabled: false } }], nextCursor: null });
+    mocks.listDigests.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.getDigest.mockResolvedValue(null);
+    render("/app/autopilot");
+    expect(await screen.findByText(/议程目前是暂停的/)).toBeInTheDocument();
+  });
+
+  // The decisions the loop is waiting on block tonight's work, so they sit in
+  // the briefing; the inbox is still where they are resolved.
+  it("surfaces the review and question items the inbox is holding", async () => {
+    inbox.listInbox.mockResolvedValue({ items: [
+      { id: "n1", noticeType: "review", title: "一份交付物等待复核", body: "心衰证据更新", actions: [], count: 1, priority: 1, readAt: null, resolvedAt: null, resolution: null, revision: 1, createdAt: "2026-09-15T00:00:00.000Z" },
+      { id: "n2", noticeType: "notify", title: "普通通知", body: "不该出现在这里", actions: [], count: 1, priority: 1, readAt: null, resolvedAt: null, resolution: null, revision: 1, createdAt: "2026-09-15T00:00:00.000Z" },
+    ], nextCursor: null });
+    render();
+    expect(await screen.findByText("一份交付物等待复核")).toBeInTheDocument();
+    expect(screen.queryByText("普通通知")).not.toBeInTheDocument();
   });
 
   it("shows bounded agenda controls and morning findings", async () => {

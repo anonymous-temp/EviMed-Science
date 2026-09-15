@@ -184,10 +184,18 @@ export function apply(ctx, _config, target = globalThis) {
    * counter would have every one of its messages dropped as a replay.
    */
   target.__EVIMED_SHELL__ = {
-    /** @param {string} destination one of `SHELL_DESTINATIONS` */
-    navigate(destination) {
+    /**
+     * @param {string} destination one of `SHELL_DESTINATIONS`
+     * @param {string} [draft] a brief to pre-fill the composer with. Only
+     *   meaningful for `new-task`; the shell sends it back in as the
+     *   navigation intent's draft, which is the path a capability card on the
+     *   「科研能力」 page already takes. Bounded here as well as there, because
+     *   this side runs third-party-composed code.
+     */
+    navigate(destination, draft = undefined) {
       if (typeof destination !== 'string' || !SHELL_DESTINATIONS.includes(destination)) return;
-      post('shell-navigate', { destination });
+      if (draft !== undefined && (typeof draft !== 'string' || !draft || draft.length > 100_000)) return;
+      post('shell-navigate', draft === undefined ? { destination } : { destination, draft });
     },
   };
 
