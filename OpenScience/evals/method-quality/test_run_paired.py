@@ -1075,3 +1075,27 @@ class NetworkFailureIsolation(unittest.TestCase):
         source = RUNNER_FILE.read_text(encoding="utf-8")
         marker = "except (EvalError, KeyError, ValueError, OSError) as error:"
         self.assertIn(marker, source, "the per-cell isolation clause no longer catches raw socket failures")
+
+
+class DispatchIdentity(unittest.TestCase):
+    """A cell measured on a different build is a different measurement."""
+
+    def test_the_release_id_is_read_off_readiness(self):
+        self.assertEqual(runner.release_id_of(
+            {"checks": {"release": {"releaseId": "evimed-abc-1"}}}), "evimed-abc-1")
+        # A deployment that tracks no release falls back to the old behaviour
+        # rather than inventing an identity.
+        for absent in ({}, None, {"checks": {}}, {"checks": {"release": {}}}):
+            self.assertEqual(runner.release_id_of(absent), "")
+
+    def test_the_same_cell_on_two_builds_dispatches_twice(self):
+        # The control plane deduplicates by dispatchId. Re-running a batch after
+        # fixing the deployment returned the previous build's runs and reached
+        # the ledger not at all — the report would have described runs nobody
+        # had just made.
+        import re
+        source = RUNNER_FILE.read_text(encoding="utf-8")
+        match = re.search(r'dispatch_id = f"mq_\{[^"]*\}_\{[^"]*\}_\{sha256_text\(([^)]*)\)', source)
+        self.assertIsNotNone(match, "the dispatch id no longer has the shape this test reads")
+        self.assertIn("self.release_id", match.group(1),
+                      "the dispatch id does not depend on the build, so a re-run silently rescores old runs")
