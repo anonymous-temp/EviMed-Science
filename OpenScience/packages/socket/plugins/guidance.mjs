@@ -45,6 +45,7 @@ export const inject = ['systemPrompt']
  * @property {boolean} askUserEnabled
  * @property {boolean} capsuleActive
  * @property {boolean} reviewEnabled
+ * @property {string} answerPersonaDir
  */
 
 export const Config = Schema.object({
