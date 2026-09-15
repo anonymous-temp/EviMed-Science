@@ -621,4 +621,118 @@ export function createModelGatewayHandler(config, runtimeManager, { fetchImpl = 
   };
 }
 
+/**
+ * A model call the control plane makes on its own behalf, through the same
+ * boundary as every other one.
+ *
+ * Hidden knowledge: this exists because the control plane had a second way out.
+ * Memory extraction ran after every finished run and called `api.deepseek.com`
+ * directly with the deployment's key: it did not reserve, it did not settle, it
+ * did not appear in `evimed_usage.model_requests`, and the account's rolling
+ * caps did not apply to it. An operator reading the ledger saw every token the
+ * *runtime* spent and none of what the platform spent thinking about the run
+ * afterwards — the one egress this file exists to make impossible to have twice
+ * (principle 15: every budget has a key, a reason and an observable counter).
+ *
+ * It is a function rather than a loopback HTTP request to `MODEL_GATEWAY_PATH`
+ * on purpose. That path authenticates a *runtime* workload token and pipes a
+ * stream to a downstream response; an in-process caller has neither, and
+ * minting itself a runtime token to talk to itself would be a worse thing to
+ * own than this. What has to be shared is the part that matters and is now
+ * shared exactly once: the upstream URL rule, the model allowlist, and the
+ * reserve-then-settle accounting.
+ *
+ * Non-streaming only. Every control-plane use is a single JSON answer, and a
+ * streaming variant with no reader is a way to lose the usage tail.
+ *
+ * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
+ * @param {{ userId: string, projectId: string, runId?: string | null, body: any,
+ *           signal?: AbortSignal, at?: Date }} call
+ * @returns {Promise<any>} the provider's parsed JSON response
+ */
+export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
+  const at = call.at ?? new Date();
+  const body = { ...call.body, stream: false };
+  if (!supportedDeepSeekModels.has(String(body.model ?? ""))) {
+    throw gatewayError(400, "model_not_supported", "The requested model is not supported.");
+  }
+  if (config.requireDurableUsageLedger === true && !usageLedger) {
+    throw gatewayError(503, "usage_ledger_unavailable", "Durable usage accounting is unavailable.");
+  }
+  let reservation = null;
+  if (usageLedger) {
+    const estimate = estimateModelReservation(body, config, at);
+    reservation = await usageLedger.reserveModel({
+      id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
+      runId: call.runId ?? null,
+      priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency,
+      requestFingerprint: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
+      estimatedCost: estimate.cost,
+      dailyLimit: Number(config.userDailySpendLimit) || 0,
+      weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
+      runLimit: 0,
+      now: at,
+    });
+  }
+
+  let dispatched = false;
+  try {
+    const response = await fetchImpl(upstreamUrl(config.deepseekBaseUrl, config.production), {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${config.deepseekApiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: call.signal,
+    });
+    dispatched = true;
+    if (!response.ok) {
+      throw gatewayError(mappedUpstreamStatus(response.status), "model_gateway_upstream_error",
+        `The model provider returned HTTP ${response.status}.`);
+    }
+    const payload = /** @type {any} */ (await response.json());
+    if (usageLedger && reservation) {
+      // The provider's own count, or nothing. A reservation settled against an
+      // estimate would read in the ledger exactly like one settled against a
+      // measurement, which is the distinction `markUncertain` exists to keep.
+      const usage = payload?.usage;
+      const completionTokens = Number(usage?.completion_tokens);
+      if (Number.isFinite(completionTokens)) {
+        const cacheHitTokens = Number(usage?.prompt_cache_hit_tokens) || 0;
+        const cacheMissTokens = Number.isFinite(Number(usage?.prompt_cache_miss_tokens))
+          ? Number(usage.prompt_cache_miss_tokens)
+          : Math.max(0, (Number(usage?.prompt_tokens) || 0) - cacheHitTokens);
+        const actual = priceUsage({
+          resourceType: "model", model: body.model, cacheHit: cacheHitTokens,
+          cacheMiss: cacheMissTokens, output: completionTokens, peak: isPeak(at),
+        });
+        await usageLedger.settleModel(call.userId, reservation.id, {
+          usage: { cacheHitTokens, cacheMissTokens, completionTokens },
+          actualCost: actual.cost, priced: actual.priced,
+          providerRequestId: payload?.id == null ? null : String(payload.id).slice(0, 512),
+        });
+      } else {
+        await usageLedger.markUncertain(call.userId, reservation.id, "response_usage_missing", {});
+      }
+      reservation = null;
+    }
+    return payload;
+  } finally {
+    // Still held means the call did not reach a settled end. Dispatched and
+    // then lost is uncertain — the provider may have billed it; never
+    // dispatched is a release, and quietly dropping either would leave a
+    // reservation counting against the account's cap until the sweep expires it.
+    if (usageLedger && reservation) {
+      try {
+        if (dispatched) await usageLedger.markUncertain(call.userId, reservation.id, "provider_response_incomplete", {});
+        else await usageLedger.release(call.userId, reservation.id, "provider_not_accepted");
+      } catch {
+        process.stderr.write("usage ledger terminal transition failed; reservation requires reconciliation\n");
+      }
+    }
+  }
+}
+
 export const MODEL_GATEWAY_PATH = gatewayPath;

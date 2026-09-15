@@ -99,12 +99,16 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.5-rc.2",
-  sha256: "b0a3eb1e6378186ac7d68946a1e3c204a31ccd789e636075a4f45c45d4ce9bf0",
-  recordedBy: "dsh@0.1.5-rc.2 --profile evimed-runtime --dump-config on an isolated Darwin arm64 profile using Node 22.22.0 and pnpm 11.7.0, initialized and pinned with the Dockerfile's profile steps (base, web, socket, cite)",
-  // Re-captured on 2026-09-14 from 231 verified rc.2 packages and the current
-  // socket; byte-identical to the previous baseline. Network was denied during
-  // the dump, with no boot, model calls or recording/gateway patches. The Linux
-  // release image must independently generate and byte-diff its own dump.
+  sha256: "5b3125e1ba913835124cd3e46295ffbf414e27eef0125fe7481253e03b88e8d0",
+  recordedBy: "dsh@0.1.5-rc.2 --profile evimed-runtime --dump-config inside the linux/amd64 runtime image, from deploy/runtime-dsh/Dockerfile.delta on base open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-39111b6b4821",
+  // Re-captured on 2026-09-15, this time from the release image itself rather
+  // than from a hand-initialized profile: the `evimed-web` row and the two
+  // provider names on the `web` row moved the composition on purpose, and the
+  // delta build's own `diff -u` is what produced these bytes. The file was
+  // then read back out of the built image and compared byte for byte against
+  // the committed copy — the only evidence that makes this hash mean what it
+  // claims, since a hand-edited baseline that happens to match a hash is
+  // exactly the laundering path this attestation exists to close.
 };
 
 /**
@@ -117,7 +121,7 @@ export const BASELINE_PROVENANCE = {
 export const EXTRACTION_FLOORS = {
   baselineRows: 100, // today: 148
   presetRows: 16, // today: 23, counting group children (24 before alpha.4 deleted the report row)
-  derivedFromPatch: 4, // today: 4 host-scope overrides
+  derivedFromPatch: 4, // today: 6 host-scope overrides
   // Not a floor. A floor is what let a defeated parse pass: nine named tools
   // with a floor of six meant three could vanish and the run stayed green.
   // Changing this number is how a reviewer says "the composition's ban list

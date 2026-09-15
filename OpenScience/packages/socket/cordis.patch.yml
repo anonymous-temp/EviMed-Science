@@ -30,6 +30,17 @@
     # carries no compatibility promise.
     - id: evimed-evidence-store
       name: '@evimed/dsh-socket/plugins/evidence-store'
+    # The platform's provider for the kernel's `web` registry. The addresses are
+    # read from container environment rather than written here, which is the
+    # deployment-independent form the header asks for: the bundle names the
+    # variable, the deployment sets it, and a laptop with neither gets a row
+    # that registers nothing and boots.
+    - id: evimed-web
+      name: '@evimed/dsh-socket/plugins/web'
+      config:
+        searchUrl: !!js process.env.EVIMED_WEB_SEARCH_GATEWAY_URL
+        fetchUrl: !!js process.env.EVIMED_PUBLIC_SOURCE_GATEWAY_URL
+        tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
 
 # Source hot-reload watches the working directory. In the hosted container the
 # working directory is the user's workspace, so a run writing a file would
@@ -79,13 +90,27 @@
 # composition is one edit away from gaining a tool, and a provider sitting ready
 # for it is not a state worth being one edit from.
 #
-# `web.fetchProvider` is deliberately left alone. It is a free-form string
-# naming a registered provider, so writing `none` there would not be a
-# configured refusal — it would be a name that happens to match nothing, which
-# reads as a typo to the next person and stops protecting anything the day
-# someone registers a provider by that name.
+# `web.fetchProvider` is no longer left alone, and the reason it was is worth
+# keeping: writing `none` there would not have been a configured refusal, it
+# would have been a name matching nothing, which reads as a typo and stops
+# protecting anything the day someone registers a provider by that name. What
+# changed is that there is now a provider worth naming. `evimed-gateway` is
+# registered by the `evimed-web` row above and goes to the control plane, so
+# both fields name a real destination and that destination is the gateway.
+#
+# The `web-fetch-http` row stays disabled underneath it. Two conditions, for the
+# same reason telemetry is off in three places.
 - id: web-fetch-http
   disabled: true
+
+# Both halves of the kernel's web registry name the platform's own provider, so
+# every retrieval that reaches `ctx.web` goes through the control-plane gateway
+# that resolves the destination, refuses private addresses before it fetches,
+# and records what it fetched. Registered by the `evimed-web` row above.
+- id: web
+  config:
+    searchProvider: evimed-gateway
+    fetchProvider: evimed-gateway
 
 # The third condition, and it is third because upstream moved. 0.1.2-alpha.4
 # turned `fetch` on by default "for the Python SDK, Headless, ACP and custom

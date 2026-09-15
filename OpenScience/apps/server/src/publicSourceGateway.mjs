@@ -1,3 +1,5 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+
 const gatewayPath = "/internal/sources/v1/fetch";
 
 const allowedHosts = new Set([
@@ -78,6 +80,7 @@ const allowedHosts = new Set([
   "www.guidetopharmacology.org",
   "www.isrctn.com",
   "www.metabolomicsworkbench.org",
+  "www.ncbi.nlm.nih.gov",
   "www.nhs.uk",
   "www.proteinatlas.org",
   "wwwn.cdc.gov",
@@ -91,6 +94,15 @@ const officialDocumentPaths = new Map([
   ["www.nhs.uk", ["/symptoms/chest-pain/"]],
   ["www.ccfdie.org", ["/zryyxxw/"]],
   ["mpa.hunan.gov.cn", ["/mpa/"]],
+]);
+
+// Hosts approved for one API surface rather than for themselves.
+// `www.ncbi.nlm.nih.gov` serves the whole of NCBI's web estate — every database
+// front end, every download path, every redirect into the rest of the NIH —
+// and the only thing approved on it is PubTator3. `officialDocumentPaths`
+// cannot express that: it also forces `text/html`, and PubTator3 answers JSON.
+const apiPathPrefixes = new Map([
+  ["www.ncbi.nlm.nih.gov", ["/research/pubtator3-api/"]],
 ]);
 
 const credentialProfiles = new Map([
@@ -349,6 +361,35 @@ function validatedOpenAccessPdfRequest(value) {
   return { mode: "open-access-pdf", doi };
 }
 
+/** True when a literal IPv4 address is one this server must never be sent to. */
+function privateIpv4Address(host) {
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!ipv4) return false;
+  const octets = ipv4.slice(1, 5).map(Number);
+  return octets.some((part) => !Number.isInteger(part) || part > 255)
+    || octets[0] === 0 || octets[0] === 10 || octets[0] === 127
+    || (octets[0] === 169 && octets[1] === 254)
+    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+    || (octets[0] === 192 && octets[1] === 168)
+    || (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127)
+    || octets[0] >= 224;
+}
+
+/** The same question for IPv6, including the forms that smuggle IPv4 through. */
+function privateIpv6Address(host) {
+  const address = host.replace(/^\[|\]$/g, "").split("%")[0].toLowerCase();
+  const mapped = /^(?:::ffff:|::)((?:\d{1,3}\.){3}\d{1,3})$/.exec(address);
+  if (mapped) return privateIpv4Address(mapped[1]);
+  if (address === "::" || address === "::1") return true;
+  const head = address.split(":", 1)[0];
+  if (!head) return false;
+  const group = Number.parseInt(head.padStart(4, "0"), 16);
+  if (!Number.isInteger(group)) return true;
+  return (group & 0xfe00) === 0xfc00        // fc00::/7  unique local
+    || (group & 0xffc0) === 0xfe80          // fe80::/10 link local
+    || (group & 0xff00) === 0xff00;         // ff00::/8  multicast
+}
+
 /** Reject anything that is not a routable public name before we fetch it.
  *
  * Unpaywall is trusted to name a publisher, not to be an oracle: a poisoned
@@ -363,19 +404,44 @@ function assertPublicHostname(hostname) {
     || host.endsWith(".internal")
     || host.endsWith(".arpa")
     || !host.includes(".");
-  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  const octets = ipv4 ? ipv4.slice(1, 5).map(Number) : null;
-  const privateIpv4 = octets && (
-    octets.some((part) => !Number.isInteger(part) || part > 255)
-    || octets[0] === 0 || octets[0] === 10 || octets[0] === 127
-    || (octets[0] === 169 && octets[1] === 254)
-    || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
-    || (octets[0] === 192 && octets[1] === 168)
-    || (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127)
-    || octets[0] >= 224
-  );
-  if (privateName || privateIpv4 || host.includes(":")) {
+  if (privateName || privateIpv4Address(host) || host.includes(":")) {
     throw gatewayError(403, "public_source_pdf_host_forbidden", "The open-access PDF host is not publicly routable.");
+  }
+}
+
+/** And the same question of the addresses the name actually resolved to.
+ *
+ * A name is not an address. `assertPublicHostname` reads a string, and a string
+ * that looks like a publisher is exactly what a record pointing at 127.0.0.1 or
+ * at this network's metadata service looks like — there is nothing in
+ * `pdfs.example.org` to reject. Every resolved address must be public, not just
+ * the first: a name that answers with one public address and one private one is
+ * the ordinary shape of this attack, and whichever the connection picks is not
+ * ours to choose.
+ *
+ * What remains after this is the rebinding window — the name can answer
+ * differently between this lookup and the connection. Closing that needs the
+ * socket pinned to the address checked here, which needs an agent this
+ * deployment's fetch does not expose. The window is worth naming rather than
+ * implying it is shut. */
+async function assertPublicAddresses(hostname, resolveImpl) {
+  let records;
+  try {
+    records = await resolveImpl(hostname, { all: true });
+  } catch {
+    throw gatewayError(502, "public_source_pdf_host_unresolved", "The open-access PDF host did not resolve.");
+  }
+  const addresses = (Array.isArray(records) ? records : [records])
+    .map((record) => String(record?.address ?? "").trim())
+    .filter(Boolean);
+  if (addresses.length === 0) {
+    throw gatewayError(502, "public_source_pdf_host_unresolved", "The open-access PDF host did not resolve.");
+  }
+  for (const address of addresses) {
+    const isPrivate = address.includes(":") ? privateIpv6Address(address) : privateIpv4Address(address);
+    if (isPrivate) {
+      throw gatewayError(403, "public_source_pdf_host_forbidden", "The open-access PDF host resolves inside this network.");
+    }
   }
 }
 
@@ -427,6 +493,13 @@ function validatedRequest(value) {
   }
   if (documentPrefixes && (method !== "GET" || value.accept.length !== 1 || value.accept[0] !== "text/html")) {
     throw gatewayError(403, "public_source_document_request_forbidden", "Official-document sources permit only HTML GET requests.");
+  }
+  const apiPrefixes = apiPathPrefixes.get(hostname);
+  if (apiPrefixes && !apiPrefixes.some((prefix) => url.pathname.startsWith(prefix))) {
+    throw gatewayError(403, "public_source_api_path_forbidden", "The API path is not approved on this host.");
+  }
+  if (apiPrefixes && method !== "GET") {
+    throw gatewayError(403, "public_source_api_request_forbidden", "This host is approved for read-only API requests.");
   }
   if (profile && (hostname !== profile.host || !url.pathname.startsWith(profile.path))) {
     throw gatewayError(403, "public_source_gateway_credential_profile_forbidden", "The credential profile does not match this official endpoint.");
@@ -632,7 +705,7 @@ async function readBoundedBody(body, maxBytes) {
  * kept ending with more eligible records than readable ones. Unpaywall knows
  * where the rest are, but on the publisher's own domain, so the resolution has
  * to happen here rather than in the runtime. */
-async function serveOpenAccessPdf(request, { config, res, fetchImpl, signal }) {
+async function serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal }) {
   const email = String(config.publicSourceCredentials?.unpaywall ?? "").trim();
   if (!email || email.length > 8 * 1024 || /[\r\n\0]/.test(email)) {
     throw gatewayError(503, "public_source_unpaywall_credential_missing", "The server-managed unpaywall credential is unavailable.");
@@ -688,8 +761,11 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, signal }) {
     }
     try {
       assertPublicHostname(target.hostname);
-    } catch {
-      attempts.push(`${target.hostname}: not publicly routable`);
+      await assertPublicAddresses(target.hostname, resolveImpl);
+    } catch (error) {
+      attempts.push(`${target.hostname}: ${
+        error?.code === "public_source_pdf_host_unresolved" ? "did not resolve" : "not publicly routable"
+      }`);
       continue;
     }
     let upstream;
@@ -738,7 +814,7 @@ async function serveOpenAccessPdf(request, { config, res, fetchImpl, signal }) {
   );
 }
 
-export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch, connectorCredentials = null } = {}) {
+export function createPublicSourceGatewayHandler(config, runtimeManager, { fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null } = {}) {
   return async function publicSourceGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
       sendError(res, gatewayError(404, "not_found", "Not found."), onFailure);
@@ -761,7 +837,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, { fetch
       }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
       if (request.mode === "open-access-pdf") {
-        await serveOpenAccessPdf(request, { config, res, fetchImpl, signal: controller.signal });
+        await serveOpenAccessPdf(request, { config, res, fetchImpl, resolveImpl, signal: controller.signal });
         return;
       }
       let upstream;

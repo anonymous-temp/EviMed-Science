@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:85cf1b8e223d4f3162df963b6d87af97667471c219cb9cb1bd913f40d4ab97f6",
+  "version": "sha256:057223e02f62a39cc42cc0966577e8b718e8e89fead4790e651617c502ec3fa8",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1377,7 +1377,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1385,6 +1385,40 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "relation": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string",
+                "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "treat",
+                  "cause",
+                  "prevent",
+                  "inhibit",
+                  "stimulate",
+                  "interact",
+                  "drug_interact",
+                  "associate",
+                  "compare",
+                  "cotreat",
+                  "positive_correlate",
+                  "negative_correlate"
+                ]
+              },
+              "object": {
+                "type": "string",
+                "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "subject"
+            ]
           },
           "limit": {
             "type": "integer",

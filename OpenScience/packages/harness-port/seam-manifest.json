@@ -16,7 +16,8 @@
       "skills",
       "fs",
       "jobs",
-      "workflowEngine"
+      "workflowEngine",
+      "web"
     ]
   },
   "events": {
@@ -364,6 +365,15 @@
     "workspaceMethods": [
       "create"
     ],
-    "frameWorkspace": "cwd"
+    "frameWorkspace": "cwd",
+    "rightSidebar": {
+      "service": "sidebarRight",
+      "tabsService": "sidebarRightTabs",
+      "tabSlot": "sidebar.right.pane.tab",
+      "methods": [
+        "openResource"
+      ],
+      "note": "The kernel's own right column, from `dsh-client-ui-sidebar-right`. Content that belongs beside a conversation registers a tab here; occupying the `rightbar` layout slot would take the whole column instead, which is what the left column already had to be undone from."
+    }
   }
 }

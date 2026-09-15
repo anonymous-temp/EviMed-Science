@@ -45,6 +45,13 @@ test("the bundle patch carries no deployment path and no address", async () => {
   assert.ok(!/\/runtime\//.test(body), "a bundle row names a container path");
   assert.ok(!/https?:\/\//.test(body), "a bundle row names an address");
   assert.match(body, /id: evimed-seam-probe/);
+  // The web provider's endpoints are named as environment variables, not as
+  // addresses: the `no address` assertion above is what holds that.
+  assert.match(body, /id: evimed-web/);
+  assert.match(body, /searchUrl: !!js process\.env\.EVIMED_WEB_SEARCH_GATEWAY_URL/);
+  // Both halves of the kernel's web registry name our provider, so the
+  // composition protects by configuration rather than only by absence.
+  assert.match(body, /- id: web\n\s+config:\n\s+searchProvider: evimed-gateway\n\s+fetchProvider: evimed-gateway/);
   assert.match(body, /id: hmr\n\s+disabled: true/);
   assert.match(body, /id: session-telemetry-otel\n\s+disabled: true/);
 });
@@ -62,7 +69,7 @@ test("the composition mounts every agent plugin we own and nothing we ruled out"
   // Counted, not named in the title: it said "five" while there were eight,
   // and a number in a sentence is a number nothing checks.
   assert.equal(AGENT_PLUGIN_IDS.length, 8, "add the row here when a plugin is added, so the count stays a fact");
-  assert.equal(HOST_PLUGIN_IDS.length, 4);
+  assert.equal(HOST_PLUGIN_IDS.length, 5);
   for (const id of AGENT_PLUGIN_IDS) assert.match(preset, new RegExp(`id: ${id}\\b`), id);
   for (const banned of ["tool-todo", "agent-instructions", "str_replace_editor", "tool-web", "plan-mode", "tool-ralph", "tool-lsp", "tool-goal"]) {
     const mounted = new RegExp(`^\\s*-?\\s*id: ${banned}\\s*$`, "m");

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { MEMORY_PROMOTION_MIN_OCCURRENCES, MEMORY_PROMOTION_MIN_RUNS, mcpToolBaseName } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { callModelForControlPlane } from "./modelGateway.mjs";
 
 const candidateKinds = new Set([
   "profile",
@@ -131,6 +132,15 @@ function toolMemorySources(message, sessionId, messageId) {
 
 
 /**
+ * The framing the platform wraps around its own injections.
+ *
+ * Emitted by `packages/socket/plugins/run-policy.mjs`; a closed vocabulary of
+ * markers we control, which is why matching on them is allowed where matching
+ * on prose would not be (principle 5).
+ */
+const PLATFORM_FRAMING = /<\/?evimed-(?:brief|capsule|agenda|context)>/;
+
+/**
  * Why the extractor must not read a message, or null when it may.
  *
  * Hidden knowledge: this is the difference between memory that learns from the
@@ -180,6 +190,19 @@ export function memorySourceRejection(message, turnEndings = new Map()) {
   const role = message?.info?.role ?? message?.role;
   const source = message?.info?.source ?? message?.source;
   if (role === "user" && typeof source === "string" && source !== "user") return "injected";
+  // The sender field is not always enough. `run-policy.mjs` injects the run's
+  // own brief into the conversation wrapped in `<evimed-brief>`, and it arrives
+  // carrying `source: "user"` because a user did, at one remove, cause it. The
+  // wrapper is ours and is a closed token, so recognising it is a structural
+  // check rather than a judgement about language.
+  //
+  // Observed in production on 2026-09-06: ten records on one account, each one
+  // a whole task brief stored as a durable `explicit` user preference at
+  // importance 0.75 — 「请以《Therapeutic Reference Range for Aripiprazole…》为题
+  // 完成一份中文科研综述报告」 recorded as something the researcher always
+  // wants. Recall for that account then returned two stale briefs ahead of real
+  // memory.
+  if (role === "user" && PLATFORM_FRAMING.test(messageText(message))) return "injected";
   if (message?.info?.error?.name === "interrupted" || message?.interrupted === true) return "unfinished";
   const ending = turnEndings.get(message?.info?.turnStartSeq ?? message?.turnStartSeq ?? null);
   if (typeof ending === "string" && ending !== "completed") return "unfinished";
@@ -247,48 +270,6 @@ export function conversationMemorySources(messages, sessionId) {
     sources: sources.slice(-20),
     excluded: [...excluded.entries()].map(([reason, count]) => ({ reason, count })),
   };
-}
-
-function extractionUrl(baseUrl, production = false) {
-  const url = new URL(baseUrl);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error("Memory extraction provider URL is invalid.");
-  }
-  if (production && (url.origin !== "https://api.deepseek.com" || url.pathname !== "/")) {
-    throw new Error("Production memory extraction must use the official DeepSeek API origin.");
-  }
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/chat/completions`;
-  return url;
-}
-
-async function boundedJsonResponse(response, maximumBytes = 512 * 1024) {
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > maximumBytes) throw new Error("Memory extraction response is too large.");
-  if (!response.body) return null;
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maximumBytes) throw new Error("Memory extraction response is too large.");
-      chunks.push(value);
-    }
-  } catch (error) {
-    await reader.cancel(error).catch(() => {});
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder().decode(merged));
 }
 
 function parseModelJson(content) {
@@ -371,10 +352,20 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   };
 }
 
+/** Longest message this path will read a durable fact out of.
+ *
+ * A preference is a sentence. Four thousand characters is a task brief, a
+ * pasted document or a whole conversation turn, and storing one whole is how a
+ * single message became a permanent "preference" ten times over. The bound is
+ * on the SOURCE, not on the stored value: truncating a long message would store
+ * the first 600 characters of a brief, which is not better. */
+const DETERMINISTIC_SOURCE_MAX_CHARS = 1_200;
+
 function deterministicCandidates(sources, project, run) {
   const candidates = [];
   for (const source of sources.filter((item) => item.role === "user")) {
     if (!/(?:请记住|记住|以后请|我的偏好|我偏好|我习惯|长期保持)/.test(source.text)) continue;
+    if (source.text.length > DETERMINISTIC_SOURCE_MAX_CHARS) continue;
     const quote = source.text.slice(0, 4_000);
     const kind = /(?:偏好|希望|以后|回答|输出|格式|习惯)/.test(quote)
       ? "preference"
@@ -391,9 +382,17 @@ function deterministicCandidates(sources, project, run) {
       key: `${kind}.explicit.${digest}`,
       value: quote,
       summary: quote.slice(0, 240),
-      origin: "explicit",
-      confidence: 1,
-      importance: 0.75,
+      // Inferred, not explicit, and that is the whole difference between this
+      // path and the model's. The trigger above is a keyword wall over open
+      // language — the thing principle 5 says never to extend — so what it
+      // produces is a guess that happened to match a word. `explicit` is the
+      // one origin that skips corroboration entirely, which is how ten guesses
+      // became ten active memories without anyone agreeing to any of them.
+      // `inferred` sends them through the pending gate they should always have
+      // gone through: repeated across separate runs, or confirmed by the person.
+      origin: "inferred",
+      confidence: 0.6,
+      importance: 0.5,
       sensitive: sensitivePattern.test(quote),
       sourceRef: source.sourceRef,
       evidenceQuote: quote,
@@ -545,11 +544,18 @@ function excerpt(value) {
 
 export class MemoryIntelligence {
   /** @param {any} config @param {any} memoryStore
-   *  @param {{fetchImpl?:any,notifications?:any,audit?:any}} dependencies */
-  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null } = {}) {
+   *  @param {{fetchImpl?:any,notifications?:any,audit?:any,usageLedger?:any}} dependencies */
+  constructor(config, memoryStore, { fetchImpl = globalThis.fetch, notifications = null, audit = null, usageLedger = null } = {}) {
     this.config = config;
     this.memoryStore = memoryStore;
     this.fetchImpl = fetchImpl;
+    // Extraction is a model call the platform makes on the user's behalf, so it
+    // is reserved and settled like every other one. It used to reach
+    // `api.deepseek.com` straight from here: off the ledger, outside the
+    // account's rolling caps, and invisible in an operator's usage export.
+    // Optional because a deployment with no product database has no ledger, and
+    // `requireDurableUsageLedger` is what decides whether that is allowed.
+    this.usageLedger = usageLedger;
     // Optional: a deployment without a product database has no inbox, and a
     // contradiction is still recorded on the record and still reported on the
     // run.
@@ -830,16 +836,15 @@ export class MemoryIntelligence {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImpl(extractionUrl(this.config.deepseekBaseUrl, this.config.production), {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${this.config.deepseekApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const body = await callModelForControlPlane(
+        { config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl },
+        {
+          userId: project.userId,
+          projectId: project.id,
+          runId: run.id ?? null,
+          signal: controller.signal,
+          body: {
           model: this.model,
-          stream: false,
           temperature: 0,
           // Twelve candidates carrying a value, a summary and an evidence quote
           // do not fit in 2,400 tokens. The reply then stops mid-object and the
@@ -889,11 +894,9 @@ export class MemoryIntelligence {
               }),
             },
           ],
-        }),
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error("Memory extraction provider rejected the request.");
-      const body = await boundedJsonResponse(response);
+          },
+        },
+      );
       const parsed = parseModelJson(body?.choices?.[0]?.message?.content);
       const sourceMap = new Map(sources.map((item) => [item.sourceRef, item]));
       const rejections = [];

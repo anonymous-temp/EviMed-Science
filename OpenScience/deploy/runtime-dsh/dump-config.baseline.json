@@ -342,11 +342,13 @@
       - 5
       - 8
     argumentsPreviewChars: 500
+# == @deepseek-ai/dsh-base, patched by @evimed/dsh-socket
 - id: web
   name: '@deepseek-ai/dsh-web'
   config:
-    searchProvider: deepseek-official
-    fetchProvider: http
+    searchProvider: evimed-gateway
+    fetchProvider: evimed-gateway
+# == @deepseek-ai/dsh-base
 - id: web-search-deepseek
   name: '@deepseek-ai/dsh-web-search-deepseek'
   config:
@@ -559,6 +561,12 @@
   name: '@evimed/dsh-socket/plugins/seam-probe'
 - id: evimed-evidence-store
   name: '@evimed/dsh-socket/plugins/evidence-store'
+- id: evimed-web
+  name: '@evimed/dsh-socket/plugins/web'
+  config:
+    searchUrl: !!js process.env.EVIMED_WEB_SEARCH_GATEWAY_URL
+    fetchUrl: !!js process.env.EVIMED_PUBLIC_SOURCE_GATEWAY_URL
+    tokenFile: !!js process.env.EVIMED_MODEL_GATEWAY_TOKEN_FILE
 # == dsh-cite
 - id: cite
   name: dsh-cite

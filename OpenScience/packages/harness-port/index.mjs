@@ -216,6 +216,112 @@ export function guardTools(ctx, fn) {
   return ctx.tools.guard((/** @type {any} */ exec) => fn(toToolCall(exec)))
 }
 
+/* ------------------------------------------------------- browser: right pane */
+
+/**
+ * A tab in the kernel's own right-hand pane.
+ *
+ * The distinction worth holding: `rightbar` is a LAYOUT slot and occupying it
+ * replaces the entire column, exactly as occupying `sidebar` replaces the left
+ * one. That was learned the expensive way — the left column was occupied, which
+ * removed its content and not its 280 px of width, and undoing it took three
+ * CSS rules pinned to grid tracks measured in a live frame. `sidebarRightTabs`
+ * is the other thing: it adds a tab to the column the kernel already manages,
+ * which keeps the open/close/fullscreen controls, the drag handle, and the
+ * kernel's own tabs working.
+ *
+ * So: content that belongs beside a conversation registers here. Nothing
+ * registers `rightbar`.
+ *
+ * @param {any} ctx the browser plugin context
+ * @param {{ key: string, title: string, render: (props?: any) => unknown, order?: number }} tab
+ * @returns {() => void}
+ */
+export function registerRightSidebarTab(ctx, tab) {
+  if (!tab || typeof tab.key !== 'string' || !tab.key.trim()) {
+    throw new Error('evimed: a right-sidebar tab must carry a key')
+  }
+  if (typeof ctx?.sidebarRightTabs?.register !== 'function') {
+    throw new Error('evimed: the kernel client exposes no sidebarRightTabs seam')
+  }
+  // Tab slots key by `key`; list slots key by `id`. Getting it the wrong way
+  // round registers nothing and reports nothing — the capability dock was
+  // silently absent for a whole deploy because of it.
+  return ctx.sidebarRightTabs.register(tab.key, {
+    title: tab.title,
+    render: tab.render,
+    ...(tab.order === undefined ? {} : { order: tab.order }),
+  })
+}
+
+/**
+ * Open a workspace file in that pane, rather than rendering our own viewer.
+ * @param {any} ctx @param {string} path @param {{ line?: number }} [at]
+ * @returns {void}
+ */
+export function openRightSidebarResource(ctx, path, at) {
+  if (typeof ctx?.sidebarRight?.openResource !== 'function') {
+    throw new Error('evimed: the kernel client exposes no sidebarRight.openResource seam')
+  }
+  ctx.sidebarRight.openResource(path, at)
+}
+
+/* -------------------------------------------------------------------- web */
+
+/**
+ * The kernel's `web` service, which is a provider registry rather than a fetcher.
+ *
+ * It has been mounted in our composition all along — the baseline's `web` row
+ * carries DeepSeek's official search and an http fetcher, and we disable both —
+ * so the only thing missing was ever a provider of our own. Registering one is
+ * what lets `web.config.searchProvider` name the platform's gateway instead of
+ * a direct egress, and it is what a community plugin written against
+ * `ctx.web` gets for free.
+ *
+ * The provider shape is upstream's: `{ id, available(), search|fetch(request,
+ * signal) }`. It is validated here rather than trusted, because a provider that
+ * throws on registration takes the whole composition down at boot, and a
+ * provider missing `available()` is asked for results it cannot produce at the
+ * first turn instead of at start-up.
+ *
+ * `web` is optional in the seam manifest on purpose: a deployment with no
+ * search backend configured must still boot, with the provider simply not
+ * registered.
+ *
+ * @param {any} ctx
+ * @param {{ id: string, available: () => boolean | Promise<boolean>, search: (request: any, signal?: AbortSignal) => Promise<any> }} provider
+ * @returns {() => void}
+ */
+export function registerWebSearchProvider(ctx, provider) {
+  assertProvider(provider, 'search')
+  if (typeof ctx?.web?.registerSearchProvider !== 'function') {
+    throw new Error('evimed: the kernel exposes no web.registerSearchProvider seam')
+  }
+  return ctx.web.registerSearchProvider(provider)
+}
+
+/**
+ * The fetch half of the same registry.
+ * @param {any} ctx
+ * @param {{ id: string, available: () => boolean | Promise<boolean>, fetch: (request: any, signal?: AbortSignal) => Promise<any> }} provider
+ * @returns {() => void}
+ */
+export function registerWebFetchProvider(ctx, provider) {
+  assertProvider(provider, 'fetch')
+  if (typeof ctx?.web?.registerFetchProvider !== 'function') {
+    throw new Error('evimed: the kernel exposes no web.registerFetchProvider seam')
+  }
+  return ctx.web.registerFetchProvider(provider)
+}
+
+/** @param {any} provider @param {'search'|'fetch'} kind */
+function assertProvider(provider, kind) {
+  if (!provider || typeof provider !== 'object') throw new Error(`evimed: a web ${kind} provider must be an object`)
+  if (typeof provider.id !== 'string' || !provider.id.trim()) throw new Error(`evimed: a web ${kind} provider must carry an id`)
+  if (typeof provider.available !== 'function') throw new Error(`evimed: web ${kind} provider ${provider.id} must implement available()`)
+  if (typeof provider[kind] !== 'function') throw new Error(`evimed: web ${kind} provider ${provider.id} must implement ${kind}()`)
+}
+
 /* ----------------------------------------------------------------- events */
 
 /**

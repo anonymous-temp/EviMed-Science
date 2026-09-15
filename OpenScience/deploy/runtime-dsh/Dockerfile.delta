@@ -45,6 +45,13 @@ USER root
 RUN set -eux; \
   rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
 
+# The baseline this delta must match is the one in the source being built, not
+# the one the base image was built against. A delta that changes the
+# composition — a new plugin row, a provider named where none was — moves the
+# resolved config on purpose, and comparing it against the base's frozen copy
+# would report the intended change as drift and refuse every such delta.
+COPY deploy/runtime-dsh/dump-config.baseline.json /opt/evimed/committed-dump-config.baseline.json
+
 COPY packages/socket /opt/evimed/socket
 COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
 COPY capability-skills /opt/evimed/capability-skills

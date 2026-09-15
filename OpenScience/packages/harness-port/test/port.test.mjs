@@ -8,18 +8,21 @@ import {
   defineTool,
   injectContext,
   loadHarnessModule,
-  onToolObserved,
   onPreStep,
+  onToolObserved,
   onToolPolicy,
   onTurnEnd,
   probeSeams,
+  registerRightSidebarTab,
+  registerWebFetchProvider,
+  registerWebSearchProvider,
   renderEnvelope,
   toArgs,
   toSessionRef,
+  toSkillName,
   toStepInfo,
   toSubagentOutcome,
   toToolCall,
-  toSkillName,
   toToolOutcome,
   toTurnEnd,
   toUsage,
@@ -74,9 +77,11 @@ test("context added during pre-step enters that request rather than the next inb
  *  }} [overrides] */
 function fakeContext(overrides = {}) {
   const listeners = new Map();
+  /** @type {Map<string, any>} */
   const services = new Map(Object.entries({
     tools: {}, systemPrompt: {}, agents: {}, sessions: {}, subagents: {}, agentPresets: {}, shell: {},
     storageDomain: {}, skills: {}, fs: {}, jobs: {}, workflowEngine: {},
+    web: { registerSearchProvider: () => () => {}, registerFetchProvider: () => () => {} },
     ...overrides.services,
   }));
   const registered = new Map();
@@ -535,4 +540,51 @@ test("a delegated child's outcome comes from its settled result and its own id",
 
   // Handed the run alone, the promise must not be mistaken for a result.
   assert.equal(toSubagentOutcome(run).stopReason, "unknown");
+});
+
+test("a web provider is validated before it is registered, and registration is refused without the seam", async () => {
+  // A provider that throws at registration takes the whole composition down at
+  // boot, and one missing `available()` is asked for results at the first turn
+  // instead of at start-up. Both are cheaper as an error here.
+  const ctx = fakeContext();
+  /** @type {any[]} */
+  const registered = [];
+  const web = /** @type {any} */ (ctx.get("web"));
+  web.registerSearchProvider = (/** @type {any} */ provider) => { registered.push(provider); return () => {}; };
+
+  registerWebSearchProvider(ctx, { id: "evimed-gateway", available: () => true, search: async () => ({ results: [] }) });
+  assert.equal(registered.length, 1);
+  assert.equal(registered[0].id, "evimed-gateway");
+
+  for (const bad of [
+    null,
+    { available: () => true, search: async () => ({}) },
+    { id: "x", search: async () => ({}) },
+    { id: "x", available: () => true },
+  ]) {
+    assert.throws(() => registerWebSearchProvider(ctx, /** @type {any} */ (bad)), /web search provider|must carry an id|must be an object/);
+  }
+  assert.equal(registered.length, 1, "a malformed provider must not reach the registry");
+
+  // `web` is optional: a kernel without it says so rather than crashing on a
+  // property of undefined three frames up.
+  const noWeb = fakeContext({ services: { web: undefined } });
+  assert.throws(
+    () => registerWebFetchProvider(noWeb, { id: "evimed-gateway", available: () => true, fetch: async () => ({}) }),
+    /no web\.registerFetchProvider seam/,
+  );
+});
+
+test("a right-pane tab registers as a tab, keyed the way tab slots are keyed", () => {
+  // Tab slots key by `key`, list slots key by `id`, and getting it the wrong
+  // way round registers nothing and reports nothing.
+  const ctx = fakeContext();
+  /** @type {any[]} */
+  const calls = [];
+  const client = { sidebarRightTabs: { register: (/** @type {any} */ key, /** @type {any} */ spec) => { calls.push([key, spec]); return () => {}; } } };
+  registerRightSidebarTab(client, { key: "evimed-evidence", title: "证据", render: () => null, order: 10 });
+  assert.equal(calls[0][0], "evimed-evidence");
+  assert.equal(calls[0][1].order, 10);
+  assert.throws(() => registerRightSidebarTab(client, /** @type {any} */ ({ title: "x", render: () => null })), /must carry a key/);
+  assert.throws(() => registerRightSidebarTab(ctx, { key: "k", title: "t", render: () => null }), /no sidebarRightTabs seam/);
 });

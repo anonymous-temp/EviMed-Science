@@ -46,6 +46,10 @@ import { UsageLedger } from "./usageLedger.mjs";
 import { NotificationService, runFinishedNotice } from "./notificationService.mjs";
 import { createNotificationRoutes } from "./notificationRoutes.mjs";
 import { createLearningRoutes } from "./learningRoutes.mjs";
+import { createMemoryRoutes } from "./memoryRoutes.mjs";
+import { AgentApiKeyStore } from "./agentApiKeys.mjs";
+import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
+import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import {
   createPublicSourceGatewayHandler,
   PUBLIC_SOURCE_GATEWAY_PATH,
@@ -414,6 +418,9 @@ function routePattern(pathname) {
   if (pathname === "/api/feedback/events") return pathname;
   if (pathname.startsWith("/api/memory/memos/")) return "/api/memory/memos/:memoId";
   if (pathname.startsWith("/api/memory/")) return "/api/memory/:route";
+  if (pathname.startsWith("/api/agent-memory/v1")) return "/api/agent-memory/v1/:action";
+  if (pathname.startsWith("/api/agent-keys/")) return "/api/agent-keys/:keyId";
+  if (pathname === "/api/agent-keys") return pathname;
   if (pathname.startsWith("/api/runtime-ui/")) return "/api/runtime-ui/:projectId/*";
   if (pathname.startsWith("/api/opencode/")) return "/api/opencode/:projectId/* (retired)";
   if (pathname.startsWith("/api/runs/") && pathname.includes("/interactions/")) return "/api/runs/:id/interactions/:eventId";
@@ -884,6 +891,11 @@ export function createWebApiApp(overrides = {}) {
     : null;
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes });
+  const memoryRoutes = createMemoryRoutes({
+    config, researchMemory, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+  });
+  const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
+  const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
   const documentParser = new DocumentParserClient({
     baseUrl: config.documentParserUrl,
@@ -1045,6 +1057,15 @@ export function createWebApiApp(overrides = {}) {
       code: typeof error?.code === "string" ? error.code : "notification_unavailable",
     }),
     fetchImpl: overrides.memoryExtractionFetch ?? globalThis.fetch,
+    // Extraction is a model call on the user's behalf and is billed as one.
+    usageLedger,
+  });
+  // Registered after `memoryIntelligence` because the episodes endpoint feeds
+  // it: an external agent posts turns and the same extractor decides what is
+  // worth remembering, through the same quote-integrity checks a run of ours
+  // goes through. There is no route that writes a record directly.
+  const agentMemoryRoutes = createAgentMemoryRoutes({
+    config, apiKeys: agentApiKeys, store, researchMemory, capsules: capsuleService, memoryIntelligence,
   });
   const specialistClassifier = new SpecialistClassifier(config, {
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
@@ -2164,6 +2185,14 @@ export function createWebApiApp(overrides = {}) {
         sendJson(res, 200, { data });
         return;
       }
+      // Before the CSRF gate, deliberately. This surface carries no cookie: it
+      // is authenticated by an account API key in an Authorization header, and
+      // a browser cannot be made to attach one cross-site the way it attaches
+      // a cookie — so the attack CSRF defends against does not exist here,
+      // while the gate itself would refuse every external agent with
+      // "Authentication required" for want of a session it was never going to
+      // have.
+      if (await agentMemoryRoutes(req, res)) return;
       await store.assertCsrf(req, pathname);
       if (maintenanceService && requestStartsMutation(req, pathname)) {
         releaseMutation = await maintenanceService.admitMutation();
@@ -2411,182 +2440,8 @@ export function createWebApiApp(overrides = {}) {
         return;
       }
 
-      if (pathname === "/api/memory/status" && req.method === "GET") {
-        await store.ensureUser(req, res);
-        sendJson(res, 200, { data: await researchMemory.status() });
-        return;
-      }
-
-      if (pathname === "/api/memory/memos" && req.method === "GET") {
-        const ctx = await context(req, res);
-        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
-        const state = url.searchParams.get("state") === "archived" ? "archived" : "normal";
-        sendJson(res, 200, { data: await researchMemory.list(ctx.user.id, { state }) });
-        return;
-      }
-
-      if (pathname === "/api/memory/memos" && req.method === "POST") {
-        const ctx = await context(req, res);
-        const body = assertObject(await readJson(req, config.maxJsonBytes), "research memory");
-        const unknown = Object.keys(body).filter((field) => field !== "content");
-        if (unknown.length > 0) {
-          throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
-        }
-        const content = assertString(body.content, "content", { max: Math.min(config.maxJsonBytes, 100_000) }).trim();
-        if (!content) throw new HttpError(400, "memory_content_empty", "Memory content must not be empty.");
-        const memo = await researchMemory.create(ctx.user.id, content);
-        await audit(ctx, "memory.create", "completed", { target: memo.id });
-        sendJson(res, 201, { data: memo });
-        return;
-      }
-
-      if (pathname.startsWith("/api/memory/memos/")) {
-        const rawMemoId = pathname.slice("/api/memory/memos/".length);
-        if (!rawMemoId || rawMemoId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
-        const memoId = decodeRouteComponent(rawMemoId, "memo id");
-        const ctx = await context(req, res);
-        if (req.method === "PATCH") {
-          const body = assertObject(await readJson(req, config.maxJsonBytes), "research memory update");
-          const unknown = Object.keys(body).filter((field) => !["content", "pinned", "state"].includes(field));
-          if (unknown.length > 0) {
-            throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
-          }
-          const update = {};
-          if (Object.hasOwn(body, "content")) {
-            const content = assertString(body.content, "content", { max: Math.min(config.maxJsonBytes, 100_000) }).trim();
-            if (!content) throw new HttpError(400, "memory_content_empty", "Memory content must not be empty.");
-            update.content = content;
-          }
-          if (Object.hasOwn(body, "pinned")) {
-            if (typeof body.pinned !== "boolean") throw new HttpError(400, "memory_pinned_invalid", "pinned must be a boolean.");
-            update.pinned = body.pinned;
-          }
-          if (Object.hasOwn(body, "state")) {
-            if (!["normal", "archived"].includes(body.state)) {
-              throw new HttpError(400, "memory_state_invalid", "state must be normal or archived.");
-            }
-            update.state = body.state;
-          }
-          const memo = await researchMemory.update(ctx.user.id, memoId, update);
-          await audit(ctx, "memory.update", "completed", { target: memo.id });
-          sendJson(res, 200, { data: memo });
-          return;
-        }
-        if (req.method === "DELETE") {
-          await researchMemory.delete(ctx.user.id, memoId);
-          await audit(ctx, "memory.delete", "completed", { target: memoId });
-          sendJson(res, 200, { data: true });
-          return;
-        }
-      }
-
-      if (pathname === "/api/memory/records" && req.method === "GET") {
-        const ctx = await context(req, res);
-        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
-        const allowedScopes = new Set(["user", "project", "session", "organization"]);
-        const allowedKinds = new Set([
-          "profile", "preference", "behavior", "project_fact", "analysis",
-          "decision", "correction", "follow_up", "run_summary",
-        ]);
-        const allowedStatuses = new Set(["active", "pending", "superseded", "archived"]);
-        const readFilters = (name, allowed) => url.searchParams.getAll(name)
-          .flatMap((value) => value.split(","))
-          .map((value) => value.trim())
-          .filter((value) => allowed.has(value));
-        const records = await researchMemory.listRecords(ctx.user.id, {
-          scopes: readFilters("scope", allowedScopes),
-          kinds: readFilters("kind", allowedKinds),
-          statuses: readFilters("status", allowedStatuses),
-          scopeId: url.searchParams.get("scopeId") ?? "",
-          query: url.searchParams.get("query") ?? "",
-          pageSize: Number(url.searchParams.get("pageSize") ?? 100),
-        });
-        sendJson(res, 200, { data: records });
-        return;
-      }
-
-      if (pathname === "/api/memory/profile" && req.method === "GET") {
-        const ctx = await context(req, res);
-        sendJson(res, 200, { data: await researchMemory.profile(ctx.user.id, { projectId: ctx.project.id }) });
-        return;
-      }
-
-      if (pathname.startsWith("/api/memory/records/")) {
-        const rawRecordId = pathname.slice("/api/memory/records/".length);
-        if (!rawRecordId || rawRecordId.includes("/")) throw new HttpError(404, "not_found", "Route not found.");
-        const recordId = decodeRouteComponent(rawRecordId, "structured memory id");
-        const ctx = await context(req, res);
-        if (req.method === "PATCH") {
-          const body = assertObject(await readJson(req, config.maxJsonBytes), "structured memory update");
-          const allowed = new Set(["value", "summary", "status", "importance", "sensitive", "expectedVersion"]);
-          const unknown = Object.keys(body).filter((field) => !allowed.has(field));
-          if (unknown.length > 0) {
-            throw new HttpError(400, "memory_payload_invalid", `Unknown memory field(s): ${unknown.sort().join(", ")}.`);
-          }
-          const existing = await researchMemory.getRecord(ctx.user.id, recordId);
-          const expectedVersion = Number(body.expectedVersion);
-          if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
-            throw new HttpError(400, "memory_version_invalid", "expectedVersion must be a positive integer.");
-          }
-          if (expectedVersion !== existing.version) {
-            throw new HttpError(409, "memory_conflict", "Structured memory changed before this update was applied.");
-          }
-          const next = { ...existing };
-          if (Object.hasOwn(body, "value")) {
-            next.value = assertString(body.value, "value", { max: 100_000 }).trim();
-            if (!next.value) throw new HttpError(400, "memory_content_empty", "Structured memory value must not be empty.");
-          }
-          if (Object.hasOwn(body, "summary")) next.summary = assertString(body.summary, "summary", { max: 2_000 }).trim();
-          if (Object.hasOwn(body, "status")) {
-            if (!["active", "pending", "superseded", "archived"].includes(body.status)) {
-              throw new HttpError(400, "memory_status_invalid", "status is invalid.");
-            }
-            next.status = body.status;
-          }
-          if (Object.hasOwn(body, "importance")) {
-            const importance = Number(body.importance);
-            if (!Number.isFinite(importance) || importance < 0 || importance > 1) {
-              throw new HttpError(400, "memory_importance_invalid", "importance must be between zero and one.");
-            }
-            next.importance = importance;
-          }
-          if (Object.hasOwn(body, "sensitive")) {
-            if (typeof body.sensitive !== "boolean") {
-              throw new HttpError(400, "memory_sensitive_invalid", "sensitive must be a boolean.");
-            }
-            next.sensitive = body.sensitive;
-          }
-          const acceptedInference = existing.status === "pending" && next.status === "active";
-          next.origin = acceptedInference ? "explicit" : "manual";
-          next.confidence = acceptedInference ? 1 : next.confidence;
-          next.lastConfirmedAt = new Date().toISOString();
-          const updated = await researchMemory.upsertRecord(ctx.user.id, next, null, {
-            expectedVersion,
-            reason: acceptedInference ? "user confirmed a pending memory" : "user updated structured memory",
-          });
-          await audit(ctx, "memory.record.update", "completed", { target: updated.id, version: updated.version });
-          // The decision itself, as an event. An audit line records that a
-          // request happened; this records what the researcher decided, in a
-          // form later steps can count and read.
-          await recordFeedback(ctx, () => feedbackEvents?.recordMemoryUpdate(ctx.user.id, {
-            before: existing, after: updated, projectId: ctx.project.id,
-          }));
-          sendJson(res, 200, { data: updated });
-          return;
-        }
-        if (req.method === "DELETE") {
-          // Read before deleting: what was rejected is the whole content of the
-          // event, and after the delete there is nothing left to name it by.
-          const rejected = await researchMemory.getRecord(ctx.user.id, recordId);
-          await researchMemory.deleteRecord(ctx.user.id, recordId);
-          await audit(ctx, "memory.record.delete", "completed", { target: recordId });
-          await recordFeedback(ctx, () => feedbackEvents?.recordMemoryDeletion(ctx.user.id, {
-            record: rejected, projectId: ctx.project.id,
-          }));
-          sendJson(res, 200, { data: true });
-          return;
-        }
-      }
+      if (await memoryRoutes(req, res)) return;
+      if (await agentKeyRoutes(req, res)) return;
 
       if (pathname === "/api/feedback/events" && req.method === "GET") {
         const ctx = await context(req, res);

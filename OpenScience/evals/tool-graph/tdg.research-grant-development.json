@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-grant-development",
-  "version": "sha256:c04b875548d3b1c5b18ae1902646e0a610c833255ba31998ac7b1cf6c6761427",
+  "version": "sha256:e8e4e32c94230a008e8cabc35a560a186d1b71685302da9cbc69bee6805d46a2",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 30,
@@ -838,7 +838,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search configured literature sources through the EviMed evidence adapter. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search configured literature sources through the EviMed evidence adapter. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -846,6 +846,40 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "relation": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string",
+                "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "treat",
+                  "cause",
+                  "prevent",
+                  "inhibit",
+                  "stimulate",
+                  "interact",
+                  "drug_interact",
+                  "associate",
+                  "compare",
+                  "cotreat",
+                  "positive_correlate",
+                  "negative_correlate"
+                ]
+              },
+              "object": {
+                "type": "string",
+                "pattern": "^@[A-Z]+_[A-Za-z0-9_,.:+-]{1,180}$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "subject"
+            ]
           },
           "limit": {
             "type": "integer",
@@ -1119,7 +1153,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary.",
+      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1137,6 +1171,9 @@
               "indication",
               "adverse_event"
             ]
+          },
+          "annotate": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false,

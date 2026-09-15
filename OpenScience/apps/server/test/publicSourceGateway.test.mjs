@@ -73,6 +73,7 @@ test("open-access PDF requests carry only a DOI and the server picks the host", 
         if (String(url).startsWith("https://blocked.example/")) return new Response("denied", { status: 403 });
         return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
       },
+      resolveImpl: async () => [{ address: "93.184.216.34", family: 4 }],
     },
   ));
   t.after(() => close(server));
@@ -90,6 +91,7 @@ test("open-access PDF requests carry only a DOI and the server picks the host", 
 });
 
 test("an open-access PDF request cannot be used to reach a private address", async (t) => {
+  let resolved = 0;
   const server = createServer(createPublicSourceGatewayHandler(
     { publicSourceCredentials: { unpaywall: "contact@example.test" } },
     runtimeManager(),
@@ -103,6 +105,9 @@ test("an open-access PDF request cannot be used to reach a private address", asy
         }
         throw new Error("a private address must never be fetched");
       },
+      // Never consulted: a literal private address is refused by name, before
+      // anything is resolved.
+      resolveImpl: async () => { resolved += 1; return [{ address: "93.184.216.34", family: 4 }]; },
     },
   ));
   t.after(() => close(server));
@@ -111,6 +116,7 @@ test("an open-access PDF request cannot be used to reach a private address", asy
   const response = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/private" });
   assert.equal(response.status, 404);
   assert.equal((await response.json()).error.code, "public_source_pdf_not_open_access");
+  assert.equal(resolved, 0);
 });
 
 test("an open-access PDF request rejects anything other than a DOI", async (t) => {
@@ -758,4 +764,111 @@ test("a researcher's own credential fills a profile the deployment has not confi
   assert.equal(observations.at(-1).url.searchParams.get("apiKey"), "deployment-umls");
   // The store was never consulted for a profile the deployment serves.
   assert.deepEqual(asked, [["alice", "opengwas"], ["bob", "opengwas"]]);
+});
+
+test("an approved host that serves more than one API is bounded to the approved API", async (t) => {
+  // `www.ncbi.nlm.nih.gov` is the whole of NCBI's web estate — every database
+  // front end and every download path. Only PubTator3 on it is approved, and
+  // only for reading, so allowing the host has to mean less than allowing the
+  // host (2026-09-15: PubTator3 substance taken from `dsh-pubmed`).
+  let fetchCalls = 0;
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response(JSON.stringify([{ _id: "@CHEMICAL_Metformin", biotype: "chemical" }]), {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+
+  const allowed = await gatewayRequest(base, {
+    url: "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/entity/autocomplete/?query=metformin&limit=3",
+    accept: ["application/json"],
+  });
+  assert.equal(allowed.status, 200);
+  assert.match(await allowed.text(), /@CHEMICAL_Metformin/);
+
+  const elsewhere = await gatewayRequest(base, {
+    url: "https://www.ncbi.nlm.nih.gov/books/NBK1/",
+    accept: ["application/json"],
+  });
+  assert.equal(elsewhere.status, 403);
+  assert.equal((await elsewhere.json()).error.code, "public_source_api_path_forbidden");
+
+  const written = await gatewayRequest(base, {
+    url: "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/",
+    accept: ["application/json"],
+    method: "POST",
+    body: { text: "anything" },
+  });
+  assert.equal(written.status, 403);
+  // POST is refused on the host rule, before the approved-POST-endpoint list is
+  // consulted, so the reason names the host rather than the endpoint.
+  assert.equal((await written.json()).error.code, "public_source_api_request_forbidden");
+  assert.equal(fetchCalls, 1);
+});
+
+test("a publisher host that resolves inside this network is refused after resolution", async (t) => {
+  // The negative control for the name check: nothing in `pdfs.example.org`
+  // is rejectable, and Unpaywall is an index, not an oracle. Only the
+  // resolution says where it goes (2026-09-15, borrowed from `citeguard`).
+  const fetched = [];
+  const resolutions = new Map([
+    // Looks like a publisher, answers with loopback.
+    ["loopback.example.org", [{ address: "127.0.0.1", family: 4 }]],
+    // One public address and one private one: the connection picks, not us.
+    ["split.example.org", [{ address: "93.184.216.34", family: 4 }, { address: "10.0.0.7", family: 4 }]],
+    // IPv4 smuggled through an IPv6 answer, at the address that matters most.
+    ["mapped.example.org", [{ address: "::ffff:169.254.169.254", family: 6 }]],
+    // Unique-local IPv6.
+    ["ula.example.org", [{ address: "fd00::1", family: 6 }]],
+    ["good.example.org", [{ address: "93.184.216.34", family: 4 }]],
+  ]);
+  const server = createServer(createPublicSourceGatewayHandler(
+    { publicSourceCredentials: { unpaywall: "contact@example.test" } },
+    runtimeManager(),
+    {
+      fetchImpl: async (url) => {
+        if (String(url).startsWith("https://api.unpaywall.org/")) {
+          const inward = [
+            { url_for_pdf: "https://loopback.example.org/a.pdf", host_type: "repository" },
+            { url_for_pdf: "https://split.example.org/a.pdf", host_type: "repository" },
+            { url_for_pdf: "https://mapped.example.org/a.pdf", host_type: "repository" },
+          ];
+          return Response.json({
+            oa_locations: String(url).includes("nowhere")
+              ? [{ url_for_pdf: "https://absent.example.org/a.pdf", host_type: "repository" }]
+              : [...inward, { url_for_pdf: "https://good.example.org/a.pdf", host_type: "repository" }],
+          });
+        }
+        fetched.push(new URL(String(url)).hostname);
+        return new Response(Buffer.from("%PDF-1.7 body"), { status: 200, headers: { "content-type": "application/pdf" } });
+      },
+      resolveImpl: async (hostname) => {
+        const record = resolutions.get(hostname);
+        if (!record) throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
+        return record;
+      },
+    },
+  ));
+  t.after(() => close(server));
+  const base = await listen(server);
+
+  const response = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/resolves-inward" });
+  assert.equal(response.status, 200);
+  // The three inward-resolving hosts were never connected to; the fourth served it.
+  assert.deepEqual(fetched, ["good.example.org"]);
+  assert.equal(decodeURIComponent(response.headers.get("x-evimed-oa-source")), "https://good.example.org");
+
+  // And when the only location resolves nowhere, the article is reported as
+  // not retrievable rather than as forbidden: an unresolvable name is an
+  // upstream condition, not an attempt to reach inward.
+  const unresolvable = await gatewayRequest(base, { openAccessPdfDoi: "10.1234/nowhere" });
+  assert.equal(unresolvable.status, 404);
+  const failure = await unresolvable.json();
+  assert.equal(failure.error.code, "public_source_pdf_not_open_access");
+  assert.match(failure.error.message, /did not resolve/);
+  assert.deepEqual(fetched, ["good.example.org"]);
 });

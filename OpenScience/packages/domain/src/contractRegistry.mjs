@@ -15,6 +15,7 @@ import { checkIdOf, clinicalEvidenceAdvisoryNotes, clinicalEvidenceCheckIds, cli
 import { CONTRACT_KINDS, isContractKind, isClinicalContractKind } from './contractKinds.mjs'
 import { matchedClinicalTriggers, matchedHighRiskEntities } from './safetyRules.mjs'
 import { appraisalTableFindings } from './appraisalContract.mjs'
+import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
@@ -87,6 +88,10 @@ export const GATE_CHECK_IDS = Object.freeze([
   'appraisal-certainty-arithmetic',
   'appraisal-citation-coverage',
   'appraisal-table-rendered',
+  // Number provenance in a dataset-scoping package: the snapshot read, and
+  // every number in the prose traced to it or not.
+  'dataset-profile-parse',
+  'dataset-number-provenance',
   // manuscriptContract.mjs
   'manuscript-scratch-file',
   // The grant package's two notices and the GEO pack's measurement notices.
@@ -706,7 +711,13 @@ const VALIDATORS = Object.freeze({
     validateReportShaped(input, proseFilesOf(input)),
     researchTopicPortfolioFindings(input),
   ),
-  'dataset-scoping-package': (input) => validateReportShaped(input, proseFilesOf(input)),
+  // The one kind whose prose has a deterministic snapshot of its own subject
+  // shipped beside it, so "where did this number come from" is decidable here
+  // and nowhere else. Advisory (principle 4).
+  'dataset-scoping-package': (input) => withFindings(
+    validateReportShaped(input, proseFilesOf(input)),
+    datasetScopingFindings(input, proseFilesOf(input)),
+  ),
   'research-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   // Both compose rather than replace: the shared required-output pass and prose
   // hygiene stay in one place, and each capability adds only what it owns. The

@@ -124,3 +124,115 @@
 2. dev profile 试装工具形态四件:`univer-office`、`cowork`、`mineru` 插件、`drawio`;跑各自冒烟,能用的进镜像 pin。
 3. 本地面(evimed-web)组一个「科研者桌面」推荐组:Origin + Stata + Zotero + Overleaf + dsh-market + UI 组(执行细则与候选表:`2026-09-01-frontend-ecosystem-adoption-plan.md`)——**连接用户自己已有的桌面工具,是托管 SaaS 给不了、我们本地 profile 白捡的差异化**。
 4. 借模式四件落到对应章节的待办:review-workflow → §8.3;vision-guard → G1 适配器;memory-porter → §19 胶囊导入;SkillOpt-Sleep/stylotrace → §19.22/§27.2 对照。
+
+## 十二、2026-09-15 复扫裁决（对着 0.1.5-rc.2 与今天的代码核实）
+
+生态规模已到 GitHub `dsh-plugin` topic 14,897 仓库。下面每条都对着实物核过：`deploy/runtime-dsh/dump-config.baseline.json`、`seam-manifest.json`、`publicSourceGateway.mjs`、`runtimeManager.mjs`、`try-install.json`，以及从 npm 拉下来的 rc.2 包（`@deepseek-ai/dsh-web`、`dsh-client-ui-sidebar-right`）。
+
+**先纠正扫描稿里五个前提**：
+
+1. **`ctx.web` 缝在我们跑的内核里已经挂着**：baseline 有 `web`（`@deepseek-ai/dsh-web`，`searchProvider: deepseek-official` / `fetchProvider: http`）、`web-search-deepseek`（要容器里的 `DEEPSEEK_API_KEY`，我们不给）、`web-fetch-http`（已禁）、`tool-web`（已禁）。rc.2 的 `WebRuntime` 暴露 `registerSearchProvider` / `registerFetchProvider`，provider 形状是 `{ id, available(), search|fetch(request, signal) }`。缺的只是我们没注册 provider、`seam-manifest.json` 没列 `web`。
+2. **但它解锁不了"整个第二节"**：核过的候选里 `dsh-plugin-mineru`、`dsh-pubmed`、`dsh-free-search` 都是自己 `fetch`，不是 `ctx.web` 的消费者；没有一个我们想要的插件被证实走 `ctx.web`。这条缝的现实价值是「让 `tool-web` 可以按我们的网关挂载」与「未来出现 `ctx.web` 消费者时零成本」，不是今天的杠杆。
+3. **`dsh-plugin-mineru` 不是"连自家服务不需要出网"**：生产运行时走 unix socket 桥，容器没有到 `evimed-document-parser` 的网络路径；插件的 `baseURL` 必须指向控制面新开的网关，且它要容器里有 `apiKeyEnv`，而运行时不持任何密钥。成本与 `dsh-cite` 同级（换传输），还要多一个网关。而且它 0.3.1 peer 上 `react` 与 `dsh-client-ui-*`，带客户端半边。
+4. **`dataset-research-scoping` 已有确定性画像步骤**：`scripts/profile_dataset.py` → `data-profile.json/.md`，支持 xlsx（openpyxl）。`dsh-data-quality` 只读 csv/tsv/json/jsonl，画像一半与我们重叠，独有的是 `verifyCitations`（正文数字 ↔ 数据快照，带容差，四值裁定）。
+5. **内核 UI 插件对我们的用户是可见的**：2026-09-15 起会话页就是内核 iframe（`SessionRoute` 只渲染 `RuntimeUiFrame`），插座已通过 `dsh.client` 注入客户端模块。所以"UI 插件 ≠ 我们的前端"不再成立；成立的约束换成：任何加 `webServer` 路由的插件要过运行时 UI 代理与方法拒绝名单。`APPLY_PATH_PLUGIN_IDS` 只约束**按项目可配置**的插件；固定配置烘进镜像的 bundle 不经过它。
+
+**核实为真的两条**：`plugin-support.json` 的 `kernel` 仍是 `0.1.2-rc.1`，两条 `incompatible` 是对着它判的，该重测；`ctx.sidebarRight` / `ctx.sidebarRightTabs` / `openResource` / `sidebar.right.pane.tab` 在 rc.2 的 `dsh-client-ui-sidebar-right` 里都在（31 / 3 / 13 / 24 处）。
+
+### 裁决表
+
+| 项目 | 核实 | 档位 | 理由 |
+|---|---|---|---|
+| **`@changfenhuang/dsh-annotation` 1.4.10** | bundle + client；批注以文本前置进用户消息；Node 半边为空 | **试装**（已进 `try-install.json`） | 稿件评审的现成交互，零出网、零门禁；风险是 peer 写的是裸 `cordis` 而非 `@deepseek-ai/cordis`，试装即知 |
+| **`dsh-mermaid` 0.4.0** | 纯客户端渲染，无 peer，无出网 | **试装**（已进 `try-install.json`） | PRISMA 流程图等在回复里直接成图；数字仍须来自筛选台账 |
+| **`dsh-data-quality` 0.3.10** | 零网络、进程内 TS、peer 明确覆盖 rc.2、Apache-2.0；发布 `ctx.dataQuality` 服务 + 4 工具 | **试装**（已进 `try-install.json`）+ **借契约** | 装的目的是量 `data_verify` 在真实数据集画像上的表现；`verifyCitations` 的四值契约不论装不装都写进 `dataset-scoping-package` 的 notice（原则 10c 的一个可执行形状）。我们**不** `inject` 它的服务 |
+| `@alger-ai/dsh-image-preview` | npm 404，未发布 | 不装 | 不能 pin 的东西不进镜像 |
+| `dsh-plugin-mineru` 0.3.1 | 自 fetch；要 baseURL + 容器内 key；带客户端半边 | 不装 → **改自家 MCP** | 运行中拉到的 PDF 今天走 `pypdf`（`open_access_fulltext.py`）；正确形状是给 `/internal/sources/v1` 加一个「经 MinerU 解析」模式、`open_access_full_text` 多一个参数，不新增 5 个工具 |
+| `dsh-pubmed`（aiyacharley） | 自 fetch；25 工具；写 `~/.dsh/dsh-pubmed-graph.json` 与 `~/.dsh/skills/`（我们的 profile 只读） | 不装 → **吸收实质** | PubTator3 实体归一 + 关系证据链是真缺口：网关白名单加 `www.ncbi.nlm.nih.gov`，`term_normalize` / `literature_search` 加 PubTator3 标注，一两个工具而不是 25 个 |
+| `dsh-free-search` | 自 fetch DuckDuckGo；实现官方 `WebSearchProvider` 接口 | 不装 → **抄形状** | 我们有 SearXNG 网关；它的 provider 对象是写 `evimed-gateway` provider 的样板 |
+| `dsh-genui` | host + client；`dsh-ui` fence；30+ 组件；表达式不 eval；host 有 HTTP 路由 | **暂缓** | 与原则 10c 冲突：fence 里的数据是模型手打的数字；等「正文无手打数字」落地后再考虑，且只接受绑定到产物文件的渲染 |
+| `DSH-better-sidebar` | host 带 node-pty 真终端 + git 操作 | 不装 → **借 API 用法** | 托管多租户里给用户一个进容器的终端绕开运行账本；原生右栏 API 的用法（`sidebarRightTabs` 注册 tab、`openResource` 开文件）直接用于我们的外壳 |
+| `dsh-context` | 读 `contextBreakdown`，展示系统提示与工具 schema 构成 | 不装（本地 profile 可用） | 对租户暴露组合本身；运维诊断放控制面运维台 |
+| `dsh-permission-rules` / `dsh-auto-review` | `tools/pre-execute` 上的 YAML 规则引擎 / 第二模型审批 | 不装 | 原则 4、13、20：工具面由组合决定，approval=never；第二模型审批是明确不做的 |
+| `dsh-research-report` · `citeguard` · `dsh-deepread` · `zotero-harvest` · `papermachine` | — | **只读** | 证据账本的篡改可见性；SSRF 的 DNS 应答校验（我们 `redirect: "error"` 已比逐跳校验严，缺的是解析后地址核验，只影响 open-access-pdf 出版商主机那条路）；claim 四分法；充分性审计循环（写进 `clinical-evidence-synthesis` SKILL.md，不加门禁）；产物溯源 |
+| `dsh-reference-checker` | 单工具，产出按样式更正的引用 | 不装 | `dsh-cite` 已装且有 `cite_check` / `cite_format`；先用一条 eval 看它是否已覆盖「整份 .bib 批量更正」 |
+| 记忆类 · 编排类 · 成本面板 · 视觉类 · 市场类 | — | 不装 | 记忆一个端口（§19）；编排已裁（十一）；计量在控制面；视觉是 G1 轨道；市场只属本地 profile |
+| `dsh-routing-suite` | — | 不装 | 根 `CLAUDE.md` 2026-09-15 裁决 |
+
+### 待办（按杠杆排序）
+
+1. **重测 peer dep 墙**：在 rc.2 镜像上跑 `pnpm try:community-bundles`（要 Docker，本机没有，在生产宿主的隔离目录或 CI 跑），候选 = 原四条 + 上表三条试装；把 `plugin-support.json` / `try-install.json` 的 `kernel` 与 `lastCompatibilityTest` 换成 rc.2 的结果。
+2. **PubTator3 进网关与 MCP**（吸收 `dsh-pubmed` 实质）：白名单一行 + `term_normalize` 的 PubTator3 标注 + `literature_search` 的关系式检索；配三条真实题面 eval。
+3. **运行中 PDF 走 MinerU**：先量——统计近 30 天运行里 `open_access_full_text` 拉回的 PDF 有多少是 CJK / 表格密集（`pypdf` 的失败面）；有分布再给 sources 网关加解析模式。
+4. **`verifyCitations` 契约进 `dataset-scoping-package`**：notice 级，正文数字必须在 `data-profile.json` 有出处（原则 10c）。不等试装结果，这条与装不装无关。
+5. **`ctx.web` 缝**：`seam-manifest.json` 加 `web`（optional），port 导出 `registerWebSearchProvider` / `registerWebFetchProvider`，插座新加 `evimed-web` 行注册 `evimed-gateway` provider（search → `/internal/search/v1`，fetch → `/internal/sources/v1`，非白名单主机返回 `WebError`），patch 把 `web.config` 两个 provider 指向它。**不挂 `tool-web`**（MCP 已有 `web_search` / `official_page_fetch`，挂了是同一活两个工具）。排在 1–4 之后，因为今天没有它的消费者。
+6. **外壳右栏改用原生 API**：`runtimeUiShell.mjs` 里凡是要往右栏放的内容，走 `ctx.sidebarRightTabs` 注册 tab、`ctx.sidebarRight.openResource` 开文件，不占 `rightbar` slot 整列。
+7. **open-access-pdf 路径加 DNS 应答核验**（借 `citeguard`）：`assertPublicHostname` 只看主机名字符串，解析结果落在私网时仍会发请求；解析后再核一次地址，配阴性对照。
+8. **充分性审计写进 SKILL.md**（借 `zotero-harvest`）：子主题覆盖 → 缺口 → 下一轮检索式，作为 `clinical-evidence-synthesis` 检索阶段的指导文字；不加 notice、不加门禁。
+9. **社区插件静态扫描进 `try:community-bundles` 报告**：装前跑一遍源码扫描（`dshscan` 类）并把结果写进 `try-install.json` 的 results；是工具不是流程，不设审批。
+10. **试装通过后的三件真会话验证**（原则 11）：annotation 在一次稿件评审里批注 5 处；mermaid 渲染一次 PRISMA；data-quality 对一份真实院内表跑 `data_verify`；各对照关掉插件的同一会话。
+
+### 执行结果（2026-09-15，同日）
+
+十条待办的执行记录。每条都注明是**做了**、**做了但结论是不做**，还是**没做以及卡在哪**。
+
+**1. 重测 peer dep 墙 — 做了。** 在生产宿主的隔离目录（`/tmp/try-bundles`，不碰任何 release 目录）用 rc.2 镜像 `open-science-runtime:dsh-0.1.5-rc.2-uv-0.11.26-39111b6b4821` 跑了七条候选，结果与源码扫描一起回写 `try-install.json`：
+
+| 候选 | 结果 | 扫描 |
+|---|---|---|
+| `dsh-cite@0.3.2` | **BOOTED** | 10 文件、零 fetch、MIT、无 deps 无 peer |
+| `@changfenhuang/dsh-annotation@1.4.10` | **BOOTED** | 4 文件、零出网、MIT、`peers=cordis` |
+| `dsh-mermaid@0.4.0` | **BOOTED** | 4 文件、`net=1 proc=1 fsWrite=1 httpRoute=2`、`installScripts=prepare` |
+| `dsh-data-quality@0.3.10` | **BOOTED** | 67 文件、零网络、Apache-2.0、peer 明确列 `@deepseek-ai/*` |
+| `dsh-plugin-academic-writing@0.2.0` | 装不上 | — |
+| `dsh-plugin-translation@0.2.0` | 装不上 | — |
+| `dsh-plugin-writing-guard@2.0.1` | 装不上 | — |
+
+**4/7 启动。** 两条值得单独说：
+
+- **annotation 的预判风险没有兑现。** 裁决表写它「peer 是裸 `cordis` 而非 `@deepseek-ai/cordis`，与 2026-09-06 两次拒绝同型」。在 rc.2 上它装上了也启动了。预判是对的形状、错的结论——这正是「试装即知」的意思。
+- **原四条里那三条仍然装不上，但原因换了。** academic-writing 与 translation 这次报的是 `@deepseek-ai/dsh-fs` 的版本不在其 peer 范围内（此前记的是笼统的「peer 不接受当前 DSH 包」）；writing-guard 仍卡在 `pnpm approve-builds`，即它的依赖要跑构建脚本，与 rc.2 无关。
+
+**9. 静态扫描 — 做了，并且当场证明了它的用处。** 扫描是装前读 pnpm 真正落盘的那棵树：多少文件出网、起进程、写文件、eval 字符串、读环境、挂 HTTP 路由，加上 `package.json` 声明的安装脚本、`dsh.bundle`/`dsh.client`、license、deps 与 peers。结果进 `try-install.json` 的 `lastCompatibilityTest.scan`。
+
+它对 `dsh-mermaid` 报出的四项与裁决表的「纯客户端渲染、无出网」表面矛盾，所以逐条核了：
+
+- `net=1`、`fsWrite=1`、`httpRoute=2` 全部落在同一个文件 `lib/mermaid-runtime.js`——Mermaid + KaTeX 的压缩产物。命中的是压缩代码里的巧合子串（`.listen(`、`writeFile`），唯一像真的那一处是 Mermaid 自己格式化「请求失败」错误信息的模板。这个文件跑在**浏览器**里。
+- `proc=1` 是 `bin/dsh-mermaid.mjs` 里的 `import { spawnSync } from 'node:child_process'`——包自带的**命令行工具**，不是插件。插件的宿主半边是 `lib/index.js`，它的 `dsh.bundle.patch` 只插入一行 `ui-mermaid`。
+- `installScripts=prepare` 是 `prepare: npm run build`，而 `files` 只发布 `bin`、`lib`、`cordis.patch.yml` 与文档，`scripts/` 和 `src/` 根本不在包里——所以从 npm tarball 装时 `prepare` 无从运行。实测也确实没有触发 approve-builds（writing-guard 触发了）。
+
+**结论：裁决表对 mermaid 的描述成立**，扫描提了正确的问题，答案记在这里。这就是「是工具不是审批」的样子。
+
+**2. PubTator3 进网关与 MCP — 做了。** 网关白名单加 `www.ncbi.nlm.nih.gov`，并新增一层 `apiPathPrefixes`：这台主机只放行 `/research/pubtator3-api/`、只放行 GET。（`officialDocumentPaths` 表达不了这件事，它还强制 `text/html`，而 PubTator3 返回 JSON。）MCP 侧只动两个已有工具、不新增工具：`term_normalize` 加 `annotate`（**默认关**——这个工具本来确定性且离线，默认开等于给每次调用挂一次 NCBI 往返），`literature_search` 加 `relation`，走 PubTator3 自己的 `relations:<type>|<e1>|<e2>` 查询语言。
+
+实测到一件必须说明的事：`relations:...|A|B AND <words>` 返回 0 而不是收窄，所以自由文本**不能**随行。结果里明写「检索只按关系寻址，你的问题文本没有被发送」，否则一次关系检索会被当成被自己的措辞筛过的结果读。
+
+三条题面进新 pack `evals/relation-retrieval/`，概念 id 与计数都是 2026-09-15 实测：metformin–treat–Neoplasms 2277 篇、pembrolizumab–cause–Myocarditis 95 篇、Clopidogrel–drug_interact–ANY **4 篇**。第三条是阴性对照：氯吡格雷与质子泵抑制剂的相互作用是心内科文献最充分的药动学相互作用之一，PubTator3 只记了 4 条，所以那是**索引稀疏**，不是证据不存在，也不是工具故障。
+
+**3. 运行中 PDF 走 MinerU — 量了，结论是不做。** 生产数据卷里 170 份 transcript，`open_access_full_text` 出现 **0 次**；保全下来的原文是 38 个 `.md`、9 个 `.txt`、8 个 `.xml`、6 个 `.json`，**0 个 `.pdf`**（唯一的 PDF 全是我们自己生成的交付物）。全文是按 PMC 的 XML/Markdown 取回来的，`pypdf` 那条路不在热路径上。按第 3 条自己的写法——有分布再加——**不给 sources 网关加解析模式**。
+
+一个过程纠正：run ledger **不记录工具名**，只记运行级状态。所以「ledger 里零命中」不能当证据，上面的数来自 transcript。
+
+**4. `verifyCitations` 契约进 `dataset-scoping-package` — 做了。** 新模块 `packages/domain/src/datasetScopingContract.mjs`，四值裁定 `verified` / `mismatched` / `unsupported` / `unverifiable`，全部 advisory。四值里最要紧的是 `mismatched` 与 `unsupported` 不合并：前者要改数，后者要补出处，只说「没找到」会让运行自己去重推是哪一种。容差按正文写的小数位取整匹配，百分数与比例互认（18.3% ↔ 0.1834）。不读围栏代码块、ISO 日期、裸年份、有序列表序号，以及嵌在词里的数字——`HbA1c` 的那个 `1` 是第一版实测踩到的误报。
+
+**5. `ctx.web` 缝 — 做了，并在真机上验过。** `seam-manifest.json` 的 `services.optional` 加 `web`；port 导出 `registerWebSearchProvider` / `registerWebFetchProvider`（注册前校验 provider 形状，因为注册时抛异常会在启动阶段带垮整个组合）；新插件 `packages/socket/plugins/web.mjs` 注册 `evimed-gateway`，search 走 `/internal/search/v1`、fetch 走 `/internal/sources/v1`，白名单仍留在网关不复制一份；`cordis.patch.yml` 插入该行并把 `web.config` 两个 provider 指向它。**不挂 `tool-web`**，`web-fetch-http` 仍 disabled。
+
+价值说清楚：今天没有 `ctx.web` 的消费者，所以这条缝换来的是两件事——`web` 行从「靠缺席保护」变成「靠配置保护」（缺席离回来只有一次编辑），以及将来出现消费者时零成本。
+
+真机验证：在生产宿主用 `Dockerfile.delta` 构建，build-smoke 通过（profile 启动、每一行 applied、挂起一个 `evimed-universal` 会话）；再用真实网关地址跑一次，`inject:['web']` 解析成功、无 degrade、无错误。dump-config 的实际 diff 只有预期两处，把镜像里的 dump 取回来与提交的副本逐字节比对后更新 `BASELINE_PROVENANCE` 的 sha256。
+
+顺带修了 delta 的一个真缺口：它拿**基础镜像里冻结的**基线做 diff，而不是正在构建的源码里的那份——任何有意改动组合的 delta 都会被它报成漂移。
+
+**6. 外壳右栏改原生 API — 做了。** port 导出 `registerRightSidebarTab` / `openRightSidebarResource`，`seam-manifest.json` 的 `browser` 块记下右栏的服务名、tab slot 与方法；外壳测试断言 `rightbar` **不被占用**——占它等于换掉整列，正是左列要花三条 CSS 才撤回来的那件事。
+
+顺带修掉 2026-09-15 上线时留下的实际损伤：两个拖拽手柄同类名，一条按类名隐藏把右栏的 resize 一起关了。真机量出它们按位置可分（frame 的子元素是三列 + overlayLayer + 手柄，侧栏手柄紧跟 overlayLayer），改成 `[class$="_overlayLayer"] + [class$="_handle"]`。右栏开时第二个手柄回到 8px `col-resize`，右栏关时 DOM 里只有一个手柄且仍隐藏——两种状态都在生产页面上注入 CSS 实测过。也顺便纠正当时的判断：「两个手柄无法区分」是错的，右栏关着时 DOM 里根本只有一个。
+
+**7. open-access-pdf 加 DNS 应答核验 — 做了。** `assertPublicHostname` 只读名字；新增 `assertPublicAddresses` 读解析结果，IPv4 与 IPv6 都核（含 `::ffff:` 映射、`fc00::/7`、`fe80::/10`、`ff00::/8`），要求**每一个**返回地址都是公网——一个名字回一个公网地址加一个私网地址是这类攻击的常见形状，而连哪个不由我们决定。解析失败按上游不可达处理，不按拒绝。阴性对照四例（回环、一公一私、映射到 169.254.169.254、ULA）全部不建连，第五个公网主机取回 PDF。
+
+剩下的重绑定窗口写在注释里没有关：关它要把 socket 钉到已核地址，需要一个本部署的 fetch 不暴露的 agent。说出来比暗示已经关上好。
+
+**8. 充分性审计进 SKILL.md — 做了。** `clinical-evidence-synthesis` 的检索阶段加一节：覆盖 / 缺口（「搜了没有」「还没搜」「该答的源不可用」三分）/ 下一轮检索式，每轮一次而不是最后一次。它的价值是把「可以停了」变成别人能核的陈述。顺带一句把关系式检索指给「缺口是两个具名事物之间的关系」的情形。不加 notice、不加门禁。
+
+**10. 三件真会话验证 — 没做，卡在一次完整镜像重建。** 三条候选试装都过了，但真会话验证要先把它们按精确版本写进 `deploy/runtime-dsh/Dockerfile`。那是新增 npm 依赖，**不符合 delta 的准入条件**（delta 明写：改了 lockfile、加了依赖、动了 kernel pin 的都要走完整 Dockerfile），而完整构建在生产宿主上是小时级，之后还要部署再跑 6 次会话（三件各一次开、一次关）。这一步是往生产镜像里装三个社区 bundle，值得单独一次有人看着的发布，不适合夹在这一轮里。
+
+前置条件已经清完：试装结果在、扫描结果在、mermaid 的四项疑问已逐条核过。下一步就是一次 Dockerfile 编辑加一次完整构建。

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { apply, inject, EVIMED_DICTIONARIES, EVIMED_LOCALE } from '../src/runtimeUiShell.mjs';
 
+/** @param {{framed?: boolean, withReact?: boolean, localeApi?: boolean, capabilities?: any[]}} [options] */
 function fixture({ framed = true, withReact = true, localeApi = true, capabilities = [] } = {}) {
   /** @type {Record<string, any>} */ const occupants = {};
   /** @type {Record<string, number>} */ const priorities = {};
@@ -17,6 +18,10 @@ function fixture({ framed = true, withReact = true, localeApi = true, capabiliti
   /** @type {any[]} */ const effects = [];
   /** @type {any[]} */ const styles = [];
   const head = { appendChild: (/** @type {any} */ node) => styles.push(node) };
+  // `any` on purpose: the shell writes `__EVIMED_SHELL__` onto its target at
+  // run time, which is the seam the frame's navigation leaves through, and an
+  // inferred literal type has no room for a property the code under test adds.
+  /** @type {any} */
   const target = {
     __EVIMED_FRAME__: framed ? { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', cwd: '/workspace', capabilities } : undefined,
     parent: {},
@@ -93,6 +98,18 @@ test('the left column, the three brand slots and the hero workspace picker are o
   for (const rule of ['[class$="_sidebarCol"]{display:none', '[class$="_centerCol"]{grid-column:1 / 3', '[class$="_rightbarCol"]{grid-column:3']) {
     assert.ok(sheet.includes(rule), `missing layout rule: ${rule}`);
   }
+  // Only the sidebar's drag handle is hidden. Both handles carry one class, so
+  // a rule keyed on the class alone also took the right panel's resize — they
+  // are told apart by position instead, and hiding all of them again would be
+  // invisible in every test that only reads the class.
+  assert.ok(sheet.includes('[class$="_overlayLayer"] + [class$="_handle"]{display:none'), 'the sidebar handle rule is missing');
+  assert.ok(!/(^|\n)\s*'\[class\$="_handle"\]\{display:none/.test(sheet), 'every handle is hidden, including the right panel\'s resize');
+
+  // And the right column itself is never occupied. `rightbar` is a layout slot
+  // like `sidebar`: occupying it replaces the whole column, which is the thing
+  // the left column had to be undone from. Content that belongs there
+  // registers a tab through `sidebarRightTabs` (port: registerRightSidebarTab).
+  assert.equal(f.occupants.rightbar, undefined, 'the shell occupies the right column');
 });
 
 // Not the blank-session hero: its seat is `conversation.hero.agentPreset`,
