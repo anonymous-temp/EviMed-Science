@@ -1,0 +1,15 @@
+{
+  "arm": "candidate",
+  "armDigest": "7bc6e830c479b1a20c925583e957afe906b1b5a3984182a20ba350deeb50d237",
+  "briefDigest": "af6e3f31d3ee7369b1196d4b12418c645f1debe0f1b83776f4ff8b4155d124d9",
+  "briefId": "review-003-mimic-overlap-unknown",
+  "cell": "review-003-mimic-overlap-unknown__candidate__r1",
+  "complete": false,
+  "configDigest": "f344fb50c26cf17c523d47b5d9383ae0f6c21ef4925de7ef17b613cc7908545b",
+  "error": "GET https://82.156.128.153/api/agent-runs?limit=200 failed: _ssl.c:983: The handshake operation timed out. Is an OpenScience server running there? (start one with `pnpm dev:server`)",
+  "family": "review-003-mimic-overlap-unknown",
+  "familySource": "brief-id",
+  "finishedAt": "2026-09-15T12:41:13Z",
+  "repeat": 1,
+  "schemaVersion": 1
+}
