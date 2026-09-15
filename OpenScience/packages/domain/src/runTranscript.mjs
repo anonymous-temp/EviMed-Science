@@ -73,6 +73,10 @@ import { isEviMedToolName } from './toolNames.mjs'
  * @property {{ kind: string, code?: string, subCode?: string } | null} turnEnd
  * @property {readonly { sessionId: string, parentSessionId: string, label: string, capability: string }[]} subagents
  * @property {number} lastSeq
+ * @property {boolean} [exhausted] whether the reader walked back to the start
+ *   of the session. The only truthful truncation signal: `lastSeq` counts every
+ *   event and a transcript's messages are a subset of those, so comparing the
+ *   two reports a gap on any session that ends on a turn-end.
  */
 
 /** An empty transcript, so a caller never has to invent one. */
